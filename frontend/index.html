@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — FinOps Agentlake & Governance Engine</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <span class="header-logo">◈</span>
+      <span class="header-title">FAGE</span>
+      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+    </div>
+    <div class="header-status" id="systemStatus">
+      <span class="status-dot offline"></span>
+      <span id="statusLabel">Connecting...</span>
+      <span class="mode-badge" id="modeBadge" style="display:none"></span>
+    </div>
+  </header>
+
+  <!-- ── Main Dashboard Grid ────────────────────────────────────────────── -->
+  <main class="dashboard">
+
+    <!-- Row 1: KPI Cards -->
+    <section class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Spend Today</div>
+        <div class="kpi-value" id="kpiSpend">—</div>
+        <div class="kpi-sub" id="kpiSpendSub">across all departments</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Tokens Saved (Pruning)</div>
+        <div class="kpi-value" id="kpiTokensSaved">—</div>
+        <div class="kpi-sub" id="kpiTokensSub">via context sweeper</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Active Agents</div>
+        <div class="kpi-value" id="kpiAgents">—</div>
+        <div class="kpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
+      </div>
+      <div class="kpi-card alert" id="kpiThrottleCard">
+        <div class="kpi-label">Throttled Departments</div>
+        <div class="kpi-value" id="kpiThrottled">—</div>
+        <div class="kpi-sub" id="kpiThrottleSub">at or over budget cap</div>
+      </div>
+    </section>
+
+    <!-- Row 1b: Routing + Spend stat bar -->
+    <section class="stat-bar" id="statBar">
+      <div class="stat-item">
+        <span class="stat-label">Total Calls</span>
+        <span class="stat-val" id="statTotalCalls">—</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">Micro Calls</span>
+        <span class="stat-val micro" id="statMicroCalls">—</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">Flagship Calls</span>
+        <span class="stat-val flagship" id="statFlagshipCalls">—</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">Overall Budget Used</span>
+        <span class="stat-val" id="statBudgetPct">—</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">Pruning Saved (est.)</span>
+        <span class="stat-val green" id="statPruningSaved">—</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">Month Spend</span>
+        <span class="stat-val" id="statMonthSpend">—</span>
+      </div>
+    </section>
+
+    <!-- Row 2: Budget Bars + Agent Table -->
+    <section class="mid-row">
+
+      <div class="panel" id="budgetPanel">
+        <h2 class="panel-title">Department Budgets</h2>
+        <div id="budgetList">
+          <p class="placeholder">Loading...</p>
+        </div>
+      </div>
+
+      <div class="panel" id="agentPanel">
+        <h2 class="panel-title">Agentlake Registry</h2>
+        <table class="agent-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Department</th>
+              <th>Target</th>
+              <th>Policy</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="agentTableBody">
+            <tr><td colspan="5" class="placeholder">Loading...</td></tr>
+          </tbody>
+        </table>
+        <div class="agent-controls">
+          <button class="btn-collision" onclick="runCollisionSim()">
+            &#9888; Simulate Collision
+          </button>
+          <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
+        </div>
+        <div id="collisionAlert" class="collision-alert" style="display:none"></div>
+
+        <!-- Register Agent Form -->
+        <div class="register-agent-form">
+          <h3 class="register-title">Register New Agent</h3>
+          <div class="register-grid">
+            <div class="register-field">
+              <label class="field-label">Agent Name</label>
+              <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+            </div>
+            <div class="register-field">
+              <label class="field-label">Department</label>
+              <select id="regDept" class="reg-input">
+                <option>Support</option>
+                <option>Sales</option>
+                <option>Marketing</option>
+                <option>Operations</option>
+              </select>
+            </div>
+            <div class="register-field">
+              <label class="field-label">Target Table</label>
+              <select id="regTable" class="reg-input">
+                <option value="tickets">tickets</option>
+                <option value="crm_records">crm_records</option>
+                <option value="customers">customers</option>
+                <option value="token_transactions">token_transactions</option>
+              </select>
+            </div>
+            <div class="register-field">
+              <label class="field-label">Permissions</label>
+              <select id="regPerms" class="reg-input">
+                <option value="read">read</option>
+                <option value="read,write" selected>read, write</option>
+                <option value="read,write,delete">read, write, delete</option>
+              </select>
+            </div>
+            <div class="register-field">
+              <label class="field-label">Collision Policy</label>
+              <select id="regPolicy" class="reg-input">
+                <option value="lock" selected>Lock — require supervisor</option>
+                <option value="queue">Queue — auto-retry when free</option>
+                <option value="skip">Skip — abandon silently</option>
+              </select>
+            </div>
+          </div>
+          <div class="register-actions">
+            <button class="btn-primary" onclick="registerAgent()">+ Register Agent</button>
+            <span id="registerStatus" class="register-status"></span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Row 3: Pruner Test Panel -->
+    <section class="panel full-width" id="prunerPanel">
+      <h2 class="panel-title">Context-Pruning Sweeper — Live Test</h2>
+      <div class="pruner-grid">
+        <div>
+          <label class="field-label">Raw Input Payload</label>
+          <textarea id="prunerInput" class="code-area" placeholder="Paste a messy email, ticket, or log here..."></textarea>
+        </div>
+        <div>
+          <label class="field-label">Cleaned Output</label>
+          <textarea id="prunerOutput" class="code-area" readonly placeholder="Pruned text will appear here..."></textarea>
+        </div>
+      </div>
+      <div class="pruner-actions">
+        <button class="btn-primary" id="prunerRunBtn" onclick="runPruner()">Run Sweeper</button>
+        <div class="pruner-stats" id="prunerStats"></div>
+      </div>
+    </section>
+
+    <!-- Row 4: Token Router Panel -->
+    <section class="panel full-width" id="routerPanel">
+      <h2 class="panel-title">Token Router & Model Cascader — Live Test</h2>
+      <div class="router-controls">
+        <div class="router-input-group">
+          <label class="field-label">Payload to Route</label>
+          <textarea id="routerInput" class="code-area" placeholder="Paste a payload here (or click 'Send Pruned Text' after running the sweeper above)..."></textarea>
+        </div>
+        <div class="router-settings">
+          <label class="field-label">Department</label>
+          <select id="routerDept" class="router-select">
+            <option>Support</option>
+            <option>Sales</option>
+            <option>Marketing</option>
+            <option>Operations</option>
+          </select>
+          <label class="router-checkbox-label">
+            <input type="checkbox" id="routerAutoPrune" checked />
+            Auto-prune before routing
+          </label>
+          <button class="btn-secondary" onclick="sendPrunedText()">&#8593; Use Pruned Text</button>
+          <button class="btn-primary" onclick="runRouter()">Route Payload</button>
+        </div>
+      </div>
+
+      <!-- Result card — hidden until a route call returns -->
+      <div class="router-result" id="routerResult" style="display:none">
+        <div class="router-result-header">
+          <span class="field-label">Routing Decision</span>
+          <div class="router-badges">
+            <span class="badge" id="routerComplexityBadge"></span>
+            <span class="badge" id="routerModelBadge"></span>
+            <span class="badge" id="routerThrottleBadge" style="display:none"></span>
+          </div>
+        </div>
+        <p class="router-reason" id="routerReason"></p>
+
+        <div class="router-cost-grid">
+          <div class="cost-cell">
+            <div class="cost-label">Input Tokens</div>
+            <div class="cost-value" id="routerInputTokens"></div>
+          </div>
+          <div class="cost-cell">
+            <div class="cost-label">Output Tokens</div>
+            <div class="cost-value" id="routerOutputTokens"></div>
+          </div>
+          <div class="cost-cell highlight-green">
+            <div class="cost-label">This Call Cost</div>
+            <div class="cost-value" id="routerCost"></div>
+          </div>
+          <div class="cost-cell highlight-purple">
+            <div class="cost-label">Cost Without Pruning</div>
+            <div class="cost-value" id="routerCostFull"></div>
+          </div>
+          <div class="cost-cell highlight-yellow">
+            <div class="cost-label">Pruning Saved</div>
+            <div class="cost-value" id="routerPruningSaved"></div>
+          </div>
+          <div class="cost-cell">
+            <div class="cost-label">Budget Used</div>
+            <div class="cost-value" id="routerBudgetPct"></div>
+          </div>
+        </div>
+
+        <div>
+          <label class="field-label" style="margin-top:14px; display:block">Simulated Model Response</label>
+          <div class="router-response" id="routerResponse"></div>
+        </div>
+      </div>
+
+      <div id="routerStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted)"></div>
+    </section>
+
+    <!-- Row 5: Audit Log -->
+    <section class="panel full-width" id="auditPanel">
+      <h2 class="panel-title">AI Decision Audit Log</h2>
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Event Type</th>
+            <th>Department</th>
+            <th>Model Tier</th>
+            <th>Risk Level</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody id="auditTableBody">
+          <tr><td colspan="6" class="placeholder">Audit events will appear here as you use the system.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    FAGE v0.1.0 — POC &nbsp;|&nbsp; Backend: <code>http://localhost:8000</code> &nbsp;|&nbsp;
+    API Docs: <a href="http://localhost:8000/docs" target="_blank">localhost:8000/docs</a>
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/budget.js"></script>
+  <script src="js/agentlake.js"></script>
+  <script src="js/router.js"></script>
+  <script src="js/auditor.js"></script>
+
+</body>
+</html>

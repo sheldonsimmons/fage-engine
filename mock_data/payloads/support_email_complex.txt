@@ -1,0 +1,62 @@
+From: aria.fontaine@acmecorp.com
+To: enterprise-support@fageplatform.com
+Date: Mon, 20 May 2026 09:14:22 -0500
+Subject: RE: RE: RE: FWD: CRITICAL - Dashboard Outage - Ticket #84921
+X-Mailer: Microsoft Outlook 16.0
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+
+<html>
+<head><style>body{font-family:Calibri,sans-serif;font-size:11pt;} .disclaimer{font-size:8pt;color:#999;} p{margin:0;padding:0;}</style></head>
+<body>
+<p>Hi Support Team,</p>
+<br>
+<p>This is the <strong>third time</strong> I have escalated this issue and we have still not received a resolution or even an acknowledgment from a senior engineer.</p>
+<br>
+<p>To summarize the critical situation: our entire enterprise dashboard has been inaccessible since 9:04am CST this morning. All 214 users across our organization are locked out. This is a P0 production incident under our SLA agreement (Contract #ACM-2024-ENT-0091). Clause 4.2 of our MSA guarantees 99.9% uptime with a maximum of 4 hours unplanned downtime per quarter. We are now at hour 3 and approaching that threshold.</p>
+<br>
+<p>The following systems are affected:</p>
+<ul>
+<li>Executive reporting dashboard (all users)</li>
+<li>API gateway authentication (returning 503 errors)</li>
+<li>Real-time analytics feeds (frozen since 09:08am)</li>
+<li>Automated billing reconciliation pipeline (halted)</li>
+</ul>
+<br>
+<p>If this is not resolved within the next 60 minutes, our legal team has been instructed to begin formal breach-of-contract proceedings and we will be seeking SLA credits as outlined in Section 9, Subsection 3 of our enterprise agreement.</p>
+<br>
+<p>I need the following immediately:</p>
+<ol>
+<li>Direct phone contact with a senior on-call engineer</li>
+<li>A written root-cause analysis within 24 hours of resolution</li>
+<li>Confirmation of SLA credit calculation</li>
+<li>A formal incident report suitable for our board of directors</li>
+</ol>
+<br>
+<p>Regards,<br>
+Aria Fontaine<br>
+VP of Enterprise Operations<br>
+Acme Corporation</p>
+
+<br><br>
+<p>-----Original Message-----</p>
+<p>From: support-bot@fageplatform.com</p>
+<p>Sent: Monday, May 20, 2026 8:58 AM</p>
+<p>To: aria.fontaine@acmecorp.com</p>
+<p>Subject: Re: CRITICAL - Dashboard Outage - Ticket #84921</p>
+<br>
+<p>Thank you for contacting FAGE Platform Support. Your ticket #84921 has been received and is being reviewed by our team. Expected response time: 4-8 business hours.</p>
+<br>
+<p>-----Original Message-----</p>
+<p>From: aria.fontaine@acmecorp.com</p>
+<p>Sent: Monday, May 20, 2026 9:06 AM</p>
+<p>Subject: CRITICAL - Dashboard Outage</p>
+<br>
+<p>Our dashboard is down. Please help immediately.</p>
+
+<br><br>
+<div class="disclaimer">
+CONFIDENTIALITY NOTICE: This email message, including any attachments, is for the sole use of the intended recipient(s) and may contain confidential and privileged information. Any unauthorized review, use, disclosure or distribution is prohibited. If you are not the intended recipient, please contact the sender by reply email and destroy all copies of the original message. This communication does not constitute legal advice. Acme Corporation | 1400 Corporate Blvd, Suite 900, Chicago, IL 60601 | Tel: +1 (312) 555-0100 | www.acmecorp.com | Registered in Delaware, USA. All rights reserved. &copy; 2026 Acme Corporation. Please consider the environment before printing this email. Acme Corporation is an equal opportunity employer. For our full privacy policy visit acmecorp.com/privacy. Acme Corporation complies with GDPR, CCPA, and all applicable data protection regulations.
+</div>
+</body>
+</html>

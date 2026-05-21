@@ -1,0 +1,18 @@
+# Environment — never commit API keys
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+*.egg-info/
+
+# Database
+*.db
+
+# Audit logs (exportable but not tracked)
+backend/audit_logs/*.jsonl
+
+# macOS
+.DS_Store

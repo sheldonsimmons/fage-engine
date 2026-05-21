@@ -1,0 +1,13 @@
+From: priya.nair@cloudbase.ai
+To: support@fageplatform.com
+Date: Mon, 20 May 2026 11:30:00 -0500
+Subject: Quick question about API rate limits
+
+Hi,
+
+Quick question — what is the rate limit for the v2 API on a Pro plan?
+
+I just want to confirm before we push a new integration to production.
+
+Thanks,
+Priya

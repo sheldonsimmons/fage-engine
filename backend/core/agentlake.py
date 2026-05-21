@@ -1,0 +1,232 @@
+"""
+core/agentlake.py — Agentlake Registry & Concurrency Traffic Cop  [Step 5]
+
+Responsibilities:
+  - List all registered AI agents and their current status
+  - Let an agent "claim" a record before writing to it
+  - Detect when two agents claim the same record simultaneously (collision)
+  - Lock both agents and raise an alert — no data is written until resolved
+  - Allow a supervisor to release a lock manually
+"""
+
+from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from database.models import RegisteredAgent
+
+
+def register_agent(db: Session, name: str, department: str, permissions: str, target_table: str, collision_policy: str = "lock") -> dict:
+    """Register a new AI agent in the Agentlake registry."""
+    agent = RegisteredAgent(
+        name=name,
+        department=department,
+        permissions=permissions,
+        target_table=target_table,
+        collision_policy=collision_policy,
+        status="idle",
+    )
+    db.add(agent)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ValueError(f"An agent named '{name}' is already registered.")
+    db.refresh(agent)
+    return _serialize(agent)
+
+
+def deregister_agent(db: Session, agent_id: int) -> dict:
+    """Remove an agent from the registry entirely."""
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+    name = agent.name
+    db.delete(agent)
+    db.commit()
+    return {"deleted": True, "message": f"Agent '{name}' removed from registry."}
+
+
+def list_agents(db: Session) -> list:
+    """Return all registered agents with their current status."""
+    agents = db.query(RegisteredAgent).all()
+    return [_serialize(a) for a in agents]
+
+
+def get_agent(db: Session, agent_id: int):
+    """Return a single agent by ID."""
+    a = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    return _serialize(a) if a else None
+
+
+def claim_record(db: Session, agent_id: int, table: str, record_id: int) -> dict:
+    """
+    Traffic Cop — an agent declares intent to write a specific record.
+
+    Logic:
+      1. Check if any OTHER agent already holds a claim on (table, record_id)
+      2. If yes  → collision detected. Lock BOTH agents. Return collision report.
+      3. If no   → grant the claim. Set agent status to 'active'.
+    """
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+
+    # Look for any other active agent already targeting this exact record
+    blocker = (
+        db.query(RegisteredAgent)
+        .filter(
+            RegisteredAgent.target_table     == table,
+            RegisteredAgent.target_record_id == record_id,
+            RegisteredAgent.status.in_(["active", "locked"]),
+            RegisteredAgent.id               != agent_id,
+        )
+        .first()
+    )
+
+    if blocker:
+        lock_reason = (
+            f"Concurrency collision: both '{agent.name}' and '{blocker.name}' "
+            f"attempted to write {table} record #{record_id} simultaneously."
+        )
+        now = datetime.utcnow()
+        policy = agent.collision_policy or "lock"
+
+        agent.target_table     = table
+        agent.target_record_id = record_id
+
+        if policy == "skip":
+            # ── SKIP — abandon silently, log it ───────────────────────────────
+            agent.status      = "idle"
+            agent.locked_at   = None
+            agent.lock_reason = None
+            db.commit()
+            return {
+                "collision":  True,
+                "policy":     "skip",
+                "agent":      _serialize(agent),
+                "lock_reason": lock_reason,
+                "message":    f"'{agent.name}' skipped {table} #{record_id} — already held by '{blocker.name}'.",
+            }
+
+        elif policy == "queue":
+            # ── QUEUE — block but don't lock, auto-proceeds when free ─────────
+            agent.status      = "queued"
+            agent.locked_at   = now
+            agent.lock_reason = lock_reason
+            db.commit()
+            return {
+                "collision":  True,
+                "policy":     "queue",
+                "agent":      _serialize(agent),
+                "lock_reason": lock_reason,
+                "message":    f"'{agent.name}' queued for {table} #{record_id} — waiting for '{blocker.name}' to release.",
+            }
+
+        else:
+            # ── LOCK (default) — lock both, require supervisor ─────────────────
+            agent.status      = "locked"
+            agent.locked_at   = now
+            agent.lock_reason = lock_reason
+
+            blocker.status      = "locked"
+            blocker.locked_at   = now
+            blocker.lock_reason = lock_reason
+
+            db.commit()
+            return {
+                "collision":     True,
+                "policy":        "lock",
+                "locked_agents": [_serialize(agent), _serialize(blocker)],
+                "lock_reason":   lock_reason,
+                "table":         table,
+                "record_id":     record_id,
+            }
+
+    # ── No collision — grant the claim ─────────────────────────────────────────
+    agent.status           = "active"
+    agent.target_table     = table
+    agent.target_record_id = record_id
+    agent.locked_at        = None
+    agent.lock_reason      = None
+    db.commit()
+
+    return {
+        "collision": False,
+        "agent":     _serialize(agent),
+        "message":   f"Claim granted. '{agent.name}' now holds exclusive write access to {table} record #{record_id}.",
+    }
+
+
+def release_lock(db: Session, agent_id: int) -> dict:
+    """
+    Supervisor action: release a locked or active agent back to idle.
+    Clears the record claim so other agents can proceed.
+    """
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+
+    agent.status           = "idle"
+    agent.target_record_id = None
+    agent.locked_at        = None
+    agent.lock_reason      = None
+    db.commit()
+
+    return {
+        "released": True,
+        "agent":    _serialize(agent),
+        "message":  f"Agent '{agent.name}' released and set to idle.",
+    }
+
+
+def simulate_collision(db: Session, agent_id_1: int, agent_id_2: int, table: str, record_id: int) -> dict:
+    """
+    Demo helper: force two specific agents to simultaneously claim the same record.
+    If agent_id_1/2 are not found, falls back to the first two available agents.
+    Agent 1 claims first (succeeds), then Agent 2 claims (triggers collision).
+    """
+    # Resolve agents — fall back to first two available if hardcoded IDs not found
+    a1 = db.query(RegisteredAgent).filter_by(id=agent_id_1).first()
+    a2 = db.query(RegisteredAgent).filter_by(id=agent_id_2).first()
+
+    if not a1 or not a2:
+        all_agents = db.query(RegisteredAgent).order_by(RegisteredAgent.id).all()
+        if len(all_agents) < 2:
+            raise ValueError("At least two agents must be registered to simulate a collision.")
+        a1 = all_agents[0]
+        a2 = all_agents[1]
+
+    # Reset both to idle so the sim starts clean
+    for a in [a1, a2]:
+        a.status           = "idle"
+        a.target_record_id = None
+        a.locked_at        = None
+        a.lock_reason      = None
+    db.commit()
+
+    # Agent 1 claims the record — this will succeed
+    claim_record(db, a1.id, table, record_id)
+
+    # Agent 2 tries to claim the same record — collision fires
+    result = claim_record(db, a2.id, table, record_id)
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Internal helper
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _serialize(a: RegisteredAgent) -> dict:
+    return {
+        "id":               a.id,
+        "name":             a.name,
+        "department":       a.department,
+        "permissions":      a.permissions,
+        "target_table":     a.target_table,
+        "target_record_id": a.target_record_id,
+        "status":           a.status,
+        "collision_policy": a.collision_policy or "lock",
+        "locked_at":        a.locked_at.isoformat() if a.locked_at else None,
+        "lock_reason":      a.lock_reason,
+    }
