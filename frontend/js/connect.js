@@ -349,8 +349,14 @@ async function registerAndConnect() {
     goStep(3);
 
   } catch (err2) {
-    err.textContent = "Error: " + err2.message;
+    if (err2.message.includes("409")) {
+      err.textContent = `An agent named "${name}" already exists. Change the Agent Name above and try again.`;
+    } else {
+      err.textContent = "Error: " + err2.message;
+    }
     err.style.color = "var(--accent-red)";
+    document.getElementById("agentName").focus();
+    document.getElementById("agentName").select();
   }
 }
 
