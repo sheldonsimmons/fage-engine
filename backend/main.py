@@ -107,6 +107,18 @@ def populate_demo_data():
     populate()
     return {"status": "ok", "message": "Demo data loaded. Refresh your dashboard."}
 
+# Dev/Demo — Populate dashboard with enterprise-scale demo data for CFO/CTO presentations
+@app.post("/api/admin/populate-enterprise-demo", tags=["Admin"])
+def populate_enterprise_demo_data():
+    """
+    DEV/DEMO ONLY — Loads the real FAGE dashboard with enterprise-scale data.
+    12 named agents, 4 departments, ~255K transactions over 30 days, Marketing throttled,
+    and 12 rich audit events covering blocks, escalations, GDPR, HIPAA, and more.
+    """
+    from database.populate_enterprise import populate_enterprise
+    populate_enterprise()
+    return {"status": "ok", "message": "Enterprise demo data loaded. Refresh your dashboard."}
+
 # Dev/Demo — Reset test data (keeps departments, agents, terms)
 @app.post("/api/admin/reset-demo", tags=["Admin"])
 def reset_demo_data(db=None):
