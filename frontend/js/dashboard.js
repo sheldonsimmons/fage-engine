@@ -136,6 +136,19 @@ async function runPruner() {
   }
 }
 
+// ── Demo reset ────────────────────────────────────────────────────────────────
+async function resetDemoData() {
+  if (!confirm("Clear all transactions and audit events?\n\nDepartments, agents, and sensitive terms will be kept.")) return;
+  try {
+    const result = await apiPost("/api/admin/reset-demo", {});
+    alert(`✓ Reset complete.\n${result.transactions_cleared} transactions cleared.\n${result.audit_events_cleared} audit events cleared.`);
+    loadDashboard();
+    loadBudgets();
+  } catch (e) {
+    alert("Reset failed: " + e.message);
+  }
+}
+
 // ── Collapsible panels ────────────────────────────────────────────────────────
 function togglePanel(bodyId, chevronId) {
   const body    = document.getElementById(bodyId);

@@ -278,6 +278,16 @@ body {
 }
 .btn-deregister:hover { background: rgba(255,82,82,0.08); }
 
+.header-reset-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+.header-reset-btn:hover { border-color: var(--accent-red); color: var(--accent-red); }
+
 /* ── Collapsible panels ───────────────────────────────────────────────────────── */
 .collapsible-title {
   cursor: pointer; user-select: none;

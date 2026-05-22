@@ -95,6 +95,39 @@ app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywor
 from api import routes_reports
 app.include_router(routes_reports.router, prefix="/api/reports", tags=["Reports"])
 
+# Dev/Demo — Reset test data (keeps departments, agents, terms)
+@app.post("/api/admin/reset-demo", tags=["Admin"])
+def reset_demo_data(db=None):
+    """
+    DEV/DEMO ONLY — Clears token transactions and audit events.
+    Keeps all departments, budget caps, agents, and sensitive terms intact.
+    """
+    from database.db import get_db
+    from database.models import TokenTransaction, AuditEvent, DepartmentBudget
+    from datetime import datetime
+    from sqlalchemy.orm import Session
+    from database.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        tx_count    = db.query(TokenTransaction).delete()
+        audit_count = db.query(AuditEvent).delete()
+        # Reset all department spend to $0
+        for budget in db.query(DepartmentBudget).all():
+            budget.current_spend_usd = 0.0
+            budget.throttled         = False
+            budget.override_granted  = False
+            budget.period_start      = datetime.utcnow()
+        db.commit()
+        return {
+            "status":              "ok",
+            "transactions_cleared": tx_count,
+            "audit_events_cleared": audit_count,
+            "message":             "Demo data cleared. Departments, agents, and terms preserved.",
+        }
+    finally:
+        db.close()
+
 # ── Serve frontend as static files (MUST be last — catches everything else) ────
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
