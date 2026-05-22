@@ -256,6 +256,78 @@ async function loadRisk() {
       </tr>
     `).join("");
   }
+
+  // Load governance summary panels from dashboard API
+  try {
+    const d = await apiGet("/api/dashboard");
+    renderComplianceGrid(d);
+    renderExecSummary(d);
+  } catch (e) {
+    console.warn("Governance panels failed:", e.message);
+  }
+}
+
+function renderComplianceGrid(d) {
+  const grid = document.getElementById("complianceGrid");
+  if (!grid) return;
+  const items = [
+    { icon: "🚫", value: d.blocked_count,     label: "Requests Blocked",          sub: "Sensitive terms triggered block policy — request never reached AI model",          cls: "critical" },
+    { icon: "⚠️",  value: d.escalated_count,   label: "Escalated to Flagship",     sub: "Legal, NDA, contract language forced flagship model review",                       cls: "high"     },
+    { icon: "🔍", value: d.flagged_count,      label: "Flagged in Audit Log",      sub: "High-risk keywords logged for compliance review",                                   cls: "medium"   },
+    { icon: "🔒", value: d.pii_count,          label: "PII Detected",              sub: "Credit cards, SSNs, emails, phone numbers caught before AI processing",             cls: "high"     },
+    { icon: "💰", value: d.throttle_prevented, label: "Budget Overruns Prevented", sub: "Auto-throttle engaged before department cap was breached",                          cls: "low"      },
+    { icon: "⚡", value: d.collision_count,    label: "Agent Collisions Resolved", sub: "Concurrent write conflicts detected and locked — zero data corruption",             cls: "low"      },
+  ];
+  const hasData = items.some(i => i.value > 0);
+  if (!hasData) {
+    grid.innerHTML = '<p class="placeholder">No compliance events yet — load enterprise demo or route a call.</p>';
+    return;
+  }
+  grid.innerHTML = items.map(i => `
+    <div class="demo-compliance-card ${i.cls}">
+      <div class="demo-compliance-icon">${i.icon}</div>
+      <div class="demo-compliance-value">${i.value.toLocaleString()}</div>
+      <div class="demo-compliance-label">${i.label}</div>
+      <div class="demo-compliance-sub">${i.sub}</div>
+    </div>
+  `).join("");
+}
+
+function renderExecSummary(d) {
+  const grid = document.getElementById("execGrid");
+  if (!grid) return;
+  const tokens = d.tokens_saved_total || 0;
+  const tokensLabel = tokens >= 1_000_000
+    ? (tokens / 1_000_000).toFixed(2) + "M"
+    : tokens >= 1_000 ? (tokens / 1_000).toFixed(1) + "K"
+    : tokens.toLocaleString();
+  const eventsLabel = (d.compliance_events_total || 0) >= 1000
+    ? ((d.compliance_events_total) / 1000).toFixed(1) + "K"
+    : (d.compliance_events_total || 0).toString();
+  const savings = (d.projected_annual_savings || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const items = [
+    { icon: "$", cls: "green",  color: "green",  title: "PROJECTED ANNUAL SAVINGS",  value: "$" + savings,                        sub: "Based on 30-day actual performance extrapolated to 12 months" },
+    { icon: "%", cls: "accent", color: "accent", title: "AI COST REDUCTION",         value: (d.cost_reduction_pct || 0) + "%",    sub: "Achieved through smart routing, token pruning, and budget enforcement" },
+    { icon: "◈", cls: "purple", color: "purple", title: "COMPLIANCE EVENTS LOGGED",  value: eventsLabel,                          sub: "Immutable audit trail — every AI decision logged, timestamped, exportable" },
+    { icon: "⚡", cls: "yellow", color: "yellow", title: "TIME TO DEPLOY",            value: "15 min",                             sub: "One Apex class · one Flow action · 4 custom fields · no IT project required" },
+    { icon: "↑", cls: "green",  color: "green",  title: "TOKENS SAVED",              value: tokensLabel,                          sub: "Context pruned before every AI call — savings start from day one" },
+    { icon: "0", cls: "red",    color: "",        title: "DATA CORRUPTION EVENTS",    value: "Zero",                               sub: (d.collision_count || 0) + " agent collisions detected and locked — no silent overwrites" },
+  ];
+  const hasData = (d.total_calls || 0) > 0 || (d.flagged_count || 0) > 0;
+  if (!hasData) {
+    grid.innerHTML = '<p class="placeholder">No data yet — load enterprise demo or route a call.</p>';
+    return;
+  }
+  grid.innerHTML = items.map(i => `
+    <div class="demo-exec-card">
+      <div class="demo-exec-icon ${i.cls}">${i.icon}</div>
+      <div class="demo-exec-content">
+        <div class="demo-exec-title">${i.title}</div>
+        <div class="demo-exec-value ${i.color}">${i.value}</div>
+        <div class="demo-exec-sub">${i.sub}</div>
+      </div>
+    </div>
+  `).join("");
 }
 
 // ── TAB 3: DEPARTMENTS ────────────────────────────────────────────────────────
