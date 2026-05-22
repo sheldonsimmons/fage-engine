@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import DepartmentBudget, TokenTransaction
+from database.models import DepartmentBudget, TokenTransaction, RegisteredAgent
 from core.router import route
 from core.auditor import write_audit_event
 from core.keywords import check_terms
@@ -99,6 +99,15 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # If escalate: force COMPLEX routing regardless of content score
     force_complex = term_result["triggered"] and term_result["action"] == "escalate"
 
+    # ── Set agent status to active ─────────────────────────────────────────────
+    agent = None
+    if req.agent_id:
+        agent = db.query(RegisteredAgent).filter_by(id=req.agent_id).first()
+        if agent:
+            agent.status      = "active"
+            agent.last_used_at = datetime.utcnow()
+            db.commit()
+
     # Run the routing pipeline
     result = route(req.text, req.department, req.auto_prune, is_throttled, force_complex=force_complex)
 
@@ -126,7 +135,12 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
             budget.throttled = True
 
-    db.commit()
+    # ── Set agent back to idle after routing ──────────────────────────────────
+    if agent:
+        agent.status = "idle"
+        db.commit()
+    else:
+        db.commit()
 
     # ── Write audit event for high-stakes decisions ────────────────────────────
     all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]

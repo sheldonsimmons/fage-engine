@@ -80,6 +80,7 @@ class RegisteredAgent(Base):
     collision_policy = Column(String,   default="lock")   # lock | queue | skip
     locked_at        = Column(DateTime, nullable=True)
     lock_reason      = Column(String,   nullable=True)
+    last_used_at     = Column(DateTime, nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
 
     token_transactions = relationship("TokenTransaction", back_populates="agent")

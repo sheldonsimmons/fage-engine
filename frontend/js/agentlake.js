@@ -10,7 +10,7 @@ async function loadAgents() {
     updateKpiAgents(agents);
   } catch (err) {
     document.getElementById("agentTableBody").innerHTML =
-      `<tr><td colspan="5" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
+      `<tr><td colspan="7" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
   }
 }
 
@@ -48,7 +48,7 @@ function renderAgentTable(agents) {
   }
 
   if (!agents.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No agents registered.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No agents registered.</td></tr>';
     return;
   }
 
@@ -77,6 +77,10 @@ function renderAgentTable(agents) {
                       : a.collision_policy === "skip"  ? "var(--text-muted)"
                       : "var(--accent-red)";
 
+    const lastActive = a.last_used_at
+      ? new Date(a.last_used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "—";
+
     return `
       <tr id="agent-row-${a.id}" ${a.status === "locked" ? 'class="row-locked"' : ""}>
         <td ${lockTip}>${a.name}</td>
@@ -84,6 +88,7 @@ function renderAgentTable(agents) {
         <td style="font-family:var(--font-mono); font-size:11px">${target}</td>
         <td style="font-size:11px; font-weight:600; color:${policyColor}">${policyLabel}</td>
         <td><span class="badge ${badgeClass}">${a.status.toUpperCase()}</span></td>
+        <td style="font-size:11px; color:var(--text-muted)">${lastActive}</td>
         <td>${actionBtn}</td>
       </tr>
     `;

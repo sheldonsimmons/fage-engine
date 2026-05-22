@@ -229,4 +229,5 @@ def _serialize(a: RegisteredAgent) -> dict:
         "collision_policy": a.collision_policy or "lock",
         "locked_at":        a.locked_at.isoformat() if a.locked_at else None,
         "lock_reason":      a.lock_reason,
+        "last_used_at":     a.last_used_at.isoformat() if a.last_used_at else None,
     }
