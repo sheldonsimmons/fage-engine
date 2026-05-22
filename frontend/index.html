@@ -277,7 +277,11 @@
 
     <!-- Row 5: Sensitive Term Library -->
     <section class="panel full-width" id="keywordsPanel">
-      <h2 class="panel-title">Sensitive Term Library</h2>
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('keywordsBody', 'keywordsChevron')">
+        Sensitive Term Library
+        <span class="panel-chevron" id="keywordsChevron">▾</span>
+      </h2>
+      <div id="keywordsBody">
       <p class="panel-sub">Words or phrases that trigger special handling when detected in any payload routed through FAGE. Add company-specific terms — legal, compliance, HR, or anything your team flags as sensitive.</p>
 
       <!-- Add term form -->
@@ -328,6 +332,7 @@
           <tr><td colspan="5" class="placeholder">Loading terms...</td></tr>
         </tbody>
       </table>
+      </div><!-- end keywordsBody -->
     </section>
 
     <!-- Row 6: Audit Log -->
