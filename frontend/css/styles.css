@@ -164,6 +164,64 @@ body {
 /* ── Misc ─────────────────────────────────────────────────────────────────────── */
 .placeholder { color: var(--text-muted); font-style: italic; font-size: 12px; padding: 8px 0; }
 
+/* ── Help Icon ───────────────────────────────────────────────────────────────── */
+.help-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: transparent; border: 1px solid var(--text-muted);
+  color: var(--text-muted); font-size: 10px; font-weight: 700;
+  cursor: pointer; margin-left: 8px; vertical-align: middle;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.help-icon:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Contextual Tooltip ──────────────────────────────────────────────────────── */
+.help-tooltip {
+  position: absolute; z-index: 1000; width: 300px;
+  background: var(--bg-panel); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 14px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.help-tooltip-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+.help-tooltip-body  { font-size: 12px; color: var(--text-primary); line-height: 1.6; }
+.help-tooltip-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: none; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; padding: 2px 4px;
+}
+.help-tooltip-close:hover { color: var(--text-primary); }
+
+/* ── Tour Button (header) ────────────────────────────────────────────────────── */
+.tour-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); border-radius: 6px; padding: 5px 12px;
+  font-size: 12px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+  margin-left: 8px;
+}
+.tour-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Tour Overlay & Box ──────────────────────────────────────────────────────── */
+.tour-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 900; pointer-events: none;
+}
+.tour-box {
+  position: absolute; z-index: 950; width: 340px;
+  background: var(--bg-panel); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 20px; box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+}
+.tour-step-count { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 8px; }
+.tour-title      { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+.tour-body       { font-size: 12px; color: var(--text-primary); line-height: 1.7; margin-bottom: 16px; }
+.tour-actions    { display: flex; justify-content: space-between; align-items: center; }
+.tour-btn-skip   { background: none; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 4px 0; }
+.tour-btn-skip:hover { color: var(--text-primary); }
+.tour-btn-next   { background: var(--accent); color: #000; border: none; border-radius: 6px; padding: 7px 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.tour-btn-next:hover { opacity: 0.85; }
+.tour-btn-prev   { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; padding: 7px 14px; font-size: 12px; cursor: pointer; }
+.tour-btn-prev:hover { border-color: var(--text-muted); color: var(--text-primary); }
+.tour-highlight  { outline: 2px solid var(--accent) !important; outline-offset: 4px; border-radius: 8px; position: relative; z-index: 910; }
+
 /* ── Footer ───────────────────────────────────────────────────────────────────── */
 .footer {
   padding: 14px 28px; border-top: 1px solid var(--border);

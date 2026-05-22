@@ -20,6 +20,7 @@
       <a href="/reports.html" class="header-nav-link" style="margin-left:8px">📊 Reports</a>
       <a href="/onboarding.html" class="header-nav-link" style="margin-left:8px">⚙ Setup</a>
       <button class="header-nav-link header-reset-btn" onclick="resetDemoData()" style="margin-left:8px">↺ Reset Demo</button>
+      <button class="tour-btn" onclick="startTour()">? Guide</button>
     </div>
     <div class="header-status" id="systemStatus">
       <span class="status-dot offline"></span>
@@ -34,22 +35,22 @@
     <!-- Row 1: KPI Cards -->
     <section class="kpi-row">
       <div class="kpi-card">
-        <div class="kpi-label">Total Spend Today</div>
+        <div class="kpi-label">Total Spend Today <span class="help-icon" data-help="kpiSpend" onclick="showHelp('kpiSpend')">?</span></div>
         <div class="kpi-value" id="kpiSpend">—</div>
         <div class="kpi-sub" id="kpiSpendSub">across all departments</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Tokens Saved (Pruning)</div>
+        <div class="kpi-label">Tokens Saved (Pruning) <span class="help-icon" data-help="kpiTokensSaved" onclick="showHelp('kpiTokensSaved')">?</span></div>
         <div class="kpi-value" id="kpiTokensSaved">—</div>
         <div class="kpi-sub" id="kpiTokensSub">via context sweeper</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Active Agents</div>
+        <div class="kpi-label">Active Agents <span class="help-icon" data-help="kpiAgents" onclick="showHelp('kpiAgents')">?</span></div>
         <div class="kpi-value" id="kpiAgents">—</div>
         <div class="kpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
       </div>
       <div class="kpi-card alert" id="kpiThrottleCard">
-        <div class="kpi-label">Throttled Departments</div>
+        <div class="kpi-label">Throttled Departments <span class="help-icon" data-help="kpiThrottled" onclick="showHelp('kpiThrottled')">?</span></div>
         <div class="kpi-value" id="kpiThrottled">—</div>
         <div class="kpi-sub" id="kpiThrottleSub">at or over budget cap</div>
       </div>
@@ -92,14 +93,14 @@
     <section class="mid-row">
 
       <div class="panel" id="budgetPanel">
-        <h2 class="panel-title">Department Budgets</h2>
+        <h2 class="panel-title">Department Budgets <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span></h2>
         <div id="budgetList">
           <p class="placeholder">Loading...</p>
         </div>
       </div>
 
       <div class="panel" id="agentPanel">
-        <h2 class="panel-title">Agentlake Registry</h2>
+        <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
         <table class="agent-table">
           <thead>
             <tr>
@@ -180,6 +181,7 @@
     <section class="panel full-width" id="prunerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('prunerBody', 'prunerChevron')">
         Context-Pruning Sweeper — Live Test
+        <span class="help-icon" data-help="prunerPanel" onclick="event.stopPropagation(); showHelp('prunerPanel')">?</span>
         <span class="panel-chevron" id="prunerChevron">▾</span>
       </h2>
       <div id="prunerBody">
@@ -204,6 +206,7 @@
     <section class="panel full-width" id="routerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('routerBody', 'routerChevron')">
         Token Router &amp; Model Cascader — Live Test
+        <span class="help-icon" data-help="routerPanel" onclick="event.stopPropagation(); showHelp('routerPanel')">?</span>
         <span class="panel-chevron" id="routerChevron">▾</span>
       </h2>
       <div id="routerBody">
@@ -282,6 +285,7 @@
     <section class="panel full-width" id="keywordsPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('keywordsBody', 'keywordsChevron')">
         Sensitive Term Library
+        <span class="help-icon" data-help="keywordsPanel" onclick="event.stopPropagation(); showHelp('keywordsPanel')">?</span>
         <span class="panel-chevron" id="keywordsChevron">▸</span>
       </h2>
       <div id="keywordsBody" style="display:none">
@@ -342,6 +346,7 @@
     <section class="panel full-width" id="auditPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('auditBody', 'auditChevron')">
         AI Decision Audit Log
+        <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation(); showHelp('auditPanel')">?</span>
         <span class="panel-chevron" id="auditChevron">▾</span>
       </h2>
       <div id="auditBody">
@@ -377,6 +382,7 @@
   <script src="js/router.js"></script>
   <script src="js/keywords.js"></script>
   <script src="js/auditor.js"></script>
+  <script src="js/help.js"></script>
 
 </body>
 </html>
