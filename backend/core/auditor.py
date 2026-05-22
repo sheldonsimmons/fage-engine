@@ -71,6 +71,16 @@ def _build_context_snapshot(db: Session, department: str) -> dict:
 # Rationale generator
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _fmt(val, spec="", fallback="N/A"):
+    """Safely format a value that may be None."""
+    if val is None:
+        return fallback
+    try:
+        return format(val, spec)
+    except (TypeError, ValueError):
+        return str(val)
+
+
 def _build_rationale(
     event_type:       str,
     routing_decision: str,
@@ -81,7 +91,10 @@ def _build_rationale(
     cost_usd:         float,
     context:          dict,
 ) -> str:
-    kw_str = ", ".join(f'"{k}"' for k in matched_keywords) if matched_keywords else "none"
+    kw_str   = ", ".join(f'"{k}"' for k in matched_keywords) if matched_keywords else "none"
+    spent    = _fmt(context.get("budget_spent_usd"), ".4f")
+    cap      = _fmt(context.get("budget_cap_usd"),   ".2f")
+    used_pct = _fmt(context.get("budget_used_pct"),  ".1f")
 
     if event_type == "LOCK":
         return (
@@ -94,25 +107,24 @@ def _build_rationale(
 
     if routing_decision == "THROTTLED":
         return (
-            f"BUDGET CAP ENFORCED. The {department} department reached {context['budget_used_pct']}% "
-            f"of its ${context['budget_cap_usd']:.2f} monthly cap "
-            f"(current spend: ${context['budget_spent_usd']:.4f}). "
+            f"BUDGET CAP ENFORCED. The {department} department reached {used_pct}% "
+            f"of its ${cap} monthly cap (current spend: ${spent}). "
             f"The payload was classified as COMPLEX (trigger: {routing_reason}), but the flagship "
             f"model was blocked. Request was downgraded to the micro-model tier to prevent "
             f"budget overrun. Estimated cost: ${cost_usd:.6f}. "
             f"A supervisor override is required to restore flagship access."
         )
 
-    if routing_decision == "COMPLEX":
+    if routing_decision in ("COMPLEX", "BLOCKED"):
         return (
             f"FLAGSHIP MODEL INVOKED. Payload routed to the premium model tier "
             f"after complexity analysis for the {department} department. "
             f"Trigger: {routing_reason}. "
             f"High-risk keywords detected: {kw_str}. "
-            f"Budget position at time of decision: {context['budget_used_pct']}% used "
-            f"(${context['budget_spent_usd']:.4f} of ${context['budget_cap_usd']:.2f} cap). "
+            f"Budget position at time of decision: {used_pct}% used "
+            f"(${spent} of ${cap} cap). "
             f"Call cost: ${cost_usd:.6f}. "
-            f"Decision: flagship routing is warranted given the legal/compliance signals present."
+            f"Decision: flagship routing is warranted given the signals present."
         )
 
     if routing_decision == "OVERRIDE":
@@ -120,7 +132,7 @@ def _build_rationale(
             f"SUPERVISOR OVERRIDE GRANTED for {department} department. "
             f"A human supervisor has manually cleared the budget throttle, "
             f"restoring flagship model access. Budget remains at "
-            f"{context['budget_used_pct']}% (${context['budget_spent_usd']:.4f} spent). "
+            f"{used_pct}% (${spent} spent). "
             f"This action is logged for compliance review."
         )
 

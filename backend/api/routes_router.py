@@ -131,25 +131,28 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # ── Write audit event for high-stakes decisions ────────────────────────────
     all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]
     if result["routing_decision"] in ("COMPLEX", "THROTTLED") or term_result["triggered"]:
-        write_audit_event(
-            db               = db,
-            event_type       = "ROUTING",
-            department       = req.department,
-            routing_decision = result["routing_decision"],
-            routing_reason   = (
-                f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] "
-                + result["routing_reason"]
-            ) if term_result["triggered"] else result["routing_reason"],
-            prompt_payload   = req.text[:2000],
-            model_tier       = result["model_tier"],
-            agent_id         = req.agent_id,
-            matched_keywords = all_matched,
-            cost_usd         = result["cost_usd"],
-            decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",
-        )
+        try:
+            write_audit_event(
+                db               = db,
+                event_type       = "ROUTING",
+                department       = req.department,
+                routing_decision = result["routing_decision"],
+                routing_reason   = (
+                    f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] "
+                    + result["routing_reason"]
+                ) if term_result["triggered"] else result["routing_reason"],
+                prompt_payload   = req.text[:2000],
+                model_tier       = result["model_tier"],
+                agent_id         = req.agent_id,
+                matched_keywords = all_matched,
+                cost_usd         = result["cost_usd"],
+                decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",
+            )
+        except Exception:
+            pass  # Never let audit write failure break the routing response
 
     # ── Budget stats for the response ──────────────────────────────────────────
-    if budget:
+    if budget and budget.monthly_cap_usd > 0:
         budget_used_pct      = round((budget.current_spend_usd / budget.monthly_cap_usd) * 100, 1)
         budget_remaining_usd = round(budget.monthly_cap_usd - budget.current_spend_usd, 4)
     else:
