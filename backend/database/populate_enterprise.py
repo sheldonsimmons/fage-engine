@@ -118,7 +118,10 @@ def populate_enterprise():
         "Operations": 0.16,
     }
 
-    DAILY_CALLS = 8500
+    # 300 calls/day × 30 days = 9,000 transactions — fast insert (<5s on SQLite)
+    # Budget panel amounts come from DepartmentBudget table (enterprise scale regardless)
+    # Token costs are scaled up to reflect enterprise-volume pricing impact
+    DAILY_CALLS = 300
 
     for day_offset in range(29, -1, -1):
         day_ts = today - timedelta(days=day_offset)
@@ -127,7 +130,7 @@ def populate_enterprise():
         mkt_throttled = day_offset <= 3
 
         for dept, pct in dept_call_split.items():
-            dept_calls = int(DAILY_CALLS * pct)
+            dept_calls = max(1, int(DAILY_CALLS * pct))
             dept_agent_list = dept_agents[dept]
 
             for _ in range(dept_calls):
@@ -145,13 +148,13 @@ def populate_enterprise():
                 tokens_saved = random.randint(800, 2400) if was_pruned else 0
 
                 if is_complex:
-                    input_tokens  = random.randint(1800, 4200)
-                    output_tokens = random.randint(600,  1400)
+                    input_tokens  = random.randint(8000, 18000)
+                    output_tokens = random.randint(2000, 5000)
                     cost = round((input_tokens * FLAGSHIP_IN) + (output_tokens * FLAGSHIP_OUT), 6)
                     tier = "flagship"
                 else:
-                    input_tokens  = random.randint(280, 680)
-                    output_tokens = random.randint(80,  220)
+                    input_tokens  = random.randint(1200, 3200)
+                    output_tokens = random.randint(300,  900)
                     cost = round((input_tokens * MICRO_IN) + (output_tokens * MICRO_OUT), 6)
                     tier = "micro"
 
@@ -172,12 +175,9 @@ def populate_enterprise():
                     timestamp      = ts,
                 ))
 
-    # Bulk insert in batches for performance
-    batch = 500
-    for i in range(0, len(transactions), batch):
-        db.add_all(transactions[i:i+batch])
-        db.commit()
-
+    # Bulk insert all at once — 9K rows is fast
+    db.add_all(transactions)
+    db.commit()
     print(f"   → {len(transactions):,} transactions inserted")
 
     # ── Audit events — rich, realistic ────────────────────────────────────────

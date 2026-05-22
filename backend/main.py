@@ -11,7 +11,7 @@ Health check: http://localhost:8001/health
 """
 
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -109,15 +109,16 @@ def populate_demo_data():
 
 # Dev/Demo — Populate dashboard with enterprise-scale demo data for CFO/CTO presentations
 @app.post("/api/admin/populate-enterprise-demo", tags=["Admin"])
-def populate_enterprise_demo_data():
+def populate_enterprise_demo_data(background_tasks: BackgroundTasks):
     """
     DEV/DEMO ONLY — Loads the real FAGE dashboard with enterprise-scale data.
-    12 named agents, 4 departments, ~255K transactions over 30 days, Marketing throttled,
+    12 named agents, 4 departments, 9K transactions over 30 days, Marketing throttled,
     and 12 rich audit events covering blocks, escalations, GDPR, HIPAA, and more.
+    Returns immediately — data loads in the background. Refresh dashboard in ~10 seconds.
     """
     from database.populate_enterprise import populate_enterprise
-    populate_enterprise()
-    return {"status": "ok", "message": "Enterprise demo data loaded. Refresh your dashboard."}
+    background_tasks.add_task(populate_enterprise)
+    return {"status": "ok", "message": "Enterprise demo loading in background. Refresh dashboard in 10 seconds."}
 
 # Dev/Demo — Full factory reset (clears everything except departments, terms, and budget caps)
 @app.post("/api/admin/reset-demo", tags=["Admin"])
