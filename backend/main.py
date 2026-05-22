@@ -119,24 +119,24 @@ def populate_enterprise_demo_data():
     populate_enterprise()
     return {"status": "ok", "message": "Enterprise demo data loaded. Refresh your dashboard."}
 
-# Dev/Demo — Reset test data (keeps departments, agents, terms)
+# Dev/Demo — Full factory reset (clears everything except departments, terms, and budget caps)
 @app.post("/api/admin/reset-demo", tags=["Admin"])
 def reset_demo_data(db=None):
     """
-    DEV/DEMO ONLY — Clears token transactions and audit events.
-    Keeps all departments, budget caps, agents, and sensitive terms intact.
+    DEV/DEMO ONLY — Full factory reset.
+    Clears all transactions, audit events, and registered agents.
+    Resets department spend to $0 but preserves user-set budget caps.
     """
-    from database.db import get_db
-    from database.models import TokenTransaction, AuditEvent, DepartmentBudget
+    from database.models import TokenTransaction, AuditEvent, DepartmentBudget, RegisteredAgent
     from datetime import datetime
-    from sqlalchemy.orm import Session
     from database.db import SessionLocal
 
     db = SessionLocal()
     try:
-        tx_count    = db.query(TokenTransaction).delete()
-        audit_count = db.query(AuditEvent).delete()
-        # Reset all department spend to $0
+        tx_count     = db.query(TokenTransaction).delete()
+        audit_count  = db.query(AuditEvent).delete()
+        agent_count  = db.query(RegisteredAgent).delete()
+        # Reset all department spend to $0, unthrottle
         for budget in db.query(DepartmentBudget).all():
             budget.current_spend_usd = 0.0
             budget.throttled         = False
@@ -147,7 +147,8 @@ def reset_demo_data(db=None):
             "status":              "ok",
             "transactions_cleared": tx_count,
             "audit_events_cleared": audit_count,
-            "message":             "Demo data cleared. Departments, agents, and terms preserved.",
+            "agents_cleared":       agent_count,
+            "message":             "Full reset complete. All agents, transactions, and audit events cleared. Budget caps preserved.",
         }
     finally:
         db.close()
