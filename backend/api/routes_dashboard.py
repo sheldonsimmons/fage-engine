@@ -33,11 +33,15 @@ def get_dashboard(db: Session = Depends(get_db)):
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
     # ── Spend ──────────────────────────────────────────────────────────────────
+    # spend_today: sum of today's actual transactions (real-time, accurate)
     spend_today = db.query(func.sum(TokenTransaction.cost_usd)).filter(
         TokenTransaction.timestamp >= today_start
     ).scalar() or 0.0
 
-    spend_month = db.query(func.sum(TokenTransaction.cost_usd)).scalar() or 0.0
+    # spend_month: authoritative source is the budget table — incremented on
+    # every routing call and reset each month, consistent with the budget panel
+    budgets_for_spend = db.query(DepartmentBudget).all()
+    spend_month = sum(b.current_spend_usd for b in budgets_for_spend)
 
     # ── Token savings from pruning ─────────────────────────────────────────────
     tokens_saved_today = db.query(func.sum(TokenTransaction.tokens_saved)).filter(
@@ -72,8 +76,8 @@ def get_dashboard(db: Session = Depends(get_db)):
     agents_locked = db.query(func.count(RegisteredAgent.id)).filter_by(status="locked").scalar()  or 0
     agents_idle   = db.query(func.count(RegisteredAgent.id)).filter_by(status="idle").scalar()    or 0
 
-    # ── Budget summaries ───────────────────────────────────────────────────────
-    budgets = db.query(DepartmentBudget).all()
+    # ── Budget summaries (reuse budgets_for_spend already loaded above) ──────────
+    budgets = budgets_for_spend
     throttled_count = sum(1 for b in budgets if b.throttled)
 
     total_cap   = sum(b.monthly_cap_usd   for b in budgets)

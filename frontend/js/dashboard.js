@@ -46,7 +46,7 @@ function renderKpis(d) {
   document.getElementById("kpiSpend").textContent =
     "$" + d.spend_today_usd.toFixed(4);
   document.getElementById("kpiSpendSub").textContent =
-    `$${d.spend_month_usd.toFixed(4)} this month · ${d.calls_today} calls today`;
+    `$${d.spend_month_usd.toFixed(2)} this month · ${d.calls_today} calls today`;
 
   // Tokens Saved
   document.getElementById("kpiTokensSaved").textContent =
@@ -75,12 +75,12 @@ function renderStatBar(d) {
   document.getElementById("statFlagshipCalls").textContent = `${d.flagship_calls} (${d.flagship_pct}%)`;
   document.getElementById("statBudgetPct").textContent     = d.overall_budget_pct + "%";
   document.getElementById("statPruningSaved").textContent  = "$" + d.pruning_savings_usd.toFixed(4);
-  document.getElementById("statMonthSpend").textContent    = "$" + d.spend_month_usd.toFixed(4);
+  document.getElementById("statMonthSpend").textContent    = "$" + d.spend_month_usd.toFixed(2);
 }
 
 // ── Enterprise Demo loader ────────────────────────────────────────────────────
 async function loadEnterpriseDemo() {
-  if (!confirm("Load enterprise demo data?\n\nThis will replace all current data with Meridian Financial Group's 30-day enterprise dataset (12 agents, 4 departments, Marketing throttled).")) return;
+  if (!confirm("Load enterprise demo data?\n\nThis will replace all current data with Meridian Financial Group's 1-year enterprise dataset (12 agents, 4 departments, 128K calls, Marketing throttled). Dashboard will refresh in ~30 seconds.")) return;
   try {
     const btn = document.querySelector('[onclick="loadEnterpriseDemo()"]');
     if (btn) btn.textContent = "★ Loading...";
