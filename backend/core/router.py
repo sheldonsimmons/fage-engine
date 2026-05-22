@@ -84,10 +84,11 @@ def _calculate_cost(input_tokens: int, output_tokens: int, tier: str) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def route(
-    text:         str,
-    department:   str,
-    auto_prune:   bool = True,
-    is_throttled: bool = False,
+    text:          str,
+    department:    str,
+    auto_prune:    bool = True,
+    is_throttled:  bool = False,
+    force_complex: bool = False,
 ) -> dict:
     """
     Full routing pipeline for one payload.
@@ -111,6 +112,12 @@ def route(
     # Step 2 — Score complexity
     complexity_result = score_complexity(working_text)
     complexity        = complexity_result["complexity"]
+
+    # Override: sensitive term escalation forces COMPLEX
+    if force_complex and complexity != "COMPLEX":
+        complexity                       = "COMPLEX"
+        complexity_result["complexity"]  = "COMPLEX"
+        complexity_result["reason"]      = "Forced to COMPLEX by sensitive term escalation policy"
 
     # Step 3 — Apply throttle override
     if is_throttled and complexity == "COMPLEX":

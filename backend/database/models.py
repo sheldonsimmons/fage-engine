@@ -144,3 +144,18 @@ class AuditEvent(Base):
     timestamp        = Column(DateTime, default=datetime.utcnow)
 
     agent = relationship("RegisteredAgent", back_populates="audit_events")
+
+
+class SensitiveTerm(Base):
+    """
+    A company-configured sensitive word or phrase.
+    When matched in a payload, triggers escalation, flagging, or blocking.
+    """
+    __tablename__ = "sensitive_terms"
+
+    id         = Column(Integer,  primary_key=True, index=True)
+    term       = Column(String,   nullable=False, unique=True)
+    category   = Column(String,   default="custom")   # legal | hipaa | financial | hr | custom
+    action     = Column(String,   default="flag")      # flag | escalate | block
+    department = Column(String,   nullable=True)       # None = global (all departments)
+    created_at = Column(DateTime, default=datetime.utcnow)

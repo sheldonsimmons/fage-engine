@@ -87,6 +87,10 @@ app.include_router(routes_auditor.router, prefix="/api/audit", tags=["Auditor"])
 from api import routes_dashboard
 app.include_router(routes_dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 
+# Step 9 — Sensitive Term Library
+from api import routes_keywords
+app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywords"])
+
 # ── Serve frontend as static files (MUST be last — catches everything else) ────
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")

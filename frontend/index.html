@@ -175,7 +175,11 @@
 
     <!-- Row 3: Pruner Test Panel -->
     <section class="panel full-width" id="prunerPanel">
-      <h2 class="panel-title">Context-Pruning Sweeper — Live Test</h2>
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('prunerBody', 'prunerChevron')">
+        Context-Pruning Sweeper — Live Test
+        <span class="panel-chevron" id="prunerChevron">▾</span>
+      </h2>
+      <div id="prunerBody">
       <div class="pruner-grid">
         <div>
           <label class="field-label">Raw Input Payload</label>
@@ -190,11 +194,16 @@
         <button class="btn-primary" id="prunerRunBtn" onclick="runPruner()">Run Sweeper</button>
         <div class="pruner-stats" id="prunerStats"></div>
       </div>
+      </div><!-- end prunerBody -->
     </section>
 
     <!-- Row 4: Token Router Panel -->
     <section class="panel full-width" id="routerPanel">
-      <h2 class="panel-title">Token Router & Model Cascader — Live Test</h2>
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('routerBody', 'routerChevron')">
+        Token Router &amp; Model Cascader — Live Test
+        <span class="panel-chevron" id="routerChevron">▾</span>
+      </h2>
+      <div id="routerBody">
       <div class="router-controls">
         <div class="router-input-group">
           <label class="field-label">Payload to Route</label>
@@ -263,9 +272,65 @@
       </div>
 
       <div id="routerStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted)"></div>
+      </div><!-- end routerBody -->
     </section>
 
-    <!-- Row 5: Audit Log -->
+    <!-- Row 5: Sensitive Term Library -->
+    <section class="panel full-width" id="keywordsPanel">
+      <h2 class="panel-title">Sensitive Term Library</h2>
+      <p class="panel-sub">Words or phrases that trigger special handling when detected in any payload routed through FAGE. Add company-specific terms — legal, compliance, HR, or anything your team flags as sensitive.</p>
+
+      <!-- Add term form -->
+      <div class="kw-add-form">
+        <div class="kw-add-row">
+          <div class="kw-field">
+            <label class="field-label">Term or Phrase</label>
+            <input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" />
+          </div>
+          <div class="kw-field">
+            <label class="field-label">Category</label>
+            <select id="kwCategory" class="reg-input">
+              <option value="legal">Legal</option>
+              <option value="hipaa">HIPAA / Health</option>
+              <option value="financial">Financial</option>
+              <option value="hr">HR</option>
+              <option value="custom" selected>Custom</option>
+            </select>
+          </div>
+          <div class="kw-field">
+            <label class="field-label">Action</label>
+            <select id="kwAction" class="reg-input">
+              <option value="flag">Flag — mark high-risk in audit log</option>
+              <option value="escalate" selected>Escalate — force flagship model</option>
+              <option value="block">Block — reject request entirely</option>
+            </select>
+          </div>
+          <div class="kw-field kw-field-btn">
+            <label class="field-label">&nbsp;</label>
+            <button class="btn-primary" onclick="addKeyword()">+ Add Term</button>
+          </div>
+        </div>
+        <div id="kwStatus" class="register-status" style="margin-top:6px"></div>
+      </div>
+
+      <!-- Term table -->
+      <table class="kw-table" id="kwTable">
+        <thead>
+          <tr>
+            <th>Term</th>
+            <th>Category</th>
+            <th>Action</th>
+            <th>Scope</th>
+            <th>Remove</th>
+          </tr>
+        </thead>
+        <tbody id="kwTableBody">
+          <tr><td colspan="5" class="placeholder">Loading terms...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Row 6: Audit Log -->
     <section class="panel full-width" id="auditPanel">
       <h2 class="panel-title">AI Decision Audit Log</h2>
       <table class="audit-table">
@@ -297,6 +362,7 @@
   <script src="js/budget.js"></script>
   <script src="js/agentlake.js"></script>
   <script src="js/router.js"></script>
+  <script src="js/keywords.js"></script>
   <script src="js/auditor.js"></script>
 
 </body>

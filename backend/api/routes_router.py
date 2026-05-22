@@ -17,6 +17,7 @@ from database.db import get_db
 from database.models import DepartmentBudget, TokenTransaction
 from core.router import route
 from core.auditor import write_audit_event
+from core.keywords import check_terms
 
 router = APIRouter()
 
@@ -47,6 +48,9 @@ class RouteResponse(BaseModel):
     budget_used_pct:            float
     budget_remaining_usd:       float
     was_throttled:              bool
+    sensitive_term_triggered:   bool = False
+    sensitive_term_action:      Optional[str] = None
+    sensitive_term_matches:     List[str] = []
 
 
 @router.post("", response_model=RouteResponse)
@@ -64,8 +68,39 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     budget       = db.query(DepartmentBudget).filter_by(department=req.department).first()
     is_throttled = budget.throttled if budget else False
 
+    # ── Sensitive term check ───────────────────────────────────────────────────
+    term_result = check_terms(db, req.text, req.department)
+    if term_result["triggered"] and term_result["action"] == "block":
+        # Write audit event and reject immediately
+        write_audit_event(
+            db               = db,
+            event_type       = "DECISION",
+            department       = req.department,
+            routing_decision = "BLOCKED",
+            routing_reason   = f"Sensitive term blocked: '{term_result['top_match']['term']}' ({term_result['top_match']['category']})",
+            prompt_payload   = req.text[:2000],
+            model_tier       = "none",
+            agent_id         = req.agent_id,
+            matched_keywords = [m["term"] for m in term_result["matches"]],
+            cost_usd         = 0.0,
+            decision_outcome = "Request blocked by sensitive term policy",
+        )
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=451,
+            detail={
+                "error":   "BLOCKED",
+                "reason":  f"Request contains a blocked sensitive term: '{term_result['top_match']['term']}'",
+                "category": term_result["top_match"]["category"],
+                "matches": [m["term"] for m in term_result["matches"]],
+            }
+        )
+
+    # If escalate: force COMPLEX routing regardless of content score
+    force_complex = term_result["triggered"] and term_result["action"] == "escalate"
+
     # Run the routing pipeline
-    result = route(req.text, req.department, req.auto_prune, is_throttled)
+    result = route(req.text, req.department, req.auto_prune, is_throttled, force_complex=force_complex)
 
     # ── Persist the token transaction ──────────────────────────────────────────
     tx = TokenTransaction(
@@ -94,17 +129,21 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     db.commit()
 
     # ── Write audit event for high-stakes decisions ────────────────────────────
-    if result["routing_decision"] in ("COMPLEX", "THROTTLED"):
+    all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]
+    if result["routing_decision"] in ("COMPLEX", "THROTTLED") or term_result["triggered"]:
         write_audit_event(
             db               = db,
             event_type       = "ROUTING",
             department       = req.department,
             routing_decision = result["routing_decision"],
-            routing_reason   = result["routing_reason"],
+            routing_reason   = (
+                f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] "
+                + result["routing_reason"]
+            ) if term_result["triggered"] else result["routing_reason"],
             prompt_payload   = req.text[:2000],
             model_tier       = result["model_tier"],
             agent_id         = req.agent_id,
-            matched_keywords = result["matched_keywords"],
+            matched_keywords = all_matched,
             cost_usd         = result["cost_usd"],
             decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",
         )
@@ -119,7 +158,10 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
     return RouteResponse(
         **result,
-        budget_used_pct      = budget_used_pct,
-        budget_remaining_usd = budget_remaining_usd,
-        was_throttled        = is_throttled,
+        budget_used_pct           = budget_used_pct,
+        budget_remaining_usd      = budget_remaining_usd,
+        was_throttled             = is_throttled,
+        sensitive_term_triggered  = term_result["triggered"],
+        sensitive_term_action     = term_result.get("action"),
+        sensitive_term_matches    = [m["term"] for m in term_result.get("matches", [])],
     )

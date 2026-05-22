@@ -136,6 +136,15 @@ async function runPruner() {
   }
 }
 
+// ── Collapsible panels ────────────────────────────────────────────────────────
+function togglePanel(bodyId, chevronId) {
+  const body    = document.getElementById(bodyId);
+  const chevron = document.getElementById(chevronId);
+  const open    = body.style.display !== "none";
+  body.style.display  = open ? "none" : "";
+  chevron.textContent = open ? "▸" : "▾";
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 checkHealth();
 loadDashboard();

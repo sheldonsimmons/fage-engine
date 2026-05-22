@@ -278,6 +278,55 @@ body {
 }
 .btn-deregister:hover { background: rgba(255,82,82,0.08); }
 
+/* ── Collapsible panels ───────────────────────────────────────────────────────── */
+.collapsible-title {
+  cursor: pointer; user-select: none;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.collapsible-title:hover { color: var(--accent); }
+.panel-chevron { font-size: 14px; color: var(--text-muted); transition: transform 0.15s; }
+
+/* ── Sensitive Term Library ───────────────────────────────────────────────────── */
+.panel-sub {
+  font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;
+}
+.kw-add-form {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px; margin-bottom: 16px;
+}
+.kw-add-row {
+  display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+}
+.kw-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px; }
+.kw-field-btn { flex: 0 0 auto; }
+.kw-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.kw-table th {
+  text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text-muted); padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.kw-table td {
+  padding: 9px 10px; border-bottom: 1px solid rgba(48,54,61,0.5);
+  vertical-align: middle;
+}
+.kw-table tr:last-child td { border-bottom: none; }
+.kw-term-cell { font-family: var(--font-mono); }
+.kw-term {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 7px; font-size: 12px; color: var(--accent-green);
+}
+.kw-cat { font-size: 11px; color: var(--text-muted); }
+.kw-scope { font-size: 11px; color: var(--text-muted); }
+.kw-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.kw-badge-flag     { background: rgba(210,153,34,0.15); color: var(--accent-yellow); }
+.kw-badge-escalate { background: rgba(88,166,255,0.12); color: var(--accent); }
+.kw-badge-block    { background: rgba(248,81,73,0.12);  color: var(--accent-red); }
+
 /* ── Responsive ───────────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .kpi-row  { grid-template-columns: repeat(2, 1fr); }

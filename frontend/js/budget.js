@@ -21,6 +21,23 @@ async function loadBudgets() {
   }
 }
 
+function fmtUsd(v) {
+  if (v === 0)    return "$0.00";
+  if (v < 0.0001) return "$" + v.toFixed(6);
+  if (v < 0.01)   return "$" + v.toFixed(4);
+  if (v < 1)      return "$" + v.toFixed(4);
+  return "$" + v.toFixed(2);
+}
+
+function fmtPct(spend, cap) {
+  if (!cap || cap === 0) return "0%";
+  const pct = (spend / cap) * 100;
+  if (pct === 0) return "0%";
+  if (pct < 0.01) return "<0.01%";
+  if (pct < 1)    return pct.toFixed(3) + "%";
+  return pct.toFixed(1) + "%";
+}
+
 function renderBudgets() {
   const container = document.getElementById("budgetList");
   if (!budgetData.length) {
@@ -45,17 +62,22 @@ function renderBudgets() {
         ? `<button class="btn-override btn-revoke" onclick="doRevoke('${b.department}')">Revoke Override</button>`
         : "";
 
+    const displayPct = fmtPct(b.current_spend_usd, b.monthly_cap_usd);
+    const barPct     = b.monthly_cap_usd > 0
+      ? Math.min((b.current_spend_usd / b.monthly_cap_usd) * 100, 100)
+      : 0;
+
     return `
       <div class="budget-item" id="budget-${b.department}">
         <div class="budget-dept">
           <span class="dept-name">${b.department} ${stateTag}</span>
           <span class="dept-spend">
-            $${b.current_spend_usd < 0.01 ? b.current_spend_usd.toFixed(4) : b.current_spend_usd.toFixed(2)} / $${b.monthly_cap_usd.toFixed(2)}
-            &nbsp;(${b.used_pct}%)
+            ${fmtUsd(b.current_spend_usd)} / ${fmtUsd(b.monthly_cap_usd)}
+            &nbsp;(${displayPct})
           </span>
         </div>
         <div class="budget-bar-track">
-          <div class="budget-bar-fill ${fillClass}" style="width:${Math.min(b.used_pct, 100)}%"></div>
+          <div class="budget-bar-fill ${fillClass}" style="width:${barPct}%"></div>
         </div>
         <div class="budget-actions">
           <input  type="number" class="cap-input" id="cap-${b.department}"
