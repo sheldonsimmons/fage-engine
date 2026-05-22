@@ -241,6 +241,16 @@ body {
   padding: 14px; font-size: 13px; line-height: 1.6; color: var(--text-primary); margin-top: 6px;
 }
 
+/* ── Header Nav ──────────────────────────────────────────────────────────────── */
+.header-nav { display: flex; align-items: center; }
+.header-nav-link {
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  text-decoration: none; border: 1px solid var(--accent);
+  border-radius: 6px; padding: 5px 12px;
+  transition: background 0.15s;
+}
+.header-nav-link:hover { background: rgba(0,168,255,0.08); }
+
 /* ── Register Agent Form ──────────────────────────────────────────────────────── */
 .register-agent-form {
   margin-top: 20px;

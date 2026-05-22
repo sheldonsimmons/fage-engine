@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Setup</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/onboarding.css" />
+</head>
+<body class="onboarding-body">
+
+  <div class="ob-shell">
+
+    <!-- Brand -->
+    <div class="ob-brand">
+      <span class="header-logo">◈</span>
+      <span class="header-title">FAGE</span>
+      <span class="ob-brand-sub">FinOps Agentlake &amp; Governance Engine</span>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="ob-progress">
+      <div class="ob-step active" id="prog-1">1</div>
+      <div class="ob-progress-line"></div>
+      <div class="ob-step" id="prog-2">2</div>
+      <div class="ob-progress-line"></div>
+      <div class="ob-step" id="prog-3">3</div>
+      <div class="ob-progress-line"></div>
+      <div class="ob-step" id="prog-4">4</div>
+    </div>
+    <div class="ob-step-labels">
+      <span>Company</span>
+      <span>Departments</span>
+      <span>Review</span>
+      <span>Launch</span>
+    </div>
+
+    <!-- ── Screen 1: Company Setup ───────────────────────────────────────── -->
+    <div class="ob-screen active" id="screen-1">
+      <h1 class="ob-title">Welcome to FAGE</h1>
+      <p class="ob-subtitle">Let's get your AI governance layer set up. This takes about 2 minutes.</p>
+
+      <div class="ob-form">
+        <div class="ob-field">
+          <label class="ob-label">Company Name</label>
+          <input type="text" id="companyName" class="ob-input" placeholder="e.g. Acme Corporation" />
+        </div>
+        <div class="ob-field">
+          <label class="ob-label">Industry</label>
+          <select id="industry" class="ob-input">
+            <option value="">Select your industry...</option>
+            <option>Technology</option>
+            <option>Financial Services</option>
+            <option>Healthcare</option>
+            <option>Retail &amp; E-Commerce</option>
+            <option>Manufacturing</option>
+            <option>Professional Services</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="ob-field">
+          <label class="ob-label">AI Provider</label>
+          <div class="ob-provider-grid">
+            <div class="ob-provider selected" id="prov-openai" onclick="selectProvider('openai')">
+              <div class="ob-provider-name">OpenAI</div>
+              <div class="ob-provider-models">gpt-3.5-turbo · gpt-4o</div>
+            </div>
+            <div class="ob-provider" id="prov-anthropic" onclick="selectProvider('anthropic')">
+              <div class="ob-provider-name">Anthropic</div>
+              <div class="ob-provider-models">claude-haiku · claude-sonnet</div>
+            </div>
+          </div>
+        </div>
+        <div class="ob-field">
+          <label class="ob-label">Monthly AI Budget (total across all departments)</label>
+          <div class="ob-budget-input">
+            <span class="ob-currency">$</span>
+            <input type="number" id="totalBudget" class="ob-input ob-budget-field" placeholder="1000" min="10" step="50" />
+            <span class="ob-currency-label">/ month</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ob-actions">
+        <div></div>
+        <button class="ob-btn-primary" onclick="goToScreen(2)">Continue →</button>
+      </div>
+      <div class="ob-error" id="error-1"></div>
+    </div>
+
+    <!-- ── Screen 2: Department Setup ───────────────────────────────────── -->
+    <div class="ob-screen" id="screen-2">
+      <h1 class="ob-title">Set Up Your Departments</h1>
+      <p class="ob-subtitle">Each department gets its own AI budget cap. Allocate your <span id="budgetLabel">$1,000</span> total budget below.</p>
+
+      <div class="ob-dept-list" id="deptList">
+        <!-- Departments rendered by JS -->
+      </div>
+
+      <button class="ob-btn-ghost" onclick="addDepartment()">+ Add Department</button>
+
+      <div class="ob-budget-summary">
+        <span>Allocated: <strong id="allocatedAmt">$0</strong></span>
+        <span>Remaining: <strong id="remainingAmt" class="green">$0</strong></span>
+        <span>Total: <strong id="totalAmt">$0</strong></span>
+      </div>
+
+      <div class="ob-actions">
+        <button class="ob-btn-ghost" onclick="goToScreen(1)">← Back</button>
+        <button class="ob-btn-primary" onclick="goToScreen(3)">Continue →</button>
+      </div>
+      <div class="ob-error" id="error-2"></div>
+    </div>
+
+    <!-- ── Screen 3: Review ──────────────────────────────────────────────── -->
+    <div class="ob-screen" id="screen-3">
+      <h1 class="ob-title">Review Your Setup</h1>
+      <p class="ob-subtitle">Here's what FAGE will configure for you.</p>
+
+      <div class="ob-review-card">
+        <div class="ob-review-section">
+          <div class="ob-review-label">Company</div>
+          <div class="ob-review-value" id="reviewCompany">—</div>
+        </div>
+        <div class="ob-review-section">
+          <div class="ob-review-label">AI Provider</div>
+          <div class="ob-review-value" id="reviewProvider">—</div>
+        </div>
+        <div class="ob-review-section">
+          <div class="ob-review-label">Total Monthly Budget</div>
+          <div class="ob-review-value" id="reviewBudget">—</div>
+        </div>
+      </div>
+
+      <div class="ob-review-label" style="margin: 20px 0 10px">Departments &amp; Budget Caps</div>
+      <div id="reviewDepts" class="ob-review-depts"></div>
+
+      <div class="ob-review-note">
+        FAGE will create these departments and budget caps automatically.
+        You can adjust them anytime from the dashboard.
+      </div>
+
+      <div class="ob-actions">
+        <button class="ob-btn-ghost" onclick="goToScreen(2)">← Back</button>
+        <button class="ob-btn-primary" onclick="launchFage()">Launch FAGE →</button>
+      </div>
+      <div class="ob-error" id="error-3"></div>
+    </div>
+
+    <!-- ── Screen 4: Launching ───────────────────────────────────────────── -->
+    <div class="ob-screen" id="screen-4">
+      <div class="ob-launch-wrap">
+        <div class="ob-launch-icon">◈</div>
+        <h1 class="ob-title" id="launchTitle">Setting up FAGE...</h1>
+        <p class="ob-subtitle" id="launchSub">Creating your departments and budget caps.</p>
+        <div class="ob-launch-steps" id="launchSteps"></div>
+        <div class="ob-launch-spinner" id="launchSpinner"></div>
+        <button class="ob-btn-primary" id="dashboardBtn" style="display:none" onclick="window.location.href='/'">
+          Open Dashboard →
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/onboarding.js"></script>
+</body>
+</html>
