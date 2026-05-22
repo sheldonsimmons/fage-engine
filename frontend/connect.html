@@ -89,46 +89,60 @@
     <!-- ── Screen 2: Configure Agent ─────────────────────────────────────── -->
     <div class="ob-screen" id="screen-2">
       <h1 class="ob-title" id="configTitle">Configure Your Agent</h1>
-      <p class="ob-subtitle">FAGE will register an AI agent for this platform. The agent handles claim/release locking and budget tracking automatically.</p>
+      <p class="ob-subtitle">FAGE will register an AI agent for this platform. Fill in the details below — we've pre-filled sensible defaults to get you started quickly.</p>
 
       <div class="ob-form">
+
         <div class="ob-field">
           <label class="ob-label">Agent Name</label>
           <input type="text" id="agentName" class="ob-input" placeholder="e.g. SF-CaseBot" />
-          <span class="conn-field-hint">Use something descriptive — this appears in your audit log and collision alerts.</span>
+          <span class="conn-field-hint">A unique name for this agent. It appears in your dashboard, audit log, and any collision alerts. You can always rename it later.</span>
         </div>
 
         <div class="ob-field">
-          <label class="ob-label">Department</label>
+          <label class="ob-label">Department
+            <span class="conn-label-hint">— Which team's AI budget should this agent draw from?</span>
+          </label>
           <select id="agentDept" class="ob-input">
             <option value="">Loading departments...</option>
           </select>
+          <span class="conn-field-hint">Each department has its own monthly budget cap. When this agent makes AI calls, the cost is tracked against that department's budget automatically.</span>
         </div>
 
         <div class="ob-field">
-          <label class="ob-label">What does this agent monitor?</label>
+          <label class="ob-label">What does this agent monitor?
+            <span class="conn-label-hint">— The type of record it will read and write</span>
+          </label>
           <div class="conn-object-grid" id="objectGrid">
             <!-- Rendered by JS based on platform -->
           </div>
+          <span class="conn-field-hint">This tells FAGE what kind of records to lock when the agent is working. For example, if two automations try to update the same Case at the same time, FAGE will detect the conflict and handle it based on your collision policy below.</span>
         </div>
 
         <div class="ob-field">
-          <label class="ob-label">Collision Policy</label>
+          <label class="ob-label">Collision Policy
+            <span class="conn-label-hint">— What happens if two agents try to work on the same record simultaneously?</span>
+          </label>
+          <div class="conn-explainer">
+            <strong>Why does this matter?</strong> If Salesforce and ServiceNow both try to update the same customer record at the same time, only one should win. FAGE detects this conflict automatically — your policy below decides what happens next.
+          </div>
           <div class="conn-policy-grid">
             <div class="conn-policy selected" id="policy-lock" onclick="selectPolicy('lock')">
-              <div class="conn-policy-name">🔒 Lock</div>
-              <div class="conn-policy-desc">Freeze both agents, require supervisor approval. Best for billing, legal, compliance.</div>
+              <div class="conn-policy-name">🔒 Lock — Stop and alert a supervisor</div>
+              <div class="conn-policy-desc">Both agents freeze. No data is written. Your team gets an alert and decides which agent should proceed. <strong>Best for:</strong> billing, legal documents, compliance records — anything where getting it wrong has consequences.</div>
             </div>
             <div class="conn-policy" id="policy-queue" onclick="selectPolicy('queue')">
-              <div class="conn-policy-name">⏳ Queue</div>
-              <div class="conn-policy-desc">Auto-retry when the record is free. Best for routine tickets and low-risk updates.</div>
+              <div class="conn-policy-name">⏳ Queue — Wait your turn, then continue</div>
+              <div class="conn-policy-desc">The second agent waits automatically until the first one finishes, then proceeds on its own. No human needed. <strong>Best for:</strong> routine support tickets, low-stakes updates, high-volume workflows.</div>
             </div>
             <div class="conn-policy" id="policy-skip" onclick="selectPolicy('skip')">
-              <div class="conn-policy-name">⏭ Skip</div>
-              <div class="conn-policy-desc">Abandon silently and log it. Best for non-critical fire-and-forget automations.</div>
+              <div class="conn-policy-name">⏭ Skip — Move on and log it</div>
+              <div class="conn-policy-desc">The second agent skips this record and moves to the next one. The conflict is recorded in your audit log but nothing is blocked. <strong>Best for:</strong> non-critical tasks like analytics, reporting, or notifications.</div>
             </div>
           </div>
+          <span class="conn-field-hint">Not sure? Start with <strong>Lock</strong>. You can change this anytime from the dashboard.</span>
         </div>
+
       </div>
 
       <div class="ob-actions">

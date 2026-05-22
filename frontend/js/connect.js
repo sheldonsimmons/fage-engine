@@ -178,30 +178,66 @@ async function initConfigScreen() {
   document.getElementById("agentName").value = names[selectedPlatform] || "";
 
   // Load departments
+  const select = document.getElementById("agentDept");
+  select.innerHTML = `<option value="">Select a department...</option>`;
   try {
     const budgets = await apiGet("/api/budget");
-    const select  = document.getElementById("agentDept");
-    select.innerHTML = budgets.map(b =>
-      `<option value="${b.department}">${b.department}</option>`
-    ).join("");
+    if (budgets && budgets.length) {
+      budgets.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value       = b.department;
+        opt.textContent = b.department;
+        select.appendChild(opt);
+      });
+    } else {
+      throw new Error("No budgets");
+    }
   } catch {
-    document.getElementById("agentDept").innerHTML = `
-      <option value="Support">Support</option>
-      <option value="Sales">Sales</option>
-      <option value="Marketing">Marketing</option>
-      <option value="Operations">Operations</option>
-    `;
+    ["Support","Sales","Marketing","Operations"].forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d; opt.textContent = d;
+      select.appendChild(opt);
+    });
   }
+  // Auto-select first real option
+  if (select.options.length > 1) select.selectedIndex = 1;
 
-  // Render object buttons
+  // Render object buttons + custom input
+  renderObjectGrid(plat.objects);
+}
+
+function renderObjectGrid(objects) {
   const grid = document.getElementById("objectGrid");
-  grid.innerHTML = plat.objects.map(obj => `
+  grid.innerHTML = objects.map(obj => `
     <button class="conn-object-btn" onclick="selectObject('${obj}', this)">${obj}</button>
-  `).join("");
-
+  `).join("") + `
+    <button class="conn-object-btn" onclick="showCustomObject(this)">+ Custom</button>
+  `;
   // Select first object by default
-  selectedObject = plat.objects[0];
+  selectedObject = objects[0];
   grid.querySelector(".conn-object-btn").classList.add("selected");
+}
+
+function showCustomObject(btn) {
+  document.querySelectorAll(".conn-object-btn").forEach(b => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  selectedObject = null;
+
+  // Show custom input if not already visible
+  if (!document.getElementById("customObjectInput")) {
+    const wrap = document.createElement("div");
+    wrap.style.marginTop = "10px";
+    wrap.innerHTML = `
+      <input id="customObjectInput" type="text" class="ob-input"
+             placeholder="e.g. WorkOrders, ServiceRequests, CustomObject__c"
+             oninput="selectedObject = this.value.trim()" />
+      <span class="conn-field-hint" style="display:block; margin-top:4px">
+        Enter the exact object name from your platform.
+      </span>
+    `;
+    document.getElementById("objectGrid").after(wrap);
+  }
+  document.getElementById("customObjectInput").focus();
 }
 
 function selectObject(obj, el) {
