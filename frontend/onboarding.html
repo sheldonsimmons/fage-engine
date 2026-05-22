@@ -27,12 +27,15 @@
       <div class="ob-step" id="prog-3">3</div>
       <div class="ob-progress-line"></div>
       <div class="ob-step" id="prog-4">4</div>
+      <div class="ob-progress-line"></div>
+      <div class="ob-step" id="prog-5">5</div>
     </div>
     <div class="ob-step-labels">
       <span>Company</span>
       <span>Departments</span>
       <span>Review</span>
       <span>Launch</span>
+      <span>Connect</span>
     </div>
 
     <!-- ── Screen 1: Company Setup ───────────────────────────────────────── -->
@@ -155,9 +158,112 @@
         <p class="ob-subtitle" id="launchSub">Creating your departments and budget caps.</p>
         <div class="ob-launch-steps" id="launchSteps"></div>
         <div class="ob-launch-spinner" id="launchSpinner"></div>
-        <button class="ob-btn-primary" id="dashboardBtn" style="display:none" onclick="window.location.href='/'">
-          Open Dashboard →
+        <button class="ob-btn-primary" id="dashboardBtn" style="display:none" onclick="goToScreen(5)">
+          Connect Salesforce →
         </button>
+        <button class="ob-btn-ghost" id="skipConnectBtn" style="display:none; margin-top:10px" onclick="window.location.href='/'">
+          Skip — Go to Dashboard
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Screen 5: Salesforce Integration ───────────────────────────────── -->
+    <div class="ob-screen" id="screen-5">
+      <h1 class="ob-title">Connect Salesforce</h1>
+      <p class="ob-subtitle">Choose which Salesforce object and field to route through FAGE. We'll generate your Apex class and Flow setup instructions automatically.</p>
+
+      <div class="ob-form">
+
+        <div class="ob-field">
+          <label class="ob-label">Salesforce Object</label>
+          <select id="sfObject" class="ob-input" onchange="onObjectChange()">
+            <option value="Case">Case</option>
+            <option value="Lead">Lead</option>
+            <option value="Opportunity">Opportunity</option>
+            <option value="Contact">Contact</option>
+            <option value="Account">Account</option>
+            <option value="Task">Task</option>
+            <option value="__custom__">Custom Object...</option>
+          </select>
+        </div>
+
+        <div class="ob-field" id="customObjectField" style="display:none">
+          <label class="ob-label">Custom Object API Name</label>
+          <input type="text" id="sfCustomObject" class="ob-input" placeholder="e.g. Support_Request__c" />
+        </div>
+
+        <div class="ob-field">
+          <label class="ob-label">Trigger Field (text to send to FAGE)</label>
+          <select id="sfField" class="ob-input" onchange="onFieldChange()">
+            <!-- Populated dynamically based on object -->
+          </select>
+        </div>
+
+        <div class="ob-field" id="customFieldRow" style="display:none">
+          <label class="ob-label">Custom Field API Name</label>
+          <input type="text" id="sfCustomField" class="ob-input" placeholder="e.g. Notes__c" />
+        </div>
+
+        <div class="ob-sf-row">
+          <div class="ob-field">
+            <label class="ob-label">Department</label>
+            <select id="sfDept" class="ob-input">
+              <option>Support</option>
+              <option>Sales</option>
+              <option>Marketing</option>
+              <option>Operations</option>
+            </select>
+          </div>
+          <div class="ob-field">
+            <label class="ob-label">Agent Name</label>
+            <input type="text" id="sfAgentName" class="ob-input" placeholder="e.g. SF-CaseBot" />
+          </div>
+        </div>
+
+      </div>
+
+      <div class="ob-actions" style="margin-bottom:0">
+        <button class="ob-btn-ghost" onclick="goToScreen(4)">← Back</button>
+        <button class="ob-btn-primary" onclick="generateCode()">Generate Setup Code →</button>
+      </div>
+      <div class="ob-error" id="error-5"></div>
+
+      <!-- Generated output -->
+      <div id="sfOutput" style="display:none; margin-top:28px">
+
+        <div class="ob-code-section">
+          <div class="ob-code-header">
+            <span class="ob-code-label">Step 1 — Apex Class</span>
+            <span class="ob-code-hint">Developer Console → File → Open → FAGECallout → Replace all → Save</span>
+            <button class="ob-copy-btn" onclick="copyCode('apexCode')">Copy</button>
+          </div>
+          <pre class="ob-code-block" id="apexCode"></pre>
+        </div>
+
+        <div class="ob-code-section" style="margin-top:20px">
+          <div class="ob-code-header">
+            <span class="ob-code-label">Step 2 — Salesforce Flow Setup</span>
+          </div>
+          <div class="ob-flow-steps" id="flowSteps"></div>
+        </div>
+
+        <div class="ob-code-section" style="margin-top:20px">
+          <div class="ob-code-header">
+            <span class="ob-code-label">Step 3 — Case Fields to Create</span>
+            <span class="ob-code-hint">Setup → Object Manager → <span id="fieldObjectLabel">Case</span> → Fields &amp; Relationships → New</span>
+          </div>
+          <div class="ob-field-table" id="fieldTable"></div>
+        </div>
+
+        <div class="ob-success-banner">
+          FAGE is configured for <strong id="successSummary"></strong>. Once the Apex class is saved and the Flow is active, your agents will appear in the Agentlake Registry automatically on first use.
+        </div>
+
+        <div class="ob-actions" style="margin-top:24px">
+          <button class="ob-btn-ghost" onclick="generateCode()">↺ Regenerate</button>
+          <button class="ob-btn-primary" onclick="window.location.href='/'">Open Dashboard →</button>
+        </div>
+
       </div>
     </div>
 

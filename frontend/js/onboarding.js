@@ -205,9 +205,10 @@ async function launchFage() {
     // Step 2 — Done
     spinner.style.display = "none";
     title.textContent = "FAGE is ready.";
-    sub.textContent   = "Your AI governance layer is live. Open the dashboard to start routing.";
+    sub.textContent   = "Your AI governance layer is live. Next, connect your Salesforce org.";
     log("Setup complete!", true);
-    doneBtn.style.display = "inline-block";
+    doneBtn.style.display      = "inline-block";
+    document.getElementById("skipConnectBtn").style.display = "inline-block";
 
   } catch (err) {
     spinner.style.display = "none";
@@ -216,5 +217,204 @@ async function launchFage() {
   }
 }
 
+// ── Salesforce Integration (Screen 5) ────────────────────────────────────────
+
+const OBJECT_FIELDS = {
+  Case:        ["Description", "Subject", "Body", "Internal_Comments__c", "Custom Field..."],
+  Lead:        ["Description", "Notes__c", "Custom Field..."],
+  Opportunity: ["Description", "Next_Step__c", "Custom Field..."],
+  Contact:     ["Description", "Custom Field..."],
+  Account:     ["Description", "Notes__c", "Custom Field..."],
+  Task:        ["Description", "Subject", "Custom Field..."],
+  __custom__:  ["Custom Field..."],
+};
+
+function onObjectChange() {
+  const obj     = document.getElementById("sfObject").value;
+  const fields  = OBJECT_FIELDS[obj] || ["Description", "Custom Field..."];
+  const select  = document.getElementById("sfField");
+  const customObjRow = document.getElementById("customObjectField");
+
+  customObjRow.style.display = obj === "__custom__" ? "" : "none";
+
+  select.innerHTML = fields.map(f =>
+    `<option value="${f}">${f}</option>`
+  ).join("");
+
+  onFieldChange();
+
+  // Auto-suggest agent name
+  const agentInput = document.getElementById("sfAgentName");
+  if (!agentInput.value) {
+    const label = obj === "__custom__" ? "Custom" : obj;
+    agentInput.value = `SF-${label}Bot`;
+  }
+}
+
+function onFieldChange() {
+  const field = document.getElementById("sfField").value;
+  document.getElementById("customFieldRow").style.display =
+    field === "Custom Field..." ? "" : "none";
+}
+
+function getEffectiveObject() {
+  const obj = document.getElementById("sfObject").value;
+  if (obj === "__custom__") {
+    return document.getElementById("sfCustomObject").value.trim() || "MyObject__c";
+  }
+  return obj;
+}
+
+function getEffectiveField() {
+  const field = document.getElementById("sfField").value;
+  if (field === "Custom Field...") {
+    return document.getElementById("sfCustomField").value.trim() || "My_Field__c";
+  }
+  return field;
+}
+
+function generateCode() {
+  const err = document.getElementById("error-5");
+  const obj   = getEffectiveObject();
+  const field = getEffectiveField();
+  const dept  = document.getElementById("sfDept").value;
+  const agent = document.getElementById("sfAgentName").value.trim() || `SF-${obj}Bot`;
+
+  if (!obj)   { err.textContent = "Please select or enter an object."; return; }
+  if (!field) { err.textContent = "Please select or enter a field.";   return; }
+  err.textContent = "";
+
+  // ── Generate Apex ──────────────────────────────────────────────────────────
+  const apex = `public class FAGECallout {
+    @InvocableMethod(label='Send to FAGE')
+    public static void sendToFAGE(List<FAGERequest> requests) {
+        if (System.isFuture() || System.isBatch()) return;
+        FAGERequest req = requests[0];
+        sendAsync(req.recordId, req.recordText, req.department, req.agentName);
+    }
+
+    @future(callout=true)
+    public static void sendAsync(String recordId, String recordText, String department, String agentName) {
+        Http http = new Http();
+        HttpRequest httpReq = new HttpRequest();
+        httpReq.setEndpoint('https://fage-engine-21cb49fe4806.herokuapp.com/api/route');
+        httpReq.setMethod('POST');
+        httpReq.setHeader('Content-Type', 'application/json');
+        Map<String, Object> body = new Map<String, Object>{
+            'text'       => recordText,
+            'department' => department,
+            'auto_prune' => true,
+            'agent_name' => agentName
+        };
+        httpReq.setBody(JSON.serialize(body));
+        httpReq.setTimeout(30000);
+
+        HttpResponse res = http.send(httpReq);
+        System.debug('FAGE Response: ' + res.getBody());
+
+        if (res.getStatusCode() == 200 && recordId != null) {
+            Map<String, Object> fageResp =
+                (Map<String, Object>) JSON.deserializeUntyped(res.getBody());
+
+            String aiResponse      = (String) fageResp.get('simulated_response');
+            String modelUsed       = (String) fageResp.get('model_name');
+            String routingDecision = (String) fageResp.get('routing_decision');
+            Decimal costUsd        = Decimal.valueOf(String.valueOf(fageResp.get('cost_usd')));
+
+            ${obj} record = new ${obj}(Id = recordId);
+            record.FAGE_AI_Response__c      = aiResponse;
+            record.FAGE_Model_Used__c       = modelUsed;
+            record.FAGE_Routing_Decision__c = routingDecision;
+            record.FAGE_Cost_USD__c         = costUsd;
+            update record;
+        }
+    }
+
+    public class FAGERequest {
+        @InvocableVariable(required=true  label='Record ID')   public String recordId;
+        @InvocableVariable(required=true  label='Record Text') public String recordText;
+        @InvocableVariable(required=true  label='Department')  public String department;
+        @InvocableVariable(required=false label='Agent Name')  public String agentName;
+    }
+}`;
+
+  document.getElementById("apexCode").textContent = apex;
+
+  // ── Flow instructions ──────────────────────────────────────────────────────
+  document.getElementById("flowSteps").innerHTML = `
+    <div class="ob-flow-step">
+      <span class="ob-flow-num">1</span>
+      <div><strong>Setup → Flows → New Flow</strong><br/>
+      Type: <em>Record-Triggered Flow</em> · Object: <strong>${obj}</strong> · Trigger: <em>A record is created or updated</em></div>
+    </div>
+    <div class="ob-flow-step">
+      <span class="ob-flow-num">2</span>
+      <div><strong>Add an Action element</strong><br/>
+      Category: <em>Apex</em> · Action: <em>Send to FAGE</em> · Label: <em>Route to FAGE</em></div>
+    </div>
+    <div class="ob-flow-step">
+      <span class="ob-flow-num">3</span>
+      <div><strong>Set Input Values</strong><br/>
+      <code>Record ID</code> → <em>Triggering ${obj} &gt; ${obj} ID</em><br/>
+      <code>Record Text</code> → <em>Triggering ${obj} &gt; ${field}</em><br/>
+      <code>Department</code> → <em>${dept}</em><br/>
+      <code>Agent Name</code> → <em>${agent}</em></div>
+    </div>
+    <div class="ob-flow-step">
+      <span class="ob-flow-num">4</span>
+      <div><strong>Save &amp; Activate the Flow</strong><br/>
+      That's it. The next time a <strong>${obj}</strong> is saved with a <strong>${field}</strong> value, FAGE will process it and write the AI response back automatically.</div>
+    </div>
+  `;
+
+  // ── Field table ────────────────────────────────────────────────────────────
+  document.getElementById("fieldObjectLabel").textContent = obj;
+  document.getElementById("fieldTable").innerHTML = `
+    <div class="ob-field-row ob-field-row-header">
+      <span>Field Label</span><span>API Name</span><span>Type</span><span>Settings</span>
+    </div>
+    <div class="ob-field-row">
+      <span>FAGE AI Response</span>
+      <span class="mono">FAGE_AI_Response__c</span>
+      <span>Long Text Area</span>
+      <span>32,768 chars</span>
+    </div>
+    <div class="ob-field-row">
+      <span>FAGE Model Used</span>
+      <span class="mono">FAGE_Model_Used__c</span>
+      <span>Text</span>
+      <span>255 chars</span>
+    </div>
+    <div class="ob-field-row">
+      <span>FAGE Routing Decision</span>
+      <span class="mono">FAGE_Routing_Decision__c</span>
+      <span>Text</span>
+      <span>50 chars</span>
+    </div>
+    <div class="ob-field-row">
+      <span>FAGE Cost USD</span>
+      <span class="mono">FAGE_Cost_USD__c</span>
+      <span>Currency</span>
+      <span>Length 12, Decimals 6</span>
+    </div>
+  `;
+
+  document.getElementById("successSummary").textContent =
+    `${obj}.${field} → ${dept} department · Agent: ${agent}`;
+
+  document.getElementById("sfOutput").style.display = "block";
+  document.getElementById("sfOutput").scrollIntoView({ behavior: "smooth" });
+}
+
+function copyCode(elementId) {
+  const text = document.getElementById(elementId).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  });
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 renderDeptList();
+onObjectChange(); // populate field dropdown on load
