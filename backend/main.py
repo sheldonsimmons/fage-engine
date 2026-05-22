@@ -95,6 +95,18 @@ app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywor
 from api import routes_reports
 app.include_router(routes_reports.router, prefix="/api/reports", tags=["Reports"])
 
+# Dev/Demo — Populate dashboard with impressive demo data for screenshots
+@app.post("/api/admin/populate-demo", tags=["Admin"])
+def populate_demo_data():
+    """
+    DEV/DEMO ONLY — Loads the dashboard with rich demo data for screenshots.
+    Clears transactions and audit events, then rebuilds with 30 days of history.
+    Keeps departments, agents, and sensitive terms intact.
+    """
+    from database.populate_demo import populate
+    populate()
+    return {"status": "ok", "message": "Demo data loaded. Refresh your dashboard."}
+
 # Dev/Demo — Reset test data (keeps departments, agents, terms)
 @app.post("/api/admin/reset-demo", tags=["Admin"])
 def reset_demo_data(db=None):
