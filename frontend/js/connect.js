@@ -178,29 +178,7 @@ async function initConfigScreen() {
   document.getElementById("agentName").value = names[selectedPlatform] || "";
 
   // Load departments
-  const select = document.getElementById("agentDept");
-  select.innerHTML = `<option value="">Select a department...</option>`;
-  try {
-    const budgets = await apiGet("/api/budget");
-    if (budgets && budgets.length) {
-      budgets.forEach(b => {
-        const opt = document.createElement("option");
-        opt.value       = b.department;
-        opt.textContent = b.department;
-        select.appendChild(opt);
-      });
-    } else {
-      throw new Error("No budgets");
-    }
-  } catch {
-    ["Support","Sales","Marketing","Operations"].forEach(d => {
-      const opt = document.createElement("option");
-      opt.value = d; opt.textContent = d;
-      select.appendChild(opt);
-    });
-  }
-  // Auto-select first real option
-  if (select.options.length > 1) select.selectedIndex = 1;
+  await loadDeptDropdown();
 
   // Render object buttons + custom input
   renderObjectGrid(plat.objects);
@@ -252,6 +230,81 @@ function selectPolicy(policy) {
   document.getElementById(`policy-${policy}`).classList.add("selected");
 }
 
+// ── Department management ─────────────────────────────────────────────────────
+
+async function loadDeptDropdown(selectValue) {
+  const select = document.getElementById("agentDept");
+  select.innerHTML = `<option value="">Select a department...</option>`;
+  try {
+    const budgets = await apiGet("/api/budget");
+    if (budgets && budgets.length) {
+      budgets.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value       = b.department;
+        opt.textContent = b.department;
+        select.appendChild(opt);
+      });
+    } else {
+      throw new Error("empty");
+    }
+  } catch {
+    ["Support","Sales","Marketing","Operations"].forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d; opt.textContent = d;
+      select.appendChild(opt);
+    });
+  }
+  // Add "new department" option at the bottom
+  const addOpt = document.createElement("option");
+  addOpt.value       = "__new__";
+  addOpt.textContent = "+ Add New Department";
+  select.appendChild(addOpt);
+
+  // Select the right value
+  if (selectValue) {
+    select.value = selectValue;
+  } else if (select.options.length > 1) {
+    select.selectedIndex = 1;
+  }
+}
+
+function handleDeptChange(select) {
+  const form = document.getElementById("newDeptForm");
+  if (select.value === "__new__") {
+    form.style.display = "block";
+    document.getElementById("newDeptName").focus();
+  } else {
+    form.style.display = "none";
+  }
+}
+
+async function createDepartment() {
+  const name  = document.getElementById("newDeptName").value.trim();
+  const cap   = parseFloat(document.getElementById("newDeptCap").value) || 0;
+  const err   = document.getElementById("newDeptError");
+
+  if (!name) {
+    err.textContent = "Please enter a department name.";
+    return;
+  }
+
+  err.textContent = "Creating...";
+  err.style.color = "var(--text-muted)";
+
+  try {
+    await apiPost(`/api/budget/${encodeURIComponent(name)}/cap`, { new_cap_usd: cap });
+    // Reload dropdown and select the new department
+    await loadDeptDropdown(name);
+    document.getElementById("newDeptForm").style.display = "none";
+    document.getElementById("newDeptName").value = "";
+    document.getElementById("newDeptCap").value  = "";
+    err.textContent = "";
+  } catch (e) {
+    err.textContent = "Error: " + e.message;
+    err.style.color = "var(--accent-red)";
+  }
+}
+
 // ── Step 2 → Register agent + go to step 3 ───────────────────────────────────
 
 async function registerAndConnect() {
@@ -259,12 +312,22 @@ async function registerAndConnect() {
   const dept  = document.getElementById("agentDept").value;
   const err   = document.getElementById("error-2");
 
+  // Capture custom object value at submit time in case oninput was missed
+  const customInput = document.getElementById("customObjectInput");
+  if (customInput && customInput.value.trim()) {
+    selectedObject = customInput.value.trim();
+  }
+
   if (!name) {
     err.textContent = "Please enter an agent name.";
     return;
   }
-  if (!dept) {
-    err.textContent = "Please select a department.";
+  if (!dept || dept === "__new__") {
+    err.textContent = "Please select or create a department first.";
+    return;
+  }
+  if (!selectedObject) {
+    err.textContent = "Please select or enter what this agent monitors.";
     return;
   }
 

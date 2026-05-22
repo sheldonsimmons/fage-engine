@@ -103,10 +103,36 @@
           <label class="ob-label">Department
             <span class="conn-label-hint">— Which team's AI budget should this agent draw from?</span>
           </label>
-          <select id="agentDept" class="ob-input">
+          <select id="agentDept" class="ob-input" onchange="handleDeptChange(this)">
             <option value="">Loading departments...</option>
           </select>
-          <span class="conn-field-hint">Each department has its own monthly budget cap. When this agent makes AI calls, the cost is tracked against that department's budget automatically.</span>
+          <span class="conn-field-hint">Each department has its own monthly budget cap. When this agent makes AI calls, the cost is tracked against that department's budget automatically. Don't see your department? Select <strong>"+ Add New Department"</strong> below.</span>
+
+          <!-- Inline new department form — shown when user selects "+ Add New" -->
+          <div id="newDeptForm" class="conn-new-dept-form" style="display:none">
+            <div class="conn-new-dept-title">Create a New Department</div>
+            <p class="conn-field-hint" style="margin-bottom:10px">
+              Common examples: Customer Success, Legal, Finance, HR, Engineering, IT, EMEA Team, Tier 1 Support.
+              Name it whatever makes sense for your organization.
+            </p>
+            <div class="conn-new-dept-row">
+              <div class="ob-field" style="flex:1">
+                <label class="ob-label">Department Name</label>
+                <input type="text" id="newDeptName" class="ob-input" placeholder="e.g. Customer Success" />
+              </div>
+              <div class="ob-field" style="width:160px">
+                <label class="ob-label">Monthly Budget</label>
+                <div class="ob-budget-input">
+                  <span class="ob-currency">$</span>
+                  <input type="number" id="newDeptCap" class="ob-input ob-budget-field" placeholder="500" min="0" step="50" />
+                </div>
+              </div>
+              <div class="ob-field" style="align-self:flex-end">
+                <button class="ob-btn-primary" onclick="createDepartment()" style="white-space:nowrap">Create →</button>
+              </div>
+            </div>
+            <div class="ob-error" id="newDeptError"></div>
+          </div>
         </div>
 
         <div class="ob-field">

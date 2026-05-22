@@ -265,6 +265,29 @@
   color: var(--accent-green);
 }
 
+/* ── New department inline form ──────────────────────────────────────────────── */
+.conn-new-dept-form {
+  margin-top: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 16px;
+}
+.conn-new-dept-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.conn-new-dept-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .conn-platform-grid { grid-template-columns: repeat(2, 1fr); }
