@@ -91,6 +91,10 @@ app.include_router(routes_dashboard.router, prefix="/api/dashboard", tags=["Dash
 from api import routes_keywords
 app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywords"])
 
+# Step 10 — Reports
+from api import routes_reports
+app.include_router(routes_reports.router, prefix="/api/reports", tags=["Reports"])
+
 # ── Serve frontend as static files (MUST be last — catches everything else) ────
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")

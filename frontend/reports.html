@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Reports</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/reports.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <span class="header-logo">◈</span>
+      <span class="header-title">FAGE</span>
+      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+    </div>
+    <div class="header-nav">
+      <a href="/" class="header-nav-link">Dashboard</a>
+      <a href="/connect.html" class="header-nav-link">+ Connect Platform</a>
+      <a href="/reports.html" class="header-nav-link active">📊 Reports</a>
+    </div>
+    <div class="header-status">
+      <span class="status-dot online"></span>
+      <span>Reports</span>
+    </div>
+  </header>
+
+  <main class="rpt-main">
+
+    <!-- ── Page header + controls ─────────────────────────────────────── -->
+    <div class="rpt-header">
+      <div>
+        <h1 class="rpt-title">AI Governance Reports</h1>
+        <p class="rpt-subtitle">Savings, risk events, and department performance over time.</p>
+      </div>
+      <div class="rpt-controls">
+        <label class="rpt-range-label">Time Range</label>
+        <div class="rpt-range-btns">
+          <button class="rpt-range-btn" data-days="7">7D</button>
+          <button class="rpt-range-btn active" data-days="30">30D</button>
+          <button class="rpt-range-btn" data-days="90">90D</button>
+          <button class="rpt-range-btn" data-days="365">1Y</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tabs ───────────────────────────────────────────────────────── -->
+    <div class="rpt-tabs">
+      <button class="rpt-tab active" data-tab="savings">💰 Savings</button>
+      <button class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
+      <button class="rpt-tab" data-tab="departments">🏢 Departments</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 1: SAVINGS
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane active" id="tab-savings">
+
+      <!-- KPI strip -->
+      <div class="rpt-kpi-row">
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Total Saved</div>
+          <div class="rpt-kpi-value green" id="sv-total-saved">—</div>
+          <div class="rpt-kpi-sub">pruning + model downgrade</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Without FAGE</div>
+          <div class="rpt-kpi-value" id="sv-no-fage">—</div>
+          <div class="rpt-kpi-sub">est. cost at full flagship rate</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Actual Cost</div>
+          <div class="rpt-kpi-value" id="sv-actual">—</div>
+          <div class="rpt-kpi-sub">what you paid</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Pruning Saved</div>
+          <div class="rpt-kpi-value green" id="sv-pruning">—</div>
+          <div class="rpt-kpi-sub" id="sv-tokens">— tokens removed</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Model Downgrade Saved</div>
+          <div class="rpt-kpi-value green" id="sv-downgrade">—</div>
+          <div class="rpt-kpi-sub" id="sv-micro-pct">— % routed to micro</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Total Calls</div>
+          <div class="rpt-kpi-value" id="sv-calls">—</div>
+          <div class="rpt-kpi-sub" id="sv-call-split">— micro / — flagship</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="rpt-charts-row">
+        <div class="rpt-chart-card rpt-chart-wide">
+          <div class="rpt-chart-title">Daily Spend</div>
+          <canvas id="chartDailySpend"></canvas>
+        </div>
+        <div class="rpt-chart-card">
+          <div class="rpt-chart-title">Model Tier Split</div>
+          <canvas id="chartModelSplit"></canvas>
+        </div>
+      </div>
+
+      <div class="rpt-charts-row">
+        <div class="rpt-chart-card rpt-chart-wide">
+          <div class="rpt-chart-title">Daily Tokens Pruned</div>
+          <canvas id="chartTokensPruned"></canvas>
+        </div>
+        <div class="rpt-chart-card">
+          <div class="rpt-chart-title">Savings Breakdown</div>
+          <canvas id="chartSavingsBreakdown"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 2: RISK
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-risk">
+
+      <div class="rpt-kpi-row">
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Total Events</div>
+          <div class="rpt-kpi-value" id="rk-total">—</div>
+          <div class="rpt-kpi-sub">audit log entries</div>
+        </div>
+        <div class="rpt-kpi alert">
+          <div class="rpt-kpi-label">Critical</div>
+          <div class="rpt-kpi-value red" id="rk-critical">—</div>
+          <div class="rpt-kpi-sub">HIPAA, fraud, lawsuits</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">High Risk</div>
+          <div class="rpt-kpi-value yellow" id="rk-high">—</div>
+          <div class="rpt-kpi-sub">legal, compliance, locks</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Blocked Requests</div>
+          <div class="rpt-kpi-value red" id="rk-blocked">—</div>
+          <div class="rpt-kpi-sub">stopped by term policy</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Agent Collisions</div>
+          <div class="rpt-kpi-value yellow" id="rk-locks">—</div>
+          <div class="rpt-kpi-sub">concurrent write conflicts</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Term Library</div>
+          <div class="rpt-kpi-value" id="rk-terms">—</div>
+          <div class="rpt-kpi-sub" id="rk-terms-sub">— block / — escalate</div>
+        </div>
+      </div>
+
+      <div class="rpt-charts-row">
+        <div class="rpt-chart-card rpt-chart-wide">
+          <div class="rpt-chart-title">Daily Risk Events</div>
+          <canvas id="chartRiskTimeline"></canvas>
+        </div>
+        <div class="rpt-chart-card">
+          <div class="rpt-chart-title">Risk Level Breakdown</div>
+          <canvas id="chartRiskBreakdown"></canvas>
+        </div>
+      </div>
+
+      <!-- Risk event table -->
+      <div class="rpt-table-card">
+        <div class="rpt-table-title">Recent High-Stakes Events</div>
+        <table class="rpt-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Type</th>
+              <th>Department</th>
+              <th>Risk</th>
+              <th>Outcome</th>
+            </tr>
+          </thead>
+          <tbody id="riskEventTable">
+            <tr><td colspan="5" class="placeholder">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 3: DEPARTMENTS
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-departments">
+
+      <!-- Scorecard table -->
+      <div class="rpt-table-card" style="margin-bottom:24px">
+        <div class="rpt-table-title">Department Scorecard</div>
+        <table class="rpt-table">
+          <thead>
+            <tr>
+              <th>Department</th>
+              <th>Calls</th>
+              <th>Micro %</th>
+              <th>Actual Cost</th>
+              <th>Pruning Saved</th>
+              <th>Budget Used</th>
+              <th>Cap</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="deptScorecardTable">
+            <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rpt-charts-row">
+        <div class="rpt-chart-card rpt-chart-wide">
+          <div class="rpt-chart-title">Daily Spend by Department</div>
+          <canvas id="chartDeptSpend"></canvas>
+        </div>
+        <div class="rpt-chart-card">
+          <div class="rpt-chart-title">Cost by Department</div>
+          <canvas id="chartDeptCost"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    FAGE v0.1.0 — Reports &nbsp;|&nbsp;
+    <a href="/">← Dashboard</a>
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/reports.js"></script>
+</body>
+</html>
