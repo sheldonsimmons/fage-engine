@@ -27,6 +27,7 @@ class RouteRequest(BaseModel):
     department: str  = "Support"
     auto_prune: bool = True
     agent_id:   Optional[int] = None
+    agent_name: Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
 
 
 class RouteResponse(BaseModel):
@@ -99,14 +100,33 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # If escalate: force COMPLEX routing regardless of content score
     force_complex = term_result["triggered"] and term_result["action"] == "escalate"
 
-    # ── Set agent status to active ─────────────────────────────────────────────
+    # ── Resolve or auto-register agent ────────────────────────────────────────
     agent = None
     if req.agent_id:
         agent = db.query(RegisteredAgent).filter_by(id=req.agent_id).first()
-        if agent:
-            agent.status      = "active"
-            agent.last_used_at = datetime.utcnow()
-            db.commit()
+
+    # If agent_id not found but agent_name provided, look up by name
+    if not agent and req.agent_name:
+        agent = db.query(RegisteredAgent).filter_by(name=req.agent_name).first()
+
+    # If still not found and we have a name, auto-register the agent
+    if not agent and req.agent_name:
+        agent = RegisteredAgent(
+            name             = req.agent_name,
+            department       = req.department,
+            permissions      = "read,write",
+            target_table     = "tickets",
+            collision_policy = "lock",
+            status           = "idle",
+        )
+        db.add(agent)
+        db.commit()
+        db.refresh(agent)
+
+    if agent:
+        agent.status       = "active"
+        agent.last_used_at = datetime.utcnow()
+        db.commit()
 
     # Run the routing pipeline
     result = route(req.text, req.department, req.auto_prune, is_throttled, force_complex=force_complex)
@@ -114,7 +134,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # ── Persist the token transaction ──────────────────────────────────────────
     tx = TokenTransaction(
         department     = req.department,
-        agent_id       = req.agent_id,
+        agent_id       = agent.id if agent else req.agent_id,
         model_tier     = result["model_tier"],
         input_tokens   = result["input_tokens"],
         output_tokens  = result["output_tokens"],
