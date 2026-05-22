@@ -29,11 +29,22 @@ def get_budget(db: Session, department: str):
 def set_cap(db: Session, department: str, new_cap: float) -> dict:
     """
     Update a department's monthly cap.
+    Creates the department if it doesn't exist yet (supports onboarding flow).
     If the new cap puts the department back under threshold, clear the throttle.
     """
     b = db.query(DepartmentBudget).filter_by(department=department).first()
     if not b:
-        raise ValueError(f"Department '{department}' not found.")
+        b = DepartmentBudget(
+            department=department,
+            monthly_cap_usd=round(new_cap, 2),
+            current_spend_usd=0.0,
+            period_start=datetime.utcnow(),
+            throttled=False,
+            override_granted=False,
+        )
+        db.add(b)
+        db.commit()
+        return _enrich(b)
 
     b.monthly_cap_usd = round(new_cap, 2)
 
