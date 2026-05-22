@@ -1,0 +1,250 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   FAGE Platform Connector Styles
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.conn-back-link {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.conn-back-link:hover { color: var(--accent); }
+
+/* ── Platform grid ───────────────────────────────────────────────────────────── */
+.conn-platform-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.conn-platform {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 16px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.conn-platform:hover { border-color: var(--accent); }
+.conn-platform.selected {
+  border-color: var(--accent);
+  background: rgba(0, 168, 255, 0.06);
+}
+.conn-plat-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+.conn-plat-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.conn-plat-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── Object buttons ──────────────────────────────────────────────────────────── */
+.conn-object-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conn-object-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.conn-object-btn:hover { border-color: var(--accent); color: var(--accent); }
+.conn-object-btn.selected {
+  border-color: var(--accent);
+  background: rgba(0, 168, 255, 0.1);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Collision policy ────────────────────────────────────────────────────────── */
+.conn-policy-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.conn-policy {
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.conn-policy:hover { border-color: var(--accent); }
+.conn-policy.selected {
+  border-color: var(--accent);
+  background: rgba(0, 168, 255, 0.05);
+}
+.conn-policy-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.conn-policy-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.conn-field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* ── Success screen ──────────────────────────────────────────────────────────── */
+.conn-success-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  color: #000;
+  font-size: 28px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+/* ── Webhook URL card ────────────────────────────────────────────────────────── */
+.conn-url-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+.conn-url-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.conn-url-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.conn-url {
+  flex: 1;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+.conn-copy-btn {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.conn-copy-btn:hover { opacity: 0.85; }
+.conn-url-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.conn-code {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  white-space: pre;
+  overflow-x: auto;
+  margin: 8px 0 0;
+}
+
+/* ── Setup guide ─────────────────────────────────────────────────────────────── */
+.conn-guide {
+  margin-top: 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.conn-guide-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.conn-guide-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.conn-guide-steps li {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.conn-guide-steps strong { color: var(--text-primary); }
+.conn-guide-steps em { color: var(--accent); font-style: normal; }
+.conn-guide-steps code {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-green);
+}
+.conn-guide-note {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(0,168,255,0.05);
+  border: 1px solid rgba(0,168,255,0.15);
+  border-radius: 6px;
+  padding: 10px 14px;
+  line-height: 1.5;
+}
+.conn-guide-note code {
+  background: var(--bg-base);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-green);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .conn-platform-grid { grid-template-columns: repeat(2, 1fr); }
+}

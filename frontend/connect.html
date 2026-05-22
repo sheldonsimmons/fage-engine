@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Connect a Platform</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/onboarding.css" />
+  <link rel="stylesheet" href="css/connect.css" />
+</head>
+<body class="onboarding-body">
+
+  <div class="ob-shell" style="max-width:700px">
+
+    <!-- Brand -->
+    <div class="ob-brand">
+      <span class="header-logo">◈</span>
+      <span class="header-title">FAGE</span>
+      <span class="ob-brand-sub">Platform Connector</span>
+      <a href="/" class="conn-back-link">← Dashboard</a>
+    </div>
+
+    <!-- Progress -->
+    <div class="ob-progress">
+      <div class="ob-step active" id="prog-1">1</div>
+      <div class="ob-progress-line"></div>
+      <div class="ob-step" id="prog-2">2</div>
+      <div class="ob-progress-line"></div>
+      <div class="ob-step" id="prog-3">3</div>
+    </div>
+    <div class="ob-step-labels" style="justify-content:space-around">
+      <span>Choose Platform</span>
+      <span>Configure Agent</span>
+      <span>Get Your URL</span>
+    </div>
+
+    <!-- ── Screen 1: Pick Platform ───────────────────────────────────────── -->
+    <div class="ob-screen active" id="screen-1">
+      <h1 class="ob-title">Connect a Platform</h1>
+      <p class="ob-subtitle">Which platform do you want to connect to FAGE? Every AI action on this platform will route through your governance layer.</p>
+
+      <div class="conn-platform-grid">
+
+        <div class="conn-platform" id="plat-salesforce" onclick="selectPlatform('salesforce')">
+          <div class="conn-plat-icon">☁</div>
+          <div class="conn-plat-name">Salesforce</div>
+          <div class="conn-plat-desc">Cases, Leads, Contacts, Accounts</div>
+        </div>
+
+        <div class="conn-platform" id="plat-servicenow" onclick="selectPlatform('servicenow')">
+          <div class="conn-plat-icon">⚙</div>
+          <div class="conn-plat-name">ServiceNow</div>
+          <div class="conn-plat-desc">Incidents, Changes, Requests</div>
+        </div>
+
+        <div class="conn-platform" id="plat-hubspot" onclick="selectPlatform('hubspot')">
+          <div class="conn-plat-icon">⬡</div>
+          <div class="conn-plat-name">HubSpot</div>
+          <div class="conn-plat-desc">Tickets, Contacts, Deals</div>
+        </div>
+
+        <div class="conn-platform" id="plat-dynamics" onclick="selectPlatform('dynamics')">
+          <div class="conn-plat-icon">◆</div>
+          <div class="conn-plat-name">Dynamics 365</div>
+          <div class="conn-plat-desc">Cases, Leads, Opportunities</div>
+        </div>
+
+        <div class="conn-platform" id="plat-zendesk" onclick="selectPlatform('zendesk')">
+          <div class="conn-plat-icon">◎</div>
+          <div class="conn-plat-name">Zendesk</div>
+          <div class="conn-plat-desc">Tickets, Users, Organizations</div>
+        </div>
+
+        <div class="conn-platform" id="plat-other" onclick="selectPlatform('other')">
+          <div class="conn-plat-icon">+</div>
+          <div class="conn-plat-name">Other / Custom</div>
+          <div class="conn-plat-desc">Any platform with webhooks or HTTP</div>
+        </div>
+
+      </div>
+
+      <div class="ob-actions">
+        <div></div>
+        <button class="ob-btn-primary" onclick="goStep(2)">Continue →</button>
+      </div>
+      <div class="ob-error" id="error-1"></div>
+    </div>
+
+    <!-- ── Screen 2: Configure Agent ─────────────────────────────────────── -->
+    <div class="ob-screen" id="screen-2">
+      <h1 class="ob-title" id="configTitle">Configure Your Agent</h1>
+      <p class="ob-subtitle">FAGE will register an AI agent for this platform. The agent handles claim/release locking and budget tracking automatically.</p>
+
+      <div class="ob-form">
+        <div class="ob-field">
+          <label class="ob-label">Agent Name</label>
+          <input type="text" id="agentName" class="ob-input" placeholder="e.g. SF-CaseBot" />
+          <span class="conn-field-hint">Use something descriptive — this appears in your audit log and collision alerts.</span>
+        </div>
+
+        <div class="ob-field">
+          <label class="ob-label">Department</label>
+          <select id="agentDept" class="ob-input">
+            <option value="">Loading departments...</option>
+          </select>
+        </div>
+
+        <div class="ob-field">
+          <label class="ob-label">What does this agent monitor?</label>
+          <div class="conn-object-grid" id="objectGrid">
+            <!-- Rendered by JS based on platform -->
+          </div>
+        </div>
+
+        <div class="ob-field">
+          <label class="ob-label">Collision Policy</label>
+          <div class="conn-policy-grid">
+            <div class="conn-policy selected" id="policy-lock" onclick="selectPolicy('lock')">
+              <div class="conn-policy-name">🔒 Lock</div>
+              <div class="conn-policy-desc">Freeze both agents, require supervisor approval. Best for billing, legal, compliance.</div>
+            </div>
+            <div class="conn-policy" id="policy-queue" onclick="selectPolicy('queue')">
+              <div class="conn-policy-name">⏳ Queue</div>
+              <div class="conn-policy-desc">Auto-retry when the record is free. Best for routine tickets and low-risk updates.</div>
+            </div>
+            <div class="conn-policy" id="policy-skip" onclick="selectPolicy('skip')">
+              <div class="conn-policy-name">⏭ Skip</div>
+              <div class="conn-policy-desc">Abandon silently and log it. Best for non-critical fire-and-forget automations.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ob-actions">
+        <button class="ob-btn-ghost" onclick="goStep(1)">← Back</button>
+        <button class="ob-btn-primary" onclick="registerAndConnect()">Register Agent →</button>
+      </div>
+      <div class="ob-error" id="error-2"></div>
+    </div>
+
+    <!-- ── Screen 3: Webhook URL + Setup Guide ───────────────────────────── -->
+    <div class="ob-screen" id="screen-3">
+      <div class="conn-success-icon">✓</div>
+      <h1 class="ob-title">Agent Registered</h1>
+      <p class="ob-subtitle"><strong id="finalAgentName"></strong> is live in your Agentlake Registry. Now point your platform at FAGE using the details below.</p>
+
+      <!-- Webhook URL -->
+      <div class="conn-url-card">
+        <div class="conn-url-label">YOUR FAGE WEBHOOK URL</div>
+        <div class="conn-url-row">
+          <code class="conn-url" id="webhookUrl"></code>
+          <button class="conn-copy-btn" onclick="copyUrl()">Copy</button>
+        </div>
+        <div class="conn-url-note">Paste this URL into your platform's automation builder as the HTTP endpoint.</div>
+      </div>
+
+      <!-- Request body -->
+      <div class="conn-url-card" style="margin-top:14px">
+        <div class="conn-url-label">REQUEST BODY (JSON)</div>
+        <pre class="conn-code" id="requestBody"></pre>
+        <button class="conn-copy-btn" style="margin-top:8px" onclick="copyBody()">Copy Body</button>
+      </div>
+
+      <!-- Platform-specific guide -->
+      <div class="conn-guide" id="platformGuide"></div>
+
+      <!-- Actions -->
+      <div class="ob-actions" style="margin-top:24px">
+        <button class="ob-btn-ghost" onclick="connectAnother()">+ Connect Another Platform</button>
+        <a href="/" class="ob-btn-primary" style="text-decoration:none; display:inline-block; text-align:center">Open Dashboard →</a>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/connect.js"></script>
+</body>
+</html>
