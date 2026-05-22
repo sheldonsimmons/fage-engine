@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Enterprise ROI Demo</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/reports.css" />
+  <link rel="stylesheet" href="css/demo.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-brand">
+      <span class="header-logo">◈</span>
+      <span class="header-title">FAGE</span>
+      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+    </div>
+    <div class="header-nav">
+      <a href="/" class="header-nav-link">← Live Dashboard</a>
+      <span class="demo-badge">ENTERPRISE DEMO</span>
+    </div>
+    <div class="header-status">
+      <span class="status-dot online"></span>
+      <span>Meridian Financial Group · 500 AI Agents · Salesforce + ServiceNow</span>
+    </div>
+  </header>
+
+  <main class="dashboard" style="max-width:1400px; margin:0 auto">
+
+    <!-- Demo context banner -->
+    <div class="demo-banner">
+      <div class="demo-banner-left">
+        <span class="demo-banner-icon">◈</span>
+        <div>
+          <div class="demo-banner-title">Meridian Financial Group — Enterprise Deployment</div>
+          <div class="demo-banner-sub">500 AI agents · 4 departments · Salesforce + ServiceNow · Live since Jan 2025</div>
+        </div>
+      </div>
+      <div class="demo-range-selector">
+        <button class="rpt-range-btn" onclick="setRange(7)"  id="range-7">7D</button>
+        <button class="rpt-range-btn active" onclick="setRange(30)" id="range-30">30D</button>
+        <button class="rpt-range-btn" onclick="setRange(90)" id="range-90">90D</button>
+        <button class="rpt-range-btn" onclick="setRange(365)" id="range-365">1Y</button>
+      </div>
+    </div>
+
+    <!-- ROI Hero Row -->
+    <section class="demo-roi-row" id="roiRow"></section>
+
+    <!-- KPI Cards -->
+    <section class="kpi-row" id="kpiRow"></section>
+
+    <!-- Stat bar -->
+    <section class="stat-bar" id="statBar"></section>
+
+    <!-- Charts row -->
+    <section class="demo-charts-row">
+
+      <div class="panel">
+        <h2 class="panel-title">Daily AI Spend — With vs. Without FAGE</h2>
+        <canvas id="spendChart" height="200"></canvas>
+      </div>
+
+      <div class="panel">
+        <h2 class="panel-title">Model Routing Split</h2>
+        <canvas id="routingChart" height="200"></canvas>
+      </div>
+
+    </section>
+
+    <!-- Department breakdown + savings -->
+    <section class="demo-mid-row">
+
+      <div class="panel">
+        <h2 class="panel-title">Department Budgets &amp; Spend</h2>
+        <div id="deptBreakdown"></div>
+      </div>
+
+      <div class="panel">
+        <h2 class="panel-title">Cumulative Savings vs. Baseline</h2>
+        <canvas id="savingsChart" height="240"></canvas>
+      </div>
+
+    </section>
+
+    <!-- Compliance & Risk -->
+    <section class="panel full-width">
+      <h2 class="panel-title">Governance &amp; Compliance Activity</h2>
+      <div class="demo-compliance-grid" id="complianceGrid"></div>
+    </section>
+
+    <!-- ROI Summary for exec -->
+    <section class="panel full-width demo-exec-summary">
+      <h2 class="panel-title">Executive Summary — AI Governance ROI</h2>
+      <div class="demo-exec-grid" id="execGrid"></div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    FAGE Enterprise Demo &nbsp;|&nbsp; Meridian Financial Group &nbsp;|&nbsp;
+    <span style="color:var(--accent-green)">All figures based on real OpenAI gpt-4o / gpt-3.5-turbo pricing</span>
+  </footer>
+
+  <script src="js/demo.js"></script>
+</body>
+</html>
