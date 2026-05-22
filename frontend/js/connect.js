@@ -280,7 +280,8 @@ function handleDeptChange(select) {
 
 async function createDepartment() {
   const name  = document.getElementById("newDeptName").value.trim();
-  const cap   = parseFloat(document.getElementById("newDeptCap").value) || 0;
+  const capRaw = document.getElementById("newDeptCap").value;
+  const cap    = capRaw === "" ? 0 : parseFloat(capRaw) || 0;
   const err   = document.getElementById("newDeptError");
 
   if (!name) {

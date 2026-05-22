@@ -59,8 +59,8 @@ def dept_budget(department: str, db: Session = Depends(get_db)):
 @router.post("/{department}/cap", response_model=BudgetStatus)
 def update_cap(department: str, body: SetCapRequest, db: Session = Depends(get_db)):
     """Supervisor action: update a department's monthly spending cap."""
-    if body.new_cap_usd <= 0:
-        raise HTTPException(status_code=400, detail="Cap must be greater than zero.")
+    if body.new_cap_usd < 0:
+        raise HTTPException(status_code=400, detail="Cap cannot be negative.")
     try:
         return set_cap(db, department, body.new_cap_usd)
     except ValueError as e:
