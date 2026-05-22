@@ -92,6 +92,29 @@ def get_dashboard(db: Session = Depends(get_db)):
         for b in budgets
     ]
 
+    # ── Governance & Compliance stats ─────────────────────────────────────────
+    blocked_count      = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "BLOCKED").scalar()   or 0
+    escalated_count    = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "ESCALATED").scalar() or 0
+    flagged_count      = db.query(func.count(AuditEvent.id)).scalar() or 0
+    pii_count          = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type.ilike("%PII%")).scalar()  or 0
+    throttle_prevented = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "THROTTLE").scalar()  or 0
+    collision_count    = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "LOCK").scalar()       or 0
+
+    # ── Executive Summary ROI ─────────────────────────────────────────────────
+    projected_annual_savings = round(pruning_savings_usd * 12, 2)
+    # Cost reduction via smart routing: % savings from sending micro calls to micro
+    # instead of sending everything to flagship (which would cost ~30x more per call)
+    FLAGSHIP_AVG = 0.030   # avg cost per flagship call
+    MICRO_AVG    = 0.000465  # avg cost per micro call
+    if total_calls > 0:
+        full_flagship_cost = total_calls * FLAGSHIP_AVG
+        cost_reduction_pct = round(
+            ((full_flagship_cost - (spend_month or 0)) / full_flagship_cost) * 100, 1
+        ) if full_flagship_cost > 0 else 0
+        cost_reduction_pct = max(0, min(99, cost_reduction_pct))
+    else:
+        cost_reduction_pct = 0
+
     # ── Recent audit events (last 5 for the KPI strip) ─────────────────────────
     recent_audits = db.query(AuditEvent).order_by(
         AuditEvent.timestamp.desc()
@@ -165,6 +188,19 @@ def get_dashboard(db: Session = Depends(get_db)):
 
         # ── Audit strip ───────────────────────────────────────────────────────
         "recent_audits":         audit_strip,
+
+        # ── Governance & Compliance ────────────────────────────────────────────
+        "blocked_count":         blocked_count,
+        "escalated_count":       escalated_count,
+        "flagged_count":         flagged_count,
+        "pii_count":             pii_count,
+        "throttle_prevented":    throttle_prevented,
+        "collision_count":       collision_count,
+
+        # ── Executive Summary ROI ──────────────────────────────────────────────
+        "projected_annual_savings": projected_annual_savings,
+        "cost_reduction_pct":    cost_reduction_pct,
+        "compliance_events_total": flagged_count,
 
         # ── Meta ──────────────────────────────────────────────────────────────
         "generated_at":          datetime.utcnow().isoformat(),

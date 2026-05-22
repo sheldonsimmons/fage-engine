@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FAGE — FinOps Agentlake & Governance Engine</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/demo.css" />
 </head>
 <body>
 
@@ -18,7 +19,7 @@
     <div class="header-nav">
       <a href="/connect.html" class="header-nav-link">+ Connect Platform</a>
       <a href="/reports.html" class="header-nav-link" style="margin-left:8px">📊 Reports</a>
-      <a href="/demo.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-yellow)">★ Enterprise Demo</a>
+      <button class="header-nav-link" onclick="loadEnterpriseDemo()" style="margin-left:8px;color:var(--accent-yellow);background:none;border:none;cursor:pointer;font:inherit">★ Enterprise Demo</button>
       <a href="/onboarding.html" class="header-nav-link" style="margin-left:8px">⚙ Setup</a>
       <button class="header-nav-link header-reset-btn" onclick="resetDemoData()" style="margin-left:8px">↺ Reset Demo</button>
       <button class="tour-btn" onclick="startTour()">? Guide</button>
@@ -341,6 +342,22 @@
         </tbody>
       </table>
       </div><!-- end keywordsBody -->
+    </section>
+
+    <!-- Row 5b: Governance & Compliance Activity -->
+    <section class="panel full-width" id="compliancePanel">
+      <h2 class="panel-title">Governance &amp; Compliance Activity</h2>
+      <div class="demo-compliance-grid" id="complianceGrid">
+        <p class="placeholder">No compliance events yet.</p>
+      </div>
+    </section>
+
+    <!-- Row 5c: Executive Summary ROI -->
+    <section class="panel full-width" id="execPanel">
+      <h2 class="panel-title">Executive Summary — AI Governance ROI</h2>
+      <div class="demo-exec-grid" id="execGrid">
+        <p class="placeholder">No data yet — run a route call or load demo data.</p>
+      </div>
     </section>
 
     <!-- Row 6: Audit Log -->

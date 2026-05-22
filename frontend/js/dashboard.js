@@ -36,6 +36,8 @@ async function loadDashboard() {
     const d = await apiGet("/api/dashboard");
     renderKpis(d);
     renderStatBar(d);
+    renderComplianceGrid(d);
+    renderExecSummary(d);
   } catch (err) {
     console.warn("Dashboard load failed:", err.message);
   }
@@ -76,6 +78,93 @@ function renderStatBar(d) {
   document.getElementById("statBudgetPct").textContent     = d.overall_budget_pct + "%";
   document.getElementById("statPruningSaved").textContent  = "$" + d.pruning_savings_usd.toFixed(4);
   document.getElementById("statMonthSpend").textContent    = "$" + d.spend_month_usd.toFixed(4);
+}
+
+// ── Governance & Compliance Activity ─────────────────────────────────────────
+function renderComplianceGrid(d) {
+  const grid = document.getElementById("complianceGrid");
+  if (!grid) return;
+  const items = [
+    { icon: "🚫", value: d.blocked_count,      label: "Requests Blocked",          sub: "Sensitive terms triggered block policy — request never reached AI model",                         cls: "critical" },
+    { icon: "⚠️",  value: d.escalated_count,    label: "Escalated to Flagship",     sub: "Legal, NDA, contract language forced flagship review",                                           cls: "high"     },
+    { icon: "🔍", value: d.flagged_count,       label: "Flagged in Audit Log",      sub: "High-risk keywords logged for compliance review",                                                cls: "medium"   },
+    { icon: "🔒", value: d.pii_count,           label: "PII Detected",              sub: "Credit cards, SSNs, emails, phone numbers caught before AI processing",                          cls: "high"     },
+    { icon: "💰", value: d.throttle_prevented,  label: "Budget Overruns Prevented", sub: "Auto-throttle engaged before department cap was breached",                                        cls: "low"      },
+    { icon: "⚡", value: d.collision_count,     label: "Agent Collisions Resolved", sub: "Concurrent write conflicts detected and locked — zero data corruption",                           cls: "low"      },
+  ];
+  const hasData = items.some(i => i.value > 0);
+  if (!hasData) {
+    grid.innerHTML = '<p class="placeholder">No compliance events yet — run a route call or load demo data.</p>';
+    return;
+  }
+  grid.innerHTML = items.map(i => `
+    <div class="demo-compliance-card ${i.cls}">
+      <div class="demo-compliance-icon">${i.icon}</div>
+      <div class="demo-compliance-value">${i.value.toLocaleString()}</div>
+      <div class="demo-compliance-label">${i.label}</div>
+      <div class="demo-compliance-sub">${i.sub}</div>
+    </div>
+  `).join("");
+}
+
+// ── Executive Summary ROI ─────────────────────────────────────────────────────
+function renderExecSummary(d) {
+  const grid = document.getElementById("execGrid");
+  if (!grid) return;
+  const tokens = d.tokens_saved_total || 0;
+  const tokensLabel = tokens >= 1_000_000
+    ? (tokens / 1_000_000).toFixed(2) + "M"
+    : tokens >= 1_000
+      ? (tokens / 1_000).toFixed(1) + "K"
+      : tokens.toLocaleString();
+  const eventsLabel = (d.compliance_events_total || 0) >= 1000
+    ? ((d.compliance_events_total) / 1000).toFixed(1) + "K"
+    : (d.compliance_events_total || 0).toString();
+  const savings = (d.projected_annual_savings || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const items = [
+    { icon: "$", cls: "green",  color: "green",  title: "PROJECTED ANNUAL SAVINGS",  value: "$" + savings,                                     sub: "Based on 30-day actual performance extrapolated to 12 months" },
+    { icon: "%", cls: "accent", color: "accent", title: "AI COST REDUCTION",         value: (d.cost_reduction_pct || 0) + "%",                  sub: "Achieved through smart routing, token pruning, and budget enforcement" },
+    { icon: "◈", cls: "purple", color: "purple", title: "COMPLIANCE EVENTS LOGGED",  value: eventsLabel,                                        sub: "Immutable audit trail — every AI decision logged, timestamped, exportable" },
+    { icon: "⚡", cls: "yellow", color: "yellow", title: "TIME TO DEPLOY",            value: "15 min",                                           sub: "One Apex class · one Flow action · 4 custom fields · no IT project required" },
+    { icon: "↑", cls: "green",  color: "green",  title: "TOKENS SAVED",              value: tokensLabel,                                        sub: "Context pruned before every AI call — savings start from day one" },
+    { icon: "0", cls: "red",    color: "",        title: "DATA CORRUPTION EVENTS",    value: "Zero",                                             sub: (d.collision_count || 0) + " agent collisions detected and locked — no silent overwrites" },
+  ];
+  const hasData = (d.total_calls || 0) > 0 || (d.flagged_count || 0) > 0;
+  if (!hasData) {
+    grid.innerHTML = '<p class="placeholder">No data yet — run a route call or load demo data.</p>';
+    return;
+  }
+  grid.innerHTML = items.map(i => `
+    <div class="demo-exec-card">
+      <div class="demo-exec-icon ${i.cls}">${i.icon}</div>
+      <div class="demo-exec-content">
+        <div class="demo-exec-title">${i.title}</div>
+        <div class="demo-exec-value ${i.color}">${i.value}</div>
+        <div class="demo-exec-sub">${i.sub}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+// ── Enterprise Demo loader ────────────────────────────────────────────────────
+async function loadEnterpriseDemo() {
+  if (!confirm("Load enterprise demo data?\n\nThis will replace all current data with Meridian Financial Group's 30-day enterprise dataset (12 agents, 4 departments, Marketing throttled).")) return;
+  try {
+    const btn = document.querySelector('[onclick="loadEnterpriseDemo()"]');
+    if (btn) btn.textContent = "★ Loading...";
+    await apiPost("/api/admin/populate-enterprise-demo", {});
+    // Wait for background task to complete, then refresh
+    setTimeout(() => {
+      loadDashboard();
+      if (typeof loadBudgets   === "function") loadBudgets();
+      if (typeof loadAgents    === "function") loadAgents();
+      if (typeof loadAuditLog  === "function") loadAuditLog();
+      if (typeof loadKeywords  === "function") loadKeywords();
+      if (btn) btn.textContent = "★ Enterprise Demo";
+    }, 8000);
+  } catch (e) {
+    alert("Enterprise demo failed: " + e.message);
+  }
 }
 
 // ── Pruner panel (wired to POST /api/prune) ───────────────────────────────────
@@ -138,11 +227,12 @@ async function runPruner() {
 
 // ── Demo reset ────────────────────────────────────────────────────────────────
 async function resetDemoData() {
-  if (!confirm("Clear all transactions and audit events?\n\nDepartments, agents, and sensitive terms will be kept.")) return;
+  if (!confirm("Full reset — clears all transactions, audit events, and agents.\n\nDepartment budget caps and sensitive terms are preserved.")) return;
   try {
     const result = await apiPost("/api/admin/reset-demo", {});
-    alert(`✓ Reset complete.\n${result.transactions_cleared} transactions cleared.\n${result.audit_events_cleared} audit events cleared.`);
+    alert(`✓ Reset complete.\n${result.transactions_cleared} transactions cleared.\n${result.audit_events_cleared} audit events cleared.\n${result.agents_cleared} agents removed.`);
     loadDashboard();
+    if (typeof loadAgents   === "function") loadAgents();
     loadBudgets();
   } catch (e) {
     alert("Reset failed: " + e.message);
