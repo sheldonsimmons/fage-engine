@@ -99,7 +99,8 @@ def get_agent_activity(
 
         total_calls    = len(txs)
         total_cost     = sum(t.cost_usd for t in txs)
-        flagship_calls = sum(1 for t in txs if t.model_tier == "flagship")
+        ECONOMY = {"Scout", "Analyst", "micro"}
+        flagship_calls = sum(1 for t in txs if t.model_tier not in ECONOMY)
         pruned_calls   = sum(1 for t in txs if t.was_pruned)
         tokens_saved   = sum(t.tokens_saved or 0 for t in txs)
         last_active    = max(t.timestamp for t in txs)

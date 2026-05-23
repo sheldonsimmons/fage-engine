@@ -21,6 +21,13 @@ router = APIRouter()
 MICRO_INPUT_COST    = 0.15  / 1_000_000
 FLAGSHIP_INPUT_COST = 3.00  / 1_000_000
 
+ECONOMY_TIERS = {"Scout", "Analyst", "micro"}
+PREMIUM_TIERS = {"Advisor", "Strategist", "flagship"}
+
+def _tier_bucket(tier: str) -> str:
+    """Normalize Scout/Analyst/micro → 'micro', Advisor/Strategist/flagship → 'flagship'."""
+    return "micro" if tier in ECONOMY_TIERS else "flagship"
+
 
 def _parse_range(days: int):
     end   = datetime.utcnow()
@@ -41,8 +48,8 @@ def savings_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(ge
 
     total_cost       = sum(t.cost_usd for t in txns)
     total_calls      = len(txns)
-    micro_calls      = sum(1 for t in txns if t.model_tier == "micro")
-    flagship_calls   = sum(1 for t in txns if t.model_tier == "flagship")
+    micro_calls      = sum(1 for t in txns if _tier_bucket(t.model_tier) == "micro")
+    flagship_calls   = sum(1 for t in txns if _tier_bucket(t.model_tier) == "flagship")
     tokens_pruned    = sum(t.tokens_saved for t in txns if t.was_pruned)
     pruning_saved    = round(tokens_pruned * FLAGSHIP_INPUT_COST, 6)
 
@@ -64,7 +71,7 @@ def savings_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(ge
         daily[day]["cost"]         = round(daily[day]["cost"] + t.cost_usd, 6)
         daily[day]["tokens_saved"] += t.tokens_saved if t.was_pruned else 0
         daily[day]["calls"]        += 1
-        daily[day][t.model_tier]   += 1
+        daily[day][_tier_bucket(t.model_tier)] += 1
 
     # Fill missing days with zeros
     timeline = []
@@ -201,7 +208,7 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365), db: Session = Depends(ge
             }
         dept_data[d]["total_calls"]    += 1
         dept_data[d]["total_cost_usd"] = round(dept_data[d]["total_cost_usd"] + t.cost_usd, 6)
-        if t.model_tier == "micro":
+        if _tier_bucket(t.model_tier) == "micro":
             dept_data[d]["micro_calls"]    += 1
         else:
             dept_data[d]["flagship_calls"] += 1

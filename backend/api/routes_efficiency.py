@@ -42,7 +42,8 @@ def _agent_stats(db: Session, agent: RegisteredAgent, days: int) -> dict:
     total_calls     = len(txs)
     total_cost      = sum(t.cost_usd for t in txs)
     avg_cost        = total_cost / total_calls
-    flagship_calls  = sum(1 for t in txs if t.model_tier == "flagship")
+    ECONOMY = {"Scout", "Analyst", "micro"}
+    flagship_calls  = sum(1 for t in txs if t.model_tier not in ECONOMY)
     micro_calls     = total_calls - flagship_calls
     flagship_pct    = round(flagship_calls / total_calls * 100, 1)
     micro_pct       = round(micro_calls    / total_calls * 100, 1)
