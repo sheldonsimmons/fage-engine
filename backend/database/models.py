@@ -73,6 +73,7 @@ class RegisteredAgent(Base):
     id               = Column(Integer,  primary_key=True, index=True)
     name             = Column(String,   nullable=False, unique=True)
     department       = Column(String,   nullable=False)
+    source_platform  = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     permissions      = Column(String,   nullable=False)   # e.g. "read,write"
     target_table     = Column(String,   nullable=True)
     target_record_id = Column(Integer,  nullable=True)
@@ -110,10 +111,11 @@ class TokenTransaction(Base):
     """
     __tablename__ = "token_transactions"
 
-    id             = Column(Integer,  primary_key=True, index=True)
-    department     = Column(String,   nullable=False)
-    agent_id       = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
-    model_tier     = Column(String,   nullable=False)    # micro | flagship
+    id              = Column(Integer,  primary_key=True, index=True)
+    department      = Column(String,   nullable=False)
+    source_platform = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
+    agent_id        = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
+    model_tier      = Column(String,   nullable=False)    # micro | flagship
     input_tokens   = Column(Integer,  nullable=False)
     output_tokens  = Column(Integer,  nullable=False)
     cost_usd       = Column(Float,    nullable=False)

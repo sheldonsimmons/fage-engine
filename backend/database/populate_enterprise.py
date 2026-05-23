@@ -72,18 +72,18 @@ def populate_enterprise():
     db.commit()
 
     agent_defs = [
-        dict(name="SF-SupportBot-1",   department="Support",    permissions="read,write",        target_table="tickets",           collision_policy="lock",  status="idle"),
-        dict(name="SF-SupportBot-2",   department="Support",    permissions="read,write",        target_table="tickets",           collision_policy="lock",  status="idle"),
-        dict(name="SF-CaseEscalator",  department="Support",    permissions="read,write",        target_table="tickets",           collision_policy="queue", status="idle"),
-        dict(name="SF-BillingAuditor", department="Support",    permissions="read",              target_table="token_transactions", collision_policy="lock",  status="idle"),
-        dict(name="SF-SalesEnrich-1",  department="Sales",      permissions="read,write",        target_table="crm_records",       collision_policy="queue", status="idle"),
-        dict(name="SF-SalesEnrich-2",  department="Sales",      permissions="read,write",        target_table="crm_records",       collision_policy="queue", status="idle"),
-        dict(name="SF-OpportunityBot", department="Sales",      permissions="read,write",        target_table="crm_records",       collision_policy="lock",  status="idle"),
-        dict(name="SF-MarketingMailer",department="Marketing",  permissions="read",              target_table="customers",         collision_policy="skip",  status="idle"),
-        dict(name="SF-CampaignBot",    department="Marketing",  permissions="read,write",        target_table="crm_records",       collision_policy="skip",  status="idle"),
-        dict(name="SF-OpsLogger",      department="Operations", permissions="read,write,delete", target_table="crm_records",       collision_policy="lock",  status="idle"),
-        dict(name="SF-ComplianceBot",  department="Operations", permissions="read",              target_table="audit_events",      collision_policy="lock",  status="idle"),
-        dict(name="SN-IncidentRouter", department="Operations", permissions="read,write",        target_table="tickets",           collision_policy="queue", status="idle"),
+        dict(name="SF-SupportBot-1",   source_platform="Salesforce",   department="Support",    permissions="read,write",        target_table="tickets",            collision_policy="lock",  status="idle"),
+        dict(name="SF-SupportBot-2",   source_platform="Salesforce",   department="Support",    permissions="read,write",        target_table="tickets",            collision_policy="lock",  status="idle"),
+        dict(name="SF-CaseEscalator",  source_platform="Salesforce",   department="Support",    permissions="read,write",        target_table="tickets",            collision_policy="queue", status="idle"),
+        dict(name="SF-BillingAuditor", source_platform="Salesforce",   department="Support",    permissions="read",              target_table="token_transactions",  collision_policy="lock",  status="idle"),
+        dict(name="SF-SalesEnrich-1",  source_platform="Salesforce",   department="Sales",      permissions="read,write",        target_table="crm_records",        collision_policy="queue", status="idle"),
+        dict(name="SF-SalesEnrich-2",  source_platform="Salesforce",   department="Sales",      permissions="read,write",        target_table="crm_records",        collision_policy="queue", status="idle"),
+        dict(name="SF-OpportunityBot", source_platform="Salesforce",   department="Sales",      permissions="read,write",        target_table="crm_records",        collision_policy="lock",  status="idle"),
+        dict(name="SF-MarketingMailer",source_platform="Salesforce",   department="Marketing",  permissions="read",              target_table="customers",          collision_policy="skip",  status="idle"),
+        dict(name="SF-CampaignBot",    source_platform="Salesforce",   department="Marketing",  permissions="read,write",        target_table="crm_records",        collision_policy="skip",  status="idle"),
+        dict(name="SF-OpsLogger",      source_platform="Salesforce",   department="Operations", permissions="read,write,delete", target_table="crm_records",        collision_policy="lock",  status="idle"),
+        dict(name="SF-ComplianceBot",  source_platform="Salesforce",   department="Operations", permissions="read",              target_table="audit_events",       collision_policy="lock",  status="idle"),
+        dict(name="SN-IncidentRouter", source_platform="ServiceNow",   department="Operations", permissions="read,write",        target_table="tickets",            collision_policy="queue", status="idle"),
     ]
 
     agents = []

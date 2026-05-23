@@ -81,10 +81,17 @@ function renderAgentTable(agents) {
       ? new Date(a.last_used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
       : "—";
 
+    const platform = a.source_platform || "Custom";
+    const platformColor = platform === "Salesforce" ? "var(--accent)"
+      : platform === "ServiceNow" ? "var(--accent-green)"
+      : platform === "HubSpot"    ? "var(--accent-yellow)"
+      : "var(--text-muted)";
+
     return `
       <tr id="agent-row-${a.id}" ${a.status === "locked" ? 'class="row-locked"' : ""}>
         <td ${lockTip}>${a.name}</td>
         <td>${a.department}</td>
+        <td style="font-size:11px; font-weight:600; color:${platformColor}">${platform}</td>
         <td style="font-family:var(--font-mono); font-size:11px">${target}</td>
         <td style="font-size:11px; font-weight:600; color:${policyColor}">${policyLabel}</td>
         <td><span class="badge ${badgeClass}">${a.status.toUpperCase()}</span></td>
@@ -132,6 +139,7 @@ async function registerAgent() {
     const agent = await apiPost("/api/agents/register", {
       name:             name,
       department:       dept,
+      source_platform:  document.getElementById("regPlatform").value || null,
       permissions:      perms,
       target_table:     table,
       collision_policy: document.getElementById("regPolicy").value,

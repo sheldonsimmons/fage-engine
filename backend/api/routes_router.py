@@ -23,11 +23,12 @@ router = APIRouter()
 
 
 class RouteRequest(BaseModel):
-    text:       str
-    department: str  = "Support"
-    auto_prune: bool = True
-    agent_id:   Optional[int] = None
-    agent_name: Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
+    text:            str
+    department:      str  = "Support"
+    auto_prune:      bool = True
+    agent_id:        Optional[int] = None
+    agent_name:      Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
+    source_platform: Optional[str] = None   # e.g. "Salesforce" — inferred from agent name if omitted
 
 
 class RouteResponse(BaseModel):
@@ -111,9 +112,11 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
     # If still not found and we have a name, auto-register the agent
     if not agent and req.agent_name:
+        from core.agentlake import infer_platform
         agent = RegisteredAgent(
             name             = req.agent_name,
             department       = req.department,
+            source_platform  = infer_platform(req.agent_name, req.source_platform),
             permissions      = "read,write",
             target_table     = "tickets",
             collision_policy = "lock",
@@ -132,10 +135,12 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     result = route(req.text, req.department, req.auto_prune, is_throttled, force_complex=force_complex)
 
     # ── Persist the token transaction ──────────────────────────────────────────
+    from core.agentlake import infer_platform
     tx = TokenTransaction(
-        department     = req.department,
-        agent_id       = agent.id if agent else req.agent_id,
-        model_tier     = result["model_tier"],
+        department      = req.department,
+        source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
+        agent_id        = agent.id if agent else req.agent_id,
+        model_tier      = result["model_tier"],
         input_tokens   = result["input_tokens"],
         output_tokens  = result["output_tokens"],
         cost_usd       = result["cost_usd"],

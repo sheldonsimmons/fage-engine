@@ -14,12 +14,35 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from database.models import RegisteredAgent
 
+# ── Platform inference from agent name prefix ─────────────────────────────────
+_PREFIX_MAP = {
+    "SF-":  "Salesforce",
+    "SN-":  "ServiceNow",
+    "HB-":  "HubSpot",
+    "HS-":  "HubSpot",
+    "MS-":  "Microsoft",
+    "ZD-":  "Zendesk",
+    "SAP-": "SAP",
+    "ORG-": "Salesforce",  # Org-level SF bots
+}
 
-def register_agent(db: Session, name: str, department: str, permissions: str, target_table: str, collision_policy: str = "lock") -> dict:
+def infer_platform(name: str, explicit: str = None) -> str:
+    """Return explicit platform if provided, else infer from agent name prefix."""
+    if explicit:
+        return explicit
+    upper = name.upper()
+    for prefix, platform in _PREFIX_MAP.items():
+        if upper.startswith(prefix):
+            return platform
+    return "Custom"
+
+
+def register_agent(db: Session, name: str, department: str, permissions: str, target_table: str, collision_policy: str = "lock", source_platform: str = None) -> dict:
     """Register a new AI agent in the Agentlake registry."""
     agent = RegisteredAgent(
         name=name,
         department=department,
+        source_platform=infer_platform(name, source_platform),
         permissions=permissions,
         target_table=target_table,
         collision_policy=collision_policy,
@@ -222,6 +245,7 @@ def _serialize(a: RegisteredAgent) -> dict:
         "id":               a.id,
         "name":             a.name,
         "department":       a.department,
+        "source_platform":  a.source_platform or infer_platform(a.name),
         "permissions":      a.permissions,
         "target_table":     a.target_table,
         "target_record_id": a.target_record_id,

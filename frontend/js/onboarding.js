@@ -301,10 +301,11 @@ function generateCode() {
         httpReq.setMethod('POST');
         httpReq.setHeader('Content-Type', 'application/json');
         Map<String, Object> body = new Map<String, Object>{
-            'text'       => recordText,
-            'department' => department,
-            'auto_prune' => true,
-            'agent_name' => agentName
+            'text'            => recordText,
+            'department'      => department,
+            'auto_prune'      => true,
+            'agent_name'      => agentName,
+            'source_platform' => 'Salesforce'
         };
         httpReq.setBody(JSON.serialize(body));
         httpReq.setTimeout(30000);

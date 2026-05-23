@@ -27,6 +27,7 @@ class AgentStatus(BaseModel):
     id:               int
     name:             str
     department:       str
+    source_platform:  Optional[str]
     permissions:      str
     target_table:     Optional[str]
     target_record_id: Optional[int]
@@ -39,6 +40,7 @@ class AgentStatus(BaseModel):
 class RegisterRequest(BaseModel):
     name:             str
     department:       str
+    source_platform:  Optional[str] = None   # explicit; inferred from name prefix if omitted
     permissions:      str = "read,write"
     target_table:     str = "tickets"
     collision_policy: str = "lock"
@@ -63,7 +65,7 @@ class SimulateCollisionRequest(BaseModel):
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
     """Register a new AI agent in the Agentlake registry."""
     try:
-        return register_agent(db, req.name, req.department, req.permissions, req.target_table, req.collision_policy)
+        return register_agent(db, req.name, req.department, req.permissions, req.target_table, req.collision_policy, req.source_platform)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 

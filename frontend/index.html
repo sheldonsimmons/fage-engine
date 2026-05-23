@@ -108,6 +108,7 @@
             <tr>
               <th>Agent</th>
               <th>Department</th>
+              <th>Platform</th>
               <th>Target</th>
               <th>Policy</th>
               <th>Status</th>
@@ -116,7 +117,7 @@
             </tr>
           </thead>
           <tbody id="agentTableBody">
-            <tr><td colspan="5" class="placeholder">Loading...</td></tr>
+            <tr><td colspan="8" class="placeholder">Loading...</td></tr>
           </tbody>
         </table>
         <div class="agent-controls">
@@ -134,6 +135,19 @@
             <div class="register-field">
               <label class="field-label">Agent Name</label>
               <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+            </div>
+            <div class="register-field">
+              <label class="field-label">Source Platform</label>
+              <select id="regPlatform" class="reg-input">
+                <option value="">— Infer from name prefix —</option>
+                <option value="Salesforce">Salesforce</option>
+                <option value="ServiceNow">ServiceNow</option>
+                <option value="HubSpot">HubSpot</option>
+                <option value="Microsoft">Microsoft</option>
+                <option value="Zendesk">Zendesk</option>
+                <option value="SAP">SAP</option>
+                <option value="Custom">Custom</option>
+              </select>
             </div>
             <div class="register-field">
               <label class="field-label">Department</label>
