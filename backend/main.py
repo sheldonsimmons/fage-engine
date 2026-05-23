@@ -95,6 +95,10 @@ app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywor
 from api import routes_reports
 app.include_router(routes_reports.router, prefix="/api/reports", tags=["Reports"])
 
+# Step 11 — Bot Efficiency Review
+from api import routes_efficiency
+app.include_router(routes_efficiency.router, prefix="/api/reports/bot-efficiency", tags=["Efficiency"])
+
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])
 def populate_demo_data():

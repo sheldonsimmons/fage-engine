@@ -93,9 +93,10 @@ document.querySelectorAll(".rpt-range-btn").forEach(btn => {
 });
 
 function loadActiveTab() {
-  if (activeTab === "savings")     loadSavings();
-  if (activeTab === "risk")        loadRisk();
+  if (activeTab === "savings")    loadSavings();
+  if (activeTab === "risk")       loadRisk();
   if (activeTab === "departments") loadDepartments();
+  // efficiency tab is on-demand only — user clicks Generate Review
 }
 
 // ── TAB 1: SAVINGS ────────────────────────────────────────────────────────────
@@ -413,6 +414,110 @@ async function loadDepartments() {
       options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "60%" },
     }
   );
+}
+
+// ── TAB 4: BOT EFFICIENCY REVIEW ──────────────────────────────────────────────
+
+async function generateEfficiencyReview() {
+  const btn  = document.getElementById("effGenerateBtn");
+  const grid = document.getElementById("effGrid");
+  const days = document.getElementById("effDaysSelect").value;
+
+  btn.disabled    = true;
+  btn.textContent = "⚡ Analyzing...";
+  grid.innerHTML  = `<div class="eff-empty" style="grid-column:1/-1">Analyzing ${days}-day transaction history across all agents...<br><span style="font-size:11px;color:var(--text-muted);margin-top:8px;display:block">This may take a few seconds</span></div>`;
+  document.getElementById("effFleetBar").style.display = "none";
+
+  try {
+    const data = await apiPost(`/api/reports/bot-efficiency?days=${days}`, {});
+
+    // Fleet summary bar
+    document.getElementById("effFleetGrade").textContent   = data.fleet_grade || "—";
+    document.getElementById("effAgentsCount").textContent  = data.total_agents_analyzed;
+    document.getElementById("effTotalSavings").textContent = "$" + (data.total_projected_savings || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById("effGeneratedBy").textContent  = data.generated_by === "ai" ? "GPT-4o" : "FAGE Analytics";
+    document.getElementById("effFleetBar").style.display   = "grid";
+
+    if (!data.reviews || !data.reviews.length) {
+      grid.innerHTML = `<div class="eff-empty" style="grid-column:1/-1">${data.message || "No agent data found for this period."}</div>`;
+      return;
+    }
+
+    grid.innerHTML = data.reviews.map(r => renderEfficiencyCard(r)).join("");
+
+  } catch (e) {
+    grid.innerHTML = `<div class="eff-empty" style="grid-column:1/-1; color:var(--accent-red)">Analysis failed: ${e.message}</div>`;
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = "⚡ Generate Review";
+  }
+}
+
+function renderEfficiencyCard(r) {
+  const s    = r.stats;
+  const grad = r.grade || "B";
+
+  const trendColor = s.cost_trend === "increasing" ? "red"
+    : s.cost_trend === "decreasing" ? "green" : "";
+
+  const findings = (r.findings || []).map(f =>
+    `<li>${f}</li>`
+  ).join("");
+
+  const recs = (r.recommendations || []).map(rec =>
+    `<li>${rec}</li>`
+  ).join("");
+
+  const savings = (r.projected_savings || 0) > 0
+    ? `<div class="eff-savings-row">
+        <span class="eff-savings-label">Projected 30-day savings if actioned</span>
+        <span class="eff-savings-value">$${(r.projected_savings).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+       </div>`
+    : "";
+
+  const aiBadge = r.generated_by === "ai"
+    ? `<div class="eff-ai-badge">◈ GPT-4o Analysis</div>`
+    : `<div class="eff-ai-badge" style="color:var(--text-muted)">◈ FAGE Analytics Engine</div>`;
+
+  return `
+    <div class="eff-card grade-${grad}">
+      <div class="eff-card-header">
+        <div class="eff-grade-badge ${grad}">${grad}</div>
+        <div>
+          <div class="eff-card-name">${r.agent_name}</div>
+          <div class="eff-card-dept">${r.department} · ${s.target_table || ""}</div>
+        </div>
+      </div>
+
+      <div class="eff-stats-row">
+        <div class="eff-stat-item">
+          <div class="eff-stat-label">Calls / Day</div>
+          <div class="eff-stat-value">${s.calls_per_day}</div>
+        </div>
+        <div class="eff-stat-item">
+          <div class="eff-stat-label">Total Cost</div>
+          <div class="eff-stat-value">$${(s.total_cost_usd || 0).toFixed(2)}</div>
+        </div>
+        <div class="eff-stat-item">
+          <div class="eff-stat-label">Flagship %</div>
+          <div class="eff-stat-value ${s.flagship_pct > 60 ? 'yellow' : s.flagship_pct < 10 ? 'green' : ''}">${s.flagship_pct}%</div>
+        </div>
+        <div class="eff-stat-item">
+          <div class="eff-stat-label">Prune Rate</div>
+          <div class="eff-stat-value ${s.prune_rate > 70 ? 'green' : s.prune_rate < 40 ? 'yellow' : ''}">${s.prune_rate}%</div>
+        </div>
+      </div>
+
+      <p class="eff-summary">${r.summary}</p>
+
+      ${findings ? `<div class="eff-section-label">Findings</div><ul class="eff-findings">${findings}</ul>` : ""}
+
+      ${recs ? `<div class="eff-section-label">Recommendations</div><ul class="eff-recs">${recs}</ul>` : ""}
+
+      ${savings}
+      ${aiBadge}
+    </div>
+  `;
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
