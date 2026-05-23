@@ -43,13 +43,14 @@ COMPLEXITY_KEYWORDS = [
 # DEPARTMENTS & DEFAULT BUDGET CAPS  (USD / month)
 # ─────────────────────────────────────────────────────────────────────────────
 
-DEPARTMENTS = ["Support", "Sales", "Marketing", "Operations"]
+DEPARTMENTS = ["Support", "Sales", "Marketing", "Operations", "Trips Team"]
 
 DEFAULT_BUDGET_CAPS = {
-    "Support":    200.00,
-    "Sales":      300.00,
-    "Marketing":  250.00,
-    "Operations": 150.00,
+    "Support":     200.00,
+    "Sales":       300.00,
+    "Marketing":   250.00,
+    "Operations":  150.00,
+    "Trips Team":  200.00,
 }
 
 # Budget usage % that triggers auto-throttle to micro model

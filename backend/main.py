@@ -15,11 +15,59 @@ from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from database.db import engine
+from database.db import engine, SessionLocal
 from database import models
 
 # Create all DB tables on startup
 models.Base.metadata.create_all(bind=engine)
+
+
+def _seed_on_startup():
+    """
+    Seed essential reference data if the DB is fresh (e.g. after a Heroku restart).
+    Safe to run on every startup — only inserts rows that don't already exist.
+    """
+    from config import DEFAULT_BUDGET_CAPS
+    from database.models import DepartmentBudget, ModelRegistry
+
+    db = SessionLocal()
+    try:
+        # ── Department budgets ────────────────────────────────────────────────
+        for dept, cap in DEFAULT_BUDGET_CAPS.items():
+            exists = db.query(DepartmentBudget).filter_by(department=dept).first()
+            if not exists:
+                db.add(DepartmentBudget(department=dept, monthly_cap_usd=cap))
+
+        # ── Model Registry ────────────────────────────────────────────────────
+        SEED_MODELS = [
+            dict(display_name="GPT-5.4 Nano", model_id="gpt-5.4-nano", provider="OpenAI",
+                 tier=1, cost_input_per_1m=0.20, cost_output_per_1m=1.25,
+                 is_enabled=True, is_default=True,
+                 notes="Scout tier — fast and affordable for routine tasks"),
+            dict(display_name="GPT-5.4 Mini", model_id="gpt-5.4-mini", provider="OpenAI",
+                 tier=2, cost_input_per_1m=0.75, cost_output_per_1m=4.50,
+                 is_enabled=True, is_default=True,
+                 notes="Analyst tier — balanced for most business tasks"),
+            dict(display_name="GPT-5.4",      model_id="gpt-5.4",      provider="OpenAI",
+                 tier=3, cost_input_per_1m=2.50, cost_output_per_1m=15.00,
+                 is_enabled=True, is_default=True,
+                 notes="Advisor tier — deep reasoning for complex and sensitive work"),
+            dict(display_name="GPT-5.5",      model_id="gpt-5.5",      provider="OpenAI",
+                 tier=4, cost_input_per_1m=5.00, cost_output_per_1m=30.00,
+                 is_enabled=True, is_default=True,
+                 notes="Strategist tier — mission-critical decisions only"),
+        ]
+        for m in SEED_MODELS:
+            exists = db.query(ModelRegistry).filter_by(model_id=m["model_id"]).first()
+            if not exists:
+                db.add(ModelRegistry(**m))
+
+        db.commit()
+    finally:
+        db.close()
+
+
+_seed_on_startup()
 
 app = FastAPI(
     title="FAGE — FinOps Agentlake & Governance Engine",
