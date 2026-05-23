@@ -6,7 +6,6 @@
  * Date range selector: 7D / 30D / 90D / 1Y
  */
 
-let activeDays = 30;
 let activeTab  = "savings";
 const charts   = {};
 
@@ -81,28 +80,90 @@ document.querySelectorAll(".rpt-tab").forEach(btn => {
   });
 });
 
-// ── Range buttons ─────────────────────────────────────────────────────────────
+// ── Date preset picker ────────────────────────────────────────────────────────
 
-document.querySelectorAll(".rpt-range-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".rpt-range-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    activeDays = parseInt(btn.dataset.days);
-    loadActiveTab();
-  });
-});
+function resolveDatePreset(preset) {
+  const now   = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function addMonths(d, n) { const r = new Date(d); r.setMonth(r.getMonth() + n); return r; }
+
+  let from, to;
+
+  if (preset === "custom") {
+    const f = document.getElementById("rptDateFrom").value;
+    const t = document.getElementById("rptDateTo").value;
+    from = f ? new Date(f) : addDays(today, -30);
+    to   = t ? addDays(new Date(t), 1) : addDays(today, 1);
+  } else if (preset === "today") {
+    from = today; to = addDays(today, 1);
+  } else if (preset === "yesterday") {
+    from = addDays(today, -1); to = today;
+  } else if (preset === "this_week") {
+    from = addDays(today, -today.getDay()); to = addDays(today, 1);
+  } else if (preset === "last_week") {
+    const sun = addDays(today, -today.getDay());
+    from = addDays(sun, -7); to = sun;
+  } else if (preset === "this_month") {
+    from = new Date(today.getFullYear(), today.getMonth(), 1); to = addDays(today, 1);
+  } else if (preset === "last_month") {
+    from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    to   = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if (preset === "this_quarter") {
+    const qm = Math.floor(today.getMonth() / 3) * 3;
+    from = new Date(today.getFullYear(), qm, 1); to = addDays(today, 1);
+  } else if (preset === "last_quarter") {
+    const qm = Math.floor(today.getMonth() / 3) * 3;
+    from = new Date(today.getFullYear(), qm - 3, 1);
+    to   = new Date(today.getFullYear(), qm, 1);
+  } else if (preset === "last_2q") {
+    const qm = Math.floor(today.getMonth() / 3) * 3;
+    from = new Date(today.getFullYear(), qm - 6, 1);
+    to   = new Date(today.getFullYear(), qm, 1);
+  } else if (preset === "this_year") {
+    from = new Date(today.getFullYear(), 0, 1); to = addDays(today, 1);
+  } else if (preset === "last_year") {
+    from = new Date(today.getFullYear() - 1, 0, 1);
+    to   = new Date(today.getFullYear(), 0, 1);
+  } else if (preset === "last_7")   { from = addDays(today, -7);   to = addDays(today, 1); }
+  else if (preset === "last_14")    { from = addDays(today, -14);  to = addDays(today, 1); }
+  else if (preset === "last_60")    { from = addDays(today, -60);  to = addDays(today, 1); }
+  else if (preset === "last_90")    { from = addDays(today, -90);  to = addDays(today, 1); }
+  else if (preset === "last_120")   { from = addDays(today, -120); to = addDays(today, 1); }
+  else if (preset === "last_6m")    { from = addMonths(today, -6); to = addDays(today, 1); }
+  else { // last_30 (default)
+    from = addDays(today, -30); to = addDays(today, 1);
+  }
+
+  const days = Math.max(1, Math.ceil((to - from) / 86400000));
+  return { date_from: from.toISOString(), date_to: to.toISOString(), days };
+}
+
+function getActiveDateRange() {
+  const preset = (document.getElementById("rptDatePreset") || {}).value || "last_30";
+  return resolveDatePreset(preset);
+}
+
+function onDatePresetChange() {
+  const preset = document.getElementById("rptDatePreset").value;
+  document.getElementById("rptCustomDates").style.display = preset === "custom" ? "flex" : "none";
+  if (preset !== "custom") loadActiveTab();
+}
 
 function loadActiveTab() {
-  if (activeTab === "savings")    loadSavings();
-  if (activeTab === "risk")       loadRisk();
+  if (activeTab === "savings")     loadSavings();
+  if (activeTab === "risk")        loadRisk();
   if (activeTab === "departments") loadDepartments();
+  if (activeTab === "activity")    loadAgentActivity();
   // efficiency tab is on-demand only — user clicks Generate Review
 }
 
 // ── TAB 1: SAVINGS ────────────────────────────────────────────────────────────
 
 async function loadSavings() {
-  const data = await apiGet(`/api/reports/savings?days=${activeDays}`);
+  const { days } = getActiveDateRange();
+  const data = await apiGet(`/api/reports/savings?days=${days}`);
 
   document.getElementById("sv-total-saved").textContent  = fmtUsd(data.total_saved_usd);
   document.getElementById("sv-no-fage").textContent      = fmtUsd(data.cost_if_no_fage_usd);
@@ -190,7 +251,8 @@ async function loadSavings() {
 // ── TAB 2: RISK ───────────────────────────────────────────────────────────────
 
 async function loadRisk() {
-  const data = await apiGet(`/api/reports/risk?days=${activeDays}`);
+  const { days } = getActiveDateRange();
+  const data = await apiGet(`/api/reports/risk?days=${days}`);
 
   document.getElementById("rk-total").textContent    = fmtNum(data.total_events);
   document.getElementById("rk-critical").textContent = fmtNum(data.critical);
@@ -334,7 +396,8 @@ function renderExecSummary(d) {
 // ── TAB 3: DEPARTMENTS ────────────────────────────────────────────────────────
 
 async function loadDepartments() {
-  const data = await apiGet(`/api/reports/departments?days=${activeDays}`);
+  const { days } = getActiveDateRange();
+  const data = await apiGet(`/api/reports/departments?days=${days}`);
 
   // Scorecard table
   const tbody = document.getElementById("deptScorecardTable");
@@ -536,27 +599,26 @@ function initActivityTab() {
 }
 
 async function populateActivityDropdowns() {
-  // Populate agent dropdown
   try {
     const agents = await apiGet("/api/agents");
-    const sel = document.getElementById("actAgent");
+
+    // Populate agent dropdown
+    const agentSel = document.getElementById("actAgent");
     agents.forEach(a => {
       const opt = document.createElement("option");
       opt.value = a.id;
       opt.textContent = a.name + " (" + (a.source_platform || "Custom") + ")";
-      sel.appendChild(opt);
+      agentSel.appendChild(opt);
     });
-  } catch (e) { /* silent */ }
 
-  // Populate department dropdown
-  try {
-    const budgets = await apiGet("/api/budget");
-    const sel = document.getElementById("actDept");
-    budgets.forEach(b => {
+    // Populate department dropdown from agent list (no extra API call needed)
+    const deptSel = document.getElementById("actDept");
+    const depts = [...new Set(agents.map(a => a.department).filter(Boolean))].sort();
+    depts.forEach(d => {
       const opt = document.createElement("option");
-      opt.value = b.department;
-      opt.textContent = b.department;
-      sel.appendChild(opt);
+      opt.value = d;
+      opt.textContent = d;
+      deptSel.appendChild(opt);
     });
   } catch (e) { /* silent */ }
 }
@@ -566,14 +628,15 @@ async function loadAgentActivity() {
   const agentId  = document.getElementById("actAgent").value;
   const dept     = document.getElementById("actDept").value;
   const model    = document.getElementById("actModel").value;
-  const days     = document.getElementById("actDays").value;
+  const { date_from, date_to } = getActiveDateRange();
 
   const params = new URLSearchParams();
   if (platform) params.set("platform",   platform);
   if (agentId)  params.set("agent_id",   agentId);
   if (dept)     params.set("department", dept);
   if (model)    params.set("model_tier", model);
-  params.set("days", days);
+  params.set("date_from", date_from);
+  params.set("date_to",   date_to);
 
   const tbody = document.getElementById("actTableBody");
   tbody.innerHTML = '<tr><td colspan="11" class="placeholder">Loading...</td></tr>';
@@ -720,6 +783,5 @@ function resetActivityFilters() {
   document.getElementById("actAgent").value    = "";
   document.getElementById("actDept").value     = "";
   document.getElementById("actModel").value    = "";
-  document.getElementById("actDays").value     = "30";
   loadAgentActivity();
 }

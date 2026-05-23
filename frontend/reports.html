@@ -39,11 +39,43 @@
       </div>
       <div class="rpt-controls">
         <label class="rpt-range-label">Time Range</label>
-        <div class="rpt-range-btns">
-          <button class="rpt-range-btn" data-days="7">7D</button>
-          <button class="rpt-range-btn active" data-days="30">30D</button>
-          <button class="rpt-range-btn" data-days="90">90D</button>
-          <button class="rpt-range-btn" data-days="365">1Y</button>
+        <div class="rpt-date-picker">
+          <select id="rptDatePreset" class="rpt-date-select" onchange="onDatePresetChange()">
+            <optgroup label="Relative">
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+            </optgroup>
+            <optgroup label="This Period">
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+              <option value="this_quarter">This Quarter</option>
+              <option value="this_year">This Year</option>
+            </optgroup>
+            <optgroup label="Last Period">
+              <option value="last_week">Last Week</option>
+              <option value="last_month">Last Month</option>
+              <option value="last_quarter">Last Quarter</option>
+              <option value="last_2q">Last 2 Quarters</option>
+              <option value="last_year">Last Year</option>
+            </optgroup>
+            <optgroup label="Fixed Range">
+              <option value="last_7">Last 7 Days</option>
+              <option value="last_14">Last 14 Days</option>
+              <option value="last_30" selected>Last 30 Days</option>
+              <option value="last_60">Last 60 Days</option>
+              <option value="last_90">Last 90 Days</option>
+              <option value="last_120">Last 120 Days</option>
+              <option value="last_6m">Last 6 Months</option>
+            </optgroup>
+            <optgroup label="Custom">
+              <option value="custom">Custom Range...</option>
+            </optgroup>
+          </select>
+          <div class="rpt-custom-dates" id="rptCustomDates" style="display:none">
+            <input type="date" id="rptDateFrom" class="rpt-date-input" onchange="loadActiveTab()" />
+            <span class="rpt-date-sep">→</span>
+            <input type="date" id="rptDateTo" class="rpt-date-input" onchange="loadActiveTab()" />
+          </div>
         </div>
       </div>
     </div>
@@ -330,15 +362,6 @@
             <option value="">All Models</option>
             <option value="micro">Turbo (micro)</option>
             <option value="flagship">Flagship</option>
-          </select>
-        </div>
-        <div class="act-filter-group">
-          <label class="act-filter-label">Date Range</label>
-          <select id="actDays" class="act-filter-select" onchange="loadAgentActivity()">
-            <option value="7">Last 7 days</option>
-            <option value="30" selected>Last 30 days</option>
-            <option value="90">Last 90 days</option>
-            <option value="365">Last 1 year</option>
           </select>
         </div>
         <button class="act-reset-btn" onclick="resetActivityFilters()">Reset</button>

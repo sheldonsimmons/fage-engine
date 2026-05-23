@@ -30,13 +30,33 @@ def get_agent_activity(
     department: Optional[str] = Query(None),
     agent_id:   Optional[int] = Query(None),
     model_tier: Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
+    date_to:    Optional[str] = Query(None),
     days:       int           = Query(30),
     db: Session = Depends(get_db),
 ):
-    since = datetime.utcnow() - timedelta(days=days)
+    # Prefer explicit date_from/date_to; fall back to days
+    if date_from:
+        try:
+            since = datetime.fromisoformat(date_from.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            since = datetime.utcnow() - timedelta(days=days)
+    else:
+        since = datetime.utcnow() - timedelta(days=days)
+
+    if date_to:
+        try:
+            until = datetime.fromisoformat(date_to.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            until = datetime.utcnow()
+    else:
+        until = datetime.utcnow()
 
     # ── Base transaction query ──────────────────────────────────────────────────
-    q = db.query(TokenTransaction).filter(TokenTransaction.timestamp >= since)
+    q = db.query(TokenTransaction).filter(
+        TokenTransaction.timestamp >= since,
+        TokenTransaction.timestamp <  until,
+    )
 
     if department:
         q = q.filter(TokenTransaction.department == department)
