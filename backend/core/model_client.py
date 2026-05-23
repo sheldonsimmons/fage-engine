@@ -128,7 +128,6 @@ def _call_openai(text: str, model_id: str) -> dict:
             {"role": "user",   "content": text},
         ],
         max_completion_tokens=400,
-        temperature=0.3,
     )
 
     choice = response.choices[0]
