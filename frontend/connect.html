@@ -201,7 +201,19 @@
         <button class="conn-copy-btn" style="margin-top:8px" onclick="copyBody()">Copy Body</button>
       </div>
 
-      <!-- Platform-specific guide -->
+      <!-- Integration method chooser — rendered dynamically per platform -->
+      <div id="integrationChooser" style="display:none; margin-top:24px">
+        <div class="conn-method-heading">HOW DO YOU WANT TO INTEGRATE?</div>
+        <div class="conn-method-grid" id="methodGrid">
+          <!-- Cards injected by buildResultScreen() -->
+        </div>
+        <div id="methodContent"></div>
+      </div>
+
+      <!-- One-way notice + guide for non-Salesforce platforms -->
+      <div id="onewayNotice" style="display:none" class="conn-oneway-notice">
+        <strong>&#9888; One-Way Integration:</strong> Data goes <em>to FAGE</em> for governance, routing, and budget tracking. AI responses are visible in your FAGE dashboard but are not automatically written back to your records.
+      </div>
       <div class="conn-guide" id="platformGuide"></div>
 
       <!-- Actions -->
