@@ -16,12 +16,11 @@ let _allModels  = [];
 let _selectedTier = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
+// Scripts are at bottom of <body> so DOM is ready — call directly.
 
-window.addEventListener("DOMContentLoaded", () => {
-  renderTierCards();
-  renderTierOptions();
-  loadModels();
-});
+renderTierCards();
+renderTierOptions();
+loadModels();
 
 // ── Tier reference cards ──────────────────────────────────────────────────────
 
@@ -113,15 +112,16 @@ async function loadModels() {
 function renderTable(models) {
   const tbody = document.getElementById("modelTableBody");
   const empty = document.getElementById("modelEmpty");
+  const table = tbody ? tbody.closest("table") : null;
 
   if (!models.length) {
-    tbody.closest("table").style.display = "none";
-    empty.style.display = "flex";
+    if (table) table.style.display = "none";
+    if (empty) empty.style.display = "flex";
     return;
   }
 
-  tbody.closest("table").style.display = "";
-  empty.style.display = "none";
+  if (table) table.style.display = "";
+  if (empty) empty.style.display = "none";
 
   tbody.innerHTML = models.map(m => {
     const tierInfo = TIERS[m.tier] || {};
