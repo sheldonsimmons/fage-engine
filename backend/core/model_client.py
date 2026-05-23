@@ -59,9 +59,15 @@ def get_mode_info() -> dict:
     }
 
 
-def call_model(text: str, tier: str) -> dict:
+def call_model(text: str, model_id: str = None, fallback_tier: str = "micro") -> dict:
     """
     Main entry point. Routes to live or simulated based on FAGE_MODEL_MODE.
+
+    Args:
+        text          — the prompt text
+        model_id      — explicit model ID from the registry (e.g. "gpt-5.4-nano").
+                        If None, falls back to env-var config.
+        fallback_tier — "micro" or "flagship", used when model_id is None or in simulated mode.
 
     Returns:
         response_text  — the model's reply
@@ -71,12 +77,20 @@ def call_model(text: str, tier: str) -> dict:
         provider       — "openai" | "anthropic" | "simulated"
     """
     if MODEL_MODE == "live":
-        if PROVIDER == "anthropic":
-            return _call_anthropic(text, tier)
+        # Resolve which model ID to actually call
+        if model_id:
+            resolved_id = model_id
+        elif PROVIDER == "anthropic":
+            resolved_id = ANTHROPIC_MICRO if fallback_tier == "micro" else ANTHROPIC_FLAGSHIP
         else:
-            return _call_openai(text, tier)
+            resolved_id = OPENAI_MICRO if fallback_tier == "micro" else OPENAI_FLAGSHIP
+
+        if PROVIDER == "anthropic":
+            return _call_anthropic(text, resolved_id)
+        else:
+            return _call_openai(text, resolved_id)
     else:
-        return _call_simulated(text, tier)
+        return _call_simulated(text, fallback_tier)
 
 
 # ── Simulated call ─────────────────────────────────────────────────────────────
@@ -97,10 +111,9 @@ def _call_simulated(text: str, tier: str) -> dict:
 
 # ── OpenAI live call ───────────────────────────────────────────────────────────
 
-def _call_openai(text: str, tier: str) -> dict:
+def _call_openai(text: str, model_id: str) -> dict:
     from openai import OpenAI
-    client   = OpenAI(api_key=OPENAI_KEY)
-    model_id = OPENAI_MICRO if tier == "micro" else OPENAI_FLAGSHIP
+    client = OpenAI(api_key=OPENAI_KEY)
 
     system_prompt = (
         "You are an enterprise AI assistant embedded in a FinOps governance middleware. "
@@ -132,10 +145,9 @@ def _call_openai(text: str, tier: str) -> dict:
 
 # ── Anthropic live call ────────────────────────────────────────────────────────
 
-def _call_anthropic(text: str, tier: str) -> dict:
+def _call_anthropic(text: str, model_id: str) -> dict:
     import anthropic
-    client   = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-    model_id = ANTHROPIC_MICRO if tier == "micro" else ANTHROPIC_FLAGSHIP
+    client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
 
     system_prompt = (
         "You are an enterprise AI assistant embedded in a FinOps governance middleware. "

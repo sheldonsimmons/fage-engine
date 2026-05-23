@@ -735,8 +735,16 @@ function renderCallLog(agent) {
     const ts = new Date(t.timestamp).toLocaleString("en-US", {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
     });
-    const tierColor  = t.model_tier === "flagship" ? "var(--accent-red)" : "var(--accent-green)";
-    const tierLabel  = t.model_tier === "flagship" ? "Flagship" : "Turbo";
+    const tierColorMap = {
+      "Scout":      "var(--accent-green)",
+      "Analyst":    "var(--accent)",
+      "Advisor":    "var(--accent-purple)",
+      "Strategist": "var(--accent-yellow)",
+      "micro":      "var(--accent-green)",
+      "flagship":   "var(--accent-red)",
+    };
+    const tierColor = tierColorMap[t.model_tier] || "var(--text-muted)";
+    const tierLabel = t.model_tier || "—";
     const routeColor = t.routing_reason === "COMPLEX" ? "var(--accent-red)"
       : t.routing_reason === "ROUTINE"  ? "var(--accent-green)"
       : "var(--accent-yellow)";

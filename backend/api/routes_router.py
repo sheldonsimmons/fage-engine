@@ -132,7 +132,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         db.commit()
 
     # Run the routing pipeline
-    result = route(req.text, req.department, req.auto_prune, is_throttled, force_complex=force_complex)
+    result = route(req.text, req.department, db=db, auto_prune=req.auto_prune, is_throttled=is_throttled, force_complex=force_complex)
 
     # ── Persist the token transaction ──────────────────────────────────────────
     from core.agentlake import infer_platform

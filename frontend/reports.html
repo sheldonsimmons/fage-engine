@@ -358,11 +358,15 @@
           </select>
         </div>
         <div class="act-filter-group">
-          <label class="act-filter-label">Model</label>
+          <label class="act-filter-label">Tier</label>
           <select id="actModel" class="act-filter-select" onchange="loadAgentActivity()">
-            <option value="">All Models</option>
-            <option value="micro">Turbo (micro)</option>
-            <option value="flagship">Flagship</option>
+            <option value="">All Tiers</option>
+            <option value="Scout">⚡ Scout</option>
+            <option value="Analyst">🔍 Analyst</option>
+            <option value="Advisor">💡 Advisor</option>
+            <option value="Strategist">🎯 Strategist</option>
+            <option value="micro">Turbo (legacy)</option>
+            <option value="flagship">Flagship (legacy)</option>
           </select>
         </div>
         <button class="act-reset-btn" onclick="resetActivityFilters()">Reset</button>
