@@ -59,9 +59,20 @@ def get_dashboard(db: Session = Depends(get_db)):
     pruning_savings_usd = round(tokens_saved_total * MICRO_COST_PER_TOKEN, 6)
 
     # ── Call counts ────────────────────────────────────────────────────────────
-    total_calls   = db.query(func.count(TokenTransaction.id)).scalar() or 0
-    micro_calls   = db.query(func.count(TokenTransaction.id)).filter_by(model_tier="micro").scalar()    or 0
-    flagship_calls= db.query(func.count(TokenTransaction.id)).filter_by(model_tier="flagship").scalar() or 0
+    total_calls = db.query(func.count(TokenTransaction.id)).scalar() or 0
+
+    # Economy tiers: Scout (tier 1), Analyst (tier 2), and legacy "micro"
+    ECONOMY_TIERS  = ("Scout", "Analyst", "micro")
+    # Premium tiers: Advisor (tier 3), Strategist (tier 4), and legacy "flagship"
+    PREMIUM_TIERS  = ("Advisor", "Strategist", "flagship")
+
+    from sqlalchemy import case as sa_case
+    micro_calls    = db.query(func.count(TokenTransaction.id)).filter(
+        TokenTransaction.model_tier.in_(ECONOMY_TIERS)
+    ).scalar() or 0
+    flagship_calls = db.query(func.count(TokenTransaction.id)).filter(
+        TokenTransaction.model_tier.in_(PREMIUM_TIERS)
+    ).scalar() or 0
 
     micro_pct    = round((micro_calls    / total_calls) * 100, 1) if total_calls else 0
     flagship_pct = round((flagship_calls / total_calls) * 100, 1) if total_calls else 0
@@ -157,7 +168,13 @@ def get_dashboard(db: Session = Depends(get_db)):
     for dept, tier, cnt in routing_breakdown:
         if dept not in routing_by_dept:
             routing_by_dept[dept] = {"micro": 0, "flagship": 0}
-        routing_by_dept[dept][tier] = cnt
+        # Normalize tier names: Scout/Analyst → micro bucket, Advisor/Strategist → flagship bucket
+        if tier in ("Scout", "Analyst", "micro"):
+            routing_by_dept[dept]["micro"] = routing_by_dept[dept].get("micro", 0) + cnt
+        elif tier in ("Advisor", "Strategist", "flagship"):
+            routing_by_dept[dept]["flagship"] = routing_by_dept[dept].get("flagship", 0) + cnt
+        else:
+            routing_by_dept[dept][tier] = cnt
 
     return {
         # ── Top-line KPIs ──────────────────────────────────────────────────────

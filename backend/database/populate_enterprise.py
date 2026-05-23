@@ -123,7 +123,9 @@ def populate_enterprise():
         "Operations": 0.16,
     }
 
-    transactions = []
+    BATCH_SIZE = 500   # commit every 500 rows — keeps memory low on Heroku
+    batch = []
+    total_inserted = 0
 
     for phase_start, phase_end, daily_calls, complex_pct, prune_pct, phase_label in PHASES:
         for day_offset in range(phase_start, phase_end - 1, -1):
@@ -165,7 +167,7 @@ def populate_enterprise():
                     minute = random.randint(0, 59)
                     ts     = day_ts + timedelta(hours=hour, minutes=minute)
 
-                    transactions.append(models.TokenTransaction(
+                    batch.append(models.TokenTransaction(
                         department     = dept,
                         agent_id       = agent.id,
                         model_tier     = tier,
@@ -178,10 +180,19 @@ def populate_enterprise():
                         timestamp      = ts,
                     ))
 
-    # Bulk insert all at once
-    db.add_all(transactions)
-    db.commit()
-    print(f"   → {len(transactions):,} transactions inserted across 3 adoption phases")
+                    if len(batch) >= BATCH_SIZE:
+                        db.add_all(batch)
+                        db.commit()
+                        total_inserted += len(batch)
+                        batch = []
+
+    # Flush any remaining
+    if batch:
+        db.add_all(batch)
+        db.commit()
+        total_inserted += len(batch)
+
+    print(f"   → {total_inserted:,} transactions inserted across 3 adoption phases")
 
     # ── 40 audit events spread across the year ────────────────────────────────
     print("Building enterprise audit events (spread across 365 days)...")
