@@ -28,7 +28,7 @@ def _seed_on_startup():
     Safe to run on every startup — only inserts rows that don't already exist.
     """
     from config import DEFAULT_BUDGET_CAPS
-    from database.models import DepartmentBudget, ModelRegistry
+    from database.models import DepartmentBudget, ModelRegistry, SensitiveTerm
 
     db = SessionLocal()
     try:
@@ -61,6 +61,39 @@ def _seed_on_startup():
             exists = db.query(ModelRegistry).filter_by(model_id=m["model_id"]).first()
             if not exists:
                 db.add(ModelRegistry(**m))
+
+        # ── Sensitive Term Library ─────────────────────────────────────────────
+        SEED_TERMS = [
+            # PII — block immediately, never send to AI
+            dict(term="ssn",                  category="hipaa",     action="block"),
+            dict(term="social security",      category="hipaa",     action="block"),
+            dict(term="social security number", category="hipaa",   action="block"),
+            dict(term="credit card",          category="financial", action="block"),
+            dict(term="card number",          category="financial", action="block"),
+            dict(term="cvv",                  category="financial", action="block"),
+            dict(term="routing number",       category="financial", action="block"),
+            dict(term="bank account",         category="financial", action="block"),
+            dict(term="passport number",      category="hipaa",     action="block"),
+            dict(term="date of birth",        category="hipaa",     action="block"),
+            # Legal / compliance — escalate to senior model
+            dict(term="lawsuit",              category="legal",     action="escalate"),
+            dict(term="litigation",           category="legal",     action="escalate"),
+            dict(term="attorney",             category="legal",     action="escalate"),
+            dict(term="legal action",         category="legal",     action="escalate"),
+            dict(term="breach of contract",   category="legal",     action="escalate"),
+            dict(term="gdpr",                 category="legal",     action="escalate"),
+            dict(term="hipaa",                category="hipaa",     action="escalate"),
+            dict(term="regulatory",           category="legal",     action="escalate"),
+            dict(term="audit",                category="legal",     action="escalate"),
+            # HR — escalate
+            dict(term="termination",          category="hr",        action="escalate"),
+            dict(term="harassment",           category="hr",        action="escalate"),
+            dict(term="discrimination",       category="hr",        action="escalate"),
+        ]
+        for t in SEED_TERMS:
+            exists = db.query(SensitiveTerm).filter_by(term=t["term"]).first()
+            if not exists:
+                db.add(SensitiveTerm(**t))
 
         db.commit()
     finally:

@@ -33,11 +33,16 @@ from config import AUDIT_LOG_DIR, AUDIT_LOG_FILENAME
 # ─────────────────────────────────────────────────────────────────────────────
 
 def classify_risk(event_type: str, routing_decision: str, matched_keywords: list) -> str:
-    critical_keywords = {"lawsuit", "fraud", "breach", "gdpr", "hipaa", "regulatory"}
-    high_keywords     = {"legal", "compliance", "audit", "contract", "escalate"}
+    critical_keywords = {"lawsuit", "fraud", "breach", "gdpr", "hipaa", "regulatory",
+                         "ssn", "social security", "credit card", "card number",
+                         "passport", "date of birth", "bank account", "routing number"}
+    high_keywords     = {"legal", "compliance", "audit", "contract", "escalate",
+                         "termination", "harassment", "discrimination"}
 
     kw_set = set(k.lower() for k in matched_keywords)
 
+    if routing_decision == "BLOCKED":
+        return "critical"   # blocked PII/sensitive data is always critical
     if kw_set & critical_keywords:
         return "critical"
     if event_type == "LOCK":
@@ -115,7 +120,18 @@ def _build_rationale(
             f"A supervisor override is required to restore flagship access."
         )
 
-    if routing_decision in ("COMPLEX", "BLOCKED"):
+    if routing_decision == "BLOCKED":
+        return (
+            f"REQUEST BLOCKED — SENSITIVE DATA DETECTED. The payload submitted by the "
+            f"{department} department was rejected before reaching any AI model. "
+            f"Trigger: {routing_reason}. "
+            f"Matched sensitive terms: {kw_str}. "
+            f"No tokens were consumed. No data was sent to OpenAI or any external provider. "
+            f"This event is logged for compliance review. "
+            f"If this block was in error, review the sensitive term library in FAGE Setup."
+        )
+
+    if routing_decision == "COMPLEX":
         return (
             f"FLAGSHIP MODEL INVOKED. Payload routed to the premium model tier "
             f"after complexity analysis for the {department} department. "
