@@ -36,6 +36,32 @@ async function apiPost(path, body) {
 }
 
 /**
+ * PUT JSON data to a FAGE backend endpoint.
+ */
+async function apiPut(path, body) {
+  const response = await fetch(`${FAGE_API}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`PUT ${path} failed: ${response.status}`);
+  return response.json();
+}
+
+/**
+ * PATCH a FAGE backend endpoint.
+ */
+async function apiPatch(path, body) {
+  const response = await fetch(`${FAGE_API}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) throw new Error(`PATCH ${path} failed: ${response.status}`);
+  return response.json();
+}
+
+/**
  * DELETE a FAGE backend resource.
  * @param {string} path - e.g. "/api/agents/7"
  * @returns {Promise<any>} parsed JSON response

@@ -91,6 +91,10 @@ app.include_router(routes_dashboard.router, prefix="/api/dashboard", tags=["Dash
 from api import routes_keywords
 app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywords"])
 
+# Step 13 — Model Registry
+from api import routes_models
+app.include_router(routes_models.router, prefix="/api/models", tags=["Models"])
+
 # Step 10 — Reports
 from api import routes_reports
 app.include_router(routes_reports.router, prefix="/api/reports", tags=["Reports"])

@@ -149,6 +149,27 @@ class AuditEvent(Base):
     agent = relationship("RegisteredAgent", back_populates="audit_events")
 
 
+class ModelRegistry(Base):
+    """
+    Company-registered AI models with tier classification and cost rates.
+    Tiers: 1=Scout, 2=Analyst, 3=Advisor, 4=Strategist
+    The router picks from this table based on complexity, risk, and budget.
+    """
+    __tablename__ = "model_registry"
+
+    id                 = Column(Integer,  primary_key=True, index=True)
+    display_name       = Column(String,   nullable=False)          # "GPT-4o mini"
+    model_id           = Column(String,   nullable=False)          # "gpt-4o-mini" (API identifier)
+    provider           = Column(String,   nullable=False)          # OpenAI | Anthropic | Azure | Google | Custom
+    tier               = Column(Integer,  nullable=False)          # 1 | 2 | 3 | 4
+    cost_input_per_1m  = Column(Float,    default=0.0)             # $ per 1M input tokens
+    cost_output_per_1m = Column(Float,    default=0.0)             # $ per 1M output tokens
+    is_enabled         = Column(Boolean,  default=True)
+    is_default         = Column(Boolean,  default=False)           # default choice for this tier
+    notes              = Column(String,   nullable=True)
+    created_at         = Column(DateTime, default=datetime.utcnow)
+
+
 class SensitiveTerm(Base):
     """
     A company-configured sensitive word or phrase.

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Model Registry</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/models.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <span class="header-logo">◈</span>
+      <span class="header-title">FAGE</span>
+      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+    </div>
+    <div class="header-nav">
+      <a href="/" class="header-nav-link">Dashboard</a>
+      <a href="/connect.html" class="header-nav-link">+ Connect Platform</a>
+      <a href="/reports.html" class="header-nav-link">📊 Reports</a>
+      <a href="/models.html" class="header-nav-link active">🤖 Model Registry</a>
+    </div>
+    <div class="header-status">
+      <span class="status-dot online"></span>
+      <span>Model Registry</span>
+    </div>
+  </header>
+
+  <main class="mdl-main">
+
+    <!-- ── Page header ────────────────────────────────────────────────── -->
+    <div class="mdl-page-header">
+      <div>
+        <h1 class="mdl-title">Model Registry</h1>
+        <p class="mdl-subtitle">Register and manage the AI models your company uses. FAGE routes every request to the right model based on tier, complexity, and budget.</p>
+      </div>
+      <button class="mdl-add-btn" onclick="openAddModal()">+ Add Model</button>
+    </div>
+
+    <!-- ── Tier reference cards ────────────────────────────────────────── -->
+    <div class="mdl-tier-row" id="tierCards">
+      <!-- Injected by JS -->
+    </div>
+
+    <!-- ── Model table ─────────────────────────────────────────────────── -->
+    <div class="mdl-table-card">
+      <div class="mdl-table-header">
+        <div class="mdl-table-title">Registered Models</div>
+        <div class="mdl-table-filters">
+          <select id="filterTier" class="mdl-filter-select" onchange="loadModels()">
+            <option value="">All Tiers</option>
+            <option value="1">⚡ Scout</option>
+            <option value="2">🔍 Analyst</option>
+            <option value="3">💡 Advisor</option>
+            <option value="4">🎯 Strategist</option>
+          </select>
+          <select id="filterProvider" class="mdl-filter-select" onchange="loadModels()">
+            <option value="">All Providers</option>
+            <option>OpenAI</option>
+            <option>Anthropic</option>
+            <option>Azure OpenAI</option>
+            <option>Google</option>
+            <option>Mistral</option>
+            <option>Custom</option>
+          </select>
+          <select id="filterEnabled" class="mdl-filter-select" onchange="loadModels()">
+            <option value="">All Statuses</option>
+            <option value="true">Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="modelTableWrap">
+        <table class="mdl-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>Tier</th>
+              <th>API Model ID</th>
+              <th>Input / 1M tokens</th>
+              <th>Output / 1M tokens</th>
+              <th>Status</th>
+              <th>Default</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="modelTableBody">
+            <tr><td colspan="9" class="mdl-placeholder">Loading models...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="modelEmpty" class="mdl-empty" style="display:none">
+        <div class="mdl-empty-icon">🤖</div>
+        <div class="mdl-empty-title">No models registered yet</div>
+        <div class="mdl-empty-sub">Add your first model to start routing AI calls by tier, complexity, and budget.</div>
+        <button class="mdl-add-btn" onclick="openAddModal()" style="margin-top:16px">+ Add Your First Model</button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ADD / EDIT MODAL
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="mdl-overlay" id="modalOverlay" onclick="closeModal()" style="display:none"></div>
+
+  <div class="mdl-modal" id="modelModal" style="display:none">
+    <div class="mdl-modal-header">
+      <div class="mdl-modal-title" id="modalTitle">Add Model</div>
+      <button class="mdl-modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="mdl-modal-body">
+
+      <div class="mdl-form-row">
+        <div class="mdl-form-group">
+          <label class="mdl-label">Display Name <span class="mdl-required">*</span></label>
+          <input id="fDisplayName" class="mdl-input" placeholder="e.g. GPT-4o mini" />
+          <div class="mdl-hint">Friendly name shown in the UI and reports</div>
+        </div>
+        <div class="mdl-form-group">
+          <label class="mdl-label">Provider <span class="mdl-required">*</span></label>
+          <select id="fProvider" class="mdl-select">
+            <option value="">Select provider...</option>
+            <option>OpenAI</option>
+            <option>Anthropic</option>
+            <option>Azure OpenAI</option>
+            <option>Google</option>
+            <option>Mistral</option>
+            <option>Custom</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mdl-form-group">
+        <label class="mdl-label">API Model ID <span class="mdl-required">*</span></label>
+        <input id="fModelId" class="mdl-input" placeholder="e.g. gpt-4o-mini" />
+        <div class="mdl-hint">The exact identifier passed to the API — must match your provider's model name</div>
+      </div>
+
+      <div class="mdl-form-group">
+        <label class="mdl-label">Tier <span class="mdl-required">*</span></label>
+        <div class="mdl-tier-options" id="tierOptions">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+
+      <div class="mdl-form-row">
+        <div class="mdl-form-group">
+          <label class="mdl-label">Input Cost (per 1M tokens)</label>
+          <div class="mdl-input-prefix-wrap">
+            <span class="mdl-input-prefix">$</span>
+            <input id="fCostIn" class="mdl-input mdl-input-prefixed" type="number" step="0.01" min="0" placeholder="0.00" />
+          </div>
+        </div>
+        <div class="mdl-form-group">
+          <label class="mdl-label">Output Cost (per 1M tokens)</label>
+          <div class="mdl-input-prefix-wrap">
+            <span class="mdl-input-prefix">$</span>
+            <input id="fCostOut" class="mdl-input mdl-input-prefixed" type="number" step="0.01" min="0" placeholder="0.00" />
+          </div>
+        </div>
+      </div>
+
+      <div class="mdl-form-row mdl-form-row-checks">
+        <label class="mdl-check-label">
+          <input type="checkbox" id="fEnabled" checked />
+          <span>Enabled — available for routing</span>
+        </label>
+        <label class="mdl-check-label">
+          <input type="checkbox" id="fDefault" />
+          <span>Set as default for this tier</span>
+        </label>
+      </div>
+
+      <div class="mdl-form-group">
+        <label class="mdl-label">Notes</label>
+        <input id="fNotes" class="mdl-input" placeholder="Optional — context for your team" />
+      </div>
+
+      <div class="mdl-modal-actions">
+        <button class="mdl-btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="mdl-btn-save" id="saveBtn" onclick="saveModel()">Save Model</button>
+      </div>
+
+      <div class="mdl-modal-error" id="modalError" style="display:none"></div>
+
+    </div>
+  </div>
+
+  <footer class="footer">
+    FAGE v0.1.0 — Model Registry &nbsp;|&nbsp;
+    <a href="/">← Dashboard</a>
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/models.js"></script>
+</body>
+</html>
