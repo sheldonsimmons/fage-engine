@@ -102,7 +102,32 @@
       </div>
 
       <div class="panel" id="agentPanel">
-        <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
+        <div class="agent-panel-header">
+          <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
+          <div class="agent-filters">
+            <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
+              <option value="">All Platforms</option>
+              <option>Salesforce</option>
+              <option>ServiceNow</option>
+              <option>HubSpot</option>
+              <option>Dynamics365</option>
+              <option>Zendesk</option>
+              <option>Custom</option>
+            </select>
+            <select class="agent-filter-select" id="filterStatus" onchange="applyAgentFilters()">
+              <option value="">All Statuses</option>
+              <option value="idle">Idle</option>
+              <option value="active">Active</option>
+              <option value="locked">Locked</option>
+              <option value="queued">Queued</option>
+            </select>
+            <select class="agent-filter-select" id="filterDept" onchange="applyAgentFilters()">
+              <option value="">All Departments</option>
+            </select>
+            <input type="text" class="agent-filter-search" id="filterSearch"
+                   placeholder="Search agents..." oninput="applyAgentFilters()" />
+          </div>
+        </div>
         <table class="agent-table">
           <thead>
             <tr>

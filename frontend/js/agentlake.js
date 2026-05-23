@@ -204,3 +204,71 @@ async function runCollisionSim() {
 // Load on page ready, refresh every 10 seconds
 loadAgents();
 setInterval(loadAgents, 10000);
+
+// ── Dashboard Agentlake Filters ───────────────────────────────────────────────
+
+let _allAgents = []; // cache for client-side filtering
+
+// Override loadAgents to cache results and populate dept dropdown
+const _origLoadAgents = loadAgents;
+async function loadAgents() {
+  try {
+    const agents = await apiGet("/api/agents");
+    _allAgents = agents;
+    renderAgentTable(agents);
+    updateKpiAgents(agents);
+    populateDeptFilter(agents);
+  } catch (err) {
+    document.getElementById("agentTableBody").innerHTML =
+      `<tr><td colspan="8" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
+  }
+}
+
+function populateDeptFilter(agents) {
+  const sel = document.getElementById("filterDept");
+  if (!sel) return;
+  const existing = new Set(Array.from(sel.options).map(o => o.value));
+  const depts = [...new Set(agents.map(a => a.department).filter(Boolean))];
+  depts.forEach(d => {
+    if (!existing.has(d)) {
+      const opt = document.createElement("option");
+      opt.value = d; opt.textContent = d;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function applyAgentFilters() {
+  const platform = (document.getElementById("filterPlatform")?.value || "").toLowerCase();
+  const status   = (document.getElementById("filterStatus")?.value   || "").toLowerCase();
+  const dept     = (document.getElementById("filterDept")?.value     || "").toLowerCase();
+  const search   = (document.getElementById("filterSearch")?.value   || "").toLowerCase();
+
+  const filtered = _allAgents.filter(a => {
+    if (platform && (a.source_platform || "custom").toLowerCase() !== platform) return false;
+    if (status   && a.status.toLowerCase() !== status)   return false;
+    if (dept     && a.department.toLowerCase() !== dept) return false;
+    if (search   && !a.name.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  renderAgentTable(filtered);
+
+  // Update count badge without affecting KPI
+  const tbody = document.getElementById("agentTableBody");
+  if (filtered.length < _allAgents.length) {
+    // Show filter indicator in title
+    const title = document.querySelector("#agentPanel .panel-title");
+    if (title) {
+      const existing = title.querySelector(".filter-count");
+      if (existing) existing.remove();
+      const chip = document.createElement("span");
+      chip.className = "filter-count";
+      chip.textContent = " " + filtered.length + " of " + _allAgents.length;
+      title.appendChild(chip);
+    }
+  } else {
+    const chip = document.querySelector("#agentPanel .filter-count");
+    if (chip) chip.remove();
+  }
+}

@@ -54,6 +54,7 @@
       <button class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
       <button class="rpt-tab" data-tab="departments">🏢 Departments</button>
       <button class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
+      <button class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
@@ -288,6 +289,92 @@
         <div class="eff-empty">
           Click <strong>Generate Review</strong> to analyze your bot fleet.
         </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 5: AGENT ACTIVITY
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-activity">
+
+      <!-- Filter bar -->
+      <div class="act-filter-bar">
+        <div class="act-filter-group">
+          <label class="act-filter-label">Platform</label>
+          <select id="actPlatform" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Platforms</option>
+            <option>Salesforce</option>
+            <option>ServiceNow</option>
+            <option>HubSpot</option>
+            <option>Dynamics365</option>
+            <option>Zendesk</option>
+            <option>Custom</option>
+          </select>
+        </div>
+        <div class="act-filter-group">
+          <label class="act-filter-label">Agent</label>
+          <select id="actAgent" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Agents</option>
+          </select>
+        </div>
+        <div class="act-filter-group">
+          <label class="act-filter-label">Department</label>
+          <select id="actDept" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Departments</option>
+          </select>
+        </div>
+        <div class="act-filter-group">
+          <label class="act-filter-label">Model</label>
+          <select id="actModel" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Models</option>
+            <option value="micro">Turbo (micro)</option>
+            <option value="flagship">Flagship</option>
+          </select>
+        </div>
+        <div class="act-filter-group">
+          <label class="act-filter-label">Date Range</label>
+          <select id="actDays" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last 1 year</option>
+          </select>
+        </div>
+        <button class="act-reset-btn" onclick="resetActivityFilters()">Reset</button>
+      </div>
+
+      <!-- Summary bar -->
+      <div class="act-summary-bar" id="actSummaryBar">
+        <div class="act-summary-chip"><span id="actTotalCalls">—</span><span class="act-summary-label">Total Calls</span></div>
+        <div class="act-summary-chip"><span id="actTotalCost">—</span><span class="act-summary-label">Total Cost</span></div>
+        <div class="act-summary-chip"><span id="actAgentsCount">—</span><span class="act-summary-label">Agents</span></div>
+        <div class="act-summary-chip"><span id="actPlatformsCount">—</span><span class="act-summary-label">Platforms</span></div>
+      </div>
+
+      <!-- Agent table -->
+      <div class="rpt-table-card" id="actTableCard">
+        <div class="rpt-table-title">API Calls by Agent</div>
+        <table class="rpt-table" id="actTable">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Agent</th>
+              <th>Platform</th>
+              <th>Department</th>
+              <th>Status</th>
+              <th>Calls</th>
+              <th>Total Cost</th>
+              <th>Avg / Call</th>
+              <th>Flagship %</th>
+              <th>Pruned %</th>
+              <th>Last Active</th>
+            </tr>
+          </thead>
+          <tbody id="actTableBody">
+            <tr><td colspan="11" class="placeholder">Loading agent activity...</td></tr>
+          </tbody>
+        </table>
       </div>
 
     </div>

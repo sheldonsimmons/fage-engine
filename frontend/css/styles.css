@@ -400,3 +400,46 @@ body {
   .kpi-row  { grid-template-columns: repeat(2, 1fr); }
   .mid-row  { grid-template-columns: 1fr; }
 }
+
+/* ── Agentlake dashboard filters ─────────────────────────────────────────────── */
+.agent-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.agent-panel-header .panel-title { margin-bottom: 0; }
+.agent-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.agent-filter-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.agent-filter-select:focus { outline: none; border-color: var(--accent); }
+.agent-filter-search {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 5px 10px;
+  width: 140px;
+}
+.agent-filter-search:focus { outline: none; border-color: var(--accent); }
+.filter-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--accent);
+  margin-left: 4px;
+}

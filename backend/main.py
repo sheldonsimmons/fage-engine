@@ -99,6 +99,9 @@ app.include_router(routes_reports.router, prefix="/api/reports", tags=["Reports"
 from api import routes_efficiency
 app.include_router(routes_efficiency.router, prefix="/api/reports/bot-efficiency", tags=["Efficiency"])
 
+from api import routes_agent_activity
+app.include_router(routes_agent_activity.router, prefix="/api/reports/agent-activity", tags=["Agent Activity"])
+
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])
 def populate_demo_data():

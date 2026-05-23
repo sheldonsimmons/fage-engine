@@ -522,3 +522,204 @@ function renderEfficiencyCard(r) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 loadSavings();
+
+// ── Agent Activity Tab ────────────────────────────────────────────────────────
+
+let _activityLoaded = false;
+let _actOpenRows    = new Set(); // track which agent rows are expanded
+
+function initActivityTab() {
+  if (_activityLoaded) return;
+  _activityLoaded = true;
+  populateActivityDropdowns();
+  loadAgentActivity();
+}
+
+async function populateActivityDropdowns() {
+  // Populate agent dropdown
+  try {
+    const agents = await apiGet("/api/agents");
+    const sel = document.getElementById("actAgent");
+    agents.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a.id;
+      opt.textContent = a.name + " (" + (a.source_platform || "Custom") + ")";
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* silent */ }
+
+  // Populate department dropdown
+  try {
+    const budgets = await apiGet("/api/budget");
+    const sel = document.getElementById("actDept");
+    budgets.forEach(b => {
+      const opt = document.createElement("option");
+      opt.value = b.department;
+      opt.textContent = b.department;
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* silent */ }
+}
+
+async function loadAgentActivity() {
+  const platform = document.getElementById("actPlatform").value;
+  const agentId  = document.getElementById("actAgent").value;
+  const dept     = document.getElementById("actDept").value;
+  const model    = document.getElementById("actModel").value;
+  const days     = document.getElementById("actDays").value;
+
+  const params = new URLSearchParams();
+  if (platform) params.set("platform",   platform);
+  if (agentId)  params.set("agent_id",   agentId);
+  if (dept)     params.set("department", dept);
+  if (model)    params.set("model_tier", model);
+  params.set("days", days);
+
+  const tbody = document.getElementById("actTableBody");
+  tbody.innerHTML = '<tr><td colspan="11" class="placeholder">Loading...</td></tr>';
+
+  try {
+    const data = await apiGet("/api/reports/agent-activity?" + params.toString());
+    renderActivitySummary(data.summary);
+    renderActivityTable(data.agents);
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="11" class="placeholder" style="color:var(--accent-red)">Error: ' + e.message + '</td></tr>';
+  }
+}
+
+function renderActivitySummary(s) {
+  document.getElementById("actTotalCalls").textContent   = s.total_calls.toLocaleString();
+  document.getElementById("actTotalCost").textContent    = "$" + s.total_cost_usd.toFixed(2);
+  document.getElementById("actAgentsCount").textContent  = s.agents_count;
+  document.getElementById("actPlatformsCount").textContent = s.platforms.length;
+}
+
+function renderActivityTable(agents) {
+  const tbody = document.getElementById("actTableBody");
+
+  if (!agents.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="placeholder">No agent activity found for the selected filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = agents.map(a => {
+    const platformColor = a.platform === "Salesforce" ? "var(--accent)"
+      : a.platform === "ServiceNow"  ? "var(--accent-green)"
+      : a.platform === "HubSpot"     ? "var(--accent-yellow)"
+      : "var(--text-muted)";
+
+    const statusBadge = a.status === "locked" ? "badge-locked"
+      : a.status === "active"  ? "badge-active"
+      : "badge-idle";
+
+    const lastActive = a.last_active
+      ? new Date(a.last_active).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "—";
+
+    const isOpen = _actOpenRows.has(a.id);
+
+    return `
+      <tr class="act-agent-row ${isOpen ? "act-row-open" : ""}" onclick="toggleCallLog(${a.id})">
+        <td class="act-expand-cell">${isOpen ? "▾" : "▸"}</td>
+        <td style="font-weight:600">${a.name}</td>
+        <td style="font-size:11px; font-weight:700; color:${platformColor}">${a.platform}</td>
+        <td>${a.department}</td>
+        <td><span class="badge ${statusBadge}">${a.status.toUpperCase()}</span></td>
+        <td style="font-weight:600">${a.calls.toLocaleString()}</td>
+        <td style="color:var(--accent-red)">$${a.cost_usd.toFixed(4)}</td>
+        <td style="color:var(--text-muted); font-size:11px">$${a.avg_cost_usd.toFixed(5)}</td>
+        <td>${a.flagship_pct}%</td>
+        <td style="color:var(--accent-green)">${a.pruned_pct}%</td>
+        <td style="font-size:11px; color:var(--text-muted)">${lastActive}</td>
+      </tr>
+      <tr class="act-log-row" id="act-log-${a.id}" style="display:${isOpen ? "table-row" : "none"}">
+        <td colspan="11" class="act-log-cell">
+          ${renderCallLog(a)}
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function toggleCallLog(agentId) {
+  const logRow = document.getElementById("act-log-" + agentId);
+  const isOpen = _actOpenRows.has(agentId);
+
+  if (isOpen) {
+    _actOpenRows.delete(agentId);
+    logRow.style.display = "none";
+  } else {
+    _actOpenRows.add(agentId);
+    logRow.style.display = "table-row";
+  }
+
+  // Flip the expand arrow without full re-render
+  const agentRows = document.querySelectorAll(".act-agent-row");
+  agentRows.forEach(row => {
+    if (row.getAttribute("onclick") === "toggleCallLog(" + agentId + ")") {
+      row.querySelector(".act-expand-cell").textContent = _actOpenRows.has(agentId) ? "▾" : "▸";
+      row.classList.toggle("act-row-open", _actOpenRows.has(agentId));
+    }
+  });
+}
+
+function renderCallLog(agent) {
+  if (!agent.transactions || !agent.transactions.length) {
+    return '<div class="act-log-empty">No transactions found.</div>';
+  }
+
+  const rows = agent.transactions.map(t => {
+    const ts = new Date(t.timestamp).toLocaleString("en-US", {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+    const tierColor  = t.model_tier === "flagship" ? "var(--accent-red)" : "var(--accent-green)";
+    const tierLabel  = t.model_tier === "flagship" ? "Flagship" : "Turbo";
+    const routeColor = t.routing_reason === "COMPLEX" ? "var(--accent-red)"
+      : t.routing_reason === "ROUTINE"  ? "var(--accent-green)"
+      : "var(--accent-yellow)";
+    const pruneTag = t.was_pruned
+      ? '<span class="act-prune-tag">✂ pruned · ' + t.tokens_saved.toLocaleString() + ' tokens saved</span>'
+      : "";
+
+    return `
+      <tr class="act-tx-row">
+        <td style="font-size:11px; color:var(--text-muted); white-space:nowrap">${ts}</td>
+        <td style="font-size:11px; font-weight:700; color:${tierColor}">${tierLabel}</td>
+        <td style="font-size:11px; font-weight:700; color:${routeColor}">${t.routing_reason}</td>
+        <td style="font-size:11px">${t.input_tokens.toLocaleString()} in · ${t.output_tokens.toLocaleString()} out</td>
+        <td style="font-size:11px; color:var(--accent-red)">$${t.cost_usd.toFixed(5)}</td>
+        <td style="font-size:11px">${pruneTag}</td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="act-log-wrap">
+      <div class="act-log-header">
+        Call Log — ${agent.name} &nbsp;·&nbsp; ${agent.transactions.length} most recent calls shown
+      </div>
+      <table class="act-log-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Model</th>
+            <th>Routing</th>
+            <th>Tokens</th>
+            <th>Cost</th>
+            <th>Pruning</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function resetActivityFilters() {
+  document.getElementById("actPlatform").value = "";
+  document.getElementById("actAgent").value    = "";
+  document.getElementById("actDept").value     = "";
+  document.getElementById("actModel").value    = "";
+  document.getElementById("actDays").value     = "30";
+  loadAgentActivity();
+}
