@@ -108,7 +108,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     ]
 
     # ── Governance & Compliance stats ─────────────────────────────────────────
-    blocked_count      = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "BLOCKED").scalar()   or 0
+    blocked_count      = db.query(func.count(AuditEvent.id)).filter(AuditEvent.decision_outcome.ilike("%blocked%")).scalar() or 0
     escalated_count    = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "ESCALATED").scalar() or 0
     flagged_count      = db.query(func.count(AuditEvent.id)).scalar() or 0
     pii_count          = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type.ilike("%PII%")).scalar()  or 0
