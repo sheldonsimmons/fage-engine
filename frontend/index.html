@@ -384,6 +384,18 @@
       </div><!-- end keywordsBody -->
     </section>
 
+    <!-- Blocked Alert Banner (hidden until a block event exists) -->
+    <div id="blockedAlertBanner" style="display:none">
+      <div class="blocked-banner-inner">
+        <span class="blocked-banner-icon">🛡</span>
+        <div class="blocked-banner-text">
+          <strong id="blockedBannerCount"></strong>
+          <span id="blockedBannerSub"></span>
+        </div>
+        <button class="blocked-banner-btn" onclick="scrollToAudit()">Review Blocked Events ↓</button>
+      </div>
+    </div>
+
     <!-- Row 6: Audit Log -->
     <section class="panel full-width" id="auditPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('auditBody', 'auditChevron')">
