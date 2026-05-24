@@ -467,6 +467,21 @@
           </div>
         </div>
 
+        <!-- Voice Guard Audit Log -->
+        <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border)">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)">
+              🔒 Voice Guard Audit Log
+            </div>
+            <button onclick="loadVoiceAuditLog()" style="background:transparent;color:var(--accent);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer">
+              ↺ Refresh
+            </button>
+          </div>
+          <div id="vgAuditLog">
+            <p style="font-size:12px;color:var(--text-muted);padding:8px 0">Loading audit records...</p>
+          </div>
+        </div>
+
         <!-- Clear Data -->
         <div style="display:flex; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--border)">
           <button onclick="clearVoiceGuardData()"

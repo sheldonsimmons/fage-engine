@@ -179,8 +179,9 @@ async function testVoiceGuard() {
       detailEl.style.display = "none";
     }
 
-    // Refresh stats
+    // Refresh stats and audit log
     loadVoiceStats();
+    loadVoiceAuditLog();
 
   } catch (e) {
     statusEl.textContent = "Error: " + e.message;
@@ -198,14 +199,140 @@ async function clearVoiceGuardData() {
       document.getElementById("vgStatus").textContent = `✓ Cleared ${data.deleted} event${data.deleted !== 1 ? "s" : ""}`;
       document.getElementById("vgStatus").style.color = "var(--accent-green)";
       loadVoiceStats();
+      loadVoiceAuditLog();
     }
   } catch (e) {
     alert("Failed to clear data: " + e.message);
   }
 }
 
+// ── Voice Guard Audit Log ─────────────────────────────────────────────────────
+
+async function loadVoiceAuditLog() {
+  const container = document.getElementById("vgAuditLog");
+  if (!container) return;
+
+  try {
+    const events = await fetch("/api/voice/events?limit=50").then(r => r.json());
+
+    if (!events.length) {
+      container.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:8px 0">No voice events recorded yet.</p>';
+      return;
+    }
+
+    const fmtTs = iso => {
+      if (!iso) return "—";
+      return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", {
+        month: "numeric", day: "numeric", year: "2-digit",
+        hour: "numeric", minute: "2-digit", hour12: true,
+      });
+    };
+
+    const fmtPiiType = t => t.replace(/_/g, " ");
+    const fmtMethod  = m => m === "both" ? "Rule + AI" : m === "ai" ? "Presidio AI" : m === "rule" ? "Rule Engine" : m || "—";
+
+    const statusColor = s => s === "redacted" ? "var(--accent-green)"
+      : s === "flagged" ? "var(--accent-yellow)"
+      : "var(--text-muted)";
+
+    const methodColor = m => m === "both" ? "var(--accent-purple)"
+      : m === "ai" ? "var(--accent)"
+      : "var(--text-muted)";
+
+    const confColor = c => c >= 0.9 ? "var(--accent-green)"
+      : c >= 0.7 ? "var(--accent-yellow)"
+      : "var(--accent-red)";
+
+    const rows = events.map((e, idx) => {
+      const status    = e.flagged_for_review ? "flagged" : e.redactions_count > 0 ? "redacted" : "clean";
+      const conf      = e.confidence_score ? (e.confidence_score * 100).toFixed(1) + "%" : "—";
+      const details   = e.detection_details || [];
+      const hasDetail = details.length > 0;
+      const rowId     = `vg-audit-row-${e.id}`;
+
+      const detailRows = details.map(d => `
+        <tr style="background:var(--bg-base)">
+          <td style="padding:5px 10px 5px 32px;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent-red)">${fmtPiiType(d.pii_type)}</td>
+          <td style="padding:5px 10px;font-size:11px;color:var(--text-primary);font-style:${d.trigger_phrase ? "normal" : "italic"}">
+            ${d.trigger_phrase ? `"${d.trigger_phrase}"` : "— no trigger (direct pattern)"}
+          </td>
+          <td style="padding:5px 10px;font-size:11px;font-weight:700;color:${confColor(d.confidence)}">${(d.confidence * 100).toFixed(1)}%</td>
+          <td style="padding:5px 10px;font-size:11px;color:${methodColor(d.detection_method)}">${fmtMethod(d.detection_method)}</td>
+          <td></td>
+        </tr>
+      `).join("");
+
+      return `
+        <tr class="vg-audit-main-row" style="border-bottom:1px solid var(--border);cursor:${hasDetail ? "pointer" : "default"}"
+            ${hasDetail ? `onclick="toggleVgAuditRow('${rowId}')"` : ""}>
+          <td style="padding:8px 10px;font-size:11px;color:var(--text-muted);white-space:nowrap">${fmtTs(e.timestamp)}</td>
+          <td style="padding:8px 10px;font-size:11px;color:var(--text-primary);font-family:var(--font-mono)">${e.call_id || "—"}</td>
+          <td style="padding:8px 10px;font-size:11px;color:var(--text-muted)">${e.department || "—"}</td>
+          <td style="padding:8px 10px;font-size:11px;font-weight:700;color:${statusColor(status)}">${status.toUpperCase()}</td>
+          <td style="padding:8px 10px;font-size:11px;color:var(--accent-red);font-weight:700">${e.redactions_count}</td>
+          <td style="padding:8px 10px;font-size:11px;font-weight:700;color:${confColor(e.confidence_score || 0)}">${conf}</td>
+          <td style="padding:8px 10px;font-size:11px;color:${methodColor(e.detection_method)}">${fmtMethod(e.detection_method)}</td>
+          <td style="padding:8px 10px;font-size:11px;color:var(--text-muted);text-align:right">${hasDetail ? '<span style="color:var(--accent);font-size:10px">▸ details</span>' : ""}</td>
+        </tr>
+        ${hasDetail ? `
+        <tr id="${rowId}" style="display:none">
+          <td colspan="8" style="padding:0 0 4px">
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr style="background:var(--bg-base);border-bottom:1px solid var(--border)">
+                  <th style="padding:5px 10px 5px 32px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">PII Type</th>
+                  <th style="padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Trigger Phrase</th>
+                  <th style="padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Confidence</th>
+                  <th style="padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Method</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>${detailRows}</tbody>
+            </table>
+          </td>
+        </tr>` : ""}
+      `;
+    }).join("");
+
+    container.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Timestamp</th>
+            <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Call ID</th>
+            <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Dept</th>
+            <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Status</th>
+            <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Redactions</th>
+            <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Avg Confidence</th>
+            <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);text-align:left">Method</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch (e) {
+    container.innerHTML = `<p style="font-size:12px;color:var(--accent-red)">Failed to load audit log: ${e.message}</p>`;
+  }
+}
+
+function toggleVgAuditRow(rowId) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  const isOpen = row.style.display !== "none";
+  row.style.display = isOpen ? "none" : "table-row";
+  // Flip the arrow on the parent row's last cell
+  const mainRow = row.previousElementSibling;
+  if (mainRow) {
+    const arrow = mainRow.querySelector("td:last-child span");
+    if (arrow) arrow.textContent = isOpen ? "▸ details" : "▾ details";
+  }
+}
+
 // Load stats on page load and refresh every 30 seconds
 document.addEventListener("DOMContentLoaded", () => {
   loadVoiceStats();
+  loadVoiceAuditLog();
   setInterval(loadVoiceStats, 30000);
+  setInterval(loadVoiceAuditLog, 30000);
 });

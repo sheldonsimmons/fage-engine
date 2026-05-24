@@ -86,6 +86,7 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
         confidence_score=result.confidence_score,
         flagged_for_review=result.flagged_for_review,
         processing_ms=result.processing_ms,
+        detection_details=json.dumps(result.detection_details),
     )
     db.add(event)
     db.commit()
@@ -192,18 +193,19 @@ def get_voice_events(limit: int = 20, db: Session = Depends(get_db)):
 
     return [
         {
-            "id":               e.id,
-            "timestamp":        e.timestamp.isoformat() if e.timestamp else None,
-            "call_id":          e.call_id,
-            "platform":         e.platform,
-            "department":       e.department,
-            "clean_transcript": e.clean_transcript,
-            "redactions_count": e.redactions_count,
-            "pii_types_found":  json.loads(e.pii_types_found) if e.pii_types_found else [],
-            "detection_method": e.detection_method,
-            "confidence_score": e.confidence_score,
+            "id":                e.id,
+            "timestamp":         e.timestamp.isoformat() if e.timestamp else None,
+            "call_id":           e.call_id,
+            "platform":          e.platform,
+            "department":        e.department,
+            "clean_transcript":  e.clean_transcript,
+            "redactions_count":  e.redactions_count,
+            "pii_types_found":   json.loads(e.pii_types_found) if e.pii_types_found else [],
+            "detection_method":  e.detection_method,
+            "confidence_score":  e.confidence_score,
             "flagged_for_review": e.flagged_for_review,
-            "processing_ms":    e.processing_ms,
+            "processing_ms":     e.processing_ms,
+            "detection_details": json.loads(e.detection_details) if e.detection_details else [],
         }
         for e in events
     ]
