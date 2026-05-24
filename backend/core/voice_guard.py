@@ -25,73 +25,48 @@ logger = logging.getLogger(__name__)
 # ── Presidio AI layer (Phase 2) — graceful fallback if not installed ──────────
 
 _presidio_ready = False
-_analyzer = None
+_presidio_recognizers = []
 
 try:
-    from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
-    from presidio_analyzer import RecognizerRegistry
-    from presidio_analyzer.nlp_engine import NlpEngineProvider
+    from presidio_analyzer import PatternRecognizer, Pattern
 
-    # Use pattern-only recognizers — no spaCy NLP model required.
-    # This keeps the Heroku slug small while still catching formatted PII
-    # that has no trigger phrase (the gap the rule engine misses).
+    # Use PatternRecognizer objects directly — no NLP engine or spaCy required.
+    # Each recognizer runs independently on the text using pure regex patterns.
+    # This is Presidio's pattern-only mode and catches formatted PII that has
+    # no trigger phrase — the gap our rule engine state machine misses.
 
-    registry = RecognizerRegistry()
-
-    # SSN: 123-45-6789 or 123 45 6789
-    registry.add_recognizer(PatternRecognizer(
-        supported_entity="US_SSN",
-        patterns=[
-            Pattern("SSN_DASHES",  r"\b\d{3}-\d{2}-\d{4}\b",         0.95),
-            Pattern("SSN_SPACES",  r"\b\d{3}\s\d{2}\s\d{4}\b",       0.90),
-            Pattern("SSN_COMPACT", r"\b(?<!\d)\d{9}(?!\d)\b",         0.60),
-        ]
-    ))
-
-    # Credit card: 16 digits with spaces or dashes
-    registry.add_recognizer(PatternRecognizer(
-        supported_entity="CREDIT_CARD",
-        patterns=[
-            Pattern("CC_DASHES", r"\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}\b", 0.95),
-            Pattern("CC_COMPACT", r"\b\d{16}\b",                             0.70),
-        ]
-    ))
-
-    # US phone: 555-867-5309 or (555) 867-5309
-    registry.add_recognizer(PatternRecognizer(
-        supported_entity="PHONE_NUMBER",
-        patterns=[
-            Pattern("PHONE_DASHES",  r"\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b",      0.85),
-            Pattern("PHONE_PARENS",  r"\(\d{3}\)\s?\d{3}[-.\s]\d{4}",          0.90),
-        ]
-    ))
-
-    # Routing number: 9-digit ABA
-    registry.add_recognizer(PatternRecognizer(
-        supported_entity="US_BANK_NUMBER",
-        patterns=[
-            Pattern("ROUTING", r"\b0[0-9]{8}\b", 0.75),
-        ]
-    ))
-
-    # Build engine with NO NLP backend (pattern-only mode)
-    provider = NlpEngineProvider(nlp_configuration={
-        "nlp_engine_name": "spacy",
-        "models": []
-    })
-
-    try:
-        nlp_engine = provider.create_engine()
-    except Exception:
-        nlp_engine = None
-
-    _analyzer = AnalyzerEngine(
-        registry=registry,
-        nlp_engine=nlp_engine,
-        supported_languages=["en"],
-    )
+    _presidio_recognizers = [
+        PatternRecognizer(
+            supported_entity="US_SSN",
+            patterns=[
+                Pattern("SSN_DASHES",  r"\b\d{3}-\d{2}-\d{4}\b",   0.95),
+                Pattern("SSN_SPACES",  r"\b\d{3} \d{2} \d{4}\b",   0.90),
+                Pattern("SSN_COMPACT", r"(?<!\d)\d{9}(?!\d)",       0.55),
+            ]
+        ),
+        PatternRecognizer(
+            supported_entity="CREDIT_CARD",
+            patterns=[
+                Pattern("CC_16_GROUPED", r"\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}\b", 0.95),
+                Pattern("CC_16_COMPACT", r"(?<!\d)\d{16}(?!\d)",                    0.70),
+            ]
+        ),
+        PatternRecognizer(
+            supported_entity="PHONE_NUMBER",
+            patterns=[
+                Pattern("PHONE_DASHES",  r"\b\d{3}[-.]\d{3}[-.]\d{4}\b",  0.85),
+                Pattern("PHONE_PARENS",  r"\(\d{3}\)\s?\d{3}[-.\s]\d{4}", 0.90),
+            ]
+        ),
+        PatternRecognizer(
+            supported_entity="US_BANK_NUMBER",
+            patterns=[
+                Pattern("ROUTING_ABA", r"\b0\d{8}\b", 0.72),
+            ]
+        ),
+    ]
     _presidio_ready = True
-    logger.info("Presidio pattern-only layer loaded successfully (no spaCy required)")
+    logger.info("Presidio pattern recognizers loaded (pattern-only mode, no spaCy)")
 except Exception as e:
     logger.warning(f"Presidio not available — running rule engine only: {e}")
 
@@ -376,36 +351,36 @@ def _apply_direct_patterns(text: str) -> List[RedactionSpan]:
 
 def _run_presidio(text: str) -> List[RedactionSpan]:
     """
-    Run Presidio analyzer on the normalized transcript.
+    Run Presidio pattern recognizers on the normalized transcript.
+    Each recognizer operates independently — no NLP engine required.
     Returns RedactionSpans for any PII found, with detection_method="ai".
     Silently returns empty list if Presidio is not available.
     """
-    if not _presidio_ready or _analyzer is None:
+    if not _presidio_ready or not _presidio_recognizers:
         return []
 
+    spans = []
     try:
-        results = _analyzer.analyze(text=text, language="en")
-        spans = []
-        for r in results:
-            if r.entity_type not in _PRESIDIO_TYPE_MAP:
-                continue
-            pii_type, base_conf = _PRESIDIO_TYPE_MAP[r.entity_type]
-            # Use the higher of Presidio's score and our base confidence
-            confidence = round(max(r.score, base_conf), 3)
-            if confidence < 0.50:
-                continue   # skip low-confidence detections
-            spans.append(RedactionSpan(
-                start=r.start,
-                end=r.end,
-                pii_type=pii_type,
-                digits_found=len(re.sub(r'\D', '', text[r.start:r.end])),
-                detection_method="ai",
-                confidence=confidence,
-            ))
-        return spans
+        for recognizer in _presidio_recognizers:
+            results = recognizer.analyze(text=text, entities=[recognizer.supported_entities[0]])
+            for r in results:
+                if r.score < 0.50:
+                    continue
+                pii_type, base_conf = _PRESIDIO_TYPE_MAP.get(
+                    r.entity_type, (r.entity_type, 0.70)
+                )
+                confidence = round(max(r.score, base_conf), 3)
+                spans.append(RedactionSpan(
+                    start=r.start,
+                    end=r.end,
+                    pii_type=pii_type,
+                    digits_found=len(re.sub(r'\D', '', text[r.start:r.end])),
+                    detection_method="ai",
+                    confidence=confidence,
+                ))
     except Exception as e:
         logger.warning(f"Presidio analysis failed: {e}")
-        return []
+    return spans
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -530,5 +505,5 @@ def process_transcript(raw: str) -> VoiceGuardResult:
 
 
 def presidio_available() -> bool:
-    """Returns True if the Presidio AI layer loaded successfully."""
-    return _presidio_ready
+    """Returns True if the Presidio pattern recognizers loaded successfully."""
+    return _presidio_ready and len(_presidio_recognizers) > 0
