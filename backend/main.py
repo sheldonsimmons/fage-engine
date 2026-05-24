@@ -187,6 +187,10 @@ app.include_router(routes_efficiency.router, prefix="/api/reports/bot-efficiency
 from api import routes_agent_activity
 app.include_router(routes_agent_activity.router, prefix="/api/reports/agent-activity", tags=["Agent Activity"])
 
+# Voice Guard — PII redaction for voice transcripts
+from api import routes_voice
+app.include_router(routes_voice.router, prefix="/api/voice", tags=["Voice Guard"])
+
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])
 def populate_demo_data():

@@ -385,6 +385,64 @@
       </div><!-- end keywordsBody -->
     </section>
 
+    <!-- Voice Guard Panel -->
+    <section class="panel full-width" id="voiceGuardPanel">
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('voiceGuardBody', 'voiceGuardChevron')">
+        🎙 Voice Guard — PII Redaction
+        <span class="panel-chevron" id="voiceGuardChevron">▾</span>
+      </h2>
+      <div id="voiceGuardBody">
+        <div class="kpi-row" style="margin-bottom:16px">
+          <div class="kpi-card">
+            <div class="kpi-label">Calls Processed Today</div>
+            <div class="kpi-value" id="vg-calls-today">—</div>
+            <div class="kpi-sub" id="vg-calls-month">— this month</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">PII Events Intercepted</div>
+            <div class="kpi-value" style="color:var(--accent-green)" id="vg-redactions-today">—</div>
+            <div class="kpi-sub" id="vg-redactions-total">— total</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Flagged for Review</div>
+            <div class="kpi-value" style="color:var(--accent-yellow)" id="vg-flagged">—</div>
+            <div class="kpi-sub">Low confidence / partial match</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Avg Redaction Confidence</div>
+            <div class="kpi-value" style="color:var(--accent)" id="vg-confidence">—</div>
+            <div class="kpi-sub">Across all PII detections</div>
+          </div>
+        </div>
+
+        <!-- PII type breakdown -->
+        <div id="vg-pii-breakdown" style="margin-bottom:16px; display:flex; gap:10px; flex-wrap:wrap"></div>
+
+        <!-- Test transcript box -->
+        <div style="background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:18px">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:10px">
+            🧪 Test Voice Transcript
+          </div>
+          <textarea id="vgTestInput" rows="3" placeholder="Paste or type a transcript here — e.g. 'my social security is 123 ummm 45 6789'"
+            style="width:100%; background:var(--bg-panel); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); padding:10px; font-size:13px; font-family:inherit; resize:vertical; box-sizing:border-box"></textarea>
+          <div style="display:flex; gap:10px; margin-top:10px; align-items:center; flex-wrap:wrap">
+            <button onclick="testVoiceGuard()" style="background:var(--accent); color:#000; border:none; border-radius:6px; padding:8px 18px; font-size:12px; font-weight:700; cursor:pointer">
+              ▶ Process Transcript
+            </button>
+            <button onclick="loadVoiceExample()" style="background:transparent; color:var(--accent); border:1px solid var(--accent); border-radius:6px; padding:8px 14px; font-size:12px; cursor:pointer">
+              Load Example
+            </button>
+            <span id="vgStatus" style="font-size:12px; color:var(--text-muted)"></span>
+          </div>
+          <div id="vgResult" style="display:none; margin-top:14px; padding:14px; background:var(--bg-panel); border-radius:8px; border:1px solid var(--border)">
+            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:8px">Clean Transcript</div>
+            <div id="vgCleanText" style="font-size:13px; color:var(--text-primary); line-height:1.6; margin-bottom:12px"></div>
+            <div id="vgMeta" style="font-size:11px; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Blocked Alert Banner (hidden until a block event exists) -->
     <div id="blockedAlertBanner" style="display:none">
       <div class="blocked-banner-inner">
@@ -438,6 +496,7 @@
   <script src="js/router.js"></script>
   <script src="js/keywords.js"></script>
   <script src="js/auditor.js"></script>
+  <script src="js/voice_guard.js"></script>
   <script src="js/help.js"></script>
 
 </body>

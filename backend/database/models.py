@@ -170,6 +170,28 @@ class ModelRegistry(Base):
     created_at         = Column(DateTime, default=datetime.utcnow)
 
 
+class VoiceEvent(Base):
+    """
+    A voice transcript processed by Voice Guard.
+    Tracks every redaction event — what was found, how it was caught, confidence score.
+    """
+    __tablename__ = "voice_events"
+
+    id                = Column(Integer,  primary_key=True, index=True)
+    timestamp         = Column(DateTime, default=datetime.utcnow)
+    call_id           = Column(String,   nullable=True)       # ID from upstream platform
+    platform          = Column(String,   nullable=True)       # Genesys | AWS Connect | Salesforce Voice | etc.
+    department        = Column(String,   nullable=True)
+    raw_transcript    = Column(Text,     nullable=True)       # Original (stored only if no PII found)
+    clean_transcript  = Column(Text,     nullable=True)       # Redacted version
+    redactions_count  = Column(Integer,  default=0)
+    pii_types_found   = Column(String,   nullable=True)       # JSON list: ["SSN", "CREDIT_CARD"]
+    detection_method  = Column(String,   nullable=True)       # rule | ai | both | none
+    confidence_score  = Column(Float,    nullable=True)       # 0.0 – 1.0
+    flagged_for_review= Column(Boolean,  default=False)
+    processing_ms     = Column(Integer,  nullable=True)
+
+
 class SensitiveTerm(Base):
     """
     A company-configured sensitive word or phrase.
