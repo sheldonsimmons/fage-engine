@@ -455,6 +455,38 @@ body {
 .collapsible-title:hover { color: var(--accent); }
 .panel-chevron { font-size: 14px; color: var(--text-muted); transition: transform 0.15s; }
 
+/* ── Enterprise Demo dropdown ─────────────────────────────────────────────────── */
+.demo-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 190px;
+  z-index: 999;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.demo-dropdown-menu.open { display: block; }
+.demo-dropdown-menu button {
+  display: block;
+  width: 100%;
+  padding: 11px 16px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.demo-dropdown-menu button:hover { background: rgba(88,166,255,0.08); color: var(--accent); }
+.demo-dropdown-menu button:first-child { color: var(--accent-yellow); }
+.demo-dropdown-menu button:first-child:hover { color: var(--accent-yellow); background: rgba(210,153,34,0.1); }
+
 /* ── Drag-and-drop ────────────────────────────────────────────────────────────── */
 .drag-handle {
   display: inline-flex; align-items: center; justify-content: center;

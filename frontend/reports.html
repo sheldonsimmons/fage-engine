@@ -21,7 +21,7 @@
     </div>
     <div class="header-nav">
       <a href="/" class="header-nav-link">Dashboard</a>
-      <a href="/connect.html" class="header-nav-link">+ Connect Platform</a>
+      <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
       <a href="/reports.html" class="header-nav-link active">📊 Reports</a>
       <a href="/models.html" class="header-nav-link">🤖 Model Registry</a>
     </div>
@@ -92,6 +92,7 @@
       <button class="rpt-tab" data-tab="departments">🏢 Departments</button>
       <button class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
       <button class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
+      <button class="rpt-tab" data-tab="roi" onclick="initRoiTab()">📈 ROI Calculator</button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
@@ -452,6 +453,149 @@
 
     </div>
 
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB: ROI CALCULATOR
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-roi">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+
+        <!-- Left: Inputs -->
+        <div class="panel" style="padding:24px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)">Your AI Usage Profile</div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between"><strong style="color:var(--text-primary);font-size:13px">Industry</strong></div>
+            <select id="roi-industry" onchange="roiApplyPreset()" style="width:100%;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:13px">
+              <option value="custom">Custom / Enter manually</option>
+              <option value="insurance">Insurance</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="financial">Financial Services / Banking</option>
+              <option value="legal">Legal Services</option>
+              <option value="retail">Retail / E-Commerce</option>
+              <option value="logistics">Logistics / Operations</option>
+              <option value="saas">SaaS / Technology</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Total AI Calls / Month</strong><span id="roi-calls-disp">50,000</span></div>
+            <input type="range" id="roi-calls" min="1000" max="1000000" step="1000" value="50000" oninput="document.getElementById('roi-calls-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-calls-num" value="50000" min="1000" max="1000000" oninput="document.getElementById('roi-calls').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">calls/month</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Routine Calls %</strong><span id="roi-routine-disp">70%</span></div>
+            <input type="range" id="roi-routine" min="10" max="95" step="5" value="70" oninput="document.getElementById('roi-routine-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-routine-num" value="70" min="10" max="95" oninput="document.getElementById('roi-routine').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">% (FAQs, simple tickets)</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Avg Input Tokens / Call</strong><span id="roi-intok-disp">2,000</span></div>
+            <input type="range" id="roi-intok" min="200" max="20000" step="100" value="2000" oninput="document.getElementById('roi-intok-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-intok-num" value="2000" min="200" max="20000" oninput="document.getElementById('roi-intok').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">tokens</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Avg Output Tokens / Call</strong><span id="roi-outtok-disp">500</span></div>
+            <input type="range" id="roi-outtok" min="50" max="5000" step="50" value="500" oninput="document.getElementById('roi-outtok-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-outtok-num" value="500" min="50" max="5000" oninput="document.getElementById('roi-outtok').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">tokens</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><strong style="color:var(--text-primary);font-size:13px">Current Model (everything today)</strong></div>
+            <select id="roi-tier" onchange="roiCalc()" style="width:100%;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:13px">
+              <option value="advisor" selected>Advisor — GPT-5.4 ($2.50 in / $15.00 out per 1M)</option>
+              <option value="strategist">Strategist — GPT-5.5 ($5.00 in / $30.00 out per 1M)</option>
+              <option value="analyst">Analyst — GPT-5.4 Mini ($0.75 in / $4.50 out per 1M)</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><strong style="color:var(--text-primary);font-size:13px">FAGE Plan</strong></div>
+            <select id="roi-plan" onchange="roiCalc()" style="width:100%;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:13px">
+              <option value="299">Starter — $299/month</option>
+              <option value="599">Growth — $599/month</option>
+              <option value="1499" selected>Business — $1,499/month</option>
+              <option value="4999">Enterprise — $4,999/month</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Right: Results -->
+        <div>
+          <div id="roi-payback" style="background:#0d2d1a;border:1px solid var(--accent-green);border-radius:8px;padding:14px 18px;display:flex;align-items:center;gap:14px;margin-bottom:20px">
+            <div style="font-size:22px">✓</div>
+            <div><strong id="roi-payback-text" style="color:var(--accent-green);font-size:14px">Calculating...</strong><p id="roi-payback-sub" style="font-size:12px;color:var(--text-muted);margin:3px 0 0"></p></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px">
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly Without FAGE</div>
+              <div id="roi-cost-without" style="font-size:22px;font-weight:700;color:var(--accent-red);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly With FAGE</div>
+              <div id="roi-cost-with" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly Net Savings</div>
+              <div id="roi-monthly-savings" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Annual Net Savings</div>
+              <div id="roi-annual-savings" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Cost/Call Before</div>
+              <div id="roi-cpc-before" style="font-size:22px;font-weight:700;font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Cost/Call After</div>
+              <div id="roi-cpc-after" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+          </div>
+
+          <div class="panel" style="padding:24px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)">Cost Breakdown by Routing Tier</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px">
+              <thead><tr>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Tier</th>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Calls</th>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Cost/Call</th>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Monthly Total</th>
+              </tr></thead>
+              <tbody id="roi-breakdown"></tbody>
+            </table>
+            <div style="background:#1a0d05;border:1px solid var(--accent-yellow);border-radius:8px;padding:14px 18px;margin-bottom:20px">
+              <div style="font-size:11px;font-weight:700;color:var(--accent-yellow);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">⚠ Risk Value Not Included Above</div>
+              <ul style="margin:0;padding-left:18px;font-size:12px;color:var(--text-muted);line-height:1.8">
+                <li>HIPAA / PII violation avoided: $50,000–$1.9M per incident</li>
+                <li>Audit-ready AI decision log — no manual reconstruction</li>
+                <li>Agent collision prevention — zero silent data corruption</li>
+                <li>Budget auto-throttle — no surprise end-of-month overruns</li>
+              </ul>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+              <button onclick="roiCopyClipboard()" style="background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:9px 20px;font-size:12px;font-weight:600;cursor:pointer">⎘ Copy Summary</button>
+              <button onclick="window.print()" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:9px 20px;font-size:12px;font-weight:700;cursor:pointer">↓ Export as PDF</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <footer class="footer">
@@ -461,5 +605,144 @@
 
   <script src="js/api.js"></script>
   <script src="js/reports.js"></script>
+  <script>
+    // ── ROI Calculator Tab ────────────────────────────────────────────────────
+    const ROI_RATES = {
+      scout:      { in: 0.20,  out: 1.25  },
+      analyst:    { in: 0.75,  out: 4.50  },
+      advisor:    { in: 2.50,  out: 15.00 },
+      strategist: { in: 5.00,  out: 30.00 },
+    };
+    const ROI_PRESETS = {
+      insurance:  { calls:500000, routine:60, inTok:5000,  outTok:1000, tier:"advisor",    plan:"1499" },
+      healthcare: { calls:200000, routine:65, inTok:4000,  outTok:800,  tier:"advisor",    plan:"1499" },
+      financial:  { calls:300000, routine:55, inTok:6000,  outTok:1500, tier:"strategist", plan:"4999" },
+      legal:      { calls:50000,  routine:40, inTok:10000, outTok:2000, tier:"advisor",    plan:"599"  },
+      retail:     { calls:400000, routine:80, inTok:1000,  outTok:300,  tier:"analyst",    plan:"1499" },
+      logistics:  { calls:150000, routine:70, inTok:2000,  outTok:500,  tier:"advisor",    plan:"599"  },
+      saas:       { calls:100000, routine:75, inTok:1500,  outTok:400,  tier:"analyst",    plan:"599"  },
+    };
+
+    let _roiInited = false;
+    function initRoiTab() {
+      if (!_roiInited) { _roiInited = true; roiCalc(); }
+    }
+
+    function roiApplyPreset() {
+      const p = ROI_PRESETS[document.getElementById("roi-industry").value];
+      if (!p) { roiCalc(); return; }
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set("roi-calls", p.calls);      set("roi-calls-num", p.calls);
+      set("roi-routine", p.routine);  set("roi-routine-num", p.routine);
+      set("roi-intok", p.inTok);      set("roi-intok-num", p.inTok);
+      set("roi-outtok", p.outTok);    set("roi-outtok-num", p.outTok);
+      set("roi-tier", p.tier);        set("roi-plan", p.plan);
+      roiCalc();
+    }
+
+    function roiCalc() {
+      const totalCalls = Number(document.getElementById("roi-calls").value);
+      const routinePct = Number(document.getElementById("roi-routine").value) / 100;
+      const inTok      = Number(document.getElementById("roi-intok").value);
+      const outTok     = Number(document.getElementById("roi-outtok").value);
+      const tier       = document.getElementById("roi-tier").value;
+      const fee        = Number(document.getElementById("roi-plan").value);
+
+      document.getElementById("roi-calls-disp").textContent   = totalCalls.toLocaleString();
+      document.getElementById("roi-routine-disp").textContent = (routinePct*100).toFixed(0) + "%";
+      document.getElementById("roi-intok-disp").textContent   = inTok.toLocaleString();
+      document.getElementById("roi-outtok-disp").textContent  = outTok.toLocaleString();
+
+      const cpc = (t) => (inTok / 1e6 * ROI_RATES[t].in) + (outTok / 1e6 * ROI_RATES[t].out);
+      const routineCalls  = Math.round(totalCalls * routinePct);
+      const complexCalls  = totalCalls - routineCalls;
+      const costWithout   = cpc(tier) * totalCalls;
+      const routineCost   = cpc("scout") * routineCalls;
+      const complexCost   = cpc(tier) * complexCalls;
+      const costWith      = routineCost + complexCost + fee;
+      const monthlySaved  = costWithout - costWith;
+      const annualSaved   = monthlySaved * 12;
+      const cpcBefore     = cpc(tier);
+      const cpcAfter      = totalCalls > 0 ? costWith / totalCalls : 0;
+      const paybackMo     = fee > 0 && monthlySaved > 0 ? (fee / monthlySaved).toFixed(1) : null;
+
+      const fmt = (n) => {
+        const abs = Math.abs(n);
+        if (abs >= 1e6) return "$" + (n/1e6).toFixed(2) + "M";
+        if (abs >= 1e3) return "$" + (n/1e3).toFixed(1) + "K";
+        return "$" + Math.abs(n).toFixed(2);
+      };
+
+      document.getElementById("roi-cost-without").textContent    = fmt(costWithout);
+      document.getElementById("roi-cost-with").textContent       = fmt(costWith);
+      document.getElementById("roi-monthly-savings").textContent = (monthlySaved >= 0 ? "" : "-") + fmt(Math.abs(monthlySaved));
+      document.getElementById("roi-annual-savings").textContent  = (annualSaved  >= 0 ? "" : "-") + fmt(Math.abs(annualSaved));
+      document.getElementById("roi-cpc-before").textContent      = "$" + cpcBefore.toFixed(5);
+      document.getElementById("roi-cpc-after").textContent       = "$" + cpcAfter.toFixed(5);
+
+      document.getElementById("roi-monthly-savings").style.color = monthlySaved >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+      document.getElementById("roi-annual-savings").style.color  = annualSaved  >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+
+      const paybackEl  = document.getElementById("roi-payback");
+      const paybackTxt = document.getElementById("roi-payback-text");
+      const paybackSub = document.getElementById("roi-payback-sub");
+      if (monthlySaved <= 0) {
+        paybackEl.style.background = "#1a0505"; paybackEl.style.borderColor = "var(--accent-red)";
+        paybackTxt.style.color = "var(--accent-red)";
+        paybackTxt.textContent = "FAGE cost exceeds routing savings at this volume";
+        paybackSub.textContent = "Consider a lower plan, or volume may be too low.";
+      } else if (paybackMo && paybackMo < 1) {
+        paybackEl.style.background = "#0d2d1a"; paybackEl.style.borderColor = "var(--accent-green)";
+        paybackTxt.style.color = "var(--accent-green)";
+        paybackTxt.textContent = "FAGE pays for itself immediately";
+        paybackSub.textContent = "Routing savings exceed the FAGE fee from day one.";
+      } else if (paybackMo) {
+        paybackEl.style.background = "#0d2d1a"; paybackEl.style.borderColor = "var(--accent-green)";
+        paybackTxt.style.color = "var(--accent-green)";
+        paybackTxt.textContent = `FAGE pays for itself in ${paybackMo} months`;
+        paybackSub.textContent = `After that, every month is ${fmt(monthlySaved)} back in your budget.`;
+      }
+
+      const tierLabels = { scout:"Scout", analyst:"Analyst", advisor:"Advisor", strategist:"Strategist" };
+      document.getElementById("roi-breakdown").innerHTML = `
+        <tr>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">Scout <span style="font-size:11px;color:var(--text-muted)">routine</span></td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${routineCalls.toLocaleString()} (${(routinePct*100).toFixed(0)}%)</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc("scout").toFixed(5)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono);color:var(--accent-green)">${fmt(routineCost)}</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${tierLabels[tier]} <span style="font-size:11px;color:var(--text-muted)">complex</span></td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${complexCalls.toLocaleString()} (${((1-routinePct)*100).toFixed(0)}%)</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc(tier).toFixed(5)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">${fmt(complexCost)}</td>
+        </tr>
+        <tr>
+          <td colspan="3" style="padding:9px 10px;border-bottom:1px solid #1c2128;color:var(--text-muted);font-size:11px">FAGE Platform Fee</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono);color:var(--text-muted)">${fmt(fee)}</td>
+        </tr>
+        <tr style="font-weight:700">
+          <td colspan="3" style="padding:9px 10px;border-top:1px solid var(--border)">Total With FAGE</td>
+          <td style="padding:9px 10px;font-family:var(--font-mono)">${fmt(costWith)}</td>
+        </tr>
+        <tr style="color:var(--accent-green);font-weight:700">
+          <td colspan="3" style="padding:9px 10px">💰 Net Monthly Savings</td>
+          <td style="padding:9px 10px;font-family:var(--font-mono)">${monthlySaved >= 0 ? fmt(monthlySaved) : "(" + fmt(Math.abs(monthlySaved)) + ")"}</td>
+        </tr>`;
+
+      window._roiTabData = { totalCalls, routinePct, inTok, outTok, tier, fee, costWithout, costWith, monthlySaved, annualSaved, paybackMo };
+    }
+
+    function roiCopyClipboard() {
+      const d = window._roiTabData;
+      if (!d) return;
+      const fmt = (n) => "$" + Math.abs(n).toFixed(2);
+      const text = `FAGE ROI Summary\nGenerated: ${new Date().toLocaleDateString()}\n\nMonthly Calls: ${d.totalCalls.toLocaleString()}\nRoutine/Complex: ${(d.routinePct*100).toFixed(0)}%/${(100-d.routinePct*100).toFixed(0)}%\nCost Without FAGE: ${fmt(d.costWithout)}/mo\nCost With FAGE: ${fmt(d.costWith)}/mo (incl. $${d.fee} fee)\nNet Monthly Savings: ${fmt(d.monthlySaved)}\nNet Annual Savings: ${fmt(d.annualSaved)}\n${d.paybackMo ? "Payback: " + d.paybackMo + " months" : ""}`;
+      navigator.clipboard.writeText(text).then(() => {
+        event.target.textContent = "✓ Copied!";
+        setTimeout(() => event.target.textContent = "⎘ Copy Summary", 2000);
+      });
+    }
+  </script>
 </body>
 </html>

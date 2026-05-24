@@ -17,14 +17,16 @@
       <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
     </div>
     <div class="header-nav">
-      <a href="/connect.html" class="header-nav-link">+ Connect Platform</a>
+      <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
       <a href="/reports.html" class="header-nav-link" style="margin-left:8px">📊 Reports</a>
       <a href="/models.html" class="header-nav-link" style="margin-left:8px">🤖 Model Registry</a>
-      <button class="header-nav-link" onclick="loadEnterpriseDemo()" style="margin-left:8px;color:var(--accent-yellow);background:none;border:none;cursor:pointer;font:inherit">★ Enterprise Demo</button>
-      <a href="/roi.html" class="header-nav-link" style="margin-left:8px;color:#4ade80">💰 ROI Calculator</a>
-      <a href="/onboarding.html" class="header-nav-link" style="margin-left:8px">⚙ Setup</a>
-      <button class="header-nav-link header-reset-btn" onclick="resetDemoData()" style="margin-left:8px">↺ Reset Demo</button>
-      <button class="header-nav-link" onclick="randomizePanels()" style="margin-left:8px;color:var(--accent-purple)" title="Shuffle panel order">⊛ Randomize</button>
+      <div class="demo-dropdown" style="margin-left:8px;position:relative;display:inline-block">
+        <button class="header-nav-link demo-dropdown-toggle" onclick="toggleDemoMenu(event)" style="color:var(--accent-yellow);background:none;border:none;cursor:pointer;font:inherit">★ Enterprise Demo ▾</button>
+        <div class="demo-dropdown-menu" id="demoMenu">
+          <button onclick="loadEnterpriseDemo(); closeDemoMenu()">★ Load Enterprise Data</button>
+          <button onclick="resetDemoData(); closeDemoMenu()">↺ Reset Demo</button>
+        </div>
+      </div>
       <button class="tour-btn" onclick="startTour()">? Guide</button>
     </div>
     <div class="header-status" id="systemStatus">
@@ -93,6 +95,11 @@
         <span class="stat-val" id="statMonthSpend">—</span>
       </div>
     </section>
+
+    <!-- ── Panel Toolbar ──────────────────────────────────────────────────── -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="randomizePanels()" style="background:transparent;color:var(--accent-purple);border:1px solid var(--accent-purple);border-radius:6px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer" title="Shuffle panel order">⊛ Randomize Panels</button>
+    </div>
 
     <!-- ── Draggable Panels ─────────────────────────────────────────────────── -->
     <div id="draggable-panels">
@@ -560,6 +567,18 @@
   <script src="js/auditor.js"></script>
   <script src="js/voice_guard.js"></script>
   <script src="js/help.js"></script>
+  <script>
+    function toggleDemoMenu(e) {
+      e.stopPropagation();
+      document.getElementById("demoMenu").classList.toggle("open");
+    }
+    function closeDemoMenu() {
+      document.getElementById("demoMenu").classList.remove("open");
+    }
+    document.addEventListener("click", function(e) {
+      if (!e.target.closest(".demo-dropdown")) closeDemoMenu();
+    });
+  </script>
 
 </body>
 </html>
