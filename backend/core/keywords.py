@@ -154,6 +154,14 @@ def check_terms(db: Session, text: str, department: str = None,
     if not matches:
         return {"triggered": False, "action": None, "matches": []}
 
+    # Voice Guard already redacted PII numbers — never block a cleaned transcript.
+    # Downgrade any "block" to "escalate" so the call routes to the flagship model
+    # for human review but is not rejected outright.
+    if skip_pii:
+        for m in matches:
+            if m["action"] == "block":
+                m["action"] = "escalate"
+
     top = max(matches, key=lambda m: priority.get(m["action"], 0))
 
     return {
