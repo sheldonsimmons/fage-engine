@@ -50,11 +50,13 @@ async function loadVoiceStats() {
            <span style="color:var(--text-muted);margin-left:6px">Presidio loading</span>
          </div>`;
 
+    const fmtType = t => t.replace(/_/g, " ");
+
     chipEl.innerHTML = aiChip + (Object.keys(breakdown).length === 0
       ? '<span style="font-size:12px;color:var(--text-muted);padding:6px 0">No PII events recorded yet — use the test box below to try it.</span>'
       : Object.entries(breakdown).map(([type, count]) => `
           <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px">
-            <span style="color:var(--accent-red);font-weight:700">${type}</span>
+            <span style="color:var(--accent-red);font-weight:700">${fmtType(type)}</span>
             <span style="color:var(--text-muted);margin-left:6px">${count} event${count !== 1 ? "s" : ""}</span>
           </div>
         `).join(""));
@@ -111,8 +113,9 @@ async function testVoiceGuard() {
       : data.status === "flagged" ? "var(--accent-yellow)"
       : "var(--text-muted)";
 
+    const fmtPii  = t => t.replace(/_/g, " ");
     const piiList = data.pii_types_found.length
-      ? data.pii_types_found.join(", ")
+      ? data.pii_types_found.map(fmtPii).join(", ")
       : "none";
 
     const methodLabel = data.detection_method === "both" ? "🤖+📏 Rule + AI"
