@@ -6,7 +6,6 @@
   <title>FAGE — ROI Calculator</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
-    /* ── ROI Calculator Styles ─────────────────────────────────────────── */
     .roi-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -26,9 +25,7 @@
       border-bottom: 1px solid var(--border);
     }
 
-    .roi-field {
-      margin-bottom: 18px;
-    }
+    .roi-field { margin-bottom: 18px; }
     .roi-label {
       font-size: 12px;
       color: var(--text-muted);
@@ -37,25 +34,15 @@
       justify-content: space-between;
       align-items: center;
     }
-    .roi-label strong {
-      color: var(--text-primary);
-      font-size: 13px;
-    }
-    .roi-label span {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
+    .roi-label strong { color: var(--text-primary); font-size: 13px; }
+    .roi-label span   { font-size: 11px; color: var(--text-muted); }
 
     input[type="range"] {
       width: 100%;
       accent-color: var(--accent);
       margin: 4px 0 2px;
     }
-    .roi-input-row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
+    .roi-input-row { display: flex; gap: 10px; align-items: center; }
     .roi-input-row input[type="number"] {
       width: 100px;
       background: var(--bg-base);
@@ -66,10 +53,7 @@
       font-size: 13px;
       font-family: var(--font-mono);
     }
-    .roi-input-row input[type="number"]:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
+    .roi-input-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
 
     .roi-select {
       width: 100%;
@@ -82,17 +66,34 @@
     }
     .roi-select:focus { outline: none; border-color: var(--accent); }
 
-    /* Results panel */
-    .roi-results {
-      background: var(--bg-base);
+    /* Tab switcher */
+    .tab-bar {
+      display: flex;
+      gap: 0;
+      margin-bottom: 20px;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 24px;
+      border-radius: 8px;
+      overflow: hidden;
     }
-    .roi-results.has-savings {
-      border-color: var(--accent-green);
+    .tab-btn {
+      flex: 1;
+      padding: 10px 16px;
+      background: var(--bg-base);
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: background 0.15s, color 0.15s;
     }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #000;
+    }
+    .tab-btn:first-child { border-right: 1px solid var(--border); }
 
+    /* Result cards */
     .roi-result-grid {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
@@ -123,11 +124,8 @@
     .roi-result-value.green  { color: var(--accent-green); }
     .roi-result-value.red    { color: var(--accent-red); }
     .roi-result-value.yellow { color: var(--accent-yellow); }
-    .roi-result-sub {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 3px;
-    }
+    .roi-result-value.purple { color: var(--accent-purple); }
+    .roi-result-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
 
     /* Breakdown table */
     .roi-breakdown {
@@ -151,11 +149,7 @@
       color: var(--text-primary);
     }
     .roi-breakdown tr:last-child td { border-bottom: none; }
-    .roi-breakdown .total-row td {
-      font-weight: 700;
-      border-top: 1px solid var(--border);
-      color: var(--accent);
-    }
+    .roi-breakdown .total-row td { font-weight: 700; border-top: 1px solid var(--border); color: var(--accent); }
     .roi-breakdown .savings-row td { color: var(--accent-green); font-weight: 700; }
 
     /* Payback banner */
@@ -198,6 +192,102 @@
       line-height: 1.8;
     }
 
+    /* Compliance risk panel */
+    .compliance-panel {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+    }
+
+    .compliance-reg-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .reg-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: border-color 0.15s;
+    }
+    .reg-checkbox input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+    .reg-checkbox:has(input:checked) { border-color: var(--accent); color: var(--text-primary); }
+
+    .compliance-result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .compliance-big-card {
+      background: #0a1f0f;
+      border: 1px solid var(--accent-green);
+      border-radius: 10px;
+      padding: 20px;
+      grid-column: 1 / -1;
+      text-align: center;
+    }
+    .compliance-big-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .compliance-big-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent-green);
+      font-family: var(--font-mono);
+      margin-bottom: 4px;
+    }
+    .compliance-big-sub { font-size: 12px; color: var(--text-muted); }
+
+    .compliance-ratio {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .compliance-ratio-label { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .compliance-ratio-value { font-size: 28px; font-weight: 700; font-family: var(--font-mono); }
+
+    .compliance-breakdown-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #1c2128;
+      font-size: 13px;
+    }
+    .compliance-breakdown-row:last-child { border-bottom: none; }
+    .compliance-breakdown-label { color: var(--text-muted); font-size: 12px; }
+    .compliance-breakdown-value { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
+
+    .fine-explainer {
+      background: #12100a;
+      border: 1px solid #3d3010;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+    .fine-explainer strong { color: var(--accent-yellow); }
+
     /* Export button */
     .roi-export-bar {
       display: flex;
@@ -236,15 +326,14 @@
       border-radius: 4px;
       margin-left: 6px;
     }
-    .chip-scout     { background: #0d1f2d; color: var(--accent); }
-    .chip-analyst   { background: #1a1a0d; color: var(--accent-yellow); }
-    .chip-advisor   { background: #1d0d2d; color: var(--accent-purple); }
-    .chip-strategist{ background: #2d0d0d; color: var(--accent-red); }
+    .chip-scout      { background: #0d1f2d; color: var(--accent); }
+    .chip-analyst    { background: #1a1a0d; color: var(--accent-yellow); }
+    .chip-advisor    { background: #1d0d2d; color: var(--accent-purple); }
+    .chip-strategist { background: #2d0d0d; color: var(--accent-red); }
   </style>
 </head>
 <body>
 
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
   <header class="header">
     <div class="header-brand">
       <span class="header-logo">◈</span>
@@ -271,8 +360,7 @@
         💰 FAGE ROI Calculator
       </h1>
       <p style="font-size:13px; color:var(--text-muted); margin:0">
-        Enter your company's AI usage profile to see exactly what FAGE saves — based on real OpenAI pricing.
-        Adjust any input and results update instantly.
+        Enter your AI usage profile to see cost savings and compliance risk exposure. Adjust any input and results update instantly.
       </p>
     </div>
 
@@ -282,7 +370,6 @@
       <div class="panel" style="padding:24px">
         <div class="roi-section-title">Your AI Usage Profile</div>
 
-        <!-- Industry -->
         <div class="roi-field">
           <div class="roi-label"><strong>Industry</strong></div>
           <select class="roi-select" id="industry" onchange="applyPreset()">
@@ -297,7 +384,6 @@
           </select>
         </div>
 
-        <!-- Total monthly calls -->
         <div class="roi-field">
           <div class="roi-label">
             <strong>Total AI Calls / Month</strong>
@@ -312,7 +398,6 @@
           </div>
         </div>
 
-        <!-- Routine % -->
         <div class="roi-field">
           <div class="roi-label">
             <strong>Routine Calls %</strong>
@@ -327,7 +412,6 @@
           </div>
         </div>
 
-        <!-- Avg input tokens -->
         <div class="roi-field">
           <div class="roi-label">
             <strong>Avg Input Tokens / Call</strong>
@@ -342,7 +426,6 @@
           </div>
         </div>
 
-        <!-- Avg output tokens -->
         <div class="roi-field">
           <div class="roi-label">
             <strong>Avg Output Tokens / Call</strong>
@@ -357,7 +440,6 @@
           </div>
         </div>
 
-        <!-- Current model tier -->
         <div class="roi-field">
           <div class="roi-label"><strong>Current Model (everything goes here today)</strong></div>
           <select class="roi-select" id="currentTier" onchange="calculate()">
@@ -367,14 +449,14 @@
           </select>
         </div>
 
-        <!-- FAGE plan -->
         <div class="roi-field">
           <div class="roi-label"><strong>FAGE Plan</strong></div>
           <select class="roi-select" id="fagePlan" onchange="calculate()">
-            <option value="499">Starter — $499/month (up to 10K calls)</option>
-            <option value="1499" selected>Business — $1,499/month (up to 50K calls)</option>
-            <option value="4999">Enterprise — $4,999/month (up to 250K calls)</option>
-            <option value="0">Custom / Negotiated — enter cost below</option>
+            <option value="299">Starter — $299/month (up to 10K calls)</option>
+            <option value="599">Growth — $599/month (up to 100K calls)</option>
+            <option value="1499" selected>Business — $1,499/month (up to 500K calls)</option>
+            <option value="4999">Enterprise — $4,999/month (unlimited)</option>
+            <option value="0">Custom / Negotiated</option>
           </select>
         </div>
 
@@ -387,83 +469,206 @@
           </div>
         </div>
 
+        <!-- Compliance-only inputs (visible in compliance tab) -->
+        <div id="complianceInputs" style="display:none">
+          <div style="border-top:1px solid var(--border); margin:16px 0 18px;"></div>
+          <div class="roi-section-title">Compliance Profile</div>
+
+          <div class="roi-field">
+            <div class="roi-label">
+              <strong>% of Calls Containing Sensitive Data</strong>
+              <span id="piiPctDisplay">5%</span>
+            </div>
+            <input type="range" id="piiPct" min="1" max="40" step="1" value="5"
+              oninput="syncInput('piiPct','piiPctNum'); calculate()">
+            <div class="roi-input-row">
+              <input type="number" id="piiPctNum" value="5" min="1" max="40"
+                oninput="syncRange('piiPctNum','piiPct'); calculate()">
+              <span style="font-size:11px; color:var(--text-muted)">% (SSN, credit cards, PHI, legal terms)</span>
+            </div>
+          </div>
+
+          <div class="roi-field">
+            <div class="roi-label"><strong>Regulatory Exposure</strong></div>
+            <div class="compliance-reg-grid">
+              <label class="reg-checkbox">
+                <input type="checkbox" id="regHIPAA" onchange="calculate()"> HIPAA
+              </label>
+              <label class="reg-checkbox">
+                <input type="checkbox" id="regGDPR" onchange="calculate()"> GDPR
+              </label>
+              <label class="reg-checkbox">
+                <input type="checkbox" id="regSOX" onchange="calculate()"> SOX
+              </label>
+              <label class="reg-checkbox">
+                <input type="checkbox" id="regPCI" onchange="calculate()"> PCI-DSS
+              </label>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:6px">Select all that apply to your industry</div>
+          </div>
+
+          <div class="roi-field">
+            <div class="roi-label"><strong>Company Annual Revenue</strong></div>
+            <select class="roi-select" id="companySize" onchange="calculate()">
+              <option value="10">Under $10M</option>
+              <option value="50">$10M – $50M</option>
+              <option value="250" selected>$50M – $500M</option>
+              <option value="2000">$500M – $5B</option>
+              <option value="20000">$5B+</option>
+            </select>
+          </div>
+        </div>
+
       </div>
 
       <!-- ── Right: Results ─────────────────────────────────────────────── -->
       <div>
 
-        <!-- Payback banner -->
-        <div class="roi-payback" id="paybackBanner">
-          <div class="roi-payback-icon">✓</div>
-          <div class="roi-payback-text">
-            <strong id="paybackText">Calculating...</strong>
-            <p id="paybackSub"></p>
+        <!-- Tab switcher -->
+        <div class="tab-bar">
+          <button class="tab-btn active" id="tabCost" onclick="switchTab('cost')">📊 Cost Savings</button>
+          <button class="tab-btn" id="tabCompliance" onclick="switchTab('compliance')">🛡 Compliance Risk</button>
+        </div>
+
+        <!-- ── COST SAVINGS PANEL ─────────────────────────────────────── -->
+        <div id="panelCost">
+
+          <div class="roi-payback" id="paybackBanner">
+            <div class="roi-payback-icon">✓</div>
+            <div class="roi-payback-text">
+              <strong id="paybackText">Calculating...</strong>
+              <p id="paybackSub"></p>
+            </div>
+          </div>
+
+          <div class="roi-result-grid">
+            <div class="roi-result-card">
+              <div class="roi-result-label">Monthly Cost Without FAGE</div>
+              <div class="roi-result-value red" id="costWithout">—</div>
+              <div class="roi-result-sub">Everything at current model</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Monthly Cost With FAGE</div>
+              <div class="roi-result-value green" id="costWith">—</div>
+              <div class="roi-result-sub">Smart routing + FAGE fee</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Monthly Net Savings</div>
+              <div class="roi-result-value green" id="monthlySavings">—</div>
+              <div class="roi-result-sub" id="savingsPct">—</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Annual Net Savings</div>
+              <div class="roi-result-value green" id="annualSavings">—</div>
+              <div class="roi-result-sub">12-month projection</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Cost Per Call (Before)</div>
+              <div class="roi-result-value" id="costPerCallBefore">—</div>
+              <div class="roi-result-sub">Unrouted</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Cost Per Call (After)</div>
+              <div class="roi-result-value green" id="costPerCallAfter">—</div>
+              <div class="roi-result-sub">With routing</div>
+            </div>
+          </div>
+
+          <div class="panel" style="padding:24px; margin-bottom:0">
+            <div class="roi-section-title">Cost Breakdown by Routing Tier</div>
+            <table class="roi-breakdown">
+              <thead>
+                <tr>
+                  <th>Tier</th><th>Calls</th><th>Cost/Call</th><th>Monthly Total</th>
+                </tr>
+              </thead>
+              <tbody id="breakdownBody"></tbody>
+            </table>
+
+            <div class="roi-risk">
+              <div class="roi-risk-title">⚠ Risk Value Not Included Above</div>
+              <ul>
+                <li>HIPAA / PII violation avoided: $50,000–$1.9M per incident</li>
+                <li>Audit-ready AI decision log — no manual reconstruction</li>
+                <li>Agent collision prevention — zero silent data corruption</li>
+                <li>Budget auto-throttle — no surprise end-of-month overruns</li>
+              </ul>
+            </div>
+
+            <div class="roi-export-bar">
+              <button class="btn-secondary" onclick="copyToClipboard()">⎘ Copy Summary</button>
+              <button class="btn-export" onclick="printROI()">↓ Export as PDF</button>
+            </div>
           </div>
         </div>
 
-        <!-- KPI cards -->
-        <div class="roi-result-grid">
-          <div class="roi-result-card">
-            <div class="roi-result-label">Monthly Cost Without FAGE</div>
-            <div class="roi-result-value red" id="costWithout">—</div>
-            <div class="roi-result-sub">Everything at current model</div>
-          </div>
-          <div class="roi-result-card">
-            <div class="roi-result-label">Monthly Cost With FAGE</div>
-            <div class="roi-result-value green" id="costWith">—</div>
-            <div class="roi-result-sub">Smart routing + FAGE fee</div>
-          </div>
-          <div class="roi-result-card">
-            <div class="roi-result-label">Monthly Net Savings</div>
-            <div class="roi-result-value green" id="monthlySavings">—</div>
-            <div class="roi-result-sub" id="savingsPct">—</div>
-          </div>
-          <div class="roi-result-card">
-            <div class="roi-result-label">Annual Net Savings</div>
-            <div class="roi-result-value green" id="annualSavings">—</div>
-            <div class="roi-result-sub">12-month projection</div>
-          </div>
-          <div class="roi-result-card">
-            <div class="roi-result-label">Cost Per Call (Before)</div>
-            <div class="roi-result-value" id="costPerCallBefore">—</div>
-            <div class="roi-result-sub">Unrouted</div>
-          </div>
-          <div class="roi-result-card">
-            <div class="roi-result-label">Cost Per Call (After)</div>
-            <div class="roi-result-value green" id="costPerCallAfter">—</div>
-            <div class="roi-result-sub">With routing</div>
-          </div>
-        </div>
+        <!-- ── COMPLIANCE RISK PANEL ──────────────────────────────────── -->
+        <div id="panelCompliance" style="display:none">
 
-        <!-- Call breakdown table -->
-        <div class="roi-results" id="resultsPanel">
-          <div class="roi-section-title">Cost Breakdown by Routing Tier</div>
-          <table class="roi-breakdown">
-            <thead>
-              <tr>
-                <th>Tier</th>
-                <th>Calls</th>
-                <th>Cost/Call</th>
-                <th>Monthly Total</th>
-              </tr>
-            </thead>
-            <tbody id="breakdownBody"></tbody>
-          </table>
-
-          <!-- Risk callout -->
-          <div class="roi-risk">
-            <div class="roi-risk-title">⚠ Risk Value Not Included Above</div>
-            <ul id="riskList">
-              <li>HIPAA / PII violation avoided: $50,000–$1.9M per incident</li>
-              <li>Audit-ready AI decision log — no manual reconstruction</li>
-              <li>Agent collision prevention — zero silent data corruption</li>
-              <li>Budget auto-throttle — no surprise end-of-month overruns</li>
-            </ul>
+          <!-- Total risk value banner -->
+          <div class="compliance-big-card" id="complianceBigCard">
+            <div class="compliance-big-label">Estimated Annual Compliance Risk Exposure Avoided</div>
+            <div class="compliance-big-value" id="complianceTotalValue">—</div>
+            <div class="compliance-big-sub" id="complianceTotalSub">Select your regulatory exposure on the left to calculate</div>
           </div>
 
-          <div class="roi-export-bar">
-            <button class="btn-secondary" onclick="copyToClipboard()">⎘ Copy Summary</button>
-            <button class="btn-export" onclick="printROI()">↓ Export as PDF</button>
+          <div style="margin-bottom:20px;"></div>
+
+          <!-- 4 compliance KPI cards -->
+          <div class="compliance-result-grid">
+            <div class="roi-result-card">
+              <div class="roi-result-label">Sensitive Calls Blocked / Month</div>
+              <div class="roi-result-value yellow" id="callsBlocked">—</div>
+              <div class="roi-result-sub" id="callsBlockedSub">—</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Incidents Prevented / Year</div>
+              <div class="roi-result-value purple" id="incidentsPrevented">—</div>
+              <div class="roi-result-sub">Est. based on industry averages</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Audit Hours Saved / Year</div>
+              <div class="roi-result-value" id="auditHoursSaved">—</div>
+              <div class="roi-result-sub">Avg $150/hr compliance staff</div>
+            </div>
+            <div class="roi-result-card">
+              <div class="roi-result-label">Audit Cost Saved / Year</div>
+              <div class="roi-result-value green" id="auditCostSaved">—</div>
+              <div class="roi-result-sub">At $150/hr billed rate</div>
+            </div>
+          </div>
+
+          <!-- Value vs fee ratio -->
+          <div class="compliance-ratio">
+            <div class="compliance-ratio-label">Compliance Value vs. FAGE Annual Fee</div>
+            <div class="compliance-ratio-value" id="complianceRatio" style="color:var(--accent-green)">—</div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px" id="complianceRatioSub">For every $1 spent on FAGE, risk exposure avoided</div>
+          </div>
+
+          <!-- Fine breakdown by regulation -->
+          <div class="panel" style="padding:24px; margin-bottom:0">
+            <div class="roi-section-title">Regulatory Fine Exposure Breakdown</div>
+            <div id="fineBreakdown">
+              <div style="font-size:13px; color:var(--text-muted); text-align:center; padding:20px">
+                Select regulatory frameworks on the left to see fine exposure breakdown
+              </div>
+            </div>
+
+            <div class="fine-explainer" id="fineExplainer" style="display:none">
+              <strong>How this is calculated:</strong> Conservative estimates based on publicly reported settlements
+              and regulatory guidance. HIPAA fines use the $100–$50,000 per violation range with a realistic
+              mid-point for notification-level incidents. GDPR uses 2% of annual revenue as a realistic
+              enforcement baseline (max is 4%). PCI-DSS uses $5,000–$100,000 per month of non-compliance.
+              Audit hours assume 2 hrs of compliance staff time per blocked event reconstructed manually.
+              <br><br>
+              <strong>These are not guarantees</strong> — they are the exposure your legal and compliance teams
+              should be discussing with you today.
+            </div>
+
+            <div class="roi-export-bar">
+              <button class="btn-secondary" onclick="copyComplianceSummary()">⎘ Copy Summary</button>
+              <button class="btn-export" onclick="printROI()">↓ Export as PDF</button>
+            </div>
           </div>
         </div>
 
@@ -473,43 +678,65 @@
   </main>
 
   <script>
-    // ── Model rates (per 1M tokens) ────────────────────────────────────────
     const RATES = {
-      scout:      { in: 0.20,  out: 1.25,  label: "Scout — GPT-5.4 Nano",  chip: "chip-scout" },
+      scout:      { in: 0.20,  out: 1.25,  label: "Scout — GPT-5.4 Nano",   chip: "chip-scout" },
       analyst:    { in: 0.75,  out: 4.50,  label: "Analyst — GPT-5.4 Mini", chip: "chip-analyst" },
       advisor:    { in: 2.50,  out: 15.00, label: "Advisor — GPT-5.4",      chip: "chip-advisor" },
       strategist: { in: 5.00,  out: 30.00, label: "Strategist — GPT-5.5",   chip: "chip-strategist" },
     };
 
-    // ── Industry presets ───────────────────────────────────────────────────
     const PRESETS = {
-      insurance:  { calls: 500000, routine: 60, inputTok: 5000,  outputTok: 1000, tier: "advisor" },
-      healthcare: { calls: 200000, routine: 65, inputTok: 4000,  outputTok: 800,  tier: "advisor" },
-      financial:  { calls: 300000, routine: 55, inputTok: 6000,  outputTok: 1500, tier: "strategist" },
-      legal:      { calls: 50000,  routine: 40, inputTok: 10000, outputTok: 2000, tier: "advisor" },
-      retail:     { calls: 400000, routine: 80, inputTok: 1000,  outputTok: 300,  tier: "analyst" },
-      logistics:  { calls: 150000, routine: 70, inputTok: 2000,  outputTok: 500,  tier: "advisor" },
-      saas:       { calls: 100000, routine: 75, inputTok: 1500,  outputTok: 400,  tier: "analyst" },
+      insurance:  { calls: 500000, routine: 60, inputTok: 5000,  outputTok: 1000, tier: "advisor",    pii: 8,  regs: ["HIPAA","PCI"],       size: 250 },
+      healthcare: { calls: 200000, routine: 65, inputTok: 4000,  outputTok: 800,  tier: "advisor",    pii: 12, regs: ["HIPAA","GDPR"],       size: 250 },
+      financial:  { calls: 300000, routine: 55, inputTok: 6000,  outputTok: 1500, tier: "strategist", pii: 10, regs: ["SOX","PCI","GDPR"],   size: 2000 },
+      legal:      { calls: 50000,  routine: 40, inputTok: 10000, outputTok: 2000, tier: "advisor",    pii: 15, regs: ["HIPAA","GDPR"],       size: 50 },
+      retail:     { calls: 400000, routine: 80, inputTok: 1000,  outputTok: 300,  tier: "analyst",    pii: 5,  regs: ["PCI","GDPR"],         size: 250 },
+      logistics:  { calls: 150000, routine: 70, inputTok: 2000,  outputTok: 500,  tier: "advisor",    pii: 4,  regs: ["GDPR"],               size: 50 },
+      saas:       { calls: 100000, routine: 75, inputTok: 1500,  outputTok: 400,  tier: "analyst",    pii: 3,  regs: ["GDPR","SOX"],         size: 50 },
     };
+
+    let activeTab = "cost";
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.getElementById("panelCost").style.display       = tab === "cost" ? "block" : "none";
+      document.getElementById("panelCompliance").style.display = tab === "compliance" ? "block" : "none";
+      document.getElementById("complianceInputs").style.display = tab === "compliance" ? "block" : "none";
+      document.getElementById("tabCost").classList.toggle("active", tab === "cost");
+      document.getElementById("tabCompliance").classList.toggle("active", tab === "compliance");
+      calculate();
+    }
 
     function applyPreset() {
       const industry = document.getElementById("industry").value;
       if (industry === "custom") { calculate(); return; }
       const p = PRESETS[industry];
       if (!p) return;
-      setVal("totalCalls",    p.calls);
-      setVal("totalCallsNum", p.calls);
-      setVal("routinePct",    p.routine);
-      setVal("routinePctNum", p.routine);
-      setVal("inputTokens",   p.inputTok);
-      setVal("inputTokensNum",p.inputTok);
-      setVal("outputTokens",  p.outputTok);
+
+      setVal("totalCalls",     p.calls);
+      setVal("totalCallsNum",  p.calls);
+      setVal("routinePct",     p.routine);
+      setVal("routinePctNum",  p.routine);
+      setVal("inputTokens",    p.inputTok);
+      setVal("inputTokensNum", p.inputTok);
+      setVal("outputTokens",   p.outputTok);
       setVal("outputTokensNum",p.outputTok);
       document.getElementById("currentTier").value = p.tier;
 
-      // Auto-select appropriate FAGE plan
-      const plan = p.calls <= 10000 ? "499" : p.calls <= 50000 ? "1499" : "4999";
+      const plan = p.calls <= 10000 ? "299" : p.calls <= 100000 ? "599" : p.calls <= 500000 ? "1499" : "4999";
       document.getElementById("fagePlan").value = plan;
+
+      // Compliance presets
+      if (p.pii !== undefined) {
+        setVal("piiPct",    p.pii);
+        setVal("piiPctNum", p.pii);
+      }
+      ["HIPAA","GDPR","SOX","PCI"].forEach(r => {
+        const el = document.getElementById("reg" + r);
+        if (el) el.checked = p.regs && p.regs.includes(r);
+      });
+      if (p.size) document.getElementById("companySize").value = p.size;
+
       calculate();
     }
 
@@ -527,10 +754,12 @@
       updateDisplays();
     }
     function updateDisplays() {
-      document.getElementById("callsDisplay").textContent   = Number(document.getElementById("totalCalls").value).toLocaleString();
-      document.getElementById("routineDisplay").textContent = document.getElementById("routinePct").value + "%";
+      document.getElementById("callsDisplay").textContent        = Number(document.getElementById("totalCalls").value).toLocaleString();
+      document.getElementById("routineDisplay").textContent      = document.getElementById("routinePct").value + "%";
       document.getElementById("inputTokensDisplay").textContent  = Number(document.getElementById("inputTokens").value).toLocaleString();
       document.getElementById("outputTokensDisplay").textContent = Number(document.getElementById("outputTokens").value).toLocaleString();
+      const piiEl = document.getElementById("piiPct");
+      if (piiEl) document.getElementById("piiPctDisplay").textContent = piiEl.value + "%";
     }
 
     function costPerCall(tier, inputTok, outputTok) {
@@ -539,39 +768,37 @@
     }
 
     function fmt(n, decimals = 2) {
-      if (n >= 1000000) return "$" + (n / 1000000).toFixed(2) + "M";
-      if (n >= 1000)    return "$" + (n / 1000).toFixed(1) + "K";
-      return "$" + n.toFixed(decimals);
+      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toFixed(2) + "M";
+      if (Math.abs(n) >= 1000)    return "$" + (n / 1000).toFixed(1) + "K";
+      return "$" + Math.abs(n).toFixed(decimals);
     }
 
     function calculate() {
       updateDisplays();
+      calcCostSavings();
+      if (activeTab === "compliance") calcComplianceRisk();
+    }
 
+    function calcCostSavings() {
       const totalCalls  = Number(document.getElementById("totalCalls").value);
       const routinePct  = Number(document.getElementById("routinePct").value) / 100;
       const complexPct  = 1 - routinePct;
       const inputTok    = Number(document.getElementById("inputTokens").value);
       const outputTok   = Number(document.getElementById("outputTokens").value);
       const currentTier = document.getElementById("currentTier").value;
-      const planEl      = document.getElementById("fagePlan");
-      const planVal     = planEl.value;
+      const planVal     = document.getElementById("fagePlan").value;
 
-      // Show/hide custom plan field
-      const customField = document.getElementById("customPlanField");
-      customField.style.display = planVal === "0" ? "block" : "none";
+      document.getElementById("customPlanField").style.display = planVal === "0" ? "block" : "none";
       const fageFee = planVal === "0"
         ? Number(document.getElementById("customPlanCost").value) || 0
         : Number(planVal);
 
-      // ── Without FAGE: everything at current tier ───────────────────────
       const cpcBefore    = costPerCall(currentTier, inputTok, outputTok);
       const costWithout  = cpcBefore * totalCalls;
 
-      // ── With FAGE routing ──────────────────────────────────────────────
-      // Routine → Scout, Complex → current tier (FAGE doesn't downgrade complex calls)
       const routineCalls  = Math.round(totalCalls * routinePct);
       const complexCalls  = totalCalls - routineCalls;
-      const routineCost   = costPerCall("scout",   inputTok, outputTok) * routineCalls;
+      const routineCost   = costPerCall("scout", inputTok, outputTok) * routineCalls;
       const complexCost   = costPerCall(currentTier, inputTok, outputTok) * complexCalls;
       const aiCostWith    = routineCost + complexCost;
       const totalCostWith = aiCostWith + fageFee;
@@ -580,47 +807,38 @@
       const annualSavings  = monthlySavings * 12;
       const savingsPct     = costWithout > 0 ? (monthlySavings / costWithout * 100) : 0;
       const cpcAfter       = totalCalls > 0 ? totalCostWith / totalCalls : 0;
+      const paybackMonths  = fageFee > 0 && monthlySavings > 0 ? (fageFee / monthlySavings).toFixed(1) : null;
 
-      // Payback
-      const paybackMonths = fageFee > 0 && monthlySavings > 0
-        ? (fageFee / monthlySavings).toFixed(1)
-        : null;
-
-      // ── Update KPI cards ───────────────────────────────────────────────
-      document.getElementById("costWithout").textContent      = fmt(costWithout);
-      document.getElementById("costWith").textContent         = fmt(totalCostWith);
-      document.getElementById("monthlySavings").textContent   = monthlySavings >= 0 ? fmt(monthlySavings) : "-" + fmt(Math.abs(monthlySavings));
-      document.getElementById("annualSavings").textContent    = annualSavings >= 0 ? fmt(annualSavings) : "-" + fmt(Math.abs(annualSavings));
-      document.getElementById("savingsPct").textContent       = savingsPct.toFixed(1) + "% reduction in AI spend";
+      document.getElementById("costWithout").textContent       = fmt(costWithout);
+      document.getElementById("costWith").textContent          = fmt(totalCostWith);
+      document.getElementById("monthlySavings").textContent    = (monthlySavings >= 0 ? "" : "-") + fmt(Math.abs(monthlySavings));
+      document.getElementById("annualSavings").textContent     = (annualSavings  >= 0 ? "" : "-") + fmt(Math.abs(annualSavings));
+      document.getElementById("savingsPct").textContent        = savingsPct.toFixed(1) + "% reduction in AI spend";
       document.getElementById("costPerCallBefore").textContent = "$" + cpcBefore.toFixed(5);
       document.getElementById("costPerCallAfter").textContent  = "$" + cpcAfter.toFixed(5);
 
-      // Color savings
-      const savingsEl = document.getElementById("monthlySavings");
-      const annualEl  = document.getElementById("annualSavings");
-      savingsEl.className = "roi-result-value " + (monthlySavings >= 0 ? "green" : "red");
-      annualEl.className  = "roi-result-value " + (annualSavings  >= 0 ? "green" : "red");
+      document.getElementById("monthlySavings").className = "roi-result-value " + (monthlySavings >= 0 ? "green" : "red");
+      document.getElementById("annualSavings").className  = "roi-result-value " + (annualSavings  >= 0 ? "green" : "red");
 
-      // ── Payback banner ─────────────────────────────────────────────────
-      const banner = document.getElementById("paybackBanner");
+      const banner      = document.getElementById("paybackBanner");
       const paybackText = document.getElementById("paybackText");
       const paybackSub  = document.getElementById("paybackSub");
       if (monthlySavings <= 0) {
-        banner.style.background = "#1a0505";
+        banner.style.background  = "#1a0505";
         banner.style.borderColor = "var(--accent-red)";
         document.querySelector(".roi-payback-icon").textContent = "⚠";
         paybackText.style.color = "var(--accent-red)";
         paybackText.textContent = "FAGE cost exceeds routing savings at this volume";
         paybackSub.textContent  = "Consider a lower plan tier, or your call volume may be too low for routing savings to offset the fee.";
       } else if (paybackMonths && paybackMonths < 1) {
-        banner.style.background = "#0d2d1a";
+        banner.style.background  = "#0d2d1a";
         banner.style.borderColor = "var(--accent-green)";
         document.querySelector(".roi-payback-icon").textContent = "✓";
         paybackText.style.color = "var(--accent-green)";
         paybackText.textContent = "FAGE pays for itself immediately";
-        paybackSub.textContent  = `Routing savings exceed the FAGE fee from day one — net positive from the first call.`;
+        paybackSub.textContent  = "Routing savings exceed the FAGE fee from day one.";
       } else if (paybackMonths) {
-        banner.style.background = "#0d2d1a";
+        banner.style.background  = "#0d2d1a";
         banner.style.borderColor = "var(--accent-green)";
         document.querySelector(".roi-payback-icon").textContent = "✓";
         paybackText.style.color = "var(--accent-green)";
@@ -628,41 +846,31 @@
         paybackSub.textContent  = `After that, every month is ${fmt(monthlySavings)} back in your budget.`;
       }
 
-      // ── Breakdown table ────────────────────────────────────────────────
       const tbody = document.getElementById("breakdownBody");
-      const currentLabel = RATES[currentTier].label;
-      const currentChip  = RATES[currentTier].chip;
-
       tbody.innerHTML = `
         <tr>
-          <td>
-            <span class="tier-chip chip-scout">Scout</span>
-            <span style="font-size:11px; color:var(--text-muted)"> Routine calls</span>
-          </td>
+          <td><span class="tier-chip chip-scout">Scout</span><span style="font-size:11px;color:var(--text-muted)"> Routine calls</span></td>
           <td>${routineCalls.toLocaleString()} <span style="color:var(--text-muted)">(${(routinePct*100).toFixed(0)}%)</span></td>
-          <td style="font-family:var(--font-mono)">$${costPerCall("scout", inputTok, outputTok).toFixed(5)}</td>
-          <td style="font-family:var(--font-mono); color:var(--accent-green)">${fmt(routineCost)}</td>
+          <td style="font-family:var(--font-mono)">$${costPerCall("scout",inputTok,outputTok).toFixed(5)}</td>
+          <td style="font-family:var(--font-mono);color:var(--accent-green)">${fmt(routineCost)}</td>
         </tr>
         <tr>
-          <td>
-            <span class="tier-chip ${currentChip}">${RATES[currentTier].label.split("—")[0].trim()}</span>
-            <span style="font-size:11px; color:var(--text-muted)"> Complex calls</span>
-          </td>
+          <td><span class="tier-chip ${RATES[currentTier].chip}">${RATES[currentTier].label.split("—")[0].trim()}</span><span style="font-size:11px;color:var(--text-muted)"> Complex calls</span></td>
           <td>${complexCalls.toLocaleString()} <span style="color:var(--text-muted)">(${(complexPct*100).toFixed(0)}%)</span></td>
-          <td style="font-family:var(--font-mono)">$${costPerCall(currentTier, inputTok, outputTok).toFixed(5)}</td>
+          <td style="font-family:var(--font-mono)">$${costPerCall(currentTier,inputTok,outputTok).toFixed(5)}</td>
           <td style="font-family:var(--font-mono)">${fmt(complexCost)}</td>
         </tr>
         <tr>
-          <td colspan="3" style="color:var(--text-muted); font-size:11px">FAGE Platform Fee</td>
-          <td style="font-family:var(--font-mono); color:var(--text-muted)">${fmt(fageFee)}</td>
+          <td colspan="3" style="color:var(--text-muted);font-size:11px">FAGE Platform Fee</td>
+          <td style="font-family:var(--font-mono);color:var(--text-muted)">${fmt(fageFee)}</td>
         </tr>
         <tr class="total-row">
           <td colspan="3">Total Monthly Cost With FAGE</td>
           <td style="font-family:var(--font-mono)">${fmt(totalCostWith)}</td>
         </tr>
         <tr class="total-row" style="color:var(--text-muted)">
-          <td colspan="3" style="font-weight:400; color:var(--text-muted)">Total Monthly Cost Without FAGE</td>
-          <td style="font-family:var(--font-mono); color:var(--accent-red)">${fmt(costWithout)}</td>
+          <td colspan="3" style="font-weight:400;color:var(--text-muted)">Total Monthly Cost Without FAGE</td>
+          <td style="font-family:var(--font-mono);color:var(--accent-red)">${fmt(costWithout)}</td>
         </tr>
         <tr class="savings-row">
           <td colspan="3">💰 Net Monthly Savings</td>
@@ -670,7 +878,6 @@
         </tr>
       `;
 
-      // Store for export
       window._roiData = {
         totalCalls, routineCalls, complexCalls, routinePct, inputTok, outputTok,
         currentTier, costWithout, totalCostWith, monthlySavings, annualSavings,
@@ -678,10 +885,158 @@
       };
     }
 
+    function calcComplianceRisk() {
+      const totalCalls = Number(document.getElementById("totalCalls").value);
+      const piiPct     = Number(document.getElementById("piiPct").value) / 100;
+      const planVal    = document.getElementById("fagePlan").value;
+      const fageFee    = planVal === "0"
+        ? Number(document.getElementById("customPlanCost").value) || 0
+        : Number(planVal);
+      const revenueM   = Number(document.getElementById("companySize").value); // millions
+
+      const hasHIPAA = document.getElementById("regHIPAA").checked;
+      const hasGDPR  = document.getElementById("regGDPR").checked;
+      const hasSOX   = document.getElementById("regSOX").checked;
+      const hasPCI   = document.getElementById("regPCI").checked;
+      const anyReg   = hasHIPAA || hasGDPR || hasSOX || hasPCI;
+
+      // Sensitive calls blocked per month
+      const callsBlockedMo = Math.round(totalCalls * piiPct);
+      const callsBlockedYr = callsBlockedMo * 12;
+
+      // Incidents prevented per year
+      // Conservative: 1 reportable incident per 500 blocked calls
+      const incidentsPrevented = Math.max(1, Math.round(callsBlockedYr / 500));
+
+      // Audit hours: 2 hrs manual work per blocked call to reconstruct without FAGE
+      const auditHoursYr  = callsBlockedYr * 2;
+      const auditCostYr   = auditHoursYr * 150;
+
+      // Fine calculations by regulation
+      let fineRows = [];
+      let totalFineExposure = 0;
+
+      if (hasHIPAA) {
+        // $10,000 realistic per-incident penalty (mid-range, notification-level)
+        const hipaaFine = incidentsPrevented * 10000;
+        totalFineExposure += hipaaFine;
+        fineRows.push({ reg: "HIPAA", basis: `${incidentsPrevented} incidents × $10,000 avg fine`, value: hipaaFine, color: "var(--accent-red)" });
+      }
+      if (hasGDPR) {
+        // 2% of annual revenue as realistic enforcement baseline
+        const gdprFine = revenueM * 1000000 * 0.02 * Math.min(incidentsPrevented, 3);
+        totalFineExposure += gdprFine;
+        fineRows.push({ reg: "GDPR", basis: `2% annual revenue × up to 3 incidents`, value: gdprFine, color: "var(--accent-yellow)" });
+      }
+      if (hasSOX) {
+        // $500K per material misstatement incident related to AI decisions
+        const soxFine = incidentsPrevented * 500000;
+        totalFineExposure += soxFine;
+        fineRows.push({ reg: "SOX", basis: `${incidentsPrevented} incidents × $500K avg`, value: soxFine, color: "var(--accent-purple)" });
+      }
+      if (hasPCI) {
+        // $5,000–$100,000/month non-compliance; use $25K/month if incident detected
+        const pciFine = 25000 * Math.min(incidentsPrevented * 2, 12);
+        totalFineExposure += pciFine;
+        fineRows.push({ reg: "PCI-DSS", basis: `$25K/month × months of exposure`, value: pciFine, color: "var(--accent)" });
+      }
+
+      const totalAnnualValue = totalFineExposure + auditCostYr;
+      const fageAnnualCost   = fageFee * 12;
+      const ratio = fageAnnualCost > 0 ? (totalAnnualValue / fageAnnualCost).toFixed(0) : "∞";
+
+      // Update KPI cards
+      document.getElementById("callsBlocked").textContent      = callsBlockedMo.toLocaleString();
+      document.getElementById("callsBlockedSub").textContent   = `${callsBlockedYr.toLocaleString()} per year at ${(piiPct*100).toFixed(0)}% of calls`;
+      document.getElementById("incidentsPrevented").textContent = incidentsPrevented.toLocaleString();
+      document.getElementById("auditHoursSaved").textContent   = auditHoursYr.toLocaleString();
+      document.getElementById("auditCostSaved").textContent    = fmt(auditCostYr);
+
+      // Big card
+      const bigCard = document.getElementById("complianceBigCard");
+      const bigVal  = document.getElementById("complianceTotalValue");
+      const bigSub  = document.getElementById("complianceTotalSub");
+
+      if (!anyReg) {
+        bigCard.style.borderColor = "var(--border)";
+        bigCard.style.background  = "var(--bg-panel)";
+        bigVal.style.color        = "var(--text-muted)";
+        bigVal.textContent = fmt(auditCostYr);
+        bigSub.textContent = "Audit cost savings only — select regulatory frameworks to include fine exposure";
+      } else {
+        bigCard.style.borderColor = "var(--accent-green)";
+        bigCard.style.background  = "#0a1f0f";
+        bigVal.style.color        = "var(--accent-green)";
+        bigVal.textContent = fmt(totalAnnualValue);
+        bigSub.textContent = `Fine exposure avoided + audit savings vs. $${(fageAnnualCost/1000).toFixed(0)}K/year FAGE cost`;
+      }
+
+      // Ratio
+      const ratioEl  = document.getElementById("complianceRatio");
+      const ratioSub = document.getElementById("complianceRatioSub");
+      if (!anyReg) {
+        ratioEl.textContent = "—";
+        ratioEl.style.color = "var(--text-muted)";
+        ratioSub.textContent = "Select regulatory frameworks to calculate";
+      } else {
+        ratioEl.textContent = ratio + "x";
+        ratioEl.style.color = Number(ratio) >= 5 ? "var(--accent-green)" : Number(ratio) >= 2 ? "var(--accent-yellow)" : "var(--accent-red)";
+        ratioSub.textContent = `For every $1 spent on FAGE, $${ratio} of regulatory risk avoided`;
+      }
+
+      // Fine breakdown table
+      const breakdownEl = document.getElementById("fineBreakdown");
+      const explainerEl = document.getElementById("fineExplainer");
+      if (!anyReg) {
+        breakdownEl.innerHTML = `<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:20px">Select regulatory frameworks on the left to see fine exposure breakdown</div>`;
+        explainerEl.style.display = "none";
+      } else {
+        explainerEl.style.display = "block";
+        let rows = fineRows.map(r => `
+          <div class="compliance-breakdown-row">
+            <div>
+              <span style="font-weight:700;color:${r.color}">${r.reg}</span>
+              <div class="compliance-breakdown-label">${r.basis}</div>
+            </div>
+            <div class="compliance-breakdown-value" style="color:${r.color}">${fmt(r.value)}</div>
+          </div>
+        `).join("");
+
+        rows += `
+          <div class="compliance-breakdown-row">
+            <div>
+              <span style="font-weight:700;color:var(--text-primary)">Audit Reconstruction Cost</span>
+              <div class="compliance-breakdown-label">${auditHoursYr.toLocaleString()} hrs × $150/hr compliance staff</div>
+            </div>
+            <div class="compliance-breakdown-value">${fmt(auditCostYr)}</div>
+          </div>
+          <div class="compliance-breakdown-row" style="border-top:2px solid var(--accent-green);margin-top:8px">
+            <div style="font-weight:700;font-size:14px;color:var(--accent-green)">Total Annual Risk Exposure Avoided</div>
+            <div class="compliance-breakdown-value" style="color:var(--accent-green);font-size:16px">${fmt(totalAnnualValue)}</div>
+          </div>
+          <div class="compliance-breakdown-row">
+            <div style="color:var(--text-muted)">FAGE Annual Cost</div>
+            <div class="compliance-breakdown-value" style="color:var(--text-muted)">${fmt(fageAnnualCost)}</div>
+          </div>
+          <div class="compliance-breakdown-row">
+            <div style="font-weight:700;color:var(--accent-green)">Net Compliance Value</div>
+            <div class="compliance-breakdown-value" style="color:var(--accent-green)">${fmt(totalAnnualValue - fageAnnualCost)}</div>
+          </div>
+        `;
+        breakdownEl.innerHTML = rows;
+      }
+
+      window._complianceData = {
+        callsBlockedMo, callsBlockedYr, incidentsPrevented, auditHoursYr,
+        auditCostYr, totalFineExposure, totalAnnualValue, fageAnnualCost,
+        ratio, hasHIPAA, hasGDPR, hasSOX, hasPCI
+      };
+    }
+
     function copyToClipboard() {
       const d = window._roiData;
       if (!d) return;
-      const text = `FAGE ROI Summary
+      const text = `FAGE ROI Summary — Cost Savings
 Generated: ${new Date().toLocaleDateString()}
 
 Monthly AI Calls: ${d.totalCalls.toLocaleString()}
@@ -690,14 +1045,12 @@ Avg Tokens: ${d.inputTok.toLocaleString()} in / ${d.outputTok.toLocaleString()} 
 
 Cost Without FAGE: $${d.costWithout.toFixed(2)}/month
 Cost With FAGE:    $${d.totalCostWith.toFixed(2)}/month (includes $${d.fageFee}/month FAGE fee)
-
 Net Monthly Savings: $${d.monthlySavings.toFixed(2)}
 Net Annual Savings:  $${d.annualSavings.toFixed(2)}
 Cost Reduction:      ${d.savingsPct.toFixed(1)}%
-${d.paybackMonths ? `Payback Period:      ${d.paybackMonths} months` : ""}
+${d.paybackMonths ? "Payback Period:      " + d.paybackMonths + " months" : ""}
 
-Risk value not included: HIPAA violations ($50K-$1.9M/incident), audit readiness, agent collision prevention.`;
-
+Risk value not included: HIPAA violations ($50K–$1.9M/incident), audit readiness, agent collision prevention.`;
       navigator.clipboard.writeText(text).then(() => {
         const btn = event.target;
         btn.textContent = "✓ Copied!";
@@ -705,11 +1058,32 @@ Risk value not included: HIPAA violations ($50K-$1.9M/incident), audit readiness
       });
     }
 
-    function printROI() {
-      window.print();
+    function copyComplianceSummary() {
+      const d = window._complianceData;
+      if (!d) return;
+      const regs = [d.hasHIPAA && "HIPAA", d.hasGDPR && "GDPR", d.hasSOX && "SOX", d.hasPCI && "PCI-DSS"].filter(Boolean).join(", ") || "None selected";
+      const text = `FAGE ROI Summary — Compliance Risk
+Generated: ${new Date().toLocaleDateString()}
+
+Regulatory Frameworks: ${regs}
+Sensitive Calls Blocked/Month: ${d.callsBlockedMo.toLocaleString()}
+Incidents Prevented/Year: ${d.incidentsPrevented.toLocaleString()}
+Audit Hours Saved/Year: ${d.auditHoursYr.toLocaleString()} hrs ($${d.auditCostYr.toFixed(0)})
+
+Regulatory Fine Exposure Avoided: $${d.totalFineExposure.toFixed(0)}/year
+Total Annual Compliance Value: $${d.totalAnnualValue.toFixed(0)}
+FAGE Annual Cost: $${d.fageAnnualCost.toFixed(0)}
+Net Compliance Value: $${(d.totalAnnualValue - d.fageAnnualCost).toFixed(0)}
+Return Ratio: ${d.ratio}x — for every $1 spent on FAGE, $${d.ratio} of risk avoided`;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        btn.textContent = "✓ Copied!";
+        setTimeout(() => btn.textContent = "⎘ Copy Summary", 2000);
+      });
     }
 
-    // Init
+    function printROI() { window.print(); }
+
     calculate();
   </script>
 
