@@ -10,7 +10,11 @@ let openRationaleId = null;
 async function loadAuditLog() {
   try {
     const events = await apiGet("/api/audit?limit=20");
-    renderAuditTable(events);
+    auditAllEvents = events;
+    const toRender = auditFilterBlocked
+      ? events.filter(e => (e.decision_outcome || "").toLowerCase().includes("blocked"))
+      : events;
+    renderAuditTable(toRender);
     updateBlockedBanner(events);
     // Restore open row and re-fetch its content after re-render
     if (openRationaleId) {
@@ -53,9 +57,21 @@ function updateBlockedBanner(events) {
   subEl.textContent   = "Sensitive data was detected and stopped before reaching any AI model. Review the audit log below.";
 }
 
-function scrollToAudit() {
-  const panel = document.getElementById("auditPanel");
-  if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+let auditFilterBlocked = false;
+let auditAllEvents = [];
+
+function toggleBlockedFilter() {
+  auditFilterBlocked = !auditFilterBlocked;
+  const btn = document.querySelector(".blocked-banner-btn");
+  if (btn) btn.textContent = auditFilterBlocked ? "Show All Events" : "Review Blocked Events ↓";
+
+  const indicator = document.getElementById("auditFilterIndicator");
+  if (indicator) indicator.style.display = auditFilterBlocked ? "inline-block" : "none";
+
+  const filtered = auditFilterBlocked
+    ? auditAllEvents.filter(e => (e.decision_outcome || "").toLowerCase().includes("blocked"))
+    : auditAllEvents;
+  renderAuditTable(filtered);
 }
 
 function renderAuditTable(events) {

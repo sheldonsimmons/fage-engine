@@ -392,7 +392,7 @@
           <strong id="blockedBannerCount"></strong>
           <span id="blockedBannerSub"></span>
         </div>
-        <button class="blocked-banner-btn" onclick="scrollToAudit()">Review Blocked Events ↓</button>
+        <button class="blocked-banner-btn" onclick="toggleBlockedFilter()">Review Blocked Events ↓</button>
       </div>
     </div>
 
@@ -400,6 +400,7 @@
     <section class="panel full-width" id="auditPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('auditBody', 'auditChevron')">
         AI Decision Audit Log
+        <span id="auditFilterIndicator" style="display:none; font-size:10px; font-weight:600; letter-spacing:0.06em; background:#2d0505; color:var(--accent-red); border:1px solid var(--accent-red); border-radius:4px; padding:2px 8px; margin-left:8px; vertical-align:middle;">BLOCKED ONLY</span>
         <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation(); showHelp('auditPanel')">?</span>
         <span class="panel-chevron" id="auditChevron">▾</span>
       </h2>
