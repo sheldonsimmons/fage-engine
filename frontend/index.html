@@ -94,6 +94,14 @@
     </section>
 
     <!-- Row 2: Budget Bars + Agent Table -->
+    <section class="panel full-width" style="padding-bottom:0">
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('midRowBody','midRowChevron')">
+        Department Budgets &amp; Agent Registry
+        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="midRowSummary"></span>
+        <span class="panel-chevron" id="midRowChevron">▸</span>
+      </h2>
+    </section>
+    <div id="midRowBody" style="display:none">
     <section class="mid-row">
 
       <div class="panel" id="budgetPanel">
@@ -219,15 +227,16 @@
       </div>
 
     </section>
+    </div><!-- end midRowBody -->
 
     <!-- Row 3: Pruner Test Panel -->
     <section class="panel full-width" id="prunerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('prunerBody', 'prunerChevron')">
         Context-Pruning Sweeper — Live Test
         <span class="help-icon" data-help="prunerPanel" onclick="event.stopPropagation(); showHelp('prunerPanel')">?</span>
-        <span class="panel-chevron" id="prunerChevron">▾</span>
+        <span class="panel-chevron" id="prunerChevron">▸</span>
       </h2>
-      <div id="prunerBody">
+      <div id="prunerBody" style="display:none">
       <div class="pruner-grid">
         <div>
           <label class="field-label">Raw Input Payload</label>
@@ -250,9 +259,9 @@
       <h2 class="panel-title collapsible-title" onclick="togglePanel('routerBody', 'routerChevron')">
         Token Router &amp; Model Cascader — Live Test
         <span class="help-icon" data-help="routerPanel" onclick="event.stopPropagation(); showHelp('routerPanel')">?</span>
-        <span class="panel-chevron" id="routerChevron">▾</span>
+        <span class="panel-chevron" id="routerChevron">▸</span>
       </h2>
-      <div id="routerBody">
+      <div id="routerBody" style="display:none">
       <div class="router-controls">
         <div class="router-input-group">
           <label class="field-label">Payload to Route</label>
@@ -389,9 +398,10 @@
     <section class="panel full-width" id="voiceGuardPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('voiceGuardBody', 'voiceGuardChevron')">
         🎙 Voice Guard — PII Redaction
-        <span class="panel-chevron" id="voiceGuardChevron">▾</span>
+        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="vg-header-summary"></span>
+        <span class="panel-chevron" id="voiceGuardChevron">▸</span>
       </h2>
-      <div id="voiceGuardBody">
+      <div id="voiceGuardBody" style="display:none">
         <div class="kpi-row" style="margin-bottom:16px">
           <div class="kpi-card">
             <div class="kpi-label">Calls Processed Today</div>
@@ -440,6 +450,15 @@
             <div id="vgMeta" style="font-size:11px; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap"></div>
           </div>
         </div>
+
+        <!-- Clear Data -->
+        <div style="display:flex; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--border)">
+          <button onclick="clearVoiceGuardData()"
+            style="background:transparent;color:var(--accent-red);border:1px solid var(--accent-red);border-radius:6px;padding:6px 16px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:0.04em">
+            ✕ Clear Voice Guard Data
+          </button>
+        </div>
+
       </div>
     </section>
 
@@ -461,9 +480,9 @@
         AI Decision Audit Log
         <span id="auditFilterIndicator" style="display:none; font-size:10px; font-weight:600; letter-spacing:0.06em; background:#2d0505; color:var(--accent-red); border:1px solid var(--accent-red); border-radius:4px; padding:2px 8px; margin-left:8px; vertical-align:middle;">BLOCKED ONLY</span>
         <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation(); showHelp('auditPanel')">?</span>
-        <span class="panel-chevron" id="auditChevron">▾</span>
+        <span class="panel-chevron" id="auditChevron">▸</span>
       </h2>
-      <div id="auditBody">
+      <div id="auditBody" style="display:none">
       <table class="audit-table">
         <thead>
           <tr>

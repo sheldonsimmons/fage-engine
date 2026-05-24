@@ -171,16 +171,45 @@ async function resetDemoData() {
   }
 }
 
-// ── Collapsible panels ────────────────────────────────────────────────────────
+// ── Collapsible panels (with localStorage persistence) ────────────────────────
 function togglePanel(bodyId, chevronId) {
   const body    = document.getElementById(bodyId);
   const chevron = document.getElementById(chevronId);
   const open    = body.style.display !== "none";
   body.style.display  = open ? "none" : "";
   chevron.textContent = open ? "▸" : "▾";
+  try { localStorage.setItem("panel_" + bodyId, open ? "closed" : "open"); } catch(e) {}
+}
+
+// Restore panel states from localStorage on load
+function restorePanelStates() {
+  const panels = [
+    ["prunerBody",      "prunerChevron"],
+    ["routerBody",      "routerChevron"],
+    ["keywordsBody",    "keywordsChevron"],
+    ["auditBody",       "auditChevron"],
+    ["voiceGuardBody",  "voiceGuardChevron"],
+    ["midRowBody",      "midRowChevron"],
+  ];
+  panels.forEach(([bodyId, chevronId]) => {
+    const body    = document.getElementById(bodyId);
+    const chevron = document.getElementById(chevronId);
+    if (!body || !chevron) return;
+    try {
+      const saved = localStorage.getItem("panel_" + bodyId);
+      // Default: all closed unless localStorage says open
+      const shouldOpen = saved === "open";
+      body.style.display  = shouldOpen ? "" : "none";
+      chevron.textContent = shouldOpen ? "▾" : "▸";
+    } catch(e) {
+      body.style.display  = "none";
+      chevron.textContent = "▸";
+    }
+  });
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
+restorePanelStates();
 checkHealth();
 loadDashboard();
 

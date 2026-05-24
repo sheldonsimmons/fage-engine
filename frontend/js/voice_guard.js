@@ -23,6 +23,16 @@ async function loadVoiceStats() {
       ? (data.avg_confidence * 100).toFixed(1) + "%"
       : "—";
 
+    // Update collapsed header summary
+    const summaryEl = document.getElementById("vg-header-summary");
+    if (summaryEl) {
+      const piiToday = data.redactions_today || 0;
+      const conf     = data.avg_confidence ? (data.avg_confidence * 100).toFixed(1) + "%" : "—";
+      summaryEl.textContent = piiToday
+        ? `${piiToday} PII event${piiToday !== 1 ? "s" : ""} today · ${conf} confidence`
+        : "No events today";
+    }
+
     // Presidio status badge
     const presidioActive = data.presidio_active;
     const chipEl = document.getElementById("vg-pii-breakdown");
@@ -137,6 +147,22 @@ async function testVoiceGuard() {
   } catch (e) {
     statusEl.textContent = "Error: " + e.message;
     statusEl.style.color = "var(--accent-red)";
+  }
+}
+
+async function clearVoiceGuardData() {
+  if (!confirm("Clear all Voice Guard data? This cannot be undone.")) return;
+  try {
+    const res = await fetch("/api/voice/events", { method: "DELETE" });
+    const data = await res.json();
+    if (data.status === "ok") {
+      document.getElementById("vgResult").style.display = "none";
+      document.getElementById("vgStatus").textContent = `✓ Cleared ${data.deleted} event${data.deleted !== 1 ? "s" : ""}`;
+      document.getElementById("vgStatus").style.color = "var(--accent-green)";
+      loadVoiceStats();
+    }
+  } catch (e) {
+    alert("Failed to clear data: " + e.message);
   }
 }
 

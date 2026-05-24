@@ -169,6 +169,16 @@ def get_voice_stats(db: Session = Depends(get_db)):
     }
 
 
+# ── DELETE /api/voice/events ─────────────────────────────────────────────────
+
+@router.delete("/events")
+def clear_voice_events(db: Session = Depends(get_db)):
+    """Clear all Voice Guard event data (dashboard reset)."""
+    deleted = db.query(VoiceEvent).delete()
+    db.commit()
+    return {"deleted": deleted, "status": "ok"}
+
+
 # ── GET /api/voice/events ─────────────────────────────────────────────────────
 
 @router.get("/events")
