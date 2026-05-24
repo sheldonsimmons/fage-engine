@@ -23,12 +23,13 @@ router = APIRouter()
 
 
 class RouteRequest(BaseModel):
-    text:            str
-    department:      str  = "Support"
-    auto_prune:      bool = True
-    agent_id:        Optional[int] = None
-    agent_name:      Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
-    source_platform: Optional[str] = None   # e.g. "Salesforce" — inferred from agent name if omitted
+    text:                   str
+    department:             str  = "Support"
+    auto_prune:             bool = True
+    agent_id:               Optional[int] = None
+    agent_name:             Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
+    source_platform:        Optional[str] = None   # e.g. "Salesforce" — inferred from agent name if omitted
+    voice_guard_processed:  bool = False           # True = Voice Guard already redacted PII numbers, skip PII keyword block
 
 
 class RouteResponse(BaseModel):
@@ -71,7 +72,10 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     is_throttled = budget.throttled if budget else False
 
     # ── Sensitive term check ───────────────────────────────────────────────────
-    term_result = check_terms(db, req.text, req.department)
+    # If Voice Guard already processed this transcript, skip PII category terms —
+    # the actual numbers are already redacted; only context words remain.
+    term_result = check_terms(db, req.text, req.department,
+                              skip_pii=req.voice_guard_processed)
     if term_result["triggered"] and term_result["action"] == "block":
         # Write audit event and reject immediately
         write_audit_event(

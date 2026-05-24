@@ -100,12 +100,17 @@ def seed_defaults(db: Session):
         db.commit()
 
 
-def check_terms(db: Session, text: str, department: str = None) -> dict:
+def check_terms(db: Session, text: str, department: str = None,
+                skip_pii: bool = False) -> dict:
     """
     Scan text against all sensitive terms and PII patterns.
     Returns the highest-priority match and full list of all matches.
 
     Action priority: block > escalate > flag
+
+    skip_pii: when True, skip category='pii' terms and PII regex patterns.
+    Use this when the request was already processed by Voice Guard — the
+    actual PII numbers are gone; only conversation context words remain.
     """
     seed_defaults(db)
 
@@ -119,6 +124,8 @@ def check_terms(db: Session, text: str, department: str = None) -> dict:
         (SensitiveTerm.department == department)
     )
     for t in query.all():
+        if skip_pii and t.category == "pii":
+            continue   # Voice Guard already handled PII — don't block on context words
         if t.term.lower() in text_lower:
             matches.append({
                 "id":         t.id,
@@ -129,19 +136,20 @@ def check_terms(db: Session, text: str, department: str = None) -> dict:
             })
 
     # ── PII regex pattern matches ─────────────────────────────────────────────
-    for p in PII_PATTERNS:
-        hit = p["pattern"].search(text)
-        if hit:
-            # Redact the matched value in the term label for safety
-            matched_val = hit.group(0)
-            redacted    = matched_val[:4] + "*" * max(0, len(matched_val) - 4)
-            matches.append({
-                "id":         None,
-                "term":       f"{p['name']} detected ({redacted})",
-                "category":   p["category"],
-                "action":     p["action"],
-                "department": None,
-            })
+    # Skip regex scan when Voice Guard already ran — [REDACTED-X] tags won't match anyway
+    if not skip_pii:
+        for p in PII_PATTERNS:
+            hit = p["pattern"].search(text)
+            if hit:
+                matched_val = hit.group(0)
+                redacted    = matched_val[:4] + "*" * max(0, len(matched_val) - 4)
+                matches.append({
+                    "id":         None,
+                    "term":       f"{p['name']} detected ({redacted})",
+                    "category":   p["category"],
+                    "action":     p["action"],
+                    "department": None,
+                })
 
     if not matches:
         return {"triggered": False, "action": None, "matches": []}
