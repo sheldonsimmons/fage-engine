@@ -191,6 +191,32 @@ async function toggleRationale(eventId) {
   await fetchRationaleContent(eventId);
 }
 
+// ── Export functions ──────────────────────────────────────────────────────────
+
+function exportAuditCsv() {
+  if (!auditAllEvents.length) { alert("No audit events to export."); return; }
+  const fmtTs = iso => iso
+    ? new Date(iso + "Z").toLocaleString("en-US", { timeZone: "America/Chicago", hour12: true })
+    : "";
+  const headers = ["Timestamp", "Event Type", "Department", "Model Tier", "Risk Level", "Decision Outcome", "Cost USD", "Matched Keywords"];
+  const rows = auditAllEvents.map(e => [
+    fmtTs(e.timestamp),
+    e.event_type,
+    e.department,
+    e.model_tier || "",
+    e.risk_level || "",
+    e.decision_outcome || "",
+    e.cost_usd != null ? e.cost_usd.toFixed(6) : "",
+    (e.matched_keywords || []).join("; "),
+  ]);
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCsv(`fage_audit_log_${date}.csv`, headers, rows);
+}
+
+function exportAuditPdf() {
+  printSection("auditBody", "FAGE — AI Decision Audit Log");
+}
+
 // Load on page ready, refresh every 15 seconds
 loadAuditLog();
 setInterval(loadAuditLog, 15000);

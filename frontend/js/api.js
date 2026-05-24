@@ -71,3 +71,51 @@ async function apiDelete(path) {
   if (!response.ok) throw new Error(`DELETE ${path} failed: ${response.status}`);
   return response.json();
 }
+
+// ── Export utilities (shared across all pages) ────────────────────────────────
+
+/**
+ * Download an array of objects as a CSV file.
+ * @param {string}   filename  - e.g. "fage_audit.csv"
+ * @param {string[]} headers   - column header labels
+ * @param {Array}    rows      - array of arrays (each inner array = one row of values)
+ */
+function downloadCsv(filename, headers, rows) {
+  const escape = v => {
+    const s = (v === null || v === undefined) ? "" : String(v);
+    return s.includes(",") || s.includes('"') || s.includes("\n")
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [headers.map(escape).join(",")]
+    .concat(rows.map(r => r.map(escape).join(",")))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Print a section of the page to PDF via the browser's native print dialog.
+ * @param {string} sectionId   - ID of the element to print
+ * @param {string} title       - document title shown in print header
+ */
+function printSection(sectionId, title) {
+  const el = document.getElementById(sectionId);
+  if (!el) return;
+  const prev = document.title;
+  document.title = title || "FAGE Export";
+  // Clone element into a print-only overlay
+  const overlay = document.createElement("div");
+  overlay.id    = "printOverlay";
+  overlay.innerHTML = el.outerHTML;
+  document.body.appendChild(overlay);
+  document.body.classList.add("printing");
+  window.print();
+  document.body.classList.remove("printing");
+  overlay.remove();
+  document.title = prev;
+}

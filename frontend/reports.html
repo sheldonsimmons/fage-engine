@@ -99,6 +99,11 @@
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-pane active" id="tab-savings">
 
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="exportSavingsCsv()">⬇ CSV</button>
+        <button class="export-btn" onclick="exportSavingsPdf()">🖨 PDF</button>
+      </div>
+
       <!-- KPI strip -->
       <div class="rpt-kpi-row">
         <div class="rpt-kpi">
@@ -169,6 +174,10 @@
          TAB 2: RISK
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-pane" id="tab-risk">
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="exportRiskCsv()">⬇ CSV</button>
+        <button class="export-btn" onclick="exportRiskPdf()">🖨 PDF</button>
+      </div>
 
       <div class="rpt-kpi-row">
         <div class="rpt-kpi">
@@ -267,6 +276,11 @@
          TAB 3: DEPARTMENTS
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-pane" id="tab-departments">
+
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="exportDeptCsv()">⬇ CSV</button>
+        <button class="export-btn" onclick="exportDeptPdf()">🖨 PDF</button>
+      </div>
 
       <!-- Cards — draggable container -->
       <div id="dept-cards" class="rpt-draggable-col">

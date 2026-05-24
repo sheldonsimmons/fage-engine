@@ -9,6 +9,11 @@
 let activeTab  = "savings";
 const charts   = {};
 
+// Cached API data for export
+let _rptRiskEvents  = [];
+let _rptDeptData    = [];
+let _rptSavingsData = null;
+
 const COLORS = {
   micro:    "#58a6ff",
   flagship: "#bc8cff",
@@ -166,6 +171,7 @@ function loadActiveTab() {
 async function loadSavings() {
   const { days } = getActiveDateRange();
   const data = await apiGet(`/api/reports/savings?days=${days}`);
+  _rptSavingsData = data;
 
   document.getElementById("sv-total-saved").textContent  = fmtUsd(data.total_saved_usd);
   document.getElementById("sv-no-fage").textContent      = fmtUsd(data.cost_if_no_fage_usd);
@@ -255,6 +261,7 @@ async function loadSavings() {
 async function loadRisk() {
   const { days } = getActiveDateRange();
   const data = await apiGet(`/api/reports/risk?days=${days}`);
+  _rptRiskEvents = data.recent_events || [];
 
   document.getElementById("rk-total").textContent    = fmtNum(data.total_events);
   document.getElementById("rk-critical").textContent = fmtNum(data.critical);
@@ -400,6 +407,7 @@ function renderExecSummary(d) {
 async function loadDepartments() {
   const { days } = getActiveDateRange();
   const data = await apiGet(`/api/reports/departments?days=${days}`);
+  _rptDeptData = data.scorecards || [];
 
   // Scorecard table
   const tbody = document.getElementById("deptScorecardTable");
@@ -794,6 +802,69 @@ function resetActivityFilters() {
   document.getElementById("actDept").value     = "";
   document.getElementById("actModel").value    = "";
   loadAgentActivity();
+}
+
+// ── Export functions ──────────────────────────────────────────────────────────
+
+function exportRiskCsv() {
+  if (!_rptRiskEvents.length) { alert("No risk events loaded — open the Risk tab first."); return; }
+  const headers = ["Timestamp", "Event Type", "Department", "Risk Level", "Decision Outcome"];
+  const rows = _rptRiskEvents.map(e => [
+    fmtTs(e.timestamp),
+    e.event_type || "",
+    e.department || "",
+    e.risk_level || "",
+    e.decision_outcome || "",
+  ]);
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCsv(`fage_risk_events_${date}.csv`, headers, rows);
+}
+
+function exportRiskPdf() {
+  printSection("tab-risk", "FAGE — Risk & Compliance Report");
+}
+
+function exportDeptCsv() {
+  if (!_rptDeptData.length) { alert("No department data loaded — open the Departments tab first."); return; }
+  const headers = ["Department", "Total Calls", "Micro %", "Actual Cost (USD)", "Pruning Saved (USD)", "Budget Used %", "Monthly Cap (USD)", "Status"];
+  const rows = _rptDeptData.map(d => [
+    d.department,
+    d.total_calls,
+    d.micro_pct + "%",
+    d.total_cost_usd != null ? d.total_cost_usd.toFixed(4) : "",
+    d.pruning_saved_usd != null ? d.pruning_saved_usd.toFixed(4) : "",
+    d.budget_used_pct != null ? d.budget_used_pct.toFixed(1) + "%" : "",
+    d.monthly_cap_usd != null ? d.monthly_cap_usd.toFixed(2) : "",
+    d.throttled ? "THROTTLED" : d.override_granted ? "OVERRIDE" : "OK",
+  ]);
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCsv(`fage_departments_${date}.csv`, headers, rows);
+}
+
+function exportDeptPdf() {
+  printSection("tab-departments", "FAGE — Department Report");
+}
+
+function exportSavingsCsv() {
+  if (!_rptSavingsData) { alert("No savings data loaded — open the Savings tab first."); return; }
+  const d = _rptSavingsData;
+  const headers = ["Metric", "Value"];
+  const rows = [
+    ["Total Saved (USD)",         d.total_saved_usd?.toFixed(4)    ?? ""],
+    ["Cost Without FAGE (USD)",   d.cost_if_no_fage_usd?.toFixed(4)?? ""],
+    ["Actual Cost (USD)",         d.total_cost_usd?.toFixed(4)     ?? ""],
+    ["Pruning Savings (USD)",     d.pruning_saved_usd?.toFixed(4)  ?? ""],
+    ["Tokens Pruned",             d.tokens_pruned ?? ""],
+    ["Model Downgrade Savings (USD)", d.downgrade_saved_usd?.toFixed(4) ?? ""],
+    ["Total Calls",               d.total_calls ?? ""],
+    ["Micro Calls %",             d.micro_pct != null ? d.micro_pct + "%" : ""],
+  ];
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCsv(`fage_savings_${date}.csv`, headers, rows);
+}
+
+function exportSavingsPdf() {
+  printSection("tab-savings", "FAGE — Savings Report");
 }
 
 // ── Draggable report cards ────────────────────────────────────────────────────

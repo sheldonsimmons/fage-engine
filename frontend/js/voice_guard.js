@@ -208,12 +208,15 @@ async function clearVoiceGuardData() {
 
 // ── Voice Guard Audit Log ─────────────────────────────────────────────────────
 
+let _vgAuditEvents = [];   // kept in memory for export
+
 async function loadVoiceAuditLog() {
   const container = document.getElementById("vgAuditLog");
   if (!container) return;
 
   try {
     const events = await fetch("/api/voice/events?limit=50").then(r => r.json());
+    _vgAuditEvents = events;
 
     if (!events.length) {
       container.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:8px 0">No voice events recorded yet.</p>';
@@ -327,6 +330,70 @@ function toggleVgAuditRow(rowId) {
     const arrow = mainRow.querySelector("td:last-child span");
     if (arrow) arrow.textContent = isOpen ? "▸ details" : "▾ details";
   }
+}
+
+// ── Voice Guard export functions ──────────────────────────────────────────────
+
+function exportVgSummaryCsv() {
+  if (!_vgAuditEvents.length) { alert("No Voice Guard events to export."); return; }
+  const fmtTs = iso => iso
+    ? new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { hour12: true })
+    : "";
+  const headers = ["Timestamp", "Call ID", "Platform", "Department", "Status", "Redactions", "Avg Confidence", "Detection Method", "Flagged for Review", "Processing (ms)"];
+  const rows = _vgAuditEvents.map(e => {
+    const status = e.flagged_for_review ? "flagged" : e.redactions_count > 0 ? "redacted" : "clean";
+    return [
+      fmtTs(e.timestamp),
+      e.call_id || "",
+      e.platform || "",
+      e.department || "",
+      status,
+      e.redactions_count,
+      e.confidence_score != null ? (e.confidence_score * 100).toFixed(1) + "%" : "",
+      e.detection_method || "",
+      e.flagged_for_review ? "Yes" : "No",
+      e.processing_ms || "",
+    ];
+  });
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCsv(`fage_voice_guard_summary_${date}.csv`, headers, rows);
+}
+
+function exportVgDetailedCsv() {
+  if (!_vgAuditEvents.length) { alert("No Voice Guard events to export."); return; }
+  const fmtTs = iso => iso
+    ? new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { hour12: true })
+    : "";
+  const headers = ["Call ID", "Timestamp", "Platform", "Department", "PII Type", "Trigger Phrase", "Confidence %", "Detection Method", "Call Status"];
+  const rows = [];
+  _vgAuditEvents.forEach(e => {
+    const status = e.flagged_for_review ? "flagged" : e.redactions_count > 0 ? "redacted" : "clean";
+    const details = e.detection_details || [];
+    if (details.length === 0) {
+      // Event with no detections — still include as one clean row
+      rows.push([e.call_id || "", fmtTs(e.timestamp), e.platform || "", e.department || "", "", "", "", "", status]);
+    } else {
+      details.forEach(d => {
+        rows.push([
+          e.call_id || "",
+          fmtTs(e.timestamp),
+          e.platform || "",
+          e.department || "",
+          (d.pii_type || "").replace(/_/g, " "),
+          d.trigger_phrase || "",
+          d.confidence != null ? (d.confidence * 100).toFixed(1) + "%" : "",
+          d.detection_method || "",
+          status,
+        ]);
+      });
+    }
+  });
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCsv(`fage_voice_guard_detailed_${date}.csv`, headers, rows);
+}
+
+function exportVgPdf() {
+  printSection("voiceGuardBody", "FAGE — Voice Guard Audit Log");
 }
 
 // Load stats on page load and refresh every 30 seconds
