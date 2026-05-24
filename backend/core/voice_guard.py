@@ -315,22 +315,38 @@ def _find_trigger(text_lower: str, pos: int) -> Optional[Tuple[PIIPattern, int]]
     return None
 
 
-def _vacuum_digits(text: str, start: int, window_chars: int = 300) -> Tuple[str, int, int]:
+def _vacuum_digits(text: str, start: int, window_chars: int = 300,
+                   max_digits: int = 0, max_gap: int = 60) -> Tuple[str, int, int]:
     """
-    From start position, collect all digit characters within window_chars,
-    ignoring filler words and whitespace. Return (digits_string, first_digit_pos, last_digit_pos).
+    From start position, collect digit characters within window_chars.
+    Stops early if:
+      - max_digits reached (prevents consuming digits from the next number)
+      - gap between digits exceeds max_gap chars (a long non-digit stretch
+        signals we've crossed into a new sentence / new number)
+
+    Returns (digits_string, first_digit_pos, last_digit_pos).
     """
     segment = text[start:start + window_chars]
     first_pos = -1
     last_pos = -1
     digits = []
+    last_digit_i = -1  # index in segment of the last digit collected
 
     for i, ch in enumerate(segment):
         if ch.isdigit():
+            # Check gap from last collected digit — if too large, stop
+            if last_digit_i != -1 and (i - last_digit_i) > max_gap:
+                break
+
             if first_pos == -1:
                 first_pos = start + i
             last_pos = start + i
+            last_digit_i = i
             digits.append(ch)
+
+            # Stop once we have enough digits (allow 1 extra for spoken variation)
+            if max_digits > 0 and len(digits) >= max_digits + 1:
+                break
 
     return "".join(digits), (first_pos if first_pos != -1 else start), last_pos
 
@@ -452,7 +468,15 @@ def process_transcript(raw: str) -> VoiceGuardResult:
             break
         pattern, trigger_end = found
 
-        digits, first_pos, last_pos = _vacuum_digits(normalized, trigger_end, window_chars=300)
+        # max_digits: stop early once we have enough (prevents eating next number)
+        # For range patterns (credit card 13-16), use the max as the cap
+        _max_dig = pattern.digit_count if pattern.digit_count > 0 else pattern.digit_max
+        digits, first_pos, last_pos = _vacuum_digits(
+            normalized, trigger_end,
+            window_chars=300,
+            max_digits=_max_dig,
+            max_gap=60,
+        )
 
         if not digits:
             pos = trigger_end
