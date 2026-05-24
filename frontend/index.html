@@ -96,8 +96,8 @@
     <!-- Row 2: Budget Bars + Agent Table -->
     <section class="panel full-width" style="padding-bottom:0">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('midRowBody','midRowChevron')">
-        Department Budgets &amp; Agent Registry
-        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="midRowSummary"></span>
+        <span>Department Budgets &amp; Agent Registry <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation(); showHelp('budgetPanel')">?</span></span>
+        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto;padding-left:12px" id="midRowSummary"></span>
         <span class="panel-chevron" id="midRowChevron">▸</span>
       </h2>
     </section>
@@ -232,8 +232,7 @@
     <!-- Row 3: Pruner Test Panel -->
     <section class="panel full-width" id="prunerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('prunerBody', 'prunerChevron')">
-        Context-Pruning Sweeper — Live Test
-        <span class="help-icon" data-help="prunerPanel" onclick="event.stopPropagation(); showHelp('prunerPanel')">?</span>
+        <span>Context-Pruning Sweeper — Live Test <span class="help-icon" data-help="prunerPanel" onclick="event.stopPropagation(); showHelp('prunerPanel')">?</span></span>
         <span class="panel-chevron" id="prunerChevron">▸</span>
       </h2>
       <div id="prunerBody" style="display:none">
@@ -257,8 +256,7 @@
     <!-- Row 4: Token Router Panel -->
     <section class="panel full-width" id="routerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('routerBody', 'routerChevron')">
-        Token Router &amp; Model Cascader — Live Test
-        <span class="help-icon" data-help="routerPanel" onclick="event.stopPropagation(); showHelp('routerPanel')">?</span>
+        <span>Token Router &amp; Model Cascader — Live Test <span class="help-icon" data-help="routerPanel" onclick="event.stopPropagation(); showHelp('routerPanel')">?</span></span>
         <span class="panel-chevron" id="routerChevron">▸</span>
       </h2>
       <div id="routerBody" style="display:none">
@@ -336,8 +334,7 @@
     <!-- Row 5: Sensitive Term Library -->
     <section class="panel full-width" id="keywordsPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('keywordsBody', 'keywordsChevron')">
-        Sensitive Term Library
-        <span class="help-icon" data-help="keywordsPanel" onclick="event.stopPropagation(); showHelp('keywordsPanel')">?</span>
+        <span>Sensitive Term Library <span class="help-icon" data-help="keywordsPanel" onclick="event.stopPropagation(); showHelp('keywordsPanel')">?</span></span>
         <span class="panel-chevron" id="keywordsChevron">▸</span>
       </h2>
       <div id="keywordsBody" style="display:none">
@@ -397,8 +394,8 @@
     <!-- Voice Guard Panel -->
     <section class="panel full-width" id="voiceGuardPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('voiceGuardBody', 'voiceGuardChevron')">
-        🎙 Voice Guard — PII Redaction
-        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="vg-header-summary"></span>
+        <span>🎙 Voice Guard — PII Redaction <span class="help-icon" data-help="voiceGuardPanel" onclick="event.stopPropagation(); showHelp('voiceGuardPanel')">?</span></span>
+        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto;padding-left:12px" id="vg-header-summary"></span>
         <span class="panel-chevron" id="voiceGuardChevron">▸</span>
       </h2>
       <div id="voiceGuardBody" style="display:none">
@@ -477,9 +474,8 @@
     <!-- Row 6: Audit Log -->
     <section class="panel full-width" id="auditPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('auditBody', 'auditChevron')">
-        AI Decision Audit Log
-        <span id="auditFilterIndicator" style="display:none; font-size:10px; font-weight:600; letter-spacing:0.06em; background:#2d0505; color:var(--accent-red); border:1px solid var(--accent-red); border-radius:4px; padding:2px 8px; margin-left:8px; vertical-align:middle;">BLOCKED ONLY</span>
-        <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation(); showHelp('auditPanel')">?</span>
+        <span>AI Decision Audit Log <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation(); showHelp('auditPanel')">?</span>
+        <span id="auditFilterIndicator" style="display:none; font-size:10px; font-weight:600; letter-spacing:0.06em; background:#2d0505; color:var(--accent-red); border:1px solid var(--accent-red); border-radius:4px; padding:2px 8px; margin-left:8px; vertical-align:middle;">BLOCKED ONLY</span></span>
         <span class="panel-chevron" id="auditChevron">▸</span>
       </h2>
       <div id="auditBody" style="display:none">

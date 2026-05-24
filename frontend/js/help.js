@@ -44,6 +44,10 @@ const HELP_CONTENT = {
     title: "Sensitive Term Library",
     body:  "Add any word or phrase your company considers sensitive — legal terms, HIPAA keywords, financial triggers, or custom terms. When FAGE detects a match in a payload, it can flag it in the audit log, escalate it to a flagship model for compliance review, or block the request entirely.",
   },
+  voiceGuardPanel: {
+    title: "Voice Guard — PII Redaction",
+    body:  "Intercepts voice call transcripts before they reach any AI model and strips PII — Social Security numbers, credit cards, routing numbers, dates of birth, phone numbers, and bank accounts — even when a caller says them with hesitations, filler words, or interruptions. Powered by a dual-layer engine: trigger-phrase state machine + Presidio AI pattern recognition. The clean transcript is then passed safely to FAGE for routing.",
+  },
   auditPanel: {
     title: "AI Decision Audit Log",
     body:  "Every high-stakes AI decision is written here once and never modified — an immutable black box. If your company faces a legal dispute, compliance review, or audit, you have a timestamped record of every AI decision: what was routed, what model was used, why, and what it cost.",
