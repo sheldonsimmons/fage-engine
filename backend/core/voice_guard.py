@@ -8,17 +8,49 @@ Pipeline:
   1. Normalization     — convert spoken numbers to digits, strip ASR artifacts
   2. Trigger Detection — look for PII context phrases ("social security", etc.)
   3. State Machine     — collect digits in a window after each trigger
-  4. Redaction         — replace PII spans with [REDACTED-TYPE] tags
-  5. Audit Record      — return structured result for logging
-
-No external dependencies required for Phase 1.
+  4. Presidio AI       — catch triggerless PII the rule engine misses
+  5. Merge + Redact    — combine both layers, most restrictive wins
+  6. Audit Record      — return structured result for logging
 """
 
 import re
 import time
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
+
+logger = logging.getLogger(__name__)
+
+# ── Presidio AI layer (Phase 2) — graceful fallback if not installed ──────────
+
+_presidio_ready = False
+_analyzer = None
+
+try:
+    from presidio_analyzer import AnalyzerEngine
+    _analyzer = AnalyzerEngine()
+    _presidio_ready = True
+    logger.info("Presidio AI layer loaded successfully")
+except Exception as e:
+    logger.warning(f"Presidio not available — running rule engine only: {e}")
+
+
+# PII type mapping: Presidio entity type → our redact label
+_PRESIDIO_TYPE_MAP = {
+    "US_SSN":           ("SSN",          0.92),
+    "CREDIT_CARD":      ("CREDIT-CARD",  0.93),
+    "PHONE_NUMBER":     ("PHONE",        0.85),
+    "DATE_TIME":        ("DATE-OF-BIRTH",0.75),
+    "US_BANK_NUMBER":   ("ROUTING-NUMBER",0.88),
+    "US_PASSPORT":      ("PASSPORT",     0.88),
+    "EMAIL_ADDRESS":    ("EMAIL",        0.90),
+    "PERSON":           ("PERSON-NAME",  0.72),
+    "LOCATION":         ("LOCATION",     0.70),
+    "IP_ADDRESS":       ("IP-ADDRESS",   0.90),
+    "MEDICAL_LICENSE":  ("MEDICAL-ID",   0.88),
+    "NRP":              ("ID-NUMBER",    0.80),
+}
 
 
 # ── Spoken-word digit normalization ───────────────────────────────────────────
@@ -280,18 +312,55 @@ def _apply_direct_patterns(text: str) -> List[RedactionSpan]:
     return spans
 
 
+# ── Presidio AI layer ─────────────────────────────────────────────────────────
+
+def _run_presidio(text: str) -> List[RedactionSpan]:
+    """
+    Run Presidio analyzer on the normalized transcript.
+    Returns RedactionSpans for any PII found, with detection_method="ai".
+    Silently returns empty list if Presidio is not available.
+    """
+    if not _presidio_ready or _analyzer is None:
+        return []
+
+    try:
+        results = _analyzer.analyze(text=text, language="en")
+        spans = []
+        for r in results:
+            if r.entity_type not in _PRESIDIO_TYPE_MAP:
+                continue
+            pii_type, base_conf = _PRESIDIO_TYPE_MAP[r.entity_type]
+            # Use the higher of Presidio's score and our base confidence
+            confidence = round(max(r.score, base_conf), 3)
+            if confidence < 0.50:
+                continue   # skip low-confidence detections
+            spans.append(RedactionSpan(
+                start=r.start,
+                end=r.end,
+                pii_type=pii_type,
+                digits_found=len(re.sub(r'\D', '', text[r.start:r.end])),
+                detection_method="ai",
+                confidence=confidence,
+            ))
+        return spans
+    except Exception as e:
+        logger.warning(f"Presidio analysis failed: {e}")
+        return []
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def process_transcript(raw: str) -> VoiceGuardResult:
     """
-    Full Voice Guard pipeline.
+    Full Voice Guard pipeline — dual layer (rule engine + Presidio AI).
 
     1. Normalize spoken numbers to digits
-    2. Run direct pattern matching (formatted SSNs, etc.)
-    3. Run trigger-based state machine
-    4. Merge spans, resolve overlaps
-    5. Apply redactions
-    6. Return VoiceGuardResult
+    2. Rule engine: direct pattern matching (formatted SSNs)
+    3. Rule engine: trigger-based state machine (interrupted speech)
+    4. AI layer: Presidio (triggerless detection, context-aware)
+    5. Merge all spans — most restrictive wins on overlaps
+    6. Apply redactions
+    7. Return VoiceGuardResult
     """
     t0 = time.time()
 
@@ -308,19 +377,17 @@ def process_transcript(raw: str) -> VoiceGuardResult:
     # Step 3: Trigger-based state machine
     pos = 0
     while pos < len(text_lower):
-        result = _find_trigger(text_lower, pos)
-        if not result:
+        found = _find_trigger(text_lower, pos)
+        if not found:
             break
-        pattern, trigger_end = result
+        pattern, trigger_end = found
 
-        # Vacuum digits from the window after the trigger
         digits, first_pos, last_pos = _vacuum_digits(normalized, trigger_end, window_chars=300)
 
         if not digits:
             pos = trigger_end
             continue
 
-        # Score the match
         conf, flagged = _score_confidence(
             len(digits),
             pattern.digit_count,
@@ -330,7 +397,6 @@ def process_transcript(raw: str) -> VoiceGuardResult:
 
         expected = pattern.digit_count or pattern.digit_max
         if len(digits) >= max(pattern.digit_min, pattern.digit_count) - 1 and last_pos > first_pos:
-            # Only redact if we found enough digits
             if len(digits) >= (pattern.digit_min if pattern.digit_count == 0 else pattern.digit_count) - 1:
                 all_spans.append(RedactionSpan(
                     start=first_pos,
@@ -348,28 +414,46 @@ def process_transcript(raw: str) -> VoiceGuardResult:
 
         pos = trigger_end
 
-    # Step 4: Merge overlapping spans (keep highest confidence)
+    # Step 4: Presidio AI layer — catches triggerless and context-aware PII
+    presidio_spans = _run_presidio(normalized)
+    all_spans.extend(presidio_spans)
+
+    # Step 5: Merge overlapping spans (keep highest confidence)
     all_spans.sort(key=lambda s: s.start)
     merged: List[RedactionSpan] = []
     for span in all_spans:
         if merged and span.start < merged[-1].end:
-            # Overlap — keep higher confidence
-            if span.confidence > merged[-1].confidence:
+            # Overlap — keep higher confidence, prefer "both" as detection method
+            if span.confidence >= merged[-1].confidence:
+                prev = merged[-1]
                 merged[-1] = span
+                # Mark as caught by both layers if methods differ
+                if prev.detection_method != span.detection_method:
+                    merged[-1].detection_method = "both"
         else:
             merged.append(span)
 
-    # Step 5: Apply redactions (process in reverse to preserve indices)
+    # Step 6: Apply redactions (process in reverse to preserve indices)
     clean = normalized
     for span in sorted(merged, key=lambda s: s.start, reverse=True):
         tag = f"[REDACTED-{span.pii_type}]"
         clean = clean[:span.start] + tag + clean[span.end:]
 
-    # Step 6: Build result
-    pii_types = list({s.pii_type for s in merged})
-    avg_conf  = (sum(s.confidence for s in merged) / len(merged)) if merged else 1.0
+    # Step 7: Build result
+    pii_types   = list({s.pii_type for s in merged})
+    avg_conf    = (sum(s.confidence for s in merged) / len(merged)) if merged else 1.0
     any_flagged = any(s.confidence < 0.80 for s in merged) or bool(warnings)
-    method = "rule" if merged else "none"
+
+    # Detection method summary
+    methods = {s.detection_method for s in merged}
+    if "both" in methods or ({"rule", "ai"} <= methods):
+        method = "both"
+    elif "ai" in methods and "rule" not in methods:
+        method = "ai"
+    elif merged:
+        method = "rule"
+    else:
+        method = "none"
 
     processing_ms = int((time.time() - t0) * 1000)
 
@@ -383,3 +467,8 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         processing_ms=processing_ms,
         warnings=warnings,
     )
+
+
+def presidio_available() -> bool:
+    """Returns True if the Presidio AI layer loaded successfully."""
+    return _presidio_ready

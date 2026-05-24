@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import VoiceEvent
-from core.voice_guard import process_transcript
+from core.voice_guard import process_transcript, presidio_available
 
 router = APIRouter()
 
@@ -156,15 +156,16 @@ def get_voice_stats(db: Session = Depends(get_db)):
     platform_breakdown = {p: c for p, c in platform_rows}
 
     return {
-        "calls_today":       calls_today,
-        "calls_month":       calls_month,
-        "calls_total":       calls_total,
-        "redactions_today":  redactions_today,
-        "redactions_total":  redactions_total,
-        "flagged_total":     flagged_total,
-        "avg_confidence":    round(float(avg_confidence), 3),
-        "pii_breakdown":     pii_breakdown,
+        "calls_today":        calls_today,
+        "calls_month":        calls_month,
+        "calls_total":        calls_total,
+        "redactions_today":   redactions_today,
+        "redactions_total":   redactions_total,
+        "flagged_total":      flagged_total,
+        "avg_confidence":     round(float(avg_confidence), 3),
+        "pii_breakdown":      pii_breakdown,
         "platform_breakdown": platform_breakdown,
+        "presidio_active":    presidio_available(),
     }
 
 

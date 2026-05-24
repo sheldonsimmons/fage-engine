@@ -23,17 +23,31 @@ async function loadVoiceStats() {
       ? (data.avg_confidence * 100).toFixed(1) + "%"
       : "—";
 
+    // Presidio status badge
+    const presidioActive = data.presidio_active;
+    const chipEl = document.getElementById("vg-pii-breakdown");
+
     // PII type chips
     const breakdown = data.pii_breakdown || {};
-    const chipEl = document.getElementById("vg-pii-breakdown");
-    chipEl.innerHTML = Object.keys(breakdown).length === 0
-      ? '<span style="font-size:12px;color:var(--text-muted)">No PII events recorded yet — use the test box below to try it.</span>'
+    // AI layer status chip
+    const aiChip = presidioActive
+      ? `<div style="background:#0a1f0f;border:1px solid var(--accent-green);border-radius:6px;padding:6px 14px;font-size:12px">
+           <span style="color:var(--accent-green);font-weight:700">🤖 Presidio AI</span>
+           <span style="color:var(--text-muted);margin-left:6px">Active</span>
+         </div>`
+      : `<div style="background:var(--bg-panel);border:1px solid var(--accent-yellow);border-radius:6px;padding:6px 14px;font-size:12px">
+           <span style="color:var(--accent-yellow);font-weight:700">⚠ Rule Engine Only</span>
+           <span style="color:var(--text-muted);margin-left:6px">Presidio loading</span>
+         </div>`;
+
+    chipEl.innerHTML = aiChip + (Object.keys(breakdown).length === 0
+      ? '<span style="font-size:12px;color:var(--text-muted);padding:6px 0">No PII events recorded yet — use the test box below to try it.</span>'
       : Object.entries(breakdown).map(([type, count]) => `
           <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px">
             <span style="color:var(--accent-red);font-weight:700">${type}</span>
             <span style="color:var(--text-muted);margin-left:6px">${count} event${count !== 1 ? "s" : ""}</span>
           </div>
-        `).join("");
+        `).join(""));
   } catch (e) {
     console.warn("Voice Guard stats unavailable:", e);
   }
@@ -91,10 +105,16 @@ async function testVoiceGuard() {
       ? data.pii_types_found.join(", ")
       : "none";
 
+    const methodLabel = data.detection_method === "both" ? "🤖+📏 Rule + AI"
+      : data.detection_method === "ai"   ? "🤖 Presidio AI"
+      : data.detection_method === "rule" ? "📏 Rule Engine"
+      : "—";
+
     document.getElementById("vgMeta").innerHTML = `
       <span>Status: <strong style="color:${statusColor}">${data.status.toUpperCase()}</strong></span>
       <span>Redactions: <strong style="color:var(--accent-red)">${data.redactions_count}</strong></span>
       <span>PII types: <strong>${piiList}</strong></span>
+      <span>Detected by: <strong>${methodLabel}</strong></span>
       <span>Confidence: <strong>${data.redactions_count ? (data.confidence_score * 100).toFixed(1) + "%" : "—"}</strong></span>
       <span>Processed in: <strong>${data.processing_ms}ms</strong></span>
       ${data.flagged_for_review ? '<span style="color:var(--accent-yellow)">⚠ Flagged for review</span>' : ""}
