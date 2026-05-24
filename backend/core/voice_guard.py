@@ -28,10 +28,70 @@ _presidio_ready = False
 _analyzer = None
 
 try:
-    from presidio_analyzer import AnalyzerEngine
-    _analyzer = AnalyzerEngine()
+    from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
+    from presidio_analyzer import RecognizerRegistry
+    from presidio_analyzer.nlp_engine import NlpEngineProvider
+
+    # Use pattern-only recognizers — no spaCy NLP model required.
+    # This keeps the Heroku slug small while still catching formatted PII
+    # that has no trigger phrase (the gap the rule engine misses).
+
+    registry = RecognizerRegistry()
+
+    # SSN: 123-45-6789 or 123 45 6789
+    registry.add_recognizer(PatternRecognizer(
+        supported_entity="US_SSN",
+        patterns=[
+            Pattern("SSN_DASHES",  r"\b\d{3}-\d{2}-\d{4}\b",         0.95),
+            Pattern("SSN_SPACES",  r"\b\d{3}\s\d{2}\s\d{4}\b",       0.90),
+            Pattern("SSN_COMPACT", r"\b(?<!\d)\d{9}(?!\d)\b",         0.60),
+        ]
+    ))
+
+    # Credit card: 16 digits with spaces or dashes
+    registry.add_recognizer(PatternRecognizer(
+        supported_entity="CREDIT_CARD",
+        patterns=[
+            Pattern("CC_DASHES", r"\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}\b", 0.95),
+            Pattern("CC_COMPACT", r"\b\d{16}\b",                             0.70),
+        ]
+    ))
+
+    # US phone: 555-867-5309 or (555) 867-5309
+    registry.add_recognizer(PatternRecognizer(
+        supported_entity="PHONE_NUMBER",
+        patterns=[
+            Pattern("PHONE_DASHES",  r"\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b",      0.85),
+            Pattern("PHONE_PARENS",  r"\(\d{3}\)\s?\d{3}[-.\s]\d{4}",          0.90),
+        ]
+    ))
+
+    # Routing number: 9-digit ABA
+    registry.add_recognizer(PatternRecognizer(
+        supported_entity="US_BANK_NUMBER",
+        patterns=[
+            Pattern("ROUTING", r"\b0[0-9]{8}\b", 0.75),
+        ]
+    ))
+
+    # Build engine with NO NLP backend (pattern-only mode)
+    provider = NlpEngineProvider(nlp_configuration={
+        "nlp_engine_name": "spacy",
+        "models": []
+    })
+
+    try:
+        nlp_engine = provider.create_engine()
+    except Exception:
+        nlp_engine = None
+
+    _analyzer = AnalyzerEngine(
+        registry=registry,
+        nlp_engine=nlp_engine,
+        supported_languages=["en"],
+    )
     _presidio_ready = True
-    logger.info("Presidio AI layer loaded successfully")
+    logger.info("Presidio pattern-only layer loaded successfully (no spaCy required)")
 except Exception as e:
     logger.warning(f"Presidio not available — running rule engine only: {e}")
 
