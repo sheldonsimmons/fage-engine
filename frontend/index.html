@@ -24,6 +24,7 @@
       <a href="/roi.html" class="header-nav-link" style="margin-left:8px;color:#4ade80">💰 ROI Calculator</a>
       <a href="/onboarding.html" class="header-nav-link" style="margin-left:8px">⚙ Setup</a>
       <button class="header-nav-link header-reset-btn" onclick="resetDemoData()" style="margin-left:8px">↺ Reset Demo</button>
+      <button class="header-nav-link" onclick="randomizePanels()" style="margin-left:8px;color:var(--accent-purple)" title="Shuffle panel order">⊛ Randomize</button>
       <button class="tour-btn" onclick="startTour()">? Guide</button>
     </div>
     <div class="header-status" id="systemStatus">
@@ -93,9 +94,14 @@
       </div>
     </section>
 
-    <!-- Row 2: Budget Bars + Agent Table -->
+    <!-- ── Draggable Panels ─────────────────────────────────────────────────── -->
+    <div id="draggable-panels">
+
+    <!-- Panel: Budget Bars + Agent Table -->
+    <div class="dp-wrap" data-panel-id="budgets-agents">
     <section class="panel full-width" style="padding-bottom:0">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('midRowBody','midRowChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span>Department Budgets &amp; Agent Registry <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation(); showHelp('budgetPanel')">?</span></span>
         <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto;padding-left:12px" id="midRowSummary"></span>
         <span class="panel-chevron" id="midRowChevron">▸</span>
@@ -228,10 +234,13 @@
 
     </section>
     </div><!-- end midRowBody -->
+    </div><!-- end dp-wrap budgets-agents -->
 
-    <!-- Row 3: Pruner Test Panel -->
+    <!-- Panel: Pruner Test -->
+    <div class="dp-wrap" data-panel-id="pruner">
     <section class="panel full-width" id="prunerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('prunerBody', 'prunerChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span>Context-Pruning Sweeper — Live Test <span class="help-icon" data-help="prunerPanel" onclick="event.stopPropagation(); showHelp('prunerPanel')">?</span></span>
         <span class="panel-chevron" id="prunerChevron">▸</span>
       </h2>
@@ -252,10 +261,13 @@
       </div>
       </div><!-- end prunerBody -->
     </section>
+    </div><!-- end dp-wrap pruner -->
 
-    <!-- Row 4: Token Router Panel -->
+    <!-- Panel: Token Router -->
+    <div class="dp-wrap" data-panel-id="router">
     <section class="panel full-width" id="routerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('routerBody', 'routerChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span>Token Router &amp; Model Cascader — Live Test <span class="help-icon" data-help="routerPanel" onclick="event.stopPropagation(); showHelp('routerPanel')">?</span></span>
         <span class="panel-chevron" id="routerChevron">▸</span>
       </h2>
@@ -330,10 +342,13 @@
       <div id="routerStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted)"></div>
       </div><!-- end routerBody -->
     </section>
+    </div><!-- end dp-wrap router -->
 
-    <!-- Row 5: Sensitive Term Library -->
+    <!-- Panel: Sensitive Term Library -->
+    <div class="dp-wrap" data-panel-id="keywords">
     <section class="panel full-width" id="keywordsPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('keywordsBody', 'keywordsChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span>Sensitive Term Library <span class="help-icon" data-help="keywordsPanel" onclick="event.stopPropagation(); showHelp('keywordsPanel')">?</span></span>
         <span class="panel-chevron" id="keywordsChevron">▸</span>
       </h2>
@@ -390,10 +405,13 @@
       </table>
       </div><!-- end keywordsBody -->
     </section>
+    </div><!-- end dp-wrap keywords -->
 
-    <!-- Voice Guard Panel -->
+    <!-- Panel: Voice Guard -->
+    <div class="dp-wrap" data-panel-id="voice-guard">
     <section class="panel full-width" id="voiceGuardPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('voiceGuardBody', 'voiceGuardChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span>🎙 Voice Guard — PII Redaction <span class="help-icon" data-help="voiceGuardPanel" onclick="event.stopPropagation(); showHelp('voiceGuardPanel')">?</span></span>
         <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto;padding-left:12px" id="vg-header-summary"></span>
         <span class="panel-chevron" id="voiceGuardChevron">▸</span>
@@ -444,7 +462,8 @@
           <div id="vgResult" style="display:none; margin-top:14px; padding:14px; background:var(--bg-panel); border-radius:8px; border:1px solid var(--border)">
             <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:8px">Clean Transcript</div>
             <div id="vgCleanText" style="font-size:13px; color:var(--text-primary); line-height:1.6; margin-bottom:12px"></div>
-            <div id="vgMeta" style="font-size:11px; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap"></div>
+            <div id="vgMeta" style="font-size:11px; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px"></div>
+            <div id="vgDetectionDetails" style="display:none"></div>
           </div>
         </div>
 
@@ -458,7 +477,10 @@
 
       </div>
     </section>
+    </div><!-- end dp-wrap voice-guard -->
 
+    <!-- Panel: Audit Log + Blocked Banner -->
+    <div class="dp-wrap" data-panel-id="audit">
     <!-- Blocked Alert Banner (hidden until a block event exists) -->
     <div id="blockedAlertBanner" style="display:none">
       <div class="blocked-banner-inner">
@@ -470,10 +492,9 @@
         <button class="blocked-banner-btn" onclick="toggleBlockedFilter()">Review Blocked Events ↓</button>
       </div>
     </div>
-
-    <!-- Row 6: Audit Log -->
     <section class="panel full-width" id="auditPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('auditBody', 'auditChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span>AI Decision Audit Log <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation(); showHelp('auditPanel')">?</span>
         <span id="auditFilterIndicator" style="display:none; font-size:10px; font-weight:600; letter-spacing:0.06em; background:#2d0505; color:var(--accent-red); border:1px solid var(--accent-red); border-radius:4px; padding:2px 8px; margin-left:8px; vertical-align:middle;">BLOCKED ONLY</span></span>
         <span class="panel-chevron" id="auditChevron">▸</span>
@@ -496,6 +517,9 @@
       </table>
       </div><!-- end auditBody -->
     </section>
+    </div><!-- end dp-wrap audit -->
+
+    </div><!-- end draggable-panels -->
 
   </main>
 
@@ -504,6 +528,7 @@
     API Docs: <a href="http://localhost:8000/docs" target="_blank">localhost:8000/docs</a>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="js/api.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/budget.js"></script>

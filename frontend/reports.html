@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="css/reports.css" />
   <link rel="stylesheet" href="css/demo.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
 <body>
 
@@ -37,6 +38,9 @@
       <div>
         <h1 class="rpt-title">AI Governance Reports</h1>
         <p class="rpt-subtitle">Savings, risk events, and department performance over time.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onclick="randomizeReportCards()" style="background:transparent;color:var(--accent-purple);border:1px solid var(--accent-purple);border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer" title="Shuffle card order in active tab">⊛ Randomize</button>
       </div>
       <div class="rpt-controls">
         <label class="rpt-range-label">Time Range</label>
@@ -129,26 +133,33 @@
         </div>
       </div>
 
-      <!-- Charts row -->
-      <div class="rpt-charts-row">
-        <div class="rpt-chart-card rpt-chart-wide">
-          <div class="rpt-chart-title">Daily Spend</div>
-          <canvas id="chartDailySpend"></canvas>
+      <!-- Charts rows — draggable container -->
+      <div id="savings-cards" class="rpt-draggable-col">
+        <div class="rpt-drag-card" data-card-id="sv-daily-spend">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Spend</div>
+              <canvas id="chartDailySpend"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Model Tier Split</div>
+              <canvas id="chartModelSplit"></canvas>
+            </div>
+          </div>
         </div>
-        <div class="rpt-chart-card">
-          <div class="rpt-chart-title">Model Tier Split</div>
-          <canvas id="chartModelSplit"></canvas>
-        </div>
-      </div>
-
-      <div class="rpt-charts-row">
-        <div class="rpt-chart-card rpt-chart-wide">
-          <div class="rpt-chart-title">Daily Tokens Pruned</div>
-          <canvas id="chartTokensPruned"></canvas>
-        </div>
-        <div class="rpt-chart-card">
-          <div class="rpt-chart-title">Savings Breakdown</div>
-          <canvas id="chartSavingsBreakdown"></canvas>
+        <div class="rpt-drag-card" data-card-id="sv-tokens-pruned">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Tokens Pruned</div>
+              <canvas id="chartTokensPruned"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Savings Breakdown</div>
+              <canvas id="chartSavingsBreakdown"></canvas>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -192,50 +203,62 @@
         </div>
       </div>
 
-      <div class="rpt-charts-row">
-        <div class="rpt-chart-card rpt-chart-wide">
-          <div class="rpt-chart-title">Daily Risk Events</div>
-          <canvas id="chartRiskTimeline"></canvas>
+      <!-- Cards — draggable container -->
+      <div id="risk-cards" class="rpt-draggable-col">
+        <div class="rpt-drag-card" data-card-id="rk-timeline">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Risk Events</div>
+              <canvas id="chartRiskTimeline"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Risk Level Breakdown</div>
+              <canvas id="chartRiskBreakdown"></canvas>
+            </div>
+          </div>
         </div>
-        <div class="rpt-chart-card">
-          <div class="rpt-chart-title">Risk Level Breakdown</div>
-          <canvas id="chartRiskBreakdown"></canvas>
-        </div>
-      </div>
 
-      <!-- Governance & Compliance Activity cards -->
-      <div class="rpt-table-card" style="margin-bottom:24px">
-        <div class="rpt-table-title">Governance &amp; Compliance Activity</div>
-        <div class="demo-compliance-grid" id="complianceGrid" style="margin-top:16px">
-          <p class="placeholder">Loading...</p>
+        <div class="rpt-drag-card" data-card-id="rk-compliance">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Governance &amp; Compliance Activity</div>
+            <div class="demo-compliance-grid" id="complianceGrid" style="margin-top:16px">
+              <p class="placeholder">Loading...</p>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- Executive Summary ROI -->
-      <div class="rpt-table-card" style="margin-bottom:24px">
-        <div class="rpt-table-title">Executive Summary — AI Governance ROI</div>
-        <div class="demo-exec-grid" id="execGrid" style="margin-top:16px">
-          <p class="placeholder">Loading...</p>
+        <div class="rpt-drag-card" data-card-id="rk-exec">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Executive Summary — AI Governance ROI</div>
+            <div class="demo-exec-grid" id="execGrid" style="margin-top:16px">
+              <p class="placeholder">Loading...</p>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- Risk event table -->
-      <div class="rpt-table-card">
-        <div class="rpt-table-title">Recent High-Stakes Events</div>
-        <table class="rpt-table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Type</th>
-              <th>Department</th>
-              <th>Risk</th>
-              <th>Outcome</th>
-            </tr>
-          </thead>
-          <tbody id="riskEventTable">
-            <tr><td colspan="5" class="placeholder">Loading...</td></tr>
-          </tbody>
-        </table>
+        <div class="rpt-drag-card" data-card-id="rk-events">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Recent High-Stakes Events</div>
+            <table class="rpt-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Type</th>
+                  <th>Department</th>
+                  <th>Risk</th>
+                  <th>Outcome</th>
+                </tr>
+              </thead>
+              <tbody id="riskEventTable">
+                <tr><td colspan="5" class="placeholder">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -245,36 +268,44 @@
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-pane" id="tab-departments">
 
-      <!-- Scorecard table -->
-      <div class="rpt-table-card" style="margin-bottom:24px">
-        <div class="rpt-table-title">Department Scorecard</div>
-        <table class="rpt-table">
-          <thead>
-            <tr>
-              <th>Department</th>
-              <th>Calls</th>
-              <th>Micro %</th>
-              <th>Actual Cost</th>
-              <th>Pruning Saved</th>
-              <th>Budget Used</th>
-              <th>Cap</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="deptScorecardTable">
-            <tr><td colspan="8" class="placeholder">Loading...</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="rpt-charts-row">
-        <div class="rpt-chart-card rpt-chart-wide">
-          <div class="rpt-chart-title">Daily Spend by Department</div>
-          <canvas id="chartDeptSpend"></canvas>
+      <!-- Cards — draggable container -->
+      <div id="dept-cards" class="rpt-draggable-col">
+        <div class="rpt-drag-card" data-card-id="dept-scorecard">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Department Scorecard</div>
+            <table class="rpt-table">
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th>Calls</th>
+                  <th>Micro %</th>
+                  <th>Actual Cost</th>
+                  <th>Pruning Saved</th>
+                  <th>Budget Used</th>
+                  <th>Cap</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="deptScorecardTable">
+                <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div class="rpt-chart-card">
-          <div class="rpt-chart-title">Cost by Department</div>
-          <canvas id="chartDeptCost"></canvas>
+
+        <div class="rpt-drag-card" data-card-id="dept-charts">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Spend by Department</div>
+              <canvas id="chartDeptSpend"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Cost by Department</div>
+              <canvas id="chartDeptCost"></canvas>
+            </div>
+          </div>
         </div>
       </div>
 

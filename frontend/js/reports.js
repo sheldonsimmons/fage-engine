@@ -77,6 +77,8 @@ document.querySelectorAll(".rpt-tab").forEach(btn => {
     activeTab = btn.dataset.tab;
     document.getElementById(`tab-${activeTab}`).classList.add("active");
     loadActiveTab();
+    // Re-init drag for newly shown tab (Sortable needs visible elements)
+    setTimeout(() => initDraggableReports(activeTab), 50);
   });
 });
 
@@ -793,3 +795,70 @@ function resetActivityFilters() {
   document.getElementById("actModel").value    = "";
   loadAgentActivity();
 }
+
+// ── Draggable report cards ────────────────────────────────────────────────────
+
+const RPT_CONTAINER_IDS = {
+  savings:     "savings-cards",
+  risk:        "risk-cards",
+  departments: "dept-cards",
+};
+
+const _rptSortables = {};
+
+function initDraggableReports(tab) {
+  if (typeof Sortable === "undefined") return;
+  const containerId = RPT_CONTAINER_IDS[tab];
+  if (!containerId) return;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Destroy existing instance before recreating (tab may have been re-shown)
+  if (_rptSortables[tab]) {
+    try { _rptSortables[tab].destroy(); } catch(e) {}
+  }
+
+  _rptSortables[tab] = Sortable.create(container, {
+    animation:   150,
+    handle:      ".rpt-drag-bar",
+    ghostClass:  "sortable-ghost",
+    chosenClass: "sortable-chosen",
+    onEnd() {
+      const order = [...container.querySelectorAll(".rpt-drag-card")]
+        .map(el => el.dataset.cardId);
+      try { localStorage.setItem(`fage_rpt_order_${tab}`, JSON.stringify(order)); } catch(e) {}
+    },
+  });
+
+  // Restore saved order
+  try {
+    const saved = JSON.parse(localStorage.getItem(`fage_rpt_order_${tab}`) || "null");
+    if (Array.isArray(saved)) {
+      saved.forEach(id => {
+        const el = container.querySelector(`.rpt-drag-card[data-card-id="${id}"]`);
+        if (el) container.appendChild(el);
+      });
+    }
+  } catch(e) {}
+}
+
+function randomizeReportCards() {
+  const containerId = RPT_CONTAINER_IDS[activeTab];
+  if (!containerId) return;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const cards = [...container.querySelectorAll(".rpt-drag-card")];
+  // Fisher-Yates shuffle
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+  cards.forEach(el => container.appendChild(el));
+  const order = cards.map(el => el.dataset.cardId);
+  try { localStorage.setItem(`fage_rpt_order_${activeTab}`, JSON.stringify(order)); } catch(e) {}
+}
+
+// Init drag for the default (savings) tab on load
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => initDraggableReports("savings"), 100);
+});

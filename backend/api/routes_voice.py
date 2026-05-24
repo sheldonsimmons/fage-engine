@@ -43,6 +43,7 @@ class TranscriptResponse(BaseModel):
     processing_ms:      int
     warnings:           list
     status:             str   # clean | redacted | flagged
+    detection_details:  list = []   # Per-redaction breakdown: pii_type, trigger_phrase, confidence, method
 
 
 # ── POST /api/voice/transcript ────────────────────────────────────────────────
@@ -100,6 +101,7 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
         processing_ms=result.processing_ms,
         warnings=result.warnings,
         status=status,
+        detection_details=result.detection_details,
     )
 
 

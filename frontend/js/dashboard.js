@@ -208,7 +208,53 @@ function restorePanelStates() {
   });
 }
 
+// ── Draggable panels ──────────────────────────────────────────────────────────
+const PANEL_ORDER_KEY = "fage_panel_order";
+
+function initDraggablePanels() {
+  const container = document.getElementById("draggable-panels");
+  if (!container || typeof Sortable === "undefined") return;
+
+  Sortable.create(container, {
+    animation:    150,
+    handle:       ".drag-handle",
+    ghostClass:   "sortable-ghost",
+    chosenClass:  "sortable-chosen",
+    onEnd() {
+      const order = [...container.querySelectorAll(".dp-wrap")]
+        .map(el => el.dataset.panelId);
+      try { localStorage.setItem(PANEL_ORDER_KEY, JSON.stringify(order)); } catch(e) {}
+    },
+  });
+
+  // Restore saved order
+  try {
+    const saved = JSON.parse(localStorage.getItem(PANEL_ORDER_KEY) || "null");
+    if (Array.isArray(saved)) {
+      saved.forEach(id => {
+        const el = container.querySelector(`.dp-wrap[data-panel-id="${id}"]`);
+        if (el) container.appendChild(el);
+      });
+    }
+  } catch(e) {}
+}
+
+function randomizePanels() {
+  const container = document.getElementById("draggable-panels");
+  if (!container) return;
+  const panels = [...container.querySelectorAll(".dp-wrap")];
+  // Fisher-Yates shuffle
+  for (let i = panels.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [panels[i], panels[j]] = [panels[j], panels[i]];
+  }
+  panels.forEach(el => container.appendChild(el));
+  const order = panels.map(el => el.dataset.panelId);
+  try { localStorage.setItem(PANEL_ORDER_KEY, JSON.stringify(order)); } catch(e) {}
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
+initDraggablePanels();
 restorePanelStates();
 checkHealth();
 loadDashboard();

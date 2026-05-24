@@ -144,6 +144,41 @@ async function testVoiceGuard() {
       statusEl.style.color = "var(--accent-green)";
     }
 
+    // Detection breakdown table
+    const detailEl  = document.getElementById("vgDetectionDetails");
+    const details   = data.detection_details || [];
+    const fmtMethod = m => m === "both" ? "Rule + AI" : m === "ai" ? "Presidio AI" : "Rule Engine";
+    if (details.length > 0) {
+      detailEl.style.display = "block";
+      detailEl.innerHTML = `
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px">
+          Detection Breakdown
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead>
+            <tr style="color:var(--text-muted);text-align:left;border-bottom:1px solid var(--border)">
+              <th style="padding:5px 8px;font-weight:600">PII Type</th>
+              <th style="padding:5px 8px;font-weight:600">Trigger Phrase</th>
+              <th style="padding:5px 8px;font-weight:600">Confidence</th>
+              <th style="padding:5px 8px;font-weight:600">Method</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${details.map(d => `
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:5px 8px;color:var(--accent-red);font-weight:700;font-family:var(--font-mono)">${fmtPii(d.pii_type)}</td>
+                <td style="padding:5px 8px;color:var(--text-primary);font-style:${d.trigger_phrase ? "normal" : "italic"}">${d.trigger_phrase ? `"${d.trigger_phrase}"` : "—"}</td>
+                <td style="padding:5px 8px;color:${d.confidence >= 0.9 ? "var(--accent-green)" : d.confidence >= 0.7 ? "var(--accent-yellow)" : "var(--accent-red)"};font-weight:600">${(d.confidence * 100).toFixed(1)}%</td>
+                <td style="padding:5px 8px;color:var(--text-muted)">${fmtMethod(d.detection_method)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    } else {
+      detailEl.style.display = "none";
+    }
+
     // Refresh stats
     loadVoiceStats();
 

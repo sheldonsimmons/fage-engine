@@ -172,6 +172,9 @@
   gap: 16px;
   margin-bottom: 16px;
 }
+/* Inside draggable column, gap is handled by rpt-draggable-col — suppress double margin */
+.rpt-draggable-col .rpt-charts-row { margin-bottom: 0; }
+.rpt-draggable-col .rpt-table-card  { margin-bottom: 0; }
 .rpt-chart-card {
   background: var(--bg-panel);
   border: 1px solid var(--border);

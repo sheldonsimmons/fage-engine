@@ -300,8 +300,9 @@ class RedactionSpan:
     end: int
     pii_type: str
     digits_found: int
-    detection_method: str   # "rule"
+    detection_method: str   # "rule" | "ai" | "both"
     confidence: float
+    trigger_phrase: str = ""   # The phrase that activated this detection (empty for AI/direct-pattern)
 
 
 @dataclass
@@ -314,20 +315,22 @@ class VoiceGuardResult:
     flagged_for_review: bool    # True if any low-confidence or partial match
     processing_ms: int
     warnings: List[str] = field(default_factory=list)
+    detection_details: List[dict] = field(default_factory=list)  # Per-redaction breakdown
 
 
 # ── Core processing functions ─────────────────────────────────────────────────
 
-def _find_trigger(text_lower: str, pos: int) -> Optional[Tuple[PIIPattern, int]]:
+def _find_trigger(text_lower: str, pos: int) -> Optional[Tuple[PIIPattern, int, str]]:
     """
     Scan from pos for the NEAREST trigger phrase.
-    Returns (pattern, end_position_of_trigger) or None.
+    Returns (pattern, end_position_of_trigger, matched_trigger_text) or None.
     Finds the earliest-starting trigger from pos.
     On position ties, prefers the longer trigger (more specific match).
     """
     best_idx: Optional[int] = None
     best_end: Optional[int] = None
     best_pattern: Optional[PIIPattern] = None
+    best_trigger: str = ""
     best_len = 0
 
     for trigger, pattern in _TRIGGER_MAP.items():
@@ -339,11 +342,12 @@ def _find_trigger(text_lower: str, pos: int) -> Optional[Tuple[PIIPattern, int]]
             best_idx = idx
             best_end = idx + len(trigger)
             best_pattern = pattern
+            best_trigger = trigger
             best_len = len(trigger)
 
     if best_pattern is None:
         return None
-    return best_pattern, best_end
+    return best_pattern, best_end, best_trigger
 
 
 def _vacuum_digits(text: str, start: int, window_chars: int = 300,
@@ -499,7 +503,7 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         found = _find_trigger(text_lower, pos)
         if not found:
             break
-        pattern, trigger_end = found
+        pattern, trigger_end, trigger_text = found
 
         # max_digits: stop early once we have enough (prevents eating next number)
         # For range patterns (credit card 13-16), use the max as the cap
@@ -539,6 +543,7 @@ def process_transcript(raw: str) -> VoiceGuardResult:
                     digits_found=len(digits),
                     detection_method="rule",
                     confidence=conf,
+                    trigger_phrase=trigger_text,
                 ))
                 if flagged:
                     warnings.append(
@@ -628,6 +633,17 @@ def process_transcript(raw: str) -> VoiceGuardResult:
 
     processing_ms = int((time.time() - t0) * 1000)
 
+    # Build per-redaction detail for the UI breakdown table
+    detection_details = [
+        {
+            "pii_type":        s.pii_type,
+            "trigger_phrase":  s.trigger_phrase,
+            "confidence":      round(s.confidence, 3),
+            "detection_method": s.detection_method,
+        }
+        for s in merged
+    ]
+
     return VoiceGuardResult(
         clean_transcript=clean,
         redactions=merged,
@@ -637,6 +653,7 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         flagged_for_review=any_flagged,
         processing_ms=processing_ms,
         warnings=warnings,
+        detection_details=detection_details,
     )
 
 

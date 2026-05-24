@@ -419,6 +419,32 @@ body {
 .collapsible-title:hover { color: var(--accent); }
 .panel-chevron { font-size: 14px; color: var(--text-muted); transition: transform 0.15s; }
 
+/* ── Drag-and-drop ────────────────────────────────────────────────────────────── */
+.drag-handle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-right: 8px; flex-shrink: 0;
+  color: var(--text-muted); cursor: grab; font-size: 16px; line-height: 1;
+  border-radius: 4px; transition: color 0.15s, background 0.15s;
+  user-select: none;
+}
+.drag-handle:hover  { color: var(--accent); background: rgba(88,166,255,0.08); }
+.drag-handle:active { cursor: grabbing; }
+
+.dp-wrap { /* dashboard draggable panel wrapper */ }
+
+.sortable-ghost  { opacity: 0.4; background: var(--bg-panel); border: 1px dashed var(--accent); border-radius: 8px; }
+.sortable-chosen { box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
+
+/* ── Report card drag ─────────────────────────────────────────────────────────── */
+.rpt-draggable-col { display: flex; flex-direction: column; gap: 20px; }
+.rpt-drag-card     { }
+.rpt-drag-bar {
+  display: flex; align-items: center; padding: 2px 0 6px;
+  opacity: 0.45; transition: opacity 0.15s;
+}
+.rpt-drag-card:hover .rpt-drag-bar { opacity: 1; }
+.rpt-drag-bar .drag-handle { margin-right: 0; }
+
 /* ── Sensitive Term Library ───────────────────────────────────────────────────── */
 .panel-sub {
   font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;
