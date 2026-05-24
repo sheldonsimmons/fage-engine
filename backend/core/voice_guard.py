@@ -458,13 +458,13 @@ def process_transcript(raw: str) -> VoiceGuardResult:
     merged: List[RedactionSpan] = []
     for span in all_spans:
         if merged and span.start < merged[-1].end:
-            # Overlap — keep higher confidence, prefer "both" as detection method
+            # Overlap — always check if methods differ (mark as "both" regardless of winner)
+            prev_method = merged[-1].detection_method
             if span.confidence >= merged[-1].confidence:
-                prev = merged[-1]
                 merged[-1] = span
-                # Mark as caught by both layers if methods differ
-                if prev.detection_method != span.detection_method:
-                    merged[-1].detection_method = "both"
+            # If the two spans came from different layers, mark as caught by both
+            if prev_method != span.detection_method:
+                merged[-1].detection_method = "both"
         else:
             merged.append(span)
 
