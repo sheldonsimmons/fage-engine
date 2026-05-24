@@ -303,16 +303,30 @@ class VoiceGuardResult:
 
 def _find_trigger(text_lower: str, pos: int) -> Optional[Tuple[PIIPattern, int]]:
     """
-    Scan from pos for any trigger phrase.
+    Scan from pos for the NEAREST trigger phrase.
     Returns (pattern, end_position_of_trigger) or None.
-    Checks longest triggers first to avoid partial matches.
+    Finds the earliest-starting trigger from pos.
+    On position ties, prefers the longer trigger (more specific match).
     """
-    sorted_triggers = sorted(_TRIGGER_MAP.keys(), key=len, reverse=True)
-    for trigger in sorted_triggers:
+    best_idx: Optional[int] = None
+    best_end: Optional[int] = None
+    best_pattern: Optional[PIIPattern] = None
+    best_len = 0
+
+    for trigger, pattern in _TRIGGER_MAP.items():
         idx = text_lower.find(trigger, pos)
-        if idx != -1:
-            return _TRIGGER_MAP[trigger], idx + len(trigger)
-    return None
+        if idx == -1:
+            continue
+        # Prefer earlier position; on tie, prefer longer trigger (more specific)
+        if best_idx is None or idx < best_idx or (idx == best_idx and len(trigger) > best_len):
+            best_idx = idx
+            best_end = idx + len(trigger)
+            best_pattern = pattern
+            best_len = len(trigger)
+
+    if best_pattern is None:
+        return None
+    return best_pattern, best_end
 
 
 def _vacuum_digits(text: str, start: int, window_chars: int = 300,
@@ -505,6 +519,10 @@ def process_transcript(raw: str) -> VoiceGuardResult:
                         f"Partial {pattern.pii_type} match: found {len(digits)} digits, "
                         f"expected {expected}. Flagged for review."
                     )
+                # Advance past the digits we just consumed so the next trigger
+                # search starts after them, not from the middle of this number.
+                pos = last_pos + 1
+                continue
 
         pos = trigger_end
 
