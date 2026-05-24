@@ -73,18 +73,19 @@ except Exception as e:
 
 # PII type mapping: Presidio entity type → our redact label
 _PRESIDIO_TYPE_MAP = {
-    "US_SSN":           ("SSN",          0.92),
-    "CREDIT_CARD":      ("CREDIT-CARD",  0.93),
-    "PHONE_NUMBER":     ("PHONE",        0.85),
-    "DATE_TIME":        ("DATE-OF-BIRTH",0.75),
+    "US_SSN":           ("SSN",           0.92),
+    "CREDIT_CARD":      ("CREDIT-CARD",   0.93),
+    "PHONE_NUMBER":     ("PHONE",         0.85),
+    "DATE_TIME":        ("DATE-OF-BIRTH", 0.75),
     "US_BANK_NUMBER":   ("ROUTING-NUMBER",0.88),
-    "US_PASSPORT":      ("PASSPORT",     0.88),
-    "EMAIL_ADDRESS":    ("EMAIL",        0.90),
-    "PERSON":           ("PERSON-NAME",  0.72),
-    "LOCATION":         ("LOCATION",     0.70),
-    "IP_ADDRESS":       ("IP-ADDRESS",   0.90),
-    "MEDICAL_LICENSE":  ("MEDICAL-ID",   0.88),
-    "NRP":              ("ID-NUMBER",    0.80),
+    "US_PASSPORT":      ("PASSPORT",      0.88),
+    "EMAIL_ADDRESS":    ("EMAIL",         0.90),
+    "PERSON":           ("PERSON-NAME",   0.72),
+    "LOCATION":         ("LOCATION",      0.70),
+    "IP_ADDRESS":       ("IP-ADDRESS",    0.90),
+    "MEDICAL_LICENSE":  ("MEMBER-ID",     0.88),
+    "NRP":              ("MEMBER-ID",     0.80),
+    "BANK_ACCOUNT":     ("BANK-ACCOUNT",  0.85),
 }
 
 
@@ -195,7 +196,7 @@ PII_PATTERNS = [
         triggers=[
             "credit card", "card number", "debit card", "card ending",
             "card is", "my card", "visa", "mastercard", "amex",
-            "american express",
+            "american express", "card on file",
         ],
         digit_count=0, digit_min=13, digit_max=16,
         window_seconds=20,
@@ -211,13 +212,25 @@ PII_PATTERNS = [
         window_seconds=20,
         redact_label="ROUTING-NUMBER",
     ),
+    # Bank account number — separate from routing, triggered by account context
+    PIIPattern(
+        pii_type="BANK_ACCOUNT",
+        triggers=[
+            "account number", "account is", "my account", "bank account",
+            "checking account", "savings account", "account ending",
+            "and my account", "account number is",
+        ],
+        digit_count=0, digit_min=6, digit_max=17,
+        window_seconds=20,
+        redact_label="BANK-ACCOUNT",
+    ),
     PIIPattern(
         pii_type="DATE_OF_BIRTH",
         triggers=[
             "date of birth", "date of birth is", "dob", "birthday",
-            "born on", "born in",
+            "born on", "born in", "birth date",
         ],
-        digit_count=8,   # MMDDYYYY
+        digit_count=8,
         window_seconds=20,
         redact_label="DATE-OF-BIRTH",
     ),
@@ -225,11 +238,33 @@ PII_PATTERNS = [
         pii_type="PHONE",
         triggers=[
             "phone number", "call me at", "my number is", "reach me at",
-            "cell number", "mobile number",
+            "you can reach me at", "cell number", "mobile number",
+            "callback number", "call back at", "telephone number",
+            "my phone", "phone is",
         ],
         digit_count=10,
         window_seconds=15,
         redact_label="PHONE",
+    ),
+    PIIPattern(
+        pii_type="PASSPORT",
+        triggers=[
+            "passport number", "passport is", "my passport",
+        ],
+        digit_count=0, digit_min=6, digit_max=9,
+        window_seconds=20,
+        redact_label="PASSPORT",
+    ),
+    PIIPattern(
+        pii_type="MEMBER_ID",
+        triggers=[
+            "member id", "member number", "employee id", "employee number",
+            "medicare number", "medicaid number", "policy number",
+            "insurance id", "member id is", "policy is",
+        ],
+        digit_count=0, digit_min=6, digit_max=12,
+        window_seconds=20,
+        redact_label="MEMBER-ID",
     ),
 ]
 
