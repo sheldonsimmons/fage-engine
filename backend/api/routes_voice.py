@@ -63,16 +63,13 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
     result = process_transcript(req.transcript)
 
     # Determine status
+    redactions_count = len(result.redactions)
     if result.flagged_for_review:
         status = "flagged"
-    elif result.redactions_count > 0 or result.pii_types_found:
+    elif redactions_count > 0 or result.pii_types_found:
         status = "redacted"
     else:
         status = "clean"
-
-    # Override status based on redactions
-    if result.redactions:
-        status = "flagged" if result.flagged_for_review else "redacted"
 
     # Persist to DB
     event = VoiceEvent(
@@ -82,7 +79,7 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
         # Only store raw transcript if no PII was found (never store PII)
         raw_transcript=req.transcript if not result.redactions else None,
         clean_transcript=result.clean_transcript,
-        redactions_count=len(result.redactions),
+        redactions_count=redactions_count,
         pii_types_found=json.dumps(result.pii_types_found),
         detection_method=result.detection_method,
         confidence_score=result.confidence_score,
@@ -95,7 +92,7 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
     return TranscriptResponse(
         call_id=req.call_id,
         clean_transcript=result.clean_transcript,
-        redactions_count=len(result.redactions),
+        redactions_count=redactions_count,
         pii_types_found=result.pii_types_found,
         detection_method=result.detection_method,
         confidence_score=result.confidence_score,
