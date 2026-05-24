@@ -453,20 +453,53 @@ def process_transcript(raw: str) -> VoiceGuardResult:
     presidio_spans = _run_presidio(normalized)
     all_spans.extend(presidio_spans)
 
-    # Step 5: Merge overlapping spans (keep highest confidence)
+    # Step 5: Merge overlapping spans
+    # Priority rules:
+    #   1. Trigger-sourced spans (state machine) always win on PII TYPE — context is authoritative
+    #   2. On confidence tie, triggered span wins
+    #   3. If both layers caught the same span, mark detection_method as "both"
+    #
+    # This prevents a 9-digit routing number from being mislabeled as SSN:
+    # the state machine fired on "routing number" trigger → ROUTING label wins
+    # even if Presidio's compact-SSN pattern scores higher.
+
+    # Tag each span with whether it came from a trigger (context-aware) detection
+    TRIGGER_TYPES = {"ROUTING", "DATE_OF_BIRTH", "PHONE", "CREDIT_CARD", "SSN",
+                     "PASSPORT"}  # all state machine types are context-authoritative
+
     all_spans.sort(key=lambda s: s.start)
     merged: List[RedactionSpan] = []
+
     for span in all_spans:
-        if merged and span.start < merged[-1].end:
-            # Overlap — always check if methods differ (mark as "both" regardless of winner)
-            prev_method = merged[-1].detection_method
-            if span.confidence >= merged[-1].confidence:
-                merged[-1] = span
-            # If the two spans came from different layers, mark as caught by both
-            if prev_method != span.detection_method:
-                merged[-1].detection_method = "both"
-        else:
+        if not merged or span.start >= merged[-1].end:
             merged.append(span)
+            continue
+
+        # Overlapping span — decide which to keep
+        existing = merged[-1]
+        prev_method = existing.detection_method
+
+        # Determine if either span came from the trigger state machine
+        # (detection_method == "rule" and pii_type matches a trigger-defined type)
+        existing_is_triggered = (existing.detection_method == "rule")
+        incoming_is_triggered = (span.detection_method == "rule")
+
+        if existing_is_triggered and not incoming_is_triggered:
+            # Keep existing — its label came from trigger context, don't overwrite with AI guess
+            winner = existing
+        elif incoming_is_triggered and not existing_is_triggered:
+            # Incoming has trigger context — it wins on label
+            winner = span
+        elif span.confidence > existing.confidence:
+            # Both same source type — higher confidence wins
+            winner = span
+        else:
+            winner = existing
+
+        merged[-1] = winner
+        # Mark as caught by both layers if methods differ
+        if prev_method != span.detection_method:
+            merged[-1].detection_method = "both"
 
     # Step 6: Apply redactions (process in reverse to preserve indices)
     clean = normalized
