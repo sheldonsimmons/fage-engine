@@ -99,6 +99,16 @@ _ONES = {
     "eighteen": 18, "nineteen": 19,
 }
 
+# Month names → two-digit month number strings (for DOB normalization)
+_MONTHS = {
+    "january": "01", "february": "02", "march": "03", "april": "04",
+    "may": "05",     "june": "06",     "july": "07", "august": "08",
+    "september": "09", "october": "10", "november": "11", "december": "12",
+    "jan": "01", "feb": "02", "mar": "03", "apr": "04",
+    "jun": "06", "jul": "07", "aug": "08", "sep": "09",
+    "oct": "10", "nov": "11", "dec": "12",
+}
+
 _TENS = {
     "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
     "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
@@ -153,6 +163,11 @@ def normalize_spoken_numbers(text: str) -> str:
 
         if word in _ONES:
             result.append(str(_ONES[word]))
+            i += 1
+            continue
+
+        if word in _MONTHS:
+            result.append(_MONTHS[word])
             i += 1
             continue
 
@@ -212,13 +227,15 @@ PII_PATTERNS = [
         window_seconds=20,
         redact_label="ROUTING-NUMBER",
     ),
-    # Bank account number — separate from routing, triggered by account context
+    # Bank account number — separate from routing, triggered by account context.
+    # "my account" and "and my account" are intentionally excluded — they fire
+    # on generic phrases like "update my account information" far from any digits.
     PIIPattern(
         pii_type="BANK_ACCOUNT",
         triggers=[
-            "account number", "account is", "my account", "bank account",
-            "checking account", "savings account", "account ending",
-            "and my account", "account number is",
+            "account number", "account number is", "account is",
+            "bank account", "checking account", "savings account",
+            "account ending", "my account is", "my account number",
         ],
         digit_count=0, digit_min=6, digit_max=17,
         window_seconds=20,
@@ -358,8 +375,10 @@ def _vacuum_digits(text: str, start: int, window_chars: int = 300,
             last_digit_i = i
             digits.append(ch)
 
-            # Stop once we have enough digits (allow 1 extra for spoken variation)
-            if max_digits > 0 and len(digits) >= max_digits + 1:
+            # Stop as soon as we have the expected number of digits.
+            # No +1 tolerance — adjacent numbers (e.g. routing then account)
+            # share no whitespace gap so a tolerance digit bleeds into the next number.
+            if max_digits > 0 and len(digits) >= max_digits:
                 break
 
     return "".join(digits), (first_pos if first_pos != -1 else start), last_pos
@@ -493,6 +512,13 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         )
 
         if not digits:
+            pos = trigger_end
+            continue
+
+        # Proximity guard: if the first digit is more than 80 chars after the
+        # trigger, the trigger was contextual (e.g. "update my account information")
+        # and these digits belong to a later, separate PII field — skip.
+        if first_pos - trigger_end > 80:
             pos = trigger_end
             continue
 
