@@ -561,10 +561,16 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
             if r.entity_type in _PRESIDIO_SKIP_ENTITIES:
                 continue
 
-            # DATE_TIME: skip temporal references ("last tuesday", "two o'clock")
+            # DATE_TIME: only flag as DATE-OF-BIRTH when a DOB context phrase
+            # appears nearby. Generic timestamps (email headers, timestamps,
+            # "9:04am CST", "24 hours") are nearly always false positives.
             if r.entity_type == "DATE_TIME":
-                window = text[max(0, r.start - 50):r.end + 20].lower()
-                if _TEMPORAL_REFS.search(window):
+                window = text[max(0, r.start - 100):r.end + 50].lower()
+                # Skip if no DOB trigger phrase in context
+                if not _DOB_CONTEXT.search(window):
+                    continue
+                # Skip temporal references ("last tuesday", "two o'clock")
+                if _TEMPORAL_REFS.search(text[max(0, r.start - 50):r.end + 20].lower()):
                     continue
                 # Require higher confidence for dates — lots of false positives
                 if r.score < 0.70:
@@ -715,31 +721,70 @@ def _level3_boost(spans: List[RedactionSpan], text: str, warnings: List[str]) ->
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
+_HTML_TAG = re.compile(r'<[^>]+>')
+_HTML_ENTITY = re.compile(r'&(?:#\d+|#x[\da-fA-F]+|[a-zA-Z]+);')
+
+def _strip_html(text: str) -> str:
+    """Strip HTML tags and decode common entities if the text looks like HTML."""
+    if '<' not in text:
+        return text
+    # Replace block-level tags with newlines so sentences don't merge
+    text = re.sub(r'<(?:br|p|div|li|tr|td|th|h\d)(?:\s[^>]*)?>',
+                  '\n', text, flags=re.IGNORECASE)
+    text = _HTML_TAG.sub(' ', text)
+    # Decode common HTML entities
+    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') \
+               .replace('&nbsp;', ' ').replace('&copy;', '©').replace('&quot;', '"')
+    text = _HTML_ENTITY.sub(' ', text)
+    # Collapse excessive whitespace
+    text = re.sub(r' {2,}', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+# Phrases that strongly suggest a DATE_TIME entity IS a date-of-birth,
+# not an operational timestamp. Required within 100 chars of a bare date.
+_DOB_CONTEXT = re.compile(
+    r'\b(date of birth|dob|birthday|born on|born in|birth date|date of birth is)\b',
+    re.IGNORECASE,
+)
+
+# Email header prefixes — dates on these lines are metadata, never DOB
+_EMAIL_HEADER = re.compile(
+    r'^(from|to|cc|bcc|date|sent|subject|reply-to|x-mailer|mime-version|content-type)\s*:',
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def process_transcript(raw: str) -> VoiceGuardResult:
     """
     Full Voice Guard pipeline — dual layer (rule engine + Presidio AI).
 
-    1. Normalize spoken numbers to digits
-    2. Rule engine: direct pattern matching (formatted SSNs)
-    3. Rule engine: trigger-based state machine (interrupted speech)
-    4. AI layer: Presidio (triggerless detection, context-aware)
-    5. Merge all spans — most restrictive wins on overlaps
-    6. Apply redactions
-    7. Return VoiceGuardResult
+    1. Strip HTML (if input is an email / HTML content)
+    2. Normalize spoken numbers to digits
+    3. Rule engine: direct pattern matching (formatted SSNs)
+    4. Rule engine: trigger-based state machine (interrupted speech)
+    5. AI layer: Presidio (triggerless detection, context-aware)
+    6. Merge all spans — most restrictive wins on overlaps
+    7. Apply redactions
+    8. Return VoiceGuardResult
     """
     t0 = time.time()
 
-    # Step 1: Normalize
-    normalized = normalize_spoken_numbers(raw)
+    # Step 1: Strip HTML tags so context windows work on plain text
+    stripped = _strip_html(raw)
+
+    # Step 2: Normalize
+    normalized = normalize_spoken_numbers(stripped)
     text_lower  = normalized.lower()
 
     all_spans: List[RedactionSpan] = []
     warnings: List[str] = []
 
-    # Step 2: Direct pattern matching (formatted numbers, no trigger needed)
+    # Step 3: Direct pattern matching (formatted numbers, no trigger needed)
     all_spans.extend(_apply_direct_patterns(normalized))
 
-    # Step 3: Trigger-based state machine
+    # Step 4: Trigger-based state machine
     pos = 0
     while pos < len(text_lower):
         found = _find_trigger(text_lower, pos)
@@ -799,11 +844,11 @@ def process_transcript(raw: str) -> VoiceGuardResult:
 
         pos = trigger_end
 
-    # Step 4: Presidio AI layer — catches triggerless and context-aware PII
+    # Step 5: Presidio AI layer — catches triggerless and context-aware PII
     presidio_spans = _run_presidio(normalized)
     all_spans.extend(presidio_spans)
 
-    # Step 5: Merge overlapping spans
+    # Step 6: Merge overlapping spans
     # Priority rules:
     #   1. Trigger-sourced spans (state machine) always win on PII TYPE — context is authoritative
     #   2. On confidence tie, triggered span wins
@@ -851,16 +896,16 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         if prev_method != span.detection_method:
             merged[-1].detection_method = "both"
 
-    # Step 5b: Level 3 — context-aware confidence boost + cluster detection
+    # Step 6b: Level 3 — context-aware confidence boost + cluster detection
     merged, l3_flagged = _level3_boost(merged, normalized, warnings)
 
-    # Step 6: Apply redactions (process in reverse to preserve indices)
+    # Step 7: Apply redactions (process in reverse to preserve indices)
     clean = normalized
     for span in sorted(merged, key=lambda s: s.start, reverse=True):
         tag = f"[REDACTED-{span.pii_type}]"
         clean = clean[:span.start] + tag + clean[span.end:]
 
-    # Step 7: Build result
+    # Step 8: Build result
     pii_types   = list({s.pii_type for s in merged})
     avg_conf    = (sum(s.confidence for s in merged) / len(merged)) if merged else 1.0
     any_flagged = l3_flagged or any(s.confidence < 0.80 for s in merged) or bool(warnings)
