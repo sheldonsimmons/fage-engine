@@ -8,7 +8,28 @@
  *   4. Launch (API calls to create budgets, redirect to dashboard)
  */
 
-let selectedProvider = "openai";
+let selectedProvider  = "openai";
+let voiceGuardEnabled = false;
+
+function toggleVoiceGuard() {
+  voiceGuardEnabled = !voiceGuardEnabled;
+  const track    = document.getElementById("vgToggleTrack");
+  const thumb    = document.getElementById("vgToggleThumb");
+  const label    = document.getElementById("vgToggleLabel");
+  const progLine = document.getElementById("prog-line-vg");
+  const prog6    = document.getElementById("prog-6");
+  const progLbl  = document.getElementById("prog-label-vg");
+
+  track.style.background = voiceGuardEnabled ? "var(--accent-green,#3fb950)" : "var(--border,#30363d)";
+  thumb.style.transform  = voiceGuardEnabled ? "translateX(18px)" : "translateX(0)";
+  label.textContent      = voiceGuardEnabled ? "Enabled — Voice Guard step included" : "Disabled — skip Voice Guard setup";
+  label.style.color      = voiceGuardEnabled ? "var(--accent-green,#3fb950)" : "var(--text-muted,#8b949e)";
+
+  const d = voiceGuardEnabled ? "" : "none";
+  if (progLine) progLine.style.display = d;
+  if (prog6)    prog6.style.display    = d;
+  if (progLbl)  progLbl.style.display  = d;
+}
 
 const defaultDepartments = [
   { name: "Support",    cap: 0 },
@@ -208,8 +229,11 @@ async function launchFage() {
     title.textContent = "FAGE is ready.";
     sub.textContent   = "Your AI governance layer is live. Connect a platform or try Voice Guard now.";
     log("Setup complete!", true);
+    document.getElementById("launchPlatformPicker").style.display = "";
     doneBtn.style.display      = "inline-block";
-    document.getElementById("voiceGuardBtn").style.display = "inline-block";
+    if (voiceGuardEnabled) {
+      document.getElementById("voiceGuardBtn").style.display = "inline-block";
+    }
     document.getElementById("skipConnectBtn").style.display = "inline-block";
 
   } catch (err) {
@@ -219,75 +243,123 @@ async function launchFage() {
   }
 }
 
-// ── Salesforce Integration (Screen 5) ────────────────────────────────────────
+// ── Launch platform picker ────────────────────────────────────────────────────
 
-const OBJECT_FIELDS = {
-  Case:        ["Description", "Subject", "Body", "Internal_Comments__c", "Custom Field..."],
-  Lead:        ["Description", "Notes__c", "Custom Field..."],
-  Opportunity: ["Description", "Next_Step__c", "Custom Field..."],
-  Contact:     ["Description", "Custom Field..."],
-  Account:     ["Description", "Notes__c", "Custom Field..."],
-  Task:        ["Description", "Subject", "Custom Field..."],
-  __custom__:  ["Custom Field..."],
+let selectedLaunchPlatform = null;
+
+function selectLaunchPlatform(platform) {
+  selectedLaunchPlatform = platform;
+  // Highlight selected tile
+  document.querySelectorAll("#launchPlatformPicker .ob-provider").forEach(el => el.classList.remove("selected"));
+  document.getElementById(`lp-${platform}`).classList.add("selected");
+  // Update connect button label
+  const labels = { salesforce: "Salesforce", servicenow: "ServiceNow", hubspot: "HubSpot", dynamics: "Dynamics 365", zendesk: "Zendesk", custom: "Custom Platform" };
+  document.getElementById("dashboardBtn").textContent = `Connect ${labels[platform] || platform} →`;
+}
+
+function goToPlatformScreen() {
+  goToScreen(5);
+  if (selectedLaunchPlatform) {
+    // Pre-select the platform on screen 5
+    selectObPlatform(selectedLaunchPlatform);
+  }
+}
+
+// ── Platform Integration (Screen 5) ──────────────────────────────────────────
+
+const FAGE_URL = "https://fage-engine-21cb49fe4806.herokuapp.com";
+
+const OB_PLATFORMS = {
+  salesforce: { label: "Salesforce",    objects: ["Case","Lead","Opportunity","Contact","Account","Task"],              agentDefault: "SF-CaseBot"    },
+  servicenow: { label: "ServiceNow",    objects: ["incident","sc_request","problem","change_request","task"],           agentDefault: "SN-IncidentBot" },
+  hubspot:    { label: "HubSpot",       objects: ["contacts","deals","tickets","companies","tasks"],                    agentDefault: "HS-TicketBot"  },
+  dynamics:   { label: "Dynamics 365", objects: ["incident","lead","opportunity","contact","account"],                  agentDefault: "D365-CaseBot"  },
+  zendesk:    { label: "Zendesk",       objects: ["ticket","user","organization","request"],                            agentDefault: "ZD-TicketBot"  },
+  custom:     { label: "Custom/Other",  objects: ["record","event","document","message"],                               agentDefault: "FAGE-Bot"      },
 };
 
-function onObjectChange() {
-  const obj     = document.getElementById("sfObject").value;
-  const fields  = OBJECT_FIELDS[obj] || ["Description", "Custom Field..."];
-  const select  = document.getElementById("sfField");
-  const customObjRow = document.getElementById("customObjectField");
+let obSelectedPlatform = null;
 
-  customObjRow.style.display = obj === "__custom__" ? "" : "none";
-
-  select.innerHTML = fields.map(f =>
-    `<option value="${f}">${f}</option>`
-  ).join("");
-
-  onFieldChange();
-
-  // Auto-suggest agent name
-  const agentInput = document.getElementById("sfAgentName");
-  if (!agentInput.value) {
-    const label = obj === "__custom__" ? "Custom" : obj;
-    agentInput.value = `SF-${label}Bot`;
+function selectObPlatform(platform) {
+  obSelectedPlatform = platform;
+  Object.keys(OB_PLATFORMS).forEach(p => {
+    const el = document.getElementById("ob-plat-" + p);
+    if (el) el.classList.toggle("selected", p === platform);
+  });
+  const cfg = OB_PLATFORMS[platform];
+  const objSel = document.getElementById("obPlatObject");
+  objSel.innerHTML = cfg.objects.map(o => `<option value="${o}">${o}</option>`).join("");
+  const agentEl = document.getElementById("obPlatAgent");
+  if (!agentEl.value || Object.values(OB_PLATFORMS).some(c => c.agentDefault === agentEl.value)) {
+    agentEl.value = cfg.agentDefault;
   }
+  document.getElementById("obPlatConfig").style.display  = "block";
+  document.getElementById("obPlatBackOnly").style.display = "none";
+  document.getElementById("obPlatOutput").style.display  = "none";
 }
 
-function onFieldChange() {
-  const field = document.getElementById("sfField").value;
-  document.getElementById("customFieldRow").style.display =
-    field === "Custom Field..." ? "" : "none";
+function _obEsc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
-function getEffectiveObject() {
-  const obj = document.getElementById("sfObject").value;
-  if (obj === "__custom__") {
-    return document.getElementById("sfCustomObject").value.trim() || "MyObject__c";
-  }
-  return obj;
+function _obCodeSection(label, hint, code) {
+  const id = "obc" + Math.random().toString(36).slice(2,8);
+  return `
+    <div class="ob-code-section" style="margin-top:20px">
+      <div class="ob-code-header">
+        <span class="ob-code-label">${_obEsc(label)}</span>
+        ${hint ? `<span class="ob-code-hint">${_obEsc(hint)}</span>` : ""}
+        <button class="ob-copy-btn" onclick="obCopyCode('${id}')">Copy</button>
+      </div>
+      <pre class="ob-code-block" id="${id}">${_obEsc(code)}</pre>
+    </div>`;
 }
 
-function getEffectiveField() {
-  const field = document.getElementById("sfField").value;
-  if (field === "Custom Field...") {
-    return document.getElementById("sfCustomField").value.trim() || "My_Field__c";
-  }
-  return field;
+function _obBanner(platform, obj, dept, agent) {
+  const lbl = (OB_PLATFORMS[platform] || {}).label || platform;
+  return `<div class="ob-success-banner">FAGE configured for <strong>${_obEsc(lbl)} · ${_obEsc(obj)} → ${_obEsc(dept)}</strong>. Agent: <strong>${_obEsc(agent)}</strong>. Agents appear in the Agentlake Registry on first use.</div>`;
 }
 
-function generateCode() {
+function _obActions() {
+  const vg = voiceGuardEnabled
+    ? `<button class="ob-btn-ghost" onclick="goToScreen(6)" style="margin-left:auto">🎙 Voice Guard →</button>` : "";
+  return `<div class="ob-actions" style="margin-top:24px">
+    <button class="ob-btn-ghost" onclick="generateObCode()">↺ Regenerate</button>
+    ${vg}
+    <button class="ob-btn-primary" onclick="window.location.href='/'">Open Dashboard →</button>
+  </div>`;
+}
+
+function obCopyCode(id) {
+  const pre = document.getElementById(id);
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    const btn = event.target;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  });
+}
+
+function generateObCode() {
   const err = document.getElementById("error-5");
-  const obj   = getEffectiveObject();
-  const field = getEffectiveField();
-  const dept  = document.getElementById("sfDept").value;
-  const agent = document.getElementById("sfAgentName").value.trim() || `SF-${obj}Bot`;
-
-  if (!obj)   { err.textContent = "Please select or enter an object."; return; }
-  if (!field) { err.textContent = "Please select or enter a field.";   return; }
+  if (!obSelectedPlatform) { err.textContent = "Select a platform first."; return; }
   err.textContent = "";
+  const obj   = document.getElementById("obPlatObject").value.trim();
+  const dept  = document.getElementById("obPlatDept").value;
+  const agent = document.getElementById("obPlatAgent").value.trim() || OB_PLATFORMS[obSelectedPlatform].agentDefault;
+  const fns   = { salesforce:_genSalesforce, servicenow:_genServiceNow, hubspot:_genHubSpot, dynamics:_genDynamics, zendesk:_genZendesk, custom:_genCustom };
+  const html  = (fns[obSelectedPlatform] || _genCustom)(obj, dept, agent);
+  const out   = document.getElementById("obPlatOutput");
+  out.innerHTML = html;
+  out.style.display = "block";
+  out.scrollIntoView({ behavior: "smooth" });
+}
 
-  // ── Generate Apex ──────────────────────────────────────────────────────────
-  const apex = `public class FAGECallout {
+// ── Code generators ───────────────────────────────────────────────────────────
+
+function _genSalesforce(obj, dept, agent) {
+  const apex =
+`public class FAGECallout {
     @InvocableMethod(label='Send to FAGE')
     public static void sendToFAGE(List<FAGERequest> requests) {
         if (System.isFuture() || System.isBatch()) return;
@@ -296,40 +368,30 @@ function generateCode() {
     }
 
     @future(callout=true)
-    public static void sendAsync(String recordId, String recordText, String department, String agentName) {
+    public static void sendAsync(String recordId, String recordText,
+                                 String department, String agentName) {
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
-        httpReq.setEndpoint('https://fage-engine-21cb49fe4806.herokuapp.com/api/route');
+        httpReq.setEndpoint('${FAGE_URL}/api/route');
         httpReq.setMethod('POST');
         httpReq.setHeader('Content-Type', 'application/json');
-        Map<String, Object> body = new Map<String, Object>{
+        httpReq.setBody(JSON.serialize(new Map<String, Object>{
             'text'            => recordText,
             'department'      => department,
             'auto_prune'      => true,
             'agent_name'      => agentName,
             'source_platform' => 'Salesforce'
-        };
-        httpReq.setBody(JSON.serialize(body));
+        }));
         httpReq.setTimeout(30000);
-
         HttpResponse res = http.send(httpReq);
-        System.debug('FAGE Response: ' + res.getBody());
-
         if (res.getStatusCode() == 200 && recordId != null) {
-            Map<String, Object> fageResp =
-                (Map<String, Object>) JSON.deserializeUntyped(res.getBody());
-
-            String aiResponse      = (String) fageResp.get('simulated_response');
-            String modelUsed       = (String) fageResp.get('model_name');
-            String routingDecision = (String) fageResp.get('routing_decision');
-            Decimal costUsd        = Decimal.valueOf(String.valueOf(fageResp.get('cost_usd')));
-
-            ${obj} record = new ${obj}(Id = recordId);
-            record.FAGE_AI_Response__c      = aiResponse;
-            record.FAGE_Model_Used__c       = modelUsed;
-            record.FAGE_Routing_Decision__c = routingDecision;
-            record.FAGE_Cost_USD__c         = costUsd;
-            update record;
+            Map<String,Object> r = (Map<String,Object>) JSON.deserializeUntyped(res.getBody());
+            ${obj} rec = new ${obj}(Id = recordId);
+            rec.FAGE_AI_Response__c      = (String)  r.get('simulated_response');
+            rec.FAGE_Model_Used__c       = (String)  r.get('model_name');
+            rec.FAGE_Routing_Decision__c = (String)  r.get('routing_decision');
+            rec.FAGE_Cost_USD__c         = Decimal.valueOf(String.valueOf(r.get('cost_usd')));
+            update rec;
         }
     }
 
@@ -341,81 +403,194 @@ function generateCode() {
     }
 }`;
 
-  document.getElementById("apexCode").textContent = apex;
+  const flowHtml = `<div class="ob-flow-steps">
+    <div class="ob-flow-step"><span class="ob-flow-num">1</span>
+      <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em></div></div>
+    <div class="ob-flow-step"><span class="ob-flow-num">2</span>
+      <div><strong>Add Action → Apex → Send to FAGE</strong><br/>Record ID → ${_obEsc(obj)} ID · Record Text → Description · Department → ${_obEsc(dept)} · Agent Name → ${_obEsc(agent)}</div></div>
+    <div class="ob-flow-step"><span class="ob-flow-num">3</span>
+      <div><strong>Save &amp; Activate</strong> — agents appear in the Agentlake Registry on first use.</div></div>
+  </div>`;
 
-  // ── Flow instructions ──────────────────────────────────────────────────────
-  document.getElementById("flowSteps").innerHTML = `
-    <div class="ob-flow-step">
-      <span class="ob-flow-num">1</span>
-      <div><strong>Setup → Flows → New Flow</strong><br/>
-      Type: <em>Record-Triggered Flow</em> · Object: <strong>${obj}</strong> · Trigger: <em>A record is created or updated</em></div>
-    </div>
-    <div class="ob-flow-step">
-      <span class="ob-flow-num">2</span>
-      <div><strong>Add an Action element</strong><br/>
-      Category: <em>Apex</em> · Action: <em>Send to FAGE</em> · Label: <em>Route to FAGE</em></div>
-    </div>
-    <div class="ob-flow-step">
-      <span class="ob-flow-num">3</span>
-      <div><strong>Set Input Values</strong><br/>
-      <code>Record ID</code> → <em>Triggering ${obj} &gt; ${obj} ID</em><br/>
-      <code>Record Text</code> → <em>Triggering ${obj} &gt; ${field}</em><br/>
-      <code>Department</code> → <em>${dept}</em><br/>
-      <code>Agent Name</code> → <em>${agent}</em></div>
-    </div>
-    <div class="ob-flow-step">
-      <span class="ob-flow-num">4</span>
-      <div><strong>Save &amp; Activate the Flow</strong><br/>
-      That's it. The next time a <strong>${obj}</strong> is saved with a <strong>${field}</strong> value, FAGE will process it and write the AI response back automatically.</div>
-    </div>
-  `;
+  const fieldHtml = `<div class="ob-field-table">
+    <div class="ob-field-row ob-field-row-header"><span>Label</span><span>API Name</span><span>Type</span><span>Settings</span></div>
+    <div class="ob-field-row"><span>FAGE AI Response</span><span class="mono">FAGE_AI_Response__c</span><span>Long Text</span><span>32,768 chars</span></div>
+    <div class="ob-field-row"><span>FAGE Model Used</span><span class="mono">FAGE_Model_Used__c</span><span>Text</span><span>255 chars</span></div>
+    <div class="ob-field-row"><span>FAGE Routing</span><span class="mono">FAGE_Routing_Decision__c</span><span>Text</span><span>50 chars</span></div>
+    <div class="ob-field-row"><span>FAGE Cost USD</span><span class="mono">FAGE_Cost_USD__c</span><span>Currency</span><span>12,6</span></div>
+  </div>`;
 
-  // ── Field table ────────────────────────────────────────────────────────────
-  document.getElementById("fieldObjectLabel").textContent = obj;
-  document.getElementById("fieldTable").innerHTML = `
-    <div class="ob-field-row ob-field-row-header">
-      <span>Field Label</span><span>API Name</span><span>Type</span><span>Settings</span>
-    </div>
-    <div class="ob-field-row">
-      <span>FAGE AI Response</span>
-      <span class="mono">FAGE_AI_Response__c</span>
-      <span>Long Text Area</span>
-      <span>32,768 chars</span>
-    </div>
-    <div class="ob-field-row">
-      <span>FAGE Model Used</span>
-      <span class="mono">FAGE_Model_Used__c</span>
-      <span>Text</span>
-      <span>255 chars</span>
-    </div>
-    <div class="ob-field-row">
-      <span>FAGE Routing Decision</span>
-      <span class="mono">FAGE_Routing_Decision__c</span>
-      <span>Text</span>
-      <span>50 chars</span>
-    </div>
-    <div class="ob-field-row">
-      <span>FAGE Cost USD</span>
-      <span class="mono">FAGE_Cost_USD__c</span>
-      <span>Currency</span>
-      <span>Length 12, Decimals 6</span>
-    </div>
-  `;
-
-  document.getElementById("successSummary").textContent =
-    `${obj}.${field} → ${dept} department · Agent: ${agent}`;
-
-  document.getElementById("sfOutput").style.display = "block";
-  document.getElementById("sfOutput").scrollIntoView({ behavior: "smooth" });
+  return _obCodeSection("Step 1 — Apex Class", "Developer Console → File → Open → FAGECallout → Replace all → Save", apex)
+    + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 2 — Salesforce Flow</span></div>${flowHtml}</div>`
+    + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 3 — Custom Fields on ${_obEsc(obj)}</span><span class="ob-code-hint">Setup → Object Manager → ${_obEsc(obj)} → Fields &amp; Relationships → New</span></div>${fieldHtml}</div>`
+    + _obBanner("salesforce", obj, dept, agent) + _obActions();
 }
 
-function copyCode(elementId) {
-  const text = document.getElementById(elementId).textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = event.target;
-    btn.textContent = "Copied!";
-    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+function _genServiceNow(obj, dept, agent) {
+  const code =
+`// ServiceNow Business Rule — Table: ${obj}
+// When: after | Insert: true | Update: true
+
+(function executeRule(current, previous) {
+    var rm = new sn_ws.RESTMessageV2();
+    rm.setEndpoint('${FAGE_URL}/api/route');
+    rm.setHttpMethod('POST');
+    rm.setRequestHeader('Content-Type', 'application/json');
+    rm.setRequestBody(JSON.stringify({
+        text:            current.description.toString(),
+        department:      '${dept}',
+        auto_prune:      true,
+        agent_name:      '${agent}',
+        source_platform: 'ServiceNow'
+    }));
+    var response = rm.execute();
+    if (response.getStatusCode() == 200) {
+        var r = JSON.parse(response.getBody());
+        current.work_notes = '[FAGE] ' + r.simulated_response +
+            '\\nModel: ' + r.model_name + ' | Cost: $' + r.cost_usd;
+    }
+})(current, previous);`;
+
+  return _obCodeSection(
+    "Business Rule Script",
+    "System Definition → Business Rules → New · Table: " + obj + " · When: after · Insert + Update",
+    code
+  ) + _obBanner("servicenow", obj, dept, agent) + _obActions();
+}
+
+function _genHubSpot(obj, dept, agent) {
+  const code =
+`// HubSpot Custom Code Action (Node.js)
+// Operations Hub → Workflows → Add Action → Custom Code
+const axios = require('axios');
+
+exports.main = async (event, callback) => {
+  const text = event.inputFields['description'] || event.inputFields['content'] || '';
+  const res  = await axios.post('${FAGE_URL}/api/route', {
+    text,
+    department:      '${dept}',
+    auto_prune:      true,
+    agent_name:      '${agent}',
+    source_platform: 'HubSpot',
   });
+  callback({
+    outputFields: {
+      fage_response: res.data.simulated_response,
+      fage_model:    res.data.model_name,
+      fage_routing:  res.data.routing_decision,
+      fage_cost:     String(res.data.cost_usd),
+    }
+  });
+};`;
+
+  return _obCodeSection(
+    "Custom Code Action",
+    "Operations Hub → Workflows → Add Action → Custom Code → Paste",
+    code
+  ) + _obBanner("hubspot", obj, dept, agent) + _obActions();
+}
+
+function _genDynamics(obj, dept, agent) {
+  const code =
+`// Power Automate — HTTP Action Configuration
+// Trigger: When a row is added, modified or deleted · Table: ${obj}
+
+Method:  POST
+URI:     ${FAGE_URL}/api/route
+Headers: { "Content-Type": "application/json" }
+Body:
+{
+  "text":            "@{triggerOutputs()?['body/description']}",
+  "department":      "${dept}",
+  "auto_prune":      true,
+  "agent_name":      "${agent}",
+  "source_platform": "Dynamics365"
+}
+
+// After HTTP — add "Update a row" action:
+// fage_ai_response:      @{body('HTTP')?['simulated_response']}
+// fage_model_used:       @{body('HTTP')?['model_name']}
+// fage_routing_decision: @{body('HTTP')?['routing_decision']}`;
+
+  return _obCodeSection(
+    "Power Automate HTTP Action",
+    "Power Automate → New Flow → Automated → Dataverse trigger → Add HTTP action",
+    code
+  ) + _obBanner("dynamics", obj, dept, agent) + _obActions();
+}
+
+function _genZendesk(obj, dept, agent) {
+  const code =
+`// Zendesk Sunshine Function (Node.js 18)
+// Admin Center → Apps and integrations → Sunshine Functions → Create
+const fetch = require('node-fetch');
+
+module.exports = async (event) => {
+  const ticketId = event.payload.ticket_id;
+  const body     = event.payload.comment.body || '';
+
+  const res  = await fetch('${FAGE_URL}/api/route', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: body, department: '${dept}',
+      auto_prune: true, agent_name: '${agent}',
+      source_platform: 'Zendesk',
+    }),
+  });
+  const data = await res.json();
+
+  await fetch(\`https://YOUR_SUBDOMAIN.zendesk.com/api/v2/tickets/\${ticketId}.json\`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_TOKEN' },
+    body: JSON.stringify({
+      ticket: { comment: { body: '[FAGE] ' + data.simulated_response, public: false } }
+    }),
+  });
+  return { status: 200, model: data.model_name };
+};`;
+
+  return _obCodeSection(
+    "Sunshine Function",
+    "Admin Center → Apps and integrations → Sunshine Functions → Create → Node.js 18",
+    code
+  ) + _obBanner("zendesk", obj, dept, agent) + _obActions();
+}
+
+function _genCustom(obj, dept, agent) {
+  const python =
+`import requests
+
+FAGE_URL = "${FAGE_URL}"
+
+def send_to_fage(text: str) -> dict:
+    resp = requests.post(FAGE_URL + "/api/route", json={
+        "text":            text,
+        "department":      "${dept}",
+        "auto_prune":      True,
+        "agent_name":      "${agent}",
+        "source_platform": "Custom",
+    }, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+# result = send_to_fage("Customer issue text here...")
+# print(result["simulated_response"])`;
+
+  const curl =
+`curl -X POST ${FAGE_URL}/api/route \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "text":            "Your ${obj} text here",
+    "department":      "${dept}",
+    "auto_prune":      true,
+    "agent_name":      "${agent}",
+    "source_platform": "Custom"
+  }'`;
+
+  return _obCodeSection("Python", "pip install requests · works with any platform that can make HTTP calls", python)
+    + _obCodeSection("cURL", "Test from your terminal", curl)
+    + _obBanner("custom", obj, dept, agent) + _obActions();
 }
 
 // ── Screen 6: Voice Guard Demo ────────────────────────────────────────────────
@@ -545,4 +720,3 @@ function toggleObMic() {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 renderDeptList();
-onObjectChange(); // populate field dropdown on load
