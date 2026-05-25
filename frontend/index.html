@@ -491,19 +491,24 @@
 
         <!-- Voice Guard Audit Log -->
         <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border)">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)">
-              🔒 Voice Guard Audit Log
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; cursor:pointer" onclick="toggleVgAuditSection()">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span id="vgAuditChevron" style="font-size:11px;color:var(--accent);transition:transform 0.2s">▾</span>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)">
+                🔒 Voice Guard Audit Log
+              </div>
             </div>
-            <div style="display:flex;gap:6px;align-items:center">
+            <div style="display:flex;gap:6px;align-items:center" onclick="event.stopPropagation()">
               <button class="export-btn" onclick="exportVgSummaryCsv()" title="Export summary (one row per call)">⬇ CSV Summary</button>
               <button class="export-btn export-btn-green" onclick="exportVgDetailedCsv()" title="Export detailed (one row per PII detection)">⬇ CSV Detailed</button>
               <button class="export-btn" onclick="exportVgPdf()" title="Print / Save as PDF">🖨 PDF</button>
               <button onclick="loadVoiceAuditLog()" style="background:transparent;color:var(--accent);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer">↺ Refresh</button>
             </div>
           </div>
-          <div id="vgAuditLog">
-            <p style="font-size:12px;color:var(--text-muted);padding:8px 0">Loading audit records...</p>
+          <div id="vgAuditLogWrap">
+            <div id="vgAuditLog">
+              <p style="font-size:12px;color:var(--text-muted);padding:8px 0">Loading audit records...</p>
+            </div>
           </div>
         </div>
 

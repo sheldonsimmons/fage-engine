@@ -206,13 +206,29 @@ async function clearVoiceGuardData() {
   }
 }
 
+// ── Voice Guard Audit Log section toggle ─────────────────────────────────────
+
+let _vgAuditOpen = true;   // starts open
+
+function toggleVgAuditSection() {
+  _vgAuditOpen = !_vgAuditOpen;
+  const wrap    = document.getElementById("vgAuditLogWrap");
+  const chevron = document.getElementById("vgAuditChevron");
+  if (wrap)    wrap.style.display    = _vgAuditOpen ? "" : "none";
+  if (chevron) chevron.textContent   = _vgAuditOpen ? "▾" : "▸";
+}
+
 // ── Voice Guard Audit Log ─────────────────────────────────────────────────────
 
-let _vgAuditEvents = [];   // kept in memory for export
+let _vgAuditEvents  = [];        // kept in memory for export
+let _vgOpenRows     = new Set(); // IDs of currently-expanded detail rows
 
 async function loadVoiceAuditLog() {
   const container = document.getElementById("vgAuditLog");
   if (!container) return;
+
+  // Don't refresh if the section is collapsed — no point rebuilding hidden HTML
+  if (!_vgAuditOpen) return;
 
   try {
     const events = await fetch("/api/voice/events?limit=50").then(r => r.json());
@@ -314,6 +330,19 @@ async function loadVoiceAuditLog() {
         <tbody>${rows}</tbody>
       </table>
     `;
+
+    // Restore any previously-open detail rows
+    _vgOpenRows.forEach(rowId => {
+      const row = document.getElementById(rowId);
+      if (row) {
+        row.style.display = "table-row";
+        const mainRow = row.previousElementSibling;
+        if (mainRow) {
+          const arrow = mainRow.querySelector("td:last-child span");
+          if (arrow) arrow.textContent = "▾ details";
+        }
+      }
+    });
   } catch (e) {
     container.innerHTML = `<p style="font-size:12px;color:var(--accent-red)">Failed to load audit log: ${e.message}</p>`;
   }
@@ -324,6 +353,9 @@ function toggleVgAuditRow(rowId) {
   if (!row) return;
   const isOpen = row.style.display !== "none";
   row.style.display = isOpen ? "none" : "table-row";
+  // Track open state so it survives re-renders
+  if (isOpen) _vgOpenRows.delete(rowId);
+  else         _vgOpenRows.add(rowId);
   // Flip the arrow on the parent row's last cell
   const mainRow = row.previousElementSibling;
   if (mainRow) {
