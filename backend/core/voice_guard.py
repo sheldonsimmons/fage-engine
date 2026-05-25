@@ -10,7 +10,8 @@ Pipeline:
   3. State Machine     — collect digits in a window after each trigger
   4. Presidio AI       — catch triggerless PII the rule engine misses
   5. Merge + Redact    — combine both layers, most restrictive wins
-  6. Audit Record      — return structured result for logging
+  6. Level 3 Boost     — context-aware confidence scoring and cluster detection
+  7. Audit Record      — return structured result for logging
 """
 
 import re
@@ -549,6 +550,128 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
     return spans
 
 
+# ── Level 3: Context-aware confidence boosting ────────────────────────────────
+#
+# Runs AFTER the rule + AI merge. Applies intelligence that neither layer can
+# see individually — cross-span signals, surrounding word context, and
+# cluster-level patterns.
+#
+# Four enhancement passes:
+#   1. Co-occurrence boost — multiple PII types in one call = each is more real
+#   2. Confirming context boost — phrases like "my name is" near a PERSON entity
+#   3. Business context suppression — "invoice/order/ticket" near a digit cluster
+#   4. Cluster flagging — 3+ distinct PII types triggers mandatory review flag
+
+# Words that suggest a number is business/operational, not personal
+_BUSINESS_CONTEXT = re.compile(
+    r'\b(invoice|order|ticket|ref|reference|case|tracking|po number|item|sku|'
+    r'serial|transaction|confirmation|booking|reservation|claim)\b',
+    re.IGNORECASE,
+)
+
+# Phrases that strongly confirm a PERSON entity is a real name being given
+_NAME_CONFIRM_PHRASES = re.compile(
+    r'\b(my name is|this is|i am|i\'m|name\'s|name is|speaking with|'
+    r'you\'re speaking to|i go by|they call me)\b',
+    re.IGNORECASE,
+)
+
+# Words that suggest a date is operational, not a date-of-birth
+_DATE_BUSINESS_CONTEXT = re.compile(
+    r'\b(invoice date|order date|shipped|due date|expiry|expiration|'
+    r'scheduled|appointment|meeting|renewal)\b',
+    re.IGNORECASE,
+)
+
+
+def _level3_boost(spans: List[RedactionSpan], text: str, warnings: List[str]) -> tuple:
+    """
+    Level 3 post-processing: context-aware confidence adjustments and cluster flagging.
+
+    Returns (enhanced_spans, extra_flagged) where extra_flagged means L3 wants
+    the call flagged regardless of individual confidence scores.
+    """
+    if not spans:
+        return spans, False
+
+    text_lower = text.lower()
+    extra_flagged = False
+
+    # ── Pass 1: Co-occurrence boost ───────────────────────────────────────────
+    # When a caller shares 2+ distinct PII types, each individual detection is
+    # more likely real. A scammer or a caller in distress giving multiple pieces
+    # of personal info in one call is a strong signal.
+    distinct_types = {s.pii_type for s in spans}
+    boost = 0.0
+    if len(distinct_types) >= 3:
+        boost = 0.06   # strong cluster signal
+        extra_flagged = True
+        warnings.append(
+            f"Level 3: {len(distinct_types)} distinct PII types in one call — "
+            "elevated risk, flagged for human review."
+        )
+    elif len(distinct_types) == 2:
+        boost = 0.03   # moderate cluster signal
+
+    for span in spans:
+        if boost > 0:
+            span.confidence = round(min(span.confidence + boost, 0.97), 3)
+
+    # ── Pass 2: Confirming context boost (PERSON names) ───────────────────────
+    # "my name is John Smith" — the phrase confirms the entity is being shared
+    # intentionally. Boost PERSON-NAME confidence.
+    for span in spans:
+        if span.pii_type != "PERSON-NAME":
+            continue
+        # Look at the 60 chars before the span
+        window_before = text_lower[max(0, span.start - 60):span.start]
+        if _NAME_CONFIRM_PHRASES.search(window_before):
+            span.confidence = round(min(span.confidence + 0.10, 0.97), 3)
+
+    # ── Pass 3: Business context suppression ──────────────────────────────────
+    # "invoice number 123456" or "order ID 789012" — these look like MEMBER_ID
+    # or phone numbers to the pattern engine but are operational IDs, not PII.
+    # Suppress confidence so they don't trigger false redactions.
+    suppressed = []
+    for span in spans:
+        if span.pii_type not in ("MEMBER-ID", "ROUTING-NUMBER", "BANK-ACCOUNT"):
+            suppressed.append(span)
+            continue
+        # Check 80 chars before the span for business context words
+        window_before = text_lower[max(0, span.start - 80):span.start]
+        if _BUSINESS_CONTEXT.search(window_before):
+            span.confidence = round(max(span.confidence - 0.20, 0.10), 3)
+            # If suppressed below 0.40, drop the span entirely — it's a false positive
+            if span.confidence < 0.40:
+                warnings.append(
+                    f"Level 3: suppressed {span.pii_type} detection (business context "
+                    f"word near span at position {span.start})"
+                )
+                continue  # skip appending — effectively removes it
+        suppressed.append(span)
+
+    # ── Pass 4: DATE_OF_BIRTH business context suppression ────────────────────
+    # Dates near business context words (invoice dates, renewal dates) should not
+    # be redacted as date-of-birth.
+    final = []
+    for span in suppressed:
+        if span.pii_type != "DATE-OF-BIRTH":
+            final.append(span)
+            continue
+        window_before = text_lower[max(0, span.start - 80):span.start]
+        if _DATE_BUSINESS_CONTEXT.search(window_before):
+            span.confidence = round(max(span.confidence - 0.25, 0.10), 3)
+            if span.confidence < 0.40:
+                warnings.append(
+                    f"Level 3: suppressed DATE-OF-BIRTH detection (operational date "
+                    f"context near span at position {span.start})"
+                )
+                continue
+        final.append(span)
+
+    return final, extra_flagged
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def process_transcript(raw: str) -> VoiceGuardResult:
@@ -687,6 +810,9 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         if prev_method != span.detection_method:
             merged[-1].detection_method = "both"
 
+    # Step 5b: Level 3 — context-aware confidence boost + cluster detection
+    merged, l3_flagged = _level3_boost(merged, normalized, warnings)
+
     # Step 6: Apply redactions (process in reverse to preserve indices)
     clean = normalized
     for span in sorted(merged, key=lambda s: s.start, reverse=True):
@@ -696,7 +822,7 @@ def process_transcript(raw: str) -> VoiceGuardResult:
     # Step 7: Build result
     pii_types   = list({s.pii_type for s in merged})
     avg_conf    = (sum(s.confidence for s in merged) / len(merged)) if merged else 1.0
-    any_flagged = any(s.confidence < 0.80 for s in merged) or bool(warnings)
+    any_flagged = l3_flagged or any(s.confidence < 0.80 for s in merged) or bool(warnings)
 
     # Detection method summary
     methods = {s.detection_method for s in merged}
@@ -741,7 +867,8 @@ def presidio_available() -> bool:
 
 
 def presidio_mode() -> str:
-    """Returns 'nlp' if spaCy Level 2 is active, 'pattern' if fallback, 'unavailable' if neither."""
+    """Returns 'nlp+l3' if Level 3 active, 'nlp' for L2, 'pattern' for fallback, 'unavailable' if neither."""
     if not _presidio_ready or _analyzer is None:
         return "unavailable"
-    return "nlp" if hasattr(_analyzer, "nlp_engine") else "pattern"
+    base = "nlp" if hasattr(_analyzer, "nlp_engine") else "pattern"
+    return base + "+l3"
