@@ -215,6 +215,10 @@ app.include_router(routes_voice.router, prefix="/api/voice", tags=["Voice Guard"
 from api import routes_routing_config
 app.include_router(routes_routing_config.router, prefix="/api/routing-config", tags=["Routing Config"])
 
+# Time-series — 30-day daily spend + call-volume for dashboard charts
+from api import routes_timeseries
+app.include_router(routes_timeseries.router, prefix="/api/timeseries", tags=["Timeseries"])
+
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])
 def populate_demo_data():

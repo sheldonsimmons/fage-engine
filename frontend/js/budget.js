@@ -52,9 +52,11 @@ function renderBudgets() {
 
     const stateTag = b.throttled
       ? `<span class="budget-tag">THROTTLED</span>`
-      : b.state === "warning"
-        ? `<span class="budget-tag" style="color:var(--accent-yellow)">WARNING</span>`
-        : "";
+      : b.override_granted
+        ? `<span class="budget-tag" style="color:var(--accent-green)">OVERRIDE ACTIVE</span>`
+        : b.state === "warning"
+          ? `<span class="budget-tag" style="color:var(--accent-yellow)">WARNING</span>`
+          : "";
 
     const overrideBtn = b.throttled
       ? `<button class="btn-override" onclick="doOverride('${b.department}')">Grant Override</button>`

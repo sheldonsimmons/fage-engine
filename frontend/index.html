@@ -257,6 +257,33 @@
     </div><!-- end midRowBody -->
     </div><!-- end dp-wrap budgets-agents -->
 
+    <!-- Panel: 30-Day Trends -->
+    <div class="dp-wrap" data-panel-id="timeseries">
+    <section class="panel full-width" id="timeseriesPanel">
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('timeseriesBody','timeseriesChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
+        <span>30-Day Spend &amp; Activity Trends</span>
+        <span class="panel-chevron" id="timeseriesChevron">▸</span>
+      </h2>
+      <div id="timeseriesBody" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+          <div>
+            <div class="field-label" style="margin-bottom:10px">Daily Spend (USD) by Department</div>
+            <div style="position:relative;height:230px">
+              <canvas id="tsSpendCanvas"></canvas>
+            </div>
+          </div>
+          <div>
+            <div class="field-label" style="margin-bottom:10px">Daily AI Calls by Model Tier</div>
+            <div style="position:relative;height:230px">
+              <canvas id="tsCallsCanvas"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    </div><!-- end dp-wrap timeseries -->
+
     <!-- Panel: Pruner Test -->
     <div class="dp-wrap" data-panel-id="pruner">
     <section class="panel full-width" id="prunerPanel">
@@ -642,6 +669,7 @@
     API Docs: <a href="http://localhost:8000/docs" target="_blank">localhost:8000/docs</a>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="js/api.js"></script>
   <script src="js/dashboard.js"></script>
@@ -650,6 +678,7 @@
   <script src="js/router.js"></script>
   <script src="js/keywords.js"></script>
   <script src="js/routing_rules.js"></script>
+  <script src="js/timeseries.js"></script>
   <script src="js/auditor.js"></script>
   <script src="js/voice_guard.js"></script>
   <script src="js/help.js"></script>

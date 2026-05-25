@@ -224,7 +224,8 @@ function restorePanelStates() {
     ["auditBody",       "auditChevron"],
     ["voiceGuardBody",   "voiceGuardChevron"],
     ["midRowBody",       "midRowChevron"],
-    ["routingRulesBody", "routingRulesChevron"],
+    ["routingRulesBody",  "routingRulesChevron"],
+    ["timeseriesBody",    "timeseriesChevron"],
   ];
   panels.forEach(([bodyId, chevronId]) => {
     const body    = document.getElementById(bodyId);
