@@ -171,6 +171,16 @@ body {
   0%, 100% { box-shadow: 0 0 18px rgba(248, 81, 73, 0.18); }
   50%       { box-shadow: 0 0 28px rgba(248, 81, 73, 0.38); }
 }
+@keyframes vgPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+.vg-mic-active {
+  background: var(--accent-red) !important;
+  color: #fff !important;
+  border-color: var(--accent-red) !important;
+  box-shadow: 0 0 12px rgba(248, 81, 73, 0.4);
+}
 .blocked-banner-icon {
   font-size: 24px;
   flex-shrink: 0;

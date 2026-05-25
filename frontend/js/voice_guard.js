@@ -396,6 +396,120 @@ function exportVgPdf() {
   printSection("voiceGuardBody", "FAGE — Voice Guard Audit Log");
 }
 
+// ── Live Microphone / Speech Recognition ──────────────────────────────────────
+
+let _vgRecognition  = null;   // SpeechRecognition instance
+let _vgMicActive    = false;  // true while recording
+let _vgFinalText    = "";     // accumulated final transcript chunks
+
+function _initSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+
+  const rec          = new SR();
+  rec.continuous     = true;    // keep going through pauses
+  rec.interimResults = true;    // show words as they come in
+  rec.lang           = "en-US";
+  rec.maxAlternatives = 1;
+
+  rec.onstart = () => {
+    _vgMicActive  = true;
+    _vgFinalText  = "";
+    const btn     = document.getElementById("vgMicBtn");
+    const badge   = document.getElementById("vgMicBadge");
+    const preview = document.getElementById("vgLivePreview");
+    if (btn)     { btn.textContent = "⏹ Stop"; btn.classList.add("vg-mic-active"); }
+    if (badge)   badge.style.display = "flex";
+    if (preview) { preview.style.display = "block"; document.getElementById("vgLiveText").textContent = "Listening..."; }
+    // Clear old result
+    document.getElementById("vgResult").style.display = "none";
+    document.getElementById("vgStatus").textContent = "";
+    document.getElementById("vgTestInput").value = "";
+  };
+
+  rec.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const chunk = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        _vgFinalText += chunk + " ";
+      } else {
+        interim = chunk;
+      }
+    }
+    // Show live preview: confirmed text + grey interim
+    const liveEl = document.getElementById("vgLiveText");
+    if (liveEl) {
+      liveEl.innerHTML = (_vgFinalText
+        ? `<span style="color:var(--text-primary)">${_vgFinalText}</span>`
+        : "") +
+        (interim
+        ? `<span style="color:var(--text-muted);font-style:italic">${interim}</span>`
+        : "");
+    }
+  };
+
+  rec.onerror = (event) => {
+    const statusEl = document.getElementById("vgStatus");
+    if (event.error === "not-allowed") {
+      statusEl.textContent = "Microphone access denied — check browser permissions.";
+    } else if (event.error === "no-speech") {
+      statusEl.textContent = "No speech detected. Try again.";
+    } else {
+      statusEl.textContent = "Mic error: " + event.error;
+    }
+    statusEl.style.color = "var(--accent-red)";
+    _stopMic();
+  };
+
+  rec.onend = () => {
+    _stopMic();
+    // Auto-submit if we captured something
+    const text = _vgFinalText.trim();
+    if (text) {
+      document.getElementById("vgTestInput").value = text;
+      document.getElementById("vgStatus").textContent = "Transcript captured — scanning for PII...";
+      document.getElementById("vgStatus").style.color = "var(--text-muted)";
+      // Short delay so user sees the textarea populate before processing
+      setTimeout(() => testVoiceGuard(), 300);
+    }
+  };
+
+  return rec;
+}
+
+function _stopMic() {
+  _vgMicActive = false;
+  const btn     = document.getElementById("vgMicBtn");
+  const badge   = document.getElementById("vgMicBadge");
+  const preview = document.getElementById("vgLivePreview");
+  if (btn)     { btn.textContent = "🎙 Speak"; btn.classList.remove("vg-mic-active"); }
+  if (badge)   badge.style.display = "none";
+  if (preview) preview.style.display = "none";
+  if (_vgRecognition) {
+    try { _vgRecognition.stop(); } catch (_) {}
+  }
+}
+
+function toggleVoiceMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    const statusEl = document.getElementById("vgStatus");
+    statusEl.textContent = "Speech recognition not supported — use Chrome or Edge.";
+    statusEl.style.color = "var(--accent-yellow)";
+    return;
+  }
+
+  if (_vgMicActive) {
+    // User hit Stop — finalize and submit
+    if (_vgRecognition) _vgRecognition.stop();
+    return;
+  }
+
+  _vgRecognition = _initSpeechRecognition();
+  if (_vgRecognition) _vgRecognition.start();
+}
+
 // Load stats on page load and refresh every 30 seconds
 document.addEventListener("DOMContentLoaded", () => {
   loadVoiceStats();

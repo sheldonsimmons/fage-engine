@@ -452,12 +452,27 @@
 
         <!-- Test transcript box -->
         <div style="background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:18px">
-          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:10px">
-            🧪 Test Voice Transcript
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
+            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted)">
+              🧪 Test Voice Transcript
+            </div>
+            <div id="vgMicBadge" style="display:none; align-items:center; gap:6px; font-size:11px; color:var(--accent-red); font-weight:700">
+              <span id="vgMicPulse" style="width:8px;height:8px;border-radius:50%;background:var(--accent-red);display:inline-block;animation:vgPulse 1s ease-in-out infinite"></span>
+              LIVE
+            </div>
           </div>
-          <textarea id="vgTestInput" rows="3" placeholder="Paste or type a transcript here — e.g. 'my social security is 123 ummm 45 6789'"
+
+          <!-- Live mic preview — shows interim transcript while speaking -->
+          <div id="vgLivePreview" style="display:none; background:var(--bg-base); border:1px solid var(--accent-red); border-radius:6px; padding:10px 14px; font-size:13px; color:var(--text-muted); font-style:italic; min-height:36px; margin-bottom:8px; line-height:1.5">
+            <span id="vgLiveText">Listening...</span>
+          </div>
+
+          <textarea id="vgTestInput" rows="3" placeholder="Speak using the mic button, or paste a transcript here — e.g. 'my social security is 123 ummm 45 6789'"
             style="width:100%; background:var(--bg-panel); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); padding:10px; font-size:13px; font-family:inherit; resize:vertical; box-sizing:border-box"></textarea>
           <div style="display:flex; gap:10px; margin-top:10px; align-items:center; flex-wrap:wrap">
+            <button id="vgMicBtn" onclick="toggleVoiceMic()" style="background:var(--bg-panel); color:var(--accent-red); border:1px solid var(--accent-red); border-radius:6px; padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px" title="Speak a transcript — words appear live, then auto-scan for PII">
+              🎙 Speak
+            </button>
             <button onclick="testVoiceGuard()" style="background:var(--accent); color:#000; border:none; border-radius:6px; padding:8px 18px; font-size:12px; font-weight:700; cursor:pointer">
               ▶ Process Transcript
             </button>
