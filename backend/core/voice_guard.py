@@ -22,70 +22,136 @@ from typing import List, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
-# ── Presidio AI layer (Phase 2) — graceful fallback if not installed ──────────
+# ── Presidio AI layer — Level 2: full spaCy NLP engine ───────────────────────
+#
+# Loads Presidio's AnalyzerEngine backed by spaCy en_core_web_sm.
+# This upgrades from pattern-only regex matching to full NLP understanding:
+#   - Named Entity Recognition (PERSON, LOCATION, DATE_TIME, ORG)
+#   - Context-aware detection (understands sentence meaning, not just patterns)
+#   - Email, IP address, driver's license, ITIN detection
+#   - Lower confidence threshold (0.40 vs 0.50) — NLP is more precise
+#
+# Graceful fallback: if spaCy model is not available, falls back to
+# pattern-only recognizers so the rule engine still runs unaffected.
 
 _presidio_ready = False
-_presidio_recognizers = []
+_analyzer = None
 
 try:
-    from presidio_analyzer import PatternRecognizer, Pattern
+    from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
+    from presidio_analyzer.nlp_engine import NlpEngineProvider
 
-    # Use PatternRecognizer objects directly — no NLP engine or spaCy required.
-    # Each recognizer runs independently on the text using pure regex patterns.
-    # This is Presidio's pattern-only mode and catches formatted PII that has
-    # no trigger phrase — the gap our rule engine state machine misses.
+    # Build spaCy NLP engine — en_core_web_sm provides tokenization,
+    # POS tagging, and NER for English. Required for context-aware detection.
+    _nlp_config = {
+        "nlp_engine_name": "spacy",
+        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+    }
+    _provider   = NlpEngineProvider(nlp_configuration=_nlp_config)
+    _nlp_engine = _provider.create_engine()
 
-    _presidio_recognizers = [
+    # Custom recognizers — supplement built-in Presidio recognizers with
+    # patterns for PII types that need stronger coverage in call center speech.
+    _custom_recognizers = [
+        # Member ID / Policy / Insurance / Medicare — not in Presidio built-ins
         PatternRecognizer(
-            supported_entity="US_SSN",
+            supported_entity="MEMBER_ID",
             patterns=[
-                Pattern("SSN_DASHES",  r"\b\d{3}-\d{2}-\d{4}\b",   0.95),
-                Pattern("SSN_SPACES",  r"\b\d{3} \d{2} \d{4}\b",   0.90),
-                Pattern("SSN_COMPACT", r"(?<!\d)\d{9}(?!\d)",       0.55),
+                Pattern("MEMBER_6_12", r"(?<!\d)\d{6,12}(?!\d)", 0.55),
             ]
         ),
-        PatternRecognizer(
-            supported_entity="CREDIT_CARD",
-            patterns=[
-                Pattern("CC_16_GROUPED", r"\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}\b", 0.95),
-                Pattern("CC_16_COMPACT", r"(?<!\d)\d{16}(?!\d)",                    0.70),
-            ]
-        ),
-        PatternRecognizer(
-            supported_entity="PHONE_NUMBER",
-            patterns=[
-                Pattern("PHONE_DASHES",  r"\b\d{3}[-.]\d{3}[-.]\d{4}\b",  0.85),
-                Pattern("PHONE_PARENS",  r"\(\d{3}\)\s?\d{3}[-.\s]\d{4}", 0.90),
-            ]
-        ),
+        # Bank routing — ABA format starts with 0
         PatternRecognizer(
             supported_entity="US_BANK_NUMBER",
             patterns=[
-                Pattern("ROUTING_ABA", r"\b0\d{8}\b", 0.72),
+                Pattern("ROUTING_ABA", r"\b0\d{8}\b", 0.80),
+            ]
+        ),
+        # Email — explicit pattern in case NLP misses informal formats
+        PatternRecognizer(
+            supported_entity="EMAIL_ADDRESS",
+            patterns=[
+                Pattern("EMAIL_STANDARD", r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b", 0.95),
+            ]
+        ),
+        # IP address
+        PatternRecognizer(
+            supported_entity="IP_ADDRESS",
+            patterns=[
+                Pattern("IPV4", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0.85),
             ]
         ),
     ]
+
+    # Build the full analyzer — combines built-in recognizers + custom ones + NLP
+    _analyzer = AnalyzerEngine(
+        nlp_engine=_nlp_engine,
+        supported_languages=["en"],
+    )
+    for _r in _custom_recognizers:
+        _analyzer.registry.add_recognizer(_r)
+
     _presidio_ready = True
-    logger.info("Presidio pattern recognizers loaded (pattern-only mode, no spaCy)")
+    logger.info("Presidio AnalyzerEngine loaded with spaCy NLP (en_core_web_sm) — Level 2 active")
+
 except Exception as e:
-    logger.warning(f"Presidio not available — running rule engine only: {e}")
+    logger.warning(f"Presidio NLP engine not available — attempting pattern-only fallback: {e}")
+
+    # Pattern-only fallback — maintains Level 1 behavior if spaCy not available
+    try:
+        from presidio_analyzer import PatternRecognizer, Pattern
+        _fallback_recognizers = [
+            PatternRecognizer("US_SSN", patterns=[
+                Pattern("SSN_DASHES",  r"\b\d{3}-\d{2}-\d{4}\b", 0.95),
+                Pattern("SSN_SPACES",  r"\b\d{3} \d{2} \d{4}\b", 0.90),
+                Pattern("SSN_COMPACT", r"(?<!\d)\d{9}(?!\d)",     0.55),
+            ]),
+            PatternRecognizer("CREDIT_CARD", patterns=[
+                Pattern("CC_16_GROUPED", r"\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}\b", 0.95),
+                Pattern("CC_16_COMPACT", r"(?<!\d)\d{16}(?!\d)",                    0.70),
+            ]),
+            PatternRecognizer("PHONE_NUMBER", patterns=[
+                Pattern("PHONE_DASHES", r"\b\d{3}[-.]\d{3}[-.]\d{4}\b",  0.85),
+                Pattern("PHONE_PARENS", r"\(\d{3}\)\s?\d{3}[-.\s]\d{4}", 0.90),
+            ]),
+        ]
+
+        class _PatternOnlyAnalyzer:
+            """Minimal stand-in — mimics AnalyzerEngine.analyze() interface."""
+            def __init__(self, recognizers):
+                self._recs = recognizers
+            def analyze(self, text, language="en"):
+                results = []
+                for rec in self._recs:
+                    results.extend(rec.analyze(text=text, entities=[rec.supported_entities[0]]))
+                return results
+
+        _analyzer = _PatternOnlyAnalyzer(_fallback_recognizers)
+        _presidio_ready = True
+        logger.info("Presidio running in pattern-only fallback mode (no spaCy)")
+    except Exception as e2:
+        logger.warning(f"Presidio pattern fallback also failed — rule engine only: {e2}")
 
 
-# PII type mapping: Presidio entity type → our redact label
+# PII type mapping: Presidio entity type → (our redact label, base confidence)
+# Level 2 additions: US_DRIVER_LICENSE, US_ITIN, MEMBER_ID now active
 _PRESIDIO_TYPE_MAP = {
-    "US_SSN":           ("SSN",           0.92),
-    "CREDIT_CARD":      ("CREDIT-CARD",   0.93),
-    "PHONE_NUMBER":     ("PHONE",         0.85),
-    "DATE_TIME":        ("DATE-OF-BIRTH", 0.75),
-    "US_BANK_NUMBER":   ("ROUTING-NUMBER",0.88),
-    "US_PASSPORT":      ("PASSPORT",      0.88),
-    "EMAIL_ADDRESS":    ("EMAIL",         0.90),
-    "PERSON":           ("PERSON-NAME",   0.72),
-    "LOCATION":         ("LOCATION",      0.70),
-    "IP_ADDRESS":       ("IP-ADDRESS",    0.90),
-    "MEDICAL_LICENSE":  ("MEMBER-ID",     0.88),
-    "NRP":              ("MEMBER-ID",     0.80),
-    "BANK_ACCOUNT":     ("BANK-ACCOUNT",  0.85),
+    "US_SSN":            ("SSN",             0.92),
+    "CREDIT_CARD":       ("CREDIT-CARD",     0.93),
+    "PHONE_NUMBER":      ("PHONE",           0.85),
+    "DATE_TIME":         ("DATE-OF-BIRTH",   0.75),
+    "US_BANK_NUMBER":    ("ROUTING-NUMBER",  0.88),
+    "US_PASSPORT":       ("PASSPORT",        0.88),
+    "EMAIL_ADDRESS":     ("EMAIL",           0.92),
+    "PERSON":            ("PERSON-NAME",     0.72),
+    "LOCATION":          ("LOCATION",        0.70),
+    "IP_ADDRESS":        ("IP-ADDRESS",      0.90),
+    "MEDICAL_LICENSE":   ("MEMBER-ID",       0.88),
+    "NRP":               ("MEMBER-ID",       0.80),
+    "BANK_ACCOUNT":      ("BANK-ACCOUNT",    0.85),
+    "US_DRIVER_LICENSE": ("DRIVERS-LICENSE", 0.87),  # Level 2 — now detected
+    "US_ITIN":           ("TAX-ID",          0.88),  # Level 2 — now detected
+    "MEMBER_ID":         ("MEMBER-ID",       0.72),  # custom recognizer
 }
 
 
@@ -439,33 +505,45 @@ def _apply_direct_patterns(text: str) -> List[RedactionSpan]:
 
 def _run_presidio(text: str) -> List[RedactionSpan]:
     """
-    Run Presidio pattern recognizers on the normalized transcript.
-    Each recognizer operates independently — no NLP engine required.
-    Returns RedactionSpans for any PII found, with detection_method="ai".
-    Silently returns empty list if Presidio is not available.
+    Run Presidio AnalyzerEngine on the normalized transcript.
+
+    Level 2 (spaCy NLP active):
+      - Full NLP understanding — context-aware, not just pattern matching
+      - Detects: SSN, credit card, phone, email, IP, driver's license, ITIN,
+        person name, location, date, bank/routing, passport, member ID
+      - Confidence threshold: 0.40 (lower than pattern-only 0.50 because
+        NLP context makes detections more reliable)
+
+    Fallback (pattern-only mode):
+      - Same behavior as Level 1 — regex patterns, 0.50 threshold
+
+    Returns RedactionSpans with detection_method="ai".
+    Silently returns empty list if Presidio is unavailable.
     """
-    if not _presidio_ready or not _presidio_recognizers:
+    if not _presidio_ready or _analyzer is None:
         return []
+
+    # Confidence threshold — lower for NLP mode (more precise), higher for pattern-only
+    threshold = 0.40 if hasattr(_analyzer, 'nlp_engine') else 0.50
 
     spans = []
     try:
-        for recognizer in _presidio_recognizers:
-            results = recognizer.analyze(text=text, entities=[recognizer.supported_entities[0]])
-            for r in results:
-                if r.score < 0.50:
-                    continue
-                pii_type, base_conf = _PRESIDIO_TYPE_MAP.get(
-                    r.entity_type, (r.entity_type, 0.70)
-                )
-                confidence = round(max(r.score, base_conf), 3)
-                spans.append(RedactionSpan(
-                    start=r.start,
-                    end=r.end,
-                    pii_type=pii_type,
-                    digits_found=len(re.sub(r'\D', '', text[r.start:r.end])),
-                    detection_method="ai",
-                    confidence=confidence,
-                ))
+        results = _analyzer.analyze(text=text, language="en")
+        for r in results:
+            if r.score < threshold:
+                continue
+            pii_type, base_conf = _PRESIDIO_TYPE_MAP.get(
+                r.entity_type, (r.entity_type, 0.70)
+            )
+            confidence = round(max(r.score, base_conf), 3)
+            spans.append(RedactionSpan(
+                start=r.start,
+                end=r.end,
+                pii_type=pii_type,
+                digits_found=len(re.sub(r'\D', '', text[r.start:r.end])),
+                detection_method="ai",
+                confidence=confidence,
+            ))
     except Exception as e:
         logger.warning(f"Presidio analysis failed: {e}")
     return spans
@@ -658,5 +736,12 @@ def process_transcript(raw: str) -> VoiceGuardResult:
 
 
 def presidio_available() -> bool:
-    """Returns True if the Presidio pattern recognizers loaded successfully."""
-    return _presidio_ready and len(_presidio_recognizers) > 0
+    """Returns True if the Presidio analyzer loaded successfully."""
+    return _presidio_ready and _analyzer is not None
+
+
+def presidio_mode() -> str:
+    """Returns 'nlp' if spaCy Level 2 is active, 'pattern' if fallback, 'unavailable' if neither."""
+    if not _presidio_ready or _analyzer is None:
+        return "unavailable"
+    return "nlp" if hasattr(_analyzer, "nlp_engine") else "pattern"
