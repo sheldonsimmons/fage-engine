@@ -85,7 +85,15 @@ def call_model(text: str, model_id: str = None, fallback_tier: str = "micro") ->
         else:
             resolved_id = OPENAI_MICRO if fallback_tier == "micro" else OPENAI_FLAGSHIP
 
-        if PROVIDER == "anthropic":
+        # Auto-detect provider from model ID prefix — registry model IDs
+        # are authoritative. "claude-*" always goes to Anthropic regardless
+        # of FAGE_PROVIDER env var, so swapping models in the registry
+        # doesn't require an env var change.
+        if resolved_id and resolved_id.startswith("claude-"):
+            return _call_anthropic(text, resolved_id)
+        elif resolved_id and (resolved_id.startswith("gpt-") or resolved_id.startswith("o1") or resolved_id.startswith("o3")):
+            return _call_openai(text, resolved_id)
+        elif PROVIDER == "anthropic":
             return _call_anthropic(text, resolved_id)
         else:
             return _call_openai(text, resolved_id)
