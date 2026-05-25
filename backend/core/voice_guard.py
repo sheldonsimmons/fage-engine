@@ -639,24 +639,25 @@ def _level3_boost(spans: List[RedactionSpan], text: str, warnings: List[str]) ->
             continue
         # Check 80 chars before the span for business context words
         window_before = text_lower[max(0, span.start - 80):span.start]
-        # DATE-OF-BIRTH uses the broader date-business pattern; others use general business pattern
-        context_hit = (
-            _DATE_BUSINESS_CONTEXT.search(window_before)
-            if span.pii_type == "DATE-OF-BIRTH"
-            else _BUSINESS_CONTEXT.search(window_before)
-        )
-        # Also suppress DATE-OF-BIRTH when plain business context words are present
-        if span.pii_type == "DATE-OF-BIRTH" and not context_hit:
-            context_hit = _BUSINESS_CONTEXT.search(window_before)
-        if context_hit:
-            reduction = 0.25 if span.pii_type == "DATE-OF-BIRTH" else 0.20
-            span.confidence = round(max(span.confidence - reduction, 0.10), 3)
+        # DATE-OF-BIRTH: drop immediately on ANY business context word —
+        # "invoice number 123456" is never a date-of-birth.
+        if span.pii_type == "DATE-OF-BIRTH":
+            if _BUSINESS_CONTEXT.search(window_before) or _DATE_BUSINESS_CONTEXT.search(window_before):
+                warnings.append(
+                    f"Level 3: suppressed DATE-OF-BIRTH (business context near pos {span.start})"
+                )
+                continue  # drop — it's a false positive
+            suppressed.append(span)
+            continue
+
+        # Other types (MEMBER-ID, ROUTING-NUMBER, BANK-ACCOUNT): reduce confidence
+        if _BUSINESS_CONTEXT.search(window_before):
+            span.confidence = round(max(span.confidence - 0.20, 0.10), 3)
             if span.confidence < 0.40:
                 warnings.append(
-                    f"Level 3: suppressed {span.pii_type} detection (business context "
-                    f"near span at position {span.start})"
+                    f"Level 3: suppressed {span.pii_type} (business context near pos {span.start})"
                 )
-                continue  # drop span — it's a false positive
+                continue
         suppressed.append(span)
 
     final = suppressed
