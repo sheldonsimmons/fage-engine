@@ -325,7 +325,9 @@ PII_PATTERNS = [
             "phone number", "call me at", "my number is", "reach me at",
             "you can reach me at", "cell number", "mobile number",
             "callback number", "call back at", "telephone number",
-            "my phone", "phone is",
+            "my phone", "phone is", "my new number", "new number is",
+            "my cell is", "my direct", "direct number", "direct line",
+            "text me at", "call me on",
         ],
         digit_count=10,
         window_seconds=15,
@@ -516,7 +518,10 @@ _PRESIDIO_SKIP_ENTITIES = {"ORGANIZATION", "NRP", "ORG"}
 _TEMPORAL_REFS = re.compile(
     r'\b(last|next|this|yesterday|today|tomorrow|ago|since|until|'
     r'o\'clock|oclock|around|about|at|by|before|after|during|'
-    r'monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
+    r'morning|afternoon|evening|night|noon|midnight|am|pm|'
+    r'monday|tuesday|wednesday|thursday|friday|saturday|sunday|'
+    r'january|february|march|april|june|july|august|september|'
+    r'october|november|december|week|month|year|hour|minute)\b',
     re.IGNORECASE,
 )
 
@@ -558,11 +563,11 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
 
             # DATE_TIME: skip temporal references ("last tuesday", "two o'clock")
             if r.entity_type == "DATE_TIME":
-                window = text[max(0, r.start - 30):r.start + 10].lower()
+                window = text[max(0, r.start - 50):r.end + 20].lower()
                 if _TEMPORAL_REFS.search(window):
                     continue
                 # Require higher confidence for dates — lots of false positives
-                if r.score < 0.65:
+                if r.score < 0.70:
                     continue
 
             # LOCATION: skip office/workspace references, require high confidence
