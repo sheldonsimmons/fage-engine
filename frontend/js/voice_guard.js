@@ -183,6 +183,21 @@ async function testVoiceGuard() {
     loadVoiceStats();
     loadVoiceAuditLog();
 
+    // Route the clean transcript so spend is recorded on the dashboard
+    if (data.clean_transcript && data.clean_transcript.trim()) {
+      try {
+        await apiPost("/api/route", {
+          text:       data.clean_transcript,
+          department: "Support",
+          auto_prune: false,
+        });
+        // Refresh KPIs to show updated spend
+        loadDashboard();
+      } catch (_) {
+        // Silently ignore routing errors — VoiceGuard result already shown
+      }
+    }
+
   } catch (e) {
     statusEl.textContent = "Error: " + e.message;
     statusEl.style.color = "var(--accent-red)";

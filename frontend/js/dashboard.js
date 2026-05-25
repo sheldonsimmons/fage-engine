@@ -292,4 +292,4 @@ checkHealth();
 loadDashboard();
 
 setInterval(checkHealth,    10000);
-setInterval(loadDashboard,  15000);
+setInterval(loadDashboard,   5000);
