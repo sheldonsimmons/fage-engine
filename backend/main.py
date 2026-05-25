@@ -39,23 +39,31 @@ def _seed_on_startup():
                 db.add(DepartmentBudget(department=dept, monthly_cap_usd=cap))
 
         # ── Model Registry ────────────────────────────────────────────────────
+        # Anthropic Claude models are the live defaults (is_default=True).
+        # GPT display models kept for reference/UI but disabled (is_enabled=False).
         SEED_MODELS = [
-            dict(display_name="GPT-5.4 Nano", model_id="gpt-5.4-nano", provider="OpenAI",
-                 tier=1, cost_input_per_1m=0.20, cost_output_per_1m=1.25,
+            # ── Anthropic — live, active defaults ────────────────────────────
+            dict(display_name="Claude Haiku 4.5",  model_id="claude-haiku-4-5-20251001", provider="Anthropic",
+                 tier=1, cost_input_per_1m=0.80,  cost_output_per_1m=4.00,
                  is_enabled=True, is_default=True,
                  notes="Scout tier — fast and affordable for routine tasks"),
-            dict(display_name="GPT-5.4 Mini", model_id="gpt-5.4-mini", provider="OpenAI",
-                 tier=2, cost_input_per_1m=0.75, cost_output_per_1m=4.50,
-                 is_enabled=True, is_default=True,
-                 notes="Analyst tier — balanced for most business tasks"),
-            dict(display_name="GPT-5.4",      model_id="gpt-5.4",      provider="OpenAI",
-                 tier=3, cost_input_per_1m=2.50, cost_output_per_1m=15.00,
+            dict(display_name="Claude Sonnet 4.6", model_id="claude-sonnet-4-6", provider="Anthropic",
+                 tier=3, cost_input_per_1m=3.00,  cost_output_per_1m=15.00,
                  is_enabled=True, is_default=True,
                  notes="Advisor tier — deep reasoning for complex and sensitive work"),
-            dict(display_name="GPT-5.5",      model_id="gpt-5.5",      provider="OpenAI",
-                 tier=4, cost_input_per_1m=5.00, cost_output_per_1m=30.00,
+            dict(display_name="Claude Opus 4.6",   model_id="claude-opus-4-6",   provider="Anthropic",
+                 tier=4, cost_input_per_1m=15.00, cost_output_per_1m=75.00,
                  is_enabled=True, is_default=True,
                  notes="Strategist tier — mission-critical decisions only"),
+            # ── OpenAI — available but not default ───────────────────────────
+            dict(display_name="GPT-4o Mini",  model_id="gpt-4o-mini",  provider="OpenAI",
+                 tier=1, cost_input_per_1m=0.15, cost_output_per_1m=0.60,
+                 is_enabled=False, is_default=False,
+                 notes="OpenAI Scout option — enable to use instead of Haiku"),
+            dict(display_name="GPT-4o",       model_id="gpt-4o",       provider="OpenAI",
+                 tier=3, cost_input_per_1m=2.50, cost_output_per_1m=10.00,
+                 is_enabled=False, is_default=False,
+                 notes="OpenAI Advisor option — enable to use instead of Sonnet"),
         ]
         for m in SEED_MODELS:
             exists = db.query(ModelRegistry).filter_by(model_id=m["model_id"]).first()
