@@ -123,9 +123,16 @@ def check_terms(db: Session, text: str, department: str = None,
         (SensitiveTerm.department == None) |
         (SensitiveTerm.department == department)
     )
+    # PII-related hipaa terms that Voice Guard already handles — skip when voice_guard_processed
+    _HIPAA_PII_TERMS = {"ssn", "social security", "social security number", "date of birth",
+                        "passport number", "credit card", "card number", "cvv",
+                        "routing number", "bank account"}
+
     for t in query.all():
         if skip_pii and t.category == "pii":
             continue   # Voice Guard already handled PII — don't block on context words
+        if skip_pii and t.category == "hipaa" and t.term.lower() in _HIPAA_PII_TERMS:
+            continue   # Voice Guard redacted the actual value; phrase alone is not a risk
         if t.term.lower() in text_lower:
             matches.append({
                 "id":         t.id,

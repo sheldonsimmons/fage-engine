@@ -35,8 +35,8 @@ COMPLEXITY_TOKEN_THRESHOLD = 500
 # Keywords that force flagship routing regardless of token count
 COMPLEXITY_KEYWORDS = [
     "legal", "compliance", "lawsuit", "contract", "audit", "fraud",
-    "critical", "escalate", "billing dispute", "breach", "regulatory",
-    "urgent", "data loss", "outage", "enterprise", "gdpr", "hipaa",
+    "critical", "billing dispute", "breach", "regulatory",
+    "data loss", "outage", "gdpr", "hipaa",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
