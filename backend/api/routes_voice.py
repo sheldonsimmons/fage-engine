@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import VoiceEvent
 from core.voice_guard import process_transcript, presidio_available
+from core.pruner import prune
 
 router = APIRouter()
 
@@ -60,8 +61,12 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
 
     Returns the clean transcript and a full audit record.
     The raw transcript is NOT stored if PII was found.
+
+    Input is pruned first (strips HTML, email headers, reply chains, legal
+    disclaimers, and signatures) so Voice Guard scans clean content only.
     """
-    result = process_transcript(req.transcript)
+    pruned = prune(req.transcript)
+    result = process_transcript(pruned["cleaned_text"])
 
     # Determine status
     redactions_count = len(result.redactions)

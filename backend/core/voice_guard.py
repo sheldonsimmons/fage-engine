@@ -533,6 +533,25 @@ _OFFICE_LOCATION = re.compile(
     re.IGNORECASE,
 )
 
+# Street address components — a LOCATION span containing these is a business
+# or mailing address, not personal spoken PII worth redacting.
+_STREET_ADDRESS = re.compile(
+    r'\b(street|st|avenue|ave|boulevard|blvd|drive|dr|road|rd|lane|ln|'
+    r'court|ct|place|pl|way|parkway|pkwy|highway|hwy|corporate|'
+    r'registered|incorporated|inc|llc|ltd|usa|united states)\b',
+    re.IGNORECASE,
+)
+
+# Personal location context — someone sharing THEIR location on a call.
+# Without one of these nearby, a detected LOCATION is almost certainly
+# a business name, city reference, or footer address — not actionable PII.
+_PERSONAL_LOCATION = re.compile(
+    r'\b(my address|home address|i live at|i\'m at|i am at|located at|'
+    r'shipping address|billing address|mailing address|i reside|'
+    r'my home|send it to|deliver to|pick me up at|i\'m located)\b',
+    re.IGNORECASE,
+)
+
 
 def _run_presidio(text: str) -> List[RedactionSpan]:
     """
@@ -576,10 +595,20 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
                 if r.score < 0.70:
                     continue
 
-            # LOCATION: skip office/workspace references, require high confidence
+            # LOCATION: only flag when someone is sharing their personal address.
+            # Business addresses, city references, and footer boilerplate are
+            # not actionable PII in a call-center or support context.
             if r.entity_type == "LOCATION":
-                window = text[max(0, r.start - 20):r.end + 20].lower()
-                if _OFFICE_LOCATION.search(window):
+                span_text = text[r.start:r.end]
+                wide_window = text[max(0, r.start - 80):r.end + 80].lower()
+                # Skip if it looks like a street/business address
+                if _STREET_ADDRESS.search(span_text):
+                    continue
+                # Skip office/workspace references
+                if _OFFICE_LOCATION.search(wide_window):
+                    continue
+                # Skip unless a personal location phrase is nearby
+                if not _PERSONAL_LOCATION.search(wide_window):
                     continue
                 if r.score < 0.80:
                     continue
