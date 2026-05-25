@@ -239,11 +239,33 @@ def normalize_spoken_numbers(text: str) -> str:
             i += 1
             continue
 
+        # Spoken separator words → punctuation
+        if word in ("dash", "hyphen", "slash"):
+            result.append("-")
+            i += 1
+            continue
+
         # Keep original word
         result.append(words[i])
         i += 1
 
-    return " ".join(result)
+    normalized = " ".join(result)
+
+    # Collapse "D D D - D D - D D D D" → "DDD-DD-DDDD" (spoken SSN with dash separators)
+    normalized = re.sub(
+        r'(?<!\d)(\d) (\d) (\d) - (\d) (\d) - (\d) (\d) (\d) (\d)(?!\d)',
+        r'\1\2\3-\4\5-\6\7\8\9',
+        normalized,
+    )
+    # Collapse long runs of space-separated single digits (compact SSN / card)
+    # e.g. "4 2 8 5 5 9 1 7 3" → "428559173"
+    normalized = re.sub(
+        r'(?<!\d)(\d)( \d){8,15}(?!\d)',
+        lambda m: m.group(0).replace(" ", ""),
+        normalized,
+    )
+
+    return normalized
 
 
 # ── PII trigger definitions ───────────────────────────────────────────────────
@@ -269,6 +291,8 @@ PII_PATTERNS = [
         triggers=[
             "social security number", "social security", "ssn",
             "my social", "your social", "social is", "social number",
+            "full social", "confirm your social", "your full social",
+            "social for me", "social on file",
         ],
         digit_count=9,
         window_seconds=20,
