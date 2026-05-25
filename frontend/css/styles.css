@@ -564,6 +564,22 @@ body {
 .kw-badge-escalate { background: rgba(88,166,255,0.12); color: var(--accent); }
 .kw-badge-block    { background: rgba(248,81,73,0.12);  color: var(--accent-red); }
 
+/* ── Routing Rules keyword chips ──────────────────────────────────────────────── */
+.rr-kw-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.25);
+  border-radius: 14px; padding: 3px 10px; font-size: 12px;
+}
+.rr-kw-locked {
+  background: rgba(139,148,158,0.08); border-color: rgba(139,148,158,0.2);
+  color: var(--text-muted);
+}
+.rr-kw-remove {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 11px; padding: 0; line-height: 1;
+}
+.rr-kw-remove:hover { color: var(--accent-red); }
+
 /* ── Responsive ───────────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .kpi-row  { grid-template-columns: repeat(2, 1fr); }

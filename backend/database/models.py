@@ -206,3 +206,29 @@ class SensitiveTerm(Base):
     action     = Column(String,   default="flag")      # flag | escalate | block
     department = Column(String,   nullable=True)       # None = global (all departments)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RoutingConfig(Base):
+    """
+    Persisted routing rule configuration — always exactly one row (id=1).
+    Seeded from config.py defaults on first boot; updated by the Routing Rules panel.
+    """
+    __tablename__ = "routing_configs"
+
+    id                         = Column(Integer,  primary_key=True, index=True)
+    complexity_token_threshold = Column(Integer,  nullable=False, default=500)
+    complexity_keywords_json   = Column(Text,     nullable=False, default="[]")
+    updated_at                 = Column(DateTime, default=datetime.utcnow)
+
+    @property
+    def complexity_keywords(self) -> list:
+        import json
+        try:
+            return json.loads(self.complexity_keywords_json)
+        except Exception:
+            return []
+
+    @complexity_keywords.setter
+    def complexity_keywords(self, value: list):
+        import json
+        self.complexity_keywords_json = json.dumps(value)

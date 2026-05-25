@@ -5,6 +5,20 @@
  * Auto-refreshes every 30 seconds alongside the rest of the dashboard.
  */
 
+// ── Protected PII terms — locked in UI, cannot be removed ────────────────────
+
+const _LOCKED_TERMS = new Set([
+  "ssn", "social security", "social security number",
+  "credit card", "card number", "cvv",
+  "routing number", "bank account", "passport number", "date of birth",
+]);
+
+function _isLockedTerm(t) {
+  return (t.category === "hipaa" || t.category === "pii" || t.category === "financial") &&
+         t.action === "block" &&
+         _LOCKED_TERMS.has(t.term.toLowerCase());
+}
+
 // ── Load & render ─────────────────────────────────────────────────────────────
 
 async function loadKeywords() {
@@ -33,7 +47,10 @@ async function loadKeywords() {
         <td>${categoryBadge(t.category)}</td>
         <td>${actionBadge(t.action)}</td>
         <td class="kw-scope">${t.department || "Global"}</td>
-        <td><button class="btn-deregister" onclick="removeKeyword(${t.id}, '${t.term}')">Remove</button></td>
+        <td>${_isLockedTerm(t)
+          ? `<span style="font-size:11px;color:var(--text-muted)" title="Core PII compliance term — cannot be removed">🔒 Protected</span>`
+          : `<button class="btn-deregister" onclick="removeKeyword(${t.id}, '${t.term}')">Remove</button>`
+        }</td>
       </tr>
     `).join("");
   } catch (e) {

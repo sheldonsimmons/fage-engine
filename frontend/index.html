@@ -365,6 +365,57 @@
     </section>
     </div><!-- end dp-wrap router -->
 
+    <!-- Panel: Routing Rules -->
+    <div class="dp-wrap" data-panel-id="routing-rules">
+    <section class="panel full-width" id="routingRulesPanel">
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('routingRulesBody','routingRulesChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
+        <span>Routing Rules — Complexity Threshold &amp; Keywords</span>
+        <span class="panel-chevron" id="routingRulesChevron">▸</span>
+      </h2>
+      <div id="routingRulesBody" style="display:none">
+
+        <!-- Threshold slider -->
+        <div style="margin-bottom:20px">
+          <label class="field-label">Token Routing Threshold</label>
+          <p style="font-size:12px;color:var(--text-muted);margin:4px 0 10px">
+            Payloads that exceed this token count <em>and</em> contain a complexity keyword will be escalated to the Advisor model tier.
+          </p>
+          <div style="display:flex;align-items:center;gap:14px">
+            <input type="range" id="rrThresholdSlider" min="150" max="2000" step="50" value="500"
+                   style="flex:1;accent-color:var(--accent-blue)" />
+            <span id="rrThresholdValue" style="font-size:15px;font-weight:600;color:var(--accent-blue);min-width:40px;text-align:right">500</span>
+            <span style="font-size:12px;color:var(--text-muted)">tokens</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin:2px 0 10px">
+            <span>150 — aggressive escalation</span>
+            <span>2000 — minimal escalation</span>
+          </div>
+          <button class="btn-primary" onclick="saveThreshold()">Save Threshold</button>
+          <span id="rrThresholdStatus" style="margin-left:10px;font-size:12px"></span>
+        </div>
+
+        <hr style="border-color:var(--border);margin:16px 0" />
+
+        <!-- Keyword manager -->
+        <div>
+          <label class="field-label">Complexity Keywords</label>
+          <p style="font-size:12px;color:var(--text-muted);margin:4px 0 10px">
+            If a keyword below appears in a payload it will be routed to a higher model tier.
+            🔒 keywords are core compliance terms that cannot be removed.
+          </p>
+          <div id="rrKeywordList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="rrNewKeyword" class="input-field" placeholder="Add keyword…" style="max-width:220px" />
+            <button class="btn-secondary" onclick="addRoutingKeyword()">Add</button>
+          </div>
+          <div id="rrKeywordStatus" style="margin-top:6px;font-size:12px"></div>
+        </div>
+
+      </div><!-- end routingRulesBody -->
+    </section>
+    </div><!-- end dp-wrap routing-rules -->
+
     <!-- Panel: Sensitive Term Library -->
     <div class="dp-wrap" data-panel-id="keywords">
     <section class="panel full-width" id="keywordsPanel">
@@ -598,6 +649,7 @@
   <script src="js/agentlake.js"></script>
   <script src="js/router.js"></script>
   <script src="js/keywords.js"></script>
+  <script src="js/routing_rules.js"></script>
   <script src="js/auditor.js"></script>
   <script src="js/voice_guard.js"></script>
   <script src="js/help.js"></script>

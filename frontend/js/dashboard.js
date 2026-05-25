@@ -222,8 +222,9 @@ function restorePanelStates() {
     ["routerBody",      "routerChevron"],
     ["keywordsBody",    "keywordsChevron"],
     ["auditBody",       "auditChevron"],
-    ["voiceGuardBody",  "voiceGuardChevron"],
-    ["midRowBody",      "midRowChevron"],
+    ["voiceGuardBody",   "voiceGuardChevron"],
+    ["midRowBody",       "midRowChevron"],
+    ["routingRulesBody", "routingRulesChevron"],
   ];
   panels.forEach(([bodyId, chevronId]) => {
     const body    = document.getElementById(bodyId);

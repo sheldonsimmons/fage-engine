@@ -15,8 +15,8 @@ Pipeline:
 from config import (
     MICRO_MODEL,
     FLAGSHIP_MODEL,
-    COMPLEXITY_TOKEN_THRESHOLD,
-    COMPLEXITY_KEYWORDS,
+    COMPLEXITY_TOKEN_THRESHOLD as _DEFAULT_THRESHOLD,
+    COMPLEXITY_KEYWORDS as _DEFAULT_KEYWORDS,
 )
 from core.pruner import prune, estimate_tokens
 from core.model_client import call_model, get_mode_info
@@ -28,7 +28,7 @@ TIER_NAMES = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
 # Complexity Scorer
 # ─────────────────────────────────────────────────────────────────────────────
 
-def score_complexity(text: str) -> dict:
+def score_complexity(text: str, threshold: int = None, keywords: list = None) -> dict:
     """
     Classify a text payload as ROUTINE or COMPLEX.
 
@@ -36,15 +36,20 @@ def score_complexity(text: str) -> dict:
       1. Any COMPLEXITY_KEYWORD present  → COMPLEX (keyword trigger)
       2. Token count > threshold         → COMPLEX (length trigger)
       3. Otherwise                       → ROUTINE
+
+    threshold and keywords are read from the DB at runtime (via route()).
+    Falls back to config.py defaults if not provided.
     """
+    _threshold  = threshold if threshold is not None else _DEFAULT_THRESHOLD
+    _keywords   = keywords  if keywords  is not None else _DEFAULT_KEYWORDS
     text_lower  = text.lower()
     token_count = estimate_tokens(text)
-    matched     = [kw for kw in COMPLEXITY_KEYWORDS if kw in text_lower]
+    matched     = [kw for kw in _keywords if kw in text_lower]
 
-    if matched and token_count > COMPLEXITY_TOKEN_THRESHOLD:
+    if matched and token_count > _threshold:
         return {
             "complexity":       "COMPLEX",
-            "reason":           f"Payload length ({token_count} tokens) exceeds routing threshold ({COMPLEXITY_TOKEN_THRESHOLD}) and high-risk keyword detected: '{matched[0]}'",
+            "reason":           f"Payload length ({token_count} tokens) exceeds routing threshold ({_threshold}) and high-risk keyword detected: '{matched[0]}'",
             "token_count":      token_count,
             "matched_keywords": matched,
         }
@@ -151,8 +156,20 @@ def route(
         prune_result = prune(text)
         working_text = prune_result["cleaned_text"]
 
+    # Load live routing config from DB (falls back to config.py defaults if unavailable)
+    _threshold = None
+    _keywords  = None
+    if db is not None:
+        try:
+            from core.routing_config import get_routing_config
+            cfg        = get_routing_config(db)
+            _threshold = cfg.complexity_token_threshold
+            _keywords  = cfg.complexity_keywords
+        except Exception:
+            pass  # DB unavailable — use config.py defaults
+
     # Step 2 — Score complexity
-    complexity_result = score_complexity(working_text)
+    complexity_result = score_complexity(working_text, threshold=_threshold, keywords=_keywords)
     complexity        = complexity_result["complexity"]
 
     # Override: sensitive term escalation forces COMPLEX

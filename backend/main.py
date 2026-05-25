@@ -103,6 +103,18 @@ def _seed_on_startup():
             if not exists:
                 db.add(SensitiveTerm(**t))
 
+        # ── Routing Config (single-row settings) ──────────────────────────────
+        import json as _json
+        from database.models import RoutingConfig
+        from config import COMPLEXITY_TOKEN_THRESHOLD, COMPLEXITY_KEYWORDS
+        exists = db.query(RoutingConfig).filter_by(id=1).first()
+        if not exists:
+            db.add(RoutingConfig(
+                id=1,
+                complexity_token_threshold=COMPLEXITY_TOKEN_THRESHOLD,
+                complexity_keywords_json=_json.dumps(COMPLEXITY_KEYWORDS),
+            ))
+
         db.commit()
     finally:
         db.close()
@@ -198,6 +210,10 @@ app.include_router(routes_agent_activity.router, prefix="/api/reports/agent-acti
 # Voice Guard — PII redaction for voice transcripts
 from api import routes_voice
 app.include_router(routes_voice.router, prefix="/api/voice", tags=["Voice Guard"])
+
+# Routing Rules — user-configurable token threshold + complexity keywords
+from api import routes_routing_config
+app.include_router(routes_routing_config.router, prefix="/api/routing-config", tags=["Routing Config"])
 
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])
