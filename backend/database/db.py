@@ -1,24 +1,27 @@
 """
 db.py — SQLAlchemy database engine and session factory.
 
-The database file (fage.db) is created automatically in the backend/ directory
-the first time the app starts or seed.py is run.
+Uses Heroku Postgres in production (DATABASE_URL env var set automatically
+by the Heroku Postgres add-on). Falls back to SQLite for local development.
 """
 
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# SQLite file stored alongside the backend code — no installation required
-DATABASE_URL = "sqlite:///./fage.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./fage.db")
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},  # Required for SQLite + FastAPI
-)
+# Heroku Postgres URLs start with "postgres://" but SQLAlchemy requires "postgresql://"
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# SQLite needs check_same_thread=False; Postgres does not
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# All ORM models inherit from this base
 Base = declarative_base()
 
 
