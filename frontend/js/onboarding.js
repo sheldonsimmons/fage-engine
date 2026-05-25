@@ -231,9 +231,6 @@ async function launchFage() {
     log("Setup complete!", true);
     document.getElementById("launchPlatformPicker").style.display = "";
     doneBtn.style.display      = "inline-block";
-    if (voiceGuardEnabled) {
-      document.getElementById("voiceGuardBtn").style.display = "inline-block";
-    }
     document.getElementById("skipConnectBtn").style.display = "inline-block";
 
   } catch (err) {
@@ -289,6 +286,12 @@ function selectObPlatform(platform) {
   const cfg = OB_PLATFORMS[platform];
   const objSel = document.getElementById("obPlatObject");
   objSel.innerHTML = cfg.objects.map(o => `<option value="${o}">${o}</option>`).join("");
+  // Populate department dropdown from the user's already-configured departments
+  const deptSel = document.getElementById("obPlatDept");
+  const userDepts = departments.filter(d => d.name.trim());
+  if (userDepts.length > 0) {
+    deptSel.innerHTML = userDepts.map(d => `<option value="${d.name}">${d.name}</option>`).join("");
+  }
   const agentEl = document.getElementById("obPlatAgent");
   if (!agentEl.value || Object.values(OB_PLATFORMS).some(c => c.agentDefault === agentEl.value)) {
     agentEl.value = cfg.agentDefault;

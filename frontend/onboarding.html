@@ -214,9 +214,6 @@
         <button class="ob-btn-primary" id="dashboardBtn" style="display:none;margin-top:16px" onclick="goToPlatformScreen()">
           Connect a Platform →
         </button>
-        <button class="ob-btn-primary" id="voiceGuardBtn" style="display:none; margin-top:10px; background:var(--accent-red,#f85149)" onclick="goToScreen(6)">
-          🎙 Try Voice Guard →
-        </button>
         <button class="ob-btn-ghost" id="skipConnectBtn" style="display:none; margin-top:10px" onclick="window.location.href='/'">
           Skip — Go to Dashboard
         </button>
@@ -266,12 +263,7 @@
           <div class="ob-sf-row">
             <div class="ob-field">
               <label class="ob-label">Department</label>
-              <select id="obPlatDept" class="ob-input">
-                <option>Support</option>
-                <option>Sales</option>
-                <option>Marketing</option>
-                <option>Operations</option>
-              </select>
+              <select id="obPlatDept" class="ob-input"></select>
             </div>
             <div class="ob-field">
               <label class="ob-label">Agent Name</label>
