@@ -159,16 +159,48 @@ async function runPruner() {
 
 // ── Demo reset ────────────────────────────────────────────────────────────────
 async function resetDemoData() {
-  if (!confirm("Full reset — clears all transactions, audit events, and agents.\n\nDepartment budget caps and sensitive terms are preserved.")) return;
+  if (!confirm("Full reset — clears everything for a clean test run.\n\n• All transactions\n• All audit events\n• All registered agents\n• All Voice Guard events\n• Department spend reset to $0\n\nBudget caps and sensitive terms are preserved.")) return;
+
+  const btn = document.getElementById("floatResetBtn");
+  if (btn) { btn.textContent = "Resetting..."; btn.disabled = true; }
+
   try {
     const result = await apiPost("/api/admin/reset-demo", {});
-    alert(`✓ Reset complete.\n${result.transactions_cleared} transactions cleared.\n${result.audit_events_cleared} audit events cleared.\n${result.agents_cleared} agents removed.`);
+
+    // Also wipe Voice Guard events
+    try { await fetch("/api/voice/events", { method: "DELETE" }); } catch (_) {}
+
+    // Refresh all panels
     loadDashboard();
-    if (typeof loadAgents   === "function") loadAgents();
     loadBudgets();
+    if (typeof loadAgents        === "function") loadAgents();
+    if (typeof loadVoiceStats    === "function") loadVoiceStats();
+    if (typeof loadVoiceAuditLog === "function") loadVoiceAuditLog();
+
+    if (btn) {
+      btn.textContent = "✓ Done";
+      setTimeout(() => { btn.textContent = "↺ Reset All"; btn.disabled = false; }, 2500);
+    }
+
+    _showResetToast(`Reset complete — ${result.transactions_cleared} transactions, ${result.audit_events_cleared} audit events, ${result.agents_cleared} agents cleared.`);
   } catch (e) {
+    if (btn) { btn.textContent = "↺ Reset All"; btn.disabled = false; }
     alert("Reset failed: " + e.message);
   }
+}
+
+function _showResetToast(msg) {
+  const toast = document.createElement("div");
+  toast.textContent = msg;
+  Object.assign(toast.style, {
+    position: "fixed", bottom: "80px", right: "20px", zIndex: "9999",
+    background: "#1a2f1a", border: "1px solid var(--accent-green)",
+    color: "var(--accent-green)", borderRadius: "8px",
+    padding: "10px 18px", fontSize: "12px", fontWeight: "600",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.4)", maxWidth: "360px",
+  });
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
 }
 
 // ── Collapsible panels (with localStorage persistence) ────────────────────────
