@@ -77,6 +77,14 @@ def get_dashboard(db: Session = Depends(get_db)):
     micro_pct    = round((micro_calls    / total_calls) * 100, 1) if total_calls else 0
     flagship_pct = round((flagship_calls / total_calls) * 100, 1) if total_calls else 0
 
+    # Per-tier call counts
+    scout_calls     = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier.in_(("Scout",     "micro"))).scalar() or 0
+    analyst_calls   = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier == "Analyst").scalar() or 0
+    advisor_calls   = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier.in_(("Advisor",   "flagship"))).scalar() or 0
+    strategist_calls= db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier == "Strategist").scalar() or 0
+
+    def _pct(n): return round((n / total_calls) * 100, 1) if total_calls else 0
+
     calls_today = db.query(func.count(TokenTransaction.id)).filter(
         TokenTransaction.timestamp >= today_start
     ).scalar() or 0
@@ -189,6 +197,14 @@ def get_dashboard(db: Session = Depends(get_db)):
         "flagship_calls":        flagship_calls,
         "micro_pct":             micro_pct,
         "flagship_pct":          flagship_pct,
+        "scout_calls":           scout_calls,
+        "analyst_calls":         analyst_calls,
+        "advisor_calls":         advisor_calls,
+        "strategist_calls":      strategist_calls,
+        "scout_pct":             _pct(scout_calls),
+        "analyst_pct":           _pct(analyst_calls),
+        "advisor_pct":           _pct(advisor_calls),
+        "strategist_pct":        _pct(strategist_calls),
 
         # ── Agents ────────────────────────────────────────────────────────────
         "agents_total":          agents_total,

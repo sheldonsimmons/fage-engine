@@ -70,12 +70,14 @@ function renderKpis(d) {
 }
 
 function renderStatBar(d) {
-  document.getElementById("statTotalCalls").textContent    = d.total_calls.toLocaleString();
-  document.getElementById("statMicroCalls").textContent    = `${d.micro_calls} (${d.micro_pct}%)`;
-  document.getElementById("statFlagshipCalls").textContent = `${d.flagship_calls} (${d.flagship_pct}%)`;
-  document.getElementById("statBudgetPct").textContent     = d.overall_budget_pct + "%";
-  document.getElementById("statPruningSaved").textContent  = "$" + d.pruning_savings_usd.toFixed(4);
-  document.getElementById("statMonthSpend").textContent    = "$" + d.spend_month_usd.toFixed(2);
+  document.getElementById("statTotalCalls").textContent      = d.total_calls.toLocaleString();
+  document.getElementById("statScoutCalls").textContent      = `${d.scout_calls} (${d.scout_pct}%)`;
+  document.getElementById("statAnalystCalls").textContent    = `${d.analyst_calls} (${d.analyst_pct}%)`;
+  document.getElementById("statAdvisorCalls").textContent    = `${d.advisor_calls} (${d.advisor_pct}%)`;
+  document.getElementById("statStrategistCalls").textContent = `${d.strategist_calls} (${d.strategist_pct}%)`;
+  document.getElementById("statBudgetPct").textContent       = d.overall_budget_pct + "%";
+  document.getElementById("statPruningSaved").textContent    = "$" + d.pruning_savings_usd.toFixed(4);
+  document.getElementById("statMonthSpend").textContent      = "$" + d.spend_month_usd.toFixed(2);
 }
 
 // ── Enterprise Demo loader ────────────────────────────────────────────────────
