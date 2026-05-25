@@ -154,6 +154,7 @@ def _call_openai(text: str, model_id: str) -> dict:
 
 def _call_anthropic(text: str, model_id: str) -> dict:
     import anthropic
+    from fastapi import HTTPException
     client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
 
     system_prompt = (
@@ -162,12 +163,19 @@ def _call_anthropic(text: str, model_id: str) -> dict:
         "For routine questions, give a direct answer. Always indicate your confidence level."
     )
 
-    response = client.messages.create(
-        model=model_id,
-        max_tokens=400,
-        system=system_prompt,
-        messages=[{"role": "user", "content": text}],
-    )
+    try:
+        response = client.messages.create(
+            model=model_id,
+            max_tokens=400,
+            system=system_prompt,
+            messages=[{"role": "user", "content": text}],
+        )
+    except anthropic.APIStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Anthropic API error {e.status_code}: {e.message}")
+    except anthropic.APIConnectionError as e:
+        raise HTTPException(status_code=502, detail=f"Anthropic connection error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Anthropic call failed: {type(e).__name__}: {e}")
 
     usage = response.usage
 
