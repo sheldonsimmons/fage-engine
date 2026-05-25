@@ -310,7 +310,16 @@ async function loadVoiceAuditLog() {
         </tr>
         ${hasDetail ? `
         <tr id="${rowId}" style="display:none">
-          <td colspan="8" style="padding:0 0 4px">
+          <td colspan="8" style="padding:0 0 8px">
+            ${e.clean_transcript ? `
+            <div style="margin:8px 10px 8px 32px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:6px">Clean Transcript Sent to AI</div>
+              <div style="background:var(--bg-base);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:12px;color:var(--text-primary);line-height:1.6;white-space:pre-wrap">${
+                e.clean_transcript.replace(/\[REDACTED-[^\]]+\]/g, m =>
+                  `<span style="background:#3d1a1a;color:#f85149;font-weight:700;border-radius:3px;padding:1px 5px;font-size:11px">${m}</span>`
+                )
+              }</div>
+            </div>` : ""}
             <table style="width:100%;border-collapse:collapse">
               <thead>
                 <tr style="background:var(--bg-base);border-bottom:1px solid var(--border)">
