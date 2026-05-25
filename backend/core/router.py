@@ -41,25 +41,25 @@ def score_complexity(text: str) -> dict:
     token_count = estimate_tokens(text)
     matched     = [kw for kw in COMPLEXITY_KEYWORDS if kw in text_lower]
 
-    if matched:
+    if matched and token_count > COMPLEXITY_TOKEN_THRESHOLD:
         return {
             "complexity":       "COMPLEX",
-            "reason":           f"High-risk keyword detected: '{matched[0]}'",
+            "reason":           f"Payload length ({token_count} tokens) exceeds routing threshold ({COMPLEXITY_TOKEN_THRESHOLD}) and high-risk keyword detected: '{matched[0]}'",
             "token_count":      token_count,
             "matched_keywords": matched,
         }
 
-    if token_count > COMPLEXITY_TOKEN_THRESHOLD:
+    if matched:
         return {
             "complexity":       "COMPLEX",
-            "reason":           f"Payload length ({token_count} tokens) exceeds routing threshold ({COMPLEXITY_TOKEN_THRESHOLD})",
+            "reason":           f"High-risk keyword detected: '{matched[0]}' — escalated to flagship regardless of length",
             "token_count":      token_count,
-            "matched_keywords": [],
+            "matched_keywords": matched,
         }
 
     return {
         "complexity":       "ROUTINE",
-        "reason":           f"Payload length {token_count} tokens — within threshold, no high-risk keywords",
+        "reason":           f"Payload length {token_count} tokens — no high-risk keywords detected, routed to micro model",
         "token_count":      token_count,
         "matched_keywords": [],
     }

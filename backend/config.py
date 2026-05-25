@@ -30,7 +30,7 @@ FLAGSHIP_MODEL = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Payloads estimated above this token count route to the flagship model
-COMPLEXITY_TOKEN_THRESHOLD = 150
+COMPLEXITY_TOKEN_THRESHOLD = 500
 
 # Keywords that force flagship routing regardless of token count
 COMPLEXITY_KEYWORDS = [
