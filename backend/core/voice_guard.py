@@ -68,11 +68,12 @@ try:
                 Pattern("ROUTING_ABA", r"\b0\d{8}\b", 0.80),
             ]
         ),
-        # Email — explicit pattern in case NLP misses informal formats
+        # Email — standard format + spoken format ("derek dot morrison at acme dot com")
         PatternRecognizer(
             supported_entity="EMAIL_ADDRESS",
             patterns=[
                 Pattern("EMAIL_STANDARD", r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b", 0.95),
+                Pattern("EMAIL_SPOKEN",   r"\b\w[\w.\-]*\s+at\s+[\w][\w.\-]*\s+dot\s+(?:com|org|net|edu|gov|io)\b", 0.88),
             ]
         ),
         # IP address
@@ -504,6 +505,30 @@ def _apply_direct_patterns(text: str) -> List[RedactionSpan]:
 
 # ── Presidio AI layer ─────────────────────────────────────────────────────────
 
+# Entity types Presidio detects that are NOT PII in a call-center context.
+# Organization names (Acme Corp, Microsoft) and NRP (nationalities/religions)
+# are not sensitive data we should redact from transcripts.
+_PRESIDIO_SKIP_ENTITIES = {"ORGANIZATION", "NRP", "ORG"}
+
+# Temporal reference words that indicate a DATE_TIME entity is a relative
+# time expression ("last tuesday", "two o'clock"), NOT a date-of-birth.
+# When these appear within 30 chars before a DATE_TIME span, we skip it.
+_TEMPORAL_REFS = re.compile(
+    r'\b(last|next|this|yesterday|today|tomorrow|ago|since|until|'
+    r'o\'clock|oclock|around|about|at|by|before|after|during|'
+    r'monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
+    re.IGNORECASE,
+)
+
+# Office/building location words — LOCATION entities in this context are
+# workspace references, not personal home addresses worth redacting.
+_OFFICE_LOCATION = re.compile(
+    r'\b(office|floor|building|suite|room|campus|headquarters|hq|'
+    r'branch|site|location|desk|station)\b',
+    re.IGNORECASE,
+)
+
+
 def _run_presidio(text: str) -> List[RedactionSpan]:
     """
     Run Presidio AnalyzerEngine on the normalized transcript.
@@ -511,12 +536,9 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
     Level 2 (spaCy NLP active):
       - Full NLP understanding — context-aware, not just pattern matching
       - Detects: SSN, credit card, phone, email, IP, driver's license, ITIN,
-        person name, location, date, bank/routing, passport, member ID
-      - Confidence threshold: 0.40 (lower than pattern-only 0.50 because
-        NLP context makes detections more reliable)
-
-    Fallback (pattern-only mode):
-      - Same behavior as Level 1 — regex patterns, 0.50 threshold
+        person name, date, bank/routing, passport, member ID
+      - Skips: ORGANIZATION (company names), NRP, office LOCATION references
+      - Confidence threshold: 0.40 for personal PII, 0.80 for LOCATION/DATE_TIME
 
     Returns RedactionSpans with detection_method="ai".
     Silently returns empty list if Presidio is unavailable.
@@ -524,15 +546,36 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
     if not _presidio_ready or _analyzer is None:
         return []
 
-    # Confidence threshold — lower for NLP mode (more precise), higher for pattern-only
     threshold = 0.40 if hasattr(_analyzer, 'nlp_engine') else 0.50
 
     spans = []
     try:
         results = _analyzer.analyze(text=text, language="en")
         for r in results:
+            # Skip entity types that are not PII in call-center context
+            if r.entity_type in _PRESIDIO_SKIP_ENTITIES:
+                continue
+
+            # DATE_TIME: skip temporal references ("last tuesday", "two o'clock")
+            if r.entity_type == "DATE_TIME":
+                window = text[max(0, r.start - 30):r.start + 10].lower()
+                if _TEMPORAL_REFS.search(window):
+                    continue
+                # Require higher confidence for dates — lots of false positives
+                if r.score < 0.65:
+                    continue
+
+            # LOCATION: skip office/workspace references, require high confidence
+            if r.entity_type == "LOCATION":
+                window = text[max(0, r.start - 20):r.end + 20].lower()
+                if _OFFICE_LOCATION.search(window):
+                    continue
+                if r.score < 0.80:
+                    continue
+
             if r.score < threshold:
                 continue
+
             pii_type, base_conf = _PRESIDIO_TYPE_MAP.get(
                 r.entity_type, (r.entity_type, 0.70)
             )
