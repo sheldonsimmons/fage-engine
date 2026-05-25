@@ -17,7 +17,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import VoiceEvent
+from database.models import VoiceEvent, TokenTransaction
 from core.voice_guard import process_transcript, presidio_available
 from core.pruner import prune
 
@@ -67,6 +67,22 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
     """
     pruned = prune(req.transcript)
     result = process_transcript(pruned["cleaned_text"])
+
+    # Record pruning savings in TokenTransaction so dashboard KPIs reflect them
+    if pruned["tokens_saved"] > 0:
+        prune_tx = TokenTransaction(
+            department=req.department or "Voice Guard",
+            source_platform=req.platform or "Voice Guard",
+            model_tier="micro",
+            input_tokens=pruned["raw_tokens"],
+            output_tokens=0,
+            cost_usd=0.0,
+            routing_reason="VOICE_GUARD_PRUNE",
+            was_pruned=True,
+            tokens_saved=pruned["tokens_saved"],
+        )
+        db.add(prune_tx)
+        db.commit()
 
     # Determine status
     redactions_count = len(result.redactions)
