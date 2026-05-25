@@ -73,7 +73,7 @@ try:
             supported_entity="EMAIL_ADDRESS",
             patterns=[
                 Pattern("EMAIL_STANDARD", r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b", 0.95),
-                Pattern("EMAIL_SPOKEN",   r"\b\w[\w.\-]*\s+at\s+[\w][\w.\-]*\s+dot\s+(?:com|org|net|edu|gov|io)\b", 0.88),
+                Pattern("EMAIL_SPOKEN",   r"\b[\w][\w.]*(?:\s+dot\s+[\w]+)*\s+at\s+[\w]+(?:\s+[\w]+)*\s+dot\s+(?:com|org|net|edu|gov|io)\b", 0.88),
             ]
         ),
         # IP address
