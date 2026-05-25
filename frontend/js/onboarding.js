@@ -42,8 +42,9 @@ function goToScreen(n) {
   document.getElementById(`screen-${n}`).classList.add("active");
 
   // Update progress
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= 6; i++) {
     const el = document.getElementById(`prog-${i}`);
+    if (!el) continue;
     if (i < n)      el.classList.add("done");
     else if (i === n) el.classList.add("active");
   }
@@ -205,9 +206,10 @@ async function launchFage() {
     // Step 2 — Done
     spinner.style.display = "none";
     title.textContent = "FAGE is ready.";
-    sub.textContent   = "Your AI governance layer is live. Next, connect your Salesforce org.";
+    sub.textContent   = "Your AI governance layer is live. Connect a platform or try Voice Guard now.";
     log("Setup complete!", true);
     doneBtn.style.display      = "inline-block";
+    document.getElementById("voiceGuardBtn").style.display = "inline-block";
     document.getElementById("skipConnectBtn").style.display = "inline-block";
 
   } catch (err) {
@@ -414,6 +416,131 @@ function copyCode(elementId) {
     btn.textContent = "Copied!";
     setTimeout(() => { btn.textContent = "Copy"; }, 2000);
   });
+}
+
+// ── Screen 6: Voice Guard Demo ────────────────────────────────────────────────
+
+const OB_VG_EXAMPLES = [
+  "my card number is 4532 uh 0157 let me check 0119 8484 and my name is John Smith",
+  "sure my social security is one two three, hold on, forty five, six seven eight nine",
+  "you can reach me at j dot smith at acme dot com and my date of birth is March 15 1982",
+];
+let _obVgExIdx = 0;
+
+function loadObExample() {
+  document.getElementById("obTranscript").value = OB_VG_EXAMPLES[_obVgExIdx % OB_VG_EXAMPLES.length];
+  _obVgExIdx++;
+  document.getElementById("obVgResult").style.display = "none";
+  document.getElementById("obVgStatus").textContent   = "";
+}
+
+async function testObVoiceGuard() {
+  const input    = document.getElementById("obTranscript").value.trim();
+  const statusEl = document.getElementById("obVgStatus");
+  if (!input) { statusEl.textContent = "Enter a transcript first."; return; }
+
+  statusEl.textContent = "Scanning...";
+  statusEl.style.color = "var(--text-muted, #8b949e)";
+
+  try {
+    const res  = await fetch("/api/voice/transcript", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript: input, platform: "Onboarding Demo", department: "Demo" }),
+    });
+    const data = await res.json();
+
+    const resultEl = document.getElementById("obVgResult");
+    resultEl.style.display = "block";
+
+    // Highlight redactions
+    document.getElementById("obVgCleanText").innerHTML = data.clean_transcript
+      .replace(/\[REDACTED-([^\]]+)\]/g, (_, type) =>
+        `<span style="background:#2d0a0a;color:#f85149;border:1px solid #5a1a1a;border-radius:4px;padding:1px 6px;font-weight:700;font-size:12px">[REDACTED-${type}]</span>`
+      );
+
+    const piiList = data.pii_types_found.length
+      ? data.pii_types_found.map(t => t.replace(/_/g, " ")).join(", ")
+      : "none detected";
+
+    document.getElementById("obVgMeta").innerHTML = `
+      <span>Redactions: <strong style="color:#f85149">${data.redactions_count}</strong></span>
+      <span>PII types: <strong>${piiList}</strong></span>
+      <span>Confidence: <strong>${data.redactions_count ? (data.confidence_score * 100).toFixed(1) + "%" : "—"}</strong></span>
+      <span>Processed in: <strong>${data.processing_ms}ms</strong></span>
+    `;
+
+    statusEl.textContent = data.redactions_count
+      ? `✓ ${data.redactions_count} PII item(s) redacted — transcript is safe to route`
+      : "✓ No PII detected — transcript is clean";
+    statusEl.style.color = "#3fb950";
+  } catch (e) {
+    statusEl.textContent = "Error: " + e.message;
+    statusEl.style.color = "#f85149";
+  }
+}
+
+// Mic support for Screen 6
+let _obRecognition = null;
+let _obMicActive   = false;
+let _obFinalText   = "";
+
+function toggleObMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    document.getElementById("obVgStatus").textContent = "Speech recognition not supported — use Chrome or Edge.";
+    return;
+  }
+  if (_obMicActive) { if (_obRecognition) _obRecognition.stop(); return; }
+
+  _obRecognition               = new SR();
+  _obRecognition.continuous     = true;
+  _obRecognition.interimResults = true;
+  _obRecognition.lang           = "en-US";
+  _obFinalText                  = "";
+
+  _obRecognition.onstart = () => {
+    _obMicActive = true;
+    document.getElementById("obMicBtn").textContent    = "⏹ Stop";
+    document.getElementById("obMicBtn").style.background = "#f85149";
+    document.getElementById("obMicBtn").style.color    = "#fff";
+    document.getElementById("obMicBadge").style.display  = "flex";
+    document.getElementById("obLivePreview").style.display = "block";
+    document.getElementById("obVgResult").style.display  = "none";
+    document.getElementById("obTranscript").value        = "";
+  };
+
+  _obRecognition.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const chunk = event.results[i][0].transcript;
+      event.results[i].isFinal ? (_obFinalText += chunk + " ") : (interim = chunk);
+    }
+    document.getElementById("obLiveText").innerHTML =
+      (_obFinalText ? `<span style="color:#e6edf3">${_obFinalText}</span>` : "") +
+      (interim     ? `<span style="color:#8b949e;font-style:italic">${interim}</span>` : "");
+  };
+
+  _obRecognition.onend = () => {
+    _obMicActive = false;
+    document.getElementById("obMicBtn").textContent    = "🎙 Speak";
+    document.getElementById("obMicBtn").style.background = "";
+    document.getElementById("obMicBtn").style.color    = "#f85149";
+    document.getElementById("obMicBadge").style.display  = "none";
+    document.getElementById("obLivePreview").style.display = "none";
+    const text = _obFinalText.trim();
+    if (text) {
+      document.getElementById("obTranscript").value = text;
+      setTimeout(() => testObVoiceGuard(), 300);
+    }
+  };
+
+  _obRecognition.onerror = (event) => {
+    document.getElementById("obVgStatus").textContent = "Mic error: " + event.error;
+    _obMicActive = false;
+  };
+
+  _obRecognition.start();
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

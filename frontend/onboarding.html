@@ -31,13 +31,16 @@
       <div class="ob-step" id="prog-4">4</div>
       <div class="ob-progress-line"></div>
       <div class="ob-step" id="prog-5">5</div>
+      <div class="ob-progress-line"></div>
+      <div class="ob-step" id="prog-6">6</div>
     </div>
     <div class="ob-step-labels">
       <span>Company</span>
       <span>Departments</span>
       <span>Review</span>
       <span>Launch</span>
-      <span>Connect</span>
+      <span>Salesforce</span>
+      <span>Voice Guard</span>
     </div>
 
     <!-- ── Screen 1: Company Setup ───────────────────────────────────────── -->
@@ -163,6 +166,9 @@
         <button class="ob-btn-primary" id="dashboardBtn" style="display:none" onclick="goToScreen(5)">
           Connect Salesforce →
         </button>
+        <button class="ob-btn-primary" id="voiceGuardBtn" style="display:none; margin-top:10px; background:var(--accent-red,#f85149)" onclick="goToScreen(6)">
+          🎙 Try Voice Guard →
+        </button>
         <button class="ob-btn-ghost" id="skipConnectBtn" style="display:none; margin-top:10px" onclick="window.location.href='/'">
           Skip — Go to Dashboard
         </button>
@@ -263,9 +269,90 @@
 
         <div class="ob-actions" style="margin-top:24px">
           <button class="ob-btn-ghost" onclick="generateCode()">↺ Regenerate</button>
+          <button class="ob-btn-ghost" onclick="goToScreen(6)" style="margin-left:auto">🎙 Voice Guard →</button>
           <button class="ob-btn-primary" onclick="window.location.href='/'">Open Dashboard →</button>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ── Screen 6: Voice Guard Setup & Demo ──────────────────────────────── -->
+    <div class="ob-screen" id="screen-6">
+      <h1 class="ob-title">🎙 Voice Guard — PII Protection</h1>
+      <p class="ob-subtitle">Voice Guard listens to call transcripts and redacts sensitive information before it reaches the AI — or your CRM. Try it live below.</p>
+
+      <!-- How it works -->
+      <div class="ob-review-card" style="margin-bottom:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+          <div style="text-align:center;padding:12px">
+            <div style="font-size:28px;margin-bottom:8px">🎤</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Caller Speaks</div>
+            <div style="font-size:11px;color:var(--text-muted)">Voice transcript arrives — raw, unfiltered</div>
+          </div>
+          <div style="text-align:center;padding:12px;border-left:1px solid var(--border,#30363d);border-right:1px solid var(--border,#30363d)">
+            <div style="font-size:28px;margin-bottom:8px">🛡</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">FAGE Redacts</div>
+            <div style="font-size:11px;color:var(--text-muted)">Names, card numbers, SSNs replaced in &lt;200ms</div>
+          </div>
+          <div style="text-align:center;padding:12px">
+            <div style="font-size:28px;margin-bottom:8px">✅</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Clean Text to AI</div>
+            <div style="font-size:11px;color:var(--text-muted)">Safe transcript routed to Claude — no PII exposed</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live demo -->
+      <div style="background:var(--bg-panel,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:20px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted,#8b949e)">
+            Live Demo — Speak or Paste a Transcript
+          </div>
+          <div id="obMicBadge" style="display:none;align-items:center;gap:6px;font-size:11px;color:#f85149;font-weight:700">
+            <span style="width:8px;height:8px;border-radius:50%;background:#f85149;display:inline-block;animation:vgPulse 1s ease-in-out infinite"></span>
+            LIVE
+          </div>
+        </div>
+
+        <div id="obLivePreview" style="display:none;background:var(--bg-base,#0d1117);border:1px solid #f85149;border-radius:6px;padding:10px 14px;font-size:13px;color:var(--text-muted,#8b949e);font-style:italic;min-height:36px;margin-bottom:8px;line-height:1.5">
+          <span id="obLiveText">Listening...</span>
+        </div>
+
+        <textarea id="obTranscript" rows="3"
+          placeholder="e.g. 'my card number is 4532 uh 0157 let me check 0119 8484 and my name is John Smith'"
+          style="width:100%;background:var(--bg-base,#0d1117);border:1px solid var(--border,#30363d);border-radius:6px;color:var(--text-primary,#e6edf3);padding:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>
+
+        <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap">
+          <button id="obMicBtn" onclick="toggleObMic()"
+            style="background:var(--bg-panel,#161b22);color:#f85149;border:1px solid #f85149;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+            🎙 Speak
+          </button>
+          <button onclick="testObVoiceGuard()"
+            style="background:#58a6ff;color:#000;border:none;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer">
+            ▶ Scan for PII
+          </button>
+          <button onclick="loadObExample()"
+            style="background:transparent;color:#58a6ff;border:1px solid #58a6ff;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer">
+            Load Example
+          </button>
+          <span id="obVgStatus" style="font-size:12px;color:var(--text-muted,#8b949e)"></span>
+        </div>
+
+        <!-- Result -->
+        <div id="obVgResult" style="display:none;margin-top:14px;padding:14px;background:var(--bg-base,#0d1117);border-radius:8px;border:1px solid var(--border,#30363d)">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted,#8b949e);margin-bottom:8px">Redacted Transcript</div>
+          <div id="obVgCleanText" style="font-size:13px;color:var(--text-primary,#e6edf3);line-height:1.6;margin-bottom:12px"></div>
+          <div id="obVgMeta" style="font-size:11px;color:var(--text-muted,#8b949e);display:flex;gap:16px;flex-wrap:wrap"></div>
+        </div>
+      </div>
+
+      <div class="ob-review-note">
+        Voice Guard is active on your FAGE instance. Connect it to your call platform by piping transcripts to <code style="font-family:monospace;font-size:12px;color:#58a6ff">/api/voice/transcript</code> — it redacts PII before any text reaches the AI.
+      </div>
+
+      <div class="ob-actions" style="margin-top:24px">
+        <button class="ob-btn-ghost" onclick="goToScreen(5)">← Back</button>
+        <button class="ob-btn-primary" onclick="window.location.href='/'">Open Dashboard →</button>
       </div>
     </div>
 
