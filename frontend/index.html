@@ -20,6 +20,7 @@
       <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
       <a href="/reports.html" class="header-nav-link" style="margin-left:8px">📊 Reports</a>
       <a href="/models.html" class="header-nav-link" style="margin-left:8px">🤖 Model Registry</a>
+      <a href="/sandbox.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-yellow)">⚗ Sandbox</a>
       <a href="/live.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-green)">● LIVE</a>
       <button onclick="randomizePanels()" class="header-nav-link" style="margin-left:8px;color:var(--accent-purple);background:none;border-color:var(--accent-purple);cursor:pointer;font:inherit">⊛ Randomize</button>
       <div class="demo-dropdown" style="margin-left:8px;position:relative;display:inline-block">
@@ -281,7 +282,25 @@
     </div><!-- end dp-wrap timeseries -->
 
     <!-- Panel: Pruner Test -->
-    <div class="dp-wrap" data-panel-id="pruner">
+    <!-- Sandbox redirect card — test tools moved to /sandbox.html -->
+    <div class="dp-wrap" data-panel-id="sandbox-redirect">
+    <section class="panel full-width" style="border-color:rgba(210,153,34,0.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+        <div style="display:flex;align-items:center;gap:14px">
+          <span style="font-size:22px">⚗</span>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--accent-yellow)">Testing Tools moved to Sandbox</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Voice Guard, Context Pruner, and Token Router are now in an isolated environment — test calls don't affect production KPIs or budgets.</div>
+          </div>
+        </div>
+        <a href="/sandbox.html" style="background:rgba(210,153,34,0.12);color:var(--accent-yellow);border:1px solid rgba(210,153,34,0.4);border-radius:6px;padding:10px 22px;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;letter-spacing:0.04em">
+          Open Sandbox →
+        </a>
+      </div>
+    </section>
+    </div>
+
+    <div class="dp-wrap" data-panel-id="pruner" style="display:none">
     <section class="panel full-width" id="prunerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('prunerBody', 'prunerChevron')">
         <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
@@ -308,7 +327,7 @@
     </div><!-- end dp-wrap pruner -->
 
     <!-- Panel: Token Router -->
-    <div class="dp-wrap" data-panel-id="router">
+    <div class="dp-wrap" data-panel-id="router" style="display:none">
     <section class="panel full-width" id="routerPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('routerBody', 'routerChevron')">
         <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
@@ -503,7 +522,7 @@
     </div><!-- end dp-wrap keywords -->
 
     <!-- Panel: Voice Guard -->
-    <div class="dp-wrap" data-panel-id="voice-guard">
+    <div class="dp-wrap" data-panel-id="voice-guard" style="display:none">
     <section class="panel full-width" id="voiceGuardPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('voiceGuardBody', 'voiceGuardChevron')">
         <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>

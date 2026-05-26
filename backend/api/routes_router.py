@@ -31,6 +31,7 @@ class RouteRequest(BaseModel):
     source_platform:        Optional[str] = None   # e.g. "Salesforce" — inferred from agent name if omitted
     voice_guard_processed:  bool = False           # True = Voice Guard already redacted PII numbers, skip PII keyword block
     min_tokens:             int  = 20              # Skip routing if pruned payload is below this token count (catches empty Salesforce on-create fires)
+    is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
 
 
 class RouteResponse(BaseModel):
@@ -166,64 +167,69 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # Run the routing pipeline
     result = route(req.text, req.department, db=db, auto_prune=req.auto_prune, is_throttled=is_throttled, force_complex=force_complex)
 
-    # ── Persist the token transaction ──────────────────────────────────────────
-    from core.agentlake import infer_platform
-    tx = TokenTransaction(
-        department      = req.department,
-        source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
-        agent_id        = agent.id if agent else req.agent_id,
-        model_tier      = result["model_tier"],
-        input_tokens   = result["input_tokens"],
-        output_tokens  = result["output_tokens"],
-        cost_usd       = result["cost_usd"],
-        timestamp      = datetime.utcnow(),
-        routing_reason = result["routing_decision"],
-        was_pruned     = result["was_pruned"],
-        tokens_saved   = result["tokens_saved_by_pruning"],
-    )
-    db.add(tx)
-
-    # ── Update department running spend ────────────────────────────────────────
-    if budget:
-        budget.current_spend_usd = round(
-            budget.current_spend_usd + result["cost_usd"], 6
+    if not req.is_test:
+        # ── Persist the token transaction ──────────────────────────────────────
+        from core.agentlake import infer_platform
+        tx = TokenTransaction(
+            department      = req.department,
+            source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
+            agent_id        = agent.id if agent else req.agent_id,
+            model_tier      = result["model_tier"],
+            input_tokens   = result["input_tokens"],
+            output_tokens  = result["output_tokens"],
+            cost_usd       = result["cost_usd"],
+            timestamp      = datetime.utcnow(),
+            routing_reason = result["routing_decision"],
+            was_pruned     = result["was_pruned"],
+            tokens_saved   = result["tokens_saved_by_pruning"],
         )
-        # Auto-throttle when cap is reached
-        if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
-            budget.throttled = True
+        db.add(tx)
 
-    # ── Set agent back to idle after routing ──────────────────────────────────
-    if agent:
-        agent.status = "idle"
-        db.commit()
-    else:
-        db.commit()
-
-    # ── Write audit event for high-stakes decisions ────────────────────────────
-    all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]
-    if result["routing_decision"] in ("COMPLEX", "MODERATE", "THROTTLED", "OVERRIDE") or term_result["triggered"]:
-        try:
-            write_audit_event(
-                db               = db,
-                event_type       = "ROUTING",
-                department       = req.department,
-                routing_decision = result["routing_decision"],
-                routing_reason   = (
-                    f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] "
-                    + result["routing_reason"]
-                ) if term_result["triggered"] else result["routing_reason"],
-                prompt_payload   = req.text[:2000],
-                model_tier       = result["model_tier"],
-                agent_id         = req.agent_id,
-                matched_keywords = all_matched,
-                cost_usd         = result["cost_usd"],
-                decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",
-                tokens_saved     = result.get("tokens_saved_by_pruning", 0),
-                raw_tokens       = result.get("tokens_saved_by_pruning", 0) + result.get("input_tokens", 0),
-                clean_tokens     = result.get("input_tokens", 0),
+        # ── Update department running spend ────────────────────────────────────
+        if budget:
+            budget.current_spend_usd = round(
+                budget.current_spend_usd + result["cost_usd"], 6
             )
-        except Exception:
-            pass  # Never let audit write failure break the routing response
+            if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
+                budget.throttled = True
+
+        # ── Set agent back to idle after routing ──────────────────────────────
+        if agent:
+            agent.status = "idle"
+            db.commit()
+        else:
+            db.commit()
+
+        # ── Write audit event for high-stakes decisions ────────────────────────
+        all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]
+        if result["routing_decision"] in ("COMPLEX", "MODERATE", "THROTTLED", "OVERRIDE") or term_result["triggered"]:
+            try:
+                write_audit_event(
+                    db               = db,
+                    event_type       = "ROUTING",
+                    department       = req.department,
+                    routing_decision = result["routing_decision"],
+                    routing_reason   = (
+                        f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] "
+                        + result["routing_reason"]
+                    ) if term_result["triggered"] else result["routing_reason"],
+                    prompt_payload   = req.text[:2000],
+                    model_tier       = result["model_tier"],
+                    agent_id         = req.agent_id,
+                    matched_keywords = all_matched,
+                    cost_usd         = result["cost_usd"],
+                    decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",
+                    tokens_saved     = result.get("tokens_saved_by_pruning", 0),
+                    raw_tokens       = result.get("tokens_saved_by_pruning", 0) + result.get("input_tokens", 0),
+                    clean_tokens     = result.get("input_tokens", 0),
+                )
+            except Exception:
+                pass  # Never let audit write failure break the routing response
+    else:
+        # Sandbox mode — no DB writes, just reset agent status in memory if needed
+        if agent:
+            agent.status = "idle"
+            db.commit()
 
     # ── Budget stats for the response ──────────────────────────────────────────
     if budget and budget.monthly_cap_usd > 0:
