@@ -110,7 +110,7 @@ body {
 .budget-dept { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
 .budget-dept .dept-name  { font-weight: 600; color: var(--text-primary); }
 .budget-dept .dept-spend { font-family: var(--font-mono); }
-.budget-bar-track { background: var(--bg-base); border-radius: 4px; height: 8px; overflow: hidden; }
+.budget-bar-track { background: var(--bg-base); border: 1px solid var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
 .budget-bar-fill  { height: 100%; border-radius: 4px; background: var(--accent-green); transition: width 0.4s ease; }
 .budget-bar-fill.warn     { background: var(--accent-yellow); }
 .budget-bar-fill.critical { background: var(--accent-red); }
