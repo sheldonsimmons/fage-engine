@@ -42,13 +42,22 @@ DEFAULT_TERMS = [
     {"term": "wrongful",       "category": "hr",          "action": "escalate"},
     # PII / Confidential (keyword triggers)
     {"term": "social security", "category": "pii",        "action": "block"},
+    {"term": "my social",       "category": "pii",        "action": "block"},
     {"term": "date of birth",   "category": "pii",        "action": "escalate"},
+    {"term": "date of birth is","category": "pii",        "action": "block"},
     {"term": "bank account",    "category": "pii",        "action": "block"},
     {"term": "routing number",  "category": "pii",        "action": "block"},
+    {"term": "routing is",      "category": "pii",        "action": "block"},
     {"term": "credit card",     "category": "pii",        "action": "block"},
     {"term": "cvv",             "category": "pii",        "action": "block"},
     {"term": "passport number", "category": "pii",        "action": "block"},
+    {"term": "passport",        "category": "pii",        "action": "escalate"},
     {"term": "drivers license", "category": "pii",        "action": "escalate"},
+    {"term": "drivers licence", "category": "pii",        "action": "escalate"},
+    {"term": "my diagnosis",    "category": "hipaa",      "action": "block"},
+    {"term": "diagnosis code",  "category": "hipaa",      "action": "block"},
+    {"term": "medical record",  "category": "hipaa",      "action": "block"},
+    {"term": "my passport",     "category": "pii",        "action": "block"},
     {"term": "confidential",    "category": "pii",        "action": "flag"},
     {"term": "proprietary",     "category": "pii",        "action": "flag"},
     {"term": "do not share",    "category": "pii",        "action": "escalate"},
@@ -75,8 +84,9 @@ PII_PATTERNS = [
         "name":     "SSN",
         "category": "pii",
         "action":   "block",
-        # Matches: 452-67-8901, 452 67 8901, 452678901
-        "pattern":  re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
+        # Matches: 452-67-8901, 452 67 8901 — requires separator OR SSN-context keyword nearby
+        # Excludes plain 9-digit numbers like routing numbers (021000021)
+        "pattern":  re.compile(r"\b(?!0{3})(?!6{3})(?!9{2})\d{3}[-\s]\d{2}[-\s]\d{4}\b"),
     },
     {
         "name":     "US Phone Number",
