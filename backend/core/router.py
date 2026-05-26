@@ -180,7 +180,23 @@ def route(
         except Exception:
             pass  # DB unavailable — use config.py defaults
 
-    # Step 2 — Score complexity
+    # Step 2 — Check for explicit tier prefix tags ([ANALYST], [ADVISOR], [STRATEGIST])
+    forced_tier = None
+    tag_map = {
+        "[scout]":      1,
+        "[analyst]":    2,
+        "[advisor]":    3,
+        "[strategist]": 4,
+    }
+    text_start = working_text.strip().lower()[:20]
+    for tag, tier in tag_map.items():
+        if text_start.startswith(tag):
+            forced_tier = tier
+            # Strip the tag from the text before sending to model
+            working_text = working_text.strip()[len(tag):].strip()
+            break
+
+    # Step 2b — Score complexity
     complexity_result = score_complexity(working_text, threshold=_threshold, keywords=_keywords)
     complexity        = complexity_result["complexity"]
 
@@ -192,12 +208,17 @@ def route(
 
     # Step 3 — Map to tier number
     if is_throttled:
-        tier_num         = 1          # Always cheapest when budget is exhausted
+        tier_num         = 1
         routing_decision = "THROTTLED"
         routing_reason   = (
             f"Department '{department}' has reached its monthly budget cap. "
             f"Forced to Scout tier. Original complexity: {complexity}."
         )
+    elif forced_tier is not None:
+        tier_num         = forced_tier
+        tier_label       = TIER_NAMES.get(forced_tier, f"Tier {forced_tier}")
+        routing_decision = "OVERRIDE"
+        routing_reason   = f"Explicit tier tag used — routed directly to {tier_label} (Tier {forced_tier})"
     elif force_complex:
         tier_num         = 4          # Strategist for sensitive term escalations
         routing_decision = "COMPLEX"

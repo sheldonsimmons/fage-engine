@@ -32,11 +32,19 @@ FLAGSHIP_MODEL = {
 # Payloads estimated above this token count route to the flagship model
 COMPLEXITY_TOKEN_THRESHOLD = 500
 
-# Keywords that force flagship routing regardless of token count
+# Keywords that trigger MODERATE or COMPLEX routing
 COMPLEXITY_KEYWORDS = [
+    # Legal / compliance (original)
     "legal", "compliance", "lawsuit", "contract", "audit", "fraud",
     "critical", "billing dispute", "breach", "regulatory",
     "data loss", "outage", "gdpr", "hipaa",
+    # Operational complexity
+    "analyze", "analysis", "assessment", "evaluate", "evaluation",
+    "root cause", "integration", "migration", "architecture",
+    "performance review", "optimization", "forecast", "strategy",
+    "risk assessment", "incident", "escalate", "escalation",
+    "investigate", "investigation", "troubleshoot", "diagnose",
+    "recommendation", "summarize", "compare", "benchmark",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
