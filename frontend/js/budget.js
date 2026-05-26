@@ -117,11 +117,19 @@ function renderLiveBudgetBars() {
     const barPct     = b.monthly_cap_usd > 0
       ? Math.min((b.current_spend_usd / b.monthly_cap_usd) * 100, 100)
       : 0;
+    const overrideBtn = b.throttled
+      ? `<button class="btn-override" onclick="doOverride('${b.department}')">Grant Override</button>`
+      : b.override_granted
+        ? `<button class="btn-override btn-revoke" onclick="doRevoke('${b.department}')">Revoke Override</button>`
+        : "";
     return `
       <div class="budget-item">
         <div class="budget-dept">
           <span class="dept-name">${b.department} ${stateTag}</span>
-          <span class="dept-spend">${fmtUsd(b.current_spend_usd)} / ${fmtUsd(b.monthly_cap_usd)} &nbsp;(${displayPct})</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            ${overrideBtn}
+            <span class="dept-spend">${fmtUsd(b.current_spend_usd)} / ${fmtUsd(b.monthly_cap_usd)} &nbsp;(${displayPct})</span>
+          </span>
         </div>
         <div class="budget-bar-track">
           <div class="budget-bar-fill ${fillClass}" style="width:${barPct}%"></div>
