@@ -134,6 +134,19 @@
     .kpi-card-sm .kpi-label { font-size: 9px; }
     .kpi-card-sm .kpi-value { font-size: 22px; }
     .kpi-card-sm .kpi-sub   { font-size: 10px; }
+
+    /* Tier stat strip */
+    .tier-stat-strip { display: grid; grid-template-columns: repeat(6,1fr);
+      border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg-panel); }
+    .tier-stat-cell { padding: 8px 16px; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 2px; }
+    .tier-stat-cell:last-child { border-right: none; }
+    .tier-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.09em;
+      color: var(--text-muted); font-weight: 600; }
+    .tier-stat-val { font-size: 15px; font-weight: 700; font-family: var(--font-mono); }
+
+    /* Budget bar track — visible outline */
+    .budget-bar-track { border: 1px solid var(--border) !important; }
   </style>
 </head>
 <body>
@@ -197,6 +210,34 @@
     <div class="kpi-label">Active Agents</div>
     <div class="kpi-value" style="color:var(--accent)" id="kpiAgents">0</div>
     <div class="kpi-sub" id="kpiAgentsSub">0 active · 0 locked</div>
+  </div>
+</div>
+
+<!-- Tier stat strip -->
+<div class="tier-stat-strip">
+  <div class="tier-stat-cell">
+    <span class="tier-stat-label">Scout (T1)</span>
+    <span class="tier-stat-val" style="color:var(--accent)" id="liveStatScout">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
+  </div>
+  <div class="tier-stat-cell">
+    <span class="tier-stat-label">Analyst (T2)</span>
+    <span class="tier-stat-val" style="color:var(--accent-green)" id="liveStatAnalyst">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
+  </div>
+  <div class="tier-stat-cell">
+    <span class="tier-stat-label">Advisor (T3)</span>
+    <span class="tier-stat-val" style="color:var(--accent-purple)" id="liveStatAdvisor">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
+  </div>
+  <div class="tier-stat-cell">
+    <span class="tier-stat-label">Strategist (T4)</span>
+    <span class="tier-stat-val" style="color:var(--accent-yellow)" id="liveStatStrategist">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
+  </div>
+  <div class="tier-stat-cell">
+    <span class="tier-stat-label">Overall Budget Used</span>
+    <span class="tier-stat-val" style="color:var(--text-primary)" id="liveStatBudget">0%</span>
+  </div>
+  <div class="tier-stat-cell">
+    <span class="tier-stat-label">Pruning Saved (Est.)</span>
+    <span class="tier-stat-val" style="color:var(--accent-green)" id="liveStatPruning">$0.0000</span>
   </div>
 </div>
 
@@ -310,14 +351,16 @@ const BLOCKED_PAYLOADS = [
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let state = {
-  calls:        42000,
-  callsToday:   120,
-  tokens:       53853729,
-  spend:        2.84,
-  spendMonth:   17454.90,
-  blocked:      47,
-  scoutCalls:   27844,
-  advisorCalls: 14156,
+  calls:           42000,
+  callsToday:      120,
+  tokens:          53853729,
+  spend:           2.84,
+  spendMonth:      17454.90,
+  blocked:         47,
+  scoutCalls:      27844,
+  analystCalls:    9240,
+  advisorCalls:    3890,
+  strategistCalls: 1026,
   agentStatuses: AGENTS.map(() => "idle"),
   budgets:      BUDGETS.map(b => ({ ...b })),
 };
@@ -365,14 +408,27 @@ function updateKPIs() {
   document.getElementById("kpiSpend").textContent    = `$${state.spend.toFixed(4)}`;
   document.getElementById("kpiSpendSub").textContent = `$${state.spendMonth.toFixed(2)} this month`;
   document.getElementById("kpiBlocked").textContent  = state.blocked;
-  const total = state.scoutCalls + state.advisorCalls;
-  const scoutPct = total ? Math.round((state.scoutCalls / total) * 100) : 0;
+  const total = state.scoutCalls + state.analystCalls + state.advisorCalls + state.strategistCalls || 1;
+  const scoutPct = Math.round(((state.scoutCalls + state.analystCalls) / total) * 100);
   document.getElementById("kpiSplit").textContent    = `${scoutPct}%`;
-  document.getElementById("kpiSplitSub").textContent = `${state.scoutCalls.toLocaleString()} scout · ${state.advisorCalls.toLocaleString()} advisor`;
+  document.getElementById("kpiSplitSub").textContent = `${(state.scoutCalls+state.analystCalls).toLocaleString()} routine · ${(state.advisorCalls+state.strategistCalls).toLocaleString()} complex`;
   const active = state.agentStatuses.filter(s => s === "active").length;
   const locked = state.agentStatuses.filter(s => s === "locked").length;
   document.getElementById("kpiAgents").textContent    = active + locked;
   document.getElementById("kpiAgentsSub").textContent = `${active} active · ${locked} locked`;
+
+  // Tier stat strip
+  const totalCalls = state.scoutCalls + state.analystCalls + state.advisorCalls + state.strategistCalls || 1;
+  const pct = n => Math.round((n / totalCalls) * 100);
+  document.getElementById("liveStatScout").innerHTML     = `${state.scoutCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.scoutCalls)}%)</span>`;
+  document.getElementById("liveStatAnalyst").innerHTML   = `${state.analystCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.analystCalls)}%)</span>`;
+  document.getElementById("liveStatAdvisor").innerHTML   = `${state.advisorCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.advisorCalls)}%)</span>`;
+  document.getElementById("liveStatStrategist").innerHTML= `${state.strategistCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.strategistCalls)}%)</span>`;
+  const totalBudgetUsed = state.budgets.reduce((s,b) => s + b.spend, 0);
+  const totalBudgetCap  = state.budgets.reduce((s,b) => s + b.cap,   0);
+  const budgetPct = ((totalBudgetUsed / totalBudgetCap) * 100).toFixed(1);
+  document.getElementById("liveStatBudget").textContent  = `${budgetPct}%`;
+  document.getElementById("liveStatPruning").textContent = `$${(state.tokens * 0.00000015).toFixed(4)}`;
 }
 
 function addRoutingRow(agent, dept, tier, detail, isBlocked) {
@@ -495,7 +551,8 @@ function tick() {
     const cost    = (tokens * 0.000003) + (out * 0.000015);
     const tier    = Math.random() < 0.7 ? "Advisor" : "Strategist";
     state.agentStatuses[agentIdx] = "active";
-    state.calls++; state.callsToday++; state.advisorCalls++;
+    state.calls++; state.callsToday++;
+    if (tier === "Advisor") state.advisorCalls++; else state.strategistCalls++;
     state.spend = parseFloat((state.spend + cost).toFixed(6));
     state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
     addRoutingRow(agent.name, agent.dept, tier, payload.slice(0, 50) + "...", false);
