@@ -218,6 +218,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 matched_keywords = all_matched,
                 cost_usd         = result["cost_usd"],
                 decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",
+                tokens_saved     = result.get("tokens_saved_by_pruning", 0),
+                raw_tokens       = result.get("tokens_saved_by_pruning", 0) + result.get("input_tokens", 0),
+                clean_tokens     = result.get("input_tokens", 0),
             )
         except Exception:
             pass  # Never let audit write failure break the routing response

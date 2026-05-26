@@ -154,6 +154,11 @@ async function fetchRationaleContent(eventId) {
           &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? "?"}
           &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? "?"}
           &nbsp;|&nbsp; Captured: ${snapshot.captured_at ?? "?"}
+          ${snapshot.tokens_saved > 0 ? `<br><br>
+          <span style="color:var(--accent-green)">&#9660; Pruning:</span>
+          Raw: ${snapshot.raw_tokens ?? "?"} tokens
+          &nbsp;&rarr;&nbsp; Clean: ${snapshot.clean_tokens ?? "?"} tokens
+          &nbsp;|&nbsp; <span style="color:var(--accent-green)">Saved: ${snapshot.tokens_saved ?? 0} tokens (${snapshot.compression_pct ?? 0}% reduction)</span>` : ""}
         </div>
       </div>
       <div class="rationale-section">

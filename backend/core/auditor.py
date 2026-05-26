@@ -184,11 +184,21 @@ def write_audit_event(
     matched_keywords: list      = None,
     cost_usd:         float     = 0.0,
     decision_outcome: str       = "",
+    tokens_saved:     int       = 0,
+    raw_tokens:       int       = 0,
+    clean_tokens:     int       = 0,
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
 
     context    = _build_context_snapshot(db, department)
+
+    # Attach pruning stats to the context snapshot
+    if tokens_saved or raw_tokens or clean_tokens:
+        context["raw_tokens"]    = raw_tokens
+        context["clean_tokens"]  = clean_tokens
+        context["tokens_saved"]  = tokens_saved
+        context["compression_pct"] = round((tokens_saved / raw_tokens) * 100, 1) if raw_tokens > 0 else 0.0
     risk_level = classify_risk(event_type, routing_decision, matched_keywords)
     rationale  = _build_rationale(
         event_type, routing_decision, routing_reason,
