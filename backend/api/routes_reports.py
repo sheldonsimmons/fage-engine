@@ -18,8 +18,9 @@ from database.models import TokenTransaction, AuditEvent, DepartmentBudget, Sens
 
 router = APIRouter()
 
-MICRO_INPUT_COST    = 0.15  / 1_000_000
-FLAGSHIP_INPUT_COST = 3.00  / 1_000_000
+MICRO_INPUT_COST     = 0.15  / 1_000_000
+FLAGSHIP_INPUT_COST  = 3.00  / 1_000_000
+FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000   # Sonnet: $15/1M output (5× input, not 4×)
 
 ECONOMY_TIERS = {"Scout", "Analyst", "micro"}
 PREMIUM_TIERS = {"Advisor", "Strategist", "flagship"}
@@ -53,10 +54,10 @@ def savings_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(ge
     tokens_pruned    = sum(t.tokens_saved for t in txns if t.was_pruned)
     pruning_saved    = round(tokens_pruned * FLAGSHIP_INPUT_COST, 6)
 
-    # What it would have cost if everything went flagship
+    # What it would have cost if everything went flagship (no routing, no pruning)
     cost_if_all_flagship = sum(
         (t.input_tokens + t.tokens_saved) * FLAGSHIP_INPUT_COST +
-        t.output_tokens * (FLAGSHIP_INPUT_COST * 4)
+        t.output_tokens * FLAGSHIP_OUTPUT_COST
         for t in txns
     )
     downgrade_saved = round(max(cost_if_all_flagship - total_cost, 0), 6)

@@ -18,6 +18,7 @@ from core.agentlake import (
     list_agents, get_agent, claim_record,
     release_lock, simulate_collision,
     register_agent, deregister_agent,
+    archive_agent, unarchive_agent,
 )
 
 router = APIRouter()
@@ -35,6 +36,7 @@ class AgentStatus(BaseModel):
     collision_policy: Optional[str]
     locked_at:        Optional[str]
     lock_reason:      Optional[str]
+    archived:         Optional[bool] = False
 
 
 class RegisterRequest(BaseModel):
@@ -80,9 +82,9 @@ def deregister(agent_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=List[AgentStatus])
-def get_agents(db: Session = Depends(get_db)):
-    """List all registered AI agents and their current status."""
-    return list_agents(db)
+def get_agents(include_archived: bool = False, db: Session = Depends(get_db)):
+    """List registered agents. Pass ?include_archived=true to include archived agents."""
+    return list_agents(db, include_archived=include_archived)
 
 
 @router.get("/{agent_id}", response_model=AgentStatus)
@@ -128,5 +130,23 @@ def release_agent(agent_id: int, db: Session = Depends(get_db)):
     """Supervisor action: release a locked agent back to idle."""
     try:
         return release_lock(db, agent_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{agent_id}/archive")
+def archive(agent_id: int, db: Session = Depends(get_db)):
+    """Soft-delete: hide agent from live grid, preserve all history in reports and audit log."""
+    try:
+        return archive_agent(db, agent_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{agent_id}/unarchive", response_model=AgentStatus)
+def unarchive(agent_id: int, db: Session = Depends(get_db)):
+    """Restore an archived agent back to the live registry."""
+    try:
+        return unarchive_agent(db, agent_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -64,7 +64,9 @@ function renderAgentTable(agents) {
 
     const actionBtn = (a.status === "locked" || a.status === "active" || a.status === "queued")
       ? `<button class="btn-release" onclick="releaseAgent(${a.id})">Release</button>`
-      : `<button class="btn-deregister" onclick="deregisterAgent(${a.id}, '${a.name}')">Remove</button>`;
+      : a.archived
+        ? `<button class="btn-deregister" style="color:var(--accent-green);border-color:var(--accent-green)" onclick="unarchiveAgent(${a.id}, '${a.name}')">Restore</button>`
+        : `<button class="btn-deregister" onclick="archiveAgent(${a.id}, '${a.name}')">Archive</button>`;
 
     const lockTip = a.lock_reason
       ? `title="${a.lock_reason}"`
@@ -155,14 +157,24 @@ async function registerAgent() {
   }
 }
 
-/** Remove an agent from the registry */
-async function deregisterAgent(agentId, agentName) {
-  if (!confirm(`Remove "${agentName}" from the registry?`)) return;
+/** Archive an agent (soft-delete — history preserved, removed from live grid) */
+async function archiveAgent(agentId, agentName) {
+  if (!confirm(`Archive "${agentName}"?\n\nThe agent will be removed from the live registry but all audit history and cost data will be preserved in reports.`)) return;
   try {
-    await apiDelete(`/api/agents/${agentId}`);
+    await apiPost(`/api/agents/${agentId}/archive`, {});
     await loadAgents();
   } catch (err) {
-    alert("Failed to remove agent: " + err.message);
+    alert("Failed to archive agent: " + err.message);
+  }
+}
+
+/** Restore an archived agent back to the live registry */
+async function unarchiveAgent(agentId, agentName) {
+  try {
+    await apiPost(`/api/agents/${agentId}/unarchive`, {});
+    await loadAgents();
+  } catch (err) {
+    alert("Failed to restore agent: " + err.message);
   }
 }
 
@@ -209,15 +221,26 @@ setInterval(loadAgents, 10000);
 
 let _allAgents = []; // cache for client-side filtering
 
+// Whether to include archived agents in the table (toggled by supervisor)
+let _showArchived = false;
+
+function toggleArchivedAgents() {
+  _showArchived = !_showArchived;
+  const btn = document.getElementById("toggleArchivedBtn");
+  if (btn) btn.textContent = _showArchived ? "Hide Archived" : "Show Archived";
+  loadAgents();
+}
+
 // Override loadAgents to cache results and populate dept dropdown
 const _origLoadAgents = loadAgents;
 async function loadAgents() {
   try {
-    const agents = await apiGet("/api/agents");
+    const url = _showArchived ? "/api/agents?include_archived=true" : "/api/agents";
+    const agents = await apiGet(url);
     _allAgents = agents;
-    renderAgentCards(agents);
+    renderAgentCards(agents.filter(a => !a.archived));  // cards show live only
     renderAgentTable(agents);
-    updateKpiAgents(agents);
+    updateKpiAgents(agents.filter(a => !a.archived));
     populateDeptFilter(agents);
   } catch (err) {
     document.getElementById("agentTableBody").innerHTML =

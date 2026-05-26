@@ -11,11 +11,9 @@ async function loadAuditLog() {
   try {
     const events = await apiGet("/api/audit?limit=20");
     auditAllEvents = events;
-    const toRender = auditFilterBlocked
-      ? events.filter(e => (e.decision_outcome || "").toLowerCase().includes("blocked"))
-      : events;
-    renderAuditTable(toRender);
+    _populateAuditDeptFilter(events);
     updateBlockedBanner(events);
+    applyAuditFilters();
     // Restore open row and re-fetch its content after re-render
     if (openRationaleId) {
       const row = document.getElementById(`rationale-${openRationaleId}`);
@@ -61,17 +59,23 @@ let auditFilterBlocked = false;
 let auditAllEvents = [];
 
 function toggleBlockedFilter() {
-  auditFilterBlocked = !auditFilterBlocked;
+  // Banner "Review Blocked" button — activates blocked-only filter
+  _auditBlockedOnly = !_auditBlockedOnly;
+  auditFilterBlocked = _auditBlockedOnly;
+
   const btn = document.querySelector(".blocked-banner-btn");
-  if (btn) btn.textContent = auditFilterBlocked ? "Show All Events" : "Review Blocked Events ↓";
+  if (btn) btn.textContent = _auditBlockedOnly ? "Show All Events" : "Review Blocked Events ↓";
 
   const indicator = document.getElementById("auditFilterIndicator");
-  if (indicator) indicator.style.display = auditFilterBlocked ? "inline-block" : "none";
+  if (indicator) indicator.style.display = _auditBlockedOnly ? "inline-block" : "none";
 
-  const filtered = auditFilterBlocked
-    ? auditAllEvents.filter(e => (e.decision_outcome || "").toLowerCase().includes("blocked"))
-    : auditAllEvents;
-  renderAuditTable(filtered);
+  const auditBtn = document.getElementById("auditBlockedOnlyBtn");
+  if (auditBtn) {
+    auditBtn.style.color       = _auditBlockedOnly ? "var(--accent-red)" : "";
+    auditBtn.style.borderColor = _auditBlockedOnly ? "var(--accent-red)" : "";
+  }
+
+  applyAuditFilters();
 }
 
 function renderAuditTable(events) {
@@ -196,43 +200,51 @@ async function toggleRationale(eventId) {
   await fetchRationaleContent(eventId);
 }
 
-/** Render the compact routing decision feed in the live ops strip */
+/** Render routing rows from a pre-filtered event array */
+function _renderRoutingRows(events) {
+  const tbody = document.getElementById("liveRoutingBody");
+  if (!tbody) return;
+  if (!events.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No events match the current filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = events.map(e => {
+    const ts = e.timestamp
+      ? new Date(e.timestamp + "Z").toLocaleTimeString("en-US", {
+          hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+        })
+      : "—";
+    const isBlocked = (e.decision_outcome || "").toLowerCase().includes("blocked");
+    const tierLabel = e.model_tier || "—";
+    const tierBadge = ["Scout","micro"].includes(tierLabel)
+      ? `<span class="badge badge-micro">Scout</span>`
+      : isBlocked
+      ? `<span class="badge badge-critical">🛡 BLOCKED</span>`
+      : tierLabel === "—"
+      ? `<span style="color:var(--text-muted)">—</span>`
+      : `<span class="badge badge-flagship">${tierLabel}</span>`;
+    const riskClass = `badge-${e.risk_level || "low"}`;
+    const rowClass  = isBlocked ? "audit-row row-blocked" : "audit-row";
+    return `
+      <tr class="${rowClass}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale">
+        <td style="font-family:var(--font-mono);color:var(--text-muted);font-size:11px">${ts}</td>
+        <td style="font-weight:600;color:var(--accent);font-size:11px">${e.agent_name || "—"}</td>
+        <td style="color:var(--text-muted);font-size:11px">${e.department || "—"}</td>
+        <td>${tierBadge}</td>
+        <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
+        <td style="font-size:11px;color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}">${e.decision_outcome || "—"}</td>
+      </tr>`;
+  }).join("");
+}
+
+/** Fetch routing events, cache them, and render with current filters applied */
 async function loadLiveRoutingFeed() {
   const tbody = document.getElementById("liveRoutingBody");
   if (!tbody) return;
   try {
-    const events = await apiGet("/api/audit?limit=10");
-    if (!events.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No routing decisions yet.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = events.map(e => {
-      const ts = e.timestamp
-        ? new Date(e.timestamp + "Z").toLocaleTimeString("en-US", {
-            hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
-          })
-        : "—";
-      const isBlocked = (e.decision_outcome || "").toLowerCase().includes("blocked");
-      const tierLabel = e.model_tier || "—";
-      const tierBadge = ["Scout","micro"].includes(tierLabel)
-        ? `<span class="badge badge-micro">Scout</span>`
-        : isBlocked
-        ? `<span class="badge badge-critical">🛡 BLOCKED</span>`
-        : tierLabel === "—"
-        ? `<span style="color:var(--text-muted)">—</span>`
-        : `<span class="badge badge-flagship">${tierLabel}</span>`;
-      const riskClass = `badge-${e.risk_level || "low"}`;
-      const rowClass = isBlocked ? "audit-row row-blocked" : "audit-row";
-      return `
-        <tr class="${rowClass}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale">
-          <td style="font-family:var(--font-mono);color:var(--text-muted);font-size:11px">${ts}</td>
-          <td style="font-weight:600;color:var(--accent);font-size:11px">${e.agent_name || "—"}</td>
-          <td style="color:var(--text-muted);font-size:11px">${e.department || "—"}</td>
-          <td>${tierBadge}</td>
-          <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
-          <td style="font-size:11px;color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}">${e.decision_outcome || "—"}</td>
-        </tr>`;
-    }).join("");
+    const events = await apiGet("/api/audit?limit=25");
+    _routingEvents = events;
+    applyRoutingFilters();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="6" class="placeholder" style="color:var(--accent-red)">Failed to load: ${err.message}</td></tr>`;
   }
@@ -240,6 +252,61 @@ async function loadLiveRoutingFeed() {
 
 loadLiveRoutingFeed();
 setInterval(loadLiveRoutingFeed, 15000);
+
+// ── Audit Log Filters ─────────────────────────────────────────────────────────
+
+let _auditBlockedOnly = false;
+
+function applyAuditFilters() {
+  const dept   = (document.getElementById("auditFilterDept")?.value   || "").toLowerCase();
+  const risk   = (document.getElementById("auditFilterRisk")?.value   || "").toLowerCase();
+  const window = parseInt(document.getElementById("auditFilterWindow")?.value || "0");
+
+  const cutoff = window > 0 ? Date.now() - window * 24 * 60 * 60 * 1000 : 0;
+
+  const filtered = auditAllEvents.filter(e => {
+    if (_auditBlockedOnly && !(e.decision_outcome || "").toLowerCase().includes("blocked")) return false;
+    if (dept && (e.department || "").toLowerCase() !== dept) return false;
+    if (risk && (e.risk_level || "").toLowerCase() !== risk) return false;
+    if (cutoff && new Date(e.timestamp + "Z").getTime() < cutoff) return false;
+    return true;
+  });
+
+  renderAuditTable(filtered);
+}
+
+function toggleAuditBlockedOnly() {
+  _auditBlockedOnly = !_auditBlockedOnly;
+  const btn = document.getElementById("auditBlockedOnlyBtn");
+  if (btn) {
+    btn.style.color       = _auditBlockedOnly ? "var(--accent-red)" : "";
+    btn.style.borderColor = _auditBlockedOnly ? "var(--accent-red)" : "";
+  }
+  applyAuditFilters();
+}
+
+function clearAuditFilters() {
+  _auditBlockedOnly = false;
+  const fields = ["auditFilterDept","auditFilterRisk","auditFilterWindow"];
+  fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  const btn = document.getElementById("auditBlockedOnlyBtn");
+  if (btn) { btn.style.color = ""; btn.style.borderColor = ""; }
+  renderAuditTable(auditAllEvents);
+}
+
+function _populateAuditDeptFilter(events) {
+  const sel = document.getElementById("auditFilterDept");
+  if (!sel) return;
+  const existing = new Set(Array.from(sel.options).map(o => o.value));
+  const depts = [...new Set(events.map(e => e.department).filter(Boolean))].sort();
+  depts.forEach(d => {
+    if (!existing.has(d.toLowerCase())) {
+      const opt = document.createElement("option");
+      opt.value = d.toLowerCase(); opt.textContent = d;
+      sel.appendChild(opt);
+    }
+  });
+}
 
 // ── Export functions ──────────────────────────────────────────────────────────
 

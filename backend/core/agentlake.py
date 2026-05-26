@@ -69,10 +69,36 @@ def deregister_agent(db: Session, agent_id: int) -> dict:
     return {"deleted": True, "message": f"Agent '{name}' removed from registry."}
 
 
-def list_agents(db: Session) -> list:
-    """Return all registered agents with their current status."""
-    agents = db.query(RegisteredAgent).all()
-    return [_serialize(a) for a in agents]
+def list_agents(db: Session, include_archived: bool = False) -> list:
+    """Return registered agents. Archived agents are hidden by default."""
+    q = db.query(RegisteredAgent)
+    if not include_archived:
+        q = q.filter((RegisteredAgent.archived == False) | (RegisteredAgent.archived == None))
+    return [_serialize(a) for a in q.all()]
+
+
+def archive_agent(db: Session, agent_id: int) -> dict:
+    """Soft-delete: hide an agent from the live grid while preserving its history."""
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+    agent.archived        = True
+    agent.status          = "idle"
+    agent.target_record_id = None
+    agent.locked_at       = None
+    agent.lock_reason     = None
+    db.commit()
+    return {"archived": True, "message": f"Agent '{agent.name}' archived. History preserved in reports and audit log."}
+
+
+def unarchive_agent(db: Session, agent_id: int) -> dict:
+    """Restore an archived agent back to the live registry."""
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+    agent.archived = False
+    db.commit()
+    return _serialize(agent)
 
 
 def get_agent(db: Session, agent_id: int):
@@ -254,4 +280,5 @@ def _serialize(a: RegisteredAgent) -> dict:
         "locked_at":        a.locked_at.isoformat() if a.locked_at else None,
         "lock_reason":      a.lock_reason,
         "last_used_at":     a.last_used_at.isoformat() if a.last_used_at else None,
+        "archived":         bool(a.archived),
     }

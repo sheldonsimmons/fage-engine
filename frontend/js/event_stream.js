@@ -6,8 +6,55 @@
  * Clicking any card expands it inline showing full rationale + context.
  */
 
-let _streamOpenId = null;
-let _streamEvents = [];
+let _streamOpenId  = null;
+let _streamEvents  = [];
+let _streamDashData = {};
+
+function _renderStreamCards(events) {
+  const list = document.getElementById("eventStreamList");
+  if (!list) return;
+
+  if (!events.length) {
+    list.innerHTML = '<p class="placeholder">No events match the current filters.</p>';
+    return;
+  }
+
+  const dashData = _streamDashData;
+  list.innerHTML = events.map(e => {
+    const type   = _streamEventType(e);
+    const title  = _streamEventTitle(e);
+    const color  = _streamEventColor(type);
+    const ts     = _fmtStreamTs(e.timestamp);
+    const dept   = e.department || "—";
+    const cost   = e.cost_usd != null ? `$${e.cost_usd.toFixed(6)}` : "—";
+    const tokens = e.tokens_in != null ? `${(e.tokens_in + (e.tokens_out || 0)).toLocaleString()} tokens` : "";
+
+    const budgetUsed = dashData.budget_used_pct != null ? `${dashData.budget_used_pct.toFixed(1)}% budget used` : "";
+    const monthSpend = dashData.spend_month_usd  != null ? `$${dashData.spend_month_usd.toFixed(2)} this month` : "";
+    const metaParts  = [tokens, cost, dept, budgetUsed, monthSpend].filter(Boolean);
+
+    const keywords = (e.matched_keywords || []).length
+      ? `<span style="color:var(--accent-red)"> · ${e.matched_keywords.slice(0,3).join(", ")}</span>`
+      : "";
+
+    const body = e.decision_outcome
+      ? `${e.decision_outcome}${keywords}`
+      : (type === "blocked" ? "Sensitive data detected — request stopped before reaching AI" : "");
+
+    return `
+      <div class="gov-event type-${type}" id="gov-ev-${e.id}" onclick="toggleStreamEvent(${e.id})">
+        <div class="gov-event-header">
+          <span class="gov-event-type" style="color:${color}">${title}</span>
+          <span class="gov-event-time">${ts}</span>
+        </div>
+        <div class="gov-event-body">${body}</div>
+        <div class="gov-event-meta">${metaParts.join(" · ")}</div>
+        <div class="gov-event-detail" id="gov-detail-${e.id}">
+          <span style="color:var(--text-muted);font-size:11px">Loading detail...</span>
+        </div>
+      </div>`;
+  }).join("");
+}
 
 // ── Event classification ──────────────────────────────────────────────────────
 
@@ -57,6 +104,9 @@ async function loadEventStream() {
   const list = document.getElementById("eventStreamList");
   if (!list) return;
 
+  // Remember which event was open so we can restore it after re-render
+  const wasOpenId = _streamOpenId;
+
   try {
     const events = await apiGet("/api/audit?limit=25");
     _streamEvents = events;
@@ -70,42 +120,17 @@ async function loadEventStream() {
     let dashData = {};
     try { dashData = await apiGet("/api/dashboard"); } catch {}
 
-    list.innerHTML = events.map(e => {
-      const type   = _streamEventType(e);
-      const title  = _streamEventTitle(e);
-      const color  = _streamEventColor(type);
-      const ts     = _fmtStreamTs(e.timestamp);
-      const dept   = e.department || "—";
-      const tier   = e.model_tier  || "—";
-      const cost   = e.cost_usd != null ? `$${e.cost_usd.toFixed(6)}` : "—";
-      const tokens = e.tokens_in != null ? `${(e.tokens_in + (e.tokens_out || 0)).toLocaleString()} tokens` : "";
+    _streamOpenId = null; // reset before render so toggle logic works correctly
 
-      // Budget context from dashboard summary
-      const budgetUsed  = dashData.budget_used_pct != null ? `${dashData.budget_used_pct.toFixed(1)}% budget used` : "";
-      const monthSpend  = dashData.spend_month_usd  != null ? `$${dashData.spend_month_usd.toFixed(2)} this month` : "";
-      const metaParts   = [tokens, cost, dept, budgetUsed, monthSpend].filter(Boolean);
+    _populateStreamDeptFilter(events);
+    _streamDashData = dashData;
+    _renderStreamCards(events);
 
-      const keywords = (e.matched_keywords || []).length
-        ? `<span style="color:var(--accent-red)"> · ${e.matched_keywords.slice(0,3).join(", ")}</span>`
-        : "";
-
-      const body = e.decision_outcome
-        ? `${e.decision_outcome}${keywords}`
-        : (type === "blocked" ? "Sensitive data detected — request stopped before reaching AI" : "");
-
-      return `
-        <div class="gov-event type-${type}" id="gov-ev-${e.id}" onclick="toggleStreamEvent(${e.id})">
-          <div class="gov-event-header">
-            <span class="gov-event-type" style="color:${color}">${title}</span>
-            <span class="gov-event-time">${ts}</span>
-          </div>
-          <div class="gov-event-body">${body}</div>
-          <div class="gov-event-meta">${metaParts.join(" · ")}</div>
-          <div class="gov-event-detail" id="gov-detail-${e.id}">
-            <span style="color:var(--text-muted);font-size:11px">Loading detail...</span>
-          </div>
-        </div>`;
-    }).join("");
+    // Restore the previously open event detail without closing it
+    if (wasOpenId) {
+      const detail = document.getElementById(`gov-detail-${wasOpenId}`);
+      if (detail) toggleStreamEvent(wasOpenId);
+    }
 
   } catch (err) {
     list.innerHTML = `<p class="placeholder" style="color:var(--accent-red)">Failed to load: ${err.message}</p>`;
@@ -179,6 +204,75 @@ async function toggleStreamEvent(eventId) {
   } catch (err) {
     detail.innerHTML = `<span style="color:var(--accent-red)">Failed to load detail: ${err.message}</span>`;
   }
+}
+
+// ── Governance Event Stream Filters ──────────────────────────────────────────
+
+function applyStreamFilters() {
+  const type   = (document.getElementById("streamFilterType")?.value   || "").toLowerCase();
+  const dept   = (document.getElementById("streamFilterDept")?.value   || "").toLowerCase();
+  const search = (document.getElementById("streamFilterSearch")?.value || "").toLowerCase();
+
+  const filtered = _streamEvents.filter(e => {
+    if (type   && _streamEventType(e) !== type) return false;
+    if (dept   && (e.department || "").toLowerCase() !== dept) return false;
+    if (search && !(
+      (e.decision_outcome || "").toLowerCase().includes(search) ||
+      (e.department       || "").toLowerCase().includes(search) ||
+      (e.rationale        || "").toLowerCase().includes(search)
+    )) return false;
+    return true;
+  });
+
+  _renderStreamCards(filtered);
+}
+
+function _populateStreamDeptFilter(events) {
+  const sel = document.getElementById("streamFilterDept");
+  if (!sel) return;
+  const existing = new Set(Array.from(sel.options).map(o => o.value));
+  const depts = [...new Set(events.map(e => e.department).filter(Boolean))].sort();
+  depts.forEach(d => {
+    if (!existing.has(d)) {
+      const opt = document.createElement("option");
+      opt.value = d.toLowerCase(); opt.textContent = d;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+// ── Routing Decision Feed Filters ─────────────────────────────────────────────
+
+let _routingEvents    = [];
+let _routingBlockedOn = false;
+
+function applyRoutingFilters() {
+  const risk    = (document.getElementById("routingFilterRisk")?.value || "").toLowerCase();
+  const tier    = (document.getElementById("routingFilterTier")?.value || "").toLowerCase();
+
+  const filtered = _routingEvents.filter(e => {
+    if (_routingBlockedOn && !(e.decision_outcome || "").toLowerCase().includes("blocked")) return false;
+    if (risk && (e.risk_level || "").toLowerCase() !== risk) return false;
+    if (tier) {
+      const t = (e.model_tier || "").toLowerCase();
+      if (tier === "scout"     && !["scout","analyst","micro"].includes(t))     return false;
+      if (tier === "advisor"   && !["advisor"].includes(t))                     return false;
+      if (tier === "strategist"&& !["strategist","flagship"].includes(t))       return false;
+    }
+    return true;
+  });
+
+  _renderRoutingRows(filtered);
+}
+
+function toggleRoutingBlocked() {
+  _routingBlockedOn = !_routingBlockedOn;
+  const btn = document.getElementById("routingBlockedBtn");
+  if (btn) {
+    btn.style.color       = _routingBlockedOn ? "var(--accent-red)" : "";
+    btn.style.borderColor = _routingBlockedOn ? "var(--accent-red)" : "";
+  }
+  applyRoutingFilters();
 }
 
 // Load on page ready, refresh every 15 seconds

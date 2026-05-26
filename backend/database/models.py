@@ -83,6 +83,7 @@ class RegisteredAgent(Base):
     lock_reason      = Column(String,   nullable=True)
     last_used_at     = Column(DateTime, nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
+    archived         = Column(Boolean,  nullable=True, default=False)  # soft-delete: hides from live grid, keeps history
 
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")

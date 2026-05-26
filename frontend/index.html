@@ -187,6 +187,7 @@
               <div class="agent-controls">
                 <button class="btn-collision" onclick="runCollisionSim()">&#9888; Simulate Collision</button>
                 <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
+                <button id="toggleArchivedBtn" class="btn-deregister" style="margin-left:auto" onclick="toggleArchivedAgents()">Show Archived</button>
               </div>
               <div id="collisionAlert" class="collision-alert" style="display:none"></div>
               <div class="register-agent-form">
@@ -626,7 +627,25 @@
 
           <!-- Left: Routing Decision Feed (table) -->
           <div>
-            <div class="live-ops-label">▸ Routing Decision Feed</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+              <div class="live-ops-label" style="margin-bottom:0">▸ Routing Decision Feed</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <select class="agent-filter-select" id="routingFilterRisk" onchange="applyRoutingFilters()" title="Filter by risk">
+                  <option value="">All Risk</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+                <select class="agent-filter-select" id="routingFilterTier" onchange="applyRoutingFilters()" title="Filter by tier">
+                  <option value="">All Tiers</option>
+                  <option value="scout">Scout</option>
+                  <option value="advisor">Advisor</option>
+                  <option value="strategist">Strategist</option>
+                </select>
+                <button class="agent-filter-select" id="routingBlockedBtn" onclick="toggleRoutingBlocked()" style="cursor:pointer;font-weight:600">🛡 Blocked</button>
+              </div>
+            </div>
             <table class="audit-table" id="liveRoutingTable">
               <thead>
                 <tr>
@@ -642,7 +661,23 @@
 
           <!-- Right: Governance Event Stream (cards) -->
           <div>
-            <div class="live-ops-label">▸ Governance Event Stream</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+              <div class="live-ops-label" style="margin-bottom:0">▸ Governance Event Stream</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <select class="agent-filter-select" id="streamFilterType" onchange="applyStreamFilters()" title="Filter by event type">
+                  <option value="">All Types</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="throttled">Throttled</option>
+                  <option value="complex">Complex</option>
+                  <option value="pruning">Pruning</option>
+                  <option value="routine">Routine</option>
+                </select>
+                <select class="agent-filter-select" id="streamFilterDept" onchange="applyStreamFilters()" title="Filter by department">
+                  <option value="">All Depts</option>
+                </select>
+                <input type="text" class="agent-filter-select" id="streamFilterSearch" placeholder="Search..." oninput="applyStreamFilters()" style="width:90px" />
+              </div>
+            </div>
             <div class="event-stream-list" id="eventStreamList">
               <p class="placeholder">Loading events...</p>
             </div>
@@ -678,6 +713,27 @@
         <span class="panel-chevron" id="auditChevron">▾</span>
       </h2>
       <div id="auditBody" style="display:block">
+      <!-- Audit Log Filters -->
+      <div class="agent-filters" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+        <select class="agent-filter-select" id="auditFilterDept" onchange="applyAuditFilters()" title="Filter by department">
+          <option value="">All Depts</option>
+        </select>
+        <select class="agent-filter-select" id="auditFilterRisk" onchange="applyAuditFilters()" title="Filter by risk level">
+          <option value="">All Risk</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <select class="agent-filter-select" id="auditFilterWindow" onchange="applyAuditFilters()" title="Filter by time window">
+          <option value="">All Time</option>
+          <option value="1">Last 24h</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
+        <button class="agent-filter-select" id="auditBlockedOnlyBtn" onclick="toggleAuditBlockedOnly()" style="cursor:pointer;font-weight:600">🛡 Blocked Only</button>
+        <button class="agent-filter-select" onclick="clearAuditFilters()" style="cursor:pointer;color:var(--text-muted)">✕ Clear</button>
+      </div>
       <table class="audit-table">
         <thead>
           <tr>

@@ -17,9 +17,24 @@ from fastapi.staticfiles import StaticFiles
 
 from database.db import engine, SessionLocal
 from database import models
+from sqlalchemy import text
 
 # Create all DB tables on startup
 models.Base.metadata.create_all(bind=engine)
+
+# ── Lightweight column migrations (safe to re-run on every startup) ────────────
+def _run_migrations():
+    """Add new columns to existing tables without requiring Alembic."""
+    with engine.connect() as conn:
+        try:
+            conn.execute(text(
+                "ALTER TABLE registered_agents ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists or DB doesn't support IF NOT EXISTS
+
+_run_migrations()
 
 
 def _seed_on_startup():
