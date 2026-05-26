@@ -42,11 +42,35 @@ def strip_html(text: str) -> str:
 
 def strip_email_headers(text: str) -> str:
     """Remove raw email header lines (From:, To:, Date:, X-Mailer:, etc.)."""
+    # Standard header fields — anywhere in the document, not just line start
     header_pattern = re.compile(
-        r"^(From|To|Cc|Bcc|Date|Subject|Reply-To|X-[\w-]+|MIME-Version|Content-Type|Content-Transfer-Encoding):.*$",
+        r"^(From|To|Cc|Bcc|Date|Subject|Reply-To|Message-ID|X-[\w-]+|MIME-Version|"
+        r"Content-Type|Content-Transfer-Encoding|Content-Disposition|"
+        r"Received|Return-Path|Delivered-To|Authentication-Results|"
+        r"DKIM-Signature|ARC-[\w-]+|X-Originating-IP|X-Spam[\w-]*|"
+        r"Thread-Index|Thread-Topic|In-Reply-To|References|"
+        r"Importance|Priority|Sensitivity|Auto-Submitted):.*$",
         re.IGNORECASE | re.MULTILINE,
     )
-    return header_pattern.sub("", text)
+    text = header_pattern.sub("", text)
+
+    # Strip MIME boundary markers and content blocks
+    text = re.sub(r"^--[a-zA-Z0-9_\-\.]+.*$", "", text, flags=re.MULTILINE)
+
+    # Strip common auto-reply / ticket system boilerplate lines
+    boilerplate = re.compile(
+        r"^(Your (ticket|case|request) (has been|#).{0,80}|"
+        r"Thank you for contacting.{0,80}|"
+        r"Expected response time:.{0,80}|"
+        r"Ticket reference:.{0,80}|"
+        r"This is an automated (message|response|reply).{0,80}|"
+        r"Do not reply to this (email|message).{0,80}|"
+        r"\[cid:[^\]]+\])$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    text = boilerplate.sub("", text)
+
+    return text
 
 
 def strip_reply_chains(text: str) -> str:
@@ -56,9 +80,15 @@ def strip_reply_chains(text: str) -> str:
     """
     markers = [
         r"-{3,}\s*Original Message\s*-{3,}",
+        r"-{3,}\s*Forwarded Message\s*-{3,}",
         r"On .+wrote:",
+        r"On .+said:",
         r"From:\s*.+\nSent:\s*.+\nTo:\s*.+",
-        r"_{3,}",   # long underscores used as dividers in some clients
+        r"From:\s*.+\nDate:\s*.+\nTo:\s*.+",
+        r"_{3,}",           # long underscores
+        r"={5,}",           # long equals signs
+        r"-{5,}",           # long dashes used as dividers
+        r"^\s*>{1,}\s*",    # quoted reply lines (> text)
     ]
     for marker in markers:
         match = re.search(marker, text, flags=re.IGNORECASE | re.DOTALL)
