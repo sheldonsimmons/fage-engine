@@ -44,12 +44,12 @@ def strip_email_headers(text: str) -> str:
     """Remove raw email header lines (From:, To:, Date:, X-Mailer:, etc.)."""
     # Standard header fields — anywhere in the document, not just line start
     header_pattern = re.compile(
-        r"^(From|To|Cc|Bcc|Date|Subject|Reply-To|Message-ID|X-[\w-]+|MIME-Version|"
+        r"^(From|To|Cc|Bcc|Date|Reply-To|Message-ID|X-[\w-]+|MIME-Version|"
         r"Content-Type|Content-Transfer-Encoding|Content-Disposition|"
         r"Received|Return-Path|Delivered-To|Authentication-Results|"
         r"DKIM-Signature|ARC-[\w-]+|X-Originating-IP|X-Spam[\w-]*|"
         r"Thread-Index|Thread-Topic|In-Reply-To|References|"
-        r"Importance|Priority|Sensitivity|Auto-Submitted):.*$",
+        r"Importance|Sensitivity|Auto-Submitted):[ \t].*$",
         re.IGNORECASE | re.MULTILINE,
     )
     text = header_pattern.sub("", text)
@@ -84,11 +84,9 @@ def strip_reply_chains(text: str) -> str:
         r"On .+wrote:",
         r"On .+said:",
         r"From:\s*.+\nSent:\s*.+\nTo:\s*.+",
+        r"From:\s*.+\nTo:\s*.+\nDate:\s*.+",
         r"From:\s*.+\nDate:\s*.+\nTo:\s*.+",
-        r"_{3,}",           # long underscores
-        r"={5,}",           # long equals signs
-        r"-{5,}",           # long dashes used as dividers
-        r"^\s*>{1,}\s*",    # quoted reply lines (> text)
+        r"_{5,}",           # long underscores used as dividers
     ]
     for marker in markers:
         match = re.search(marker, text, flags=re.IGNORECASE | re.DOTALL)
