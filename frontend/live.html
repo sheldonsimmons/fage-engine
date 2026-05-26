@@ -6,7 +6,6 @@
   <title>FAGE — Live Operations Center</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
-    /* Live-specific layout overrides — everything else inherits from styles.css */
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
     .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
@@ -14,164 +13,133 @@
       transition: color 0.15s, border-color 0.15s; }
     .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
 
-    /* Live status badge */
-    .live-indicator { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    /* Live indicator */
+    .live-indicator { display: flex; align-items: center; gap: 8px; }
     .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green);
       box-shadow: 0 0 6px var(--accent-green); animation: live-pulse 1.5s infinite; }
     @keyframes live-pulse {
-      0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent-green); }
-      50%       { opacity: 0.6; box-shadow: 0 0 14px var(--accent-green); }
+      0%,100% { opacity:1; box-shadow:0 0 6px var(--accent-green); }
+      50%      { opacity:.6; box-shadow:0 0 14px var(--accent-green); }
     }
     .live-clock { font-family: var(--font-mono); font-size: 13px; color: var(--accent); margin-left: 12px; }
 
-    /* KPI strip — 6 columns */
-    .kpi-row-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
-      padding: 16px 28px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    /* KPI strip — 6 cols (matches main) */
+    .dash-kpi { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px;
+      padding: 10px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .dkpi-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; }
+    .dkpi-card.alert { border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.04); }
+    .dkpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; }
+    .dkpi-value { font-size: 20px; font-weight: 700; line-height: 1.25; margin: 3px 0 1px; }
+    .dkpi-sub   { font-size: 10px; color: var(--text-muted); }
 
-    /* Main layout */
-    .live-content { display: grid; grid-template-columns: 1fr 360px; flex: 1; overflow: hidden;
-      gap: 0; border-top: none; }
+    /* Tier stat bar (matches main) */
+    .dash-stat { display: flex; align-items: center; padding: 5px 24px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+      background: var(--bg-base); gap: 0; }
 
-    .live-left { display: flex; flex-direction: column; gap: 0;
-      border-right: 1px solid var(--border); overflow: hidden; }
+    /* Two-column layout (matches main) */
+    .dash-content { display: grid; grid-template-columns: 1fr 340px; flex: 1; overflow: hidden; }
+    .dash-left  { overflow-y: auto; border-right: 1px solid var(--border); }
+    .dash-left::-webkit-scrollbar { width: 3px; }
+    .dash-left::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .dash-right { display: flex; flex-direction: column; overflow: hidden; background: var(--bg-panel); }
 
-    /* Agent grid section */
-    .live-section { padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .live-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
-      color: var(--text-muted); margin-bottom: 12px; font-weight: 600; }
+    /* Collapsible panel sections (matches main) */
+    .dash-section { border-bottom: 1px solid var(--border); }
+    .dash-sec-head {
+      display: flex; align-items: center; gap: 8px; padding: 10px 20px 8px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); font-weight: 600; cursor: pointer; user-select: none;
+    }
+    .dash-sec-head:hover { color: var(--text-primary); }
+    .dash-sec-head .drag-handle { color: var(--border); cursor: grab; font-size: 13px; line-height: 1; flex-shrink: 0; }
+    .dash-sec-head .sec-chev { flex-shrink: 0; font-size: 11px; }
+    .dash-sec-head .sec-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+    .dash-sec-body { padding: 0 20px 16px; }
+    .sec-sub-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600; margin-bottom: 10px; }
 
-    .agent-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
-    .agent-card { background: var(--bg-base); border: 1px solid var(--border);
+    /* Right column stream */
+    .stream-head { padding: 10px 16px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .stream-head-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .stream-head-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); font-weight: 600; }
+    .stream-scroll { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .stream-scroll::-webkit-scrollbar { width: 3px; }
+    .stream-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Agent grid */
+    .agent-grid-6 { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; margin-bottom: 20px; }
+    .live-agent-card { background: var(--bg-base); border: 1px solid var(--border);
       border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px;
       transition: border-color 0.3s, background 0.3s, box-shadow 0.3s; }
-    .agent-card.active { border-color: var(--accent-green); background: #0a1a0f;
-      box-shadow: 0 0 10px rgba(63,185,80,0.15); }
-    .agent-card.locked { border-color: var(--accent-yellow); background: #1a130a;
-      animation: lock-pulse 0.7s ease infinite alternate; }
+    .live-agent-card.active { border-color: var(--accent-green); background: #0a1a0f; box-shadow: 0 0 10px rgba(63,185,80,0.15); }
+    .live-agent-card.locked { border-color: var(--accent-yellow); background: #1a130a; animation: lock-pulse 0.7s ease infinite alternate; }
     @keyframes lock-pulse {
       from { box-shadow: 0 0 6px rgba(210,153,34,0.2); }
       to   { box-shadow: 0 0 18px rgba(210,153,34,0.5); }
     }
-    .agent-name { font-size: 10px; font-weight: 600; color: var(--text-primary);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .agent-dept { font-size: 10px; color: var(--text-muted); }
+    .a-name { font-size: 10px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .a-dept { font-size: 10px; color: var(--text-muted); }
 
-    /* Budget section */
-    .budget-item { margin-bottom: 10px; }
-    .budget-item:last-child { margin-bottom: 0; }
-
-    /* Routing feed — scrollable table */
-    .routing-section { flex: 1; overflow: hidden; display: flex; flex-direction: column;
-      padding: 0; }
-    .routing-section .live-section-title { padding: 12px 20px 0; margin-bottom: 8px; }
-    .routing-scroll { flex: 1; overflow-y: auto; }
-    .routing-scroll::-webkit-scrollbar { width: 3px; }
-    .routing-scroll::-webkit-scrollbar-track { background: transparent; }
-    .routing-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
+    /* Routing table */
     .routing-table { width: 100%; border-collapse: collapse; font-size: 11px; }
     .routing-table th { text-align: left; padding: 6px 12px; font-size: 9px; text-transform: uppercase;
-      letter-spacing: 0.08em; color: var(--text-muted); border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; background: var(--bg-panel); z-index: 1; }
+      letter-spacing: 0.08em; color: var(--text-muted); border-bottom: 1px solid var(--border); background: var(--bg-panel); }
     .routing-table td { padding: 6px 12px; border-bottom: 1px solid #1c2128; }
     .routing-row { animation: row-in 0.3s ease; }
-    @keyframes row-in {
-      from { opacity: 0; background: rgba(88,166,255,0.05); }
-      to   { opacity: 1; background: transparent; }
-    }
+    @keyframes row-in { from { opacity:0; background:rgba(88,166,255,0.05); } to { opacity:1; background:transparent; } }
     .routing-row.blocked-row td { color: var(--accent-red); }
 
-    /* Event stream — right panel */
-    .live-right { display: flex; flex-direction: column; overflow: hidden;
-      background: var(--bg-panel); }
-    .stream-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
-      flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
-    .stream-body { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex;
-      flex-direction: column; gap: 8px; }
-    .stream-body::-webkit-scrollbar { width: 3px; }
-    .stream-body::-webkit-scrollbar-track { background: transparent; }
-    .stream-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
+    /* Stream events */
     .stream-event { background: var(--bg-base); border: 1px solid var(--border);
       border-left-width: 3px; border-radius: 0 6px 6px 0; padding: 10px 12px;
       display: flex; flex-direction: column; gap: 4px; animation: stream-in 0.35s ease; }
-    @keyframes stream-in {
-      from { opacity: 0; transform: translateY(-6px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes stream-in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
     .stream-event.type-routine   { border-left-color: var(--accent); }
     .stream-event.type-complex   { border-left-color: var(--accent-purple); }
-    .stream-event.type-blocked   { border-left-color: var(--accent-red);
-      background: #1a0505; }
+    .stream-event.type-blocked   { border-left-color: var(--accent-red); background: #1a0505; }
     .stream-event.type-throttled { border-left-color: var(--accent-yellow); }
-    .stream-event.type-collision { border-left-color: var(--accent-yellow);
-      background: #1a1205; }
+    .stream-event.type-collision { border-left-color: var(--accent-yellow); background: #1a1205; }
     .stream-event.type-pruning   { border-left-color: var(--accent-green); }
     .se-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .se-type { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; }
-    .se-time { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);
-      flex-shrink: 0; }
+    .se-time { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; }
     .se-body { font-size: 11px; color: var(--text-primary); line-height: 1.4; }
     .se-meta { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
 
-    /* Flash overlay */
-    .flash-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0;
-      transition: opacity 0.1s; z-index: 200; }
+    /* Flash + ticker */
+    .flash-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.1s; z-index: 200; }
     .flash-overlay.red    { background: rgba(248,81,73,0.10); }
     .flash-overlay.yellow { background: rgba(210,153,34,0.10); }
     .flash-overlay.green  { background: rgba(63,185,80,0.07); }
-
-    /* Pruning ticker */
     .pruning-ticker { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
       background: #0a1a0f; border: 1px solid var(--accent-green); border-radius: 20px;
       padding: 7px 20px; font-size: 11px; color: var(--accent-green); font-family: var(--font-mono);
       opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
     .pruning-ticker.show { opacity: 1; }
 
-    /* Compact kpi card */
-    .kpi-card-sm { background: var(--bg-panel); border: 1px solid var(--border);
-      border-radius: 8px; padding: 12px 16px; }
-    .kpi-card-sm .kpi-label { font-size: 9px; }
-    .kpi-card-sm .kpi-value { font-size: 22px; }
-    .kpi-card-sm .kpi-sub   { font-size: 10px; }
-
-    /* Tier stat strip */
-    .tier-stat-strip { display: grid; grid-template-columns: repeat(6,1fr);
-      border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg-panel); }
-    .tier-stat-cell { padding: 8px 16px; border-right: 1px solid var(--border);
-      display: flex; flex-direction: column; gap: 2px; }
-    .tier-stat-cell:last-child { border-right: none; }
-    .tier-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.09em;
-      color: var(--text-muted); font-weight: 600; }
-    .tier-stat-val { font-size: 15px; font-weight: 700; font-family: var(--font-mono); }
-
-    /* Budget bar track — visible outline */
-    .budget-bar-track { border: 1px solid var(--border) !important; }
+    .sortable-ghost { opacity: 0.3; background: rgba(88,166,255,0.05); }
   </style>
 </head>
 <body>
 
-<!-- Flash overlay -->
 <div class="flash-overlay" id="flashOverlay"></div>
-<!-- Pruning ticker -->
 <div class="pruning-ticker" id="pruningTicker"></div>
 
-<!-- Header — same structure as main dashboard -->
+<!-- ── Header ───────────────────────────────────────────────────────────────── -->
 <header class="header">
   <div class="header-brand">
     <span class="header-logo">◈</span>
     <div>
       <div class="header-title">FAGE</div>
-      <div class="header-sub">FinOps Agentlake &amp; Governance Engine — Live Operations Center</div>
+      <div class="header-sub">FinOps Agentlake &amp; Governance Engine — Enterprise Demo</div>
     </div>
   </div>
-
   <div class="live-indicator">
     <div class="live-dot"></div>
     <span style="color:var(--accent-green);font-size:12px;font-weight:700;letter-spacing:0.08em">LIVE</span>
     <span class="live-clock" id="liveClock">--:--:--</span>
   </div>
-
   <div style="display:flex;align-items:center;gap:8px">
     <a href="/" class="header-nav-link">← Dashboard</a>
     <a href="/policy.html" class="header-nav-link">⚖ Policy &amp; Rules</a>
@@ -179,134 +147,213 @@
   </div>
 </header>
 
-<!-- KPI Row (6 cols) -->
-<div class="kpi-row-6">
-  <div class="kpi-card kpi-card-sm">
-    <div class="kpi-label">Total Calls</div>
-    <div class="kpi-value" id="kpiCalls">0</div>
-    <div class="kpi-sub" id="kpiCallsSub">0 today</div>
+<!-- ── KPI Strip ─────────────────────────────────────────────────────────────── -->
+<div class="dash-kpi">
+  <div class="dkpi-card">
+    <div class="dkpi-label">Total Spend Today</div>
+    <div class="dkpi-value" style="color:var(--accent-yellow)" id="lKpiSpend">—</div>
+    <div class="dkpi-sub" id="lKpiSpendSub">across all departments</div>
   </div>
-  <div class="kpi-card kpi-card-sm">
-    <div class="kpi-label">Tokens Saved</div>
-    <div class="kpi-value" style="color:var(--accent-green)" id="kpiTokens">0</div>
-    <div class="kpi-sub" id="kpiTokensSub">est. $0.0000 saved</div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Tokens Saved (Pruning)</div>
+    <div class="dkpi-value" style="color:var(--accent-green)" id="lKpiTokensSaved">—</div>
+    <div class="dkpi-sub" id="lKpiTokensSub">via context sweeper</div>
   </div>
-  <div class="kpi-card kpi-card-sm">
-    <div class="kpi-label">Spend Today</div>
-    <div class="kpi-value" style="color:var(--accent-yellow)" id="kpiSpend">$0.0000</div>
-    <div class="kpi-sub" id="kpiSpendSub">$0.00 this month</div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Month Spend</div>
+    <div class="dkpi-value" id="lKpiMonthSpend">—</div>
+    <div class="dkpi-sub">this billing period</div>
   </div>
-  <div class="kpi-card kpi-card-sm alert">
-    <div class="kpi-label">Blocked</div>
-    <div class="kpi-value" id="kpiBlocked">0</div>
-    <div class="kpi-sub">PII / sensitive term</div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Active Agents</div>
+    <div class="dkpi-value" style="color:var(--accent)" id="lKpiAgents">—</div>
+    <div class="dkpi-sub" id="lKpiAgentsSub">in Agentlake</div>
   </div>
-  <div class="kpi-card kpi-card-sm">
-    <div class="kpi-label">Scout / Advisor Split</div>
-    <div class="kpi-value" style="color:var(--accent-purple)" id="kpiSplit">--%</div>
-    <div class="kpi-sub" id="kpiSplitSub">-- scout · -- advisor</div>
+  <div class="dkpi-card alert" id="lKpiThrottleCard">
+    <div class="dkpi-label">Throttled Depts</div>
+    <div class="dkpi-value" id="lKpiThrottled">—</div>
+    <div class="dkpi-sub" id="lKpiThrottleSub">at or over budget cap</div>
   </div>
-  <div class="kpi-card kpi-card-sm">
-    <div class="kpi-label">Active Agents</div>
-    <div class="kpi-value" style="color:var(--accent)" id="kpiAgents">0</div>
-    <div class="kpi-sub" id="kpiAgentsSub">0 active · 0 locked</div>
-  </div>
-</div>
-
-<!-- Tier stat strip -->
-<div class="tier-stat-strip">
-  <div class="tier-stat-cell">
-    <span class="tier-stat-label">Scout (T1)</span>
-    <span class="tier-stat-val" style="color:var(--accent)" id="liveStatScout">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
-  </div>
-  <div class="tier-stat-cell">
-    <span class="tier-stat-label">Analyst (T2)</span>
-    <span class="tier-stat-val" style="color:var(--accent-green)" id="liveStatAnalyst">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
-  </div>
-  <div class="tier-stat-cell">
-    <span class="tier-stat-label">Advisor (T3)</span>
-    <span class="tier-stat-val" style="color:var(--accent-purple)" id="liveStatAdvisor">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
-  </div>
-  <div class="tier-stat-cell">
-    <span class="tier-stat-label">Strategist (T4)</span>
-    <span class="tier-stat-val" style="color:var(--accent-yellow)" id="liveStatStrategist">0 <span style="font-size:11px;color:var(--text-muted)">(0%)</span></span>
-  </div>
-  <div class="tier-stat-cell">
-    <span class="tier-stat-label">Overall Budget Used</span>
-    <span class="tier-stat-val" style="color:var(--text-primary)" id="liveStatBudget">0%</span>
-  </div>
-  <div class="tier-stat-cell">
-    <span class="tier-stat-label">Pruning Saved (Est.)</span>
-    <span class="tier-stat-val" style="color:var(--accent-green)" id="liveStatPruning">$0.0000</span>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Total Calls</div>
+    <div class="dkpi-value" id="lKpiCalls">—</div>
+    <div class="dkpi-sub">all time</div>
   </div>
 </div>
 
-<!-- Main content -->
-<div class="live-content">
+<!-- ── Tier Stat Bar ──────────────────────────────────────────────────────────── -->
+<div class="dash-stat stat-bar stat-bar-compact">
+  <div class="stat-item">
+    <span class="stat-label">Scout (T1)</span>
+    <span class="stat-val micro" id="lStatScout">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Analyst (T2)</span>
+    <span class="stat-val" style="color:var(--accent-green)" id="lStatAnalyst">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Advisor (T3)</span>
+    <span class="stat-val flagship" id="lStatAdvisor">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Strategist (T4)</span>
+    <span class="stat-val" style="color:var(--accent-yellow)" id="lStatStrategist">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Overall Budget Used</span>
+    <span class="stat-val" id="lStatBudget">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Pruning Saved (est.)</span>
+    <span class="stat-val green" id="lStatPruning">—</span>
+  </div>
+</div>
 
-  <!-- Left column -->
-  <div class="live-left">
+<!-- ── Main Content ───────────────────────────────────────────────────────────── -->
+<div class="dash-content">
 
-    <!-- Agent Registry -->
-    <div class="live-section">
-      <div class="live-section-title">▸ Agentlake Registry — Live Status</div>
-      <div class="agent-grid" id="agentGrid"></div>
-    </div>
+  <!-- Left column — collapsible + draggable panels -->
+  <div class="dash-left">
+    <div id="live-panels">
 
-    <!-- Budget bars -->
-    <div class="live-section">
-      <div class="live-section-title">▸ Department Budget Utilization</div>
-      <div id="budgetRows"></div>
-    </div>
+      <!-- ── Panel 1: Agentlake Registry & Budget ──────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="l-agents-budget">
+        <div class="dash-sec-head" onclick="togglePanel('lAgentBudgetBody','lAgentBudgetChev')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Agentlake Registry &amp; Budget</span>
+          <span class="sec-right"><span class="sec-chev" id="lAgentBudgetChev">▾</span></span>
+        </div>
+        <div id="lAgentBudgetBody" class="dash-sec-body">
+          <div class="sec-sub-label">Agentlake Registry — Live Status</div>
+          <div class="agent-grid-6" id="lAgentGrid"></div>
+          <div class="sec-sub-label">Department Budget Utilization</div>
+          <div id="lBudgetRows"></div>
+        </div>
+      </div>
 
-    <!-- Routing Decision Feed -->
-    <div class="routing-section">
-      <div class="live-section-title" style="padding:12px 20px 0">▸ Routing Decision Feed</div>
-      <div class="routing-scroll">
-        <table class="routing-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Agent</th>
-              <th>Dept</th>
-              <th>Model</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody id="routingFeed"></tbody>
-        </table>
+      <!-- ── Panel 2: 30-Day Trends ────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="l-timeseries">
+        <div class="dash-sec-head" onclick="togglePanel('lTimeseriesBody','lTimeseriesChev')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ 30-Day Spend &amp; Activity Trends</span>
+          <span class="sec-right"><span class="sec-chev" id="lTimeseriesChev">▸</span></span>
+        </div>
+        <div id="lTimeseriesBody" class="dash-sec-body" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+            <div>
+              <div class="field-label" style="margin-bottom:10px">Daily Spend (USD) by Department</div>
+              <div style="position:relative;height:200px"><canvas id="lSpendCanvas"></canvas></div>
+            </div>
+            <div>
+              <div class="field-label" style="margin-bottom:10px">Daily AI Calls by Model Tier</div>
+              <div style="position:relative;height:200px"><canvas id="lCallsCanvas"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Panel 3: Routing Decision Feed ───────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="l-routing-feed">
+        <div class="dash-sec-head" onclick="togglePanel('lRoutingFeedBody','lRoutingFeedChev')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Routing Decision Feed</span>
+          <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:8px">● LIVE</span>
+          <span class="sec-right"><span class="sec-chev" id="lRoutingFeedChev">▾</span></span>
+        </div>
+        <div id="lRoutingFeedBody" class="dash-sec-body">
+          <table class="audit-table routing-table">
+            <thead>
+              <tr>
+                <th>Time</th><th>Agent</th><th>Dept</th><th>Model Tier</th><th>Detail</th>
+              </tr>
+            </thead>
+            <tbody id="lRoutingBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Panel 4: AI Decision Audit Log ───────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="l-audit">
+        <div class="dash-sec-head" onclick="togglePanel('lAuditPanel','lAuditChev')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ AI Decision Audit Log</span>
+          <span class="sec-right"><span class="sec-chev" id="lAuditChev">▸</span></span>
+        </div>
+        <div id="lAuditPanel" class="dash-sec-body" style="display:none">
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th><th>Event Type</th><th>Department</th>
+                <th>Model Tier</th><th>Risk Level</th><th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="lAuditTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- end live-panels -->
+  </div><!-- end dash-left -->
+
+  <!-- Right column — Governance Event Stream -->
+  <div class="dash-right">
+    <div class="stream-head">
+      <div class="stream-head-row">
+        <div class="stream-head-label">▸ Governance Event Stream</div>
+        <span style="font-size:10px;color:var(--accent-green);font-weight:700">● LIVE</span>
       </div>
     </div>
-
+    <div class="stream-scroll" id="lEventStream"></div>
   </div>
 
-  <!-- Right — event stream -->
-  <div class="live-right">
-    <div class="stream-header">
-      <div class="live-section-title" style="margin:0">▸ Governance Event Stream</div>
-      <span style="font-size:10px;color:var(--accent-green);font-weight:700">● STREAMING</span>
-    </div>
-    <div class="stream-body" id="eventStream"></div>
-  </div>
+</div><!-- end dash-content -->
 
-</div>
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
+
+// ── Panel toggle + drag ───────────────────────────────────────────────────────
+
+function togglePanel(bodyId, chevId) {
+  const body = document.getElementById(bodyId);
+  const chev = document.getElementById(chevId);
+  if (!body) return;
+  const hidden = body.style.display === "none";
+  body.style.display = hidden ? "" : "none";
+  if (chev) chev.textContent = hidden ? "▾" : "▸";
+
+  // Render charts when timeseries panel is opened
+  if (hidden && bodyId === "lTimeseriesBody" && !_lSpendChart) {
+    initTimeseries();
+  }
+}
+
+new Sortable(document.getElementById("live-panels"), {
+  animation: 150,
+  handle: ".drag-handle",
+  ghostClass: "sortable-ghost",
+});
+
 // ── Simulation Data ───────────────────────────────────────────────────────────
 
 const AGENTS = [
-  { name: "SF-SupportBot-1",    dept: "Support",    platform: "SF" },
-  { name: "SF-SupportBot-2",    dept: "Support",    platform: "SF" },
-  { name: "SF-CaseEscalator",   dept: "Support",    platform: "SF" },
-  { name: "SF-BillingAuditor",  dept: "Support",    platform: "SF" },
-  { name: "SF-SalesEnrich-1",   dept: "Sales",      platform: "SF" },
-  { name: "SF-SalesEnrich-2",   dept: "Sales",      platform: "SF" },
-  { name: "SF-OpportunityBot",  dept: "Sales",      platform: "SF" },
-  { name: "SF-MarketingMailer", dept: "Marketing",  platform: "SF" },
-  { name: "SF-CampaignBot",     dept: "Marketing",  platform: "SF" },
-  { name: "SF-OpsLogger",       dept: "Operations", platform: "SF" },
-  { name: "SF-ComplianceBot",   dept: "Operations", platform: "SF" },
-  { name: "SN-IncidentRouter",  dept: "Operations", platform: "SN" },
+  { name: "SF-SupportBot-1",   dept: "Support",    platform: "Salesforce" },
+  { name: "SF-SupportBot-2",   dept: "Support",    platform: "Salesforce" },
+  { name: "SF-CaseEscalator",  dept: "Support",    platform: "Salesforce" },
+  { name: "SF-BillingAuditor", dept: "Support",    platform: "Salesforce" },
+  { name: "SF-SalesEnrich-1",  dept: "Sales",      platform: "Salesforce" },
+  { name: "SF-SalesEnrich-2",  dept: "Sales",      platform: "Salesforce" },
+  { name: "SF-OpportunityBot", dept: "Sales",      platform: "Salesforce" },
+  { name: "SF-MarketMailer",   dept: "Marketing",  platform: "Salesforce" },
+  { name: "SF-CampaignBot",    dept: "Marketing",  platform: "Salesforce" },
+  { name: "SF-OpsLogger",      dept: "Operations", platform: "Salesforce" },
+  { name: "SF-ComplianceBot",  dept: "Operations", platform: "Salesforce" },
+  { name: "SN-IncidentRouter", dept: "Operations", platform: "ServiceNow" },
 ];
 
 const BUDGETS = [
@@ -346,23 +393,22 @@ const BLOCKED_PAYLOADS = [
   { text: "Bank account 987654321 routing 021000021", term: "bank account", category: "financial" },
   { text: "Passport number A12345678 for identity verification", term: "passport number", category: "hipaa" },
   { text: "Patient diagnosis: F32.9 — medical record MRN-447291", term: "diagnosis code", category: "hipaa" },
-  { text: "My social is 3 1 8 5 5 7 2 2 4 date of birth november 3 1979", term: "my social", category: "hipaa" },
 ];
 
 // ── State ─────────────────────────────────────────────────────────────────────
+
 let state = {
   calls:           42000,
-  callsToday:      120,
+  callsToday:      847,
   tokens:          53853729,
-  spend:           2.84,
+  spend:           2184.60,
   spendMonth:      17454.90,
-  blocked:         47,
   scoutCalls:      27844,
   analystCalls:    9240,
   advisorCalls:    3890,
   strategistCalls: 1026,
   agentStatuses: AGENTS.map(() => "idle"),
-  budgets:      BUDGETS.map(b => ({ ...b })),
+  budgets: BUDGETS.map(b => ({ ...b })),
 };
 
 let tickCount = 0, lastBlockedAt = -20, lastCollisionAt = -30, lastComplexAt = -5;
@@ -370,69 +416,68 @@ let tickCount = 0, lastBlockedAt = -20, lastCollisionAt = -30, lastComplexAt = -
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function renderAgents() {
-  document.getElementById("agentGrid").innerHTML = AGENTS.map((a, i) => {
+  document.getElementById("lAgentGrid").innerHTML = AGENTS.map((a, i) => {
     const st = state.agentStatuses[i];
     const badgeClass = st === "active" ? "badge-active" : st === "locked" ? "badge-locked" : "badge-idle";
-    return `
-      <div class="agent-card ${st}" id="agent-${i}">
-        <div class="agent-name">${a.name}</div>
-        <div class="agent-dept">${a.dept}</div>
-        <span class="badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${st.toUpperCase()}</span>
-      </div>`;
+    return `<div class="live-agent-card ${st}">
+      <div class="a-name">${a.name}</div>
+      <div class="a-dept">${a.dept}</div>
+      <span class="badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${st.toUpperCase()}</span>
+    </div>`;
   }).join("");
 }
 
 function renderBudgets() {
-  document.getElementById("budgetRows").innerHTML = state.budgets.map(b => {
+  document.getElementById("lBudgetRows").innerHTML = state.budgets.map(b => {
     const pct = Math.min((b.spend / b.cap) * 100, 100);
     const fillClass = pct >= 100 ? "critical" : pct >= 80 ? "warn" : "";
     const throttleTag = b.throttled ? `<span class="budget-tag">THROTTLED</span>` : "";
-    return `
-      <div class="budget-item">
-        <div class="budget-dept">
-          <span class="dept-name">${b.dept}${throttleTag}</span>
-          <span class="dept-spend">$${b.spend.toFixed(2)} / $${b.cap.toLocaleString()} (${pct.toFixed(1)}%)</span>
-        </div>
-        <div class="budget-bar-track">
-          <div class="budget-bar-fill ${fillClass}" style="width:${pct}%"></div>
-        </div>
-      </div>`;
+    return `<div class="budget-item">
+      <div class="budget-dept">
+        <span class="dept-name">${b.dept}${throttleTag}</span>
+        <span class="dept-spend">$${b.spend.toFixed(2)} / $${b.cap.toLocaleString()} (${pct.toFixed(1)}%)</span>
+      </div>
+      <div class="budget-bar-track">
+        <div class="budget-bar-fill ${fillClass}" style="width:${pct}%"></div>
+      </div>
+    </div>`;
   }).join("");
 }
 
 function updateKPIs() {
-  document.getElementById("kpiCalls").textContent    = state.calls.toLocaleString();
-  document.getElementById("kpiCallsSub").textContent = `${state.callsToday} today`;
-  document.getElementById("kpiTokens").textContent   = state.tokens.toLocaleString();
-  document.getElementById("kpiTokensSub").textContent= `est. $${(state.tokens * 0.00000015).toFixed(4)} saved`;
-  document.getElementById("kpiSpend").textContent    = `$${state.spend.toFixed(4)}`;
-  document.getElementById("kpiSpendSub").textContent = `$${state.spendMonth.toFixed(2)} this month`;
-  document.getElementById("kpiBlocked").textContent  = state.blocked;
-  const total = state.scoutCalls + state.analystCalls + state.advisorCalls + state.strategistCalls || 1;
-  const scoutPct = Math.round(((state.scoutCalls + state.analystCalls) / total) * 100);
-  document.getElementById("kpiSplit").textContent    = `${scoutPct}%`;
-  document.getElementById("kpiSplitSub").textContent = `${(state.scoutCalls+state.analystCalls).toLocaleString()} routine · ${(state.advisorCalls+state.strategistCalls).toLocaleString()} complex`;
-  const active = state.agentStatuses.filter(s => s === "active").length;
-  const locked = state.agentStatuses.filter(s => s === "locked").length;
-  document.getElementById("kpiAgents").textContent    = active + locked;
-  document.getElementById("kpiAgentsSub").textContent = `${active} active · ${locked} locked`;
-
-  // Tier stat strip
   const totalCalls = state.scoutCalls + state.analystCalls + state.advisorCalls + state.strategistCalls || 1;
   const pct = n => Math.round((n / totalCalls) * 100);
-  document.getElementById("liveStatScout").innerHTML     = `${state.scoutCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.scoutCalls)}%)</span>`;
-  document.getElementById("liveStatAnalyst").innerHTML   = `${state.analystCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.analystCalls)}%)</span>`;
-  document.getElementById("liveStatAdvisor").innerHTML   = `${state.advisorCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.advisorCalls)}%)</span>`;
-  document.getElementById("liveStatStrategist").innerHTML= `${state.strategistCalls.toLocaleString()} <span style="font-size:11px;color:var(--text-muted)">(${pct(state.strategistCalls)}%)</span>`;
-  const totalBudgetUsed = state.budgets.reduce((s,b) => s + b.spend, 0);
-  const totalBudgetCap  = state.budgets.reduce((s,b) => s + b.cap,   0);
-  const budgetPct = ((totalBudgetUsed / totalBudgetCap) * 100).toFixed(1);
-  document.getElementById("liveStatBudget").textContent  = `${budgetPct}%`;
-  document.getElementById("liveStatPruning").textContent = `$${(state.tokens * 0.00000015).toFixed(4)}`;
+  const throttled = state.budgets.filter(b => b.throttled).length;
+  const active = state.agentStatuses.filter(s => s === "active").length;
+  const locked = state.agentStatuses.filter(s => s === "locked").length;
+
+  // KPI strip
+  document.getElementById("lKpiSpend").textContent     = `$${state.spend.toFixed(2)}`;
+  document.getElementById("lKpiSpendSub").textContent  = `$${state.spendMonth.toFixed(2)} this month`;
+  document.getElementById("lKpiTokensSaved").textContent = state.tokens.toLocaleString();
+  document.getElementById("lKpiTokensSub").textContent  = `est. $${(state.tokens * 0.00000015).toFixed(4)} saved`;
+  document.getElementById("lKpiMonthSpend").textContent = `$${state.spendMonth.toFixed(2)}`;
+  document.getElementById("lKpiAgents").textContent     = active + locked;
+  document.getElementById("lKpiAgentsSub").textContent  = `${active} active · ${locked} locked`;
+  document.getElementById("lKpiThrottled").textContent  = throttled;
+  document.getElementById("lKpiThrottleSub").textContent= throttled > 0 ? "departments capped" : "all within budget";
+  document.getElementById("lKpiCalls").textContent      = state.calls.toLocaleString();
+
+  // Tier stat bar
+  document.getElementById("lStatScout").textContent      = `${state.scoutCalls.toLocaleString()} (${pct(state.scoutCalls)}%)`;
+  document.getElementById("lStatAnalyst").textContent    = `${state.analystCalls.toLocaleString()} (${pct(state.analystCalls)}%)`;
+  document.getElementById("lStatAdvisor").textContent    = `${state.advisorCalls.toLocaleString()} (${pct(state.advisorCalls)}%)`;
+  document.getElementById("lStatStrategist").textContent = `${state.strategistCalls.toLocaleString()} (${pct(state.strategistCalls)}%)`;
+  const totalBudgetUsed = state.budgets.reduce((s, b) => s + b.spend, 0);
+  const totalBudgetCap  = state.budgets.reduce((s, b) => s + b.cap, 0);
+  document.getElementById("lStatBudget").textContent  = `${((totalBudgetUsed / totalBudgetCap) * 100).toFixed(1)}%`;
+  document.getElementById("lStatPruning").textContent = `$${(state.tokens * 0.00000015).toFixed(4)}`;
 }
 
+// ── Routing Feed ──────────────────────────────────────────────────────────────
+
 function addRoutingRow(agent, dept, tier, detail, isBlocked) {
-  const feed = document.getElementById("routingFeed");
+  const feed = document.getElementById("lRoutingBody");
   const tierBadge = tier === "Scout"
     ? `<span class="badge badge-micro">Scout</span>`
     : tier === "BLOCKED"
@@ -440,7 +485,6 @@ function addRoutingRow(agent, dept, tier, detail, isBlocked) {
     : tier === "THROTTLED"
     ? `<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`
     : `<span class="badge badge-flagship">${tier}</span>`;
-
   const row = document.createElement("tr");
   row.className = `routing-row${isBlocked ? " blocked-row" : ""}`;
   row.innerHTML = `
@@ -450,8 +494,96 @@ function addRoutingRow(agent, dept, tier, detail, isBlocked) {
     <td>${tierBadge}</td>
     <td style="color:var(--text-muted);font-size:10px">${detail}</td>`;
   feed.prepend(row);
-  while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+  while (feed.children.length > 25) feed.removeChild(feed.lastChild);
 }
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+
+const _RISK = {
+  routine:   "low",
+  pruning:   "low",
+  complex:   "high",
+  blocked:   "critical",
+  throttled: "medium",
+  collision: "high",
+};
+const _OUTCOME = {
+  routine:   "Allowed",
+  pruning:   "Allowed · pruned",
+  complex:   "Escalated",
+  blocked:   "Blocked",
+  throttled: "Downgraded",
+  collision: "Locked",
+};
+const _RISK_COLOR = {
+  low:      "var(--text-muted)",
+  medium:   "var(--accent-yellow)",
+  high:     "var(--accent-purple)",
+  critical: "var(--accent-red)",
+};
+
+function addAuditRow(eventType, dept, tier) {
+  const tbody = document.getElementById("lAuditTableBody");
+  const risk    = _RISK[eventType]    || "low";
+  const outcome = _OUTCOME[eventType] || "Allowed";
+  const typeLabels = {
+    routine: "Routine Call", pruning: "Context Pruning",
+    complex: "Complex Escalation", blocked: "PII / Sensitive Blocked",
+    throttled: "Budget Throttle", collision: "Concurrency Collision",
+  };
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${new Date().toLocaleString()}</td>
+    <td style="font-size:11px">${typeLabels[eventType] || eventType}</td>
+    <td style="font-size:11px;color:var(--text-muted)">${dept}</td>
+    <td style="font-size:11px">${tier !== "BLOCKED" && tier !== "THROTTLED" ? `<span class="badge badge-${tier === "Scout" ? "micro" : "flagship"}">${tier}</span>` : "—"}</td>
+    <td style="font-size:11px;font-weight:700;color:${_RISK_COLOR[risk]}">${risk.toUpperCase()}</td>
+    <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>`;
+  tbody.prepend(row);
+  while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+}
+
+function seedAuditLog() {
+  const entries = [
+    ["blocked",   "Finance",    "—",          "critical", "Blocked"],
+    ["complex",   "Legal",      "Strategist",  "high",     "Escalated"],
+    ["complex",   "Support",    "Advisor",     "high",     "Escalated"],
+    ["pruning",   "Sales",      "Scout",       "low",      "Allowed · pruned"],
+    ["routine",   "Marketing",  "Scout",       "low",      "Allowed"],
+    ["throttled", "Marketing",  "Scout",       "medium",   "Downgraded"],
+    ["complex",   "Operations", "Advisor",     "high",     "Escalated"],
+    ["blocked",   "Support",    "—",           "critical", "Blocked"],
+    ["routine",   "Sales",      "Scout",       "low",      "Allowed"],
+    ["pruning",   "Support",    "Scout",       "low",      "Allowed · pruned"],
+    ["complex",   "Legal",      "Strategist",  "high",     "Escalated"],
+    ["routine",   "Operations", "Analyst",     "low",      "Allowed"],
+    ["collision", "Support",    "—",           "high",     "Locked"],
+    ["routine",   "Marketing",  "Scout",       "low",      "Allowed"],
+    ["complex",   "Sales",      "Advisor",     "high",     "Escalated"],
+  ];
+
+  const tbody = document.getElementById("lAuditTableBody");
+  const typeLabels = {
+    routine: "Routine Call", pruning: "Context Pruning",
+    complex: "Complex Escalation", blocked: "PII / Sensitive Blocked",
+    throttled: "Budget Throttle", collision: "Concurrency Collision",
+  };
+
+  entries.forEach(([type, dept, tier, risk, outcome], i) => {
+    const ts = new Date(Date.now() - (entries.length - i) * 4 * 60000);
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${ts.toLocaleString()}</td>
+      <td style="font-size:11px">${typeLabels[type]}</td>
+      <td style="font-size:11px;color:var(--text-muted)">${dept}</td>
+      <td style="font-size:11px">${tier !== "—" ? `<span class="badge badge-${tier === "Scout" || tier === "Analyst" ? "micro" : "flagship"}">${tier}</span>` : "—"}</td>
+      <td style="font-size:11px;font-weight:700;color:${_RISK_COLOR[risk]}">${risk.toUpperCase()}</td>
+      <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>`;
+    tbody.appendChild(row);
+  });
+}
+
+// ── Event Stream ──────────────────────────────────────────────────────────────
 
 function addStreamEvent(type, title, body, meta) {
   const colors = {
@@ -468,12 +600,13 @@ function addStreamEvent(type, title, body, meta) {
     </div>
     <div class="se-body">${body}</div>
     ${meta ? `<div class="se-meta">${meta}</div>` : ""}`;
-  const stream = document.getElementById("eventStream");
+  const stream = document.getElementById("lEventStream");
   stream.prepend(el);
   while (stream.children.length > 40) stream.removeChild(stream.lastChild);
 }
 
-// ── Flash ─────────────────────────────────────────────────────────────────────
+// ── Flash + Ticker ────────────────────────────────────────────────────────────
+
 function flash(color) {
   const el = document.getElementById("flashOverlay");
   el.className = `flash-overlay ${color}`;
@@ -488,35 +621,35 @@ function showPruningTicker(saved) {
   setTimeout(() => el.classList.remove("show"), 2800);
 }
 
-// ── Tick ──────────────────────────────────────────────────────────────────────
+// ── Simulation Tick ───────────────────────────────────────────────────────────
+
 function tick() {
   tickCount++;
   const agentIdx = Math.floor(Math.random() * AGENTS.length);
   const agent    = AGENTS[agentIdx];
   const rand     = Math.random();
 
-  const canBlock     = (tickCount - lastBlockedAt)    >= 18;
-  const canCollision = (tickCount - lastCollisionAt)  >= 25;
-  const canComplex   = (tickCount - lastComplexAt)    >= 4;
+  const canBlock     = (tickCount - lastBlockedAt)   >= 18;
+  const canCollision = (tickCount - lastCollisionAt) >= 25;
+  const canComplex   = (tickCount - lastComplexAt)   >= 4;
 
   let eventType;
-  if      (canBlock     && rand < 0.08) { eventType = "blocked";   lastBlockedAt    = tickCount; }
-  else if (canCollision && rand < 0.04) { eventType = "collision"; lastCollisionAt  = tickCount; }
+  if      (canBlock     && rand < 0.08) { eventType = "blocked";   lastBlockedAt   = tickCount; }
+  else if (canCollision && rand < 0.04) { eventType = "collision"; lastCollisionAt = tickCount; }
   else if (agent.dept === "Marketing" && state.budgets[2].throttled) { eventType = "throttled"; }
-  else if (canComplex   && rand < 0.28) { eventType = "complex";   lastComplexAt    = tickCount; }
+  else if (canComplex   && rand < 0.28) { eventType = "complex";   lastComplexAt   = tickCount; }
   else if (rand < 0.12)                 { eventType = "pruning"; }
   else                                  { eventType = "routine"; }
 
   if (eventType === "blocked") {
     const b = BLOCKED_PAYLOADS[Math.floor(Math.random() * BLOCKED_PAYLOADS.length)];
     state.agentStatuses[agentIdx] = "idle";
-    state.blocked++;
     flash("red");
     addRoutingRow(agent.name, agent.dept, "BLOCKED", `${b.term} detected`, true);
-    addStreamEvent("blocked",
-      "🛡 REQUEST BLOCKED",
-      `"${b.text.slice(0, 65)}"`,
+    addStreamEvent("blocked", "🛡 REQUEST BLOCKED",
+      `"${b.text.slice(0,65)}"`,
       `Term: "${b.term}" · Category: ${b.category} · No tokens consumed`);
+    addAuditRow("blocked", agent.dept, "BLOCKED");
 
   } else if (eventType === "collision") {
     const idx2   = (agentIdx + 3) % AGENTS.length;
@@ -524,10 +657,10 @@ function tick() {
     state.agentStatuses[agentIdx] = "locked";
     state.agentStatuses[idx2]     = "locked";
     flash("yellow");
-    addStreamEvent("collision",
-      "⚡ CONCURRENCY LOCK",
+    addStreamEvent("collision", "⚡ CONCURRENCY LOCK",
       `${agent.name} + ${agent2.name} targeting same record simultaneously`,
       `Dept: ${agent.dept} · Traffic Cop locked both agents · Supervisor action required`);
+    addAuditRow("collision", agent.dept, "—");
     setTimeout(() => {
       state.agentStatuses[agentIdx] = "idle";
       state.agentStatuses[idx2]     = "idle";
@@ -539,9 +672,10 @@ function tick() {
     const cost   = (tokens * 0.0000005) + (200 * 0.0000015);
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++; state.scoutCalls++;
-    state.spend = parseFloat((state.spend + cost).toFixed(6));
+    state.spend      = parseFloat((state.spend + cost).toFixed(6));
     state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
     addRoutingRow(agent.name, agent.dept, "THROTTLED", "Downgraded — budget cap enforced", false);
+    addAuditRow("throttled", agent.dept, "Scout");
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
 
   } else if (eventType === "complex") {
@@ -553,13 +687,12 @@ function tick() {
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++;
     if (tier === "Advisor") state.advisorCalls++; else state.strategistCalls++;
-    state.spend = parseFloat((state.spend + cost).toFixed(6));
+    state.spend      = parseFloat((state.spend + cost).toFixed(6));
     state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
-    addRoutingRow(agent.name, agent.dept, tier, payload.slice(0, 50) + "...", false);
-    addStreamEvent("complex",
-      `◈ ${tier.toUpperCase()} MODEL INVOKED`,
-      payload,
+    addRoutingRow(agent.name, agent.dept, tier, payload.slice(0,50) + "...", false);
+    addStreamEvent("complex", `◈ ${tier.toUpperCase()} MODEL INVOKED`, payload,
       `${tokens.toLocaleString()} tokens · $${cost.toFixed(6)} · ${agent.dept}`);
+    addAuditRow("complex", agent.dept, tier);
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 3000);
 
   } else if (eventType === "pruning") {
@@ -575,10 +708,9 @@ function tick() {
     flash("green");
     showPruningTicker(saved);
     addRoutingRow(agent.name, agent.dept, "Scout", payload, false);
-    addStreamEvent("pruning",
-      `▼ PRUNING: ${saved.toLocaleString()} tokens stripped`,
-      payload,
+    addStreamEvent("pruning", `▼ PRUNING: ${saved.toLocaleString()} tokens stripped`, payload,
       `Raw → Clean · Est. $${(saved * 0.00000015).toFixed(6)} saved · Scout model`);
+    addAuditRow("pruning", agent.dept, "Scout");
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
 
   } else {
@@ -590,6 +722,7 @@ function tick() {
     state.spend      = parseFloat((state.spend + cost).toFixed(6));
     state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
     addRoutingRow(agent.name, agent.dept, "Scout", payload, false);
+    addAuditRow("routine", agent.dept, "Scout");
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 1500);
   }
 
@@ -598,7 +731,108 @@ function tick() {
   updateKPIs();
 }
 
+// ── 30-Day Pre-seeded Timeseries ──────────────────────────────────────────────
+
+let _lSpendChart = null;
+let _lCallsChart = null;
+
+function generateTimeseriesData() {
+  const labels = [], supportSpend = [], salesSpend = [], marketingSpend = [], opsSpend = [];
+  const scoutCalls = [], analystCalls = [], advisorCalls = [], strategistCalls = [];
+
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+
+    const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+    const wf = isWeekend ? 0.35 : 1;
+    const trend = 1 + (29 - i) * 0.012; // slight upward trend over the month
+    const jitter = () => 0.8 + Math.random() * 0.4;
+
+    // Marketing had a campaign spike days 10-14 (pushed them over budget)
+    const marketingBoost = (i >= 14 && i <= 19) ? 2.4 : 1;
+
+    const s  = Math.round(620 * trend * wf * jitter());
+    const an = Math.round(260 * trend * wf * jitter());
+    const ad = Math.round(85  * trend * wf * jitter());
+    const st = Math.round(18  * trend * wf * jitter());
+
+    scoutCalls.push(s);
+    analystCalls.push(an);
+    advisorCalls.push(ad);
+    strategistCalls.push(st);
+
+    supportSpend.push(parseFloat(((s * 0.35 + an * 0.45) * 0.0025 * wf * jitter()).toFixed(2)));
+    salesSpend.push(parseFloat(((s * 0.28 + ad * 0.38) * 0.0032 * wf * jitter()).toFixed(2)));
+    marketingSpend.push(parseFloat(((an * 0.22 + st * 0.25) * 0.0042 * marketingBoost * wf * jitter()).toFixed(2)));
+    opsSpend.push(parseFloat(((ad * 0.18 + st * 0.18) * 0.0055 * wf * jitter()).toFixed(2)));
+  }
+
+  return { labels, supportSpend, salesSpend, marketingSpend, opsSpend,
+           scoutCalls, analystCalls, advisorCalls, strategistCalls };
+}
+
+function initTimeseries() {
+  const d = generateTimeseriesData();
+
+  // Spend chart (line, area fill — matches timeseries.js)
+  const spendCtx = document.getElementById("lSpendCanvas");
+  if (_lSpendChart) { _lSpendChart.destroy(); }
+  _lSpendChart = new Chart(spendCtx, {
+    type: "line",
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: "Support",    data: d.supportSpend,    borderColor: "#58a6ff", backgroundColor: "#58a6ff30", fill: true, tension: 0.35, pointRadius: 2, borderWidth: 2 },
+        { label: "Sales",      data: d.salesSpend,      borderColor: "#3fb950", backgroundColor: "#3fb95030", fill: true, tension: 0.35, pointRadius: 2, borderWidth: 2 },
+        { label: "Marketing",  data: d.marketingSpend,  borderColor: "#d2993a", backgroundColor: "#d2993a30", fill: true, tension: 0.35, pointRadius: 2, borderWidth: 2 },
+        { label: "Operations", data: d.opsSpend,        borderColor: "#f85149", backgroundColor: "#f8514930", fill: true, tension: 0.35, pointRadius: 2, borderWidth: 2 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { labels: { color: "#8b949e", font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: $${c.parsed.y.toFixed(2)}` } },
+      },
+      scales: {
+        x: { stacked: true, grid: { color: "#21262d" }, ticks: { color: "#8b949e", maxTicksLimit: 10, font: { size: 10 } } },
+        y: { stacked: true, grid: { color: "#21262d" }, ticks: { color: "#8b949e", font: { size: 10 }, callback: v => "$" + v.toFixed(2) } },
+      },
+    },
+  });
+
+  // Calls chart (stacked bar — matches timeseries.js)
+  const callsCtx = document.getElementById("lCallsCanvas");
+  if (_lCallsChart) { _lCallsChart.destroy(); }
+  _lCallsChart = new Chart(callsCtx, {
+    type: "bar",
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: "Scout",      data: d.scoutCalls,      backgroundColor: "#58a6ffbb", borderColor: "#58a6ff", borderWidth: 1, stack: "calls" },
+        { label: "Analyst",    data: d.analystCalls,    backgroundColor: "#3fb950bb", borderColor: "#3fb950", borderWidth: 1, stack: "calls" },
+        { label: "Advisor",    data: d.advisorCalls,    backgroundColor: "#d2993abb", borderColor: "#d2993a", borderWidth: 1, stack: "calls" },
+        { label: "Strategist", data: d.strategistCalls, backgroundColor: "#f85149bb", borderColor: "#f85149", borderWidth: 1, stack: "calls" },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { labels: { color: "#8b949e", font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { stacked: true, grid: { color: "#21262d" }, ticks: { color: "#8b949e", maxTicksLimit: 10, font: { size: 10 } } },
+        y: { stacked: true, grid: { color: "#21262d" }, ticks: { color: "#8b949e", font: { size: 10 } } },
+      },
+    },
+  });
+}
+
 // ── Clock & Init ──────────────────────────────────────────────────────────────
+
 function nowTime() {
   return new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
@@ -607,20 +841,25 @@ function init() {
   renderAgents();
   renderBudgets();
   updateKPIs();
+  seedAuditLog();
+
   document.getElementById("liveClock").textContent = nowTime();
 
-  // Seed initial events
-  addStreamEvent("routine", "◈ SYSTEM ONLINE",
-    "FAGE Live Operations Center initialized",
-    "All agents registered · Budget monitors active · PII scanner armed");
-  addRoutingRow("SF-SupportBot-1",  "Support",    "Scout",   "Account update — routine", false);
-  addRoutingRow("SF-SalesEnrich-1", "Sales",      "Advisor", "NDA review before board meeting...", false);
-  addRoutingRow("SF-OpsLogger",     "Operations", "Scout",   "Incident log entry", false);
+  // Seed initial routing rows
+  addRoutingRow("SF-SupportBot-1",  "Support",    "Scout",     "Account update — routine", false);
+  addRoutingRow("SF-SalesEnrich-1", "Sales",      "Advisor",   "NDA review before board meeting...", false);
+  addRoutingRow("SF-OpsLogger",     "Operations", "Scout",     "Incident log entry", false);
+  addRoutingRow("SF-MarketMailer",  "Marketing",  "THROTTLED", "Budget cap enforced", false);
+  addRoutingRow("SF-ComplianceBot", "Operations", "Strategist","HIPAA audit — health data migration...", false);
 
-  setInterval(tick,        2500);
-  setInterval(() => {
-    document.getElementById("liveClock").textContent = nowTime();
-  }, 1000);
+  // Seed initial stream events
+  addStreamEvent("routine",  "◈ SYSTEM ONLINE",       "FAGE Enterprise Demo initialized — all agents registered",     "Budget monitors active · PII scanner armed · Simulation running");
+  addStreamEvent("throttled","⚠ BUDGET THROTTLE",      "Marketing department at 101.7% of monthly cap",                "All Marketing agents downgraded to Scout tier until next cycle");
+  addStreamEvent("complex",  "◈ STRATEGIST INVOKED",   "HIPAA compliance audit — health data migration review required","SF-ComplianceBot · Operations · $0.142800");
+  addStreamEvent("blocked",  "🛡 REQUEST BLOCKED",      '"SSN detected: 472-88-3910"',                                  'Term: "social security" · Category: hipaa · No tokens consumed');
+
+  setInterval(tick, 2500);
+  setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
 }
 
 init();
