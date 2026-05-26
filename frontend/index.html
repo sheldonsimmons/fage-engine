@@ -116,185 +116,140 @@
     <!-- ── Draggable Panels ─────────────────────────────────────────────────── -->
     <div id="draggable-panels">
 
-    <!-- Panel: Budget Bars + Agent Table -->
+    <!-- Panel: Agentlake & Budget -->
     <div class="dp-wrap" data-panel-id="budgets-agents">
-    <section class="panel full-width" style="padding-bottom:0">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('midRowBody','midRowChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>Department Budgets &amp; Agent Registry <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation(); showHelp('budgetPanel')">?</span></span>
-        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto;padding-left:12px" id="midRowSummary"></span>
-        <span class="panel-chevron" id="midRowChevron">▾</span>
-      </h2>
-    </section>
-    <div id="midRowBody" style="display:block">
-
-    <!-- ── Live Operations Strip ──────────────────────────────────────────── -->
     <section class="panel full-width live-ops-strip">
-
-      <!-- Agent card grid -->
-      <div class="live-ops-label">▸ Agentlake Registry — Live Status</div>
-      <div id="agentCardGrid" class="agent-card-grid-6"></div>
-
-      <!-- Budget bars only (no controls) -->
-      <div class="live-ops-label" style="margin-top:20px">▸ Department Budget Utilization</div>
-      <div id="liveBudgetBars"></div>
-
-      <!-- Routing Decision Feed -->
-      <div class="live-ops-label" style="margin-top:20px">▸ Routing Decision Feed</div>
-      <table class="audit-table" id="liveRoutingTable" style="margin-top:8px">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Agent</th>
-            <th>Dept</th>
-            <th>Model Tier</th>
-            <th>Risk</th>
-            <th>Outcome</th>
-          </tr>
-        </thead>
-        <tbody id="liveRoutingBody">
-          <tr><td colspan="6" class="placeholder">Loading...</td></tr>
-        </tbody>
-      </table>
-
-    </section>
-
-    <!-- ── Management Section (collapsible) ──────────────────────────────── -->
-    <section class="panel full-width" style="margin-top:16px">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('mgmtBody','mgmtChevron')" style="margin-bottom:0">
-        <span>⚙ Budget Controls &amp; Agent Management</span>
-        <span class="panel-chevron" id="mgmtChevron">▸</span>
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('agentBudgetBody','agentBudgetChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
+        <span>Agentlake &amp; Budget <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation(); showHelp('budgetPanel')">?</span></span>
+        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto" id="midRowSummary"></span>
+        <span class="panel-chevron" id="agentBudgetChevron">▾</span>
       </h2>
-      <div id="mgmtBody" style="display:none">
-      <section class="mid-row" style="margin-top:20px">
 
-        <div class="panel" id="budgetPanel">
-          <h2 class="panel-title">Department Budgets <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span></h2>
-          <div id="budgetList">
-            <p class="placeholder">Loading...</p>
-          </div>
-        </div>
+      <div id="agentBudgetBody" style="display:block">
 
-        <div class="panel" id="agentPanel">
-          <div class="agent-panel-header">
-            <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
-            <div class="agent-filters">
-              <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
-                <option value="">All Platforms</option>
-                <option>Salesforce</option>
-                <option>ServiceNow</option>
-                <option>HubSpot</option>
-                <option>Dynamics365</option>
-                <option>Zendesk</option>
-                <option>Custom</option>
-              </select>
-              <select class="agent-filter-select" id="filterStatus" onchange="applyAgentFilters()">
-                <option value="">All Statuses</option>
-                <option value="idle">Idle</option>
-                <option value="active">Active</option>
-                <option value="locked">Locked</option>
-                <option value="queued">Queued</option>
-              </select>
-              <select class="agent-filter-select" id="filterDept" onchange="applyAgentFilters()">
-                <option value="">All Departments</option>
-              </select>
-              <input type="text" class="agent-filter-search" id="filterSearch"
-                     placeholder="Search agents..." oninput="applyAgentFilters()" />
+        <!-- Agent card grid -->
+        <div class="live-ops-label">▸ Agentlake Registry — Live Status</div>
+        <div id="agentCardGrid" class="agent-card-grid-6"></div>
+
+        <!-- Budget bars -->
+        <div class="live-ops-label" style="margin-top:20px">▸ Department Budget Utilization</div>
+        <div id="liveBudgetBars"></div>
+
+        <!-- Management toggle -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+          <button class="panel-title collapsible-title" onclick="togglePanel('mgmtBody','mgmtChevron')"
+            style="width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:0;font:inherit;color:inherit">
+            <span style="font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:0.04em">⚙ Budget Controls &amp; Agent Management</span>
+            <span class="panel-chevron" id="mgmtChevron" style="margin-left:auto">▸</span>
+          </button>
+          <div id="mgmtBody" style="display:none;margin-top:16px">
+          <section class="mid-row">
+
+            <div class="panel" id="budgetPanel">
+              <h2 class="panel-title">Department Budgets <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span></h2>
+              <div id="budgetList"><p class="placeholder">Loading...</p></div>
             </div>
-          </div>
-          <table class="agent-table">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Department</th>
-                <th>Platform</th>
-                <th>Target</th>
-                <th>Policy</th>
-                <th>Status</th>
-                <th>Last Active</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="agentTableBody">
-              <tr><td colspan="8" class="placeholder">Loading...</td></tr>
-            </tbody>
-          </table>
-          <div class="agent-controls">
-            <button class="btn-collision" onclick="runCollisionSim()">
-              &#9888; Simulate Collision
-            </button>
-            <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
-          </div>
-          <div id="collisionAlert" class="collision-alert" style="display:none"></div>
 
-          <!-- Register Agent Form -->
-          <div class="register-agent-form">
-            <h3 class="register-title">Register New Agent</h3>
-            <div class="register-grid">
-              <div class="register-field">
-                <label class="field-label">Agent Name</label>
-                <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+            <div class="panel" id="agentPanel">
+              <div class="agent-panel-header">
+                <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
+                <div class="agent-filters">
+                  <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
+                    <option value="">All Platforms</option>
+                    <option>Salesforce</option><option>ServiceNow</option>
+                    <option>HubSpot</option><option>Dynamics365</option>
+                    <option>Zendesk</option><option>Custom</option>
+                  </select>
+                  <select class="agent-filter-select" id="filterStatus" onchange="applyAgentFilters()">
+                    <option value="">All Statuses</option>
+                    <option value="idle">Idle</option><option value="active">Active</option>
+                    <option value="locked">Locked</option><option value="queued">Queued</option>
+                  </select>
+                  <select class="agent-filter-select" id="filterDept" onchange="applyAgentFilters()">
+                    <option value="">All Departments</option>
+                  </select>
+                  <input type="text" class="agent-filter-search" id="filterSearch"
+                         placeholder="Search agents..." oninput="applyAgentFilters()" />
+                </div>
               </div>
-              <div class="register-field">
-                <label class="field-label">Source Platform</label>
-                <select id="regPlatform" class="reg-input">
-                  <option value="">— Infer from name prefix —</option>
-                  <option value="Salesforce">Salesforce</option>
-                  <option value="ServiceNow">ServiceNow</option>
-                  <option value="HubSpot">HubSpot</option>
-                  <option value="Microsoft">Microsoft</option>
-                  <option value="Zendesk">Zendesk</option>
-                  <option value="SAP">SAP</option>
-                  <option value="Custom">Custom</option>
-                </select>
+              <table class="agent-table">
+                <thead>
+                  <tr>
+                    <th>Agent</th><th>Department</th><th>Platform</th><th>Target</th>
+                    <th>Policy</th><th>Status</th><th>Last Active</th><th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="agentTableBody">
+                  <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+                </tbody>
+              </table>
+              <div class="agent-controls">
+                <button class="btn-collision" onclick="runCollisionSim()">&#9888; Simulate Collision</button>
+                <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
               </div>
-              <div class="register-field">
-                <label class="field-label">Department</label>
-                <select id="regDept" class="reg-input">
-                  <option>Support</option>
-                  <option>Sales</option>
-                  <option>Marketing</option>
-                  <option>Operations</option>
-                </select>
-              </div>
-              <div class="register-field">
-                <label class="field-label">Target Table</label>
-                <select id="regTable" class="reg-input">
-                  <option value="tickets">tickets</option>
-                  <option value="crm_records">crm_records</option>
-                  <option value="customers">customers</option>
-                  <option value="token_transactions">token_transactions</option>
-                </select>
-              </div>
-              <div class="register-field">
-                <label class="field-label">Permissions</label>
-                <select id="regPerms" class="reg-input">
-                  <option value="read">read</option>
-                  <option value="read,write" selected>read, write</option>
-                  <option value="read,write,delete">read, write, delete</option>
-                </select>
-              </div>
-              <div class="register-field">
-                <label class="field-label">Collision Policy</label>
-                <select id="regPolicy" class="reg-input">
-                  <option value="lock" selected>Lock — require supervisor</option>
-                  <option value="queue">Queue — auto-retry when free</option>
-                  <option value="skip">Skip — abandon silently</option>
-                </select>
+              <div id="collisionAlert" class="collision-alert" style="display:none"></div>
+              <div class="register-agent-form">
+                <h3 class="register-title">Register New Agent</h3>
+                <div class="register-grid">
+                  <div class="register-field">
+                    <label class="field-label">Agent Name</label>
+                    <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+                  </div>
+                  <div class="register-field">
+                    <label class="field-label">Source Platform</label>
+                    <select id="regPlatform" class="reg-input">
+                      <option value="">— Infer from name prefix —</option>
+                      <option value="Salesforce">Salesforce</option><option value="ServiceNow">ServiceNow</option>
+                      <option value="HubSpot">HubSpot</option><option value="Microsoft">Microsoft</option>
+                      <option value="Zendesk">Zendesk</option><option value="SAP">SAP</option>
+                      <option value="Custom">Custom</option>
+                    </select>
+                  </div>
+                  <div class="register-field">
+                    <label class="field-label">Department</label>
+                    <select id="regDept" class="reg-input">
+                      <option>Support</option><option>Sales</option>
+                      <option>Marketing</option><option>Operations</option>
+                    </select>
+                  </div>
+                  <div class="register-field">
+                    <label class="field-label">Target Table</label>
+                    <select id="regTable" class="reg-input">
+                      <option value="tickets">tickets</option><option value="crm_records">crm_records</option>
+                      <option value="customers">customers</option><option value="token_transactions">token_transactions</option>
+                    </select>
+                  </div>
+                  <div class="register-field">
+                    <label class="field-label">Permissions</label>
+                    <select id="regPerms" class="reg-input">
+                      <option value="read">read</option>
+                      <option value="read,write" selected>read, write</option>
+                      <option value="read,write,delete">read, write, delete</option>
+                    </select>
+                  </div>
+                  <div class="register-field">
+                    <label class="field-label">Collision Policy</label>
+                    <select id="regPolicy" class="reg-input">
+                      <option value="lock" selected>Lock — require supervisor</option>
+                      <option value="queue">Queue — auto-retry when free</option>
+                      <option value="skip">Skip — abandon silently</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="register-actions">
+                  <button class="btn-primary" onclick="registerAgent()">+ Register Agent</button>
+                  <span id="registerStatus" class="register-status"></span>
+                </div>
               </div>
             </div>
-            <div class="register-actions">
-              <button class="btn-primary" onclick="registerAgent()">+ Register Agent</button>
-              <span id="registerStatus" class="register-status"></span>
-            </div>
-          </div>
-        </div>
 
-      </section>
-      </div><!-- end mgmtBody -->
+          </section>
+          </div><!-- end mgmtBody -->
+        </div><!-- end management toggle -->
+
+      </div><!-- end agentBudgetBody -->
     </section>
-
-    </div><!-- end midRowBody -->
     </div><!-- end dp-wrap budgets-agents -->
 
     <!-- Panel: 30-Day Trends -->
@@ -656,19 +611,43 @@
     </section>
     </div><!-- end dp-wrap voice-guard -->
 
-    <!-- Panel: Governance Event Stream -->
+    <!-- Panel: AI Decision Feed (Routing table + Event Stream side by side) -->
     <div class="dp-wrap" data-panel-id="event-stream">
     <section class="panel full-width" id="eventStreamPanel">
       <h2 class="panel-title collapsible-title" onclick="togglePanel('eventStreamBody','eventStreamChevron')">
         <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>Governance Event Stream</span>
-        <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:10px;margin-right:auto" id="eventStreamStatus">● LIVE</span>
-        <button class="export-btn" onclick="event.stopPropagation(); loadEventStream()" title="Refresh stream">↺ Refresh</button>
+        <span>AI Decision Feed</span>
+        <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:10px;margin-right:auto">● LIVE</span>
+        <button class="export-btn" onclick="event.stopPropagation(); loadEventStream(); loadLiveRoutingFeed()" title="Refresh">↺ Refresh</button>
         <span class="panel-chevron" id="eventStreamChevron">▾</span>
       </h2>
       <div id="eventStreamBody" style="display:block">
-        <div class="event-stream-list" id="eventStreamList">
-          <p class="placeholder">Loading events...</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+
+          <!-- Left: Routing Decision Feed (table) -->
+          <div>
+            <div class="live-ops-label">▸ Routing Decision Feed</div>
+            <table class="audit-table" id="liveRoutingTable">
+              <thead>
+                <tr>
+                  <th>Time</th><th>Agent</th><th>Dept</th>
+                  <th>Model Tier</th><th>Risk</th><th>Outcome</th>
+                </tr>
+              </thead>
+              <tbody id="liveRoutingBody">
+                <tr><td colspan="6" class="placeholder">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Right: Governance Event Stream (cards) -->
+          <div>
+            <div class="live-ops-label">▸ Governance Event Stream</div>
+            <div class="event-stream-list" id="eventStreamList">
+              <p class="placeholder">Loading events...</p>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
