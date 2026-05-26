@@ -30,12 +30,12 @@ TIER_NAMES = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
 
 def score_complexity(text: str, threshold: int = None, keywords: list = None) -> dict:
     """
-    Classify a text payload as ROUTINE or COMPLEX.
+    Classify a text payload as ROUTINE, MODERATE, or COMPLEX.
 
     Rules applied in priority order:
-      1. Any COMPLEXITY_KEYWORD present  → COMPLEX (keyword trigger)
-      2. Token count > threshold         → COMPLEX (length trigger)
-      3. Otherwise                       → ROUTINE
+      1. Keywords AND tokens > threshold  → COMPLEX  (Advisor, Tier 3)
+      2. Keywords OR  tokens > threshold  → MODERATE (Analyst, Tier 2)
+      3. Otherwise                        → ROUTINE  (Scout,   Tier 1)
 
     threshold and keywords are read from the DB at runtime (via route()).
     Falls back to config.py defaults if not provided.
@@ -45,26 +45,35 @@ def score_complexity(text: str, threshold: int = None, keywords: list = None) ->
     text_lower  = text.lower()
     token_count = estimate_tokens(text)
     matched     = [kw for kw in _keywords if kw in text_lower]
+    over_limit  = token_count > _threshold
 
-    if matched and token_count > _threshold:
+    if matched and over_limit:
         return {
             "complexity":       "COMPLEX",
-            "reason":           f"Payload length ({token_count} tokens) exceeds routing threshold ({_threshold}) and high-risk keyword detected: '{matched[0]}'",
+            "reason":           f"Payload length ({token_count} tokens) exceeds threshold ({_threshold}) and complexity keyword detected: '{matched[0]}' — escalated to Advisor",
             "token_count":      token_count,
             "matched_keywords": matched,
         }
 
     if matched:
         return {
-            "complexity":       "COMPLEX",
-            "reason":           f"High-risk keyword detected: '{matched[0]}' — escalated to flagship regardless of length",
+            "complexity":       "MODERATE",
+            "reason":           f"Complexity keyword detected: '{matched[0]}' — routed to Analyst (keyword match, under token threshold)",
             "token_count":      token_count,
             "matched_keywords": matched,
         }
 
+    if over_limit:
+        return {
+            "complexity":       "MODERATE",
+            "reason":           f"Payload length ({token_count} tokens) exceeds threshold ({_threshold}) — routed to Analyst (length trigger, no keywords)",
+            "token_count":      token_count,
+            "matched_keywords": [],
+        }
+
     return {
         "complexity":       "ROUTINE",
-        "reason":           f"Payload length {token_count} tokens — no high-risk keywords detected, routed to micro model",
+        "reason":           f"Payload length {token_count} tokens — no complexity keywords detected, routed to Scout",
         "token_count":      token_count,
         "matched_keywords": [],
     }
@@ -99,7 +108,10 @@ def _get_model_from_registry(tier_num: int, db) -> dict | None:
             ModelRegistry.is_enabled == True,
         ).first()
 
-    # Cascade down one tier if nothing found here
+    # Cascade: Analyst (tier 2) falls UP to Advisor (tier 3) if no Analyst model registered.
+    # All other tiers cascade down to the next cheaper tier.
+    if not model and tier_num == 2:
+        return _get_model_from_registry(3, db)
     if not model and tier_num > 1:
         return _get_model_from_registry(tier_num - 1, db)
 
@@ -191,8 +203,12 @@ def route(
         routing_decision = "COMPLEX"
         routing_reason   = complexity_result["reason"]
     elif complexity == "COMPLEX":
-        tier_num         = 3          # Advisor for complex payloads
+        tier_num         = 3          # Advisor — keywords AND over token threshold
         routing_decision = "COMPLEX"
+        routing_reason   = complexity_result["reason"]
+    elif complexity == "MODERATE":
+        tier_num         = 2          # Analyst — keyword OR over threshold (one signal)
+        routing_decision = "MODERATE"
         routing_reason   = complexity_result["reason"]
     else:
         tier_num         = 1          # Scout for routine
