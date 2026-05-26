@@ -18,9 +18,10 @@ from database.models import TokenTransaction, AuditEvent, DepartmentBudget, Sens
 
 router = APIRouter()
 
-MICRO_INPUT_COST     = 0.15  / 1_000_000
-FLAGSHIP_INPUT_COST  = 3.00  / 1_000_000
-FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000   # Sonnet: $15/1M output (5× input, not 4×)
+MICRO_INPUT_COST     = 0.80  / 1_000_000   # Haiku 4.5 input
+MICRO_OUTPUT_COST    = 4.00  / 1_000_000   # Haiku 4.5 output
+FLAGSHIP_INPUT_COST  = 3.00  / 1_000_000   # Sonnet 4.6 (Advisor) input
+FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000   # Sonnet 4.6 (Advisor) output
 
 ECONOMY_TIERS = {"Scout", "Analyst", "micro"}
 PREMIUM_TIERS = {"Advisor", "Strategist", "flagship"}
@@ -54,14 +55,18 @@ def savings_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(ge
     tokens_pruned    = sum(t.tokens_saved for t in txns if t.was_pruned)
     pruning_saved    = round(tokens_pruned * FLAGSHIP_INPUT_COST, 6)
 
-    # What it would have cost if everything went flagship (no routing, no pruning)
-    cost_if_all_flagship = sum(
-        (t.input_tokens + t.tokens_saved) * FLAGSHIP_INPUT_COST +
-        t.output_tokens * FLAGSHIP_OUTPUT_COST
+    # Downgrade savings: for each Scout call, what it would have cost at Advisor (flagship) rates
+    # This is always positive — Scout is always cheaper than Advisor
+    downgrade_saved = round(sum(
+        (t.input_tokens + t.tokens_saved) * (FLAGSHIP_INPUT_COST - MICRO_INPUT_COST) +
+        t.output_tokens * (FLAGSHIP_OUTPUT_COST - MICRO_OUTPUT_COST)
         for t in txns
-    )
-    downgrade_saved = round(max(cost_if_all_flagship - total_cost, 0), 6)
-    total_saved     = round(pruning_saved + downgrade_saved, 6)
+        if _tier_bucket(t.model_tier) == "micro"
+    ), 6)
+
+    # Hypothetical cost with no FAGE routing (all calls at flagship rates, no pruning savings)
+    cost_if_all_flagship = round(total_cost + downgrade_saved, 6)
+    total_saved          = round(pruning_saved + downgrade_saved, 6)
 
     # Daily buckets for chart
     daily = {}
