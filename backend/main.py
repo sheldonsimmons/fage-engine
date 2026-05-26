@@ -33,6 +33,13 @@ def _run_migrations():
             conn.commit()
         except Exception:
             pass  # Column already exists or DB doesn't support IF NOT EXISTS
+        try:
+            conn.execute(text(
+                "ALTER TABLE model_registry ADD COLUMN IF NOT EXISTS department VARCHAR"
+            ))
+            conn.commit()
+        except Exception:
+            pass
 
 _run_migrations()
 

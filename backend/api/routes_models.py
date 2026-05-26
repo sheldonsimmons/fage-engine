@@ -76,6 +76,7 @@ class ModelIn(BaseModel):
     cost_output_per_1m: float = 0.0
     is_enabled:         bool  = True
     is_default:         bool  = False
+    department:         Optional[str] = None   # None = global; set to restrict to one business unit
     notes:              Optional[str] = None
 
 
@@ -95,6 +96,7 @@ def _serialize(m: ModelRegistry) -> dict:
         "cost_output_per_1m": m.cost_output_per_1m,
         "is_enabled":         m.is_enabled,
         "is_default":         m.is_default,
+        "department":         m.department or None,
         "notes":              m.notes or "",
         "created_at":         m.created_at.isoformat() if m.created_at else None,
     }
@@ -128,12 +130,17 @@ def create_model(body: ModelIn, db: Session = Depends(get_db)):
     if body.tier not in TIER_META:
         raise HTTPException(status_code=400, detail="tier must be 1, 2, 3, or 4")
 
-    # If this is set as default, clear existing default for that tier
+    # If this is set as default, clear existing default for same tier + same department scope
     if body.is_default:
-        db.query(ModelRegistry).filter(
+        q = db.query(ModelRegistry).filter(
             ModelRegistry.tier == body.tier,
             ModelRegistry.is_default == True,
-        ).update({"is_default": False})
+        )
+        if body.department:
+            q = q.filter(ModelRegistry.department == body.department)
+        else:
+            q = q.filter(ModelRegistry.department == None)
+        q.update({"is_default": False})
 
     m = ModelRegistry(**body.model_dump())
     db.add(m)
@@ -151,13 +158,18 @@ def update_model(model_id: int, body: ModelIn, db: Session = Depends(get_db)):
     if body.tier not in TIER_META:
         raise HTTPException(status_code=400, detail="tier must be 1, 2, 3, or 4")
 
-    # If setting as default, clear others in same tier
+    # If setting as default, clear others in same tier + same department scope
     if body.is_default:
-        db.query(ModelRegistry).filter(
+        q = db.query(ModelRegistry).filter(
             ModelRegistry.tier == body.tier,
             ModelRegistry.is_default == True,
             ModelRegistry.id != model_id,
-        ).update({"is_default": False})
+        )
+        if body.department:
+            q = q.filter(ModelRegistry.department == body.department)
+        else:
+            q = q.filter(ModelRegistry.department == None)
+        q.update({"is_default": False})
 
     for field, value in body.model_dump().items():
         setattr(m, field, value)

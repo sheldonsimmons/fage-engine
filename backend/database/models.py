@@ -167,6 +167,7 @@ class ModelRegistry(Base):
     cost_output_per_1m = Column(Float,    default=0.0)             # $ per 1M output tokens
     is_enabled         = Column(Boolean,  default=True)
     is_default         = Column(Boolean,  default=False)           # default choice for this tier
+    department         = Column(String,   nullable=True)           # None = global (all departments); set to limit to one BU
     notes              = Column(String,   nullable=True)
     created_at         = Column(DateTime, default=datetime.utcnow)
 

@@ -83,37 +83,68 @@ def score_complexity(text: str, threshold: int = None, keywords: list = None) ->
 # Model Registry lookup
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _get_model_from_registry(tier_num: int, db) -> dict | None:
+def _get_model_from_registry(tier_num: int, db, department: str = None) -> dict | None:
     """
     Look up the default enabled model for a given tier from ModelRegistry.
-    Cascades down to lower tiers if the requested tier has no model registered.
-    Returns None if no models are registered at all.
+
+    Lookup priority:
+      1. Department-specific default for this tier (is_default=True, department=requested)
+      2. Department-specific any-enabled for this tier
+      3. Global default for this tier (department IS NULL, is_default=True)
+      4. Global any-enabled for this tier (department IS NULL)
+
+    Cascades: Analyst (tier 2) falls UP to Advisor (tier 3) if nothing registered.
+    All other tiers cascade down to the next cheaper tier.
+    Returns None if no models registered at all.
     """
     if db is None or tier_num < 1:
         return None
 
     from database.models import ModelRegistry
+    from sqlalchemy import or_
 
-    # Prefer the default model for this tier
-    model = db.query(ModelRegistry).filter(
-        ModelRegistry.tier == tier_num,
-        ModelRegistry.is_enabled == True,
-        ModelRegistry.is_default == True,
-    ).first()
+    model = None
 
-    # Fall back to any enabled model in this tier
+    if department:
+        # 1. Department-specific default
+        model = db.query(ModelRegistry).filter(
+            ModelRegistry.tier == tier_num,
+            ModelRegistry.is_enabled == True,
+            ModelRegistry.is_default == True,
+            ModelRegistry.department == department,
+        ).first()
+
+        # 2. Department-specific any-enabled
+        if not model:
+            model = db.query(ModelRegistry).filter(
+                ModelRegistry.tier == tier_num,
+                ModelRegistry.is_enabled == True,
+                ModelRegistry.department == department,
+            ).first()
+
+    # 3. Global default (department IS NULL)
     if not model:
         model = db.query(ModelRegistry).filter(
             ModelRegistry.tier == tier_num,
             ModelRegistry.is_enabled == True,
+            ModelRegistry.is_default == True,
+            ModelRegistry.department == None,
+        ).first()
+
+    # 4. Global any-enabled
+    if not model:
+        model = db.query(ModelRegistry).filter(
+            ModelRegistry.tier == tier_num,
+            ModelRegistry.is_enabled == True,
+            ModelRegistry.department == None,
         ).first()
 
     # Cascade: Analyst (tier 2) falls UP to Advisor (tier 3) if no Analyst model registered.
     # All other tiers cascade down to the next cheaper tier.
     if not model and tier_num == 2:
-        return _get_model_from_registry(3, db)
+        return _get_model_from_registry(3, db, department)
     if not model and tier_num > 1:
-        return _get_model_from_registry(tier_num - 1, db)
+        return _get_model_from_registry(tier_num - 1, db, department)
 
     if not model:
         return None
@@ -125,6 +156,7 @@ def _get_model_from_registry(tier_num: int, db) -> dict | None:
         "tier_name":             TIER_NAMES.get(model.tier, f"Tier {model.tier}"),
         "cost_input_per_million":  model.cost_input_per_1m,
         "cost_output_per_million": model.cost_output_per_1m,
+        "department_scoped":     model.department is not None,
     }
 
 
@@ -241,8 +273,8 @@ def route(
         routing_decision = "ROUTINE"
         routing_reason   = complexity_result["reason"]
 
-    # Step 4 — Look up model from registry
-    registry_model = _get_model_from_registry(tier_num, db)
+    # Step 4 — Look up model from registry (department-specific first, then global)
+    registry_model = _get_model_from_registry(tier_num, db, department=department)
 
     if registry_model:
         model_id_to_use  = registry_model["model_id"]

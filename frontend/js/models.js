@@ -136,6 +136,7 @@ function renderTable(models) {
       '<tr>' +
         '<td>' +
           '<div class="mdl-model-name">' + m.display_name + '</div>' +
+          (m.department ? '<div class="mdl-dept-scope">🏢 ' + m.department + ' only</div>' : '') +
           (m.notes ? '<div class="mdl-model-notes">' + m.notes + '</div>' : '') +
         '</td>' +
         '<td>' +
@@ -212,9 +213,10 @@ function openEditModal(id) {
   document.getElementById("fModelId").value     = model.model_id;
   document.getElementById("fCostIn").value      = model.cost_input_per_1m;
   document.getElementById("fCostOut").value     = model.cost_output_per_1m;
-  document.getElementById("fEnabled").checked   = model.is_enabled;
-  document.getElementById("fDefault").checked   = model.is_default;
-  document.getElementById("fNotes").value       = model.notes || "";
+  document.getElementById("fEnabled").checked    = model.is_enabled;
+  document.getElementById("fDefault").checked    = model.is_default;
+  document.getElementById("fNotes").value        = model.notes || "";
+  document.getElementById("fDepartment").value   = model.department || "";
 
   selectTier(model.tier);
   showModal();
@@ -233,7 +235,7 @@ function closeModal() {
 }
 
 function clearForm() {
-  ["fDisplayName","fProvider","fModelId","fCostIn","fCostOut","fNotes"].forEach(id => {
+  ["fDisplayName","fProvider","fModelId","fCostIn","fCostOut","fNotes","fDepartment"].forEach(id => {
     document.getElementById(id).value = "";
   });
   document.getElementById("fEnabled").checked = true;
@@ -256,6 +258,7 @@ async function saveModel() {
   const isEnabled   = document.getElementById("fEnabled").checked;
   const isDefault   = document.getElementById("fDefault").checked;
   const notes       = document.getElementById("fNotes").value.trim();
+  const department  = document.getElementById("fDepartment").value || null;
 
   const errEl = document.getElementById("modalError");
   errEl.style.display = "none";
@@ -275,6 +278,7 @@ async function saveModel() {
     is_enabled:         isEnabled,
     is_default:         isDefault,
     notes:              notes || null,
+    department:         department,
   };
 
   const saveBtn = document.getElementById("saveBtn");
