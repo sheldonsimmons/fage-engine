@@ -30,18 +30,22 @@ router = APIRouter()
 def get_dashboard(db: Session = Depends(get_db)):
     """Single endpoint that powers the entire executive dashboard."""
 
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    now         = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # ── Spend ──────────────────────────────────────────────────────────────────
-    # spend_today: sum of today's actual transactions (real-time, accurate)
+    # Both spend figures query token_transactions directly so they always agree.
     spend_today = db.query(func.sum(TokenTransaction.cost_usd)).filter(
         TokenTransaction.timestamp >= today_start
     ).scalar() or 0.0
 
-    # spend_month: authoritative source is the budget table — incremented on
-    # every routing call and reset each month, consistent with the budget panel
+    spend_month = db.query(func.sum(TokenTransaction.cost_usd)).filter(
+        TokenTransaction.timestamp >= month_start
+    ).scalar() or 0.0
+
+    # Budget table still used for cap / throttle display — load once here
     budgets_for_spend = db.query(DepartmentBudget).all()
-    spend_month = sum(b.current_spend_usd for b in budgets_for_spend)
 
     # ── Token savings from pruning ─────────────────────────────────────────────
     tokens_saved_today = db.query(func.sum(TokenTransaction.tokens_saved)).filter(
