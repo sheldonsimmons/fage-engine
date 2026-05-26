@@ -230,15 +230,15 @@ function applyStreamFilters() {
 function _populateStreamDeptFilter(events) {
   const sel = document.getElementById("streamFilterDept");
   if (!sel) return;
-  const existing = new Set(Array.from(sel.options).map(o => o.value));
+  const current = sel.value;
+  while (sel.options.length > 1) sel.remove(1);  // keep "All Depts", rebuild the rest
   const depts = [...new Set(events.map(e => e.department).filter(Boolean))].sort();
   depts.forEach(d => {
-    if (!existing.has(d)) {
-      const opt = document.createElement("option");
-      opt.value = d.toLowerCase(); opt.textContent = d;
-      sel.appendChild(opt);
-    }
+    const opt = document.createElement("option");
+    opt.value = d.toLowerCase(); opt.textContent = d;
+    sel.appendChild(opt);
   });
+  sel.value = current; // restore previously selected dept if still valid
 }
 
 // ── Routing Decision Feed Filters ─────────────────────────────────────────────
@@ -275,6 +275,6 @@ function toggleRoutingBlocked() {
   applyRoutingFilters();
 }
 
-// Load on page ready, refresh every 15 seconds
-loadEventStream();
+// Staggered 1600ms
+setTimeout(loadEventStream, 1600);
 setInterval(loadEventStream, 15000);

@@ -213,8 +213,8 @@ async function runCollisionSim() {
   }
 }
 
-// Load on page ready, refresh every 10 seconds
-loadAgents();
+// Load on page ready, refresh every 10 seconds (staggered 400ms)
+setTimeout(loadAgents, 400);
 setInterval(loadAgents, 10000);
 
 // ── Dashboard Agentlake Filters ───────────────────────────────────────────────

@@ -189,6 +189,6 @@ async function doReset(department) {
   }
 }
 
-// Load on page ready, refresh every 15 seconds
-loadBudgets();
+// Load on page ready, refresh every 15 seconds (staggered 0ms)
+setTimeout(loadBudgets, 0);
 setInterval(loadBudgets, 15000);

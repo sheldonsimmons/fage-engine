@@ -250,7 +250,8 @@ async function loadLiveRoutingFeed() {
   }
 }
 
-loadLiveRoutingFeed();
+// Staggered 800ms
+setTimeout(loadLiveRoutingFeed, 800);
 setInterval(loadLiveRoutingFeed, 15000);
 
 // ── Audit Log Filters ─────────────────────────────────────────────────────────
@@ -297,15 +298,15 @@ function clearAuditFilters() {
 function _populateAuditDeptFilter(events) {
   const sel = document.getElementById("auditFilterDept");
   if (!sel) return;
-  const existing = new Set(Array.from(sel.options).map(o => o.value));
+  const current = sel.value;
+  while (sel.options.length > 1) sel.remove(1);  // keep "All Depts", rebuild the rest
   const depts = [...new Set(events.map(e => e.department).filter(Boolean))].sort();
   depts.forEach(d => {
-    if (!existing.has(d.toLowerCase())) {
-      const opt = document.createElement("option");
-      opt.value = d.toLowerCase(); opt.textContent = d;
-      sel.appendChild(opt);
-    }
+    const opt = document.createElement("option");
+    opt.value = d.toLowerCase(); opt.textContent = d;
+    sel.appendChild(opt);
   });
+  sel.value = current;
 }
 
 // ── Export functions ──────────────────────────────────────────────────────────
@@ -334,6 +335,6 @@ function exportAuditPdf() {
   printSection("auditBody", "FAGE — AI Decision Audit Log");
 }
 
-// Load on page ready, refresh every 15 seconds
-loadAuditLog();
+// Staggered 1200ms
+setTimeout(loadAuditLog, 1200);
 setInterval(loadAuditLog, 15000);

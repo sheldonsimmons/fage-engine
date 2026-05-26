@@ -292,8 +292,9 @@ function randomizePanels() {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 initDraggablePanels();
 restorePanelStates();
-checkHealth();
-loadDashboard();
+// Staggered 200ms, dashboard poll reduced from 5s → 15s to reduce API burst
+setTimeout(checkHealth,   200);
+setTimeout(loadDashboard, 200);
 
-setInterval(checkHealth,    10000);
-setInterval(loadDashboard,   5000);
+setInterval(checkHealth,   15000);
+setInterval(loadDashboard, 15000);
