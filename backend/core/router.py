@@ -161,6 +161,8 @@ def route(
       - cost comparison: with pruning vs. without pruning
     """
     # Step 1 — Check for explicit tier prefix tags BEFORE pruning
+    # Searches within first 100 chars to handle Salesforce field-label prefixes
+    # e.g. "DESCRIPTION:\n[ANALYST] ..." — prefix must be a plain word like "DESCRIPTION:"
     forced_tier = None
     tag_map = {
         "[scout]":      1,
@@ -168,12 +170,16 @@ def route(
         "[advisor]":    3,
         "[strategist]": 4,
     }
-    text_start = text.strip().lower()[:20]
+    text_head = text.strip().lower()[:100]
     for tag, tier in tag_map.items():
-        if text_start.startswith(tag):
-            forced_tier = tier
-            text = text.strip()[len(tag):].strip()  # strip tag before pruning
-            break
+        idx = text_head.find(tag)
+        if idx != -1:
+            prefix = text_head[:idx].strip()
+            # Allow only simple field-label prefixes (e.g. "description:") — no full sentences
+            if prefix == "" or (len(prefix) <= 20 and prefix.rstrip(":").replace(" ", "").isalpha()):
+                forced_tier = tier
+                text = text.strip()[text.strip().lower().find(tag) + len(tag):].strip()
+                break
 
     # Step 2 — Prune
     prune_result = None
