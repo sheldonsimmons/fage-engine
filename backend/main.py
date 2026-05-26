@@ -311,6 +311,35 @@ def reset_demo_data(db=None):
     finally:
         db.close()
 
+# Dev/Debug — Inspect tag detection without a full route call
+@app.post("/api/admin/debug-tag", tags=["Admin"])
+def debug_tag(body: dict):
+    """
+    DEV ONLY — Shows what the router sees for tag detection.
+    POST {"text": "[ANALYST] your text here"}
+    """
+    text = body.get("text", "")
+    tag_map = {"[scout]": 1, "[analyst]": 2, "[advisor]": 3, "[strategist]": 4}
+    text_start = text.strip().lower()[:50]
+    forced_tier = None
+    matched_tag = None
+    for tag, tier in tag_map.items():
+        if text_start.startswith(tag):
+            forced_tier = tier
+            matched_tag = tag
+            break
+    from core.pruner import prune, estimate_tokens
+    pruned = prune(text)
+    return {
+        "raw_first_50_chars":    repr(text.strip()[:50]),
+        "lowercased_first_50":   repr(text.strip().lower()[:50]),
+        "matched_tag":           matched_tag,
+        "forced_tier":           forced_tier,
+        "raw_token_estimate":    estimate_tokens(text),
+        "pruned_token_estimate": estimate_tokens(pruned["cleaned_text"]),
+        "pruned_first_100":      pruned["cleaned_text"][:100],
+    }
+
 # ── Serve frontend as static files (MUST be last — catches everything else) ────
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
