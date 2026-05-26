@@ -196,6 +196,51 @@ async function toggleRationale(eventId) {
   await fetchRationaleContent(eventId);
 }
 
+/** Render the compact routing decision feed in the live ops strip */
+async function loadLiveRoutingFeed() {
+  const tbody = document.getElementById("liveRoutingBody");
+  if (!tbody) return;
+  try {
+    const events = await apiGet("/api/audit?limit=10");
+    if (!events.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No routing decisions yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = events.map(e => {
+      const ts = e.timestamp
+        ? new Date(e.timestamp + "Z").toLocaleTimeString("en-US", {
+            hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+          })
+        : "—";
+      const isBlocked = (e.decision_outcome || "").toLowerCase().includes("blocked");
+      const tierLabel = e.model_tier || "—";
+      const tierBadge = ["Scout","micro"].includes(tierLabel)
+        ? `<span class="badge badge-micro">Scout</span>`
+        : isBlocked
+        ? `<span class="badge badge-critical">🛡 BLOCKED</span>`
+        : tierLabel === "—"
+        ? `<span style="color:var(--text-muted)">—</span>`
+        : `<span class="badge badge-flagship">${tierLabel}</span>`;
+      const riskClass = `badge-${e.risk_level || "low"}`;
+      const rowClass = isBlocked ? "audit-row row-blocked" : "audit-row";
+      return `
+        <tr class="${rowClass}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale">
+          <td style="font-family:var(--font-mono);color:var(--text-muted);font-size:11px">${ts}</td>
+          <td style="font-weight:600;color:var(--accent);font-size:11px">${e.agent_name || "—"}</td>
+          <td style="color:var(--text-muted);font-size:11px">${e.department || "—"}</td>
+          <td>${tierBadge}</td>
+          <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
+          <td style="font-size:11px;color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}">${e.decision_outcome || "—"}</td>
+        </tr>`;
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="placeholder" style="color:var(--accent-red)">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+loadLiveRoutingFeed();
+setInterval(loadLiveRoutingFeed, 15000);
+
 // ── Export functions ──────────────────────────────────────────────────────────
 
 function exportAuditCsv() {

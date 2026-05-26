@@ -214,10 +214,10 @@ body {
 }
 .blocked-banner-btn:hover { opacity: 0.85; }
 
-/* ── Agent Card Grid (live status view in registry panel) ────────────────────── */
-.agent-card-grid {
+/* ── Agent Card Grid (live status view) ──────────────────────────────────────── */
+.agent-card-grid-6 {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: 10px;
   margin-bottom: 4px;
 }
@@ -230,7 +230,6 @@ body {
   flex-direction: column;
   gap: 5px;
   transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
-  cursor: default;
 }
 .agent-status-card.status-active {
   border-color: var(--accent-green);
@@ -240,7 +239,6 @@ body {
 .agent-status-card.status-locked {
   border-color: var(--accent-red);
   background: #1a0505;
-  box-shadow: 0 0 10px rgba(248,81,73,0.14);
   animation: card-lock-pulse 0.8s ease infinite alternate;
 }
 .agent-status-card.status-queued {
@@ -256,6 +254,13 @@ body {
 .asc-dept { font-size: 10px; color: var(--text-muted); }
 .asc-platform { font-size: 10px; font-weight: 600; }
 .asc-last { font-size: 9px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
+
+/* Live ops strip section labels */
+.live-ops-strip { padding-bottom: 20px; }
+.live-ops-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-muted); font-weight: 600; margin-bottom: 12px;
+}
 
 /* ── Audit Log ───────────────────────────────────────────────────────────────── */
 .audit-row:hover td { background: #1c2128; }

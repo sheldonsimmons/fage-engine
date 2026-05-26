@@ -14,6 +14,7 @@ async function loadBudgets() {
   try {
     budgetData = await apiGet("/api/budget");
     renderBudgets();
+    renderLiveBudgetBars();
     updateKpiThrottled();
   } catch (err) {
     document.getElementById("budgetList").innerHTML =
@@ -90,6 +91,42 @@ function renderBudgets() {
         </div>
       </div>
     `;
+  }).join("");
+}
+
+/** Render budget bars only (no cap controls) for the live ops strip */
+function renderLiveBudgetBars() {
+  const container = document.getElementById("liveBudgetBars");
+  if (!container) return;
+  if (!budgetData.length) {
+    container.innerHTML = '<p class="placeholder">Loading...</p>';
+    return;
+  }
+  container.innerHTML = budgetData.map(b => {
+    const fillClass = b.state === "throttled" ? "critical"
+                    : b.state === "warning"   ? "warn"
+                    : "";
+    const stateTag = b.throttled
+      ? `<span class="budget-tag">THROTTLED</span>`
+      : b.override_granted
+        ? `<span class="budget-tag" style="color:var(--accent-green)">OVERRIDE ACTIVE</span>`
+        : b.state === "warning"
+          ? `<span class="budget-tag" style="color:var(--accent-yellow)">WARNING</span>`
+          : "";
+    const displayPct = fmtPct(b.current_spend_usd, b.monthly_cap_usd);
+    const barPct     = b.monthly_cap_usd > 0
+      ? Math.min((b.current_spend_usd / b.monthly_cap_usd) * 100, 100)
+      : 0;
+    return `
+      <div class="budget-item">
+        <div class="budget-dept">
+          <span class="dept-name">${b.department} ${stateTag}</span>
+          <span class="dept-spend">${fmtUsd(b.current_spend_usd)} / ${fmtUsd(b.monthly_cap_usd)} &nbsp;(${displayPct})</span>
+        </div>
+        <div class="budget-bar-track">
+          <div class="budget-bar-fill ${fillClass}" style="width:${barPct}%"></div>
+        </div>
+      </div>`;
   }).join("");
 }
 
