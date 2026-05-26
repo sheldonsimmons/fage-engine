@@ -43,19 +43,20 @@ def strip_html(text: str) -> str:
 def strip_email_headers(text: str) -> str:
     """Remove raw email header lines (From:, To:, Date:, X-Mailer:, etc.)."""
     # Standard header fields — anywhere in the document, not just line start
+    # Strip headers whether they appear at line start OR inline (Salesforce collapses newlines)
     header_pattern = re.compile(
-        r"^(From|To|Cc|Bcc|Date|Reply-To|Message-ID|X-[\w-]+|MIME-Version|"
+        r"(?:^|\s)(From|To|Cc|Bcc|Date|Reply-To|Message-ID|X-[\w-]+|MIME-Version|"
         r"Content-Type|Content-Transfer-Encoding|Content-Disposition|"
         r"Received|Return-Path|Delivered-To|Authentication-Results|"
         r"DKIM-Signature|ARC-[\w-]+|X-Originating-IP|X-Spam[\w-]*|"
         r"Thread-Index|Thread-Topic|In-Reply-To|References|"
-        r"Importance|Sensitivity|Auto-Submitted):[ \t].*$",
-        re.IGNORECASE | re.MULTILINE,
+        r"Importance|Sensitivity|Auto-Submitted):[ \t][^\n]{0,300}",
+        re.IGNORECASE,
     )
-    text = header_pattern.sub("", text)
+    text = header_pattern.sub(" ", text)
 
-    # Strip MIME boundary markers and content blocks
-    text = re.sub(r"^--[a-zA-Z0-9_\-\.]+.*$", "", text, flags=re.MULTILINE)
+    # Strip MIME boundary markers
+    text = re.sub(r"--[a-zA-Z0-9_\-\.]{10,}", " ", text)
 
     # Strip common auto-reply / ticket system boilerplate lines
     boilerplate = re.compile(
@@ -83,9 +84,9 @@ def strip_reply_chains(text: str) -> str:
         r"-{3,}\s*Forwarded Message\s*-{3,}",
         r"On .+wrote:",
         r"On .+said:",
-        r"From:\s*.+\nSent:\s*.+\nTo:\s*.+",
-        r"From:\s*.+\nTo:\s*.+\nDate:\s*.+",
-        r"From:\s*.+\nDate:\s*.+\nTo:\s*.+",
+        r"From:\s*.+?Sent:\s*.+?To:\s*.+?(?=Subject:|$)",
+        r"From:\s*.+?To:\s*.+?Date:\s*.+?(?=Subject:|$)",
+        r"From:\s*.+?Date:\s*.+?To:\s*.+?(?=Subject:|$)",
         r"_{5,}",           # long underscores used as dividers
     ]
     for marker in markers:
