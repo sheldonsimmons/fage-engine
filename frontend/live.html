@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Live Operations Center</title>
+  <style>
+    :root {
+      --bg:           #0a0a0f;
+      --bg-card:      #111118;
+      --bg-card2:     #16161f;
+      --border:       #1e1e2e;
+      --text:         #e2e8f0;
+      --text-muted:   #64748b;
+      --accent-blue:  #60a5fa;
+      --accent-green: #4ade80;
+      --accent-yellow:#fbbf24;
+      --accent-red:   #f87171;
+      --accent-purple:#c084fc;
+      --accent-cyan:  #22d3ee;
+      --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    .live-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      flex-shrink: 0;
+    }
+    .live-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .live-logo {
+      font-size: 22px;
+      color: var(--accent-blue);
+    }
+    .live-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text);
+    }
+    .live-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      letter-spacing: 1px;
+    }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74,222,128,0.4); }
+      50%       { opacity: 0.7; box-shadow: 0 0 0 6px rgba(74,222,128,0); }
+    }
+    .live-clock {
+      font-size: 13px;
+      color: var(--accent-blue);
+      letter-spacing: 1px;
+    }
+    .back-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+    .back-btn:hover { color: var(--text); border-color: var(--accent-blue); }
+
+    /* ── KPI Strip ── */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .kpi-cell {
+      background: var(--bg-card);
+      padding: 10px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .kpi-label {
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .kpi-value {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .kpi-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .kpi-blue   { color: var(--accent-blue); }
+    .kpi-green  { color: var(--accent-green); }
+    .kpi-yellow { color: var(--accent-yellow); }
+    .kpi-red    { color: var(--accent-red); }
+    .kpi-purple { color: var(--accent-purple); }
+    .kpi-cyan   { color: var(--accent-cyan); }
+
+    /* ── Main Layout ── */
+    .live-body {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 1px;
+      background: var(--border);
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left panel ── */
+    .live-left {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    /* Agent grid */
+    .agent-panel {
+      background: var(--bg-card);
+      padding: 14px 16px;
+      flex-shrink: 0;
+    }
+    .panel-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+    }
+    .agent-card {
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: all 0.3s ease;
+    }
+    .agent-card.active {
+      border-color: var(--accent-green);
+      background: rgba(74,222,128,0.05);
+      box-shadow: 0 0 12px rgba(74,222,128,0.15);
+    }
+    .agent-card.locked {
+      border-color: var(--accent-yellow);
+      background: rgba(251,191,36,0.05);
+      box-shadow: 0 0 12px rgba(251,191,36,0.2);
+      animation: lock-flash 0.5s ease infinite alternate;
+    }
+    @keyframes lock-flash {
+      from { box-shadow: 0 0 8px rgba(251,191,36,0.2); }
+      to   { box-shadow: 0 0 20px rgba(251,191,36,0.5); }
+    }
+    .agent-name {
+      font-size: 9px;
+      color: var(--text);
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .agent-dept {
+      font-size: 8px;
+      color: var(--text-muted);
+    }
+    .agent-status {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .status-idle   { color: var(--text-muted); }
+    .status-active { color: var(--accent-green); }
+    .status-locked { color: var(--accent-yellow); }
+
+    /* Budget bars */
+    .budget-panel {
+      background: var(--bg-card);
+      padding: 14px 16px;
+      flex-shrink: 0;
+    }
+    .budget-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .budget-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .budget-row-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+    }
+    .budget-dept { color: var(--text); }
+    .budget-nums { color: var(--text-muted); }
+    .budget-tag  {
+      font-size: 8px;
+      color: var(--accent-red);
+      letter-spacing: 1px;
+      font-weight: 700;
+    }
+    .budget-bar-bg {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .budget-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 1s ease;
+    }
+    .bar-green  { background: var(--accent-green); }
+    .bar-yellow { background: var(--accent-yellow); }
+    .bar-red    { background: var(--accent-red); }
+
+    /* Routing feed */
+    .routing-panel {
+      background: var(--bg-card);
+      padding: 14px 16px;
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .routing-feed {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .routing-event {
+      display: grid;
+      grid-template-columns: 70px 120px 80px 70px 1fr;
+      gap: 8px;
+      font-size: 10px;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      animation: slide-in 0.3s ease;
+      align-items: center;
+    }
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(-10px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .ev-time    { color: var(--text-muted); font-size: 9px; }
+    .ev-agent   { color: var(--accent-cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ev-dept    { color: var(--text-muted); }
+    .ev-tier    { font-weight: 700; }
+    .ev-tier.scout     { color: var(--accent-blue); }
+    .ev-tier.advisor   { color: var(--accent-purple); }
+    .ev-tier.strategist{ color: var(--accent-red); }
+    .ev-tier.blocked   { color: var(--accent-red); }
+    .ev-tier.throttled { color: var(--accent-yellow); }
+    .ev-detail  { color: var(--text-muted); font-size: 9px; }
+
+    /* ── Right panel — event stream ── */
+    .live-right {
+      background: var(--bg-card);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .event-stream-header {
+      padding: 14px 16px 8px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .event-stream {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .event-stream::-webkit-scrollbar { width: 3px; }
+    .event-stream::-webkit-scrollbar-track { background: transparent; }
+    .event-stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .stream-event {
+      background: var(--bg-card2);
+      border-left: 3px solid var(--border);
+      border-radius: 0 4px 4px 0;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      animation: stream-in 0.4s ease;
+    }
+    @keyframes stream-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .stream-event.type-routine   { border-left-color: var(--accent-blue); }
+    .stream-event.type-complex   { border-left-color: var(--accent-purple); }
+    .stream-event.type-blocked   { border-left-color: var(--accent-red); background: rgba(248,113,113,0.05); }
+    .stream-event.type-throttled { border-left-color: var(--accent-yellow); }
+    .stream-event.type-collision { border-left-color: var(--accent-yellow); background: rgba(251,191,36,0.05); }
+    .stream-event.type-pruning   { border-left-color: var(--accent-green); }
+
+    .se-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .se-type {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .se-time { font-size: 9px; color: var(--text-muted); }
+    .se-body { font-size: 10px; color: var(--text); line-height: 1.4; }
+    .se-meta { font-size: 9px; color: var(--text-muted); }
+
+    /* ── Flash overlay for dramatic events ── */
+    .flash-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s;
+      z-index: 100;
+    }
+    .flash-overlay.red    { background: rgba(248,113,113,0.12); }
+    .flash-overlay.yellow { background: rgba(251,191,36,0.10); }
+    .flash-overlay.green  { background: rgba(74,222,128,0.08); }
+
+    /* ── Pruning ticker ── */
+    .pruning-ticker {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(74,222,128,0.1);
+      border: 1px solid var(--accent-green);
+      border-radius: 20px;
+      padding: 6px 20px;
+      font-size: 11px;
+      color: var(--accent-green);
+      letter-spacing: 1px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .pruning-ticker.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- Flash overlay -->
+<div class="flash-overlay" id="flashOverlay"></div>
+
+<!-- Pruning ticker -->
+<div class="pruning-ticker" id="pruningTicker"></div>
+
+<!-- Header -->
+<div class="live-header">
+  <div class="live-brand">
+    <span class="live-logo">◈</span>
+    <div>
+      <div class="live-title">FAGE LIVE</div>
+      <div class="live-subtitle">FinOps Agentlake &amp; Governance Engine — Operations Center</div>
+    </div>
+  </div>
+  <div class="live-badge">
+    <div class="live-dot"></div>
+    <span style="color:var(--accent-green);letter-spacing:2px;font-size:11px">LIVE</span>
+    &nbsp;&nbsp;
+    <span class="live-clock" id="liveClock">--:--:--</span>
+  </div>
+  <button class="back-btn" onclick="window.location='/'">← Dashboard</button>
+</div>
+
+<!-- KPI Strip -->
+<div class="kpi-strip">
+  <div class="kpi-cell">
+    <div class="kpi-label">Total Calls</div>
+    <div class="kpi-value kpi-blue" id="kpiCalls">0</div>
+    <div class="kpi-sub" id="kpiCallsSub">0 today</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Tokens Saved</div>
+    <div class="kpi-value kpi-green" id="kpiTokens">0</div>
+    <div class="kpi-sub" id="kpiTokensSub">est. $0.0000 saved</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Spend Today</div>
+    <div class="kpi-value kpi-yellow" id="kpiSpend">$0.0000</div>
+    <div class="kpi-sub" id="kpiSpendSub">$0.00 this month</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Blocked</div>
+    <div class="kpi-value kpi-red" id="kpiBlocked">0</div>
+    <div class="kpi-sub">PII / sensitive term</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Scout / Advisor Split</div>
+    <div class="kpi-value kpi-purple" id="kpiSplit">--%</div>
+    <div class="kpi-sub" id="kpiSplitSub">-- scout · -- advisor</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Active Agents</div>
+    <div class="kpi-value kpi-cyan" id="kpiAgents">0</div>
+    <div class="kpi-sub" id="kpiAgentsSub">0 active · 0 locked</div>
+  </div>
+</div>
+
+<!-- Main body -->
+<div class="live-body">
+
+  <!-- Left -->
+  <div class="live-left">
+
+    <!-- Agent grid -->
+    <div class="agent-panel">
+      <div class="panel-label">▸ Agentlake Registry — Live Status</div>
+      <div class="agent-grid" id="agentGrid"></div>
+    </div>
+
+    <!-- Budget bars -->
+    <div class="budget-panel">
+      <div class="panel-label">▸ Department Budget Utilization</div>
+      <div class="budget-rows" id="budgetRows"></div>
+    </div>
+
+    <!-- Routing feed -->
+    <div class="routing-panel">
+      <div class="panel-label">▸ Routing Decision Feed</div>
+      <div class="routing-feed" id="routingFeed"></div>
+    </div>
+
+  </div>
+
+  <!-- Right — event stream -->
+  <div class="live-right">
+    <div class="event-stream-header">
+      <div class="panel-label" style="margin:0">▸ Governance Event Stream</div>
+      <div style="font-size:9px;color:var(--accent-green)">● STREAMING</div>
+    </div>
+    <div class="event-stream" id="eventStream"></div>
+  </div>
+
+</div>
+
+<script>
+// ── Simulation Data ───────────────────────────────────────────────────────────
+
+const AGENTS = [
+  { name: "SF-SupportBot-1",   dept: "Support",    platform: "SF" },
+  { name: "SF-SupportBot-2",   dept: "Support",    platform: "SF" },
+  { name: "SF-CaseEscalator",  dept: "Support",    platform: "SF" },
+  { name: "SF-BillingAuditor", dept: "Support",    platform: "SF" },
+  { name: "SF-SalesEnrich-1",  dept: "Sales",      platform: "SF" },
+  { name: "SF-SalesEnrich-2",  dept: "Sales",      platform: "SF" },
+  { name: "SF-OpportunityBot", dept: "Sales",      platform: "SF" },
+  { name: "SF-MarketingMailer",dept: "Marketing",  platform: "SF" },
+  { name: "SF-CampaignBot",    dept: "Marketing",  platform: "SF" },
+  { name: "SF-OpsLogger",      dept: "Operations", platform: "SF" },
+  { name: "SF-ComplianceBot",  dept: "Operations", platform: "SF" },
+  { name: "SN-IncidentRouter", dept: "Operations", platform: "SN" },
+];
+
+const BUDGETS = [
+  { dept: "Support",    cap: 8000,  spend: 5842.10, throttled: false },
+  { dept: "Sales",      cap: 12000, spend: 4218.60, throttled: false },
+  { dept: "Marketing",  cap: 6000,  spend: 6104.80, throttled: true  },
+  { dept: "Operations", cap: 4000,  spend: 1289.40, throttled: false },
+];
+
+const ROUTINE_PAYLOADS = [
+  "Customer requesting account email update",
+  "Booking reference change — TRP-8821",
+  "Meal preference update for upcoming flight",
+  "Baggage allowance inquiry — economy class",
+  "Cancel reservation — booking TRP-4421",
+  "Address update for corporate account",
+  "Invoice copy request — Q2 billing",
+  "Password reset assistance",
+  "Loyalty points balance inquiry",
+  "Flight status update request",
+];
+
+const COMPLEX_PAYLOADS = [
+  "SLA breach — 4 hours downtime, 2,000 users affected. Board report required.",
+  "Enterprise contract review — NDA amendment before Thursday board meeting",
+  "GDPR right-to-erasure request — 847 EU customer records within 72-hour window",
+  "Breach of contract claim — $340K damages, legal team engaged",
+  "HIPAA compliance audit — health data migration review required",
+  "Class action filing — 340 clients, legal discovery of all AI interaction logs",
+  "Wrongful termination complaint — HR escalation with legal counsel retained",
+  "Regulatory audit — SEC subpoena received, Q1-Q3 records must be preserved",
+];
+
+const BLOCKED_PAYLOADS = [
+  { text: "SSN detected: 472-88-3910", term: "social security", category: "hipaa" },
+  { text: "Credit card 4532-1234-5678-9012 CVV 412", term: "credit card", category: "financial" },
+  { text: "Bank account 987654321 routing 021000021", term: "bank account", category: "financial" },
+  { text: "Passport number A12345678 for identity verification", term: "passport number", category: "hipaa" },
+  { text: "Patient diagnosis: F32.9 — medical record MRN-447291", term: "diagnosis code", category: "hipaa" },
+  { text: "My social is 3 1 8 5 5 7 2 2 4 date of birth november 3 1979", term: "my social", category: "hipaa" },
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let state = {
+  calls:       42000,
+  callsToday:  120,
+  tokens:      53853729,
+  tokensToday: 84200,
+  spend:       2.84,
+  spendMonth:  17454.90,
+  blocked:     47,
+  scoutCalls:  27844,
+  advisorCalls:14156,
+  agentStatuses: AGENTS.map(() => "idle"),
+  budgets:     BUDGETS.map(b => ({ ...b })),
+  eventCount:  0,
+};
+
+let tickCount = 0;
+let lastBlockedAt = -20;
+let lastCollisionAt = -30;
+let lastComplexAt = -5;
+
+// ── Render Functions ──────────────────────────────────────────────────────────
+
+function renderAgents() {
+  const grid = document.getElementById("agentGrid");
+  grid.innerHTML = AGENTS.map((a, i) => {
+    const st = state.agentStatuses[i];
+    return `
+      <div class="agent-card ${st}" id="agent-${i}">
+        <div class="agent-name">${a.name}</div>
+        <div class="agent-dept">${a.dept}</div>
+        <div class="agent-status status-${st}">${st.toUpperCase()}</div>
+      </div>`;
+  }).join("");
+}
+
+function renderBudgets() {
+  const rows = document.getElementById("budgetRows");
+  rows.innerHTML = state.budgets.map(b => {
+    const pct = Math.min((b.spend / b.cap) * 100, 100);
+    const barColor = pct >= 100 ? "bar-red" : pct >= 80 ? "bar-yellow" : "bar-green";
+    const tag = b.throttled ? `<span class="budget-tag">THROTTLED</span>` : "";
+    return `
+      <div class="budget-row">
+        <div class="budget-row-header">
+          <span class="budget-dept">${b.dept} ${tag}</span>
+          <span class="budget-nums">$${b.spend.toFixed(2)} / $${b.cap.toLocaleString()} (${pct.toFixed(1)}%)</span>
+        </div>
+        <div class="budget-bar-bg">
+          <div class="budget-bar-fill ${barColor}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function updateKPIs() {
+  document.getElementById("kpiCalls").textContent = state.calls.toLocaleString();
+  document.getElementById("kpiCallsSub").textContent = `${state.callsToday} today`;
+  document.getElementById("kpiTokens").textContent = state.tokens.toLocaleString();
+  document.getElementById("kpiTokensSub").textContent = `est. $${(state.tokens * 0.00000015).toFixed(4)} saved`;
+  document.getElementById("kpiSpend").textContent = `$${state.spend.toFixed(4)}`;
+  document.getElementById("kpiSpendSub").textContent = `$${state.spendMonth.toFixed(2)} this month`;
+  document.getElementById("kpiBlocked").textContent = state.blocked;
+  const scoutPct = Math.round((state.scoutCalls / (state.scoutCalls + state.advisorCalls)) * 100);
+  document.getElementById("kpiSplit").textContent = `${scoutPct}%`;
+  document.getElementById("kpiSplitSub").textContent = `${state.scoutCalls.toLocaleString()} scout · ${state.advisorCalls.toLocaleString()} advisor`;
+  const active = state.agentStatuses.filter(s => s === "active").length;
+  const locked = state.agentStatuses.filter(s => s === "locked").length;
+  document.getElementById("kpiAgents").textContent = active + locked;
+  document.getElementById("kpiAgentsSub").textContent = `${active} active · ${locked} locked`;
+}
+
+function addRoutingRow(agent, dept, tier, tokens, cost, detail) {
+  const feed = document.getElementById("routingFeed");
+  const tierClass = tier === "Scout" ? "scout" : tier === "Advisor" || tier === "Strategist" ? "advisor" : tier === "BLOCKED" ? "blocked" : "throttled";
+  const row = document.createElement("div");
+  row.className = "routing-event";
+  row.innerHTML = `
+    <span class="ev-time">${nowTime()}</span>
+    <span class="ev-agent">${agent}</span>
+    <span class="ev-dept">${dept}</span>
+    <span class="ev-tier ${tierClass}">${tier}</span>
+    <span class="ev-detail">${detail}</span>`;
+  feed.prepend(row);
+  // Keep only last 20 rows
+  while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+}
+
+function addStreamEvent(type, title, body, meta) {
+  const stream = document.getElementById("eventStream");
+  const colors = {
+    routine:   "var(--accent-blue)",
+    complex:   "var(--accent-purple)",
+    blocked:   "var(--accent-red)",
+    throttled: "var(--accent-yellow)",
+    collision: "var(--accent-yellow)",
+    pruning:   "var(--accent-green)",
+  };
+  const el = document.createElement("div");
+  el.className = `stream-event type-${type}`;
+  el.innerHTML = `
+    <div class="se-header">
+      <span class="se-type" style="color:${colors[type]}">${title}</span>
+      <span class="se-time">${nowTime()}</span>
+    </div>
+    <div class="se-body">${body}</div>
+    ${meta ? `<div class="se-meta">${meta}</div>` : ""}`;
+  stream.prepend(el);
+  while (stream.children.length > 40) stream.removeChild(stream.lastChild);
+}
+
+// ── Flash effect ──────────────────────────────────────────────────────────────
+
+function flash(color) {
+  const el = document.getElementById("flashOverlay");
+  el.className = `flash-overlay ${color}`;
+  el.style.opacity = "1";
+  setTimeout(() => { el.style.opacity = "0"; }, 300);
+}
+
+function showPruningTicker(saved) {
+  const el = document.getElementById("pruningTicker");
+  el.textContent = `▼ Pruning: ${saved.toLocaleString()} tokens stripped`;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+// ── Simulation Tick ───────────────────────────────────────────────────────────
+
+function tick() {
+  tickCount++;
+  const now = tickCount;
+
+  // Pick a random agent to go active
+  const agentIdx = Math.floor(Math.random() * AGENTS.length);
+  const agent = AGENTS[agentIdx];
+
+  // Decide event type
+  let eventType;
+  const rand = Math.random();
+
+  const canBlock     = (now - lastBlockedAt) >= 18;
+  const canCollision = (now - lastCollisionAt) >= 25;
+  const canComplex   = (now - lastComplexAt) >= 4;
+
+  if (canBlock && rand < 0.08) {
+    eventType = "blocked";
+    lastBlockedAt = now;
+  } else if (canCollision && rand < 0.04) {
+    eventType = "collision";
+    lastCollisionAt = now;
+  } else if (agent.dept === "Marketing" && state.budgets[2].throttled) {
+    eventType = "throttled";
+  } else if (canComplex && rand < 0.28) {
+    eventType = "complex";
+    lastComplexAt = now;
+  } else if (rand < 0.12) {
+    eventType = "pruning";
+  } else {
+    eventType = "routine";
+  }
+
+  // ── Execute event ──────────────────────────────────────────────────────────
+
+  if (eventType === "blocked") {
+    const b = BLOCKED_PAYLOADS[Math.floor(Math.random() * BLOCKED_PAYLOADS.length)];
+    state.agentStatuses[agentIdx] = "idle";
+    state.blocked++;
+    flash("red");
+    addRoutingRow(agent.name, agent.dept, "BLOCKED", 0, "$0.000000", `${b.term} detected`);
+    addStreamEvent("blocked",
+      "🛡 REQUEST BLOCKED",
+      `"${b.text.slice(0, 60)}"`,
+      `Term: "${b.term}" · Category: ${b.category} · No tokens consumed`
+    );
+
+  } else if (eventType === "collision") {
+    const idx2 = (agentIdx + 3) % AGENTS.length;
+    const agent2 = AGENTS[idx2];
+    state.agentStatuses[agentIdx] = "locked";
+    state.agentStatuses[idx2] = "locked";
+    flash("yellow");
+    addStreamEvent("collision",
+      "⚡ CONCURRENCY LOCK",
+      `${agent.name} + ${agent2.name} targeting same record simultaneously`,
+      `Dept: ${agent.dept} · Traffic Cop locked both agents · Supervisor action required`
+    );
+    // Auto-release after 8 seconds
+    setTimeout(() => {
+      state.agentStatuses[agentIdx] = "idle";
+      state.agentStatuses[idx2] = "idle";
+      renderAgents();
+      updateKPIs();
+    }, 8000);
+
+  } else if (eventType === "throttled") {
+    const tokens  = 800 + Math.floor(Math.random() * 800);
+    const cost    = parseFloat(((tokens * 0.0000005) + (200 * 0.0000015)).toFixed(6));
+    state.agentStatuses[agentIdx] = "active";
+    state.calls++; state.callsToday++;
+    state.scoutCalls++;
+    state.spend     = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
+    addRoutingRow(agent.name, agent.dept, "THROTTLED", tokens, cost, `Downgraded — budget cap enforced`);
+    setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
+
+  } else if (eventType === "complex") {
+    const payload = COMPLEX_PAYLOADS[Math.floor(Math.random() * COMPLEX_PAYLOADS.length)];
+    const tokens  = 8000 + Math.floor(Math.random() * 8000);
+    const out     = 2000 + Math.floor(Math.random() * 3000);
+    const cost    = parseFloat(((tokens * 0.000003) + (out * 0.000015)).toFixed(6));
+    const tier    = Math.random() < 0.7 ? "Advisor" : "Strategist";
+    state.agentStatuses[agentIdx] = "active";
+    state.calls++; state.callsToday++;
+    state.advisorCalls++;
+    state.spend     = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
+    addRoutingRow(agent.name, agent.dept, tier, tokens, cost, payload.slice(0, 45) + "...");
+    addStreamEvent("complex",
+      `◈ ${tier.toUpperCase()} MODEL INVOKED`,
+      payload,
+      `${tokens.toLocaleString()} tokens · $${cost.toFixed(6)} · ${agent.dept}`
+    );
+    setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 3000);
+
+  } else if (eventType === "pruning") {
+    const payload = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
+    const saved   = 400 + Math.floor(Math.random() * 1800);
+    const tokens  = 1200 + Math.floor(Math.random() * 1200);
+    const cost    = parseFloat(((tokens * 0.0000008) + (300 * 0.0000040)).toFixed(6));
+    state.agentStatuses[agentIdx] = "active";
+    state.calls++; state.callsToday++;
+    state.scoutCalls++;
+    state.tokens     += saved;
+    state.tokensToday += saved;
+    state.spend     = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
+    flash("green");
+    showPruningTicker(saved);
+    addRoutingRow(agent.name, agent.dept, "Scout", tokens, cost, payload);
+    addStreamEvent("pruning",
+      `▼ PRUNING: ${saved.toLocaleString()} tokens stripped`,
+      payload,
+      `Raw → Clean · Est. $${(saved * 0.00000015).toFixed(6)} saved · Scout model`
+    );
+    setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
+
+  } else {
+    // routine
+    const payload = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
+    const tokens  = 600 + Math.floor(Math.random() * 1000);
+    const cost    = parseFloat(((tokens * 0.0000008) + (200 * 0.0000040)).toFixed(6));
+    state.agentStatuses[agentIdx] = "active";
+    state.calls++; state.callsToday++;
+    state.scoutCalls++;
+    state.spend     = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
+    addRoutingRow(agent.name, agent.dept, "Scout", tokens, cost, payload);
+    setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 1500);
+  }
+
+  renderAgents();
+  renderBudgets();
+  updateKPIs();
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+
+function nowTime() {
+  return new Date().toLocaleTimeString("en-US", { hour12: false });
+}
+
+function updateClock() {
+  document.getElementById("liveClock").textContent = nowTime();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+function init() {
+  renderAgents();
+  renderBudgets();
+  updateKPIs();
+
+  // Seed the feed with some initial events
+  addStreamEvent("routine", "◈ SYSTEM ONLINE", "FAGE Live Operations Center initialized", "All agents registered · Budget monitors active · PII scanner armed");
+  addRoutingRow("SF-SupportBot-1", "Support", "Scout", 840, 0.000792, "Account update — routine");
+  addRoutingRow("SF-SalesEnrich-1", "Sales", "Advisor", 9200, 0.032400, "NDA review before board meeting...");
+  addRoutingRow("SF-OpsLogger", "Operations", "Scout", 1100, 0.001480, "Incident log entry");
+
+  // Main tick — new event every 2.5 seconds
+  setInterval(tick, 2500);
+  // Clock every second
+  setInterval(updateClock, 1000);
+  updateClock();
+}
+
+init();
+</script>
+</body>
+</html>
