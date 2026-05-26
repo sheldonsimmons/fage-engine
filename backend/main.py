@@ -219,6 +219,10 @@ app.include_router(routes_routing_config.router, prefix="/api/routing-config", t
 from api import routes_timeseries
 app.include_router(routes_timeseries.router, prefix="/api/timeseries", tags=["Timeseries"])
 
+# Platform Context Enrichment — FAGE fetches full case context directly from CRM APIs
+from api import routes_enrich
+app.include_router(routes_enrich.router, prefix="/api/enrich", tags=["Enrichment"])
+
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])
 def populate_demo_data():

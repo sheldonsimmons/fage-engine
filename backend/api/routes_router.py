@@ -30,6 +30,7 @@ class RouteRequest(BaseModel):
     agent_name:             Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
     source_platform:        Optional[str] = None   # e.g. "Salesforce" — inferred from agent name if omitted
     voice_guard_processed:  bool = False           # True = Voice Guard already redacted PII numbers, skip PII keyword block
+    min_tokens:             int  = 20              # Skip routing if pruned payload is below this token count (catches empty Salesforce on-create fires)
 
 
 class RouteResponse(BaseModel):
@@ -67,6 +68,33 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       5. Simulate model call + calculate real cost
       6. Record transaction and update department spend in the DB
     """
+    # ── Minimum payload check ─────────────────────────────────────────────────
+    # Salesforce Flows often fire on record create before the description is filled in.
+    # Prune first to get an accurate token count, then skip if it's too short.
+    from core.pruner import prune as _prune, estimate_tokens as _est
+    _quick_text = _prune(req.text)["cleaned_text"] if req.auto_prune else req.text
+    if _est(_quick_text) < req.min_tokens:
+        return RouteResponse(
+            department               = req.department,
+            complexity               = "SKIPPED",
+            routing_decision         = "SKIPPED",
+            routing_reason           = f"Payload too short after pruning ({_est(_quick_text)} tokens < {req.min_tokens} minimum) — likely an empty on-create trigger. No AI call made.",
+            matched_keywords         = [],
+            model_tier               = "none",
+            model_name               = "none",
+            input_tokens             = 0,
+            output_tokens            = 0,
+            cost_usd                 = 0.0,
+            simulated_response       = "",
+            was_pruned               = req.auto_prune,
+            tokens_saved_by_pruning  = 0,
+            pruning_cost_saved_usd   = 0.0,
+            total_cost_without_pruning = 0.0,
+            budget_used_pct          = 0.0,
+            budget_remaining_usd     = 0.0,
+            was_throttled            = False,
+        )
+
     # Check throttle status from the department budget table
     budget       = db.query(DepartmentBudget).filter_by(department=req.department).first()
     is_throttled = budget.throttled if budget else False

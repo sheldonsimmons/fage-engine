@@ -160,6 +160,13 @@ function addDepartment() {
 function removeDept(index) {
   if (departments.length <= 1) return;
   departments.splice(index, 1);
+  // Redistribute total budget evenly across remaining departments
+  const total = parseFloat(document.getElementById("totalBudget").value) || 0;
+  if (total > 0 && departments.length > 0) {
+    const perDept = Math.floor(total / departments.length);
+    const remainder = total - perDept * departments.length;
+    departments.forEach((d, i) => { d.cap = perDept + (i === 0 ? remainder : 0); });
+  }
   renderDeptList();
 }
 
@@ -257,9 +264,29 @@ function selectLaunchPlatform(platform) {
 function goToPlatformScreen() {
   goToScreen(5);
   if (selectedLaunchPlatform) {
-    // Pre-select the platform on screen 5
+    // Hide tile grid — platform already chosen on Screen 4
+    const grid = document.querySelector("#screen-5 .ob-provider-grid");
+    if (grid) grid.style.display = "none";
+    document.getElementById("obPlatBackOnly").style.display = "none";
+    // Pre-fill and auto-generate code
     selectObPlatform(selectedLaunchPlatform);
+    // Auto-pick first department from user's setup
+    const userDepts = departments.filter(d => d.name.trim());
+    if (userDepts.length > 0) {
+      document.getElementById("obPlatDept").value = userDepts[0].name;
+    }
+    generateObCode();
   }
+}
+
+function resetObPlatformScreen() {
+  // Restore tile grid visibility for next visit
+  const grid = document.querySelector("#screen-5 .ob-provider-grid");
+  if (grid) grid.style.display = "";
+  document.getElementById("obPlatConfig").style.display  = "none";
+  document.getElementById("obPlatBackOnly").style.display = "";
+  document.getElementById("obPlatOutput").style.display  = "none";
+  selectedLaunchPlatform = null;
 }
 
 // ── Platform Integration (Screen 5) ──────────────────────────────────────────
