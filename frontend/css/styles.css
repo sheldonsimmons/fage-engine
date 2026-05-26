@@ -55,7 +55,8 @@ body {
 .dashboard { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 
 /* ── KPI Row ────────────────────────────────────────────────────────────────── */
-.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.kpi-row-compact { gap: 12px; }
 
 .kpi-card {
   background: var(--bg-panel);
@@ -65,24 +66,31 @@ body {
 }
 .kpi-card.alert { border-color: var(--accent-red); }
 
-.kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 8px; }
+/* Compact card — matches live screen style */
+.kpi-card-sm {
+  padding: 14px 18px !important;
+}
+.kpi-card-sm .kpi-value { font-size: 26px !important; }
+
+.kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
 .kpi-value { font-size: 32px; font-weight: 700; color: var(--accent); line-height: 1; }
 .kpi-card.alert .kpi-value { color: var(--accent-red); }
-.kpi-sub   { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.kpi-sub   { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
 
 /* ── Stat Bar ────────────────────────────────────────────────────────────────── */
 .stat-bar {
   display: flex; align-items: center; gap: 0;
   background: var(--bg-panel); border: 1px solid var(--border);
-  border-radius: 8px; padding: 12px 24px; flex-wrap: wrap;
+  border-radius: 8px; padding: 10px 20px; flex-wrap: wrap;
 }
-.stat-item    { display: flex; flex-direction: column; align-items: center; padding: 0 20px; gap: 4px; }
+.stat-bar-compact { padding: 10px 20px; }
+.stat-item    { display: flex; flex-direction: column; align-items: center; padding: 0 16px; gap: 3px; }
 .stat-label   { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-.stat-val     { font-size: 18px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
+.stat-val     { font-size: 16px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
 .stat-val.micro    { color: var(--accent); }
 .stat-val.flagship { color: var(--accent-purple); }
 .stat-val.green    { color: var(--accent-green); }
-.stat-divider { width: 1px; height: 32px; background: var(--border); }
+.stat-divider { width: 1px; height: 28px; background: var(--border); }
 
 /* ── Mid Row ─────────────────────────────────────────────────────────────────── */
 .mid-row { display: grid; grid-template-columns: 1fr 1.6fr; gap: 20px; }

@@ -41,31 +41,32 @@
   <main class="dashboard">
 
     <!-- Row 1: KPI Cards -->
-    <section class="kpi-row">
-      <div class="kpi-card">
+    <!-- KPI Row 1: 4 summary cards -->
+    <section class="kpi-row kpi-row-compact">
+      <div class="kpi-card kpi-card-sm">
         <div class="kpi-label">Total Spend Today <span class="help-icon" data-help="kpiSpend" onclick="showHelp('kpiSpend')">?</span></div>
-        <div class="kpi-value" id="kpiSpend">—</div>
+        <div class="kpi-value" style="color:var(--accent-yellow)" id="kpiSpend">—</div>
         <div class="kpi-sub" id="kpiSpendSub">across all departments</div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card kpi-card-sm">
         <div class="kpi-label">Tokens Saved (Pruning) <span class="help-icon" data-help="kpiTokensSaved" onclick="showHelp('kpiTokensSaved')">?</span></div>
-        <div class="kpi-value" id="kpiTokensSaved">—</div>
+        <div class="kpi-value" style="color:var(--accent-green)" id="kpiTokensSaved">—</div>
         <div class="kpi-sub" id="kpiTokensSub">via context sweeper</div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card kpi-card-sm">
         <div class="kpi-label">Active Agents <span class="help-icon" data-help="kpiAgents" onclick="showHelp('kpiAgents')">?</span></div>
         <div class="kpi-value" id="kpiAgents">—</div>
         <div class="kpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
       </div>
-      <div class="kpi-card alert" id="kpiThrottleCard">
+      <div class="kpi-card kpi-card-sm alert" id="kpiThrottleCard">
         <div class="kpi-label">Throttled Departments <span class="help-icon" data-help="kpiThrottled" onclick="showHelp('kpiThrottled')">?</span></div>
         <div class="kpi-value" id="kpiThrottled">—</div>
         <div class="kpi-sub" id="kpiThrottleSub">at or over budget cap</div>
       </div>
     </section>
 
-    <!-- Row 1b: Routing + Spend stat bar -->
-    <section class="stat-bar" id="statBar">
+    <!-- KPI Row 2: Routing + Spend stat strip -->
+    <section class="stat-bar stat-bar-compact" id="statBar">
       <div class="stat-item">
         <span class="stat-label">Total Calls</span>
         <span class="stat-val" id="statTotalCalls">—</span>
