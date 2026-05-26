@@ -194,6 +194,48 @@ def populate_enterprise():
 
     print(f"   → {total_inserted:,} transactions inserted across 3 adoption phases")
 
+    # ── Today's transactions — always included so spend_today is non-zero ─────
+    print("Inserting today's transactions...")
+    today_data = [
+        ("Support",    agents[0].id, "flagship", 12400, 3200, True,  1840, "COMPLEX"),
+        ("Support",    agents[1].id, "micro",     1800,  420, True,   640, "ROUTINE"),
+        ("Support",    agents[2].id, "flagship",  9800, 2600, True,  2100, "COMPLEX"),
+        ("Sales",      agents[4].id, "flagship", 14200, 3800, True,  2240, "COMPLEX"),
+        ("Sales",      agents[5].id, "micro",     2100,  580, True,   720, "ROUTINE"),
+        ("Sales",      agents[6].id, "flagship", 11600, 3100, True,  1980, "COMPLEX"),
+        ("Marketing",  agents[7].id, "micro",     1600,  380, True,   510, "THROTTLED"),
+        ("Marketing",  agents[8].id, "micro",     1900,  440, True,   590, "THROTTLED"),
+        ("Operations", agents[9].id, "flagship",  8400, 2200, True,  1640, "COMPLEX"),
+        ("Operations", agents[10].id,"micro",     1400,  320, False,    0, "ROUTINE"),
+        ("Support",    agents[0].id, "micro",     2200,  510, True,   780, "ROUTINE"),
+        ("Sales",      agents[4].id, "micro",     1700,  390, True,   430, "ROUTINE"),
+    ]
+    today_batch = []
+    for dept, agent_id, tier, inp, out, pruned, saved, reason in today_data:
+        if tier == "flagship":
+            cost = round((inp * FLAGSHIP_IN) + (out * FLAGSHIP_OUT), 6)
+        else:
+            cost = round((inp * MICRO_IN) + (out * MICRO_OUT), 6)
+        hour   = random.randint(6, 14)
+        minute = random.randint(0, 59)
+        ts     = today + timedelta(hours=hour, minutes=minute)
+        today_batch.append(models.TokenTransaction(
+            department     = dept,
+            agent_id       = agent_id,
+            model_tier     = tier,
+            input_tokens   = inp,
+            output_tokens  = out,
+            cost_usd       = cost,
+            routing_reason = reason,
+            was_pruned     = pruned,
+            tokens_saved   = saved,
+            timestamp      = ts,
+        ))
+    db.add_all(today_batch)
+    db.commit()
+    total_inserted += len(today_batch)
+    print(f"   → {len(today_batch)} transactions inserted for today")
+
     # ── 40 audit events spread across the year ────────────────────────────────
     print("Building enterprise audit events (spread across 365 days)...")
 
