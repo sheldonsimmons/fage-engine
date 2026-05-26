@@ -214,6 +214,49 @@ body {
 }
 .blocked-banner-btn:hover { opacity: 0.85; }
 
+/* ── Agent Card Grid (live status view in registry panel) ────────────────────── */
+.agent-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.agent-status-card {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
+  cursor: default;
+}
+.agent-status-card.status-active {
+  border-color: var(--accent-green);
+  background: #0a1a0f;
+  box-shadow: 0 0 10px rgba(63,185,80,0.14);
+}
+.agent-status-card.status-locked {
+  border-color: var(--accent-red);
+  background: #1a0505;
+  box-shadow: 0 0 10px rgba(248,81,73,0.14);
+  animation: card-lock-pulse 0.8s ease infinite alternate;
+}
+.agent-status-card.status-queued {
+  border-color: var(--accent-yellow);
+  background: #1a1205;
+}
+@keyframes card-lock-pulse {
+  from { box-shadow: 0 0 6px rgba(248,81,73,0.14); }
+  to   { box-shadow: 0 0 18px rgba(248,81,73,0.38); }
+}
+.asc-name { font-size: 11px; font-weight: 700; color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asc-dept { font-size: 10px; color: var(--text-muted); }
+.asc-platform { font-size: 10px; font-weight: 600; }
+.asc-last { font-size: 9px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
+
 /* ── Audit Log ───────────────────────────────────────────────────────────────── */
 .audit-row:hover td { background: #1c2128; }
 

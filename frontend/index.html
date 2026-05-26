@@ -126,10 +126,10 @@
         <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span>Department Budgets &amp; Agent Registry <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation(); showHelp('budgetPanel')">?</span></span>
         <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto;padding-left:12px" id="midRowSummary"></span>
-        <span class="panel-chevron" id="midRowChevron">▸</span>
+        <span class="panel-chevron" id="midRowChevron">▾</span>
       </h2>
     </section>
-    <div id="midRowBody" style="display:none">
+    <div id="midRowBody" style="display:block">
     <section class="mid-row">
 
       <div class="panel" id="budgetPanel">
@@ -140,8 +140,11 @@
       </div>
 
       <div class="panel" id="agentPanel">
-        <div class="agent-panel-header">
-          <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
+        <!-- Agent card grid — real-time status view -->
+        <div id="agentCardGrid" class="agent-card-grid"></div>
+
+        <div class="agent-panel-header" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <h2 class="panel-title" style="margin-bottom:8px">Agent Details <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
           <div class="agent-filters">
             <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
               <option value="">All Platforms</option>
@@ -639,9 +642,9 @@
           <button class="export-btn" onclick="exportAuditCsv()" title="Export as CSV">⬇ CSV</button>
           <button class="export-btn" onclick="exportAuditPdf()" title="Print / Save as PDF">🖨 PDF</button>
         </span>
-        <span class="panel-chevron" id="auditChevron">▸</span>
+        <span class="panel-chevron" id="auditChevron">▾</span>
       </h2>
-      <div id="auditBody" style="display:none">
+      <div id="auditBody" style="display:block">
       <table class="audit-table">
         <thead>
           <tr>

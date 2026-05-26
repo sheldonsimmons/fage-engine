@@ -215,6 +215,7 @@ async function loadAgents() {
   try {
     const agents = await apiGet("/api/agents");
     _allAgents = agents;
+    renderAgentCards(agents);
     renderAgentTable(agents);
     updateKpiAgents(agents);
     populateDeptFilter(agents);
@@ -222,6 +223,47 @@ async function loadAgents() {
     document.getElementById("agentTableBody").innerHTML =
       `<tr><td colspan="8" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
   }
+}
+
+/** Render live-status agent cards (the visual grid at the top of the registry) */
+function renderAgentCards(agents) {
+  const grid = document.getElementById("agentCardGrid");
+  if (!grid) return;
+
+  if (!agents.length) {
+    grid.innerHTML = '<p class="placeholder" style="font-size:12px">No agents registered yet.</p>';
+    return;
+  }
+
+  const platformColor = p =>
+    p === "Salesforce"  ? "var(--accent)" :
+    p === "ServiceNow"  ? "var(--accent-green)" :
+    p === "HubSpot"     ? "var(--accent-yellow)" :
+    "var(--text-muted)";
+
+  const badgeClass = s =>
+    s === "active" ? "badge-active" :
+    s === "locked" ? "badge-critical" :
+    s === "queued" ? "badge-locked"  :
+    "badge-idle";
+
+  const fmtLast = iso => iso
+    ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "Never";
+
+  grid.innerHTML = agents.map(a => {
+    const platform = a.source_platform || "Custom";
+    return `
+      <div class="agent-status-card status-${a.status}" title="Click row below to manage">
+        <div class="asc-name">${a.name}</div>
+        <div class="asc-dept">${a.department}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
+          <span class="asc-platform" style="color:${platformColor(platform)}">${platform}</span>
+          <span class="badge ${badgeClass(a.status)}" style="font-size:9px;padding:1px 6px">${a.status.toUpperCase()}</span>
+        </div>
+        <div class="asc-last">${fmtLast(a.last_used_at)}</div>
+      </div>`;
+  }).join("");
 }
 
 function populateDeptFilter(agents) {
