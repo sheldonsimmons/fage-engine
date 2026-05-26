@@ -115,6 +115,7 @@
   <div class="header-nav" style="gap:10px;align-items:center">
     <span class="sandbox-badge">⚗ Sandbox</span>
     <a href="/" class="header-nav-link">← Dashboard</a>
+    <a href="/policy.html" class="header-nav-link">⚖ Policy &amp; Rules</a>
     <a href="/live.html" class="header-nav-link" style="color:var(--accent-green)">● Live Ops</a>
   </div>
 </header>
@@ -169,7 +170,19 @@
         <textarea id="sb-vg-input" class="sb-textarea" rows="6"
           placeholder="Paste a transcript — e.g. 'My social security number is 123-45-6789 and my card ending in 4532...'"></textarea>
       </div>
+      <!-- Live mic preview -->
+      <div id="sb-vg-live-preview" style="display:none;background:var(--bg-base);border:1px solid var(--accent-red);
+        border-radius:6px;padding:8px 12px;font-size:12px;color:var(--text-muted);font-style:italic;
+        min-height:32px;margin-bottom:6px;line-height:1.5">
+        <span id="sb-vg-live-text">Listening...</span>
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button id="sb-vg-mic-btn" onclick="sbToggleMic()"
+          style="background:var(--bg-panel);color:var(--accent-red);border:1px solid var(--accent-red);
+            border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;
+            display:flex;align-items:center;gap:5px">
+          🎙 Speak
+        </button>
         <button class="sb-btn-primary" onclick="sbRunVoiceGuard()">▶ Scan for PII</button>
         <button class="sb-btn-secondary" onclick="sbLoadVgExample()">Load Example</button>
         <span id="sb-vg-status" style="font-size:11px;color:var(--text-muted)"></span>

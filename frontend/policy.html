@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Policy &amp; Rules</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+      transition: color 0.15s, border-color 0.15s; }
+    .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
+    .header-nav-link.active { color: var(--accent); border-color: var(--accent); }
+
+    /* Two-column layout */
+    .policy-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      height: calc(100vh - 57px);
+      overflow: hidden;
+    }
+    .policy-col {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .policy-col:last-child { border-right: none; }
+
+    .policy-col-header {
+      padding: 18px 24px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .policy-col-title {
+      font-size: 13px; font-weight: 700; color: var(--text-primary);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .policy-col-sub {
+      font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.5;
+    }
+    .policy-col-body {
+      flex: 1; overflow-y: auto; padding: 20px 24px;
+    }
+    .policy-col-body::-webkit-scrollbar { width: 4px; }
+    .policy-col-body::-webkit-scrollbar-track { background: transparent; }
+    .policy-col-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Routing Rules styles (inline since routing_rules.js uses existing IDs) */
+    .rr-section { margin-bottom: 28px; }
+    .rr-section-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 12px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <span class="header-title">FAGE</span>
+    <span class="header-sub">Policy &amp; Rules</span>
+  </div>
+  <div class="header-nav">
+    <a href="/" class="header-nav-link">← Dashboard</a>
+    <a href="/policy.html" class="header-nav-link active" style="margin-left:8px">⚖ Policy &amp; Rules</a>
+    <a href="/reports.html" class="header-nav-link" style="margin-left:8px">📊 Reports</a>
+    <a href="/models.html" class="header-nav-link" style="margin-left:8px">🤖 Models</a>
+    <a href="/sandbox.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-yellow)">⚗ Sandbox</a>
+    <a href="/live.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-green)">● LIVE</a>
+  </div>
+</header>
+
+<!-- ── Two-column layout ──────────────────────────────────────────────────── -->
+<div class="policy-layout">
+
+  <!-- ── LEFT: Routing Rules ──────────────────────────────────────────────── -->
+  <div class="policy-col">
+    <div class="policy-col-header">
+      <div class="policy-col-title">
+        <span>⚡</span> Routing Rules
+        <span style="font-size:10px;font-weight:400;color:var(--text-muted);padding:2px 8px;
+          border:1px solid var(--border);border-radius:4px">Complexity Engine</span>
+      </div>
+      <div class="policy-col-sub">Controls when payloads are escalated to higher model tiers — adjust the token threshold and add or remove complexity keywords.</div>
+    </div>
+    <div class="policy-col-body">
+
+      <!-- Token Threshold -->
+      <div class="rr-section">
+        <div class="rr-section-label">Token Routing Threshold</div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">
+          Payloads that exceed this token count <em>and</em> contain a complexity keyword are escalated to the <strong>Advisor</strong> model tier. Payloads that match only one condition route to <strong>Analyst</strong>.
+        </p>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
+          <input type="range" id="rrThresholdSlider" min="150" max="2000" step="50" value="500"
+                 style="flex:1;accent-color:var(--accent-blue)" />
+          <span id="rrThresholdValue"
+            style="font-size:20px;font-weight:700;color:var(--accent-blue);min-width:44px;text-align:right;font-family:var(--font-mono)">500</span>
+          <span style="font-size:12px;color:var(--text-muted)">tokens</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:14px">
+          <span>150 — aggressive escalation</span>
+          <span>2000 — minimal escalation</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <button class="btn-primary" onclick="saveThreshold()">Save Threshold</button>
+          <span id="rrThresholdStatus" style="font-size:12px"></span>
+        </div>
+      </div>
+
+      <!-- Complexity Keywords -->
+      <div class="rr-section">
+        <div class="rr-section-label">Complexity Keywords</div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">
+          When any keyword below appears in a payload it triggers MODERATE or COMPLEX routing.
+          🔒 keywords are core compliance terms that cannot be removed.
+        </p>
+        <div id="rrKeywordList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="rrNewKeyword" class="input-field" placeholder="Add keyword…" style="max-width:220px" />
+          <button class="btn-secondary" onclick="addRoutingKeyword()">Add</button>
+        </div>
+        <div id="rrKeywordStatus" style="margin-top:8px;font-size:12px"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── RIGHT: Sensitive Term Library ────────────────────────────────────── -->
+  <div class="policy-col">
+    <div class="policy-col-header">
+      <div class="policy-col-title">
+        <span>🛡</span> Sensitive Term Library
+        <span style="font-size:10px;font-weight:400;color:var(--text-muted);padding:2px 8px;
+          border:1px solid var(--border);border-radius:4px">Compliance Guard</span>
+      </div>
+      <div class="policy-col-sub">Words or phrases that trigger special handling — block PII before it reaches any AI model, escalate legal or HR content to senior models, or flag for audit review.</div>
+    </div>
+    <div class="policy-col-body">
+
+      <!-- Add term form -->
+      <div class="rr-section">
+        <div class="rr-section-label">Add Term</div>
+        <div class="kw-add-form">
+          <div class="kw-add-row">
+            <div class="kw-field">
+              <label class="field-label">Term or Phrase</label>
+              <input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" />
+            </div>
+            <div class="kw-field">
+              <label class="field-label">Category</label>
+              <select id="kwCategory" class="reg-input">
+                <option value="legal">Legal</option>
+                <option value="hipaa">HIPAA / Health</option>
+                <option value="financial">Financial</option>
+                <option value="hr">HR</option>
+                <option value="custom" selected>Custom</option>
+              </select>
+            </div>
+            <div class="kw-field">
+              <label class="field-label">Action</label>
+              <select id="kwAction" class="reg-input">
+                <option value="flag">Flag — mark high-risk in audit log</option>
+                <option value="escalate" selected>Escalate — force flagship model</option>
+                <option value="block">Block — reject request entirely</option>
+              </select>
+            </div>
+            <div class="kw-field kw-field-btn">
+              <label class="field-label">&nbsp;</label>
+              <button class="btn-primary" onclick="addKeyword()">+ Add Term</button>
+            </div>
+          </div>
+          <div id="kwStatus" class="register-status" style="margin-top:6px"></div>
+        </div>
+      </div>
+
+      <!-- Term table -->
+      <div class="rr-section">
+        <div class="rr-section-label">Active Terms</div>
+        <table class="kw-table" id="kwTable">
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Category</th>
+              <th>Action</th>
+              <th>Scope</th>
+              <th>Remove</th>
+            </tr>
+          </thead>
+          <tbody id="kwTableBody">
+            <tr><td colspan="5" class="placeholder">Loading terms...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- end policy-layout -->
+
+<script src="js/api.js"></script>
+<script src="js/routing_rules.js"></script>
+<script src="js/keywords.js"></script>
+</body>
+</html>

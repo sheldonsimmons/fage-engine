@@ -22,6 +22,102 @@ function _sbUpdateStrip() {
 }
 
 
+// ── Microphone / Speech Recognition ──────────────────────────────────────────
+
+let _sbRecognition = null;
+let _sbMicActive   = false;
+let _sbFinalText   = "";
+
+function sbToggleMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const status = document.getElementById("sb-vg-status");
+  if (!SR) {
+    status.textContent = "Speech recognition not supported — use Chrome or Edge.";
+    status.style.color = "var(--accent-yellow)";
+    return;
+  }
+  if (_sbMicActive) {
+    if (_sbRecognition) _sbRecognition.stop();
+    return;
+  }
+  _sbRecognition = _sbInitSpeech();
+  if (_sbRecognition) _sbRecognition.start();
+}
+
+function _sbInitSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+
+  const rec           = new SR();
+  rec.continuous      = true;
+  rec.interimResults  = true;
+  rec.lang            = "en-US";
+  rec.maxAlternatives = 1;
+
+  rec.onstart = () => {
+    _sbMicActive = true;
+    _sbFinalText = "";
+    const btn     = document.getElementById("sb-vg-mic-btn");
+    const preview = document.getElementById("sb-vg-live-preview");
+    if (btn)     { btn.innerHTML = "⏹ Stop"; btn.style.background = "rgba(248,81,73,0.15)"; }
+    if (preview) { preview.style.display = "block"; document.getElementById("sb-vg-live-text").textContent = "Listening..."; }
+    document.getElementById("sb-vg-result").classList.remove("visible");
+    document.getElementById("sb-vg-status").textContent = "";
+    document.getElementById("sb-vg-input").value = "";
+  };
+
+  rec.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const chunk = event.results[i][0].transcript;
+      if (event.results[i].isFinal) { _sbFinalText += chunk + " "; }
+      else { interim = chunk; }
+    }
+    const liveEl = document.getElementById("sb-vg-live-text");
+    if (liveEl) {
+      liveEl.innerHTML =
+        (_sbFinalText ? `<span style="color:var(--text-primary)">${_sbFinalText}</span>` : "") +
+        (interim      ? `<span style="color:var(--text-muted);font-style:italic">${interim}</span>` : "");
+    }
+  };
+
+  rec.onerror = (event) => {
+    const status = document.getElementById("sb-vg-status");
+    status.style.color = "var(--accent-red)";
+    if (event.error === "not-allowed") {
+      status.textContent = "Microphone access denied — check browser permissions.";
+    } else if (event.error === "no-speech") {
+      status.textContent = "No speech detected. Try again.";
+    } else {
+      status.textContent = "Mic error: " + event.error;
+    }
+    _sbStopMic();
+  };
+
+  rec.onend = () => {
+    _sbStopMic();
+    const text = _sbFinalText.trim();
+    if (text) {
+      document.getElementById("sb-vg-input").value = text;
+      document.getElementById("sb-vg-status").textContent = "Transcript captured — scanning for PII...";
+      document.getElementById("sb-vg-status").style.color = "var(--text-muted)";
+      setTimeout(() => sbRunVoiceGuard(), 300);
+    }
+  };
+
+  return rec;
+}
+
+function _sbStopMic() {
+  _sbMicActive = false;
+  const btn     = document.getElementById("sb-vg-mic-btn");
+  const preview = document.getElementById("sb-vg-live-preview");
+  if (btn)     { btn.innerHTML = "🎙 Speak"; btn.style.background = "var(--bg-panel)"; }
+  if (preview) preview.style.display = "none";
+  if (_sbRecognition) { try { _sbRecognition.stop(); } catch (_) {} }
+}
+
+
 // ── Voice Guard ───────────────────────────────────────────────────────────────
 
 async function sbRunVoiceGuard() {
