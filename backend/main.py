@@ -129,7 +129,7 @@ def _seed_on_startup():
             if not exists:
                 db.add(SensitiveTerm(**t))
 
-        # ── Routing Config (single-row settings) ──────────────────────────────
+        # ── Routing Config (single-row settings — always sync keywords from config.py) ──
         import json as _json
         from database.models import RoutingConfig
         from config import COMPLEXITY_TOKEN_THRESHOLD, COMPLEXITY_KEYWORDS
@@ -140,6 +140,9 @@ def _seed_on_startup():
                 complexity_token_threshold=COMPLEXITY_TOKEN_THRESHOLD,
                 complexity_keywords_json=_json.dumps(COMPLEXITY_KEYWORDS),
             ))
+        else:
+            # Always update keywords from config.py so new keywords take effect on deploy
+            exists.complexity_keywords_json = _json.dumps(COMPLEXITY_KEYWORDS)
 
         db.commit()
     finally:

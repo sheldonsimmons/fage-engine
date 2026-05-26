@@ -160,7 +160,22 @@ def route(
       - real token counts and cost
       - cost comparison: with pruning vs. without pruning
     """
-    # Step 1 — Prune
+    # Step 1 — Check for explicit tier prefix tags BEFORE pruning
+    forced_tier = None
+    tag_map = {
+        "[scout]":      1,
+        "[analyst]":    2,
+        "[advisor]":    3,
+        "[strategist]": 4,
+    }
+    text_start = text.strip().lower()[:20]
+    for tag, tier in tag_map.items():
+        if text_start.startswith(tag):
+            forced_tier = tier
+            text = text.strip()[len(tag):].strip()  # strip tag before pruning
+            break
+
+    # Step 2 — Prune
     prune_result = None
     working_text = text
 
@@ -179,22 +194,6 @@ def route(
             _keywords  = cfg.complexity_keywords
         except Exception:
             pass  # DB unavailable — use config.py defaults
-
-    # Step 2 — Check for explicit tier prefix tags ([ANALYST], [ADVISOR], [STRATEGIST])
-    forced_tier = None
-    tag_map = {
-        "[scout]":      1,
-        "[analyst]":    2,
-        "[advisor]":    3,
-        "[strategist]": 4,
-    }
-    text_start = working_text.strip().lower()[:20]
-    for tag, tier in tag_map.items():
-        if text_start.startswith(tag):
-            forced_tier = tier
-            # Strip the tag from the text before sending to model
-            working_text = working_text.strip()[len(tag):].strip()
-            break
 
     # Step 2b — Score complexity
     complexity_result = score_complexity(working_text, threshold=_threshold, keywords=_keywords)
