@@ -42,18 +42,30 @@ def strip_html(text: str) -> str:
 
 def strip_email_headers(text: str) -> str:
     """Remove raw email header lines (From:, To:, Date:, X-Mailer:, etc.)."""
-    # Standard header fields — anywhere in the document, not just line start
-    # Strip headers whether they appear at line start OR inline (Salesforce collapses newlines)
-    header_pattern = re.compile(
-        r"(?:^|\s)(From|To|Cc|Bcc|Date|Reply-To|Message-ID|X-[\w-]+|MIME-Version|"
+    HEADER_KEYS = (
+        r"From|To|Cc|Bcc|Date|Reply-To|Message-ID|X-[\w-]+|MIME-Version|"
         r"Content-Type|Content-Transfer-Encoding|Content-Disposition|"
         r"Received|Return-Path|Delivered-To|Authentication-Results|"
         r"DKIM-Signature|ARC-[\w-]+|X-Originating-IP|X-Spam[\w-]*|"
         r"Thread-Index|Thread-Topic|In-Reply-To|References|"
-        r"Importance|Sensitivity|Auto-Submitted):[ \t][^\n]{0,300}",
-        re.IGNORECASE,
+        r"Importance|Sensitivity|Auto-Submitted"
     )
-    text = header_pattern.sub(" ", text)
+
+    # Step 1: Normalize flat text — insert newlines before header keywords
+    # Handles Salesforce collapsing the email body into a single line
+    text = re.sub(
+        r'\s+(' + HEADER_KEYS + r'):\s',
+        lambda m: '\n' + m.group(1) + ': ',
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Step 2: Strip header lines now that they start at line beginnings
+    header_pattern = re.compile(
+        r"^(" + HEADER_KEYS + r"):[ \t].*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    text = header_pattern.sub("", text)
 
     # Strip MIME boundary markers
     text = re.sub(r"--[a-zA-Z0-9_\-\.]{10,}", " ", text)
