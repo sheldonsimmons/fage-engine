@@ -75,7 +75,8 @@ PII_PATTERNS = [
         "name":     "SSN",
         "category": "pii",
         "action":   "block",
-        "pattern":  re.compile(r"\b\d{3}[-]\d{2}[-]\d{4}\b"),
+        # Matches: 452-67-8901, 452 67 8901, 452678901
+        "pattern":  re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
     },
     {
         "name":     "US Phone Number",
