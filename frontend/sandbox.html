@@ -29,12 +29,17 @@
     .session-stat-value { font-size: 18px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
     .session-stat-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 
-    /* Three-column tool layout */
-    .sandbox-content { display: grid; grid-template-columns: 1fr 1fr 1fr; flex: 1;
-      overflow: hidden; gap: 0; }
+    /* Scrollable main area */
+    .sandbox-main { flex: 1; overflow-y: auto; }
+    .sandbox-main::-webkit-scrollbar { width: 4px; }
+    .sandbox-main::-webkit-scrollbar-track { background: transparent; }
+    .sandbox-main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-    .sandbox-col { display: flex; flex-direction: column; border-right: 1px solid var(--border);
-      overflow: hidden; }
+    /* Three-column tool layout */
+    .sandbox-content { display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 0; min-height: 480px; border-bottom: 2px solid var(--border); }
+
+    .sandbox-col { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
     .sandbox-col:last-child { border-right: none; }
 
     .col-header { padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
@@ -46,12 +51,11 @@
     .badge-blue  { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid var(--accent); }
     .badge-green { background: rgba(63,185,80,0.15);  color: var(--accent-green); border: 1px solid var(--accent-green); }
     .badge-purple{ background: rgba(188,140,255,0.15);color: var(--accent-purple); border: 1px solid var(--accent-purple); }
+    .badge-orange{ background: rgba(210,153,34,0.15); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
+    .badge-red   { background: rgba(248,81,73,0.12);  color: var(--accent-red);    border: 1px solid var(--accent-red); }
 
-    .col-body { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex;
+    .col-body { flex: 1; padding: 16px 18px; display: flex;
       flex-direction: column; gap: 14px; }
-    .col-body::-webkit-scrollbar { width: 3px; }
-    .col-body::-webkit-scrollbar-track { background: transparent; }
-    .col-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
     /* Shared field styles */
     .sb-label { font-size: 10px; font-weight: 600; text-transform: uppercase;
@@ -101,6 +105,18 @@
     .sandbox-notice { background: rgba(210,153,34,0.08); border-bottom: 1px solid rgba(210,153,34,0.25);
       padding: 7px 24px; font-size: 11px; color: var(--accent-yellow); flex-shrink: 0;
       display: flex; align-items: center; gap: 8px; }
+
+    /* Two-column row for config tools */
+    .sandbox-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+    .sandbox-row2 .sandbox-col { min-height: 420px; }
+
+    /* Config tool section headers */
+    .rr-section { margin-bottom: 24px; }
+    .rr-section-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 12px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
   </style>
 </head>
 <body>
@@ -155,181 +171,303 @@
   </div>
 </div>
 
-<!-- ── Three-Column Tools ─────────────────────────────────────────────────── -->
-<div class="sandbox-content">
+<!-- ── Scrollable content area ───────────────────────────────────────────── -->
+<div class="sandbox-main">
 
-  <!-- ── Column 1: Voice Guard ──────────────────────────────────────────── -->
-  <div class="sandbox-col">
-    <div class="col-header">
-      <span class="col-title">🎙 Voice Guard — PII Redaction</span>
-      <span class="col-badge badge-green">PII Scanner</span>
-    </div>
-    <div class="col-body">
-      <div>
-        <label class="sb-label">Voice Transcript or Text</label>
-        <textarea id="sb-vg-input" class="sb-textarea" rows="6"
-          placeholder="Paste a transcript — e.g. 'My social security number is 123-45-6789 and my card ending in 4532...'"></textarea>
-      </div>
-      <!-- Live mic preview -->
-      <div id="sb-vg-live-preview" style="display:none;background:var(--bg-base);border:1px solid var(--accent-red);
-        border-radius:6px;padding:8px 12px;font-size:12px;color:var(--text-muted);font-style:italic;
-        min-height:32px;margin-bottom:6px;line-height:1.5">
-        <span id="sb-vg-live-text">Listening...</span>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button id="sb-vg-mic-btn" onclick="sbToggleMic()"
-          style="background:var(--bg-panel);color:var(--accent-red);border:1px solid var(--accent-red);
-            border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;
-            display:flex;align-items:center;gap:5px">
-          🎙 Speak
-        </button>
-        <button class="sb-btn-primary" onclick="sbRunVoiceGuard()">▶ Scan for PII</button>
-        <button class="sb-btn-secondary" onclick="sbLoadVgExample()">Load Example</button>
-        <span id="sb-vg-status" style="font-size:11px;color:var(--text-muted)"></span>
-      </div>
+  <!-- ── Row 1: Three-Column Tools ──────────────────────────────────────── -->
+  <div class="sandbox-content">
 
-      <div class="sb-result" id="sb-vg-result">
-        <div class="sb-result-title">Redaction Result</div>
-        <div class="sb-stat-row">
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">PII Found</div>
-            <div class="sb-stat-val" id="sb-vg-count" style="color:var(--accent-green)">0</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Confidence</div>
-            <div class="sb-stat-val" id="sb-vg-confidence">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Method</div>
-            <div class="sb-stat-val" id="sb-vg-method" style="font-size:11px">—</div>
-          </div>
-        </div>
-        <label class="sb-label">Clean Transcript</label>
-        <div class="sb-response-box" id="sb-vg-clean" style="max-height:160px"></div>
-        <div id="sb-vg-types" style="margin-top:10px;font-size:11px;color:var(--text-muted)"></div>
+    <!-- ── Column 1: Voice Guard ────────────────────────────────────────── -->
+    <div class="sandbox-col">
+      <div class="col-header">
+        <span class="col-title">🎙 Voice Guard — PII Redaction</span>
+        <span class="col-badge badge-green">PII Scanner</span>
       </div>
-    </div>
-  </div>
-
-  <!-- ── Column 2: Context Pruner ───────────────────────────────────────── -->
-  <div class="sandbox-col">
-    <div class="col-header">
-      <span class="col-title">✂ Context-Pruning Sweeper</span>
-      <span class="col-badge badge-blue">Token Reducer</span>
-    </div>
-    <div class="col-body">
-      <div>
-        <label class="sb-label">Raw Input Payload</label>
-        <textarea id="sb-pruner-input" class="sb-textarea" rows="6"
-          placeholder="Paste a messy email, ticket, or support log here..."></textarea>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="sb-btn-primary" onclick="sbRunPruner()">▶ Run Sweeper</button>
-        <button class="sb-btn-secondary" onclick="sbSendPrunedToRouter()">→ Send to Router</button>
-        <span id="sb-pruner-status" style="font-size:11px;color:var(--text-muted)"></span>
-      </div>
-
-      <div class="sb-result" id="sb-pruner-result">
-        <div class="sb-result-title">Pruning Result</div>
-        <div class="sb-stat-row">
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Before</div>
-            <div class="sb-stat-val" id="sb-pruner-before">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">After</div>
-            <div class="sb-stat-val" id="sb-pruner-after" style="color:var(--accent-green)">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Saved</div>
-            <div class="sb-stat-val" id="sb-pruner-saved" style="color:var(--accent-purple)">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Compression</div>
-            <div class="sb-stat-val" id="sb-pruner-pct">—</div>
-          </div>
-        </div>
-        <div id="sb-pruner-cost-line" style="font-size:11px;color:var(--text-muted);margin-bottom:8px"></div>
-        <label class="sb-label">Cleaned Output</label>
-        <div class="sb-response-box" id="sb-pruner-output" style="max-height:160px"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Column 3: Token Router ─────────────────────────────────────────── -->
-  <div class="sandbox-col">
-    <div class="col-header">
-      <span class="col-title">⚡ Token Router &amp; Model Cascader</span>
-      <span class="col-badge badge-purple">Routing Engine</span>
-    </div>
-    <div class="col-body">
-      <div>
-        <label class="sb-label">Payload to Route</label>
-        <textarea id="sb-router-input" class="sb-textarea" rows="5"
-          placeholder="Paste payload, or click '→ Send to Router' from the Pruner. Use [ANALYST], [ADVISOR], or [STRATEGIST] prefix to force a tier."></textarea>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="col-body">
         <div>
-          <label class="sb-label" style="margin-bottom:4px">Department</label>
-          <select id="sb-router-dept" class="sb-select" style="width:auto;min-width:130px">
-            <option>Support</option>
-            <option>Sales</option>
-            <option>Marketing</option>
-            <option>Operations</option>
-            <option>Trips Team</option>
-          </select>
+          <label class="sb-label">Voice Transcript or Text</label>
+          <textarea id="sb-vg-input" class="sb-textarea" rows="6"
+            placeholder="Paste a transcript — e.g. 'My social security number is 123-45-6789 and my card ending in 4532...'"></textarea>
         </div>
-        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:16px">
-          <input type="checkbox" id="sb-router-prune" checked /> Auto-prune
-        </label>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="sb-btn-primary" onclick="sbRunRouter()">▶ Route Payload</button>
-        <span id="sb-router-status" style="font-size:11px;color:var(--text-muted);align-self:center"></span>
-      </div>
+        <!-- Live mic preview -->
+        <div id="sb-vg-live-preview" style="display:none;background:var(--bg-base);border:1px solid var(--accent-red);
+          border-radius:6px;padding:8px 12px;font-size:12px;color:var(--text-muted);font-style:italic;
+          min-height:32px;margin-bottom:6px;line-height:1.5">
+          <span id="sb-vg-live-text">Listening...</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="sb-vg-mic-btn" onclick="sbToggleMic()"
+            style="background:var(--bg-panel);color:var(--accent-red);border:1px solid var(--accent-red);
+              border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;
+              display:flex;align-items:center;gap:5px">
+            🎙 Speak
+          </button>
+          <button class="sb-btn-primary" onclick="sbRunVoiceGuard()">▶ Scan for PII</button>
+          <button class="sb-btn-secondary" onclick="sbLoadVgExample()">Load Example</button>
+          <span id="sb-vg-status" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
 
-      <div class="sb-result" id="sb-router-result">
-        <div class="sb-result-title">Routing Decision</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <span class="tier-badge" id="sb-router-tier-badge"></span>
-          <span class="tier-badge" id="sb-router-decision-badge"
-            style="background:rgba(255,255,255,0.05);color:var(--text-muted);border:1px solid var(--border)"></span>
-          <span id="sb-router-sensitive-badge" style="display:none;font-size:10px;font-weight:700;
-            padding:3px 10px;border-radius:4px;background:rgba(255,100,50,0.15);
-            color:#ff6432;border:1px solid #ff6432"></span>
+        <div class="sb-result" id="sb-vg-result">
+          <div class="sb-result-title">Redaction Result</div>
+          <div class="sb-stat-row">
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">PII Found</div>
+              <div class="sb-stat-val" id="sb-vg-count" style="color:var(--accent-green)">0</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Confidence</div>
+              <div class="sb-stat-val" id="sb-vg-confidence">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Method</div>
+              <div class="sb-stat-val" id="sb-vg-method" style="font-size:11px">—</div>
+            </div>
+          </div>
+          <label class="sb-label">Clean Transcript</label>
+          <div class="sb-response-box" id="sb-vg-clean" style="max-height:160px"></div>
+          <div id="sb-vg-types" style="margin-top:10px;font-size:11px;color:var(--text-muted)"></div>
         </div>
-        <p id="sb-router-reason" style="font-size:12px;color:var(--text-muted);margin:0 0 10px;line-height:1.5"></p>
-        <div class="sb-stat-row">
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Model</div>
-            <div class="sb-stat-val" id="sb-router-model" style="font-size:11px">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Input Tokens</div>
-            <div class="sb-stat-val" id="sb-router-in">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Output Tokens</div>
-            <div class="sb-stat-val" id="sb-router-out">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Cost</div>
-            <div class="sb-stat-val" id="sb-router-cost" style="color:var(--accent-green)">—</div>
-          </div>
-          <div class="sb-stat">
-            <div class="sb-stat-lbl">Pruning Saved</div>
-            <div class="sb-stat-val" id="sb-router-saved" style="color:var(--accent-purple)">—</div>
-          </div>
-        </div>
-        <label class="sb-label" style="margin-top:4px">Model Response</label>
-        <div class="sb-response-box" id="sb-router-response"></div>
       </div>
     </div>
-  </div>
 
-</div><!-- end sandbox-content -->
+    <!-- ── Column 2: Context Pruner ─────────────────────────────────────── -->
+    <div class="sandbox-col">
+      <div class="col-header">
+        <span class="col-title">✂ Context-Pruning Sweeper</span>
+        <span class="col-badge badge-blue">Token Reducer</span>
+      </div>
+      <div class="col-body">
+        <div>
+          <label class="sb-label">Raw Input Payload</label>
+          <textarea id="sb-pruner-input" class="sb-textarea" rows="6"
+            placeholder="Paste a messy email, ticket, or support log here..."></textarea>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="sb-btn-primary" onclick="sbRunPruner()">▶ Run Sweeper</button>
+          <button class="sb-btn-secondary" onclick="sbSendPrunedToRouter()">→ Send to Router</button>
+          <span id="sb-pruner-status" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+
+        <div class="sb-result" id="sb-pruner-result">
+          <div class="sb-result-title">Pruning Result</div>
+          <div class="sb-stat-row">
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Before</div>
+              <div class="sb-stat-val" id="sb-pruner-before">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">After</div>
+              <div class="sb-stat-val" id="sb-pruner-after" style="color:var(--accent-green)">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Saved</div>
+              <div class="sb-stat-val" id="sb-pruner-saved" style="color:var(--accent-purple)">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Compression</div>
+              <div class="sb-stat-val" id="sb-pruner-pct">—</div>
+            </div>
+          </div>
+          <div id="sb-pruner-cost-line" style="font-size:11px;color:var(--text-muted);margin-bottom:8px"></div>
+          <label class="sb-label">Cleaned Output</label>
+          <div class="sb-response-box" id="sb-pruner-output" style="max-height:160px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Column 3: Token Router ───────────────────────────────────────── -->
+    <div class="sandbox-col">
+      <div class="col-header">
+        <span class="col-title">⚡ Token Router &amp; Model Cascader</span>
+        <span class="col-badge badge-purple">Routing Engine</span>
+      </div>
+      <div class="col-body">
+        <div>
+          <label class="sb-label">Payload to Route</label>
+          <textarea id="sb-router-input" class="sb-textarea" rows="5"
+            placeholder="Paste payload, or click '→ Send to Router' from the Pruner. Use [ANALYST], [ADVISOR], or [STRATEGIST] prefix to force a tier."></textarea>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div>
+            <label class="sb-label" style="margin-bottom:4px">Department</label>
+            <select id="sb-router-dept" class="sb-select" style="width:auto;min-width:130px">
+              <option>Support</option>
+              <option>Sales</option>
+              <option>Marketing</option>
+              <option>Operations</option>
+              <option>Trips Team</option>
+            </select>
+          </div>
+          <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:16px">
+            <input type="checkbox" id="sb-router-prune" checked /> Auto-prune
+          </label>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="sb-btn-primary" onclick="sbRunRouter()">▶ Route Payload</button>
+          <span id="sb-router-status" style="font-size:11px;color:var(--text-muted);align-self:center"></span>
+        </div>
+
+        <div class="sb-result" id="sb-router-result">
+          <div class="sb-result-title">Routing Decision</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <span class="tier-badge" id="sb-router-tier-badge"></span>
+            <span class="tier-badge" id="sb-router-decision-badge"
+              style="background:rgba(255,255,255,0.05);color:var(--text-muted);border:1px solid var(--border)"></span>
+            <span id="sb-router-sensitive-badge" style="display:none;font-size:10px;font-weight:700;
+              padding:3px 10px;border-radius:4px;background:rgba(255,100,50,0.15);
+              color:#ff6432;border:1px solid #ff6432"></span>
+          </div>
+          <p id="sb-router-reason" style="font-size:12px;color:var(--text-muted);margin:0 0 10px;line-height:1.5"></p>
+          <div class="sb-stat-row">
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Model</div>
+              <div class="sb-stat-val" id="sb-router-model" style="font-size:11px">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Input Tokens</div>
+              <div class="sb-stat-val" id="sb-router-in">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Output Tokens</div>
+              <div class="sb-stat-val" id="sb-router-out">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Cost</div>
+              <div class="sb-stat-val" id="sb-router-cost" style="color:var(--accent-green)">—</div>
+            </div>
+            <div class="sb-stat">
+              <div class="sb-stat-lbl">Pruning Saved</div>
+              <div class="sb-stat-val" id="sb-router-saved" style="color:var(--accent-purple)">—</div>
+            </div>
+          </div>
+          <label class="sb-label" style="margin-top:4px">Model Response</label>
+          <div class="sb-response-box" id="sb-router-response"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end sandbox-content -->
+
+  <!-- ── Row 2: Config Tools ────────────────────────────────────────────── -->
+  <div class="sandbox-row2">
+
+    <!-- ── Routing Rules ──────────────────────────────────────────────── -->
+    <div class="sandbox-col">
+      <div class="col-header">
+        <span class="col-title">⚡ Routing Rules</span>
+        <span class="col-badge badge-orange">Complexity Engine</span>
+      </div>
+      <div class="col-body">
+
+        <div class="rr-section">
+          <div class="rr-section-label">Token Routing Threshold</div>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">
+            Payloads exceeding this token count <em>and</em> containing a complexity keyword escalate to the <strong>Advisor</strong> tier.
+          </p>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
+            <input type="range" id="rrThresholdSlider" min="150" max="2000" step="50" value="500"
+                   style="flex:1;accent-color:var(--accent)" />
+            <span id="rrThresholdValue"
+              style="font-size:20px;font-weight:700;color:var(--accent);min-width:44px;text-align:right;font-family:var(--font-mono)">500</span>
+            <span style="font-size:12px;color:var(--text-muted)">tokens</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:14px">
+            <span>150 — aggressive escalation</span>
+            <span>2000 — minimal escalation</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="btn-primary" onclick="saveThreshold()">Save Threshold</button>
+            <span id="rrThresholdStatus" style="font-size:12px"></span>
+          </div>
+        </div>
+
+        <div class="rr-section">
+          <div class="rr-section-label">Complexity Keywords</div>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">
+            Any keyword below in a payload triggers MODERATE or COMPLEX routing. 🔒 keywords are protected and cannot be removed.
+          </p>
+          <div id="rrKeywordList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="rrNewKeyword" class="reg-input" placeholder="Add keyword…" style="max-width:220px" />
+            <button class="btn-secondary" onclick="addRoutingKeyword()">Add</button>
+          </div>
+          <div id="rrKeywordStatus" style="margin-top:8px;font-size:12px"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Sensitive Term Library ────────────────────────────────────── -->
+    <div class="sandbox-col">
+      <div class="col-header">
+        <span class="col-title">🛡 Sensitive Term Library</span>
+        <span class="col-badge badge-red">Compliance Guard</span>
+      </div>
+      <div class="col-body">
+
+        <div class="rr-section">
+          <div class="rr-section-label">Add Term</div>
+          <div class="kw-add-form">
+            <div class="kw-add-row">
+              <div class="kw-field">
+                <label class="field-label">Term or Phrase</label>
+                <input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" />
+              </div>
+              <div class="kw-field">
+                <label class="field-label">Category</label>
+                <select id="kwCategory" class="reg-input">
+                  <option value="legal">Legal</option>
+                  <option value="hipaa">HIPAA / Health</option>
+                  <option value="financial">Financial</option>
+                  <option value="hr">HR</option>
+                  <option value="custom" selected>Custom</option>
+                </select>
+              </div>
+              <div class="kw-field">
+                <label class="field-label">Action</label>
+                <select id="kwAction" class="reg-input">
+                  <option value="flag">Flag — mark high-risk in audit log</option>
+                  <option value="escalate" selected>Escalate — force flagship model</option>
+                  <option value="block">Block — reject request entirely</option>
+                </select>
+              </div>
+              <div class="kw-field kw-field-btn">
+                <label class="field-label">&nbsp;</label>
+                <button class="btn-primary" onclick="addKeyword()">+ Add Term</button>
+              </div>
+            </div>
+            <div id="kwStatus" class="register-status" style="margin-top:6px"></div>
+          </div>
+        </div>
+
+        <div class="rr-section">
+          <div class="rr-section-label">Active Terms</div>
+          <table class="kw-table" id="kwTable">
+            <thead>
+              <tr>
+                <th>Term</th>
+                <th>Category</th>
+                <th>Action</th>
+                <th>Scope</th>
+                <th>Remove</th>
+              </tr>
+            </thead>
+            <tbody id="kwTableBody">
+              <tr><td colspan="5" class="placeholder">Loading terms...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- end sandbox-row2 -->
+
+</div><!-- end sandbox-main -->
 
 <script src="js/api.js"></script>
 <script src="js/sandbox.js"></script>
+<script src="js/routing_rules.js"></script>
+<script src="js/keywords.js"></script>
 </body>
 </html>
