@@ -159,10 +159,10 @@ def get_voice_stats(db: Session = Depends(get_db)):
         VoiceEvent.redactions_count > 0
     ).scalar() or 0.0
 
-    # PII type breakdown (parse JSON strings)
+    # PII type breakdown (parse JSON strings — capped to last 500 to avoid full-table scan)
     all_events_with_pii = db.query(VoiceEvent.pii_types_found).filter(
         VoiceEvent.redactions_count > 0
-    ).all()
+    ).limit(500).all()
     pii_breakdown: dict = {}
     for row in all_events_with_pii:
         if row[0]:
