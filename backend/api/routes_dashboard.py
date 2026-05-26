@@ -62,35 +62,37 @@ def get_dashboard(db: Session = Depends(get_db)):
     MICRO_COST_PER_TOKEN = 0.15 / 1_000_000
     pruning_savings_usd = round(tokens_saved_total * MICRO_COST_PER_TOKEN, 6)
 
-    # ── Call counts ────────────────────────────────────────────────────────────
-    total_calls = db.query(func.count(TokenTransaction.id)).scalar() or 0
+    # ── Call counts — exclude Voice Guard prune-only records (cost=$0, no AI call) ──
+    # VOICE_GUARD_PRUNE rows exist only to record token savings; they are not AI calls.
+    IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+
+    total_calls = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL).scalar() or 0
 
     # Economy tiers: Scout (tier 1), Analyst (tier 2), and legacy "micro"
     ECONOMY_TIERS  = ("Scout", "Analyst", "micro")
     # Premium tiers: Advisor (tier 3), Strategist (tier 4), and legacy "flagship"
     PREMIUM_TIERS  = ("Advisor", "Strategist", "flagship")
 
-    from sqlalchemy import case as sa_case
     micro_calls    = db.query(func.count(TokenTransaction.id)).filter(
-        TokenTransaction.model_tier.in_(ECONOMY_TIERS)
+        IS_AI_CALL, TokenTransaction.model_tier.in_(ECONOMY_TIERS)
     ).scalar() or 0
     flagship_calls = db.query(func.count(TokenTransaction.id)).filter(
-        TokenTransaction.model_tier.in_(PREMIUM_TIERS)
+        IS_AI_CALL, TokenTransaction.model_tier.in_(PREMIUM_TIERS)
     ).scalar() or 0
 
     micro_pct    = round((micro_calls    / total_calls) * 100, 1) if total_calls else 0
     flagship_pct = round((flagship_calls / total_calls) * 100, 1) if total_calls else 0
 
     # Per-tier call counts
-    scout_calls     = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier.in_(("Scout",     "micro"))).scalar() or 0
-    analyst_calls   = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier == "Analyst").scalar() or 0
-    advisor_calls   = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier.in_(("Advisor",   "flagship"))).scalar() or 0
-    strategist_calls= db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.model_tier == "Strategist").scalar() or 0
+    scout_calls      = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier.in_(("Scout",     "micro"))).scalar() or 0
+    analyst_calls    = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier == "Analyst").scalar() or 0
+    advisor_calls    = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier.in_(("Advisor",   "flagship"))).scalar() or 0
+    strategist_calls = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier == "Strategist").scalar() or 0
 
     def _pct(n): return round((n / total_calls) * 100, 1) if total_calls else 0
 
     calls_today = db.query(func.count(TokenTransaction.id)).filter(
-        TokenTransaction.timestamp >= today_start
+        IS_AI_CALL, TokenTransaction.timestamp >= today_start
     ).scalar() or 0
 
     # ── Agent counts ───────────────────────────────────────────────────────────
