@@ -114,7 +114,16 @@ def check_terms(db: Session, text: str, department: str = None,
     """
     seed_defaults(db)
 
-    text_lower = text.lower()
+    # ── Normalize spaced-out digits before scanning ───────────────────────────
+    # People dictating numbers or typing carefully space them out:
+    # "4 5 3 2 0 1 5 1 1 2 8 3 0 3 6 6" or "4 5 2 - 6 7 - 8 9 0 1"
+    # Collapse sequences of single digits separated by spaces into a continuous number
+    # so Presidio patterns and regex can match them.
+    normalized = re.sub(r'\b(\d[\s\-]{1,2}){3,}\d\b',
+                        lambda m: re.sub(r'[\s\-]', '', m.group(0)),
+                        text)
+
+    text_lower = normalized.lower()
     priority   = {"block": 3, "escalate": 2, "flag": 1}
     matches    = []
 
@@ -146,7 +155,7 @@ def check_terms(db: Session, text: str, department: str = None,
     # Skip regex scan when Voice Guard already ran — [REDACTED-X] tags won't match anyway
     if not skip_pii:
         for p in PII_PATTERNS:
-            hit = p["pattern"].search(text)
+            hit = p["pattern"].search(normalized)
             if hit:
                 matched_val = hit.group(0)
                 redacted    = matched_val[:4] + "*" * max(0, len(matched_val) - 4)
