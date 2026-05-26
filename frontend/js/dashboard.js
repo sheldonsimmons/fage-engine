@@ -178,6 +178,7 @@ async function resetDemoData() {
     if (typeof loadAgents        === "function") loadAgents();
     if (typeof loadVoiceStats    === "function") loadVoiceStats();
     if (typeof loadVoiceAuditLog === "function") loadVoiceAuditLog();
+    if (typeof loadTimeSeries    === "function") loadTimeSeries();
 
     if (btn) {
       btn.textContent = "✓ Done";
