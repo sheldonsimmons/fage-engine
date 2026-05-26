@@ -240,7 +240,8 @@ def route(
 
     if registry_model:
         model_id_to_use  = registry_model["model_id"]
-        model_tier_label = registry_model["tier_name"]
+        # Always use the REQUESTED tier's name — not the cascaded model's tier
+        model_tier_label = TIER_NAMES.get(tier_num, registry_model["tier_name"])
         display_name     = registry_model["display_name"]
         cost_in_per_m    = registry_model["cost_input_per_million"]
         cost_out_per_m   = registry_model["cost_output_per_million"]

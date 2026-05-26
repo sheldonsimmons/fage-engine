@@ -201,7 +201,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
     # ── Write audit event for high-stakes decisions ────────────────────────────
     all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]
-    if result["routing_decision"] in ("COMPLEX", "THROTTLED") or term_result["triggered"]:
+    if result["routing_decision"] in ("COMPLEX", "MODERATE", "THROTTLED", "OVERRIDE") or term_result["triggered"]:
         try:
             write_audit_event(
                 db               = db,
