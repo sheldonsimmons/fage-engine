@@ -659,6 +659,24 @@
     </section>
     </div><!-- end dp-wrap voice-guard -->
 
+    <!-- Panel: Governance Event Stream -->
+    <div class="dp-wrap" data-panel-id="event-stream">
+    <section class="panel full-width" id="eventStreamPanel">
+      <h2 class="panel-title collapsible-title" onclick="togglePanel('eventStreamBody','eventStreamChevron')">
+        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
+        <span>Governance Event Stream</span>
+        <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:10px;margin-right:auto" id="eventStreamStatus">● LIVE</span>
+        <button class="export-btn" onclick="event.stopPropagation(); loadEventStream()" title="Refresh stream">↺ Refresh</button>
+        <span class="panel-chevron" id="eventStreamChevron">▾</span>
+      </h2>
+      <div id="eventStreamBody" style="display:block">
+        <div class="event-stream-list" id="eventStreamList">
+          <p class="placeholder">Loading events...</p>
+        </div>
+      </div>
+    </section>
+    </div><!-- end dp-wrap event-stream -->
+
     <!-- Panel: Audit Log + Blocked Banner -->
     <div class="dp-wrap" data-panel-id="audit">
     <!-- Blocked Alert Banner (hidden until a block event exists) -->
@@ -724,6 +742,7 @@
   <script src="js/timeseries.js"></script>
   <script src="js/auditor.js"></script>
   <script src="js/voice_guard.js"></script>
+  <script src="js/event_stream.js"></script>
   <script src="js/help.js"></script>
   <script>
     function toggleDemoMenu(e) {
