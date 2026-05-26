@@ -6,793 +6,784 @@
   <title>FAGE — FinOps Agentlake & Governance Engine</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/demo.css" />
+  <style>
+    /* ── Live-style layout override ──────────────────────────────────────────── */
+    body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Header nav */
+    .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+      transition: color 0.15s, border-color 0.15s; background: none; cursor: pointer; font: inherit; }
+    .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
+
+    /* KPI strip — 6 cols */
+    .dash-kpi { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px;
+      padding: 10px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .dkpi-card { background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; }
+    .dkpi-card.alert { border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.04); }
+    .dkpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+    .dkpi-value { font-size: 20px; font-weight: 700; line-height: 1.25; margin: 3px 0 1px; }
+    .dkpi-sub   { font-size: 10px; color: var(--text-muted); }
+
+    /* Secondary stat bar */
+    .dash-stat { display: flex; align-items: center; padding: 5px 24px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+      background: var(--bg-base); gap: 0; }
+
+    /* Two-column main layout */
+    .dash-content { display: grid; grid-template-columns: 1fr 340px;
+      flex: 1; overflow: hidden; }
+    .dash-left  { overflow-y: auto; border-right: 1px solid var(--border); }
+    .dash-left::-webkit-scrollbar { width: 3px; }
+    .dash-left::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .dash-right { display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg-panel); }
+
+    /* Section wrapper */
+    .dash-section { border-bottom: 1px solid var(--border); }
+
+    /* Section header — live style with collapse + drag */
+    .dash-sec-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 20px 8px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); font-weight: 600;
+      cursor: pointer; user-select: none;
+    }
+    .dash-sec-head:hover { color: var(--text-primary); }
+    .dash-sec-head .drag-handle { color: var(--border); cursor: grab; font-size: 13px;
+      line-height: 1; flex-shrink: 0; }
+    .dash-sec-head .sec-chev { flex-shrink: 0; font-size: 11px; }
+    .dash-sec-head .sec-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+    /* Section body */
+    .dash-sec-body { padding: 0 20px 16px; }
+
+    /* Sub-label (▸ style within a section) */
+    .sec-sub-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600; margin-bottom: 10px; }
+
+    /* Right column — event stream */
+    .stream-head { padding: 10px 16px 8px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; }
+    .stream-head-row { display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 6px; }
+    .stream-head-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); font-weight: 600; }
+    .stream-filters { display: flex; gap: 5px; flex-wrap: wrap; }
+    .stream-scroll { flex: 1; overflow-y: auto; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 6px; }
+    .stream-scroll::-webkit-scrollbar { width: 3px; }
+    .stream-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Neaten the management nested section */
+    .mgmt-toggle-btn { width: 100%; background: none; border: none; cursor: pointer;
+      padding: 6px 0; font: inherit; color: inherit; display: flex; align-items: center;
+      gap: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600; }
+    .mgmt-toggle-btn:hover { color: var(--text-primary); }
+  </style>
 </head>
 <body>
 
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
-  <header class="header">
-    <div class="header-brand">
-      <span class="header-logo">◈</span>
-      <span class="header-title">FAGE</span>
-      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
-    </div>
-    <div class="header-nav">
-      <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
-      <a href="/policy.html" class="header-nav-link" style="margin-left:8px">⚖ Policy &amp; Rules</a>
-      <a href="/reports.html" class="header-nav-link" style="margin-left:8px">📊 Reports</a>
-      <a href="/models.html" class="header-nav-link" style="margin-left:8px">🤖 Models</a>
-      <a href="/sandbox.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-yellow)">⚗ Sandbox</a>
-      <a href="/live.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-green)">● LIVE</a>
-      <button onclick="randomizePanels()" class="header-nav-link" style="margin-left:8px;color:var(--accent-purple);background:none;border-color:var(--accent-purple);cursor:pointer;font:inherit">⊛ Randomize</button>
-      <button onclick="resetDemoData()" class="header-nav-link" style="margin-left:8px;background:none;cursor:pointer;font:inherit">↺ Reset</button>
-      <button class="tour-btn" onclick="startTour()">? Guide</button>
-    </div>
-    <div class="header-status" id="systemStatus">
-      <span class="status-dot offline"></span>
-      <span id="statusLabel">Connecting...</span>
-      <span class="mode-badge" id="modeBadge" style="display:none"></span>
-    </div>
-  </header>
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <span class="header-title">FAGE</span>
+    <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+  </div>
+  <div class="header-nav">
+    <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
+    <a href="/policy.html"     class="header-nav-link" style="margin-left:8px">⚖ Policy &amp; Rules</a>
+    <a href="/reports.html"    class="header-nav-link" style="margin-left:8px">📊 Reports</a>
+    <a href="/models.html"     class="header-nav-link" style="margin-left:8px">🤖 Models</a>
+    <a href="/sandbox.html"    class="header-nav-link" style="margin-left:8px;color:var(--accent-yellow)">⚗ Sandbox</a>
+    <a href="/live.html"       class="header-nav-link" style="margin-left:8px;color:var(--accent-green)">● LIVE</a>
+    <button onclick="resetDemoData()" class="header-nav-link" style="margin-left:8px">↺ Reset</button>
+    <button class="tour-btn"   onclick="startTour()">? Guide</button>
+  </div>
+  <div class="header-status" id="systemStatus">
+    <span class="status-dot offline"></span>
+    <span id="statusLabel">Connecting...</span>
+    <span class="mode-badge" id="modeBadge" style="display:none"></span>
+  </div>
+</header>
 
-  <!-- ── Main Dashboard Grid ────────────────────────────────────────────── -->
-  <main class="dashboard">
+<!-- ── KPI Strip (6 cols) ──────────────────────────────────────────────────── -->
+<div class="dash-kpi">
+  <div class="dkpi-card">
+    <div class="dkpi-label">Total Spend Today <span class="help-icon" data-help="kpiSpend" onclick="showHelp('kpiSpend')">?</span></div>
+    <div class="dkpi-value" style="color:var(--accent-yellow)" id="kpiSpend">—</div>
+    <div class="dkpi-sub" id="kpiSpendSub">across all departments</div>
+  </div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Tokens Saved (Pruning) <span class="help-icon" data-help="kpiTokensSaved" onclick="showHelp('kpiTokensSaved')">?</span></div>
+    <div class="dkpi-value" style="color:var(--accent-green)" id="kpiTokensSaved">—</div>
+    <div class="dkpi-sub" id="kpiTokensSub">via context sweeper</div>
+  </div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Month Spend</div>
+    <div class="dkpi-value" id="statMonthSpend">—</div>
+    <div class="dkpi-sub">this billing period</div>
+  </div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Active Agents <span class="help-icon" data-help="kpiAgents" onclick="showHelp('kpiAgents')">?</span></div>
+    <div class="dkpi-value" style="color:var(--accent)" id="kpiAgents">—</div>
+    <div class="dkpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
+  </div>
+  <div class="dkpi-card alert" id="kpiThrottleCard">
+    <div class="dkpi-label">Throttled Depts <span class="help-icon" data-help="kpiThrottled" onclick="showHelp('kpiThrottled')">?</span></div>
+    <div class="dkpi-value" id="kpiThrottled">—</div>
+    <div class="dkpi-sub" id="kpiThrottleSub">at or over budget cap</div>
+  </div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Total Calls</div>
+    <div class="dkpi-value" id="statTotalCalls">—</div>
+    <div class="dkpi-sub">all time</div>
+  </div>
+</div>
 
-    <!-- Row 1: KPI Cards -->
-    <!-- KPI Row 1: 4 summary cards -->
-    <section class="kpi-row kpi-row-compact">
-      <div class="kpi-card kpi-card-sm">
-        <div class="kpi-label">Total Spend Today <span class="help-icon" data-help="kpiSpend" onclick="showHelp('kpiSpend')">?</span></div>
-        <div class="kpi-value" style="color:var(--accent-yellow)" id="kpiSpend">—</div>
-        <div class="kpi-sub" id="kpiSpendSub">across all departments</div>
-      </div>
-      <div class="kpi-card kpi-card-sm">
-        <div class="kpi-label">Tokens Saved (Pruning) <span class="help-icon" data-help="kpiTokensSaved" onclick="showHelp('kpiTokensSaved')">?</span></div>
-        <div class="kpi-value" style="color:var(--accent-green)" id="kpiTokensSaved">—</div>
-        <div class="kpi-sub" id="kpiTokensSub">via context sweeper</div>
-      </div>
-      <div class="kpi-card kpi-card-sm">
-        <div class="kpi-label">Active Agents <span class="help-icon" data-help="kpiAgents" onclick="showHelp('kpiAgents')">?</span></div>
-        <div class="kpi-value" id="kpiAgents">—</div>
-        <div class="kpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
-      </div>
-      <div class="kpi-card kpi-card-sm alert" id="kpiThrottleCard">
-        <div class="kpi-label">Throttled Departments <span class="help-icon" data-help="kpiThrottled" onclick="showHelp('kpiThrottled')">?</span></div>
-        <div class="kpi-value" id="kpiThrottled">—</div>
-        <div class="kpi-sub" id="kpiThrottleSub">at or over budget cap</div>
-      </div>
-    </section>
+<!-- ── Stat Bar ────────────────────────────────────────────────────────────── -->
+<div class="dash-stat stat-bar stat-bar-compact" id="statBar">
+  <div class="stat-item">
+    <span class="stat-label">Scout (T1)</span>
+    <span class="stat-val micro" id="statScoutCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Analyst (T2)</span>
+    <span class="stat-val" style="color:var(--accent-green)" id="statAnalystCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Advisor (T3)</span>
+    <span class="stat-val flagship" id="statAdvisorCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Strategist (T4)</span>
+    <span class="stat-val" style="color:var(--accent-yellow)" id="statStrategistCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Overall Budget Used</span>
+    <span class="stat-val" id="statBudgetPct">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Pruning Saved (est.)</span>
+    <span class="stat-val green" id="statPruningSaved">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <button onclick="loadDashboard()" title="Refresh KPIs"
+      style="background:transparent;color:var(--accent);border:1px solid var(--border);
+             border-radius:5px;padding:3px 12px;font-size:11px;font-weight:600;
+             cursor:pointer;letter-spacing:0.04em">↺ Refresh</button>
+  </div>
+</div>
 
-    <!-- KPI Row 2: Routing + Spend stat strip -->
-    <section class="stat-bar stat-bar-compact" id="statBar">
-      <div class="stat-item">
-        <span class="stat-label">Total Calls</span>
-        <span class="stat-val" id="statTotalCalls">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Scout (T1)</span>
-        <span class="stat-val micro" id="statScoutCalls">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Analyst (T2)</span>
-        <span class="stat-val" style="color:var(--accent-green)" id="statAnalystCalls">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Advisor (T3)</span>
-        <span class="stat-val flagship" id="statAdvisorCalls">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Strategist (T4)</span>
-        <span class="stat-val" style="color:var(--accent-yellow)" id="statStrategistCalls">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Overall Budget Used</span>
-        <span class="stat-val" id="statBudgetPct">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Pruning Saved (est.)</span>
-        <span class="stat-val green" id="statPruningSaved">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Month Spend</span>
-        <span class="stat-val" id="statMonthSpend">—</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <button onclick="loadDashboard()" title="Refresh KPIs now" style="background:transparent;color:var(--accent);border:1px solid var(--border);border-radius:5px;padding:3px 12px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:0.04em">↺ Refresh</button>
-      </div>
-    </section>
+<!-- ── Main Content ────────────────────────────────────────────────────────── -->
+<div class="dash-content">
 
-    <!-- ── Draggable Panels ─────────────────────────────────────────────────── -->
+  <!-- Left column — all panels, scrollable, draggable -->
+  <div class="dash-left">
     <div id="draggable-panels">
 
-    <!-- Panel: Agentlake & Budget -->
-    <div class="dp-wrap" data-panel-id="budgets-agents">
-    <section class="panel full-width live-ops-strip">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('agentBudgetBody','agentBudgetChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>Agentlake &amp; Budget <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation(); showHelp('budgetPanel')">?</span></span>
-        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto" id="midRowSummary"></span>
-        <span class="panel-chevron" id="agentBudgetChevron">▾</span>
-      </h2>
+      <!-- ── Agentlake & Budget ───────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="budgets-agents">
+        <div class="dash-sec-head" onclick="togglePanel('agentBudgetBody','agentBudgetChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Agentlake Registry &amp; Budget
+            <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation();showHelp('budgetPanel')">?</span>
+          </span>
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="midRowSummary"></span>
+          <span class="sec-right"><span class="sec-chev" id="agentBudgetChevron">▾</span></span>
+        </div>
+        <div id="agentBudgetBody" class="dash-sec-body">
 
-      <div id="agentBudgetBody" style="display:block">
+          <div class="sec-sub-label">Agentlake Registry — Live Status</div>
+          <div id="agentCardGrid" class="agent-card-grid-6" style="margin-bottom:20px"></div>
 
-        <!-- Agent card grid -->
-        <div class="live-ops-label">▸ Agentlake Registry — Live Status</div>
-        <div id="agentCardGrid" class="agent-card-grid-6"></div>
+          <div class="sec-sub-label">Department Budget Utilization</div>
+          <div id="liveBudgetBars" style="margin-bottom:16px"></div>
 
-        <!-- Budget bars -->
-        <div class="live-ops-label" style="margin-top:20px">▸ Department Budget Utilization</div>
-        <div id="liveBudgetBars"></div>
+          <!-- Budget Controls & Agent Management (nested) -->
+          <div style="padding-top:12px;border-top:1px solid var(--border)">
+            <button class="mgmt-toggle-btn" onclick="togglePanel('mgmtBody','mgmtChevron')">
+              <span>⚙ Budget Controls &amp; Agent Management</span>
+              <span style="margin-left:auto" id="mgmtChevron">▸</span>
+            </button>
+            <div id="mgmtBody" style="display:none;margin-top:12px">
+              <section class="mid-row">
 
-        <!-- Management toggle -->
-        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-          <button class="panel-title collapsible-title" onclick="togglePanel('mgmtBody','mgmtChevron')"
-            style="width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:0;font:inherit;color:inherit">
-            <span style="font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:0.04em">⚙ Budget Controls &amp; Agent Management</span>
-            <span class="panel-chevron" id="mgmtChevron" style="margin-left:auto">▸</span>
-          </button>
-          <div id="mgmtBody" style="display:none;margin-top:16px">
-          <section class="mid-row">
-
-            <div class="panel" id="budgetPanel">
-              <h2 class="panel-title">Department Budgets <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span></h2>
-              <div id="budgetList"><p class="placeholder">Loading...</p></div>
-            </div>
-
-            <div class="panel" id="agentPanel">
-              <div class="agent-panel-header">
-                <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
-                <div class="agent-filters">
-                  <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
-                    <option value="">All Platforms</option>
-                    <option>Salesforce</option><option>ServiceNow</option>
-                    <option>HubSpot</option><option>Dynamics365</option>
-                    <option>Zendesk</option><option>Custom</option>
-                  </select>
-                  <select class="agent-filter-select" id="filterStatus" onchange="applyAgentFilters()">
-                    <option value="">All Statuses</option>
-                    <option value="idle">Idle</option><option value="active">Active</option>
-                    <option value="locked">Locked</option><option value="queued">Queued</option>
-                  </select>
-                  <select class="agent-filter-select" id="filterDept" onchange="applyAgentFilters()">
-                    <option value="">All Departments</option>
-                  </select>
-                  <input type="text" class="agent-filter-search" id="filterSearch"
-                         placeholder="Search agents..." oninput="applyAgentFilters()" />
+                <div class="panel" id="budgetPanel">
+                  <h2 class="panel-title">Department Budgets <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span></h2>
+                  <div id="budgetList"><p class="placeholder">Loading...</p></div>
                 </div>
-              </div>
-              <table class="agent-table">
-                <thead>
-                  <tr>
-                    <th>Agent</th><th>Department</th><th>Platform</th><th>Target</th>
-                    <th>Policy</th><th>Status</th><th>Last Active</th><th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="agentTableBody">
-                  <tr><td colspan="8" class="placeholder">Loading...</td></tr>
-                </tbody>
-              </table>
-              <div class="agent-controls">
-                <button class="btn-collision" onclick="runCollisionSim()">&#9888; Simulate Collision</button>
-                <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
-                <button id="toggleArchivedBtn" class="btn-deregister" style="margin-left:auto" onclick="toggleArchivedAgents()">Show Archived</button>
-              </div>
-              <div id="collisionAlert" class="collision-alert" style="display:none"></div>
-              <div class="register-agent-form">
-                <h3 class="register-title">Register New Agent</h3>
-                <div class="register-grid">
-                  <div class="register-field">
-                    <label class="field-label">Agent Name</label>
-                    <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+
+                <div class="panel" id="agentPanel">
+                  <div class="agent-panel-header">
+                    <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
+                    <div class="agent-filters">
+                      <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
+                        <option value="">All Platforms</option>
+                        <option>Salesforce</option><option>ServiceNow</option>
+                        <option>HubSpot</option><option>Dynamics365</option>
+                        <option>Zendesk</option><option>Custom</option>
+                      </select>
+                      <select class="agent-filter-select" id="filterStatus" onchange="applyAgentFilters()">
+                        <option value="">All Statuses</option>
+                        <option value="idle">Idle</option><option value="active">Active</option>
+                        <option value="locked">Locked</option><option value="queued">Queued</option>
+                      </select>
+                      <select class="agent-filter-select" id="filterDept" onchange="applyAgentFilters()">
+                        <option value="">All Departments</option>
+                      </select>
+                      <input type="text" class="agent-filter-search" id="filterSearch"
+                             placeholder="Search agents..." oninput="applyAgentFilters()" />
+                    </div>
                   </div>
-                  <div class="register-field">
-                    <label class="field-label">Source Platform</label>
-                    <select id="regPlatform" class="reg-input">
-                      <option value="">— Infer from name prefix —</option>
-                      <option value="Salesforce">Salesforce</option><option value="ServiceNow">ServiceNow</option>
-                      <option value="HubSpot">HubSpot</option><option value="Microsoft">Microsoft</option>
-                      <option value="Zendesk">Zendesk</option><option value="SAP">SAP</option>
-                      <option value="Custom">Custom</option>
-                    </select>
+                  <table class="agent-table">
+                    <thead>
+                      <tr>
+                        <th>Agent</th><th>Department</th><th>Platform</th><th>Target</th>
+                        <th>Policy</th><th>Status</th><th>Last Active</th><th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="agentTableBody">
+                      <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="agent-controls">
+                    <button class="btn-collision" onclick="runCollisionSim()">&#9888; Simulate Collision</button>
+                    <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
+                    <button id="toggleArchivedBtn" class="btn-deregister" style="margin-left:auto" onclick="toggleArchivedAgents()">Show Archived</button>
                   </div>
-                  <div class="register-field">
-                    <label class="field-label">Department</label>
-                    <select id="regDept" class="reg-input">
-                      <option>Support</option><option>Sales</option>
-                      <option>Marketing</option><option>Operations</option>
-                    </select>
+                  <div id="collisionAlert" class="collision-alert" style="display:none"></div>
+                  <div class="register-agent-form">
+                    <h3 class="register-title">Register New Agent</h3>
+                    <div class="register-grid">
+                      <div class="register-field">
+                        <label class="field-label">Agent Name</label>
+                        <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Source Platform</label>
+                        <select id="regPlatform" class="reg-input">
+                          <option value="">— Infer from name prefix —</option>
+                          <option value="Salesforce">Salesforce</option>
+                          <option value="ServiceNow">ServiceNow</option>
+                          <option value="HubSpot">HubSpot</option>
+                          <option value="Microsoft">Microsoft</option>
+                          <option value="Zendesk">Zendesk</option>
+                          <option value="SAP">SAP</option>
+                          <option value="Custom">Custom</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Department</label>
+                        <select id="regDept" class="reg-input">
+                          <option>Support</option><option>Sales</option>
+                          <option>Marketing</option><option>Operations</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Target Table</label>
+                        <select id="regTable" class="reg-input">
+                          <option value="tickets">tickets</option>
+                          <option value="crm_records">crm_records</option>
+                          <option value="customers">customers</option>
+                          <option value="token_transactions">token_transactions</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Permissions</label>
+                        <select id="regPerms" class="reg-input">
+                          <option value="read">read</option>
+                          <option value="read,write" selected>read, write</option>
+                          <option value="read,write,delete">read, write, delete</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Collision Policy</label>
+                        <select id="regPolicy" class="reg-input">
+                          <option value="lock" selected>Lock — require supervisor</option>
+                          <option value="queue">Queue — auto-retry when free</option>
+                          <option value="skip">Skip — abandon silently</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="register-actions">
+                      <button class="btn-primary" onclick="registerAgent()">+ Register Agent</button>
+                      <span id="registerStatus" class="register-status"></span>
+                    </div>
                   </div>
-                  <div class="register-field">
-                    <label class="field-label">Target Table</label>
-                    <select id="regTable" class="reg-input">
-                      <option value="tickets">tickets</option><option value="crm_records">crm_records</option>
-                      <option value="customers">customers</option><option value="token_transactions">token_transactions</option>
-                    </select>
-                  </div>
-                  <div class="register-field">
-                    <label class="field-label">Permissions</label>
-                    <select id="regPerms" class="reg-input">
-                      <option value="read">read</option>
-                      <option value="read,write" selected>read, write</option>
-                      <option value="read,write,delete">read, write, delete</option>
-                    </select>
-                  </div>
-                  <div class="register-field">
-                    <label class="field-label">Collision Policy</label>
-                    <select id="regPolicy" class="reg-input">
-                      <option value="lock" selected>Lock — require supervisor</option>
-                      <option value="queue">Queue — auto-retry when free</option>
-                      <option value="skip">Skip — abandon silently</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="register-actions">
-                  <button class="btn-primary" onclick="registerAgent()">+ Register Agent</button>
-                  <span id="registerStatus" class="register-status"></span>
-                </div>
-              </div>
+                </div><!-- end agentPanel -->
+
+              </section>
+            </div><!-- end mgmtBody -->
+          </div>
+
+        </div><!-- end agentBudgetBody -->
+      </div><!-- end budgets-agents -->
+
+      <!-- ── 30-Day Trends ──────────────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="timeseries">
+        <div class="dash-sec-head" onclick="togglePanel('timeseriesBody','timeseriesChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ 30-Day Spend &amp; Activity Trends</span>
+          <span class="sec-right"><span class="sec-chev" id="timeseriesChevron">▸</span></span>
+        </div>
+        <div id="timeseriesBody" class="dash-sec-body" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+            <div>
+              <div class="field-label" style="margin-bottom:10px">Daily Spend (USD) by Department</div>
+              <div style="position:relative;height:200px"><canvas id="tsSpendCanvas"></canvas></div>
             </div>
-
-          </section>
-          </div><!-- end mgmtBody -->
-        </div><!-- end management toggle -->
-
-      </div><!-- end agentBudgetBody -->
-    </section>
-    </div><!-- end dp-wrap budgets-agents -->
-
-    <!-- Panel: 30-Day Trends -->
-    <div class="dp-wrap" data-panel-id="timeseries">
-    <section class="panel full-width" id="timeseriesPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('timeseriesBody','timeseriesChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>30-Day Spend &amp; Activity Trends</span>
-        <span class="panel-chevron" id="timeseriesChevron">▸</span>
-      </h2>
-      <div id="timeseriesBody" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
-          <div>
-            <div class="field-label" style="margin-bottom:10px">Daily Spend (USD) by Department</div>
-            <div style="position:relative;height:230px">
-              <canvas id="tsSpendCanvas"></canvas>
-            </div>
-          </div>
-          <div>
-            <div class="field-label" style="margin-bottom:10px">Daily AI Calls by Model Tier</div>
-            <div style="position:relative;height:230px">
-              <canvas id="tsCallsCanvas"></canvas>
+            <div>
+              <div class="field-label" style="margin-bottom:10px">Daily AI Calls by Model Tier</div>
+              <div style="position:relative;height:200px"><canvas id="tsCallsCanvas"></canvas></div>
             </div>
           </div>
         </div>
       </div>
-    </section>
-    </div><!-- end dp-wrap timeseries -->
 
-    <!-- Panel: Pruner Test -->
-
-    <div class="dp-wrap" data-panel-id="pruner" style="display:none">
-    <section class="panel full-width" id="prunerPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('prunerBody', 'prunerChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>Context-Pruning Sweeper — Live Test <span class="help-icon" data-help="prunerPanel" onclick="event.stopPropagation(); showHelp('prunerPanel')">?</span></span>
-        <span class="panel-chevron" id="prunerChevron">▸</span>
-      </h2>
-      <div id="prunerBody" style="display:none">
-      <div class="pruner-grid">
-        <div>
-          <label class="field-label">Raw Input Payload</label>
-          <textarea id="prunerInput" class="code-area" placeholder="Paste a messy email, ticket, or log here..."></textarea>
-        </div>
-        <div>
-          <label class="field-label">Cleaned Output</label>
-          <textarea id="prunerOutput" class="code-area" readonly placeholder="Pruned text will appear here..."></textarea>
-        </div>
-      </div>
-      <div class="pruner-actions">
-        <button class="btn-primary" id="prunerRunBtn" onclick="runPruner()">Run Sweeper</button>
-        <div class="pruner-stats" id="prunerStats"></div>
-      </div>
-      </div><!-- end prunerBody -->
-    </section>
-    </div><!-- end dp-wrap pruner -->
-
-    <!-- Panel: Token Router -->
-    <div class="dp-wrap" data-panel-id="router" style="display:none">
-    <section class="panel full-width" id="routerPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('routerBody', 'routerChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>Token Router &amp; Model Cascader — Live Test <span class="help-icon" data-help="routerPanel" onclick="event.stopPropagation(); showHelp('routerPanel')">?</span></span>
-        <span class="panel-chevron" id="routerChevron">▸</span>
-      </h2>
-      <div id="routerBody" style="display:none">
-      <div class="router-controls">
-        <div class="router-input-group">
-          <label class="field-label">Payload to Route</label>
-          <textarea id="routerInput" class="code-area" placeholder="Paste a payload here (or click 'Send Pruned Text' after running the sweeper above)..."></textarea>
-        </div>
-        <div class="router-settings">
-          <label class="field-label">Department</label>
-          <select id="routerDept" class="router-select">
-            <option>Support</option>
-            <option>Sales</option>
-            <option>Marketing</option>
-            <option>Operations</option>
-          </select>
-          <label class="router-checkbox-label">
-            <input type="checkbox" id="routerAutoPrune" checked />
-            Auto-prune before routing
-          </label>
-          <button class="btn-secondary" onclick="sendPrunedText()">&#8593; Use Pruned Text</button>
-          <button class="btn-primary" onclick="runRouter()">Route Payload</button>
-        </div>
-      </div>
-
-      <!-- Result card — hidden until a route call returns -->
-      <div class="router-result" id="routerResult" style="display:none">
-        <div class="router-result-header">
-          <span class="field-label">Routing Decision</span>
-          <div class="router-badges">
-            <span class="badge" id="routerComplexityBadge"></span>
-            <span class="badge" id="routerModelBadge"></span>
-            <span class="badge" id="routerThrottleBadge" style="display:none"></span>
-          </div>
-        </div>
-        <p class="router-reason" id="routerReason"></p>
-
-        <div class="router-cost-grid">
-          <div class="cost-cell">
-            <div class="cost-label">Input Tokens</div>
-            <div class="cost-value" id="routerInputTokens"></div>
-          </div>
-          <div class="cost-cell">
-            <div class="cost-label">Output Tokens</div>
-            <div class="cost-value" id="routerOutputTokens"></div>
-          </div>
-          <div class="cost-cell highlight-green">
-            <div class="cost-label">This Call Cost</div>
-            <div class="cost-value" id="routerCost"></div>
-          </div>
-          <div class="cost-cell highlight-purple">
-            <div class="cost-label">Cost Without Pruning</div>
-            <div class="cost-value" id="routerCostFull"></div>
-          </div>
-          <div class="cost-cell highlight-yellow">
-            <div class="cost-label">Pruning Saved</div>
-            <div class="cost-value" id="routerPruningSaved"></div>
-          </div>
-          <div class="cost-cell">
-            <div class="cost-label">Budget Used</div>
-            <div class="cost-value" id="routerBudgetPct"></div>
-          </div>
-        </div>
-
-        <div>
-          <label class="field-label" style="margin-top:14px; display:block">Simulated Model Response</label>
-          <div class="router-response" id="routerResponse"></div>
-        </div>
-      </div>
-
-      <div id="routerStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted)"></div>
-      </div><!-- end routerBody -->
-    </section>
-    </div><!-- end dp-wrap router -->
-
-    <!-- Panel: Routing Rules -->
-    <div class="dp-wrap" data-panel-id="routing-rules" style="display:none">
-    <section class="panel full-width" id="routingRulesPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('routingRulesBody','routingRulesChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>Routing Rules — Complexity Threshold &amp; Keywords</span>
-        <span class="panel-chevron" id="routingRulesChevron">▸</span>
-      </h2>
-      <div id="routingRulesBody" style="display:none">
-
-        <!-- Threshold slider -->
-        <div style="margin-bottom:20px">
-          <label class="field-label">Token Routing Threshold</label>
-          <p style="font-size:12px;color:var(--text-muted);margin:4px 0 10px">
-            Payloads that exceed this token count <em>and</em> contain a complexity keyword will be escalated to the Advisor model tier.
-          </p>
-          <div style="display:flex;align-items:center;gap:14px">
-            <input type="range" id="rrThresholdSlider" min="150" max="2000" step="50" value="500"
-                   style="flex:1;accent-color:var(--accent-blue)" />
-            <span id="rrThresholdValue" style="font-size:15px;font-weight:600;color:var(--accent-blue);min-width:40px;text-align:right">500</span>
-            <span style="font-size:12px;color:var(--text-muted)">tokens</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin:2px 0 10px">
-            <span>150 — aggressive escalation</span>
-            <span>2000 — minimal escalation</span>
-          </div>
-          <button class="btn-primary" onclick="saveThreshold()">Save Threshold</button>
-          <span id="rrThresholdStatus" style="margin-left:10px;font-size:12px"></span>
-        </div>
-
-        <hr style="border-color:var(--border);margin:16px 0" />
-
-        <!-- Keyword manager -->
-        <div>
-          <label class="field-label">Complexity Keywords</label>
-          <p style="font-size:12px;color:var(--text-muted);margin:4px 0 10px">
-            If a keyword below appears in a payload it will be routed to a higher model tier.
-            🔒 keywords are core compliance terms that cannot be removed.
-          </p>
-          <div id="rrKeywordList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="rrNewKeyword" class="input-field" placeholder="Add keyword…" style="max-width:220px" />
-            <button class="btn-secondary" onclick="addRoutingKeyword()">Add</button>
-          </div>
-          <div id="rrKeywordStatus" style="margin-top:6px;font-size:12px"></div>
-        </div>
-
-      </div><!-- end routingRulesBody -->
-    </section>
-    </div><!-- end dp-wrap routing-rules -->
-
-    <!-- Panel: Sensitive Term Library -->
-    <div class="dp-wrap" data-panel-id="keywords" style="display:none">
-    <section class="panel full-width" id="keywordsPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('keywordsBody', 'keywordsChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>Sensitive Term Library <span class="help-icon" data-help="keywordsPanel" onclick="event.stopPropagation(); showHelp('keywordsPanel')">?</span></span>
-        <span class="panel-chevron" id="keywordsChevron">▸</span>
-      </h2>
-      <div id="keywordsBody" style="display:none">
-      <p class="panel-sub">Words or phrases that trigger special handling when detected in any payload routed through FAGE. Add company-specific terms — legal, compliance, HR, or anything your team flags as sensitive.</p>
-
-      <!-- Add term form -->
-      <div class="kw-add-form">
-        <div class="kw-add-row">
-          <div class="kw-field">
-            <label class="field-label">Term or Phrase</label>
-            <input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" />
-          </div>
-          <div class="kw-field">
-            <label class="field-label">Category</label>
-            <select id="kwCategory" class="reg-input">
-              <option value="legal">Legal</option>
-              <option value="hipaa">HIPAA / Health</option>
-              <option value="financial">Financial</option>
-              <option value="hr">HR</option>
-              <option value="custom" selected>Custom</option>
+      <!-- ── Routing Decision Feed ──────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="routing-feed">
+        <div class="dash-sec-head" onclick="togglePanel('routingFeedBody','routingFeedChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Routing Decision Feed</span>
+          <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:8px">● LIVE</span>
+          <span class="sec-right" onclick="event.stopPropagation()">
+            <select class="agent-filter-select" id="routingFilterRisk" onchange="applyRoutingFilters()">
+              <option value="">All Risk</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
             </select>
-          </div>
-          <div class="kw-field">
-            <label class="field-label">Action</label>
-            <select id="kwAction" class="reg-input">
-              <option value="flag">Flag — mark high-risk in audit log</option>
-              <option value="escalate" selected>Escalate — force flagship model</option>
-              <option value="block">Block — reject request entirely</option>
+            <select class="agent-filter-select" id="routingFilterTier" onchange="applyRoutingFilters()">
+              <option value="">All Tiers</option>
+              <option value="scout">Scout</option>
+              <option value="advisor">Advisor</option>
+              <option value="strategist">Strategist</option>
             </select>
-          </div>
-          <div class="kw-field kw-field-btn">
-            <label class="field-label">&nbsp;</label>
-            <button class="btn-primary" onclick="addKeyword()">+ Add Term</button>
-          </div>
+            <button class="agent-filter-select" id="routingBlockedBtn" onclick="toggleRoutingBlocked()"
+              style="cursor:pointer;font-weight:600">🛡 Blocked</button>
+            <button onclick="loadEventStream();loadLiveRoutingFeed()"
+              style="background:transparent;color:var(--accent);border:1px solid var(--border);
+                     border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">↺</button>
+            <span class="sec-chev" id="routingFeedChevron">▾</span>
+          </span>
         </div>
-        <div id="kwStatus" class="register-status" style="margin-top:6px"></div>
+        <div id="routingFeedBody" class="dash-sec-body">
+          <table class="audit-table" id="liveRoutingTable">
+            <thead>
+              <tr>
+                <th>Time</th><th>Agent</th><th>Dept</th>
+                <th>Model Tier</th><th>Risk</th><th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="liveRoutingBody">
+              <tr><td colspan="6" class="placeholder">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <!-- Term table -->
-      <table class="kw-table" id="kwTable">
-        <thead>
-          <tr>
-            <th>Term</th>
-            <th>Category</th>
-            <th>Action</th>
-            <th>Scope</th>
-            <th>Remove</th>
-          </tr>
-        </thead>
-        <tbody id="kwTableBody">
-          <tr><td colspan="5" class="placeholder">Loading terms...</td></tr>
-        </tbody>
-      </table>
-      </div><!-- end keywordsBody -->
-    </section>
-    </div><!-- end dp-wrap keywords -->
-
-    <!-- Panel: Voice Guard -->
-    <div class="dp-wrap" data-panel-id="voice-guard" style="display:none">
-    <section class="panel full-width" id="voiceGuardPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('voiceGuardBody', 'voiceGuardChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>🎙 Voice Guard — PII Redaction <span class="help-icon" data-help="voiceGuardPanel" onclick="event.stopPropagation(); showHelp('voiceGuardPanel')">?</span></span>
-        <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px;margin-right:auto;padding-left:12px" id="vg-header-summary"></span>
-        <span class="panel-chevron" id="voiceGuardChevron">▸</span>
-      </h2>
-      <div id="voiceGuardBody" style="display:none">
-        <div class="kpi-row" style="margin-bottom:16px">
-          <div class="kpi-card">
-            <div class="kpi-label">Calls Processed Today</div>
-            <div class="kpi-value" id="vg-calls-today">—</div>
-            <div class="kpi-sub" id="vg-calls-month">— this month</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">PII Events Intercepted</div>
-            <div class="kpi-value" style="color:var(--accent-green)" id="vg-redactions-today">—</div>
-            <div class="kpi-sub" id="vg-redactions-total">— total</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Flagged for Review</div>
-            <div class="kpi-value" style="color:var(--accent-yellow)" id="vg-flagged">—</div>
-            <div class="kpi-sub">Low confidence / partial match</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Avg Redaction Confidence</div>
-            <div class="kpi-value" style="color:var(--accent)" id="vg-confidence">—</div>
-            <div class="kpi-sub">Across all PII detections</div>
+      <!-- ── AI Decision Audit Log ──────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="audit">
+        <div id="blockedAlertBanner" style="display:none">
+          <div class="blocked-banner-inner">
+            <span class="blocked-banner-icon">🛡</span>
+            <div class="blocked-banner-text">
+              <strong id="blockedBannerCount"></strong>
+              <span id="blockedBannerSub"></span>
+            </div>
+            <button class="blocked-banner-btn" onclick="toggleBlockedFilter()">Review Blocked Events ↓</button>
           </div>
         </div>
-
-        <!-- PII type breakdown -->
-        <div id="vg-pii-breakdown" style="margin-bottom:16px; display:flex; gap:10px; flex-wrap:wrap"></div>
-
-        <!-- Test transcript box -->
-        <div style="background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:18px">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
-            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted)">
-              🧪 Test Voice Transcript
-            </div>
-            <div id="vgMicBadge" style="display:none; align-items:center; gap:6px; font-size:11px; color:var(--accent-red); font-weight:700">
-              <span id="vgMicPulse" style="width:8px;height:8px;border-radius:50%;background:var(--accent-red);display:inline-block;animation:vgPulse 1s ease-in-out infinite"></span>
-              LIVE
-            </div>
-          </div>
-
-          <!-- Live mic preview — shows interim transcript while speaking -->
-          <div id="vgLivePreview" style="display:none; background:var(--bg-base); border:1px solid var(--accent-red); border-radius:6px; padding:10px 14px; font-size:13px; color:var(--text-muted); font-style:italic; min-height:36px; margin-bottom:8px; line-height:1.5">
-            <span id="vgLiveText">Listening...</span>
-          </div>
-
-          <textarea id="vgTestInput" rows="3" placeholder="Speak using the mic button, or paste a transcript here — e.g. 'my social security is 123 ummm 45 6789'"
-            style="width:100%; background:var(--bg-panel); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); padding:10px; font-size:13px; font-family:inherit; resize:vertical; box-sizing:border-box"></textarea>
-          <div style="display:flex; gap:10px; margin-top:10px; align-items:center; flex-wrap:wrap">
-            <button id="vgMicBtn" onclick="toggleVoiceMic()" style="background:var(--bg-panel); color:var(--accent-red); border:1px solid var(--accent-red); border-radius:6px; padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px" title="Speak a transcript — words appear live, then auto-scan for PII">
-              🎙 Speak
-            </button>
-            <button onclick="testVoiceGuard()" style="background:var(--accent); color:#000; border:none; border-radius:6px; padding:8px 18px; font-size:12px; font-weight:700; cursor:pointer">
-              ▶ Process Transcript
-            </button>
-            <button onclick="loadVoiceExample()" style="background:transparent; color:var(--accent); border:1px solid var(--accent); border-radius:6px; padding:8px 14px; font-size:12px; cursor:pointer">
-              Load Example
-            </button>
-            <span id="vgStatus" style="font-size:12px; color:var(--text-muted)"></span>
-          </div>
-          <div id="vgResult" style="display:none; margin-top:14px; padding:14px; background:var(--bg-panel); border-radius:8px; border:1px solid var(--border)">
-            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:8px">Clean Transcript</div>
-            <div id="vgCleanText" style="font-size:13px; color:var(--text-primary); line-height:1.6; margin-bottom:12px"></div>
-            <div id="vgMeta" style="font-size:11px; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px"></div>
-            <div id="vgDetectionDetails" style="display:none"></div>
-          </div>
+        <div class="dash-sec-head" onclick="togglePanel('auditBody','auditChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ AI Decision Audit Log
+            <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation();showHelp('auditPanel')">?</span>
+            <span id="auditFilterIndicator"
+              style="display:none;font-size:10px;font-weight:600;letter-spacing:0.06em;
+                     background:#2d0505;color:var(--accent-red);border:1px solid var(--accent-red);
+                     border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle">BLOCKED ONLY</span>
+          </span>
+          <span class="sec-right" onclick="event.stopPropagation()">
+            <button class="export-btn" onclick="exportAuditCsv()">⬇ CSV</button>
+            <button class="export-btn" onclick="exportAuditPdf()">🖨 PDF</button>
+            <span class="sec-chev" id="auditChevron">▸</span>
+          </span>
         </div>
+        <div id="auditBody" class="dash-sec-body" style="display:none">
+          <div class="agent-filters" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+            <select class="agent-filter-select" id="auditFilterDept" onchange="applyAuditFilters()">
+              <option value="">All Depts</option>
+            </select>
+            <select class="agent-filter-select" id="auditFilterRisk" onchange="applyAuditFilters()">
+              <option value="">All Risk</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <select class="agent-filter-select" id="auditFilterWindow" onchange="applyAuditFilters()">
+              <option value="">All Time</option>
+              <option value="1">Last 24h</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+            <button class="agent-filter-select" id="auditBlockedOnlyBtn"
+              onclick="toggleAuditBlockedOnly()" style="cursor:pointer;font-weight:600">🛡 Blocked Only</button>
+            <button class="agent-filter-select" onclick="clearAuditFilters()"
+              style="cursor:pointer;color:var(--text-muted)">✕ Clear</button>
+          </div>
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th><th>Event Type</th><th>Department</th>
+                <th>Model Tier</th><th>Risk Level</th><th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="6" class="placeholder">Audit events will appear here as you use the system.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        <!-- Voice Guard Audit Log -->
-        <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border)">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; cursor:pointer" onclick="toggleVgAuditSection()">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span id="vgAuditChevron" style="font-size:11px;color:var(--accent);transition:transform 0.2s">▾</span>
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)">
-                🔒 Voice Guard Audit Log
+      <!-- ── Voice Guard ────────────────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="voice-guard">
+        <div class="dash-sec-head" onclick="togglePanel('voiceGuardBody','voiceGuardChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ 🎙 Voice Guard — PII Redaction
+            <span class="help-icon" data-help="voiceGuardPanel" onclick="event.stopPropagation();showHelp('voiceGuardPanel')">?</span>
+          </span>
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="vg-header-summary"></span>
+          <span class="sec-right"><span class="sec-chev" id="voiceGuardChevron">▸</span></span>
+        </div>
+        <div id="voiceGuardBody" class="dash-sec-body" style="display:none">
+          <div class="kpi-row" style="margin-bottom:16px">
+            <div class="kpi-card">
+              <div class="kpi-label">Calls Processed Today</div>
+              <div class="kpi-value" id="vg-calls-today">—</div>
+              <div class="kpi-sub" id="vg-calls-month">— this month</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">PII Events Intercepted</div>
+              <div class="kpi-value" style="color:var(--accent-green)" id="vg-redactions-today">—</div>
+              <div class="kpi-sub" id="vg-redactions-total">— total</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Flagged for Review</div>
+              <div class="kpi-value" style="color:var(--accent-yellow)" id="vg-flagged">—</div>
+              <div class="kpi-sub">Low confidence / partial match</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Avg Redaction Confidence</div>
+              <div class="kpi-value" style="color:var(--accent)" id="vg-confidence">—</div>
+              <div class="kpi-sub">Across all PII detections</div>
+            </div>
+          </div>
+          <div id="vg-pii-breakdown" style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap"></div>
+          <div style="background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)">🧪 Test Voice Transcript</div>
+              <div id="vgMicBadge" style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--accent-red);font-weight:700">
+                <span id="vgMicPulse" style="width:8px;height:8px;border-radius:50%;background:var(--accent-red);display:inline-block;animation:vgPulse 1s ease-in-out infinite"></span>
+                LIVE
               </div>
             </div>
-            <div style="display:flex;gap:6px;align-items:center" onclick="event.stopPropagation()">
-              <button class="export-btn" onclick="exportVgSummaryCsv()" title="Export summary (one row per call)">⬇ CSV Summary</button>
-              <button class="export-btn export-btn-green" onclick="exportVgDetailedCsv()" title="Export detailed (one row per PII detection)">⬇ CSV Detailed</button>
-              <button class="export-btn" onclick="exportVgPdf()" title="Print / Save as PDF">🖨 PDF</button>
-              <button onclick="loadVoiceAuditLog()" style="background:transparent;color:var(--accent);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer">↺ Refresh</button>
+            <div id="vgLivePreview" style="display:none;background:var(--bg-base);border:1px solid var(--accent-red);border-radius:6px;padding:10px 14px;font-size:13px;color:var(--text-muted);font-style:italic;min-height:36px;margin-bottom:8px;line-height:1.5">
+              <span id="vgLiveText">Listening...</span>
+            </div>
+            <textarea id="vgTestInput" rows="3"
+              placeholder="Speak using the mic button, or paste a transcript here — e.g. 'my social security is 123 ummm 45 6789'"
+              style="width:100%;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>
+            <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap">
+              <button id="vgMicBtn" onclick="toggleVoiceMic()"
+                style="background:var(--bg-panel);color:var(--accent-red);border:1px solid var(--accent-red);border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+                🎙 Speak
+              </button>
+              <button onclick="testVoiceGuard()"
+                style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer">
+                ▶ Process Transcript
+              </button>
+              <button onclick="loadVoiceExample()"
+                style="background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer">
+                Load Example
+              </button>
+              <span id="vgStatus" style="font-size:12px;color:var(--text-muted)"></span>
+            </div>
+            <div id="vgResult" style="display:none;margin-top:14px;padding:14px;background:var(--bg-panel);border-radius:8px;border:1px solid var(--border)">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px">Clean Transcript</div>
+              <div id="vgCleanText" style="font-size:13px;color:var(--text-primary);line-height:1.6;margin-bottom:12px"></div>
+              <div id="vgMeta" style="font-size:11px;color:var(--text-muted);display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px"></div>
+              <div id="vgDetectionDetails" style="display:none"></div>
             </div>
           </div>
-          <div id="vgAuditLogWrap">
-            <div id="vgAuditLog">
-              <p style="font-size:12px;color:var(--text-muted);padding:8px 0">Loading audit records...</p>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer" onclick="toggleVgAuditSection()">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span id="vgAuditChevron" style="font-size:11px;color:var(--accent);transition:transform 0.2s">▾</span>
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)">🔒 Voice Guard Audit Log</div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center" onclick="event.stopPropagation()">
+                <button class="export-btn" onclick="exportVgSummaryCsv()">⬇ CSV Summary</button>
+                <button class="export-btn export-btn-green" onclick="exportVgDetailedCsv()">⬇ CSV Detailed</button>
+                <button class="export-btn" onclick="exportVgPdf()">🖨 PDF</button>
+                <button onclick="loadVoiceAuditLog()"
+                  style="background:transparent;color:var(--accent);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;cursor:pointer">↺ Refresh</button>
+              </div>
+            </div>
+            <div id="vgAuditLogWrap">
+              <div id="vgAuditLog"><p style="font-size:12px;color:var(--text-muted);padding:8px 0">Loading audit records...</p></div>
             </div>
           </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+            <button onclick="clearVoiceGuardData()"
+              style="background:transparent;color:var(--accent-red);border:1px solid var(--accent-red);border-radius:6px;padding:6px 16px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:0.04em">
+              ✕ Clear Voice Guard Data
+            </button>
+          </div>
         </div>
-
-        <!-- Clear Data -->
-        <div style="display:flex; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--border)">
-          <button onclick="clearVoiceGuardData()"
-            style="background:transparent;color:var(--accent-red);border:1px solid var(--accent-red);border-radius:6px;padding:6px 16px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:0.04em">
-            ✕ Clear Voice Guard Data
-          </button>
-        </div>
-
       </div>
-    </section>
-    </div><!-- end dp-wrap voice-guard -->
 
-    <!-- Panel: AI Decision Feed (Routing table + Event Stream side by side) -->
-    <div class="dp-wrap" data-panel-id="event-stream">
-    <section class="panel full-width" id="eventStreamPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('eventStreamBody','eventStreamChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>AI Decision Feed</span>
-        <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:10px;margin-right:auto">● LIVE</span>
-        <button class="export-btn" onclick="event.stopPropagation(); loadEventStream(); loadLiveRoutingFeed()" title="Refresh">↺ Refresh</button>
-        <span class="panel-chevron" id="eventStreamChevron">▾</span>
-      </h2>
-      <div id="eventStreamBody" style="display:block">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+      <!-- ── Pruner (hidden by default) ────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="pruner" style="display:none">
+        <div class="dash-sec-head" onclick="togglePanel('prunerBody','prunerChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Context-Pruning Sweeper — Live Test
+            <span class="help-icon" data-help="prunerPanel" onclick="event.stopPropagation();showHelp('prunerPanel')">?</span>
+          </span>
+          <span class="sec-right"><span class="sec-chev" id="prunerChevron">▸</span></span>
+        </div>
+        <div id="prunerBody" class="dash-sec-body" style="display:none">
+          <div class="pruner-grid">
+            <div>
+              <label class="field-label">Raw Input Payload</label>
+              <textarea id="prunerInput" class="code-area" placeholder="Paste a messy email, ticket, or log here..."></textarea>
+            </div>
+            <div>
+              <label class="field-label">Cleaned Output</label>
+              <textarea id="prunerOutput" class="code-area" readonly placeholder="Pruned text will appear here..."></textarea>
+            </div>
+          </div>
+          <div class="pruner-actions">
+            <button class="btn-primary" id="prunerRunBtn" onclick="runPruner()">Run Sweeper</button>
+            <div class="pruner-stats" id="prunerStats"></div>
+          </div>
+        </div>
+      </div>
 
-          <!-- Left: Routing Decision Feed (table) -->
+      <!-- ── Token Router (hidden by default) ──────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="router" style="display:none">
+        <div class="dash-sec-head" onclick="togglePanel('routerBody','routerChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Token Router &amp; Model Cascader — Live Test
+            <span class="help-icon" data-help="routerPanel" onclick="event.stopPropagation();showHelp('routerPanel')">?</span>
+          </span>
+          <span class="sec-right"><span class="sec-chev" id="routerChevron">▸</span></span>
+        </div>
+        <div id="routerBody" class="dash-sec-body" style="display:none">
+          <div class="router-controls">
+            <div class="router-input-group">
+              <label class="field-label">Payload to Route</label>
+              <textarea id="routerInput" class="code-area" placeholder="Paste a payload here (or click 'Send Pruned Text' after running the sweeper above)..."></textarea>
+            </div>
+            <div class="router-settings">
+              <label class="field-label">Department</label>
+              <select id="routerDept" class="router-select">
+                <option>Support</option><option>Sales</option>
+                <option>Marketing</option><option>Operations</option>
+              </select>
+              <label class="router-checkbox-label">
+                <input type="checkbox" id="routerAutoPrune" checked />
+                Auto-prune before routing
+              </label>
+              <button class="btn-secondary" onclick="sendPrunedText()">&#8593; Use Pruned Text</button>
+              <button class="btn-primary" onclick="runRouter()">Route Payload</button>
+            </div>
+          </div>
+          <div class="router-result" id="routerResult" style="display:none">
+            <div class="router-result-header">
+              <span class="field-label">Routing Decision</span>
+              <div class="router-badges">
+                <span class="badge" id="routerComplexityBadge"></span>
+                <span class="badge" id="routerModelBadge"></span>
+                <span class="badge" id="routerThrottleBadge" style="display:none"></span>
+              </div>
+            </div>
+            <p class="router-reason" id="routerReason"></p>
+            <div class="router-cost-grid">
+              <div class="cost-cell"><div class="cost-label">Input Tokens</div><div class="cost-value" id="routerInputTokens"></div></div>
+              <div class="cost-cell"><div class="cost-label">Output Tokens</div><div class="cost-value" id="routerOutputTokens"></div></div>
+              <div class="cost-cell highlight-green"><div class="cost-label">This Call Cost</div><div class="cost-value" id="routerCost"></div></div>
+              <div class="cost-cell highlight-purple"><div class="cost-label">Cost Without Pruning</div><div class="cost-value" id="routerCostFull"></div></div>
+              <div class="cost-cell highlight-yellow"><div class="cost-label">Pruning Saved</div><div class="cost-value" id="routerPruningSaved"></div></div>
+              <div class="cost-cell"><div class="cost-label">Budget Used</div><div class="cost-value" id="routerBudgetPct"></div></div>
+            </div>
+            <div>
+              <label class="field-label" style="margin-top:14px;display:block">Simulated Model Response</label>
+              <div class="router-response" id="routerResponse"></div>
+            </div>
+          </div>
+          <div id="routerStatus" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
+        </div>
+      </div>
+
+      <!-- ── Routing Rules (hidden by default) ─────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="routing-rules" style="display:none">
+        <div class="dash-sec-head" onclick="togglePanel('routingRulesBody','routingRulesChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Routing Rules — Complexity Threshold &amp; Keywords</span>
+          <span class="sec-right"><span class="sec-chev" id="routingRulesChevron">▸</span></span>
+        </div>
+        <div id="routingRulesBody" class="dash-sec-body" style="display:none">
+          <div style="margin-bottom:20px">
+            <label class="field-label">Token Routing Threshold</label>
+            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 10px">
+              Payloads that exceed this token count <em>and</em> contain a complexity keyword will be escalated to the Advisor model tier.
+            </p>
+            <div style="display:flex;align-items:center;gap:14px">
+              <input type="range" id="rrThresholdSlider" min="150" max="2000" step="50" value="500"
+                     style="flex:1;accent-color:var(--accent-blue)" />
+              <span id="rrThresholdValue" style="font-size:15px;font-weight:600;color:var(--accent-blue);min-width:40px;text-align:right">500</span>
+              <span style="font-size:12px;color:var(--text-muted)">tokens</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin:2px 0 10px">
+              <span>150 — aggressive escalation</span><span>2000 — minimal escalation</span>
+            </div>
+            <button class="btn-primary" onclick="saveThreshold()">Save Threshold</button>
+            <span id="rrThresholdStatus" style="margin-left:10px;font-size:12px"></span>
+          </div>
+          <hr style="border-color:var(--border);margin:16px 0" />
           <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-              <div class="live-ops-label" style="margin-bottom:0">▸ Routing Decision Feed</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <select class="agent-filter-select" id="routingFilterRisk" onchange="applyRoutingFilters()" title="Filter by risk">
-                  <option value="">All Risk</option>
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-                <select class="agent-filter-select" id="routingFilterTier" onchange="applyRoutingFilters()" title="Filter by tier">
-                  <option value="">All Tiers</option>
-                  <option value="scout">Scout</option>
-                  <option value="advisor">Advisor</option>
-                  <option value="strategist">Strategist</option>
-                </select>
-                <button class="agent-filter-select" id="routingBlockedBtn" onclick="toggleRoutingBlocked()" style="cursor:pointer;font-weight:600">🛡 Blocked</button>
-              </div>
+            <label class="field-label">Complexity Keywords</label>
+            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 10px">
+              If a keyword below appears in a payload it will be routed to a higher model tier.
+              🔒 keywords are core compliance terms that cannot be removed.
+            </p>
+            <div id="rrKeywordList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" id="rrNewKeyword" class="input-field" placeholder="Add keyword…" style="max-width:220px" />
+              <button class="btn-secondary" onclick="addRoutingKeyword()">Add</button>
             </div>
-            <table class="audit-table" id="liveRoutingTable">
-              <thead>
-                <tr>
-                  <th>Time</th><th>Agent</th><th>Dept</th>
-                  <th>Model Tier</th><th>Risk</th><th>Outcome</th>
-                </tr>
-              </thead>
-              <tbody id="liveRoutingBody">
-                <tr><td colspan="6" class="placeholder">Loading...</td></tr>
-              </tbody>
-            </table>
+            <div id="rrKeywordStatus" style="margin-top:6px;font-size:12px"></div>
           </div>
-
-          <!-- Right: Governance Event Stream (cards) -->
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-              <div class="live-ops-label" style="margin-bottom:0">▸ Governance Event Stream</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <select class="agent-filter-select" id="streamFilterType" onchange="applyStreamFilters()" title="Filter by event type">
-                  <option value="">All Types</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="throttled">Throttled</option>
-                  <option value="complex">Complex</option>
-                  <option value="pruning">Pruning</option>
-                  <option value="routine">Routine</option>
-                </select>
-                <select class="agent-filter-select" id="streamFilterDept" onchange="applyStreamFilters()" title="Filter by department">
-                  <option value="">All Depts</option>
-                </select>
-                <input type="text" class="agent-filter-select" id="streamFilterSearch" placeholder="Search..." oninput="applyStreamFilters()" style="width:90px" />
-              </div>
-            </div>
-            <div class="event-stream-list" id="eventStreamList">
-              <p class="placeholder">Loading events...</p>
-            </div>
-          </div>
-
         </div>
       </div>
-    </section>
-    </div><!-- end dp-wrap event-stream -->
 
-    <!-- Panel: Audit Log + Blocked Banner -->
-    <div class="dp-wrap" data-panel-id="audit">
-    <!-- Blocked Alert Banner (hidden until a block event exists) -->
-    <div id="blockedAlertBanner" style="display:none">
-      <div class="blocked-banner-inner">
-        <span class="blocked-banner-icon">🛡</span>
-        <div class="blocked-banner-text">
-          <strong id="blockedBannerCount"></strong>
-          <span id="blockedBannerSub"></span>
+      <!-- ── Sensitive Term Library (hidden by default) ─────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="keywords" style="display:none">
+        <div class="dash-sec-head" onclick="togglePanel('keywordsBody','keywordsChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Sensitive Term Library
+            <span class="help-icon" data-help="keywordsPanel" onclick="event.stopPropagation();showHelp('keywordsPanel')">?</span>
+          </span>
+          <span class="sec-right"><span class="sec-chev" id="keywordsChevron">▸</span></span>
         </div>
-        <button class="blocked-banner-btn" onclick="toggleBlockedFilter()">Review Blocked Events ↓</button>
+        <div id="keywordsBody" class="dash-sec-body" style="display:none">
+          <p class="panel-sub">Words or phrases that trigger special handling when detected in any payload routed through FAGE. Add company-specific terms — legal, compliance, HR, or anything your team flags as sensitive.</p>
+          <div class="kw-add-form">
+            <div class="kw-add-row">
+              <div class="kw-field">
+                <label class="field-label">Term or Phrase</label>
+                <input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" />
+              </div>
+              <div class="kw-field">
+                <label class="field-label">Category</label>
+                <select id="kwCategory" class="reg-input">
+                  <option value="legal">Legal</option>
+                  <option value="hipaa">HIPAA / Health</option>
+                  <option value="financial">Financial</option>
+                  <option value="hr">HR</option>
+                  <option value="custom" selected>Custom</option>
+                </select>
+              </div>
+              <div class="kw-field">
+                <label class="field-label">Action</label>
+                <select id="kwAction" class="reg-input">
+                  <option value="flag">Flag — mark high-risk in audit log</option>
+                  <option value="escalate" selected>Escalate — force flagship model</option>
+                  <option value="block">Block — reject request entirely</option>
+                </select>
+              </div>
+              <div class="kw-field kw-field-btn">
+                <label class="field-label">&nbsp;</label>
+                <button class="btn-primary" onclick="addKeyword()">+ Add Term</button>
+              </div>
+            </div>
+            <div id="kwStatus" class="register-status" style="margin-top:6px"></div>
+          </div>
+          <table class="kw-table" id="kwTable">
+            <thead>
+              <tr><th>Term</th><th>Category</th><th>Action</th><th>Scope</th><th>Remove</th></tr>
+            </thead>
+            <tbody id="kwTableBody">
+              <tr><td colspan="5" class="placeholder">Loading terms...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-    <section class="panel full-width" id="auditPanel">
-      <h2 class="panel-title collapsible-title" onclick="togglePanel('auditBody', 'auditChevron')">
-        <span class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
-        <span>AI Decision Audit Log <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation(); showHelp('auditPanel')">?</span>
-        <span id="auditFilterIndicator" style="display:none; font-size:10px; font-weight:600; letter-spacing:0.06em; background:#2d0505; color:var(--accent-red); border:1px solid var(--accent-red); border-radius:4px; padding:2px 8px; margin-left:8px; vertical-align:middle;">BLOCKED ONLY</span></span>
-        <span style="display:flex;gap:6px;margin-right:10px" onclick="event.stopPropagation()">
-          <button class="export-btn" onclick="exportAuditCsv()" title="Export as CSV">⬇ CSV</button>
-          <button class="export-btn" onclick="exportAuditPdf()" title="Print / Save as PDF">🖨 PDF</button>
-        </span>
-        <span class="panel-chevron" id="auditChevron">▾</span>
-      </h2>
-      <div id="auditBody" style="display:block">
-      <!-- Audit Log Filters -->
-      <div class="agent-filters" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-        <select class="agent-filter-select" id="auditFilterDept" onchange="applyAuditFilters()" title="Filter by department">
-          <option value="">All Depts</option>
-        </select>
-        <select class="agent-filter-select" id="auditFilterRisk" onchange="applyAuditFilters()" title="Filter by risk level">
-          <option value="">All Risk</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-        <select class="agent-filter-select" id="auditFilterWindow" onchange="applyAuditFilters()" title="Filter by time window">
-          <option value="">All Time</option>
-          <option value="1">Last 24h</option>
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-        </select>
-        <button class="agent-filter-select" id="auditBlockedOnlyBtn" onclick="toggleAuditBlockedOnly()" style="cursor:pointer;font-weight:600">🛡 Blocked Only</button>
-        <button class="agent-filter-select" onclick="clearAuditFilters()" style="cursor:pointer;color:var(--text-muted)">✕ Clear</button>
-      </div>
-      <table class="audit-table">
-        <thead>
-          <tr>
-            <th>Timestamp</th>
-            <th>Event Type</th>
-            <th>Department</th>
-            <th>Model Tier</th>
-            <th>Risk Level</th>
-            <th>Outcome</th>
-          </tr>
-        </thead>
-        <tbody id="auditTableBody">
-          <tr><td colspan="6" class="placeholder">Audit events will appear here as you use the system.</td></tr>
-        </tbody>
-      </table>
-      </div><!-- end auditBody -->
-    </section>
-    </div><!-- end dp-wrap audit -->
 
     </div><!-- end draggable-panels -->
+  </div><!-- end dash-left -->
 
-  </main>
-
-  <footer class="footer">
-    FAGE v0.1.0 — POC &nbsp;|&nbsp; Backend: <code>http://localhost:8000</code> &nbsp;|&nbsp;
-    API Docs: <a href="http://localhost:8000/docs" target="_blank">localhost:8000/docs</a>
-  </footer>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/dashboard.js"></script>
-  <script src="js/budget.js"></script>
-  <script src="js/agentlake.js"></script>
-  <script src="js/timeseries.js"></script>
-  <script src="js/auditor.js"></script>
-  <script src="js/event_stream.js"></script>
-  <script src="js/help.js"></script>
-  <script>
-    function toggleDemoMenu(e) {
-      e.stopPropagation();
-      document.getElementById("demoMenu").classList.toggle("open");
-    }
-    function closeDemoMenu() {
-      document.getElementById("demoMenu").classList.remove("open");
-    }
-    document.addEventListener("click", function(e) {
-      if (!e.target.closest(".demo-dropdown")) closeDemoMenu();
-    });
-  </script>
-
-  <!-- Floating Reset Button — testing only -->
-  <div style="position:fixed;bottom:20px;right:20px;z-index:9998;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-    <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);opacity:0.6;text-align:right">Dev / Testing</div>
-    <button id="floatResetBtn" onclick="resetDemoData()"
-      style="background:#1a1010;color:#f85149;border:1px solid #f85149;border-radius:8px;
-             padding:10px 18px;font-size:12px;font-weight:700;cursor:pointer;
-             box-shadow:0 4px 16px rgba(248,81,73,0.2);letter-spacing:0.04em;
-             display:flex;align-items:center;gap:6px">
-      ↺ Reset All
-    </button>
+  <!-- ── Right column — Governance Event Stream (always visible) ──────────── -->
+  <div class="dash-right">
+    <div class="stream-head">
+      <div class="stream-head-row">
+        <div class="stream-head-label">▸ Governance Event Stream</div>
+        <span style="font-size:10px;color:var(--accent-green);font-weight:700">● LIVE</span>
+      </div>
+      <div class="stream-filters">
+        <select class="agent-filter-select" id="streamFilterType" onchange="applyStreamFilters()">
+          <option value="">All Types</option>
+          <option value="blocked">Blocked</option>
+          <option value="throttled">Throttled</option>
+          <option value="complex">Complex</option>
+          <option value="pruning">Pruning</option>
+          <option value="routine">Routine</option>
+        </select>
+        <select class="agent-filter-select" id="streamFilterDept" onchange="applyStreamFilters()">
+          <option value="">All Depts</option>
+        </select>
+        <input type="text" class="agent-filter-select" id="streamFilterSearch"
+               placeholder="Search..." oninput="applyStreamFilters()" style="width:80px" />
+        <button onclick="loadEventStream();loadLiveRoutingFeed()"
+          style="background:transparent;color:var(--accent);border:1px solid var(--border);
+                 border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">↺</button>
+      </div>
+    </div>
+    <div class="stream-scroll event-stream-list" id="eventStreamList">
+      <p class="placeholder">Loading events...</p>
+    </div>
   </div>
+
+</div><!-- end dash-content -->
+
+<footer class="footer">
+  FAGE v0.1.0 &nbsp;|&nbsp; <a href="/onboarding.html">⚙ Connect your platform</a>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/budget.js"></script>
+<script src="js/agentlake.js"></script>
+<script src="js/timeseries.js"></script>
+<script src="js/auditor.js"></script>
+<script src="js/event_stream.js"></script>
+<script src="js/help.js"></script>
 
 </body>
 </html>
