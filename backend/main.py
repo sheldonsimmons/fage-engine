@@ -97,6 +97,17 @@ def _seed_on_startup():
             dict(term="termination",          category="hr",        action="escalate"),
             dict(term="harassment",           category="hr",        action="escalate"),
             dict(term="discrimination",       category="hr",        action="escalate"),
+            # PII phrase variants — catch sloppy/spoken input
+            dict(term="my social",            category="hipaa",     action="block"),
+            dict(term="my passport",          category="hipaa",     action="block"),
+            dict(term="routing is",           category="financial", action="block"),
+            dict(term="date of birth is",     category="hipaa",     action="block"),
+            dict(term="passport",             category="hipaa",     action="escalate"),
+            dict(term="drivers license",      category="hipaa",     action="escalate"),
+            dict(term="drivers licence",      category="hipaa",     action="escalate"),
+            dict(term="diagnosis code",       category="hipaa",     action="block"),
+            dict(term="my diagnosis",         category="hipaa",     action="block"),
+            dict(term="medical record",       category="hipaa",     action="block"),
         ]
         for t in SEED_TERMS:
             exists = db.query(SensitiveTerm).filter_by(term=t["term"]).first()
