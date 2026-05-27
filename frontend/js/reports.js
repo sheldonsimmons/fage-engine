@@ -28,6 +28,55 @@ const COLORS = {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
+/**
+ * Animate a KPI element from its current displayed value to a new target string.
+ * Handles dollar amounts, integers, and strings with numeric content.
+ * Falls back to instant swap for non-numeric strings (badges, labels, etc.).
+ */
+function countUp(el, targetStr, duration = 700) {
+  if (!el) return;
+  if (el._countUpRaf) cancelAnimationFrame(el._countUpRaf);
+
+  const numMatch = String(targetStr).replace(/,/g, "").match(/-?[\d.]+/);
+  if (!numMatch) { el.textContent = targetStr; return; }
+
+  const endNum   = parseFloat(numMatch[0]);
+  const prefix   = String(targetStr).slice(0, numMatch.index);
+  const suffix   = String(targetStr).slice(numMatch.index + numMatch[0].length);
+  const decPlaces = numMatch[0].includes(".") ? numMatch[0].split(".")[1].length : 0;
+
+  const fromMatch = String(el.textContent).replace(/,/g, "").match(/-?[\d.]+/);
+  const startNum  = fromMatch ? parseFloat(fromMatch[0]) : 0;
+
+  const startTime = performance.now();
+
+  function tick(now) {
+    const elapsed  = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased    = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    const current  = startNum + (endNum - startNum) * eased;
+
+    const formatted = decPlaces > 0
+      ? current.toFixed(decPlaces).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+      : Math.round(current).toLocaleString();
+
+    el.textContent = prefix + formatted + suffix;
+
+    if (progress < 1) {
+      el._countUpRaf = requestAnimationFrame(tick);
+    } else {
+      el.textContent = targetStr; // snap to exact value
+    }
+  }
+
+  el._countUpRaf = requestAnimationFrame(tick);
+}
+
+/** Set a KPI by element ID with count-up animation */
+function setKpi(id, text) {
+  countUp(document.getElementById(id), String(text));
+}
+
 function fmtUsd(v) {
   if (v == null)  return "—";
   if (v === 0)    return "$0.00";
@@ -173,16 +222,15 @@ async function loadSavings() {
   const data = await apiGet(`/api/reports/savings?days=${days}`);
   _rptSavingsData = data;
 
-  document.getElementById("sv-total-saved").textContent  = fmtUsd(data.total_saved_usd);
-  document.getElementById("sv-no-fage").textContent      = fmtUsd(data.cost_if_no_fage_usd);
-  document.getElementById("sv-actual").textContent       = fmtUsd(data.total_cost_usd);
-  document.getElementById("sv-pruning").textContent      = fmtUsd(data.pruning_saved_usd);
-  document.getElementById("sv-tokens").textContent       = fmtNum(data.tokens_pruned) + " tokens removed";
-  document.getElementById("sv-downgrade").textContent    = fmtUsd(data.downgrade_saved_usd);
-  document.getElementById("sv-micro-pct").textContent    = data.micro_pct + "% routed to micro";
-  document.getElementById("sv-calls").textContent        = fmtNum(data.total_calls);
-  document.getElementById("sv-call-split").textContent   =
-    fmtNum(data.micro_calls) + " micro / " + fmtNum(data.flagship_calls) + " flagship";
+  setKpi("sv-total-saved",  fmtUsd(data.total_saved_usd));
+  setKpi("sv-no-fage",     fmtUsd(data.cost_if_no_fage_usd));
+  setKpi("sv-actual",      fmtUsd(data.total_cost_usd));
+  setKpi("sv-pruning",     fmtUsd(data.pruning_saved_usd));
+  setKpi("sv-tokens",      fmtNum(data.tokens_pruned) + " tokens removed");
+  setKpi("sv-downgrade",   fmtUsd(data.downgrade_saved_usd));
+  setKpi("sv-micro-pct",   data.micro_pct + "% routed to micro");
+  setKpi("sv-calls",       fmtNum(data.total_calls));
+  setKpi("sv-call-split",  fmtNum(data.micro_calls) + " micro / " + fmtNum(data.flagship_calls) + " flagship");
 
   const labels = data.timeline.map(d => d.date);
 
@@ -263,14 +311,13 @@ async function loadRisk() {
   const data = await apiGet(`/api/reports/risk?days=${days}`);
   _rptRiskEvents = data.recent_events || [];
 
-  document.getElementById("rk-total").textContent    = fmtNum(data.total_events);
-  document.getElementById("rk-critical").textContent = fmtNum(data.critical);
-  document.getElementById("rk-high").textContent     = fmtNum(data.high);
-  document.getElementById("rk-blocked").textContent  = fmtNum(data.blocked);
-  document.getElementById("rk-locks").textContent    = fmtNum(data.locks);
-  document.getElementById("rk-terms").textContent    = fmtNum(data.term_library.total);
-  document.getElementById("rk-terms-sub").textContent =
-    data.term_library.block + " block / " + data.term_library.escalate + " escalate";
+  setKpi("rk-total",    fmtNum(data.total_events));
+  setKpi("rk-critical", fmtNum(data.critical));
+  setKpi("rk-high",     fmtNum(data.high));
+  setKpi("rk-blocked",  fmtNum(data.blocked));
+  setKpi("rk-locks",    fmtNum(data.locks));
+  setKpi("rk-terms",    fmtNum(data.term_library.total));
+  setKpi("rk-terms-sub", data.term_library.block + " block / " + data.term_library.escalate + " escalate");
 
   const labels = data.timeline.map(d => d.date);
 
@@ -933,3 +980,6 @@ function randomizeReportCards() {
 document.addEventListener("DOMContentLoaded", () => {
   setTimeout(() => initDraggableReports("savings"), 100);
 });
+
+// Auto-refresh active tab every 30 seconds so KPIs tick to new values live
+setInterval(() => loadActiveTab(), 30000);
