@@ -214,14 +214,15 @@
           <div class="sec-sub-label">Department Budget Utilization</div>
           <div id="liveBudgetBars" style="margin-bottom:16px"></div>
 
-          <!-- Budget Controls & Agent Management (nested) -->
+          <!-- Budget Controls & Agent Management moved to Admin page -->
           <div style="padding-top:12px;border-top:1px solid var(--border)">
-            <button class="mgmt-toggle-btn" onclick="togglePanel('mgmtBody','mgmtChevron')">
-              <span>⚙ Budget Controls &amp; Agent Management</span>
-              <span style="margin-left:auto" id="mgmtChevron">▸</span>
-            </button>
-            <div id="mgmtBody" style="display:none;margin-top:12px">
-              <section class="mid-row">
+            <a href="/admin.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);text-decoration:none;padding:6px 12px;border:1px solid var(--border);border-radius:5px;transition:color 0.15s,border-color 0.15s" onmouseover="this.style.color='var(--text-primary)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border)'">
+              🛠 Manage budgets &amp; agents → Admin
+            </a>
+          </div>
+
+          <div style="display:none">
+            <section class="mid-row">
 
                 <div class="panel" id="budgetPanel">
                   <h2 class="panel-title">Department Budgets <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span></h2>
@@ -328,8 +329,7 @@
                 </div><!-- end agentPanel -->
 
               </section>
-            </div><!-- end mgmtBody -->
-          </div>
+          </div><!-- end hidden mgmt -->
 
         </div><!-- end agentBudgetBody -->
       </div><!-- end budgets-agents -->
