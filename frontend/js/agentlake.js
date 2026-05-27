@@ -105,8 +105,8 @@ function renderAgentTable(agents) {
 }
 
 function updateKpiAgents(agents) {
-  const active = agents.filter(a => a.status !== "idle").length;
-  document.getElementById("kpiAgents").textContent = agents.length;
+  const el = document.getElementById("kpiAgents");
+  if (el) el.textContent = agents.length;
 }
 
 /** Release a locked or active agent back to idle */
