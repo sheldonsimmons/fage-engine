@@ -626,9 +626,18 @@ def _score_confidence(digits_found: int, expected: int,
 
 # These fire even without a trigger phrase — catch "it's 123-45-6789" with no preamble
 _DIRECT_PATTERNS = [
-    (re.compile(r'\b(\d{3})[-\s](\d{2})[-\s](\d{4})\b'), "SSN", "SSN", 0.97),
-    (re.compile(r'\b(\d{4}[\s-]){3}\d{4}\b'),             "CREDIT_CARD", "CREDIT-CARD", 0.93),
-    (re.compile(r'\b(\d{3})[-.\s](\d{3})[-.\s](\d{4})\b'),"PHONE", "PHONE", 0.85),
+    # SSN — standard 3-2-4 format
+    (re.compile(r'\b(\d{3})[-\s](\d{2})[-\s](\d{4})\b'),  "SSN", "SSN", 0.97),
+    # SSN — non-standard 9-digit groupings (not 3-3-4 which would be phone)
+    # 3-6: "441-617877", 6-3: "441617-877", 4-5: "4416-17877", 2-7: "44-1617877"
+    (re.compile(r'\b\d{3}[-\s]\d{6}\b'),                   "SSN", "SSN", 0.88),
+    (re.compile(r'\b\d{6}[-\s]\d{3}\b'),                   "SSN", "SSN", 0.85),
+    (re.compile(r'\b\d{4}[-\s]\d{5}\b'),                   "SSN", "SSN", 0.85),
+    (re.compile(r'\b\d{2}[-\s]\d{7}\b'),                   "SSN", "SSN", 0.85),
+    # Credit card — 4x4 grouped
+    (re.compile(r'\b(\d{4}[\s-]){3}\d{4}\b'),              "CREDIT_CARD", "CREDIT-CARD", 0.93),
+    # Phone — standard 3-3-4 format (10 digits)
+    (re.compile(r'\b(\d{3})[-.\s](\d{3})[-.\s](\d{4})\b'), "PHONE", "PHONE", 0.85),
 ]
 
 
