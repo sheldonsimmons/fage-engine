@@ -650,11 +650,14 @@ def _vacuum_digits_resumed(
     if not m:
         return digits1, first1, last1
 
-    # Resume collecting from after the resumption phrase
+    # Resume collecting from after the resumption phrase.
+    # No digit cap on the second pass — if the caller delivers more digits
+    # than still_need (e.g. 8 when 5 were needed), take all of them so
+    # nothing leaks. Scoring will handle the count mismatch.
     resume_from = scan_start + m.end()
     digits2, first2, last2 = _vacuum_digits(
         text, resume_from, window_chars=200,
-        max_digits=still_need, max_gap=max_gap,
+        max_digits=0, max_gap=max_gap,
     )
 
     if not digits2:
