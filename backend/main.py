@@ -40,6 +40,13 @@ def _run_migrations():
             conn.commit()
         except Exception:
             pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE department_budgets ADD COLUMN IF NOT EXISTS throttle_tier INTEGER DEFAULT 1"
+            ))
+            conn.commit()
+        except Exception:
+            pass
 
 _run_migrations()
 
