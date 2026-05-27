@@ -600,6 +600,70 @@ def _vacuum_digits(text: str, start: int, window_chars: int = 300,
     return "".join(digits), (first_pos if first_pos != -1 else start), last_pos
 
 
+# Phrases that signal a caller is resuming a number after an interruption.
+# "hold on let me get my card ... okay it's 5 2 1 1 6 6 7 7"
+_RESUMPTION_PHRASES = re.compile(
+    r'\b(okay\s+(?:it\'?s?|so|here|got|continuing|the\s+rest|back)|'
+    r'ok\s+(?:it\'?s?|so|here|got)|'
+    r'here\s+(?:it\s+is|it\'?s?|they\s+are|are\s+the)|'
+    r'got\s+it|alright\s+(?:it\'?s?|so|here)|'
+    r'(?:it\'?s?|the\s+rest\s+is|continuing\s+with|rest\s+of\s+(?:it|the\s+number)\s+is))\b',
+    re.IGNORECASE,
+)
+
+
+def _vacuum_digits_resumed(
+    text: str,
+    trigger_end: int,
+    needed: int,
+    window_chars: int = 400,
+    max_gap: int = 8,
+) -> Tuple[str, int, int]:
+    """
+    Extended vacuum that handles interrupted number delivery.
+
+    First collects digits normally (tight max_gap=8). If fewer digits than
+    needed are found, scans ahead up to window_chars for a resumption phrase
+    ("okay it's", "here it is", "got it back", etc.) and continues collecting
+    from there. Combines both halves into one digit string.
+
+    Returns (digits, first_pos, last_pos) same as _vacuum_digits.
+    """
+    digits1, first1, last1 = _vacuum_digits(
+        text, trigger_end, window_chars=window_chars,
+        max_digits=needed, max_gap=max_gap,
+    )
+
+    if needed == 0 or len(digits1) >= needed:
+        # Got enough digits on first pass — no resumption needed
+        return digits1, first1, last1
+
+    still_need = needed - len(digits1)
+    if still_need <= 0:
+        return digits1, first1, last1
+
+    # Scan ahead from last1+1 for a resumption phrase within 400 chars
+    scan_start = (last1 + 1) if last1 > trigger_end else trigger_end
+    scan_window = text[scan_start:scan_start + 400]
+
+    m = _RESUMPTION_PHRASES.search(scan_window)
+    if not m:
+        return digits1, first1, last1
+
+    # Resume collecting from after the resumption phrase
+    resume_from = scan_start + m.end()
+    digits2, first2, last2 = _vacuum_digits(
+        text, resume_from, window_chars=200,
+        max_digits=still_need, max_gap=max_gap,
+    )
+
+    if not digits2:
+        return digits1, first1, last1
+
+    combined = digits1 + digits2
+    return combined, first1, last2
+
+
 def _score_confidence(digits_found: int, expected: int,
                       min_d: int, max_d: int) -> Tuple[float, bool]:
     """Return (confidence, flagged_for_review)."""
@@ -997,17 +1061,15 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         pattern, trigger_end, trigger_text = found
 
         # max_digits: stop early once we have enough (prevents eating next number)
-        # For range patterns (credit card 13-16), use the max as the cap
+        # For range patterns (credit card 13-16), use the max as the cap.
+        # Use resumed vacuum to handle interrupted number delivery:
+        # "my number is 452 11 hold on let me get my card okay it's 52116677"
         _max_dig = pattern.digit_count if pattern.digit_count > 0 else pattern.digit_max
-        digits, first_pos, last_pos = _vacuum_digits(
+        digits, first_pos, last_pos = _vacuum_digits_resumed(
             normalized, trigger_end,
-            window_chars=300,
-            max_digits=_max_dig,
-            max_gap=8,    # 8 chars — handles filler words ("uh", "um", a dash or
-                          # space) between spoken digits without crossing into
-                          # the next sentence or next PII field's digits.
-                          # 20 was too wide: "3 2 7 [my PIN is] 4 8 2 1" had a
-                          # 9-char gap that let the CVV vacuum steal PIN digits.
+            needed=_max_dig,
+            window_chars=400,
+            max_gap=8,
         )
 
         if not digits:
