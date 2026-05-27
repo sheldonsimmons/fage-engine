@@ -883,7 +883,10 @@ def process_transcript(raw: str) -> VoiceGuardResult:
             normalized, trigger_end,
             window_chars=300,
             max_digits=_max_dig,
-            max_gap=60,
+            max_gap=20,   # 20 chars — allows filler words ("uh", "um") between
+                          # spoken digits without crossing sentence boundaries.
+                          # 60 was too wide: vacuum bled across "do you need my
+                          # date of birth" and stole the first digit of DOB.
         )
 
         if not digits:
