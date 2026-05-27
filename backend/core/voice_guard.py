@@ -387,6 +387,8 @@ PII_PATTERNS = [
         pii_type="PASSPORT",
         triggers=[
             "passport number", "passport is", "my passport",
+            "visa number", "green card number", "alien registration",
+            "a-number", "national id",
         ],
         digit_count=0, digit_min=6, digit_max=9,
         window_seconds=20,
@@ -398,10 +400,100 @@ PII_PATTERNS = [
             "member id", "member number", "employee id", "employee number",
             "medicare number", "medicaid number", "policy number",
             "insurance id", "member id is", "policy is",
+            "military id", "voter registration", "student id", "school id",
+            "workday id", "payroll id", "badge number", "employee number is",
         ],
         digit_count=0, digit_min=6, digit_max=12,
         window_seconds=20,
         redact_label="MEMBER-ID",
+    ),
+    # ── CVV / security code — 3-4 digits ─────────────────────────────────────
+    PIIPattern(
+        pii_type="CVV",
+        triggers=[
+            "cvv", "cvv is", "security code", "security code is",
+            "card verification", "cvc", "cvc is", "cvv2",
+            "three digit code", "four digit code", "back of the card",
+        ],
+        digit_count=0, digit_min=3, digit_max=4,
+        window_seconds=10,
+        redact_label="CVV",
+    ),
+    # ── PIN — 4-6 digits ──────────────────────────────────────────────────────
+    PIIPattern(
+        pii_type="PIN",
+        triggers=[
+            "pin is", "my pin", "pin number", "pin number is",
+            "atm pin", "debit pin", "access pin", "door code",
+            "badge code", "access code is",
+        ],
+        digit_count=0, digit_min=4, digit_max=6,
+        window_seconds=10,
+        redact_label="PIN",
+    ),
+    # ── OTP / verification codes — 4-8 digits ─────────────────────────────────
+    PIIPattern(
+        pii_type="OTP",
+        triggers=[
+            "verification code", "verification code is", "one time code",
+            "one-time code", "one time passcode", "otp", "otp is",
+            "mfa code", "2fa code", "two factor code", "authenticator code",
+            "reset code", "reset code is", "temporary code", "passcode is",
+            "the code is", "your code is", "confirmation code",
+        ],
+        digit_count=0, digit_min=4, digit_max=8,
+        window_seconds=10,
+        redact_label="OTP",
+    ),
+    # ── Card expiry — 4 digits (MMYY) ────────────────────────────────────────
+    PIIPattern(
+        pii_type="CARD_EXPIRY",
+        triggers=[
+            "expiration date", "expiration date is", "expiry date",
+            "expiry is", "expires", "card expires", "good through",
+            "valid through", "valid thru", "exp date",
+        ],
+        digit_count=0, digit_min=4, digit_max=4,
+        window_seconds=10,
+        redact_label="CARD-EXPIRY",
+    ),
+    # ── Billing ZIP — 5 digits ────────────────────────────────────────────────
+    PIIPattern(
+        pii_type="ZIP_CODE",
+        triggers=[
+            "billing zip", "billing zip code", "billing postal code",
+            "zip code is", "my zip is", "zip is", "postal code is",
+        ],
+        digit_count=5,
+        window_seconds=10,
+        redact_label="ZIP-CODE",
+    ),
+    # ── Additional phone triggers (relationship / role context) ───────────────
+    PIIPattern(
+        pii_type="PHONE",
+        triggers=[
+            "his number is", "her number is", "their number is",
+            "patient phone", "patient's phone", "patient phone number",
+            "customer phone", "work phone", "home phone",
+            "emergency phone", "emergency number", "whatsapp is",
+            "signal number", "best number", "best number to reach",
+        ],
+        digit_count=10,
+        window_seconds=15,
+        redact_label="PHONE",
+    ),
+    # ── Additional DOB triggers (institutional contexts) ──────────────────────
+    PIIPattern(
+        pii_type="DATE_OF_BIRTH",
+        triggers=[
+            "patient dob", "applicant dob", "customer birthdate",
+            "my child was born on", "child's birthday", "child dob",
+            "their date of birth", "his date of birth", "her date of birth",
+            "date of birth on file",
+        ],
+        digit_count=0, digit_min=4, digit_max=8,
+        window_seconds=20,
+        redact_label="DATE-OF-BIRTH",
     ),
 ]
 
@@ -787,7 +879,8 @@ def _level3_boost(spans: List[RedactionSpan], text: str, warnings: List[str]) ->
     # Suppress confidence so they don't trigger false redactions.
     suppressed = []
     for span in spans:
-        if span.pii_type not in ("MEMBER-ID", "ROUTING-NUMBER", "BANK-ACCOUNT", "DATE-OF-BIRTH"):
+        if span.pii_type not in ("MEMBER-ID", "ROUTING-NUMBER", "BANK-ACCOUNT", "DATE-OF-BIRTH",
+                                  "CVV", "PIN", "OTP", "CARD-EXPIRY", "ZIP-CODE"):
             suppressed.append(span)
             continue
         # Check 80 chars before the span for business context words
