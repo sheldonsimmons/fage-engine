@@ -527,9 +527,17 @@ _DIRECT_PATTERNS = [
 
 def _apply_direct_patterns(text: str) -> List[RedactionSpan]:
     """Catch formatted PII that appears without a trigger phrase."""
+    text_lower = text.lower()
     spans = []
     for pattern, pii_type, label, conf in _DIRECT_PATTERNS:
         for m in pattern.finditer(text):
+            # Suppress direct PHONE pattern when DOB trigger phrase appears
+            # within 150 chars before the match — date digits read aloud look
+            # identical to phone number patterns (e.g. "08 09 1985").
+            if pii_type == "PHONE":
+                dob_window = text_lower[max(0, m.start() - 150):m.start()]
+                if _DOB_CONTEXT.search(dob_window):
+                    continue
             spans.append(RedactionSpan(
                 start=m.start(), end=m.end(),
                 pii_type=pii_type,
@@ -631,6 +639,15 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
                     continue
                 # Require higher confidence for dates — lots of false positives
                 if r.score < 0.70:
+                    continue
+
+            # PHONE_NUMBER: suppress if a DOB trigger phrase appears within 150
+            # chars before the span. Date digits read aloud after "date of birth"
+            # are routinely misclassified as phone numbers by NLP models because
+            # the digit groupings look similar (e.g. "08 09 1985").
+            if r.entity_type == "PHONE_NUMBER":
+                dob_window = text[max(0, r.start - 150):r.start].lower()
+                if _DOB_CONTEXT.search(dob_window):
                     continue
 
             # LOCATION: only flag when someone is sharing their personal address.
