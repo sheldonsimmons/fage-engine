@@ -1127,12 +1127,28 @@ def process_transcript(raw: str) -> VoiceGuardResult:
             continue
 
         # Ambiguous trigger disambiguation — "my number is" / "other number is"
-        # could be SSN (9 digits) or PHONE (10 digits). Relabel based on count.
+        # could be SSN (9 digits), PHONE (10 digits), or CREDIT_CARD (13-16 digits).
+        # Re-vacuum with a 16-digit cap so we don't truncate credit cards at 10.
         _AMBIGUOUS_PHONE_TRIGGERS = {"my number is", "other number is"}
         if trigger_text in _AMBIGUOUS_PHONE_TRIGGERS:
-            if len(digits) == 9:
-                # Treat as SSN — same digit count, more sensitive label
-                from dataclasses import replace as _dc_replace
+            # Re-collect up to 16 digits so card numbers aren't truncated at 10
+            digits_wide, first_wide, last_wide = _vacuum_digits_resumed(
+                normalized, trigger_end, needed=16, window_chars=400, max_gap=8,
+            )
+            from dataclasses import replace as _dc_replace
+            if len(digits_wide) >= 13:
+                # Credit card — relabel and use wider span
+                digits, first_pos, last_pos = digits_wide, first_wide, last_wide
+                pattern = _dc_replace(
+                    pattern,
+                    pii_type="CREDIT_CARD",
+                    redact_label="CREDIT-CARD",
+                    digit_count=0,
+                    digit_min=13,
+                    digit_max=16,
+                )
+            elif len(digits_wide) == 9:
+                # SSN — relabel
                 pattern = _dc_replace(
                     pattern,
                     pii_type="SSN",
