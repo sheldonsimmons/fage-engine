@@ -400,13 +400,16 @@ function _genSalesforce(obj, dept, agent) {
     @future(callout=true)
     public static void sendAsync(String recordId, String recordText,
                                  String department, String agentName) {
+        // Combine subject line + body so short cases (subject-only) still reach FAGE
+        // recordText is passed as Subject + '\n' + Description from the Flow
+        String payload = String.isBlank(recordText) ? '(no description)' : recordText;
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
         httpReq.setEndpoint('${FAGE_URL}/api/route');
         httpReq.setMethod('POST');
         httpReq.setHeader('Content-Type', 'application/json');
         httpReq.setBody(JSON.serialize(new Map<String, Object>{
-            'text'            => recordText,
+            'text'            => payload,
             'department'      => department,
             'auto_prune'      => true,
             'agent_name'      => agentName,
@@ -437,7 +440,7 @@ function _genSalesforce(obj, dept, agent) {
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-      <div><strong>Add Action → Apex → Send to FAGE</strong><br/>Record ID → ${_obEsc(obj)} ID · Record Text → Description · Department → ${_obEsc(dept)} · Agent Name → ${_obEsc(agent)}</div></div>
+      <div><strong>Add Action → Apex → Send to FAGE</strong><br/>Record ID → ${_obEsc(obj)} ID · Record Text → <em>{!$Record.Subject} + "\\n" + {!$Record.Description}</em> (formula) · Department → ${_obEsc(dept)} · Agent Name → ${_obEsc(agent)}<br/><span style="font-size:0.9em;color:#888">Tip: combining Subject + Description ensures short cases without a body still route through FAGE.</span></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">3</span>
       <div><strong>Save &amp; Activate</strong> — agents appear in the Agentlake Registry on first use.</div></div>
   </div>`;
