@@ -242,6 +242,46 @@
         </div>
       </div>
 
+      <!-- Panel 1b: Budget Controls & Agent Management (live backend) -->
+      <div class="dp-wrap dash-section" data-panel-id="l-budget-controls">
+        <div class="dash-sec-head" onclick="togglePanel('lBudgetControlBody','lBudgetControlChev')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Budget Controls &amp; Agent Management</span>
+          <span class="sec-right"><span class="sec-chev" id="lBudgetControlChev">▸</span></span>
+        </div>
+        <div id="lBudgetControlBody" class="dash-sec-body" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+
+            <!-- Department Budgets -->
+            <div>
+              <div class="sec-sub-label">Department Budgets</div>
+              <div id="lBudgetControls"><p class="placeholder">Loading…</p></div>
+            </div>
+
+            <!-- Agentlake Registry -->
+            <div>
+              <div class="sec-sub-label">Agentlake Registry</div>
+              <div id="lAgentControls"><p class="placeholder">Loading…</p></div>
+              <div style="margin-top:12px">
+                <div class="sec-sub-label">Register New Agent</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                  <input id="lRegName"  class="form-input" placeholder="Agent name" style="font-size:11px;padding:5px 8px">
+                  <input id="lRegDept"  class="form-input" placeholder="Department" style="font-size:11px;padding:5px 8px">
+                  <input id="lRegTable" class="form-input" placeholder="Target table" style="font-size:11px;padding:5px 8px">
+                  <select id="lRegPerms" class="form-input" style="font-size:11px;padding:5px 8px">
+                    <option value="read">read</option>
+                    <option value="read,write">read,write</option>
+                    <option value="read,write,delete">read,write,delete</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" style="font-size:11px;padding:4px 14px" onclick="lRegisterAgent()">+ Register Agent</button>
+                <span id="lRegStatus" style="font-size:11px;margin-left:8px;color:var(--accent-green)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Panel 2: 30-Day Trends -->
       <div class="dp-wrap dash-section" data-panel-id="l-timeseries">
         <div class="dash-sec-head" onclick="togglePanel('lTimeseriesBody','lTimeseriesChev')">
@@ -1257,6 +1297,141 @@ function init() {
 }
 
 init();
+</script>
+<script>
+// ── Budget Controls & Agent Management (live backend panel) ───────────────────
+
+async function lLoadBudgetControls() {
+  try {
+    const res  = await fetch("/api/budget/all");
+    const data = await res.json();
+    const budgets = data.budgets || data;
+    const tierNames = { 1:"Scout — T1", 2:"Analyst — T2", 3:"Advisor — T3", 4:"Strategist — T4" };
+    document.getElementById("lBudgetControls").innerHTML = budgets.map(b => {
+      const pct = Math.min((b.current_spend_usd / b.monthly_cap_usd) * 100, 100);
+      const fc  = pct >= 100 ? "critical" : pct >= 80 ? "warn" : "";
+      const throttleTag = b.throttled ? `<span class="budget-tag" style="margin-left:6px">THROTTLED</span>` : "";
+      const tierOpts = [1,2,3,4].map(v =>
+        `<option value="${v}" ${v === (b.throttle_tier || 1) ? "selected" : ""}>${tierNames[v]}</option>`
+      ).join("");
+      return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-weight:700;font-size:13px">${b.department}${throttleTag}</span>
+          <span style="font-size:11px;color:var(--text-muted)">$${b.current_spend_usd.toFixed(2)} / $${b.monthly_cap_usd.toFixed(2)} (${pct.toFixed(1)}%)</span>
+        </div>
+        <div style="background:var(--bg-input);border-radius:3px;height:6px;margin-bottom:10px">
+          <div class="budget-bar-fill ${fc}" style="width:${pct}%;height:6px;border-radius:3px"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <input id="lcap-${b.department}" class="form-input" type="number" value="${b.monthly_cap_usd}" min="0" step="50" style="width:80px;font-size:11px;padding:3px 6px">
+          <button class="btn btn-sm" onclick="lSetCap('${b.department}')" style="font-size:10px;padding:3px 10px">Set Cap</button>
+          <button class="btn btn-sm" onclick="lResetMonth('${b.department}')" style="font-size:10px;padding:3px 10px;background:var(--bg-input)">Reset Month</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:var(--text-muted);white-space:nowrap">Throttle floor:</span>
+          <select class="budget-throttle-select" id="ltier-${b.department}" onchange="lSetThrottleTier('${b.department}')">${tierOpts}</select>
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e) {
+    document.getElementById("lBudgetControls").innerHTML = `<p style="color:var(--accent-red);font-size:11px">Failed to load budgets</p>`;
+  }
+}
+
+async function lSetCap(dept) {
+  const val = parseFloat(document.getElementById(`lcap-${dept}`).value);
+  if (isNaN(val) || val < 0) return;
+  await fetch(`/api/budget/${dept}/cap`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ monthly_cap_usd: val }) });
+  lLoadBudgetControls();
+}
+
+async function lResetMonth(dept) {
+  await fetch(`/api/budget/${dept}/reset`, { method:"POST" });
+  lLoadBudgetControls();
+}
+
+async function lSetThrottleTier(dept) {
+  const tier = parseInt(document.getElementById(`ltier-${dept}`).value, 10);
+  await fetch(`/api/budget/${dept}/throttle-tier`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ tier }) });
+  lLoadBudgetControls();
+}
+
+async function lLoadAgentControls() {
+  try {
+    const res    = await fetch("/api/agents");
+    const agents = await res.json();
+    const active = agents.filter(a => !a.archived);
+    document.getElementById("lAgentControls").innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="color:var(--text-muted);border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:4px 6px">Agent</th>
+          <th style="text-align:left;padding:4px 6px">Dept</th>
+          <th style="text-align:left;padding:4px 6px">Status</th>
+          <th style="text-align:left;padding:4px 6px">Action</th>
+        </tr></thead>
+        <tbody>${active.map(a => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:5px 6px;font-weight:600">${a.name}</td>
+            <td style="padding:5px 6px;color:var(--text-muted)">${a.department}</td>
+            <td style="padding:5px 6px">
+              <span style="color:${a.status==='active'?'var(--accent-green)':a.status==='locked'?'var(--accent-yellow)':'var(--text-muted)'}">
+                ${a.status.toUpperCase()}
+              </span>
+            </td>
+            <td style="padding:5px 6px">
+              <button class="btn btn-sm" onclick="lArchiveAgent(${a.id},'${a.name}')"
+                style="font-size:9px;padding:2px 8px;background:var(--bg-input);color:var(--accent-red);border-color:var(--accent-red)">
+                Archive
+              </button>
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    document.getElementById("lAgentControls").innerHTML = `<p style="color:var(--accent-red);font-size:11px">Failed to load agents</p>`;
+  }
+}
+
+async function lArchiveAgent(id, name) {
+  if (!confirm(`Archive agent "${name}"?`)) return;
+  await fetch(`/api/agents/${id}/archive`, { method:"POST" });
+  lLoadAgentControls();
+}
+
+async function lRegisterAgent() {
+  const name  = document.getElementById("lRegName").value.trim();
+  const dept  = document.getElementById("lRegDept").value.trim();
+  const table = document.getElementById("lRegTable").value.trim();
+  const perms = document.getElementById("lRegPerms").value;
+  const status = document.getElementById("lRegStatus");
+  if (!name || !dept) { status.textContent = "Name and department required."; status.style.color = "var(--accent-red)"; return; }
+  try {
+    await fetch("/api/agents/register", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ name, department: dept, target_table: table || "tickets", permissions: perms, collision_policy: "lock" }) });
+    status.textContent = `✓ ${name} registered`;
+    status.style.color = "var(--accent-green)";
+    document.getElementById("lRegName").value = "";
+    document.getElementById("lRegDept").value = "";
+    document.getElementById("lRegTable").value = "";
+    lLoadAgentControls();
+    setTimeout(() => status.textContent = "", 3000);
+  } catch(e) {
+    status.textContent = "Registration failed.";
+    status.style.color = "var(--accent-red)";
+  }
+}
+
+// Load on open
+document.querySelector('[data-panel-id="l-budget-controls"] .dash-sec-head').addEventListener("click", function() {
+  const body = document.getElementById("lBudgetControlBody");
+  // After toggle, if now visible, load data
+  setTimeout(() => {
+    if (body.style.display !== "none") {
+      lLoadBudgetControls();
+      lLoadAgentControls();
+    }
+  }, 50);
+});
 </script>
 <script src="js/help.js"></script>
 <script>
