@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Reports — Enterprise Demo</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/reports.css" />
+  <link rel="stylesheet" href="css/demo.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <style>
+    .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+      transition: color 0.15s, border-color 0.15s; }
+    .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
+    .header-nav-link.active { color: var(--accent); border-color: var(--accent); background: rgba(88,166,255,0.08); }
+    .demo-banner {
+      background: rgba(88,166,255,0.06);
+      border-bottom: 1px solid rgba(88,166,255,0.2);
+      padding: 6px 24px;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .demo-banner strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <span class="header-logo">◈</span>
+      <div>
+        <div class="header-title">FAGE</div>
+        <div class="header-sub">FinOps Agentlake &amp; Governance Engine — Enterprise Demo</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <a href="/live.html" class="header-nav-link">← Live Operations</a>
+      <a href="/live-reports.html" class="header-nav-link active">📊 Reports</a>
+      <a href="/" class="header-nav-link">← Dashboard</a>
+      <a href="/policy.html" class="header-nav-link">⚖ Policy &amp; Rules</a>
+    </div>
+    <div class="header-status">
+      <span style="font-size:12px;color:var(--text-muted);font-weight:600;letter-spacing:0.06em">Reports — Enterprise Demo</span>
+    </div>
+  </header>
+
+  <!-- ── Demo Banner ────────────────────────────────────────────────────── -->
+  <div class="demo-banner">
+    <span>◈</span>
+    <span>Enterprise Demo — <strong>Meridian Financial Group</strong> · 4 Departments · 12 Agents · 30-Day Period · All data is simulated — no API calls</span>
+  </div>
+
+  <main class="rpt-main">
+
+    <!-- ── Page header + controls ─────────────────────────────────────── -->
+    <div class="rpt-header">
+      <div>
+        <h1 class="rpt-title">AI Governance Reports</h1>
+        <p class="rpt-subtitle">Savings, risk events, and department performance — Meridian Financial Group</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onclick="randomizeReportCards()" style="background:transparent;color:var(--accent-purple);border:1px solid var(--accent-purple);border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer" title="Shuffle card order in active tab">⊛ Randomize</button>
+      </div>
+      <div class="rpt-controls">
+        <label class="rpt-range-label">Time Range</label>
+        <div class="rpt-date-picker">
+          <select id="rptDatePreset" class="rpt-date-select" onchange="onDatePresetChange()">
+            <optgroup label="Relative">
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+            </optgroup>
+            <optgroup label="This Period">
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+              <option value="this_quarter">This Quarter</option>
+              <option value="this_year">This Year</option>
+            </optgroup>
+            <optgroup label="Last Period">
+              <option value="last_week">Last Week</option>
+              <option value="last_month">Last Month</option>
+              <option value="last_quarter">Last Quarter</option>
+              <option value="last_2q">Last 2 Quarters</option>
+              <option value="last_year">Last Year</option>
+            </optgroup>
+            <optgroup label="Fixed Range">
+              <option value="last_7">Last 7 Days</option>
+              <option value="last_14">Last 14 Days</option>
+              <option value="last_30" selected>Last 30 Days</option>
+              <option value="last_60">Last 60 Days</option>
+              <option value="last_90">Last 90 Days</option>
+              <option value="last_120">Last 120 Days</option>
+              <option value="last_6m">Last 6 Months</option>
+            </optgroup>
+            <optgroup label="Custom">
+              <option value="custom">Custom Range...</option>
+            </optgroup>
+          </select>
+          <div class="rpt-custom-dates" id="rptCustomDates" style="display:none">
+            <input type="date" id="rptDateFrom" class="rpt-date-input" onchange="loadActiveTab()" />
+            <span class="rpt-date-sep">→</span>
+            <input type="date" id="rptDateTo" class="rpt-date-input" onchange="loadActiveTab()" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tabs ───────────────────────────────────────────────────────── -->
+    <div class="rpt-tabs">
+      <button class="rpt-tab active" data-tab="savings">💰 Savings</button>
+      <button class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
+      <button class="rpt-tab" data-tab="departments">🏢 Departments</button>
+      <button class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
+      <button class="rpt-tab" data-tab="activity">📡 Agent Activity</button>
+      <button class="rpt-tab" data-tab="roi">📈 ROI Calculator</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 1: SAVINGS
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane active" id="tab-savings">
+
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="alert('Export available in production version')">⬇ CSV</button>
+        <button class="export-btn" onclick="alert('Export available in production version')">🖨 PDF</button>
+      </div>
+
+      <!-- KPI strip -->
+      <div class="rpt-kpi-row">
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Total Saved</div>
+          <div class="rpt-kpi-value green" id="sv-total-saved">—</div>
+          <div class="rpt-kpi-sub">pruning + model downgrade</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Without FAGE</div>
+          <div class="rpt-kpi-value" id="sv-no-fage">—</div>
+          <div class="rpt-kpi-sub">est. cost at full flagship rate</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Actual Cost</div>
+          <div class="rpt-kpi-value" id="sv-actual">—</div>
+          <div class="rpt-kpi-sub">what you paid</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Pruning Saved</div>
+          <div class="rpt-kpi-value green" id="sv-pruning">—</div>
+          <div class="rpt-kpi-sub" id="sv-tokens">— tokens removed</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Model Downgrade Saved</div>
+          <div class="rpt-kpi-value green" id="sv-downgrade">—</div>
+          <div class="rpt-kpi-sub" id="sv-micro-pct">— % routed to micro</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Total Calls</div>
+          <div class="rpt-kpi-value" id="sv-calls">—</div>
+          <div class="rpt-kpi-sub" id="sv-call-split">— micro / — flagship</div>
+        </div>
+      </div>
+
+      <!-- Charts rows — draggable container -->
+      <div id="savings-cards" class="rpt-draggable-col">
+        <div class="rpt-drag-card" data-card-id="sv-daily-spend">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Spend</div>
+              <canvas id="chartDailySpend"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Model Tier Split</div>
+              <canvas id="chartModelSplit"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="rpt-drag-card" data-card-id="sv-tokens-pruned">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Tokens Pruned</div>
+              <canvas id="chartTokensPruned"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Savings Breakdown</div>
+              <canvas id="chartSavingsBreakdown"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 2: RISK
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-risk">
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="alert('Export available in production version')">⬇ CSV</button>
+        <button class="export-btn" onclick="alert('Export available in production version')">🖨 PDF</button>
+      </div>
+
+      <div class="rpt-kpi-row">
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Total Events</div>
+          <div class="rpt-kpi-value" id="rk-total">—</div>
+          <div class="rpt-kpi-sub">audit log entries</div>
+        </div>
+        <div class="rpt-kpi alert">
+          <div class="rpt-kpi-label">Critical</div>
+          <div class="rpt-kpi-value red" id="rk-critical">—</div>
+          <div class="rpt-kpi-sub">HIPAA, fraud, lawsuits</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">High Risk</div>
+          <div class="rpt-kpi-value yellow" id="rk-high">—</div>
+          <div class="rpt-kpi-sub">legal, compliance, locks</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Blocked Requests</div>
+          <div class="rpt-kpi-value red" id="rk-blocked">—</div>
+          <div class="rpt-kpi-sub">stopped by term policy</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Agent Collisions</div>
+          <div class="rpt-kpi-value yellow" id="rk-locks">—</div>
+          <div class="rpt-kpi-sub">concurrent write conflicts</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Term Library</div>
+          <div class="rpt-kpi-value" id="rk-terms">—</div>
+          <div class="rpt-kpi-sub" id="rk-terms-sub">— block / — escalate</div>
+        </div>
+      </div>
+
+      <!-- Cards — draggable container -->
+      <div id="risk-cards" class="rpt-draggable-col">
+        <div class="rpt-drag-card" data-card-id="rk-timeline">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Risk Events</div>
+              <canvas id="chartRiskTimeline"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Risk Level Breakdown</div>
+              <canvas id="chartRiskBreakdown"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="rpt-drag-card" data-card-id="rk-compliance">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Governance &amp; Compliance Activity</div>
+            <div class="demo-compliance-grid" id="complianceGrid" style="margin-top:16px">
+              <p class="placeholder">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rpt-drag-card" data-card-id="rk-exec">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Executive Summary — AI Governance ROI</div>
+            <div class="demo-exec-grid" id="execGrid" style="margin-top:16px">
+              <p class="placeholder">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rpt-drag-card" data-card-id="rk-events">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Recent High-Stakes Events</div>
+            <table class="rpt-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Type</th>
+                  <th>Department</th>
+                  <th>Risk</th>
+                  <th>Outcome</th>
+                </tr>
+              </thead>
+              <tbody id="riskEventTable">
+                <tr><td colspan="5" class="placeholder">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 3: DEPARTMENTS
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-departments">
+
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="alert('Export available in production version')">⬇ CSV</button>
+        <button class="export-btn" onclick="alert('Export available in production version')">🖨 PDF</button>
+      </div>
+
+      <!-- Cards — draggable container -->
+      <div id="dept-cards" class="rpt-draggable-col">
+        <div class="rpt-drag-card" data-card-id="dept-scorecard">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-table-card">
+            <div class="rpt-table-title">Department Scorecard</div>
+            <table class="rpt-table">
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th>Calls</th>
+                  <th>Micro %</th>
+                  <th>Actual Cost</th>
+                  <th>Pruning Saved</th>
+                  <th>Budget Used</th>
+                  <th>Cap</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="deptScorecardTable">
+                <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rpt-drag-card" data-card-id="dept-charts">
+          <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
+          <div class="rpt-charts-row">
+            <div class="rpt-chart-card rpt-chart-wide">
+              <div class="rpt-chart-title">Daily Spend by Department</div>
+              <canvas id="chartDeptSpend"></canvas>
+            </div>
+            <div class="rpt-chart-card">
+              <div class="rpt-chart-title">Cost by Department</div>
+              <canvas id="chartDeptCost"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 4: BOT EFFICIENCY REVIEW
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-efficiency">
+
+      <div class="eff-generate-bar">
+        <p>Analyzes every agent's call history — frequency, cost, routing decisions, and pruning efficiency — then generates AI-written recommendations with projected savings.</p>
+        <select id="effDaysSelect" class="reg-input" style="width:120px; flex-shrink:0">
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last 1 year</option>
+        </select>
+        <button class="eff-generate-btn" id="effGenerateBtn" onclick="generateEfficiencyReview()">
+          ⚡ Generate Review
+        </button>
+      </div>
+
+      <!-- Fleet summary bar -->
+      <div class="eff-fleet-bar" id="effFleetBar" style="display:none">
+        <div class="eff-fleet-card">
+          <div class="eff-fleet-label">Fleet Grade</div>
+          <div class="eff-fleet-value accent" id="effFleetGrade">—</div>
+        </div>
+        <div class="eff-fleet-card">
+          <div class="eff-fleet-label">Agents Analyzed</div>
+          <div class="eff-fleet-value" id="effAgentsCount">—</div>
+        </div>
+        <div class="eff-fleet-card">
+          <div class="eff-fleet-label">Projected 30-Day Savings</div>
+          <div class="eff-fleet-value green" id="effTotalSavings">—</div>
+        </div>
+        <div class="eff-fleet-card">
+          <div class="eff-fleet-label">Generated By</div>
+          <div class="eff-fleet-value accent" id="effGeneratedBy" style="font-size:14px">—</div>
+        </div>
+      </div>
+
+      <!-- Agent cards -->
+      <div class="eff-grid" id="effGrid">
+        <div class="eff-empty">
+          Click <strong>Generate Review</strong> to analyze your bot fleet.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 5: AGENT ACTIVITY
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-activity">
+
+      <!-- Filter bar -->
+      <div class="act-filter-bar">
+        <div class="act-filter-group">
+          <label class="act-filter-label">Platform</label>
+          <select id="actPlatform" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Platforms</option>
+            <option>Salesforce</option>
+            <option>ServiceNow</option>
+            <option>HubSpot</option>
+            <option>Dynamics365</option>
+            <option>Zendesk</option>
+            <option>Custom</option>
+          </select>
+        </div>
+        <div class="act-filter-group">
+          <label class="act-filter-label">Agent</label>
+          <select id="actAgent" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Agents</option>
+          </select>
+        </div>
+        <div class="act-filter-group">
+          <label class="act-filter-label">Department</label>
+          <select id="actDept" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Departments</option>
+          </select>
+        </div>
+        <div class="act-filter-group">
+          <label class="act-filter-label">Tier</label>
+          <select id="actModel" class="act-filter-select" onchange="loadAgentActivity()">
+            <option value="">All Tiers</option>
+            <option value="Scout">⚡ Scout</option>
+            <option value="Analyst">🔍 Analyst</option>
+            <option value="Advisor">💡 Advisor</option>
+            <option value="Strategist">🎯 Strategist</option>
+            <option value="micro">Turbo (legacy)</option>
+            <option value="flagship">Flagship (legacy)</option>
+          </select>
+        </div>
+        <button class="act-reset-btn" onclick="resetActivityFilters()">Reset</button>
+      </div>
+
+      <!-- Summary bar -->
+      <div class="act-summary-bar" id="actSummaryBar">
+        <div class="act-summary-chip"><span id="actTotalCalls">—</span><span class="act-summary-label">Total Calls</span></div>
+        <div class="act-summary-chip"><span id="actTotalCost">—</span><span class="act-summary-label">Total Cost</span></div>
+        <div class="act-summary-chip"><span id="actAgentsCount">—</span><span class="act-summary-label">Agents</span></div>
+        <div class="act-summary-chip"><span id="actPlatformsCount">—</span><span class="act-summary-label">Platforms</span></div>
+      </div>
+
+      <!-- Agent table -->
+      <div class="rpt-table-card" id="actTableCard">
+        <div class="rpt-table-title">API Calls by Agent</div>
+        <table class="rpt-table" id="actTable">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Agent</th>
+              <th>Platform</th>
+              <th>Department</th>
+              <th>Status</th>
+              <th>Calls</th>
+              <th>Total Cost</th>
+              <th>Avg / Call</th>
+              <th>Flagship %</th>
+              <th>Pruned %</th>
+              <th>Last Active</th>
+            </tr>
+          </thead>
+          <tbody id="actTableBody">
+            <tr><td colspan="11" class="placeholder">Loading agent activity...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB: ROI CALCULATOR
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-roi">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+
+        <!-- Left: Inputs -->
+        <div class="panel" style="padding:24px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)">Your AI Usage Profile</div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between"><strong style="color:var(--text-primary);font-size:13px">Industry</strong></div>
+            <select id="roi-industry" onchange="roiApplyPreset()" style="width:100%;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:13px">
+              <option value="custom">Custom / Enter manually</option>
+              <option value="insurance">Insurance</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="financial">Financial Services / Banking</option>
+              <option value="legal">Legal Services</option>
+              <option value="retail">Retail / E-Commerce</option>
+              <option value="logistics">Logistics / Operations</option>
+              <option value="saas">SaaS / Technology</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Total AI Calls / Month</strong><span id="roi-calls-disp">50,000</span></div>
+            <input type="range" id="roi-calls" min="1000" max="1000000" step="1000" value="50000" oninput="document.getElementById('roi-calls-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-calls-num" value="50000" min="1000" max="1000000" oninput="document.getElementById('roi-calls').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">calls/month</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Routine Calls %</strong><span id="roi-routine-disp">70%</span></div>
+            <input type="range" id="roi-routine" min="10" max="95" step="5" value="70" oninput="document.getElementById('roi-routine-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-routine-num" value="70" min="10" max="95" oninput="document.getElementById('roi-routine').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">% (FAQs, simple tickets)</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Avg Input Tokens / Call</strong><span id="roi-intok-disp">2,000</span></div>
+            <input type="range" id="roi-intok" min="200" max="20000" step="100" value="2000" oninput="document.getElementById('roi-intok-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-intok-num" value="2000" min="200" max="20000" oninput="document.getElementById('roi-intok').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">tokens</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--text-primary);font-size:13px">Avg Output Tokens / Call</strong><span id="roi-outtok-disp">500</span></div>
+            <input type="range" id="roi-outtok" min="50" max="5000" step="50" value="500" oninput="document.getElementById('roi-outtok-num').value=this.value;roiCalc()" style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+              <input type="number" id="roi-outtok-num" value="500" min="50" max="5000" oninput="document.getElementById('roi-outtok').value=this.value;roiCalc()" style="width:100px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:6px 10px;font-size:13px;font-family:var(--font-mono)">
+              <span style="font-size:11px;color:var(--text-muted)">tokens</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><strong style="color:var(--text-primary);font-size:13px">Current Model (everything today)</strong></div>
+            <select id="roi-tier" onchange="roiCalc()" style="width:100%;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:13px">
+              <option value="advisor" selected>Advisor — Sonnet 4.6 ($3.00 in / $15.00 out per 1M)</option>
+              <option value="strategist">Strategist — Opus 4.6 ($5.00 in / $25.00 out per 1M)</option>
+              <option value="analyst">Analyst — Haiku 4.5 ($1.00 in / $5.00 out per 1M)</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><strong style="color:var(--text-primary);font-size:13px">FAGE Plan</strong></div>
+            <select id="roi-plan" onchange="roiCalc()" style="width:100%;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:13px">
+              <option value="299">Starter — $299/month</option>
+              <option value="599">Growth — $599/month</option>
+              <option value="1499" selected>Business — $1,499/month</option>
+              <option value="4999">Enterprise — $4,999/month</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Right: Results -->
+        <div>
+          <div id="roi-payback" style="background:#0d2d1a;border:1px solid var(--accent-green);border-radius:8px;padding:14px 18px;display:flex;align-items:center;gap:14px;margin-bottom:20px">
+            <div style="font-size:22px">✓</div>
+            <div><strong id="roi-payback-text" style="color:var(--accent-green);font-size:14px">Calculating...</strong><p id="roi-payback-sub" style="font-size:12px;color:var(--text-muted);margin:3px 0 0"></p></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px">
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly Without FAGE</div>
+              <div id="roi-cost-without" style="font-size:22px;font-weight:700;color:var(--accent-red);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly With FAGE</div>
+              <div id="roi-cost-with" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly Net Savings</div>
+              <div id="roi-monthly-savings" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Annual Net Savings</div>
+              <div id="roi-annual-savings" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Cost/Call Before</div>
+              <div id="roi-cpc-before" style="font-size:22px;font-weight:700;font-family:var(--font-mono)">—</div>
+            </div>
+            <div class="panel" style="padding:14px 16px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Cost/Call After</div>
+              <div id="roi-cpc-after" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
+            </div>
+          </div>
+
+          <div class="panel" style="padding:24px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)">Cost Breakdown by Routing Tier</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px">
+              <thead><tr>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Tier</th>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Calls</th>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Cost/Call</th>
+                <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);border-bottom:1px solid var(--border)">Monthly Total</th>
+              </tr></thead>
+              <tbody id="roi-breakdown"></tbody>
+            </table>
+            <div style="background:#1a0d05;border:1px solid var(--accent-yellow);border-radius:8px;padding:14px 18px;margin-bottom:20px">
+              <div style="font-size:11px;font-weight:700;color:var(--accent-yellow);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">⚠ Risk Value Not Included Above</div>
+              <ul style="margin:0;padding-left:18px;font-size:12px;color:var(--text-muted);line-height:1.8">
+                <li>HIPAA / PII violation avoided: $50,000–$1.9M per incident</li>
+                <li>Audit-ready AI decision log — no manual reconstruction</li>
+                <li>Agent collision prevention — zero silent data corruption</li>
+                <li>Budget auto-throttle — no surprise end-of-month overruns</li>
+              </ul>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+              <button onclick="roiCopyClipboard()" style="background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:9px 20px;font-size:12px;font-weight:600;cursor:pointer">⎘ Copy Summary</button>
+              <button onclick="window.print()" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:9px 20px;font-size:12px;font-weight:700;cursor:pointer">↓ Export as PDF</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    FAGE v0.1.0 — Enterprise Demo Reports &nbsp;|&nbsp;
+    <a href="/live.html">← Live Operations</a>
+  </footer>
+
+  <script>
+  // ══════════════════════════════════════════════════════════════════════════════
+  // FAGE — live-reports.html — Enterprise Demo (Meridian Financial Group)
+  // All data mocked inline — no API calls
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  // ── Pricing constants (real Anthropic rates) ──────────────────────────────────
+  const RATES = {
+    scout:      { input: 1.00 / 1e6, output: 5.00  / 1e6 }, // Haiku 4.5
+    analyst:    { input: 1.00 / 1e6, output: 5.00  / 1e6 },
+    advisor:    { input: 3.00 / 1e6, output: 15.00 / 1e6 }, // Sonnet 4.6
+    strategist: { input: 5.00 / 1e6, output: 25.00 / 1e6 }, // Opus 4.6
+  };
+
+  // ── Color palette ─────────────────────────────────────────────────────────────
+  const COLORS = {
+    micro:    "#58a6ff",
+    flagship: "#bc8cff",
+    green:    "#3fb950",
+    yellow:   "#d29922",
+    red:      "#f85149",
+    muted:    "#8b949e",
+    border:   "#30363d",
+    panel:    "#161b22",
+    dept:     ["#58a6ff","#3fb950","#bc8cff","#d29922","#f85149","#79c0ff","#56d364","#d2a8ff"],
+  };
+
+  // ── Mock Data — Meridian Financial Group ─────────────────────────────────────
+
+  const MOCK_SAVINGS = {
+    total_saved_usd:      8742.30,
+    cost_if_no_fage_usd:  24180.50,
+    total_cost_usd:       15438.20,
+    pruning_saved_usd:    2841.60,
+    tokens_pruned:        1894400,
+    downgrade_saved_usd:  5900.70,
+    micro_pct:            72,
+    total_calls:          128441,
+    micro_calls:          92477,
+    flagship_calls:       35964,
+  };
+
+  const MOCK_RISK = {
+    total_events: 847,
+    critical: 23,
+    high: 94,
+    medium: 318,
+    low: 412,
+    blocked: 47,
+    locks: 12,
+    term_library: { total: 34, block: 28, escalate: 6 },
+  };
+
+  const MOCK_DEPTS = [
+    { department:"Support",    total_calls:48200, micro_pct:68, total_cost_usd:5842.10, pruning_saved_usd:892.40,  budget_used_pct:73.0,  monthly_cap_usd:8000,  throttled:false, override_granted:false },
+    { department:"Sales",      total_calls:31400, micro_pct:78, total_cost_usd:4218.60, pruning_saved_usd:641.20,  budget_used_pct:35.2,  monthly_cap_usd:12000, throttled:false, override_granted:false },
+    { department:"Marketing",  total_calls:29800, micro_pct:71, total_cost_usd:6104.80, pruning_saved_usd:1048.30, budget_used_pct:101.7, monthly_cap_usd:6000,  throttled:true,  override_granted:true  },
+    { department:"Operations", total_calls:19041, micro_pct:74, total_cost_usd:1289.40, pruning_saved_usd:259.70,  budget_used_pct:32.2,  monthly_cap_usd:4000,  throttled:false, override_granted:false },
+  ];
+
+  const MOCK_AGENTS = [
+    { id:1,  name:"SF-SupportBot-1",   platform:"Salesforce",  department:"Support",    status:"idle", calls:14820, cost_usd:1842.10, avg_cost_usd:0.000124, flagship_pct:28, pruned_pct:74, last_active:"2026-05-26T14:22:00" },
+    { id:2,  name:"SF-SupportBot-2",   platform:"Salesforce",  department:"Support",    status:"idle", calls:12440, cost_usd:1540.80, avg_cost_usd:0.000124, flagship_pct:24, pruned_pct:71, last_active:"2026-05-26T14:18:00" },
+    { id:3,  name:"SF-CaseEscalator",  platform:"Salesforce",  department:"Support",    status:"idle", calls:9820,  cost_usd:1284.20, avg_cost_usd:0.000131, flagship_pct:42, pruned_pct:68, last_active:"2026-05-26T13:55:00" },
+    { id:4,  name:"SF-BillingAuditor", platform:"Salesforce",  department:"Support",    status:"idle", calls:11120, cost_usd:1175.00, avg_cost_usd:0.000106, flagship_pct:18, pruned_pct:82, last_active:"2026-05-26T14:01:00" },
+    { id:5,  name:"SF-SalesEnrich-1",  platform:"Salesforce",  department:"Sales",      status:"idle", calls:12200, cost_usd:1680.40, avg_cost_usd:0.000138, flagship_pct:34, pruned_pct:66, last_active:"2026-05-26T14:10:00" },
+    { id:6,  name:"SF-SalesEnrich-2",  platform:"Salesforce",  department:"Sales",      status:"idle", calls:10840, cost_usd:1492.20, avg_cost_usd:0.000138, flagship_pct:31, pruned_pct:63, last_active:"2026-05-26T13:48:00" },
+    { id:7,  name:"SF-OpportunityBot", platform:"Salesforce",  department:"Sales",      status:"idle", calls:8360,  cost_usd:1046.00, avg_cost_usd:0.000125, flagship_pct:26, pruned_pct:70, last_active:"2026-05-26T14:05:00" },
+    { id:8,  name:"SF-MarketMailer",   platform:"Salesforce",  department:"Marketing",  status:"idle", calls:14900, cost_usd:3082.40, avg_cost_usd:0.000207, flagship_pct:22, pruned_pct:68, last_active:"2026-05-26T14:20:00" },
+    { id:9,  name:"SF-CampaignBot",    platform:"Salesforce",  department:"Marketing",  status:"idle", calls:14900, cost_usd:3022.40, avg_cost_usd:0.000203, flagship_pct:20, pruned_pct:72, last_active:"2026-05-26T13:58:00" },
+    { id:10, name:"SF-OpsLogger",      platform:"Salesforce",  department:"Operations", status:"idle", calls:9220,  cost_usd:612.20,  avg_cost_usd:0.000066, flagship_pct:12, pruned_pct:81, last_active:"2026-05-26T14:08:00" },
+    { id:11, name:"SF-ComplianceBot",  platform:"Salesforce",  department:"Operations", status:"idle", calls:5821,  cost_usd:487.10,  avg_cost_usd:0.000084, flagship_pct:38, pruned_pct:77, last_active:"2026-05-26T13:30:00" },
+    { id:12, name:"SN-IncidentRouter", platform:"ServiceNow",  department:"Operations", status:"idle", calls:4000,  cost_usd:190.10,  avg_cost_usd:0.000048, flagship_pct:8,  pruned_pct:88, last_active:"2026-05-26T12:44:00" },
+  ];
+
+  const MOCK_COMPLIANCE = [
+    { icon:"🚫", value:47,  label:"Requests Blocked",          sub:"Sensitive terms triggered block policy — request never reached AI model",     cls:"critical" },
+    { icon:"⚠️",  value:94,  label:"Escalated to Flagship",     sub:"Legal, NDA, contract language forced flagship model review",                  cls:"high"     },
+    { icon:"🔍", value:318, label:"Flagged in Audit Log",      sub:"High-risk keywords logged for compliance review",                              cls:"medium"   },
+    { icon:"🔒", value:23,  label:"PII Detected",              sub:"Credit cards, SSNs, account numbers caught before AI processing",              cls:"high"     },
+    { icon:"💰", value:12,  label:"Budget Overruns Prevented", sub:"Auto-throttle engaged before department cap was breached",                     cls:"low"      },
+    { icon:"⚡", value:12,  label:"Agent Collisions Resolved", sub:"Concurrent write conflicts detected and locked — zero data corruption",        cls:"low"      },
+  ];
+
+  const MOCK_EXEC = [
+    { icon:"$", cls:"green",  color:"green",  title:"PROJECTED ANNUAL SAVINGS",  value:"$104,907.60", sub:"Based on 30-day actual performance extrapolated to 12 months" },
+    { icon:"%", cls:"accent", color:"accent", title:"AI COST REDUCTION",         value:"36.1%",       sub:"Achieved through smart routing, token pruning, and budget enforcement" },
+    { icon:"◈", cls:"purple", color:"purple", title:"COMPLIANCE EVENTS LOGGED",  value:"847",         sub:"Immutable audit trail — every AI decision logged, timestamped, exportable" },
+    { icon:"⚡", cls:"yellow", color:"yellow", title:"TIME TO DEPLOY",            value:"15 min",      sub:"One Apex class · one Flow action · 4 custom fields · no IT project required" },
+    { icon:"↑", cls:"green",  color:"green",  title:"TOKENS SAVED",              value:"1.89M",       sub:"Context pruned before every AI call — savings start from day one" },
+    { icon:"0", cls:"red",    color:"",        title:"DATA CORRUPTION EVENTS",    value:"Zero",        sub:"12 agent collisions detected and locked — no silent overwrites" },
+  ];
+
+  const MOCK_RISK_EVENTS = [
+    { timestamp:"2026-05-26T14:12:00", event_type:"PII Blocked",       department:"Support",    risk_level:"critical", decision_outcome:"Blocked — SSN detected in ticket payload" },
+    { timestamp:"2026-05-26T13:48:00", event_type:"PII Blocked",       department:"Operations", risk_level:"critical", decision_outcome:"Blocked — credit card number in billing record" },
+    { timestamp:"2026-05-26T13:22:00", event_type:"Complex Escalation",department:"Legal",      risk_level:"high",     decision_outcome:"Escalated to Strategist — class action discovery" },
+    { timestamp:"2026-05-25T16:44:00", event_type:"Agent Collision",   department:"Support",    risk_level:"high",     decision_outcome:"Locked — SF-SupportBot-1 + SF-CaseEscalator conflict" },
+    { timestamp:"2026-05-25T15:11:00", event_type:"PII Blocked",       department:"Finance",    risk_level:"critical", decision_outcome:"Blocked — passport number in identity verification" },
+    { timestamp:"2026-05-24T11:03:00", event_type:"Budget Throttle",   department:"Marketing",  risk_level:"medium",   decision_outcome:"Downgraded to Scout — budget at 101.7%" },
+    { timestamp:"2026-05-23T14:52:00", event_type:"Complex Escalation",department:"Sales",      risk_level:"high",     decision_outcome:"Escalated to Advisor — NDA amendment review" },
+    { timestamp:"2026-05-22T10:28:00", event_type:"Agent Collision",   department:"Operations", risk_level:"high",     decision_outcome:"Locked — SF-OpsLogger + SF-ComplianceBot conflict" },
+    { timestamp:"2026-05-21T16:37:00", event_type:"PII Blocked",       department:"Support",    risk_level:"critical", decision_outcome:"Blocked — bank account number in support ticket" },
+    { timestamp:"2026-05-20T09:14:00", event_type:"Complex Escalation",department:"Operations", risk_level:"high",     decision_outcome:"Escalated to Strategist — HIPAA audit, 12,400 records" },
+  ];
+
+  const MOCK_EFFICIENCY = [
+    {
+      agent_name: "SF-MarketMailer",
+      department: "Marketing",
+      grade: "C",
+      stats: { calls_per_day: 497, total_cost_usd: 3082.40, flagship_pct: 22, prune_rate: 68, cost_trend: "increasing", target_table: "campaigns" },
+      summary: "Highest cost agent in the fleet. Marketing is throttled at 101.7% of budget cap — this agent is the primary driver. Call volume is 4× the fleet average and trending upward. Immediate review required.",
+      findings: [
+        "Dept budget exceeded — all flagship calls being force-downgraded to Scout",
+        "Call volume 62% higher than SF-CampaignBot despite identical function",
+        "22% of calls still routing to flagship despite throttle (override grant active)",
+        "74 blocked requests in 30 days — highest PII exposure rate in fleet"
+      ],
+      recommendations: [
+        "Split campaign processing into smaller batches to reduce per-call complexity",
+        "Audit why flagship-tier calls are still occurring under override — likely NDA/contract content",
+        "Enable auto-prune threshold at 800 tokens to reduce context window size",
+        "Coordinate with SF-CampaignBot to distribute load evenly"
+      ],
+      projected_savings: 412.80,
+      generated_by: "ai"
+    },
+    {
+      agent_name: "SF-CaseEscalator",
+      department: "Support",
+      grade: "B",
+      stats: { calls_per_day: 327, total_cost_usd: 1284.20, flagship_pct: 42, prune_rate: 68, cost_trend: "stable", target_table: "cases" },
+      summary: "Solid performer but flagship rate is elevated for a support agent. 42% of calls route to Advisor — suggest reviewing escalation triggers. Pruning rate could be improved.",
+      findings: [
+        "42% flagship routing is high for case management — SLA breach keywords triggering escalation frequently",
+        "3 agent collision events in 30 days — simultaneous case updates with SF-SupportBot-1",
+        "Prune rate 68% is below fleet average of 74%",
+        "Cost per call $0.000131 — 6% above support dept average"
+      ],
+      recommendations: [
+        "Review escalation keyword list — 'customer threatening' may be too broad a trigger",
+        "Implement collision backoff: add 500ms jitter before writing to same case record",
+        "Enable conversation history pruning at 600 token threshold",
+        "Consider routing SLA breach notifications to Analyst tier first for initial triage"
+      ],
+      projected_savings: 284.20,
+      generated_by: "ai"
+    },
+    {
+      agent_name: "SN-IncidentRouter",
+      department: "Operations",
+      grade: "A",
+      stats: { calls_per_day: 133, total_cost_usd: 190.10, flagship_pct: 8, prune_rate: 88, cost_trend: "decreasing", target_table: "incidents" },
+      summary: "Best performing agent in the fleet. Lowest flagship rate (8%), highest prune rate (88%), and lowest cost per call. This agent's configuration should be used as the template for all routine processing agents.",
+      findings: [
+        "88% prune rate — highest in fleet, saving $47.20/month vs unoptimized baseline",
+        "8% flagship rate — appropriate for incident routing which rarely requires complex analysis",
+        "Cost trend is decreasing: 14% cost reduction over the 30-day period",
+        "Zero collision events — clean sequential processing pattern"
+      ],
+      recommendations: [
+        "Use this agent as configuration reference for other routine agents",
+        "Document prune threshold settings (currently: 400 token trigger) in runbook",
+        "Consider increasing batch size — current latency allows headroom",
+        "No action required — maintain current configuration"
+      ],
+      projected_savings: 0,
+      generated_by: "ai"
+    },
+    {
+      agent_name: "SF-BillingAuditor",
+      department: "Support",
+      grade: "A-",
+      stats: { calls_per_day: 371, total_cost_usd: 1175.00, flagship_pct: 18, prune_rate: 82, cost_trend: "stable", target_table: "billing_records" },
+      summary: "Highly efficient billing agent. 82% prune rate reflects well-designed context management. 18% flagship routing is appropriate given occasional contract and compliance language in billing disputes. One area of concern: 9 blocked events suggest PII sometimes enters the billing context.",
+      findings: [
+        "82% prune rate — second highest in fleet",
+        "9 blocked events in 30 days — billing payloads occasionally contain account numbers or card digits",
+        "18% flagship routing is reasonable for billing dispute content",
+        "Cost per call $0.000106 — most cost-efficient Support agent"
+      ],
+      recommendations: [
+        "Add pre-processing step to mask account numbers before they reach FAGE",
+        "Current prune rate is optimal — no changes recommended",
+        "Consider adding 'account number' to escalate-only policy rather than block to preserve audit trail",
+        "Document as efficiency benchmark for the Support department"
+      ],
+      projected_savings: 84.20,
+      generated_by: "ai"
+    },
+    {
+      agent_name: "SF-SalesEnrich-1",
+      department: "Sales",
+      grade: "B+",
+      stats: { calls_per_day: 407, total_cost_usd: 1680.40, flagship_pct: 34, prune_rate: 66, cost_trend: "increasing", target_table: "opportunities" },
+      summary: "Active sales enrichment agent with reasonable routing but below-average pruning efficiency. 34% flagship rate is expected given NDA and contract content in opportunities. Cost trend is slightly increasing — likely due to Q2 pipeline growth.",
+      findings: [
+        "34% flagship routing appropriate for opportunity enrichment with contract content",
+        "Prune rate 66% — 8% below fleet average, suggesting longer conversation histories being retained",
+        "Cost trending up 8% over 30 days — correlates with increased pipeline activity",
+        "No collision events — good isolation from SF-SalesEnrich-2"
+      ],
+      recommendations: [
+        "Reduce conversation history retention from 10 turns to 6 turns to improve prune rate",
+        "Separate routine field enrichment from NDA/contract analysis into two distinct agent flows",
+        "Monitor cost trend through Q2 end — may need budget cap adjustment for Sales",
+        "Coordinate with SF-SalesEnrich-2 to ensure no duplicate opportunity processing"
+      ],
+      projected_savings: 168.40,
+      generated_by: "ai"
+    },
+    {
+      agent_name: "SF-ComplianceBot",
+      department: "Operations",
+      grade: "B-",
+      stats: { calls_per_day: 194, total_cost_usd: 487.10, flagship_pct: 38, prune_rate: 77, cost_trend: "stable", target_table: "compliance_records" },
+      summary: "Compliance-focused agent with appropriately high flagship routing — HIPAA and regulatory content justifies Advisor/Strategist tier. The 38% flagship rate is expected and defensible. Good prune rate. No immediate action required but cost should be monitored given compliance escalation patterns.",
+      findings: [
+        "38% flagship routing justified by HIPAA, audit, and regulatory payload content",
+        "77% prune rate is solid for a compliance agent with complex multi-document context",
+        "No blocked events — compliance content is correctly routed rather than blocked",
+        "2 supervisor overrides granted in the period — appropriate escalation handling"
+      ],
+      recommendations: [
+        "Current flagship routing policy is appropriate — do not reduce",
+        "Add 'regulatory audit' as an auto-escalate term to ensure court-ordered discovery requests always reach Strategist tier",
+        "Review the 2 override events to confirm they were authorized by compliance team",
+        "Consider quarterly review of compliance term library to add new regulatory keywords"
+      ],
+      projected_savings: 335.00,
+      generated_by: "ai"
+    },
+  ];
+
+  // ── Utilities ─────────────────────────────────────────────────────────────────
+
+  function fmtUsd(v) {
+    if (v == null)   return "—";
+    if (v === 0)     return "$0.00";
+    if (v < 0.0001)  return "$" + v.toFixed(6);
+    if (v < 0.01)    return "$" + v.toFixed(4);
+    if (v < 1)       return "$" + v.toFixed(4);
+    return "$" + v.toFixed(2);
+  }
+
+  function fmtNum(v) {
+    if (v == null) return "—";
+    return v.toLocaleString();
+  }
+
+  function fmtTs(iso) {
+    if (!iso) return "—";
+    return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", {
+      timeZone: "America/Chicago",
+      month: "numeric", day: "numeric",
+      hour: "numeric", minute: "2-digit", hour12: true,
+    });
+  }
+
+  function riskBadge(level) {
+    const cls = { critical:"badge-critical", high:"badge-high", medium:"badge-medium", low:"badge-low" }[level] || "";
+    return `<span class="rpt-badge ${cls}">${(level || "low").toUpperCase()}</span>`;
+  }
+
+  const charts = {};
+  function destroyChart(id) {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  }
+
+  function chartDefaults() {
+    return {
+      plugins: { legend: { labels: { color: COLORS.muted, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: COLORS.muted, font: { size: 10 }, maxTicksLimit: 10 },
+             grid: { color: "rgba(48,54,61,0.5)" } },
+        y: { ticks: { color: COLORS.muted, font: { size: 10 } },
+             grid: { color: "rgba(48,54,61,0.5)" } },
+      },
+    };
+  }
+
+  // ── Timeline generators ───────────────────────────────────────────────────────
+
+  function genDays(n) {
+    const labels = [], dates = [];
+    const now = new Date("2026-05-26");
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      labels.push(d.toLocaleDateString("en-US", { month:"short", day:"numeric" }));
+      dates.push(d);
+    }
+    return { labels, dates };
+  }
+
+  function genSavingsTimeline(n) {
+    const { labels, dates } = genDays(n);
+    const baseSpend = 514;
+    const baseTokens = 63200;
+    const timeline = dates.map((d, i) => {
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const wf = isWeekend ? 0.42 : 1;
+      const trend = 1 + i * 0.008;
+      const jitter = 0.84 + Math.random() * 0.32;
+      const cost = parseFloat((baseSpend * trend * wf * jitter).toFixed(2));
+      const tokens_saved = Math.round(baseTokens * trend * wf * (0.82 + Math.random() * 0.36));
+      return { date: labels[i], cost, tokens_saved };
+    });
+    return timeline;
+  }
+
+  function genRiskTimeline(n) {
+    const { labels, dates } = genDays(n);
+    return dates.map((d, i) => {
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const wf = isWeekend ? 0.35 : 1;
+      return {
+        date:     labels[i],
+        critical: Math.round((Math.random() < 0.6 ? 0 : 1 + Math.random()) * wf),
+        high:     Math.round((1 + Math.random() * 4) * wf),
+        medium:   Math.round((5 + Math.random() * 10) * wf),
+        low:      Math.round((8 + Math.random() * 12) * wf),
+      };
+    });
+  }
+
+  function genDeptTimeline(n) {
+    const { labels, dates } = genDays(n);
+    const BASE = { Support: 195, Sales: 141, Marketing: 204, Operations: 43 };
+    return dates.map((d, i) => {
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const wf = isWeekend ? 0.38 : 1;
+      const trend = 1 + i * 0.007;
+      const row = { date: labels[i] };
+      ["Support","Sales","Marketing","Operations"].forEach(dept => {
+        row[dept] = parseFloat((BASE[dept] * trend * wf * (0.82 + Math.random() * 0.36)).toFixed(2));
+      });
+      return row;
+    });
+  }
+
+  // ── Tab state ─────────────────────────────────────────────────────────────────
+
+  let activeTab = "savings";
+  let _riskLoaded = false, _deptLoaded = false, _activityLoaded = false, _efficiencyLoaded = false;
+  let _actOpenRows = new Set();
+  let _roiInited = false;
+
+  // ── Date preset ───────────────────────────────────────────────────────────────
+
+  function onDatePresetChange() {
+    const preset = document.getElementById("rptDatePreset").value;
+    document.getElementById("rptCustomDates").style.display = preset === "custom" ? "flex" : "none";
+    if (preset !== "custom") loadActiveTab();
+  }
+
+  function loadActiveTab() {
+    if (activeTab === "savings")     loadSavings();
+    if (activeTab === "risk")        loadRisk();
+    if (activeTab === "departments") loadDepartments();
+    if (activeTab === "activity")    loadAgentActivity();
+    if (activeTab === "roi")         { if (!_roiInited) { _roiInited = true; roiCalc(); } }
+  }
+
+  // ── Tab switching ─────────────────────────────────────────────────────────────
+
+  document.querySelectorAll(".rpt-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".rpt-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".rpt-pane").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      activeTab = btn.dataset.tab;
+      document.getElementById("tab-" + activeTab).classList.add("active");
+      loadActiveTab();
+      setTimeout(() => initDraggableReports(activeTab), 50);
+    });
+  });
+
+  // ── TAB 1: SAVINGS ────────────────────────────────────────────────────────────
+
+  function loadSavings() {
+    const data = MOCK_SAVINGS;
+
+    document.getElementById("sv-total-saved").textContent  = fmtUsd(data.total_saved_usd);
+    document.getElementById("sv-no-fage").textContent      = fmtUsd(data.cost_if_no_fage_usd);
+    document.getElementById("sv-actual").textContent       = fmtUsd(data.total_cost_usd);
+    document.getElementById("sv-pruning").textContent      = fmtUsd(data.pruning_saved_usd);
+    document.getElementById("sv-tokens").textContent       = fmtNum(data.tokens_pruned) + " tokens removed";
+    document.getElementById("sv-downgrade").textContent    = fmtUsd(data.downgrade_saved_usd);
+    document.getElementById("sv-micro-pct").textContent    = data.micro_pct + "% routed to micro";
+    document.getElementById("sv-calls").textContent        = fmtNum(data.total_calls);
+    document.getElementById("sv-call-split").textContent   =
+      fmtNum(data.micro_calls) + " micro / " + fmtNum(data.flagship_calls) + " flagship";
+
+    const timeline = genSavingsTimeline(30);
+    const labels   = timeline.map(d => d.date);
+
+    // Daily spend line chart
+    destroyChart("dailySpend");
+    charts["dailySpend"] = new Chart(
+      document.getElementById("chartDailySpend").getContext("2d"),
+      {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Daily Spend ($)",
+            data: timeline.map(d => d.cost),
+            borderColor: COLORS.micro,
+            backgroundColor: "rgba(88,166,255,0.08)",
+            fill: true, tension: 0.3, pointRadius: 2,
+          }],
+        },
+        options: { ...chartDefaults(), plugins: { legend: { display: false } } },
+      }
+    );
+
+    // Model tier doughnut
+    destroyChart("modelSplit");
+    charts["modelSplit"] = new Chart(
+      document.getElementById("chartModelSplit").getContext("2d"),
+      {
+        type: "doughnut",
+        data: {
+          labels: ["Micro / Scout", "Flagship / Advisor+"],
+          datasets: [{ data: [data.micro_calls, data.flagship_calls],
+            backgroundColor: [COLORS.micro, COLORS.flagship], borderWidth: 0 }],
+        },
+        options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "65%" },
+      }
+    );
+
+    // Daily tokens pruned bar
+    destroyChart("tokensPruned");
+    charts["tokensPruned"] = new Chart(
+      document.getElementById("chartTokensPruned").getContext("2d"),
+      {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Tokens Pruned",
+            data: timeline.map(d => d.tokens_saved),
+            backgroundColor: "rgba(63,185,80,0.5)",
+            borderColor: COLORS.green, borderWidth: 1,
+          }],
+        },
+        options: { ...chartDefaults(), plugins: { legend: { display: false } } },
+      }
+    );
+
+    // Savings breakdown doughnut
+    destroyChart("savingsBreakdown");
+    charts["savingsBreakdown"] = new Chart(
+      document.getElementById("chartSavingsBreakdown").getContext("2d"),
+      {
+        type: "doughnut",
+        data: {
+          labels: ["Pruning Savings", "Downgrade Savings", "Actual Cost"],
+          datasets: [{ data: [data.pruning_saved_usd, data.downgrade_saved_usd, data.total_cost_usd],
+            backgroundColor: [COLORS.green, COLORS.micro, COLORS.muted], borderWidth: 0 }],
+        },
+        options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "60%" },
+      }
+    );
+  }
+
+  // ── TAB 2: RISK ───────────────────────────────────────────────────────────────
+
+  function loadRisk() {
+    const data = MOCK_RISK;
+
+    document.getElementById("rk-total").textContent    = fmtNum(data.total_events);
+    document.getElementById("rk-critical").textContent = fmtNum(data.critical);
+    document.getElementById("rk-high").textContent     = fmtNum(data.high);
+    document.getElementById("rk-blocked").textContent  = fmtNum(data.blocked);
+    document.getElementById("rk-locks").textContent    = fmtNum(data.locks);
+    document.getElementById("rk-terms").textContent    = fmtNum(data.term_library.total);
+    document.getElementById("rk-terms-sub").textContent =
+      data.term_library.block + " block / " + data.term_library.escalate + " escalate";
+
+    const timeline = genRiskTimeline(30);
+    const labels   = timeline.map(d => d.date);
+
+    // Risk timeline stacked bar
+    destroyChart("riskTimeline");
+    charts["riskTimeline"] = new Chart(
+      document.getElementById("chartRiskTimeline").getContext("2d"),
+      {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "Critical", data: timeline.map(d => d.critical),
+              backgroundColor: "rgba(248,81,73,0.7)", stack: "risk" },
+            { label: "High",     data: timeline.map(d => d.high),
+              backgroundColor: "rgba(210,153,34,0.7)", stack: "risk" },
+            { label: "Medium",   data: timeline.map(d => d.medium),
+              backgroundColor: "rgba(88,166,255,0.5)", stack: "risk" },
+            { label: "Low",      data: timeline.map(d => d.low),
+              backgroundColor: "rgba(139,148,158,0.3)", stack: "risk" },
+          ],
+        },
+        options: chartDefaults(),
+      }
+    );
+
+    // Risk level doughnut
+    destroyChart("riskBreakdown");
+    charts["riskBreakdown"] = new Chart(
+      document.getElementById("chartRiskBreakdown").getContext("2d"),
+      {
+        type: "doughnut",
+        data: {
+          labels: ["Critical", "High", "Medium", "Low"],
+          datasets: [{ data: [data.critical, data.high, data.medium, data.low],
+            backgroundColor: [COLORS.red, COLORS.yellow, COLORS.micro, COLORS.muted],
+            borderWidth: 0 }],
+        },
+        options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "65%" },
+      }
+    );
+
+    // Event table
+    const tbody = document.getElementById("riskEventTable");
+    tbody.innerHTML = MOCK_RISK_EVENTS.map(e => `
+      <tr>
+        <td style="font-size:11px; font-family:var(--font-mono)">${fmtTs(e.timestamp)}</td>
+        <td><span class="rpt-badge badge-event">${e.event_type}</span></td>
+        <td>${e.department}</td>
+        <td>${riskBadge(e.risk_level)}</td>
+        <td style="font-size:11px; color:var(--text-muted)">${e.decision_outcome}</td>
+      </tr>
+    `).join("");
+
+    // Compliance grid
+    const grid = document.getElementById("complianceGrid");
+    grid.innerHTML = MOCK_COMPLIANCE.map(i => `
+      <div class="demo-compliance-card ${i.cls}">
+        <div class="demo-compliance-icon">${i.icon}</div>
+        <div class="demo-compliance-value">${i.value.toLocaleString()}</div>
+        <div class="demo-compliance-label">${i.label}</div>
+        <div class="demo-compliance-sub">${i.sub}</div>
+      </div>
+    `).join("");
+
+    // Exec summary
+    const execGrid = document.getElementById("execGrid");
+    execGrid.innerHTML = MOCK_EXEC.map(i => `
+      <div class="demo-exec-card">
+        <div class="demo-exec-icon ${i.cls}">${i.icon}</div>
+        <div class="demo-exec-content">
+          <div class="demo-exec-title">${i.title}</div>
+          <div class="demo-exec-value ${i.color}">${i.value}</div>
+          <div class="demo-exec-sub">${i.sub}</div>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  // ── TAB 3: DEPARTMENTS ────────────────────────────────────────────────────────
+
+  function loadDepartments() {
+    const scorecards = MOCK_DEPTS;
+
+    // Scorecard table
+    const tbody = document.getElementById("deptScorecardTable");
+    tbody.innerHTML = scorecards.map(d => {
+      const statusBadge = d.throttled
+        ? `<span class="rpt-badge badge-critical">THROTTLED</span>`
+        : d.override_granted
+          ? `<span class="rpt-badge badge-event">OVERRIDE</span>`
+          : `<span class="rpt-badge badge-low">OK</span>`;
+      const barW = Math.min(d.budget_used_pct, 100);
+      const barC = d.budget_used_pct >= 90 ? COLORS.red
+                 : d.budget_used_pct >= 70 ? COLORS.yellow
+                 : COLORS.green;
+      return `
+        <tr>
+          <td><strong>${d.department}</strong></td>
+          <td>${fmtNum(d.total_calls)}</td>
+          <td>${d.micro_pct}%</td>
+          <td>${fmtUsd(d.total_cost_usd)}</td>
+          <td class="green">${fmtUsd(d.pruning_saved_usd)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
+                <div style="width:${barW}%;height:100%;background:${barC};border-radius:3px"></div>
+              </div>
+              <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${d.budget_used_pct.toFixed(1)}%</span>
+            </div>
+          </td>
+          <td>${fmtUsd(d.monthly_cap_usd)}</td>
+          <td>${statusBadge}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const deptNames = ["Support","Sales","Marketing","Operations"];
+    const timeline  = genDeptTimeline(30);
+    const labels    = timeline.map(d => d.date);
+
+    // Stacked dept spend chart
+    destroyChart("deptSpend");
+    charts["deptSpend"] = new Chart(
+      document.getElementById("chartDeptSpend").getContext("2d"),
+      {
+        type: "bar",
+        data: {
+          labels,
+          datasets: deptNames.map((dept, i) => ({
+            label: dept,
+            data:  timeline.map(d => d[dept] || 0),
+            backgroundColor: COLORS.dept[i % COLORS.dept.length] + "99",
+            borderColor:     COLORS.dept[i % COLORS.dept.length],
+            borderWidth: 1,
+            stack: "dept",
+          })),
+        },
+        options: chartDefaults(),
+      }
+    );
+
+    // Dept cost doughnut
+    destroyChart("deptCost");
+    charts["deptCost"] = new Chart(
+      document.getElementById("chartDeptCost").getContext("2d"),
+      {
+        type: "doughnut",
+        data: {
+          labels: scorecards.map(d => d.department),
+          datasets: [{
+            data: scorecards.map(d => d.total_cost_usd),
+            backgroundColor: deptNames.map((_, i) => COLORS.dept[i % COLORS.dept.length]),
+            borderWidth: 0,
+          }],
+        },
+        options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "60%" },
+      }
+    );
+  }
+
+  // ── TAB 4: BOT EFFICIENCY ─────────────────────────────────────────────────────
+
+  function renderEfficiencyCards() {
+    document.getElementById("effFleetGrade").textContent   = "B+";
+    document.getElementById("effAgentsCount").textContent  = "12";
+    document.getElementById("effTotalSavings").textContent = "$1,284.60";
+    document.getElementById("effGeneratedBy").textContent  = "Claude Sonnet 4.6";
+    document.getElementById("effFleetBar").style.display   = "grid";
+
+    const grid = document.getElementById("effGrid");
+    grid.innerHTML = MOCK_EFFICIENCY.map(r => renderEfficiencyCard(r)).join("");
+  }
+
+  function generateEfficiencyReview() {
+    const btn = document.getElementById("effGenerateBtn");
+    btn.textContent = "✓ Already Analyzed";
+    btn.style.background = "var(--accent-green)";
+    btn.style.color = "#000";
+    setTimeout(() => {
+      btn.textContent = "⚡ Generate Review";
+      btn.style.background = "";
+      btn.style.color = "";
+    }, 2000);
+    // Cards are already shown — no further action needed
+  }
+
+  function renderEfficiencyCard(r) {
+    const s    = r.stats;
+    const grad = r.grade || "B";
+
+    const findings = (r.findings || []).map(f => `<li>${f}</li>`).join("");
+    const recs     = (r.recommendations || []).map(rec => `<li>${rec}</li>`).join("");
+
+    const savings = (r.projected_savings || 0) > 0
+      ? `<div class="eff-savings-row">
+          <span class="eff-savings-label">Projected 30-day savings if actioned</span>
+          <span class="eff-savings-value">$${r.projected_savings.toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 })}</span>
+         </div>`
+      : "";
+
+    const aiBadge = r.generated_by === "ai"
+      ? `<div class="eff-ai-badge">◈ Claude Sonnet 4.6 Analysis</div>`
+      : `<div class="eff-ai-badge" style="color:var(--text-muted)">◈ FAGE Analytics Engine</div>`;
+
+    return `
+      <div class="eff-card grade-${grad}">
+        <div class="eff-card-header">
+          <div class="eff-grade-badge ${grad}">${grad}</div>
+          <div>
+            <div class="eff-card-name">${r.agent_name}</div>
+            <div class="eff-card-dept">${r.department} · ${s.target_table || ""}</div>
+          </div>
+        </div>
+
+        <div class="eff-stats-row">
+          <div class="eff-stat-item">
+            <div class="eff-stat-label">Calls / Day</div>
+            <div class="eff-stat-value">${s.calls_per_day}</div>
+          </div>
+          <div class="eff-stat-item">
+            <div class="eff-stat-label">Total Cost</div>
+            <div class="eff-stat-value">$${(s.total_cost_usd || 0).toFixed(2)}</div>
+          </div>
+          <div class="eff-stat-item">
+            <div class="eff-stat-label">Flagship %</div>
+            <div class="eff-stat-value ${s.flagship_pct > 60 ? "yellow" : s.flagship_pct < 10 ? "green" : ""}">${s.flagship_pct}%</div>
+          </div>
+          <div class="eff-stat-item">
+            <div class="eff-stat-label">Prune Rate</div>
+            <div class="eff-stat-value ${s.prune_rate > 70 ? "green" : s.prune_rate < 40 ? "yellow" : ""}">${s.prune_rate}%</div>
+          </div>
+        </div>
+
+        <p class="eff-summary">${r.summary}</p>
+
+        ${findings ? `<div class="eff-section-label">Findings</div><ul class="eff-findings">${findings}</ul>` : ""}
+        ${recs     ? `<div class="eff-section-label">Recommendations</div><ul class="eff-recs">${recs}</ul>` : ""}
+
+        ${savings}
+        ${aiBadge}
+      </div>
+    `;
+  }
+
+  // ── TAB 5: AGENT ACTIVITY ─────────────────────────────────────────────────────
+
+  function loadAgentActivity() {
+    const platformF = document.getElementById("actPlatform").value;
+    const agentF    = document.getElementById("actAgent").value;
+    const deptF     = document.getElementById("actDept").value;
+    const modelF    = document.getElementById("actModel").value;
+
+    let agents = MOCK_AGENTS.slice();
+
+    if (platformF)  agents = agents.filter(a => a.platform === platformF);
+    if (agentF)     agents = agents.filter(a => String(a.id) === agentF);
+    if (deptF)      agents = agents.filter(a => a.department === deptF);
+    // modelF filtering: simplification — tier filters not granularly split here
+    if (modelF === "flagship" || modelF === "Advisor" || modelF === "Strategist") {
+      agents = agents.filter(a => a.flagship_pct > 0);
+    }
+
+    const totalCalls = agents.reduce((s, a) => s + a.calls, 0);
+    const totalCost  = agents.reduce((s, a) => s + a.cost_usd, 0);
+    const platforms  = [...new Set(agents.map(a => a.platform))];
+
+    document.getElementById("actTotalCalls").textContent    = totalCalls.toLocaleString();
+    document.getElementById("actTotalCost").textContent     = "$" + totalCost.toFixed(2);
+    document.getElementById("actAgentsCount").textContent   = agents.length;
+    document.getElementById("actPlatformsCount").textContent = platforms.length;
+
+    const tbody = document.getElementById("actTableBody");
+    if (!agents.length) {
+      tbody.innerHTML = '<tr><td colspan="11" class="placeholder">No agents match the selected filters.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = agents.map(a => {
+      const platformColor = a.platform === "Salesforce" ? "var(--accent)"
+        : a.platform === "ServiceNow"  ? "var(--accent-green)"
+        : "var(--text-muted)";
+      const statusBadge = a.status === "locked" ? "badge-locked"
+        : a.status === "active" ? "badge-active" : "badge-idle";
+      const lastActive = a.last_active
+        ? new Date(a.last_active).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })
+        : "—";
+      const isOpen = _actOpenRows.has(a.id);
+
+      return `
+        <tr class="act-agent-row ${isOpen ? "act-row-open" : ""}" onclick="toggleCallLog(${a.id})" style="cursor:pointer">
+          <td class="act-expand-cell">${isOpen ? "▾" : "▸"}</td>
+          <td style="font-weight:600">${a.name}</td>
+          <td style="font-size:11px; font-weight:700; color:${platformColor}">${a.platform}</td>
+          <td>${a.department}</td>
+          <td><span class="badge ${statusBadge}">${a.status.toUpperCase()}</span></td>
+          <td style="font-weight:600">${a.calls.toLocaleString()}</td>
+          <td style="color:var(--accent-red)">$${a.cost_usd.toFixed(2)}</td>
+          <td style="color:var(--text-muted); font-size:11px">$${a.avg_cost_usd.toFixed(6)}</td>
+          <td>${a.flagship_pct}%</td>
+          <td style="color:var(--accent-green)">${a.pruned_pct}%</td>
+          <td style="font-size:11px; color:var(--text-muted)">${lastActive}</td>
+        </tr>
+        <tr class="act-log-row" id="act-log-${a.id}" style="display:${isOpen ? "table-row" : "none"}">
+          <td colspan="11" class="act-log-cell">
+            ${renderMockCallLog(a)}
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function resetActivityFilters() {
+    document.getElementById("actPlatform").value = "";
+    document.getElementById("actAgent").value    = "";
+    document.getElementById("actDept").value     = "";
+    document.getElementById("actModel").value    = "";
+    loadAgentActivity();
+  }
+
+  function toggleCallLog(agentId) {
+    const logRow = document.getElementById("act-log-" + agentId);
+    const isOpen = _actOpenRows.has(agentId);
+
+    if (isOpen) {
+      _actOpenRows.delete(agentId);
+      if (logRow) logRow.style.display = "none";
+    } else {
+      _actOpenRows.add(agentId);
+      if (logRow) logRow.style.display = "table-row";
+    }
+
+    document.querySelectorAll(".act-agent-row").forEach(row => {
+      if (row.getAttribute("onclick") === "toggleCallLog(" + agentId + ")") {
+        const cell = row.querySelector(".act-expand-cell");
+        if (cell) cell.textContent = _actOpenRows.has(agentId) ? "▾" : "▸";
+        row.classList.toggle("act-row-open", _actOpenRows.has(agentId));
+      }
+    });
+  }
+
+  function mockTransactions(agent) {
+    const now = new Date("2026-05-26T14:30:00");
+    const tierColorMap = {
+      "Scout":      "var(--accent-green)",
+      "Analyst":    "var(--accent)",
+      "Advisor":    "var(--accent-purple)",
+      "Strategist": "var(--accent-yellow)",
+    };
+    const tiers = ["Scout","Scout","Scout","Advisor","Advisor"];
+    const routings = ["ROUTINE","ROUTINE","PRUNING","COMPLEX","COMPLEX"];
+
+    // Weight flagship tier by agent's flagship_pct
+    const flagshipRate = agent.flagship_pct / 100;
+
+    return Array.from({ length: 5 }, (_, i) => {
+      const minutesAgo = 8 + i * 22;
+      const ts = new Date(now.getTime() - minutesAgo * 60000);
+      const isFlagship = Math.random() < flagshipRate;
+      const tier = isFlagship ? (Math.random() < 0.6 ? "Advisor" : "Strategist") : "Scout";
+      const routing = isFlagship ? "COMPLEX" : (Math.random() < 0.3 ? "PRUNING" : "ROUTINE");
+      const inTok  = tier === "Scout" ? 600  + Math.floor(Math.random() * 1200)
+                   : tier === "Advisor" ? 6000 + Math.floor(Math.random() * 4000)
+                   : 9000 + Math.floor(Math.random() * 5000);
+      const outTok = tier === "Scout" ? 150  + Math.floor(Math.random() * 200)
+                   : 1800 + Math.floor(Math.random() * 2000);
+      const wasPruned = routing === "PRUNING";
+      const tokensSaved = wasPruned ? 400 + Math.floor(Math.random() * 1400) : 0;
+      const rateObj = tier === "Advisor" ? RATES.advisor
+                    : tier === "Strategist" ? RATES.strategist
+                    : RATES.scout;
+      const cost = (inTok * rateObj.input) + (outTok * rateObj.output);
+      const tierColor = tierColorMap[tier] || "var(--text-muted)";
+      const routeColor = routing === "COMPLEX" ? "var(--accent-red)"
+        : routing === "ROUTINE"  ? "var(--accent-green)"
+        : "var(--accent-yellow)";
+      const pruneTag = wasPruned
+        ? `<span class="act-prune-tag">✂ pruned · ${tokensSaved.toLocaleString()} tokens saved</span>`
+        : "";
+      const tsStr = ts.toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit" });
+
+      return `
+        <tr class="act-tx-row">
+          <td style="font-size:11px; color:var(--text-muted); white-space:nowrap">${tsStr}</td>
+          <td style="font-size:11px; font-weight:700; color:${tierColor}">${tier}</td>
+          <td style="font-size:11px; font-weight:700; color:${routeColor}">${routing}</td>
+          <td style="font-size:11px">${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out</td>
+          <td style="font-size:11px; color:var(--accent-red)">$${cost.toFixed(6)}</td>
+          <td style="font-size:11px">${pruneTag}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function renderMockCallLog(agent) {
+    const rows = mockTransactions(agent);
+    return `
+      <div class="act-log-wrap">
+        <div class="act-log-header">
+          Call Log — ${agent.name} &nbsp;·&nbsp; 5 most recent calls shown
+        </div>
+        <table class="act-log-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Model</th>
+              <th>Routing</th>
+              <th>Tokens</th>
+              <th>Cost</th>
+              <th>Pruning</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // ── Draggable report cards ────────────────────────────────────────────────────
+
+  const RPT_CONTAINER_IDS = {
+    savings:     "savings-cards",
+    risk:        "risk-cards",
+    departments: "dept-cards",
+  };
+
+  const _rptSortables = {};
+
+  function initDraggableReports(tab) {
+    if (typeof Sortable === "undefined") return;
+    const containerId = RPT_CONTAINER_IDS[tab];
+    if (!containerId) return;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (_rptSortables[tab]) {
+      try { _rptSortables[tab].destroy(); } catch(e) {}
+    }
+
+    _rptSortables[tab] = Sortable.create(container, {
+      animation:   150,
+      handle:      ".rpt-drag-bar",
+      ghostClass:  "sortable-ghost",
+      chosenClass: "sortable-chosen",
+      onEnd() {
+        const order = [...container.querySelectorAll(".rpt-drag-card")].map(el => el.dataset.cardId);
+        try { localStorage.setItem("fage_rpt_order_" + tab, JSON.stringify(order)); } catch(e) {}
+      },
+    });
+
+    try {
+      const saved = JSON.parse(localStorage.getItem("fage_rpt_order_" + tab) || "null");
+      if (Array.isArray(saved)) {
+        saved.forEach(id => {
+          const el = container.querySelector(`.rpt-drag-card[data-card-id="${id}"]`);
+          if (el) container.appendChild(el);
+        });
+      }
+    } catch(e) {}
+  }
+
+  function randomizeReportCards() {
+    const containerId = RPT_CONTAINER_IDS[activeTab];
+    if (!containerId) return;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const cards = [...container.querySelectorAll(".rpt-drag-card")];
+    for (let i = cards.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+    cards.forEach(el => container.appendChild(el));
+  }
+
+  // ── Activity tab dropdown population ─────────────────────────────────────────
+
+  function populateActivityDropdowns() {
+    const agentSel = document.getElementById("actAgent");
+    MOCK_AGENTS.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a.id;
+      opt.textContent = a.name + " (" + a.platform + ")";
+      agentSel.appendChild(opt);
+    });
+
+    const deptSel = document.getElementById("actDept");
+    const depts = [...new Set(MOCK_AGENTS.map(a => a.department))].sort();
+    depts.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d;
+      deptSel.appendChild(opt);
+    });
+  }
+
+  // ── ROI Calculator ────────────────────────────────────────────────────────────
+
+  const ROI_RATES = {
+    scout:      { in: 1.00,  out: 5.00  },
+    analyst:    { in: 1.00,  out: 5.00  },
+    advisor:    { in: 3.00,  out: 15.00 },
+    strategist: { in: 5.00,  out: 25.00 },
+  };
+
+  const ROI_PRESETS = {
+    insurance:  { calls:500000, routine:60, inTok:5000,  outTok:1000, tier:"advisor",    plan:"1499" },
+    healthcare: { calls:200000, routine:65, inTok:4000,  outTok:800,  tier:"advisor",    plan:"1499" },
+    financial:  { calls:300000, routine:55, inTok:6000,  outTok:1500, tier:"strategist", plan:"4999" },
+    legal:      { calls:50000,  routine:40, inTok:10000, outTok:2000, tier:"advisor",    plan:"599"  },
+    retail:     { calls:400000, routine:80, inTok:1000,  outTok:300,  tier:"analyst",    plan:"1499" },
+    logistics:  { calls:150000, routine:70, inTok:2000,  outTok:500,  tier:"advisor",    plan:"599"  },
+    saas:       { calls:100000, routine:75, inTok:1500,  outTok:400,  tier:"analyst",    plan:"599"  },
+  };
+
+  function roiApplyPreset() {
+    const p = ROI_PRESETS[document.getElementById("roi-industry").value];
+    if (!p) { roiCalc(); return; }
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set("roi-calls", p.calls);      set("roi-calls-num", p.calls);
+    set("roi-routine", p.routine);  set("roi-routine-num", p.routine);
+    set("roi-intok", p.inTok);      set("roi-intok-num", p.inTok);
+    set("roi-outtok", p.outTok);    set("roi-outtok-num", p.outTok);
+    set("roi-tier", p.tier);        set("roi-plan", p.plan);
+    roiCalc();
+  }
+
+  function roiCalc() {
+    const totalCalls  = Number(document.getElementById("roi-calls").value);
+    const routinePct  = Number(document.getElementById("roi-routine").value) / 100;
+    const inTok       = Number(document.getElementById("roi-intok").value);
+    const outTok      = Number(document.getElementById("roi-outtok").value);
+    const tier        = document.getElementById("roi-tier").value;
+    const fee         = Number(document.getElementById("roi-plan").value);
+
+    document.getElementById("roi-calls-disp").textContent   = totalCalls.toLocaleString();
+    document.getElementById("roi-routine-disp").textContent = (routinePct * 100).toFixed(0) + "%";
+    document.getElementById("roi-intok-disp").textContent   = inTok.toLocaleString();
+    document.getElementById("roi-outtok-disp").textContent  = outTok.toLocaleString();
+
+    const cpc = (t) => (inTok / 1e6 * ROI_RATES[t].in) + (outTok / 1e6 * ROI_RATES[t].out);
+    const routineCalls = Math.round(totalCalls * routinePct);
+    const complexCalls = totalCalls - routineCalls;
+    const costWithout  = cpc(tier) * totalCalls;
+    const routineCost  = cpc("scout") * routineCalls;
+    const complexCost  = cpc(tier) * complexCalls;
+    const costWith     = routineCost + complexCost + fee;
+    const monthlySaved = costWithout - costWith;
+    const annualSaved  = monthlySaved * 12;
+    const cpcBefore    = cpc(tier);
+    const cpcAfter     = totalCalls > 0 ? costWith / totalCalls : 0;
+    const paybackMo    = fee > 0 && monthlySaved > 0 ? (fee / monthlySaved).toFixed(1) : null;
+
+    const fmt = (n) => {
+      const abs = Math.abs(n);
+      if (abs >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+      if (abs >= 1e3) return "$" + (n / 1e3).toFixed(1) + "K";
+      return "$" + Math.abs(n).toFixed(2);
+    };
+
+    document.getElementById("roi-cost-without").textContent    = fmt(costWithout);
+    document.getElementById("roi-cost-with").textContent       = fmt(costWith);
+    document.getElementById("roi-monthly-savings").textContent = (monthlySaved >= 0 ? "" : "-") + fmt(Math.abs(monthlySaved));
+    document.getElementById("roi-annual-savings").textContent  = (annualSaved  >= 0 ? "" : "-") + fmt(Math.abs(annualSaved));
+    document.getElementById("roi-cpc-before").textContent      = "$" + cpcBefore.toFixed(5);
+    document.getElementById("roi-cpc-after").textContent       = "$" + cpcAfter.toFixed(5);
+
+    document.getElementById("roi-monthly-savings").style.color = monthlySaved >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+    document.getElementById("roi-annual-savings").style.color  = annualSaved  >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+
+    const paybackEl  = document.getElementById("roi-payback");
+    const paybackTxt = document.getElementById("roi-payback-text");
+    const paybackSub = document.getElementById("roi-payback-sub");
+    if (monthlySaved <= 0) {
+      paybackEl.style.background  = "#1a0505";
+      paybackEl.style.borderColor = "var(--accent-red)";
+      paybackTxt.style.color      = "var(--accent-red)";
+      paybackTxt.textContent      = "FAGE cost exceeds routing savings at this volume";
+      paybackSub.textContent      = "Consider a lower plan, or volume may be too low.";
+    } else if (paybackMo && paybackMo < 1) {
+      paybackEl.style.background  = "#0d2d1a";
+      paybackEl.style.borderColor = "var(--accent-green)";
+      paybackTxt.style.color      = "var(--accent-green)";
+      paybackTxt.textContent      = "FAGE pays for itself immediately";
+      paybackSub.textContent      = "Routing savings exceed the FAGE fee from day one.";
+    } else if (paybackMo) {
+      paybackEl.style.background  = "#0d2d1a";
+      paybackEl.style.borderColor = "var(--accent-green)";
+      paybackTxt.style.color      = "var(--accent-green)";
+      paybackTxt.textContent      = `FAGE pays for itself in ${paybackMo} months`;
+      paybackSub.textContent      = `After that, every month is ${fmt(monthlySaved)} back in your budget.`;
+    }
+
+    const tierLabels = { scout:"Scout", analyst:"Analyst", advisor:"Advisor", strategist:"Strategist" };
+    document.getElementById("roi-breakdown").innerHTML = `
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">Scout <span style="font-size:11px;color:var(--text-muted)">routine</span></td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${routineCalls.toLocaleString()} (${(routinePct * 100).toFixed(0)}%)</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc("scout").toFixed(5)}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono);color:var(--accent-green)">${fmt(routineCost)}</td>
+      </tr>
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${tierLabels[tier] || tier} <span style="font-size:11px;color:var(--text-muted)">complex</span></td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${complexCalls.toLocaleString()} (${((1 - routinePct) * 100).toFixed(0)}%)</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc(tier).toFixed(5)}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">${fmt(complexCost)}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="padding:9px 10px;border-bottom:1px solid #1c2128;color:var(--text-muted);font-size:11px">FAGE Platform Fee</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono);color:var(--text-muted)">${fmt(fee)}</td>
+      </tr>
+      <tr style="font-weight:700">
+        <td colspan="3" style="padding:9px 10px;border-top:1px solid var(--border)">Total With FAGE</td>
+        <td style="padding:9px 10px;font-family:var(--font-mono)">${fmt(costWith)}</td>
+      </tr>
+      <tr style="color:var(--accent-green);font-weight:700">
+        <td colspan="3" style="padding:9px 10px">💰 Net Monthly Savings</td>
+        <td style="padding:9px 10px;font-family:var(--font-mono)">${monthlySaved >= 0 ? fmt(monthlySaved) : "(" + fmt(Math.abs(monthlySaved)) + ")"}</td>
+      </tr>`;
+
+    window._roiTabData = { totalCalls, routinePct, inTok, outTok, tier, fee, costWithout, costWith, monthlySaved, annualSaved, paybackMo };
+  }
+
+  function roiCopyClipboard() {
+    const d = window._roiTabData;
+    if (!d) return;
+    const fmt = (n) => "$" + Math.abs(n).toFixed(2);
+    const text = `FAGE ROI Summary — Meridian Financial Group Demo\nGenerated: ${new Date().toLocaleDateString()}\n\nMonthly Calls: ${d.totalCalls.toLocaleString()}\nRoutine/Complex: ${(d.routinePct*100).toFixed(0)}%/${(100-d.routinePct*100).toFixed(0)}%\nCost Without FAGE: ${fmt(d.costWithout)}/mo\nCost With FAGE: ${fmt(d.costWith)}/mo (incl. $${d.fee} fee)\nNet Monthly Savings: ${fmt(d.monthlySaved)}\nNet Annual Savings: ${fmt(d.annualSaved)}\n${d.paybackMo ? "Payback: " + d.paybackMo + " months" : ""}`;
+    navigator.clipboard.writeText(text).then(() => {
+      event.target.textContent = "✓ Copied!";
+      setTimeout(() => { event.target.textContent = "⎘ Copy Summary"; }, 2000);
+    });
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────────
+
+  document.addEventListener("DOMContentLoaded", () => {
+    // Populate activity dropdowns once
+    populateActivityDropdowns();
+
+    // Load initial tab (Savings) immediately
+    loadSavings();
+
+    // Pre-render efficiency cards (auto-load, no button click needed)
+    renderEfficiencyCards();
+
+    // Init draggable for savings tab
+    setTimeout(() => initDraggableReports("savings"), 100);
+
+    // Lazy load other tabs when clicked — already wired via tab switching above
+  });
+
+  </script>
+</body>
+</html>
