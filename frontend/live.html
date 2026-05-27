@@ -99,12 +99,8 @@
     .routing-row.blocked-row:hover td { background: rgba(248,81,73,0.06); }
     @keyframes row-in { from { opacity:0; background:rgba(88,166,255,0.05); } to { opacity:1; } }
 
-    /* Audit row highlight — flash on jump */
-    .audit-row-highlight { animation: audit-flash 2.5s ease; }
-    @keyframes audit-flash {
-      0%,100% { background: transparent; }
-      15%,50% { background: rgba(88,166,255,0.2); }
-    }
+    /* Inline rationale expand row (mirrors main's toggleRationale) */
+    .live-rationale-row td { padding: 0 12px 12px; border-bottom: 1px solid #1c2128; }
 
     .flash-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.1s; z-index: 200; }
     .flash-overlay.red    { background: rgba(248,81,73,0.10); }
@@ -265,7 +261,7 @@
           <span>▸ Routing Decision Feed</span>
           <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:8px">● LIVE</span>
           <span class="sec-right">
-            <span style="font-size:10px;color:var(--text-muted);font-style:italic">Click row → jump to audit log</span>
+            <span style="font-size:10px;color:var(--text-muted);font-style:italic">Click row → expand rationale</span>
             <span class="sec-chev" id="lRoutingFeedChev">▾</span>
           </span>
         </div>
@@ -551,9 +547,12 @@ function addRoutingRow(eventId, agent, dept, tier, detail, cost, isBlocked) {
                            `<span class="badge badge-flagship">${tier}</span>`;
   const costCell = isBlocked ? `<span style="color:var(--accent-green);font-family:var(--font-mono);font-size:11px">$0.00</span>`
     : `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">$${cost.toFixed(6)}</span>`;
+
+  // Main data row
   const row = document.createElement("tr");
   row.className = `routing-row${isBlocked ? " blocked-row" : ""}`;
   row.dataset.eventId = eventId;
+  row.title = "Click to expand rationale";
   row.innerHTML = `
     <td style="font-family:var(--font-mono);color:var(--text-muted)">${nowTime()}</td>
     <td style="color:var(--accent);font-weight:600">${agent}</td>
@@ -561,29 +560,90 @@ function addRoutingRow(eventId, agent, dept, tier, detail, cost, isBlocked) {
     <td>${tierBadge}</td>
     <td style="color:var(--text-muted);font-size:10px">${detail}</td>
     <td>${costCell}</td>`;
-  row.onclick = () => jumpToAudit(eventId);
+  row.onclick = () => toggleLiveRationale(eventId);
+
+  // Hidden rationale row (expands inline, same as main's toggleRationale)
+  const rationaleRow = document.createElement("tr");
+  rationaleRow.className = "live-rationale-row";
+  rationaleRow.id = `live-rationale-${eventId}`;
+  rationaleRow.style.display = "none";
+  rationaleRow.innerHTML = `<td colspan="6"><div class="rationale-box" id="live-rationale-content-${eventId}"></div></td>`;
+
+  feed.prepend(rationaleRow);
   feed.prepend(row);
-  while (feed.children.length > 25) feed.removeChild(feed.lastChild);
+
+  // Keep max 25 routing rows (each row + rationale = 2 el, so trim pairs)
+  while (feed.children.length > 50) {
+    feed.removeChild(feed.lastChild);
+    if (feed.lastChild) feed.removeChild(feed.lastChild);
+  }
 }
 
-// ── Jump to Audit ─────────────────────────────────────────────────────────────
+// ── Inline Rationale Expand (mirrors main's toggleRationale) ──────────────────
 
-function jumpToAudit(eventId) {
-  const auditBody = document.getElementById("lAuditPanel");
-  const auditChev = document.getElementById("lAuditChev");
-  if (auditBody.style.display === "none") {
-    auditBody.style.display = "";
-    if (auditChev) auditChev.textContent = "▾";
+function toggleLiveRationale(eventId) {
+  const rationaleRow = document.getElementById(`live-rationale-${eventId}`);
+  if (!rationaleRow) return;
+
+  const isOpen = rationaleRow.style.display !== "none";
+
+  // Close all open rationale rows
+  document.querySelectorAll(".live-rationale-row").forEach(r => r.style.display = "none");
+
+  if (isOpen) return; // was open — just close it
+
+  rationaleRow.style.display = "table-row";
+
+  // Build content from stored event data
+  const e = _liveEventData[eventId];
+  const content = document.getElementById(`live-rationale-content-${eventId}`);
+  if (!content) return;
+
+  if (!e) {
+    content.innerHTML = `<span style="color:var(--text-muted);font-size:11px">No detail available for this event.</span>`;
+    return;
   }
-  const row = document.getElementById(`audit-row-${eventId}`);
-  if (row) {
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
-    row.classList.remove("audit-row-highlight");
-    void row.offsetWidth;
-    row.classList.add("audit-row-highlight");
-  } else {
-    auditBody.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+
+  const budgetSnap = e.budgetSnap;
+  const budgetLine = budgetSnap
+    ? `Budget: $${budgetSnap.spend.toFixed(2)} / $${budgetSnap.cap.toLocaleString()} &nbsp;(${((budgetSnap.spend/budgetSnap.cap)*100).toFixed(1)}% used) &nbsp;|&nbsp; Throttled: ${budgetSnap.throttled} &nbsp;|&nbsp; Override: false`
+    : "Budget context: —";
+
+  const keywords = e.keywords && e.keywords.length
+    ? `<span style="color:var(--accent-red)">${e.keywords.join(", ")}</span>`
+    : '<span style="color:var(--text-muted)">None</span>';
+
+  const costStr  = e.cost  > 0 ? `$${e.cost.toFixed(6)}`  : "$0.00";
+  const savedStr = e.saved > 0 ? `<span style="color:var(--accent-green)">$${e.saved.toFixed(6)}</span>` : "$0.00";
+
+  content.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="toggleLiveRationale('${eventId}')"
+        style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer">
+        ✕ Close
+      </button>
+    </div>
+    <div class="rationale-section">
+      <div class="rationale-label">Plain-English Rationale</div>
+      <div class="rationale-text">${e.rationale || "—"}</div>
+    </div>
+    <div class="rationale-section">
+      <div class="rationale-label">Context Snapshot</div>
+      <div class="rationale-text" style="font-family:var(--font-mono);font-size:11px">
+        ${budgetLine}<br>
+        Cost: ${costStr} &nbsp;|&nbsp; FAGE Saving: ${savedStr}
+      </div>
+    </div>
+    <div class="rationale-section">
+      <div class="rationale-label">Matched Keywords</div>
+      <div class="rationale-text" style="font-family:var(--font-mono);font-size:11px">${keywords}</div>
+    </div>
+    <div class="rationale-section">
+      <div class="rationale-label">Prompt Payload (first 400 chars)</div>
+      <div class="rationale-text" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">
+        ${(e.payload || "").slice(0, 400)}${(e.payload || "").length > 400 ? "…" : ""}
+      </div>
+    </div>`;
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────────────
@@ -1024,34 +1084,50 @@ function init() {
   seedAuditLog();
   document.getElementById("liveClock").textContent = nowTime();
 
-  // Seed routing feed — with click handlers pointing to seeded audit rows
+  // Seed routing feed — inline rationale expand (same pattern as tick rows)
   const tbody = document.getElementById("lRoutingBody");
   const seedRows = [
-    { agent:"SF-ComplianceBot",  dept:"Operations", badge:`<span class="badge badge-flagship">Strategist</span>`,   detail:"HIPAA audit — health data migration...",   cost:"$0.392500", auditId:"audit-row-seed-0" },
-    { agent:"SF-MarketMailer",   dept:"Marketing",  badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`, detail:"Budget cap enforced", cost:"$0.001040", auditId:"audit-row-seed-5" },
-    { agent:"SF-OpsLogger",      dept:"Operations", badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Incident log entry",                      cost:"$0.000840", auditId:"audit-row-seed-11" },
-    { agent:"SF-SalesEnrich-1",  dept:"Sales",      badge:`<span class="badge badge-flagship">Advisor</span>`,      detail:"NDA review before board meeting...",       cost:"$0.056200", auditId:"audit-row-seed-14" },
-    { agent:"SF-SupportBot-1",   dept:"Support",    badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Account update — routine",                 cost:"$0.000920", auditId:"audit-row-seed-8" },
+    { id:"seed-r0", agent:"SF-ComplianceBot",  dept:"Operations", tier:"Strategist", badge:`<span class="badge badge-flagship">Strategist</span>`,   detail:"HIPAA audit — health data migration...",   cost:"$0.392500",
+      payload:"[Strategist] HIPAA compliance audit — health data migration review required. Involves sensitive patient records across 3 hospital systems.", keywords:[], rationale:"FAGE escalated to Strategist model for Operations department. High-complexity indicators: HIPAA compliance and health data migration. Cost: $0.392500. Downgrading would risk inadequate legal and compliance analysis." },
+    { id:"seed-r1", agent:"SF-MarketMailer",   dept:"Marketing",  tier:"Scout",      badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`, detail:"Budget cap enforced", cost:"$0.001040",
+      payload:"[Scout] Campaign targeting update — Q3 holiday push. Downgraded from Advisor due to Marketing budget cap enforcement.", keywords:[], rationale:"Marketing department reached budget cap (101.7%). FAGE Traffic Cop downgraded agent from Advisor to Scout tier to enforce spend controls. Tier routing saved $0.001680 vs Advisor baseline." },
+    { id:"seed-r2", agent:"SF-OpsLogger",      dept:"Operations", tier:"Scout",      badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Incident log entry",                      cost:"$0.000840",
+      payload:"[Scout] Routine incident log entry — ServiceNow ticket SN-28841. Low complexity, no sensitive keywords matched.", keywords:[], rationale:"FAGE Scout tier assigned for routine incident log entry from Operations. Low complexity classification — no sensitive keywords, budget within threshold. Tier routing saved vs Advisor baseline." },
+    { id:"seed-r3", agent:"SF-SalesEnrich-1",  dept:"Sales",      tier:"Advisor",    badge:`<span class="badge badge-flagship">Advisor</span>`,      detail:"NDA review before board meeting...",       cost:"$0.056200",
+      payload:"[Advisor] Enterprise contract review — NDA amendment required before Thursday board meeting. Legal implications require careful analysis.", keywords:[], rationale:"FAGE escalated to Advisor model for Sales department. High-complexity indicators: legal contract review with board-level time constraint. Scout tier insufficient for NDA analysis." },
+    { id:"seed-r4", agent:"SF-SupportBot-1",   dept:"Support",    tier:"Scout",      badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Account update — routine",                 cost:"$0.000920",
+      payload:"[Scout] Customer requesting account email update. Standard support request, no sensitive data detected.", keywords:[], rationale:"FAGE Scout tier assigned for routine account update from Support department. Low complexity — simple field update, no PII in routing payload, budget within threshold." },
   ];
   seedRows.forEach(r => {
-    const row = document.createElement("tr");
-    row.className = "routing-row";
-    row.title = "Click to view in audit log";
-    row.innerHTML = `
+    const rowEl = document.createElement("tr");
+    rowEl.className = "routing-row";
+    rowEl.title = "Click to expand rationale";
+    rowEl.innerHTML = `
       <td style="font-family:var(--font-mono);color:var(--text-muted)">${nowTime()}</td>
       <td style="color:var(--accent);font-weight:600">${r.agent}</td>
       <td style="color:var(--text-muted)">${r.dept}</td>
       <td>${r.badge}</td>
       <td style="color:var(--text-muted);font-size:10px">${r.detail}</td>
       <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${r.cost}</td>`;
-    row.onclick = () => {
-      const auditBody = document.getElementById("lAuditPanel");
-      const auditChev = document.getElementById("lAuditChev");
-      if (auditBody.style.display === "none") { auditBody.style.display = ""; if (auditChev) auditChev.textContent = "▾"; }
-      const target = document.getElementById(r.auditId);
-      if (target) { target.scrollIntoView({ behavior:"smooth", block:"center" }); target.classList.remove("audit-row-highlight"); void target.offsetWidth; target.classList.add("audit-row-highlight"); }
+
+    const rationaleRow = document.createElement("tr");
+    rationaleRow.className = "live-rationale-row";
+    rationaleRow.id = `live-rationale-${r.id}`;
+    rationaleRow.style.display = "none";
+    rationaleRow.innerHTML = `<td colspan="6"><div class="rationale-box" id="live-rationale-content-${r.id}"></div></td>`;
+
+    // Store seed event data so toggleLiveRationale can render it
+    const budgetSnap = getBudgetSnap(r.dept);
+    _liveEventData[r.id] = {
+      dept: r.dept, tier: r.tier, agent: r.agent,
+      payload: r.payload, keywords: r.keywords,
+      cost: parseFloat(r.cost.replace("$","")), saved: 0,
+      budgetSnap, rationale: r.rationale,
     };
-    tbody.appendChild(row);
+
+    rowEl.onclick = () => toggleLiveRationale(r.id);
+    tbody.appendChild(rowEl);
+    tbody.appendChild(rationaleRow);
   });
 
   // Seed stream with full context for click-to-expand
