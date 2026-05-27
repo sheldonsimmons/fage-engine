@@ -119,7 +119,7 @@
       <div id="collisionAlert" class="collision-alert" style="display:none"></div>
 
       <!-- Register New Agent -->
-      <div class="register-agent-form">
+      <div class="register-agent-form" id="registerPanel">
         <h3 class="register-title">Register New Agent</h3>
         <div class="register-grid">
           <div class="register-field">
@@ -212,8 +212,31 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 window.PAGE_TOUR_STEPS = [
-  { target:"budgetPanel",  title:"Department Budgets",  body:"Set monthly caps, reset spend at period end, and configure the throttle floor — the minimum model tier when a department exceeds its budget.",  position:"right" },
-  { target:"agentPanel",   title:"Agentlake Registry",  body:"Every registered AI agent appears here. Filter by platform, status, or department. Archive agents that are no longer active.",                 position:"left",  last:true },
+  {
+    target:   "budgetPanel",
+    title:    "Department Budgets",
+    body:     "Set a monthly spend cap per department. FAGE tracks every AI call in real time — when a department hits its cap, the throttle kicks in automatically. No manual intervention needed.",
+    position: "right"
+  },
+  {
+    target:   "agentPanel",
+    title:    "Agentlake Registry",
+    body:     "Every registered AI agent appears here — the platform it came from, its current status, and how long ago it was active. Filter by platform, department, or status to find what you need fast.",
+    position: "left"
+  },
+  {
+    target:   "agentTableBody",
+    title:    "Tier Bounds — Per-Agent Routing Control",
+    body:     "The Min and Max dropdowns in the Tier Bounds column control what model tier this agent is allowed to use. Min is the floor — the agent will never route cheaper than this even on a short payload. Max is the ceiling — it can never escalate above this even if a keyword triggers it. Set Min=Analyst on a Legal agent so a 5-word subject line never hits the cheap Scout model.",
+    position: "left"
+  },
+  {
+    target:   "registerPanel",
+    title:    "Register a New Agent",
+    body:     "When a new AI worker comes online — from Salesforce, ServiceNow, or a custom integration — register it here. Give it a name, assign it to a department, and set its collision policy. Once registered, it appears in the registry and FAGE starts tracking its routing decisions and spend.",
+    position: "left",
+    last:     true
+  },
 ];
 </script>
 </body>
