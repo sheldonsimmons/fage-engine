@@ -118,9 +118,12 @@ def risk_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_d
     high          = sum(1 for e in events if e.risk_level == "high")
     medium        = sum(1 for e in events if e.risk_level == "medium")
     low           = sum(1 for e in events if e.risk_level == "low")
-    blocked       = sum(1 for e in events if "BLOCKED" in (e.decision_outcome or ""))
+    blocked       = sum(1 for e in events if (
+        "blocked" in (e.decision_outcome or "").lower() or
+        "REQUEST BLOCKED" in (e.rationale or "")
+    ))
     locks         = sum(1 for e in events if e.event_type == "LOCK")
-    throttled     = sum(1 for e in events if "THROTTLED" in (e.rationale or ""))
+    throttled     = sum(1 for e in events if "throttled" in (e.rationale or "").lower())
 
     # Daily risk buckets
     daily = {}

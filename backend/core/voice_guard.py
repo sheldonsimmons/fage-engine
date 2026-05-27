@@ -266,6 +266,21 @@ def normalize_spoken_numbers(text: str) -> str:
         r'\1\2\3-\4\5-\6\7\8\9',
         normalized,
     )
+    # Collapse partial spoken SSN "D D D - D D - D D D" (8 digits, cut-off SSN)
+    # e.g. "4 5 1 - 1 1 - 1 1 1" → "451-11-111"
+    normalized = re.sub(
+        r'(?<!\d)(\d) (\d) (\d) - (\d) (\d) - (\d) (\d) (\d)(?!\d)',
+        r'\1\2\3-\4\5-\6\7\8',
+        normalized,
+    )
+    # Normalize "NNN -NN-NNN" or "NNN -NN -NNN" SSN format with space-before-dash
+    # (ASR sometimes inserts a space before the dash: "451 -11-111")
+    # Collapses to clean "NNN-NN-NNN" so direct patterns can match it.
+    normalized = re.sub(
+        r'(?<!\d)(\d{3}) -([\d]{2})-([\d]{3,4})(?!\d)',
+        r'\1-\2-\3',
+        normalized,
+    )
     # Collapse long runs of space-separated single digits (compact SSN / card)
     # e.g. "4 2 8 5 5 9 1 7 3" → "428559173"
     normalized = re.sub(
@@ -303,8 +318,16 @@ PII_PATTERNS = [
             "full social", "confirm your social", "your full social",
             "social for me", "social on file", "my social number",
             "social number is",
+            # Interrupted / casual phrasing — caller provides digits mid-sentence
+            # e.g. "my number it's 451-11-111" (cut-off SSN)
+            "my number it's", "my number its",
         ],
-        digit_count=9,
+        # Range mode — accept 6-11 digits so interrupted/partial SSN delivery is
+        # still redacted. The outer gate requires >= digit_min - 1 = 5 digits.
+        # Full 9-digit delivery → 0.92 confidence. 7-8 digits → 0.92 (still redacted).
+        # 5-6 digits → 0.60, flagged for review but still redacted.
+        # 10-11 digits → 0.60, flagged (caller over-read / repeated last group).
+        digit_count=0, digit_min=6, digit_max=11,
         window_seconds=20,
         redact_label="SSN",
     ),
@@ -402,8 +425,11 @@ PII_PATTERNS = [
             "insurance id", "member id is", "policy is",
             "military id", "voter registration", "student id", "school id",
             "workday id", "payroll id", "badge number", "employee number is",
+            "invoice number", "invoice number is", "invoice is", "order number",
+            "order number is", "reference number", "reference number is",
+            "case number", "ticket number", "claim number", "claim number is",
         ],
-        digit_count=0, digit_min=6, digit_max=12,
+        digit_count=0, digit_min=6, digit_max=17,
         window_seconds=20,
         redact_label="MEMBER-ID",
     ),
@@ -742,6 +768,16 @@ _DIRECT_PATTERNS = [
     (re.compile(r'\b\d{6}[\s\-]+\d{3}\b'),                 "SSN", "SSN", 0.85),
     (re.compile(r'\b\d{4}[\s\-]+\d{5}\b'),                 "SSN", "SSN", 0.85),
     (re.compile(r'\b\d{2}[\s\-]+\d{7}\b'),                 "SSN", "SSN", 0.85),
+    # SSN partial — 3+5 (8 digits, caller grouped differently or cut off mid-delivery)
+    # e.g. "451 -11162", "451-11162" — starts with SSN area code format
+    (re.compile(r'\b\d{3}[\s\-]+\d{5}\b'),                 "SSN", "SSN", 0.80),
+    # SSN partial — 3-2-3 (8 digits, caller cut off before last digit)
+    # e.g. "451-11-111" or "451 -11-111" after normalization
+    (re.compile(r'\b(\d{3})[-\s](\d{2})[-\s](\d{3})\b'),   "SSN", "SSN", 0.82),
+    # SSN partial — 3-2-N (7 digits, caller stopped mid-delivery before completing last group)
+    # e.g. "212-72 81" — first two SSN groups delivered then interrupted
+    # The dash after the 3-digit group is a strong SSN indicator; space separates the partial last group.
+    (re.compile(r'\b\d{3}-\d{2}\s\d{1,4}\b'),              "SSN", "SSN", 0.75),
     # Credit card — 4x4 grouped
     (re.compile(r'\b(\d{4}[\s-]){3}\d{4}\b'),              "CREDIT_CARD", "CREDIT-CARD", 0.93),
     # Phone — standard 3-3-4 format (10 digits)

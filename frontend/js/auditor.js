@@ -9,7 +9,7 @@ let openRationaleId = null;
 
 async function loadAuditLog() {
   try {
-    const events = await apiGet("/api/audit?limit=20");
+    const events = await apiGet("/api/audit?limit=50");
     auditAllEvents = events;
     _populateAuditDeptFilter(events);
     updateBlockedBanner(events);
@@ -251,7 +251,7 @@ async function loadLiveRoutingFeed() {
   const tbody = document.getElementById("liveRoutingBody");
   if (!tbody) return;
   try {
-    const events = await apiGet("/api/audit?limit=25");
+    const events = await apiGet("/api/audit?limit=50");
     _routingEvents = events;
     applyRoutingFilters();
   } catch (err) {
@@ -377,7 +377,12 @@ function jumpToMainAuditRow(eventId) {
 
 function _doJumpToAuditEntry(eventId) {
   const row = document.getElementById(`audit-entry-${eventId}`);
-  if (!row) return;
+  if (!row) {
+    // Entry not in loaded window — scroll to the audit section header at minimum
+    const auditSection = document.getElementById("auditBody");
+    if (auditSection) auditSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
 
   // 3. Scroll into view
   row.scrollIntoView({ behavior: "smooth", block: "center" });
