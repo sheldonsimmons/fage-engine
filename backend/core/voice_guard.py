@@ -1157,7 +1157,20 @@ def process_transcript(raw: str) -> VoiceGuardResult:
                     digit_min=0,
                     digit_max=0,
                 )
-            # 10 digits → stays PHONE (original pattern unchanged)
+            elif 8 <= len(digits_wide) <= 12:
+                # Interrupted delivery can produce 8-12 digit totals (e.g. caller
+                # restarts partway through, causing duplicate prefix digits).
+                # Treat as PHONE and use the wide span so nothing leaks.
+                digits, first_pos, last_pos = digits_wide, first_wide, last_wide
+                pattern = _dc_replace(
+                    pattern,
+                    pii_type="PHONE",
+                    redact_label="PHONE",
+                    digit_count=0,
+                    digit_min=8,
+                    digit_max=12,
+                )
+            # exact 10 digits → stays PHONE (original pattern, already handled above)
 
         # For DATE_OF_BIRTH: months are not normalized globally, so extend the
         # span backward from first_pos to include any month name between the
