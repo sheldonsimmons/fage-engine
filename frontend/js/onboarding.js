@@ -394,15 +394,18 @@ function _genSalesforce(obj, dept, agent) {
     public static void sendToFAGE(List<FAGERequest> requests) {
         if (System.isFuture() || System.isBatch()) return;
         FAGERequest req = requests[0];
-        sendAsync(req.recordId, req.recordText, req.department, req.agentName);
+        sendAsync(req.recordId, req.subject, req.recordText, req.department, req.agentName);
     }
 
     @future(callout=true)
-    public static void sendAsync(String recordId, String recordText,
-                                 String department, String agentName) {
-        // Combine subject line + body so short cases (subject-only) still reach FAGE
-        // recordText is passed as Subject + '\n' + Description from the Flow
-        String payload = String.isBlank(recordText) ? '(no description)' : recordText;
+    public static void sendAsync(String recordId, String subject,
+                                 String recordText, String department, String agentName) {
+        // Always combine Subject + Description so short cases (subject-only) reach FAGE
+        String subj = String.isBlank(subject)     ? '' : subject.trim();
+        String body = String.isBlank(recordText)  ? '' : recordText.trim();
+        String payload = String.isBlank(subj)
+            ? (String.isBlank(body) ? '(no content)' : body)
+            : (String.isBlank(body) ? subj : subj + '\\n\\n' + body);
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
         httpReq.setEndpoint('${FAGE_URL}/api/route');
@@ -429,10 +432,11 @@ function _genSalesforce(obj, dept, agent) {
     }
 
     public class FAGERequest {
-        @InvocableVariable(required=true  label='Record ID')   public String recordId;
-        @InvocableVariable(required=true  label='Record Text') public String recordText;
-        @InvocableVariable(required=true  label='Department')  public String department;
-        @InvocableVariable(required=false label='Agent Name')  public String agentName;
+        @InvocableVariable(required=true  label='Record ID')          public String recordId;
+        @InvocableVariable(required=true  label='Subject')            public String subject;
+        @InvocableVariable(required=false label='Description / Body') public String recordText;
+        @InvocableVariable(required=true  label='Department')         public String department;
+        @InvocableVariable(required=false label='Agent Name')         public String agentName;
     }
 }`;
 
@@ -440,7 +444,7 @@ function _genSalesforce(obj, dept, agent) {
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-      <div><strong>Add Action → Apex → Send to FAGE</strong><br/>Record ID → ${_obEsc(obj)} ID · Record Text → <em>{!$Record.Subject} + "\\n" + {!$Record.Description}</em> (formula) · Department → ${_obEsc(dept)} · Agent Name → ${_obEsc(agent)}<br/><span style="font-size:0.9em;color:#888">Tip: combining Subject + Description ensures short cases without a body still route through FAGE.</span></div></div>
+      <div><strong>Add Action → Apex → Send to FAGE</strong><br/>Map these fields:<br/>• Record ID → ${_obEsc(obj)} ID<br/>• <strong>Subject → Subject</strong> (required — short cases like "My email is down" route via Subject)<br/>• Description / Body → Description (optional)<br/>• Department → ${_obEsc(dept)}<br/>• Agent Name → ${_obEsc(agent)}</div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">3</span>
       <div><strong>Save &amp; Activate</strong> — agents appear in the Agentlake Registry on first use.</div></div>
   </div>`;
