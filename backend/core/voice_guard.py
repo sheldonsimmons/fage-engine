@@ -165,6 +165,13 @@ _ONES = {
     "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
     "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
     "eighteen": 18, "nineteen": 19,
+    # Ordinal forms — spoken dates: "the ninth", "august 9th", "twenty-first"
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+    "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14,
+    "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18,
+    "nineteenth": 19, "twentieth": 20, "thirtieth": 30,
+    # Shorthand ordinals ("9th", "21st", "3rd") handled below via regex
 }
 
 # Month names → two-digit month number strings (for DOB normalization)
@@ -210,6 +217,9 @@ def normalize_spoken_numbers(text: str) -> str:
     """
     # Strip ASR artifacts first
     text = _ASR_ARTIFACTS.sub(" ", text)
+
+    # Convert numeric ordinals to plain digits: "9th" → "9", "21st" → "21"
+    text = re.sub(r'\b(\d+)(?:st|nd|rd|th)\b', r'\1', text, flags=re.IGNORECASE)
 
     words = text.lower().split()
     result = []
@@ -609,9 +619,12 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
             # appears nearby. Generic timestamps (email headers, timestamps,
             # "9:04am CST", "24 hours") are nearly always false positives.
             if r.entity_type == "DATE_TIME":
-                window = text[max(0, r.start - 100):r.end + 50].lower()
-                # Skip if no DOB trigger phrase in context
-                if not _DOB_CONTEXT.search(window):
+                # Only look BEFORE the span for DOB context — looking forward
+                # causes false positives when a number appears earlier in the
+                # transcript and "date of birth" is mentioned later.
+                before_window = text[max(0, r.start - 120):r.start].lower()
+                after_window  = text[r.end:r.end + 15].lower()  # tiny forward — covers "is 01/09/85"
+                if not (_DOB_CONTEXT.search(before_window) or _DOB_CONTEXT.search(after_window)):
                     continue
                 # Skip temporal references ("last tuesday", "two o'clock")
                 if _TEMPORAL_REFS.search(text[max(0, r.start - 50):r.end + 20].lower()):
