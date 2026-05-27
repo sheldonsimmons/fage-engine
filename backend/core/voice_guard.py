@@ -314,7 +314,8 @@ PII_PATTERNS = [
         triggers=[
             "credit card", "card number", "debit card", "card ending",
             "card is", "my card", "visa", "mastercard", "amex",
-            "american express", "card on file",
+            "american express", "card on file", "full number is",
+            "full card is", "full card number",
         ],
         digit_count=0, digit_min=13, digit_max=16,
         window_seconds=20,
