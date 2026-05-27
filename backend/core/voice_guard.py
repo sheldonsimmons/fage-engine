@@ -312,13 +312,27 @@ PII_PATTERNS = [
     PIIPattern(
         pii_type="CREDIT_CARD",
         triggers=[
-            "credit card", "card number", "debit card", "card ending",
-            "card is", "my card", "visa", "mastercard", "amex",
-            "american express", "card on file", "full number is",
+            "credit card", "card number", "debit card",
+            "card is", "my card", "my visa", "visa card",
+            "my mastercard", "mastercard card", "my amex", "amex card",
+            "american express card", "card on file", "full number is",
             "full card is", "full card number",
         ],
         digit_count=0, digit_min=13, digit_max=16,
         window_seconds=20,
+        redact_label="CREDIT-CARD",
+    ),
+    # "ending in" / "card ending" — caller gives last 4 digits only.
+    # Treated as partial PII — still redacted but only 4 digits collected.
+    # Kept separate so it doesn't bleed into a following full-number trigger.
+    PIIPattern(
+        pii_type="CREDIT_CARD",
+        triggers=[
+            "ending in", "card ending in", "ends in", "card ending",
+            "last four", "last 4", "last four digits", "last 4 digits",
+        ],
+        digit_count=0, digit_min=4, digit_max=4,
+        window_seconds=10,
         redact_label="CREDIT-CARD",
     ),
     PIIPattern(
