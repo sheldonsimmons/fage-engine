@@ -133,6 +133,7 @@
     <a href="/" class="header-nav-link">← Dashboard</a>
     <a href="/policy.html" class="header-nav-link">⚖ Policy &amp; Rules</a>
     <a href="/live.html" class="header-nav-link" style="color:var(--accent-green)">● Live Ops</a>
+    <button class="tour-btn" onclick="startTour()">? Guide</button>
   </div>
 </header>
 
@@ -469,5 +470,17 @@
 <script src="js/sandbox.js"></script>
 <script src="js/routing_rules.js"></script>
 <script src="js/keywords.js"></script>
+<script src="js/help.js"></script>
+<script>
+window.PAGE_TOUR_STEPS = [
+  { target:"sb-stat-calls",    title:"Session Stats",           body:"Every call you make in the sandbox is tracked here — total calls, tokens saved by pruning, cost, and which model tier was selected. Resets when you refresh.",                      position:"bottom" },
+  { target:"sb-vg-input",      title:"Voice Guard — PII Redaction", body:"Paste a voice transcript here and FAGE strips PII before it reaches any AI model — SSNs, credit cards, bank accounts, dates of birth, even spoken hesitantly or interrupted.", position:"bottom" },
+  { target:"sb-vg-result",     title:"Voice Guard Results",     body:"After redaction, see how many PII items were caught, the detection method (pattern vs. AI), and the cleaned transcript ready to pass safely through the router.",                  position:"top"    },
+  { target:"sb-pruner-input",  title:"Context Pruner",          body:"Paste any raw text — a support email, log dump, ticket thread — and FAGE strips it to only the meaningful content. See tokens removed and cost avoided before it hits a model.",   position:"bottom" },
+  { target:"sb-pruner-result", title:"Pruner Results",          body:"Token counts before and after, percentage compressed, and estimated cost savings at both micro and flagship rates. The cleaned text is what gets sent to the AI.",                  position:"top"    },
+  { target:"sb-router-input",  title:"Token Router",            body:"Route a real payload through FAGE's full pipeline — prune, score complexity, select model tier, simulate the call. No budget impact. Real routing logic, sandboxed result.",        position:"bottom" },
+  { target:"sb-router-result", title:"Router Results",          body:"See the full routing decision: complexity classification, model selected, cost, tokens, and the plain-English reason FAGE chose this tier.", position:"top", last:true },
+];
+</script>
 </body>
 </html>

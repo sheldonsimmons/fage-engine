@@ -54,18 +54,18 @@ const HELP_CONTENT = {
   },
 };
 
-// ── Tour steps ────────────────────────────────────────────────────────────────
+// ── Tour steps — Main Dashboard ───────────────────────────────────────────────
 const TOUR_STEPS = [
   {
     target:  "kpiSpend",
     title:   "Welcome to FAGE",
-    body:    "This is your real-time AI spend dashboard. Every dollar your AI agents spend is tracked here — by department, by day, by month. Let's take a quick tour.",
+    body:    "Your real-time AI spend dashboard. Every dollar your AI agents spend is tracked here — by department, by day, by month. Let's take a quick tour.",
     position: "bottom",
   },
   {
     target:  "kpiTokensSaved",
     title:   "Instant Cost Savings",
-    body:    "Before any text reaches an AI model, FAGE strips out noise and junk. Fewer tokens = lower cost. The savings start from the very first request — no configuration needed.",
+    body:    "Before any text reaches an AI model, FAGE strips out noise and junk. Fewer tokens = lower cost. Savings start from the very first request.",
     position: "bottom",
   },
   {
@@ -77,43 +77,49 @@ const TOUR_STEPS = [
   {
     target:  "kpiThrottleCard",
     title:   "Budget Protection",
-    body:    "When a department hits its spend cap, FAGE auto-throttles — switching to a lighter model so work keeps running without blowing the budget. This card turns red when action is needed.",
+    body:    "When a department hits its spend cap, FAGE auto-throttles — switching to a lighter model so work keeps running without blowing the budget.",
+    position: "bottom",
+  },
+  {
+    target:  "kpiBlockedRequests",
+    title:   "Blocked Requests",
+    body:    "Every request that was stopped before reaching an AI model is counted here. PII, sensitive terms, or policy violations — blocked at the gate, zero tokens consumed.",
     position: "bottom",
   },
   {
     target:  "budgetPanel",
     title:   "Department Budgets",
-    body:    "Set monthly AI spend caps per department. FAGE enforces them automatically. You can reset the month, adjust the cap, or grant a supervisor override — all from here.",
+    body:    "Set monthly AI spend caps per department. FAGE enforces them automatically — reset the month, adjust the cap, or grant a supervisor override from here.",
     position: "right",
   },
   {
     target:  "agentPanel",
     title:   "Agentlake Registry & Traffic Cop",
-    body:    "Every connected AI agent is tracked here. If two agents try to write the same record at the same time, FAGE detects the collision and locks both — no data corruption, no silent overwrites.",
+    body:    "Every connected AI agent is tracked here. If two agents try to write the same record simultaneously, FAGE detects the collision and locks both — no silent overwrites.",
     position: "left",
   },
   {
     target:  "prunerPanel",
     title:   "Context-Pruning Sweeper",
-    body:    "Paste any raw text and FAGE instantly strips it down to only what matters. See exactly how many tokens were removed and how much cost was avoided — before it ever reaches a model.",
+    body:    "Paste any raw text and FAGE strips it down to only what matters before sending it to a model. See tokens removed and cost avoided in real time.",
     position: "top",
   },
   {
     target:  "routerPanel",
     title:   "Token Router & Model Cascader",
-    body:    "FAGE scores every payload and routes it to the right model. Routine requests go to a fast micro model. Complex or sensitive requests escalate to flagship. Every decision is logged.",
+    body:    "FAGE scores every payload and routes it to the right model tier. Routine → cheap Scout model. Complex or sensitive → flagship. Every decision logged.",
     position: "top",
   },
   {
     target:  "keywordsPanel",
     title:   "Sensitive Term Library",
-    body:    "Add any words your company flags as sensitive. FAGE can flag, escalate, or block requests that match — giving you compliance protection on every AI call.",
+    body:    "Add any words your company flags as sensitive. FAGE can flag, escalate to flagship, or block the request entirely — compliance protection on every AI call.",
     position: "top",
   },
   {
     target:  "auditPanel",
     title:   "AI Decision Audit Log",
-    body:    "Every high-stakes decision is logged here permanently — immutable, timestamped, exportable. Legal dispute? Compliance review? You have the receipts. That's it — you're ready to use FAGE.",
+    body:    "Click any routing row in the feed above to jump here and see its full audit entry — rationale, payload, cost, and keywords. Every decision is immutable and exportable.",
     position: "top",
     last:    true,
   },
@@ -123,6 +129,7 @@ let tourStep     = 0;
 let tourOverlay  = null;
 let tourBox      = null;
 let tourActive   = false;
+let _activeTourSteps = null; // set at startTour time — uses PAGE_TOUR_STEPS if defined
 
 // ── Contextual tooltip ────────────────────────────────────────────────────────
 function showHelp(panelId) {
@@ -166,8 +173,9 @@ function showHelp(panelId) {
 
 // ── Guided tour ───────────────────────────────────────────────────────────────
 function startTour() {
-  tourStep   = 0;
-  tourActive = true;
+  tourStep         = 0;
+  tourActive       = true;
+  _activeTourSteps = window.PAGE_TOUR_STEPS || TOUR_STEPS;
 
   // Overlay
   tourOverlay = document.createElement("div");
@@ -185,7 +193,8 @@ function startTour() {
 }
 
 function renderTourStep() {
-  const step   = TOUR_STEPS[tourStep];
+  const steps  = _activeTourSteps || TOUR_STEPS;
+  const step   = steps[tourStep];
   const target = document.getElementById(step.target);
 
   // Scroll target into view
@@ -195,7 +204,7 @@ function renderTourStep() {
   }
 
   tourBox.innerHTML = `
-    <div class="tour-step-count">Step ${tourStep + 1} of ${TOUR_STEPS.length}</div>
+    <div class="tour-step-count">Step ${tourStep + 1} of ${steps.length}</div>
     <div class="tour-title">${step.title}</div>
     <div class="tour-body">${step.body}</div>
     <div class="tour-actions">
@@ -245,7 +254,8 @@ function positionTourBox(target, step) {
 }
 
 function nextTourStep() {
-  if (tourStep < TOUR_STEPS.length - 1) {
+  const steps = _activeTourSteps || TOUR_STEPS;
+  if (tourStep < steps.length - 1) {
     tourStep++;
     renderTourStep();
   }

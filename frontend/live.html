@@ -146,6 +146,7 @@
     <a href="/live-reports.html" class="header-nav-link">📊 Reports</a>
     <a href="/policy.html" class="header-nav-link">⚖ Policy &amp; Rules</a>
     <a href="/sandbox.html" class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
+    <button class="tour-btn" onclick="startTour()">? Guide</button>
   </div>
 </header>
 
@@ -1256,6 +1257,20 @@ function init() {
 }
 
 init();
+</script>
+<script src="js/help.js"></script>
+<script>
+window.PAGE_TOUR_STEPS = [
+  { target:"lKpiSpend",      title:"Live Spend",              body:"Total AI spend today across all departments, updating every 2.5 seconds as agents process requests in real time.",                                                                     position:"bottom" },
+  { target:"lKpiSaved",      title:"FAGE Savings",            body:"Combined savings from tier routing (Scout instead of Advisor) and context pruning. This accumulates live with every tick.",                                                            position:"bottom" },
+  { target:"lKpiBlocked",    title:"Blocked Requests",        body:"Requests stopped before reaching any AI model — PII, sensitive terms, or policy violations. Zero tokens consumed, full audit record created.",                                          position:"bottom" },
+  { target:"lKpiThrottled",  title:"Throttled Departments",   body:"Departments at or over their monthly budget cap. FAGE automatically downgrades them to Scout tier — work continues, budget doesn't blow.",                                              position:"bottom" },
+  { target:"lStatScout",     title:"Model Tier Distribution", body:"Real-time breakdown of calls by tier. Scout handles routine volume cheaply. Advisor/Strategist activate only when complexity or compliance requires it.",                               position:"bottom" },
+  { target:"lAgentBudgetBody", title:"Agents & Budgets",      body:"Live status of every agent in the Agentlake — idle, active, or locked. Budget bars fill as departments spend. Drag panels to reorder the layout.",                                    position:"right"  },
+  { target:"lRoutingFeedBody", title:"Routing Decision Feed", body:"Every AI call appears here as it happens. Click any row to jump to its matching audit log entry — FAGE scrolls to it, highlights it, and opens the full rationale.",                  position:"right"  },
+  { target:"lAuditPanel",    title:"AI Decision Audit Log",   body:"Every routing decision is written here permanently. Click a row to expand the plain-English rationale, payload, budget snapshot, and keywords — the full black-box record.",           position:"right"  },
+  { target:"lEventStream",   title:"Governance Event Stream", body:"Real-time feed of every governance event — blocked PII, collision locks, budget throttles, complex escalations. Click any event to expand the full detail and rationale.", position:"left", last:true },
+];
 </script>
 </body>
 </html>

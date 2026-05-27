@@ -24,6 +24,7 @@
       <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
       <a href="/reports.html" class="header-nav-link active">📊 Reports</a>
       <a href="/models.html" class="header-nav-link">🤖 Model Registry</a>
+      <button class="tour-btn" onclick="startTour()">? Guide</button>
     </div>
     <div class="header-status">
       <span class="status-dot online"></span>
@@ -743,6 +744,20 @@
         setTimeout(() => event.target.textContent = "⎘ Copy Summary", 2000);
       });
     }
+  </script>
+  <script src="js/help.js"></script>
+  <script>
+  window.PAGE_TOUR_STEPS = [
+    { target:"rptDatePreset",   title:"Time Range",              body:"Change the reporting period here. Every chart and KPI updates instantly — choose from presets like Last 30 Days, This Quarter, or set a custom date range.",                       position:"bottom" },
+    { target:"tab-savings",     title:"Savings Tab",             body:"Your headline ROI view. Shows total cost saved vs. a no-routing baseline, broken down into pruning savings and tier routing savings. Export to CSV or PDF.",                       position:"bottom" },
+    { target:"sv-total-saved",  title:"Total Saved",             body:"What FAGE saved this period — actual tokens pruned plus the cost difference between economy and flagship tiers for all routed calls.",                                            position:"bottom" },
+    { target:"sv-no-fage",      title:"Without FAGE Baseline",   body:"Estimated cost if every call had gone to your flagship model with no pruning or routing. The gap between this and Actual Cost is your FAGE ROI.",                                 position:"bottom" },
+    { target:"tab-risk",        title:"Risk & Compliance",       body:"Every governance event — blocked PII, high-risk escalations, agent collisions, and term matches. Drill into the recent events table to see individual audit entries.",             position:"bottom" },
+    { target:"tab-departments", title:"Departments",             body:"Scorecard for every department — call volume, economy-tier %, actual cost, and budget bar. Throttled departments are flagged. Drag cards to rearrange the layout.",               position:"bottom" },
+    { target:"tab-efficiency",  title:"Bot Efficiency Review",   body:"Click Generate Review to run AI analysis on every agent's 30-day history. Each agent gets a grade, findings, and specific recommendations with projected savings.",               position:"bottom" },
+    { target:"tab-activity",    title:"Agent Activity",          body:"Filter by platform, agent, department, or model tier. Click any agent row to expand its full transaction log for the selected period.",                                           position:"bottom" },
+    { target:"tab-roi",         title:"ROI Calculator",          body:"Model your own AI usage — calls per month, token counts, model tier, and FAGE plan. See payback period and net annual savings. Use industry presets to auto-fill.", position:"bottom", last:true },
+  ];
   </script>
 </body>
 </html>

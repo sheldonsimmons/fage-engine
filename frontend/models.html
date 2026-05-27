@@ -21,6 +21,7 @@
       <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
       <a href="/reports.html" class="header-nav-link">📊 Reports</a>
       <a href="/models.html" class="header-nav-link active">🤖 Model Registry</a>
+      <button class="tour-btn" onclick="startTour()">? Guide</button>
     </div>
     <div class="header-status">
       <span class="status-dot online"></span>
@@ -213,5 +214,16 @@
 
   <script src="js/api.js"></script>
   <script src="js/models.js"></script>
+  <script src="js/help.js"></script>
+  <script>
+  window.PAGE_TOUR_STEPS = [
+    { target:"tierCards",      title:"Model Tier Cards",         body:"Four tiers — Scout, Analyst, Advisor, Strategist. FAGE routes every payload to the right tier automatically. Scout handles cheap routine calls; Strategist handles high-stakes complex ones.",  position:"bottom" },
+    { target:"filterTier",     title:"Filter by Tier",           body:"Filter the model table by tier, provider, or enabled status. Use this to quickly see which models are active in each tier.",                                                                     position:"bottom" },
+    { target:"modelTableBody", title:"Model Registry Table",     body:"Every model FAGE can route to appears here — name, provider, tier, cost per 1M tokens, department assignment, and enabled status. Click the edit icon to modify any model.",                     position:"top"    },
+    { target:"modalOverlay",   title:"Add / Edit a Model",       body:"Click Add Model to register a new model. Set the tier, provider ID, input/output costs, and optionally restrict it to a specific department. FAGE uses this registry to calculate real costs.",  position:"top", last:true },
+  ];
+  // modalOverlay is hidden by default — target tier cards as fallback for last step
+  window.PAGE_TOUR_STEPS[3].target = "tierCards";
+  </script>
 </body>
 </html>

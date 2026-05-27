@@ -72,6 +72,7 @@
     <a href="/models.html" class="header-nav-link" style="margin-left:8px">🤖 Models</a>
     <a href="/sandbox.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-yellow)">⚗ Sandbox</a>
     <a href="/live.html" class="header-nav-link" style="margin-left:8px;color:var(--accent-green)">● LIVE</a>
+    <button class="tour-btn" onclick="startTour()">? Guide</button>
   </div>
 </header>
 
@@ -206,5 +207,15 @@
 <script src="js/api.js"></script>
 <script src="js/routing_rules.js"></script>
 <script src="js/keywords.js"></script>
+<script src="js/help.js"></script>
+<script>
+window.PAGE_TOUR_STEPS = [
+  { target:"rrThresholdSlider", title:"Complexity Threshold",   body:"This slider sets the token count at which FAGE considers a payload 'complex' and routes it to a flagship model. Raise it to escalate less, lower it to escalate more.",          position:"bottom" },
+  { target:"rrKeywordList",     title:"Complexity Keywords",     body:"Any payload containing these words is automatically escalated to the flagship model tier, regardless of token count. Add legal, compliance, or domain-specific trigger words.",   position:"bottom" },
+  { target:"kwTerm",            title:"Add Sensitive Term",      body:"Add a word or phrase your company flags as sensitive. When FAGE detects it in a payload, the action you choose — escalate or block — is enforced on every matching request.",    position:"bottom" },
+  { target:"kwAction",          title:"Escalate vs. Block",      body:"Escalate routes the request to a flagship model and flags it in the audit log. Block rejects it entirely — zero tokens consumed, full audit record created.",                    position:"bottom" },
+  { target:"kwTable",           title:"Sensitive Term Library",  body:"Your full active term library. Every term here is checked against every incoming payload in real time. Edit or remove terms at any time — changes take effect immediately.", position:"top", last:true },
+];
+</script>
 </body>
 </html>
