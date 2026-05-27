@@ -92,23 +92,25 @@
 <header class="header">
   <div class="header-brand">
     <span class="header-logo">◈</span>
-    <span class="header-title">FAGE</span>
-    <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
-  </div>
-  <div class="header-nav">
-    <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
-    <a href="/policy.html"     class="header-nav-link" style="margin-left:8px">⚖ Policy &amp; Rules</a>
-    <a href="/reports.html"    class="header-nav-link" style="margin-left:8px">📊 Reports</a>
-    <a href="/models.html"     class="header-nav-link" style="margin-left:8px">🤖 Models</a>
-    <a href="/sandbox.html"    class="header-nav-link" style="margin-left:8px;color:var(--accent-yellow)">⚗ Sandbox</a>
-    <a href="/live.html"       class="header-nav-link" style="margin-left:8px;color:var(--accent-green)">● LIVE</a>
-    <button onclick="resetDemoData()" class="header-nav-link" style="margin-left:8px">↺ Reset</button>
-    <button class="tour-btn"   onclick="startTour()">? Guide</button>
+    <div>
+      <div class="header-title">FAGE</div>
+      <div class="header-sub">FinOps Agentlake &amp; Governance Engine</div>
+    </div>
   </div>
   <div class="header-status" id="systemStatus">
     <span class="status-dot offline"></span>
     <span id="statusLabel">Connecting...</span>
     <span class="mode-badge" id="modeBadge" style="display:none"></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
+    <a href="/policy.html"     class="header-nav-link">⚖ Policy &amp; Rules</a>
+    <a href="/reports.html"    class="header-nav-link">📊 Reports</a>
+    <a href="/models.html"     class="header-nav-link">🤖 Models</a>
+    <a href="/sandbox.html"    class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
+    <a href="/live.html"       class="header-nav-link" style="color:var(--accent-green)">● LIVE</a>
+    <button onclick="resetDemoData()" class="header-nav-link">↺ Reset</button>
+    <button class="tour-btn"   onclick="startTour()">? Guide</button>
   </div>
 </header>
 
