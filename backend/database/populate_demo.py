@@ -37,10 +37,10 @@ def populate():
     # ── Reset / upsert department budgets ──────────────────────────────────────
     print("Setting department budgets...")
     budget_data = [
-        dict(department="Support",    monthly_cap_usd=500.00,  current_spend_usd=342.80,  throttled=False),
-        dict(department="Sales",      monthly_cap_usd=750.00,  current_spend_usd=218.40,  throttled=False),
-        dict(department="Marketing",  monthly_cap_usd=400.00,  current_spend_usd=401.20,  throttled=True),
-        dict(department="Operations", monthly_cap_usd=300.00,  current_spend_usd=89.60,   throttled=False),
+        dict(department="Support",    monthly_cap_usd=500.00,  current_spend_usd=342.80,  throttled=False, throttle_tier=2),
+        dict(department="Sales",      monthly_cap_usd=750.00,  current_spend_usd=218.40,  throttled=False, throttle_tier=2),
+        dict(department="Marketing",  monthly_cap_usd=400.00,  current_spend_usd=401.20,  throttled=True,  throttle_tier=1),
+        dict(department="Operations", monthly_cap_usd=300.00,  current_spend_usd=89.60,   throttled=False, throttle_tier=1),
     ]
     for bd in budget_data:
         b = db.query(models.DepartmentBudget).filter_by(department=bd["department"]).first()
@@ -48,6 +48,7 @@ def populate():
             b.monthly_cap_usd   = bd["monthly_cap_usd"]
             b.current_spend_usd = bd["current_spend_usd"]
             b.throttled         = bd["throttled"]
+            b.throttle_tier     = bd["throttle_tier"]
             b.period_start      = period_start
         else:
             db.add(models.DepartmentBudget(period_start=period_start, **bd))

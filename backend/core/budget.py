@@ -87,6 +87,21 @@ def revoke_override(db: Session, department: str) -> dict:
     return _enrich(b)
 
 
+def set_throttle_tier(db: Session, department: str, tier: int) -> dict:
+    """
+    Set the minimum model tier a department is allowed to use when throttled.
+    1=Scout, 2=Analyst, 3=Advisor, 4=Strategist.
+    """
+    if tier not in (1, 2, 3, 4):
+        raise ValueError("throttle_tier must be 1, 2, 3, or 4.")
+    b = db.query(DepartmentBudget).filter_by(department=department).first()
+    if not b:
+        raise ValueError(f"Department '{department}' not found.")
+    b.throttle_tier = tier
+    db.commit()
+    return _enrich(b)
+
+
 def reset_period(db: Session, department: str) -> dict:
     """Reset a department's spend to zero (simulates a new billing month)."""
     b = db.query(DepartmentBudget).filter_by(department=department).first()
@@ -117,6 +132,9 @@ def _enrich(b: DepartmentBudget) -> dict:
     else:
         state = "healthy"
 
+    throttle_tier = getattr(b, "throttle_tier", 1) or 1
+    tier_names    = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
+
     return {
         "department":        b.department,
         "monthly_cap_usd":   b.monthly_cap_usd,
@@ -127,4 +145,6 @@ def _enrich(b: DepartmentBudget) -> dict:
         "override_granted":  b.override_granted,
         "period_start":      b.period_start.isoformat() if b.period_start else None,
         "state":             state,   # healthy | warning | throttled
+        "throttle_tier":     throttle_tier,
+        "throttle_tier_name": tier_names.get(throttle_tier, "Scout"),
     }

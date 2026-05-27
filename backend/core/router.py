@@ -180,6 +180,7 @@ def route(
     db=None,
     auto_prune:    bool = True,
     is_throttled:  bool = False,
+    throttle_tier: int  = 1,
     force_complex: bool = False,
 ) -> dict:
     """
@@ -245,11 +246,14 @@ def route(
 
     # Step 3 — Map to tier number
     if is_throttled:
-        tier_num         = 1
+        effective_tier   = max(1, min(4, throttle_tier))   # clamp 1–4
+        tier_num         = effective_tier
+        floor_name       = TIER_NAMES.get(effective_tier, f"Tier {effective_tier}")
         routing_decision = "THROTTLED"
         routing_reason   = (
             f"Department '{department}' has reached its monthly budget cap. "
-            f"Forced to Scout tier. Original complexity: {complexity}."
+            f"Requests capped at {floor_name} (Tier {effective_tier}) per department policy. "
+            f"Original complexity: {complexity}."
         )
     elif forced_tier is not None:
         tier_num         = forced_tier

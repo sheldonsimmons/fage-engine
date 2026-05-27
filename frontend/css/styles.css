@@ -483,6 +483,22 @@ body {
 .btn-revoke { background: #2d0d0d; color: var(--accent-red); border-color: var(--accent-red); }
 .btn-revoke:hover { background: #3d1010; }
 
+.budget-throttle-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+}
+.budget-throttle-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-muted); font-weight: 600; white-space: nowrap;
+}
+.budget-throttle-select {
+  background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
+  border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer;
+}
+.budget-throttle-select:focus { outline: none; border-color: var(--accent); }
+.budget-throttle-hint {
+  font-size: 10px; color: var(--text-muted); font-style: italic;
+}
+
 /* ── Router Panel ────────────────────────────────────────────────────────────── */
 .router-controls { display: grid; grid-template-columns: 1fr 220px; gap: 16px; align-items: start; }
 .router-settings { display: flex; flex-direction: column; gap: 10px; }

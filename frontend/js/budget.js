@@ -70,6 +70,16 @@ function renderBudgets() {
       ? Math.min((b.current_spend_usd / b.monthly_cap_usd) * 100, 100)
       : 0;
 
+    const throttleTier = b.throttle_tier || 1;
+    const tierOpts = [
+      { v: 1, label: "⚡ Scout — Tier 1 (cheapest)" },
+      { v: 2, label: "🔍 Analyst — Tier 2" },
+      { v: 3, label: "💡 Advisor — Tier 3" },
+      { v: 4, label: "🎯 Strategist — Tier 4 (premium)" },
+    ].map(o =>
+      `<option value="${o.v}" ${o.v === throttleTier ? "selected" : ""}>${o.label}</option>`
+    ).join("");
+
     return `
       <div class="budget-item" id="budget-${b.department}">
         <div class="budget-dept">
@@ -88,6 +98,14 @@ function renderBudgets() {
           <button class="btn-cap" onclick="doSetCap('${b.department}')">Set Cap</button>
           <button class="btn-cap btn-reset" onclick="doReset('${b.department}')">Reset Month</button>
           ${overrideBtn}
+        </div>
+        <div class="budget-throttle-row">
+          <span class="budget-throttle-label">Throttle floor:</span>
+          <select class="budget-throttle-select" id="throttle-tier-${b.department}"
+                  onchange="doSetThrottleTier('${b.department}')">
+            ${tierOpts}
+          </select>
+          <span class="budget-throttle-hint">Min tier when over budget</span>
         </div>
       </div>
     `;
@@ -175,6 +193,18 @@ async function doRevoke(department) {
     await loadBudgets();
   } catch (err) {
     alert(`Failed to revoke override: ${err.message}`);
+  }
+}
+
+/** Supervisor: set the throttle floor tier for a department */
+async function doSetThrottleTier(department) {
+  const sel  = document.getElementById(`throttle-tier-${department}`);
+  const tier = parseInt(sel.value, 10);
+  try {
+    await apiPatch(`/api/budget/${department}/throttle-tier`, { tier });
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to set throttle floor: ${err.message}`);
   }
 }
 

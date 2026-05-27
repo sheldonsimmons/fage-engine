@@ -98,7 +98,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
     # Check throttle status from the department budget table
     budget       = db.query(DepartmentBudget).filter_by(department=req.department).first()
-    is_throttled = budget.throttled if budget else False
+    is_throttled   = budget.throttled    if budget else False
+    throttle_tier  = getattr(budget, "throttle_tier", 1) or 1  if budget else 1
 
     # ── Sensitive term check ───────────────────────────────────────────────────
     # If Voice Guard already processed this transcript, skip PII category terms —
@@ -165,7 +166,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         db.commit()
 
     # Run the routing pipeline
-    result = route(req.text, req.department, db=db, auto_prune=req.auto_prune, is_throttled=is_throttled, force_complex=force_complex)
+    result = route(req.text, req.department, db=db, auto_prune=req.auto_prune, is_throttled=is_throttled, throttle_tier=throttle_tier, force_complex=force_complex)
 
     if not req.is_test:
         # ── Persist the token transaction ──────────────────────────────────────

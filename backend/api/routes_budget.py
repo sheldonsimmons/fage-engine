@@ -17,26 +17,32 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from core.budget import (
     get_all_budgets, get_budget, set_cap,
-    grant_override, revoke_override, reset_period,
+    grant_override, revoke_override, reset_period, set_throttle_tier,
 )
 
 router = APIRouter()
 
 
 class BudgetStatus(BaseModel):
-    department:        str
-    monthly_cap_usd:   float
-    current_spend_usd: float
-    remaining_usd:     float
-    used_pct:          float
-    throttled:         bool
-    override_granted:  bool
-    period_start:      str
-    state:             str   # healthy | warning | throttled
+    department:         str
+    monthly_cap_usd:    float
+    current_spend_usd:  float
+    remaining_usd:      float
+    used_pct:           float
+    throttled:          bool
+    override_granted:   bool
+    period_start:       str
+    state:              str   # healthy | warning | throttled
+    throttle_tier:      int
+    throttle_tier_name: str
 
 
 class SetCapRequest(BaseModel):
     new_cap_usd: float
+
+
+class SetThrottleTierRequest(BaseModel):
+    tier: int  # 1=Scout, 2=Analyst, 3=Advisor, 4=Strategist
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -92,3 +98,13 @@ def reset_month(department: str, db: Session = Depends(get_db)):
         return reset_period(db, department)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.patch("/{department}/throttle-tier", response_model=BudgetStatus)
+def update_throttle_tier(department: str, body: SetThrottleTierRequest, db: Session = Depends(get_db)):
+    """Set the minimum model tier a department is allowed to use when throttled."""
+    try:
+        return set_throttle_tier(db, department, body.tier)
+    except ValueError as e:
+        status_code = 400 if "must be" in str(e) else 404
+        raise HTTPException(status_code=status_code, detail=str(e))

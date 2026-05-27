@@ -103,6 +103,7 @@ class DepartmentBudget(Base):
     period_start      = Column(DateTime, default=datetime.utcnow)
     throttled         = Column(Boolean,  default=False)
     override_granted  = Column(Boolean,  default=False)
+    throttle_tier     = Column(Integer,  default=1)   # min tier when throttled (1=Scout … 4=Strategist)
 
 
 class TokenTransaction(Base):

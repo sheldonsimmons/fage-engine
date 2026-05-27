@@ -141,14 +141,14 @@ def seed():
     # ── Department Budgets ─────────────────────────────────────────────────────
     period_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     budgets = [
-        # Support is at 71% — approaching warn threshold (80%)
-        models.DepartmentBudget(department="Support",    monthly_cap_usd=200.00, current_spend_usd=142.50, period_start=period_start, throttled=False),
-        # Sales is comfortable at 29%
-        models.DepartmentBudget(department="Sales",      monthly_cap_usd=300.00, current_spend_usd=87.20,  period_start=period_start, throttled=False),
-        # Marketing is at 99.6% — nearly throttled
-        models.DepartmentBudget(department="Marketing",  monthly_cap_usd=250.00, current_spend_usd=249.10, period_start=period_start, throttled=False),
-        # Operations is well under budget at 15%
-        models.DepartmentBudget(department="Operations", monthly_cap_usd=150.00, current_spend_usd=23.80,  period_start=period_start, throttled=False),
+        # Support at 71% — throttle floor: Analyst (customer-facing quality matters)
+        models.DepartmentBudget(department="Support",    monthly_cap_usd=200.00, current_spend_usd=142.50, period_start=period_start, throttled=False, throttle_tier=2),
+        # Sales at 29% — throttle floor: Analyst (proposals need quality)
+        models.DepartmentBudget(department="Sales",      monthly_cap_usd=300.00, current_spend_usd=87.20,  period_start=period_start, throttled=False, throttle_tier=2),
+        # Marketing at 99.6% — throttle floor: Scout (copy drafts, Scout is fine)
+        models.DepartmentBudget(department="Marketing",  monthly_cap_usd=250.00, current_spend_usd=249.10, period_start=period_start, throttled=False, throttle_tier=1),
+        # Operations at 15% — throttle floor: Scout (log analysis, Scout is adequate)
+        models.DepartmentBudget(department="Operations", monthly_cap_usd=150.00, current_spend_usd=23.80,  period_start=period_start, throttled=False, throttle_tier=1),
     ]
     db.add_all(budgets)
     db.commit()

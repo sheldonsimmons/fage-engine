@@ -49,10 +49,10 @@ def populate_enterprise():
     # ── Department budgets — enterprise scale ──────────────────────────────────
     print("Setting enterprise department budgets...")
     budget_data = [
-        dict(department="Support",    monthly_cap_usd=8000.00,  current_spend_usd=5842.10,  throttled=False, override_granted=False),
-        dict(department="Sales",      monthly_cap_usd=12000.00, current_spend_usd=4218.60,  throttled=False, override_granted=False),
-        dict(department="Marketing",  monthly_cap_usd=6000.00,  current_spend_usd=6104.80,  throttled=True,  override_granted=False),
-        dict(department="Operations", monthly_cap_usd=4000.00,  current_spend_usd=1289.40,  throttled=False, override_granted=False),
+        dict(department="Support",    monthly_cap_usd=8000.00,  current_spend_usd=5842.10,  throttled=False, override_granted=False, throttle_tier=2),
+        dict(department="Sales",      monthly_cap_usd=12000.00, current_spend_usd=4218.60,  throttled=False, override_granted=False, throttle_tier=2),
+        dict(department="Marketing",  monthly_cap_usd=6000.00,  current_spend_usd=6104.80,  throttled=True,  override_granted=False, throttle_tier=1),
+        dict(department="Operations", monthly_cap_usd=4000.00,  current_spend_usd=1289.40,  throttled=False, override_granted=False, throttle_tier=1),
     ]
     for bd in budget_data:
         b = db.query(models.DepartmentBudget).filter_by(department=bd["department"]).first()
@@ -61,6 +61,7 @@ def populate_enterprise():
             b.current_spend_usd = bd["current_spend_usd"]
             b.throttled         = bd["throttled"]
             b.override_granted  = bd["override_granted"]
+            b.throttle_tier     = bd["throttle_tier"]
             b.period_start      = period_start
         else:
             db.add(models.DepartmentBudget(period_start=period_start, **bd))
