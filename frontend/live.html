@@ -35,7 +35,7 @@
       border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
       background: var(--bg-base); gap: 0; }
 
-    .dash-content { display: grid; grid-template-columns: 1fr 340px; flex: 1; overflow: hidden; }
+    .dash-content { display: grid; grid-template-columns: 1fr 360px; flex: 1; overflow: hidden; }
     .dash-left  { overflow-y: auto; border-right: 1px solid var(--border); }
     .dash-left::-webkit-scrollbar { width: 3px; }
     .dash-left::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -55,9 +55,26 @@
     .sec-sub-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--text-muted); font-weight: 600; margin-bottom: 10px; }
 
-    .stream-head { padding: 10px 16px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .stream-head-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    /* Right column — stream */
+    .stream-head { padding: 10px 12px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .stream-head-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .stream-head-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); font-weight: 600; }
+    .stream-filters { display: flex; gap: 5px; flex-wrap: wrap; }
+    .stream-filter-sel {
+      background: var(--bg-main); border: 1px solid var(--border); color: var(--text-primary);
+      border-radius: 5px; padding: 4px 8px; font-size: 11px; cursor: pointer;
+    }
+    .stream-filter-sel:focus { outline: none; border-color: var(--accent); }
+    .stream-search {
+      background: var(--bg-main); border: 1px solid var(--border); color: var(--text-primary);
+      border-radius: 5px; padding: 4px 8px; font-size: 11px; flex: 1; min-width: 80px;
+    }
+    .stream-search:focus { outline: none; border-color: var(--accent); }
+    .stream-refresh-btn {
+      background: var(--bg-main); border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 5px; padding: 4px 8px; font-size: 11px; cursor: pointer;
+    }
+    .stream-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
     .stream-scroll { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
     .stream-scroll::-webkit-scrollbar { width: 3px; }
     .stream-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -72,7 +89,7 @@
     .a-name { font-size: 10px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .a-dept { font-size: 10px; color: var(--text-muted); }
 
-    /* Routing table — clickable rows */
+    /* Routing table */
     .routing-table { width: 100%; border-collapse: collapse; font-size: 11px; }
     .routing-table th { text-align: left; padding: 6px 12px; font-size: 9px; text-transform: uppercase;
       letter-spacing: 0.08em; color: var(--text-muted); border-bottom: 1px solid var(--border); background: var(--bg-panel); }
@@ -88,22 +105,6 @@
       0%,100% { background: transparent; }
       15%,50% { background: rgba(88,166,255,0.2); }
     }
-
-    .stream-event { background: var(--bg-base); border: 1px solid var(--border);
-      border-left-width: 3px; border-radius: 0 6px 6px 0; padding: 10px 12px;
-      display: flex; flex-direction: column; gap: 4px; animation: stream-in 0.35s ease; }
-    @keyframes stream-in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
-    .stream-event.type-routine   { border-left-color: var(--accent); }
-    .stream-event.type-complex   { border-left-color: var(--accent-purple); }
-    .stream-event.type-blocked   { border-left-color: var(--accent-red); background: #1a0505; }
-    .stream-event.type-throttled { border-left-color: var(--accent-yellow); }
-    .stream-event.type-collision { border-left-color: var(--accent-yellow); background: #1a1205; }
-    .stream-event.type-pruning   { border-left-color: var(--accent-green); }
-    .se-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    .se-type { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; }
-    .se-time { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; }
-    .se-body { font-size: 11px; color: var(--text-primary); line-height: 1.4; }
-    .se-meta { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
 
     .flash-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.1s; z-index: 200; }
     .flash-overlay.red    { background: rgba(248,81,73,0.10); }
@@ -283,9 +284,9 @@
         <div class="dash-sec-head" onclick="togglePanel('lAuditPanel','lAuditChev')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
           <span>▸ AI Decision Audit Log</span>
-          <span class="sec-right"><span class="sec-chev" id="lAuditChev">▸</span></span>
+          <span class="sec-right"><span class="sec-chev" id="lAuditChev">▾</span></span>
         </div>
-        <div id="lAuditPanel" class="dash-sec-body" style="display:none">
+        <div id="lAuditPanel" class="dash-sec-body">
           <table class="audit-table">
             <thead>
               <tr><th>Timestamp</th><th>Event Type</th><th>Department</th><th>Model Tier</th><th>Risk Level</th><th>Outcome</th><th>Cost</th><th>Saved</th></tr>
@@ -305,6 +306,26 @@
         <div class="stream-head-label">▸ Governance Event Stream</div>
         <span style="font-size:10px;color:var(--accent-green);font-weight:700">● LIVE</span>
       </div>
+      <div class="stream-filters">
+        <select class="stream-filter-sel" id="lStreamType" onchange="applyLiveStreamFilters()">
+          <option value="">All Types</option>
+          <option value="routine">Routine</option>
+          <option value="complex">Complex</option>
+          <option value="blocked">Blocked</option>
+          <option value="throttled">Throttled</option>
+          <option value="pruning">Pruning</option>
+          <option value="collision">Collision</option>
+        </select>
+        <select class="stream-filter-sel" id="lStreamDept" onchange="applyLiveStreamFilters()">
+          <option value="">All Depts</option>
+          <option value="support">Support</option>
+          <option value="sales">Sales</option>
+          <option value="marketing">Marketing</option>
+          <option value="operations">Operations</option>
+        </select>
+        <input class="stream-search" id="lStreamSearch" placeholder="Search..." oninput="applyLiveStreamFilters()" />
+        <button class="stream-refresh-btn" onclick="applyLiveStreamFilters()">↺</button>
+      </div>
     </div>
     <div class="stream-scroll" id="lEventStream"></div>
   </div>
@@ -315,7 +336,6 @@
 <script>
 
 // ── Real pricing (per token) ───────────────────────────────────────────────────
-// Source: Anthropic published rates, May 2026
 const RATES = {
   Scout:      { input: 1.00 / 1e6,  output: 5.00  / 1e6 }, // Haiku 4.5
   Analyst:    { input: 1.00 / 1e6,  output: 5.00  / 1e6 }, // Haiku 4.5
@@ -323,7 +343,6 @@ const RATES = {
   Strategist: { input: 5.00 / 1e6,  output: 25.00 / 1e6 }, // Opus 4.6
 };
 
-// Savings = what Advisor would have cost minus what Scout actually cost
 const TIER_SAVING_INPUT  = RATES.Advisor.input  - RATES.Scout.input;  // $2.00/1M
 const TIER_SAVING_OUTPUT = RATES.Advisor.output - RATES.Scout.output; // $10.00/1M
 
@@ -333,12 +352,10 @@ function calcCost(tier, inputTokens, outputTokens) {
 }
 
 function calcTierSaving(inputTokens, outputTokens) {
-  // Savings vs always routing to Advisor
   return (inputTokens * TIER_SAVING_INPUT) + (outputTokens * TIER_SAVING_OUTPUT);
 }
 
 function calcPruningSaving(strippedTokens) {
-  // Stripped tokens would have hit Advisor — cost avoided
   return strippedTokens * RATES.Advisor.input;
 }
 
@@ -414,16 +431,7 @@ const BLOCKED_PAYLOADS = [
   { term: "medical record ID",      category: "HIPAA",      description: "Patient diagnosis code and medical record ID detected" },
 ];
 
-// ── State — seeded with real math ─────────────────────────────────────────────
-// Tier routing savings seed:
-//   Scout  27,844 calls × avg 800 in × $2/1M + avg 200 out × $10/1M = $44.55 + $55.69 = $100.24
-//   Analyst 9,240 calls × avg 800 in × $2/1M + avg 200 out × $10/1M = $14.78 + $18.48 = $33.26
-// Pruning savings seed:
-//   ~4,200 pruning events × avg 1,200 stripped tokens × $3/1M = $15.12
-// Block savings seed:
-//   47 blocks × avg 1,500 tokens × $3/1M = $0.21
-// Total seeded savings: $148.83
-
+// ── State ─────────────────────────────────────────────────────────────────────
 let state = {
   calls:           42000,
   callsToday:      847,
@@ -435,13 +443,42 @@ let state = {
   analystCalls:    9240,
   advisorCalls:    3890,
   strategistCalls: 1026,
-  tierSavings:     133.50,   // real math: tier routing savings accumulated
-  pruningSavings:  15.33,    // real math: pruning savings accumulated
+  tierSavings:     133.50,
+  pruningSavings:  15.33,
   agentStatuses: AGENTS.map(() => "idle"),
   budgets: BUDGETS.map(b => ({ ...b })),
 };
 
 let tickCount = 0, lastBlockedAt = -20, lastCollisionAt = -30, lastComplexAt = -5;
+
+// ── Governance Event Data Store ────────────────────────────────────────────────
+// Keyed by eventId so clicking any stream event can show full detail
+const _liveEventData = {};
+
+// ── Rationale generator ────────────────────────────────────────────────────────
+function genRationale(type, tier, dept, cost, saved, stripped) {
+  switch (type) {
+    case "routine":
+      return `FAGE Scout tier assigned for routine request from ${dept} department. Low complexity classification — no sensitive keywords matched, budget within threshold. Tier routing saved $${saved.toFixed(6)} vs Advisor baseline ($3.00/1M input).`;
+    case "complex":
+      return `FAGE escalated to ${tier} model for ${dept} department. High-complexity indicators detected: legal, compliance, or financial context. Cost: $${cost.toFixed(6)}. No cheaper tier appropriate for this payload — downgrading would risk inadequate analysis.`;
+    case "blocked":
+      return `FAGE PII Guard intercepted payload before reaching any AI model. Sensitive data matched FAGE keyword policy. Request terminated — zero tokens sent to AI. Compliance action logged. Cost avoided: $${saved.toFixed(6)}.`;
+    case "throttled":
+      return `${dept} department reached budget cap. FAGE Traffic Cop downgraded agent from Advisor to Scout tier to enforce spend controls. Tier routing saved $${saved.toFixed(6)}.`;
+    case "pruning":
+      return `FAGE Context Pruner applied before Scout invocation. ${stripped ? stripped.toLocaleString() : "—"} redundant tokens removed from payload history. Pruning savings: $${saved.toFixed(6)} at Advisor rate. Payload quality preserved — only stale context removed.`;
+    case "collision":
+      return `FAGE Traffic Cop detected concurrent record access conflict. Two agents targeted the same resource simultaneously. Both agents locked — supervisor action required to unlock and prevent conflicting AI outputs or data corruption.`;
+    default:
+      return "—";
+  }
+}
+
+// ── Budget snapshot for a given dept ──────────────────────────────────────────
+function getBudgetSnap(dept) {
+  return state.budgets.find(b => b.dept.toLowerCase() === dept.toLowerCase()) || null;
+}
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -480,7 +517,6 @@ function updateKPIs() {
   const locked    = state.agentStatuses.filter(s => s === "locked").length;
   const totalSaved = state.tierSavings + state.pruningSavings;
 
-  // KPI strip
   document.getElementById("lKpiSpend").textContent      = `$${state.spend.toFixed(2)}`;
   document.getElementById("lKpiSpendSub").textContent   = `$${state.spendMonth.toFixed(2)} this month`;
   document.getElementById("lKpiSaved").textContent      = `$${totalSaved.toFixed(2)}`;
@@ -492,7 +528,6 @@ function updateKPIs() {
   document.getElementById("lKpiThrottleSub").textContent= throttled > 0 ? "departments capped" : "all within budget";
   document.getElementById("lKpiBlocked").textContent    = state.blocked;
 
-  // Stat bar
   document.getElementById("lStatScout").textContent      = `${state.scoutCalls.toLocaleString()} (${pct(state.scoutCalls)}%)`;
   document.getElementById("lStatAnalyst").textContent    = `${state.analystCalls.toLocaleString()} (${pct(state.analystCalls)}%)`;
   document.getElementById("lStatAdvisor").textContent    = `${state.advisorCalls.toLocaleString()} (${pct(state.advisorCalls)}%)`;
@@ -531,27 +566,22 @@ function addRoutingRow(eventId, agent, dept, tier, detail, cost, isBlocked) {
   while (feed.children.length > 25) feed.removeChild(feed.lastChild);
 }
 
-// ── Jump to Audit (main-style: expand panel + scroll + highlight) ─────────────
+// ── Jump to Audit ─────────────────────────────────────────────────────────────
 
 function jumpToAudit(eventId) {
-  // Expand audit panel if collapsed
   const auditBody = document.getElementById("lAuditPanel");
   const auditChev = document.getElementById("lAuditChev");
   if (auditBody.style.display === "none") {
     auditBody.style.display = "";
     if (auditChev) auditChev.textContent = "▾";
   }
-
-  // Find matching audit row
-  const rowId = `audit-row-${eventId}`;
-  const row   = document.getElementById(rowId);
+  const row = document.getElementById(`audit-row-${eventId}`);
   if (row) {
     row.scrollIntoView({ behavior: "smooth", block: "center" });
     row.classList.remove("audit-row-highlight");
-    void row.offsetWidth; // force reflow
+    void row.offsetWidth;
     row.classList.add("audit-row-highlight");
   } else {
-    // Row scrolled off — scroll audit section into view
     auditBody.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
@@ -588,24 +618,22 @@ function addAuditRow(eventId, eventType, dept, tier, risk, outcome, cost, saved)
 }
 
 function seedAuditLog() {
-  // Pre-seed with realistic historical entries using real pricing
   const entries = [
-    // [type, dept, tier, risk, outcome, inputTok, outputTok, strippedTok]
-    ["blocked",   "Finance",    "—",          "critical", "Blocked",        0,    0,    0],
-    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",   9200, 2800,    0],
-    ["complex",   "Support",    "Advisor",     "high",    "Escalated",   7400, 2100,    0],
-    ["pruning",   "Sales",      "Scout",       "low",     "Allowed",     1100,  280, 1420],
-    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",      740,  180,    0],
-    ["throttled", "Marketing",  "Scout",       "medium",  "Downgraded",   820,  200,    0],
-    ["complex",   "Operations", "Advisor",     "high",    "Escalated",   8800, 2400,    0],
-    ["blocked",   "Support",    "—",          "critical", "Blocked",        0,    0,    0],
-    ["routine",   "Sales",      "Scout",       "low",     "Allowed",      680,  160,    0],
-    ["pruning",   "Support",    "Scout",       "low",     "Allowed",     1050,  260, 1780],
-    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",  11200, 3400,    0],
-    ["routine",   "Operations", "Analyst",     "low",     "Allowed",      920,  220,    0],
-    ["collision", "Support",    "—",           "high",    "Locked",         0,    0,    0],
-    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",      590,  140,    0],
-    ["complex",   "Sales",      "Advisor",     "high",    "Escalated",   6800, 1900,    0],
+    ["blocked",   "Finance",    "—",          "critical", "Blocked",          0,     0,    0],
+    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",      9200,  2800,    0],
+    ["complex",   "Support",    "Advisor",     "high",    "Escalated",      7400,  2100,    0],
+    ["pruning",   "Sales",      "Scout",       "low",     "Allowed",        1100,   280, 1420],
+    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",         740,   180,    0],
+    ["throttled", "Marketing",  "Scout",       "medium",  "Downgraded",      820,   200,    0],
+    ["complex",   "Operations", "Advisor",     "high",    "Escalated",      8800,  2400,    0],
+    ["blocked",   "Support",    "—",          "critical", "Blocked",           0,     0,    0],
+    ["routine",   "Sales",      "Scout",       "low",     "Allowed",          680,  160,    0],
+    ["pruning",   "Support",    "Scout",       "low",     "Allowed",         1050,  260, 1780],
+    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",     11200, 3400,    0],
+    ["routine",   "Operations", "Analyst",     "low",     "Allowed",          920,  220,    0],
+    ["collision", "Support",    "—",           "high",    "Locked",             0,    0,    0],
+    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",          590,  140,    0],
+    ["complex",   "Sales",      "Advisor",     "high",    "Escalated",       6800, 1900,    0],
   ];
 
   const tbody = document.getElementById("lAuditTableBody");
@@ -613,9 +641,9 @@ function seedAuditLog() {
     const ts = new Date(Date.now() - (entries.length - i) * 4 * 60000);
     const tierName = (tier !== "—") ? tier : null;
     const cost  = tierName ? calcCost(tierName, inTok, outTok) : 0;
-    const saved = (type === "pruning") ? calcPruningSaving(stripped)
+    const saved = (type === "pruning")  ? calcPruningSaving(stripped)
       : (type === "routine" || type === "throttled") ? calcTierSaving(inTok, outTok)
-      : (type === "blocked") ? calcCost("Advisor", 1500, 0) // avoided cost
+      : (type === "blocked") ? calcCost("Advisor", 1500, 0)
       : 0;
     const tierCell = tierName
       ? `<span class="badge badge-${tierName === "Scout" || tierName === "Analyst" ? "micro" : "flagship"}">${tierName}</span>` : "—";
@@ -637,26 +665,120 @@ function seedAuditLog() {
   });
 }
 
-// ── Governance Event Stream ───────────────────────────────────────────────────
+// ── Governance Event Stream — click-to-expand ─────────────────────────────────
 
-function addStreamEvent(type, title, body, meta) {
+function addStreamEvent(type, title, body, meta, ctx) {
+  // ctx = { dept, tier, agent, payload, keywords, cost, saved, stripped }
+  const eventId = `lev-${tickCount}-${Date.now()}`;
+  const budgetSnap = ctx && ctx.dept ? getBudgetSnap(ctx.dept) : null;
+  const rationale  = genRationale(type, ctx && ctx.tier, ctx && ctx.dept, ctx && ctx.cost || 0, ctx && ctx.saved || 0, ctx && ctx.stripped);
+
+  _liveEventData[eventId] = {
+    type, title, body, meta,
+    dept:      ctx && ctx.dept      || "—",
+    tier:      ctx && ctx.tier      || "—",
+    agent:     ctx && ctx.agent     || "—",
+    payload:   ctx && ctx.payload   || "",
+    keywords:  ctx && ctx.keywords  || [],
+    cost:      ctx && ctx.cost      || 0,
+    saved:     ctx && ctx.saved     || 0,
+    budgetSnap,
+    rationale,
+  };
+
   const colors = {
     routine:"var(--accent)", complex:"var(--accent-purple)",
     blocked:"var(--accent-red)", throttled:"var(--accent-yellow)",
     collision:"var(--accent-yellow)", pruning:"var(--accent-green)",
   };
+
   const el = document.createElement("div");
-  el.className = `stream-event type-${type}`;
+  el.className = `gov-event type-${type}`;
+  el.id = `gov-ev-${eventId}`;
+  el.dataset.type = type;
+  el.dataset.dept = (ctx && ctx.dept || "").toLowerCase();
   el.innerHTML = `
-    <div class="se-header">
-      <span class="se-type" style="color:${colors[type]}">${title}</span>
-      <span class="se-time">${nowTime()}</span>
+    <div class="gov-event-header">
+      <span class="gov-event-type" style="color:${colors[type]}">${title}</span>
+      <span class="gov-event-time">${nowTime()}</span>
     </div>
-    <div class="se-body">${body}</div>
-    ${meta ? `<div class="se-meta">${meta}</div>` : ""}`;
+    <div class="gov-event-body">${body}</div>
+    ${meta ? `<div class="gov-event-meta">${meta}</div>` : ""}
+    <div class="gov-event-detail" id="gov-detail-${eventId}"></div>`;
+  el.onclick = () => toggleLiveEvent(eventId);
+
   const stream = document.getElementById("lEventStream");
   stream.prepend(el);
   while (stream.children.length > 40) stream.removeChild(stream.lastChild);
+
+  applyLiveStreamFilters();
+}
+
+function toggleLiveEvent(eventId) {
+  const detail = document.getElementById(`gov-detail-${eventId}`);
+  if (!detail) return;
+  const isOpen = detail.classList.contains("open");
+
+  // Close all open details
+  document.querySelectorAll(".gov-event-detail.open").forEach(d => d.classList.remove("open"));
+
+  if (isOpen) return;
+
+  const e = _liveEventData[eventId];
+  if (!e) { detail.classList.add("open"); detail.innerHTML = '<span style="color:var(--text-muted)">No detail stored.</span>'; return; }
+
+  const budgetSnap = e.budgetSnap;
+  const budgetLine = budgetSnap
+    ? `$${budgetSnap.spend.toFixed(2)} / $${budgetSnap.cap.toLocaleString()} &nbsp;(${((budgetSnap.spend/budgetSnap.cap)*100).toFixed(1)}% used) &nbsp;|&nbsp; Throttled: ${budgetSnap.throttled} &nbsp;|&nbsp; Override: false`
+    : "—";
+
+  const keywords = e.keywords && e.keywords.length
+    ? `<span style="color:var(--accent-red)">${e.keywords.join(", ")}</span>`
+    : '<span style="color:var(--text-muted)">None</span>';
+
+  const payloadText = e.payload || "";
+  const costStr  = e.cost  > 0 ? `$${e.cost.toFixed(6)}`  : "$0.00";
+  const savedStr = e.saved > 0 ? `<span style="color:var(--accent-green)">$${e.saved.toFixed(6)}</span>` : "$0.00";
+
+  detail.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="event.stopPropagation(); toggleLiveEvent('${eventId}')"
+        style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer">
+        ✕ Close
+      </button>
+    </div>
+    <div class="gov-detail-label">Rationale</div>
+    <div class="gov-detail-text">${e.rationale}</div>
+    <div class="gov-detail-label">Budget Context</div>
+    <div class="gov-detail-mono">${budgetLine}</div>
+    <div class="gov-detail-label">Cost / Saved</div>
+    <div class="gov-detail-mono">Cost: ${costStr} &nbsp;|&nbsp; FAGE Saving: ${savedStr}</div>
+    <div class="gov-detail-label">Matched Keywords</div>
+    <div class="gov-detail-mono">${keywords}</div>
+    <div class="gov-detail-label">Prompt Payload (first 400 chars)</div>
+    <div class="gov-detail-mono" style="white-space:pre-wrap">${payloadText.slice(0,400)}${payloadText.length > 400 ? "…" : ""}</div>`;
+
+  detail.classList.add("open");
+}
+
+// ── Stream Filters ────────────────────────────────────────────────────────────
+
+function applyLiveStreamFilters() {
+  const typeF   = (document.getElementById("lStreamType")?.value   || "").toLowerCase();
+  const deptF   = (document.getElementById("lStreamDept")?.value   || "").toLowerCase();
+  const searchF = (document.getElementById("lStreamSearch")?.value || "").toLowerCase();
+
+  document.querySelectorAll("#lEventStream .gov-event").forEach(el => {
+    const eType = (el.dataset.type || "").toLowerCase();
+    const eDept = (el.dataset.dept || "").toLowerCase();
+    const eText = el.textContent.toLowerCase();
+
+    const matchType   = !typeF   || eType === typeF;
+    const matchDept   = !deptF   || eDept === deptF;
+    const matchSearch = !searchF || eText.includes(searchF);
+
+    el.style.display = (matchType && matchDept && matchSearch) ? "" : "none";
+  });
 }
 
 // ── Flash + Ticker ────────────────────────────────────────────────────────────
@@ -675,7 +797,7 @@ function showPruningTicker(saved, tokens) {
   setTimeout(() => el.classList.remove("show"), 3000);
 }
 
-// ── Simulation Tick (real pricing math) ───────────────────────────────────────
+// ── Simulation Tick ───────────────────────────────────────────────────────────
 
 function tick() {
   tickCount++;
@@ -697,8 +819,7 @@ function tick() {
   else                                  { eventType = "routine"; }
 
   if (eventType === "blocked") {
-    const b = BLOCKED_PAYLOADS[Math.floor(Math.random() * BLOCKED_PAYLOADS.length)];
-    // Savings: cost avoided (Advisor call that never ran)
+    const b     = BLOCKED_PAYLOADS[Math.floor(Math.random() * BLOCKED_PAYLOADS.length)];
     const saved = calcCost("Advisor", 1500, 0);
     state.agentStatuses[agentIdx] = "idle";
     state.blocked++;
@@ -708,7 +829,8 @@ function tick() {
     addAuditRow(eventId, "blocked", agent.dept, "—", "critical", "Blocked", 0, saved);
     addStreamEvent("blocked", "🛡 REQUEST BLOCKED",
       `${b.description} — content redacted by FAGE PII Guard`,
-      `Term: "${b.term}" · Category: ${b.category} · Cost avoided: $${saved.toFixed(6)}`);
+      `Term: "${b.term}" · Category: ${b.category} · Cost avoided: $${saved.toFixed(6)}`,
+      { dept: agent.dept, tier: "—", agent: agent.name, payload: `[${agent.dept}] ${b.description}. Request intercepted before reaching AI.`, keywords: [b.term], cost: 0, saved });
 
   } else if (eventType === "collision") {
     const idx2   = (agentIdx + 3) % AGENTS.length;
@@ -720,7 +842,8 @@ function tick() {
     addAuditRow(eventId, "collision", agent.dept, "—", "high", "Locked", 0, 0);
     addStreamEvent("collision", "⚡ CONCURRENCY LOCK",
       `${agent.name} + ${agent2.name} targeted the same record simultaneously`,
-      `Dept: ${agent.dept} · Traffic Cop locked both agents · Supervisor required`);
+      `Dept: ${agent.dept} · Traffic Cop locked both agents · Supervisor required`,
+      { dept: agent.dept, tier: "—", agent: agent.name, payload: `Concurrent update conflict detected. ${agent.name} and ${agent2.name} both attempted to access the same record in ${agent.dept} department simultaneously.`, keywords: [], cost: 0, saved: 0 });
     setTimeout(() => {
       state.agentStatuses[agentIdx] = "idle";
       state.agentStatuses[idx2]     = "idle";
@@ -732,6 +855,7 @@ function tick() {
     const outTok = 200  + Math.floor(Math.random() * 200);
     const cost   = calcCost("Scout", inTok, outTok);
     const saved  = calcTierSaving(inTok, outTok);
+    const payload = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++; state.scoutCalls++;
     state.spend       = parseFloat((state.spend + cost).toFixed(6));
@@ -739,24 +863,29 @@ function tick() {
     state.tierSavings = parseFloat((state.tierSavings + saved).toFixed(6));
     addRoutingRow(eventId, agent.name, agent.dept, "THROTTLED", "Downgraded — budget cap enforced", cost, false);
     addAuditRow(eventId, "throttled", agent.dept, "Scout", "medium", "Downgraded", cost, saved);
+    addStreamEvent("throttled", "⚠ BUDGET THROTTLE",
+      `${agent.dept} at ${((state.budgets.find(b=>b.dept===agent.dept)?.spend||0) / (state.budgets.find(b=>b.dept===agent.dept)?.cap||1) * 100).toFixed(1)}% of cap — downgraded to Scout`,
+      `Routing saving $${saved.toFixed(6)} vs Advisor baseline`,
+      { dept: agent.dept, tier: "Scout", agent: agent.name, payload, keywords: [], cost, saved });
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
 
   } else if (eventType === "complex") {
-    const payload  = COMPLEX_PAYLOADS[Math.floor(Math.random() * COMPLEX_PAYLOADS.length)];
-    const inTok    = 8000 + Math.floor(Math.random() * 8000);
-    const outTok   = 2000 + Math.floor(Math.random() * 3000);
-    const tier     = Math.random() < 0.7 ? "Advisor" : "Strategist";
-    const cost     = calcCost(tier, inTok, outTok);
+    const payload = COMPLEX_PAYLOADS[Math.floor(Math.random() * COMPLEX_PAYLOADS.length)];
+    const inTok   = 8000 + Math.floor(Math.random() * 8000);
+    const outTok  = 2000 + Math.floor(Math.random() * 3000);
+    const tier    = Math.random() < 0.7 ? "Advisor" : "Strategist";
+    const cost    = calcCost(tier, inTok, outTok);
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++;
     if (tier === "Advisor") state.advisorCalls++; else state.strategistCalls++;
     state.spend      = parseFloat((state.spend + cost).toFixed(6));
     state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
-    // No tier savings — these legitimately needed the higher model
     addRoutingRow(eventId, agent.name, agent.dept, tier, payload.slice(0,50) + "...", cost, false);
     addAuditRow(eventId, "complex", agent.dept, tier, "high", "Escalated", cost, 0);
-    addStreamEvent("complex", `◈ ${tier.toUpperCase()} MODEL INVOKED`, payload,
-      `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${cost.toFixed(6)} · ${agent.dept}`);
+    addStreamEvent("complex", `◈ ${tier.toUpperCase()} MODEL INVOKED`,
+      `${payload.slice(0, 80)}${payload.length > 80 ? "…" : ""}`,
+      `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${cost.toFixed(6)} · ${agent.dept}`,
+      { dept: agent.dept, tier, agent: agent.name, payload: `[${tier}] ${payload}`, keywords: [], cost, saved: 0 });
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 3000);
 
   } else if (eventType === "pruning") {
@@ -767,6 +896,7 @@ function tick() {
     const cost     = calcCost("Scout", inTok, outTok);
     const tierSave = calcTierSaving(inTok, outTok);
     const prunSave = calcPruningSaving(stripped);
+    const totalSave = tierSave + prunSave;
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++; state.scoutCalls++;
     state.tokens         += stripped;
@@ -777,19 +907,20 @@ function tick() {
     flash("green");
     showPruningTicker(prunSave, stripped);
     addRoutingRow(eventId, agent.name, agent.dept, "Scout", `Pruned ${stripped.toLocaleString()} tokens — ${payload}`, cost, false);
-    addAuditRow(eventId, "pruning", agent.dept, "Scout", "low", "Allowed · pruned", cost, tierSave + prunSave);
+    addAuditRow(eventId, "pruning", agent.dept, "Scout", "low", "Allowed · pruned", cost, totalSave);
     addStreamEvent("pruning", `▼ PRUNING: ${stripped.toLocaleString()} tokens stripped`,
       payload,
-      `Tier saving $${tierSave.toFixed(6)} · Pruning saving $${prunSave.toFixed(6)} · Total $${(tierSave+prunSave).toFixed(6)}`);
+      `Tier saving $${tierSave.toFixed(6)} · Pruning saving $${prunSave.toFixed(6)} · Total $${totalSave.toFixed(6)}`,
+      { dept: agent.dept, tier: "Scout", agent: agent.name, payload: `[Scout] ${payload} — ${stripped.toLocaleString()} tokens of stale context removed before invocation.`, keywords: [], cost, saved: totalSave, stripped });
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
 
   } else {
     // routine
-    const payload  = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
-    const inTok    = 600  + Math.floor(Math.random() * 1000);
-    const outTok   = 150  + Math.floor(Math.random() * 200);
-    const cost     = calcCost("Scout", inTok, outTok);
-    const saved    = calcTierSaving(inTok, outTok);
+    const payload = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
+    const inTok   = 600  + Math.floor(Math.random() * 1000);
+    const outTok  = 150  + Math.floor(Math.random() * 200);
+    const cost    = calcCost("Scout", inTok, outTok);
+    const saved   = calcTierSaving(inTok, outTok);
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++; state.scoutCalls++;
     state.spend       = parseFloat((state.spend + cost).toFixed(6));
@@ -797,6 +928,10 @@ function tick() {
     state.tierSavings = parseFloat((state.tierSavings + saved).toFixed(6));
     addRoutingRow(eventId, agent.name, agent.dept, "Scout", payload, cost, false);
     addAuditRow(eventId, "routine", agent.dept, "Scout", "low", "Allowed", cost, saved);
+    addStreamEvent("routine", "◈ ROUTINE ROUTING",
+      payload,
+      `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${cost.toFixed(6)} · ${agent.dept} · Saved $${saved.toFixed(6)}`,
+      { dept: agent.dept, tier: "Scout", agent: agent.name, payload: `[Scout] ${payload}`, keywords: [], cost, saved });
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 1500);
   }
 
@@ -826,14 +961,12 @@ function generateTimeseriesData() {
     const ad = Math.round(85  * trend * wf * jitter());
     const st = Math.round(18  * trend * wf * jitter());
     scoutCalls.push(s); analystCalls.push(an); advisorCalls.push(ad); strategistCalls.push(st);
-    // Real pricing for spend charts
-    const scoutSpend    = (s  * 800 * RATES.Scout.input)      + (s  * 200 * RATES.Scout.output);
-    const advisorSpend  = (ad * 8000 * RATES.Advisor.input)   + (ad * 2500 * RATES.Advisor.output);
-    const stratSpend    = (st * 10000 * RATES.Strategist.input)+ (st * 3000 * RATES.Strategist.output);
-    const mktExtra = mktBoost;
+    const scoutSpend   = (s  * 800 * RATES.Scout.input)       + (s  * 200 * RATES.Scout.output);
+    const advisorSpend = (ad * 8000 * RATES.Advisor.input)    + (ad * 2500 * RATES.Advisor.output);
+    const stratSpend   = (st * 10000 * RATES.Strategist.input) + (st * 3000 * RATES.Strategist.output);
     supportSpend.push(parseFloat(((scoutSpend * 0.35 + advisorSpend * 0.28) * wf * jitter()).toFixed(2)));
     salesSpend.push(parseFloat(((scoutSpend * 0.28 + advisorSpend * 0.32) * wf * jitter()).toFixed(2)));
-    marketingSpend.push(parseFloat(((scoutSpend * 0.22 + stratSpend * 0.20) * mktExtra * wf * jitter()).toFixed(2)));
+    marketingSpend.push(parseFloat(((scoutSpend * 0.22 + stratSpend * 0.20) * mktBoost * wf * jitter()).toFixed(2)));
     opsSpend.push(parseFloat(((advisorSpend * 0.12 + stratSpend * 0.18) * wf * jitter()).toFixed(2)));
   }
   return { labels, supportSpend, salesSpend, marketingSpend, opsSpend, scoutCalls, analystCalls, advisorCalls, strategistCalls };
@@ -891,17 +1024,19 @@ function init() {
   seedAuditLog();
   document.getElementById("liveClock").textContent = nowTime();
 
-  // Seed routing feed (no click handlers on historical seed rows)
+  // Seed routing feed — with click handlers pointing to seeded audit rows
   const tbody = document.getElementById("lRoutingBody");
-  [
-    { agent:"SF-ComplianceBot", dept:"Operations", badge:`<span class="badge badge-flagship">Strategist</span>`,   detail:"HIPAA audit — health data migration...",   cost:"$0.392500" },
-    { agent:"SF-MarketMailer",  dept:"Marketing",  badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`, detail:"Budget cap enforced", cost:"$0.001040" },
-    { agent:"SF-OpsLogger",     dept:"Operations", badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Incident log entry",                      cost:"$0.000840" },
-    { agent:"SF-SalesEnrich-1", dept:"Sales",      badge:`<span class="badge badge-flagship">Advisor</span>`,      detail:"NDA review before board meeting...",       cost:"$0.056200" },
-    { agent:"SF-SupportBot-1",  dept:"Support",    badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Account update — routine",                 cost:"$0.000920" },
-  ].forEach(r => {
+  const seedRows = [
+    { agent:"SF-ComplianceBot",  dept:"Operations", badge:`<span class="badge badge-flagship">Strategist</span>`,   detail:"HIPAA audit — health data migration...",   cost:"$0.392500", auditId:"audit-row-seed-0" },
+    { agent:"SF-MarketMailer",   dept:"Marketing",  badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`, detail:"Budget cap enforced", cost:"$0.001040", auditId:"audit-row-seed-5" },
+    { agent:"SF-OpsLogger",      dept:"Operations", badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Incident log entry",                      cost:"$0.000840", auditId:"audit-row-seed-11" },
+    { agent:"SF-SalesEnrich-1",  dept:"Sales",      badge:`<span class="badge badge-flagship">Advisor</span>`,      detail:"NDA review before board meeting...",       cost:"$0.056200", auditId:"audit-row-seed-14" },
+    { agent:"SF-SupportBot-1",   dept:"Support",    badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Account update — routine",                 cost:"$0.000920", auditId:"audit-row-seed-8" },
+  ];
+  seedRows.forEach(r => {
     const row = document.createElement("tr");
     row.className = "routing-row";
+    row.title = "Click to view in audit log";
     row.innerHTML = `
       <td style="font-family:var(--font-mono);color:var(--text-muted)">${nowTime()}</td>
       <td style="color:var(--accent);font-weight:600">${r.agent}</td>
@@ -909,14 +1044,36 @@ function init() {
       <td>${r.badge}</td>
       <td style="color:var(--text-muted);font-size:10px">${r.detail}</td>
       <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${r.cost}</td>`;
+    row.onclick = () => {
+      const auditBody = document.getElementById("lAuditPanel");
+      const auditChev = document.getElementById("lAuditChev");
+      if (auditBody.style.display === "none") { auditBody.style.display = ""; if (auditChev) auditChev.textContent = "▾"; }
+      const target = document.getElementById(r.auditId);
+      if (target) { target.scrollIntoView({ behavior:"smooth", block:"center" }); target.classList.remove("audit-row-highlight"); void target.offsetWidth; target.classList.add("audit-row-highlight"); }
+    };
     tbody.appendChild(row);
   });
 
-  // Seed stream (PII-safe)
-  addStreamEvent("blocked",   "🛡 REQUEST BLOCKED",   "Social security number detected in Support agent payload — content redacted",  `Term: "social security number" · Category: HIPAA · Cost avoided: $0.004500`);
-  addStreamEvent("complex",   "◈ STRATEGIST INVOKED", "HIPAA compliance audit — health data migration review required",               "SF-ComplianceBot · Operations · 10,200 in · 3,100 out · $0.392500");
-  addStreamEvent("throttled", "⚠ BUDGET THROTTLE",    "Marketing at 101.7% of cap — all agents downgraded to Scout",                  "Routing saving $0.001680 vs Advisor baseline");
-  addStreamEvent("routine",   "◈ SYSTEM ONLINE",      "FAGE Enterprise Demo initialized — all agents registered",                    "Real pricing: Scout $1/$5 · Advisor $3/$15 · Strategist $5/$25 per 1M tokens");
+  // Seed stream with full context for click-to-expand
+  addStreamEvent("blocked",   "🛡 REQUEST BLOCKED",
+    "Social security number detected in Support agent payload — content redacted",
+    `Term: "social security number" · Category: HIPAA · Cost avoided: $0.004500`,
+    { dept:"Support", tier:"—", agent:"SF-BillingAuditor", payload:"[Support] Social security number detected in agent payload. Request intercepted before reaching AI model. Content was not transmitted.", keywords:["social security number"], cost:0, saved:0.0045 });
+
+  addStreamEvent("complex",   "◈ STRATEGIST INVOKED",
+    "HIPAA compliance audit — health data migration review required",
+    "SF-ComplianceBot · Operations · 10,200 in · 3,100 out · $0.392500",
+    { dept:"Operations", tier:"Strategist", agent:"SF-ComplianceBot", payload:"[Strategist] HIPAA compliance audit — health data migration review required. Involves sensitive patient records across 3 hospital systems. Requires comprehensive legal and compliance analysis.", keywords:[], cost:0.3925, saved:0 });
+
+  addStreamEvent("throttled", "⚠ BUDGET THROTTLE",
+    "Marketing at 101.7% of cap — all agents downgraded to Scout",
+    "Routing saving $0.001680 vs Advisor baseline",
+    { dept:"Marketing", tier:"Scout", agent:"SF-MarketMailer", payload:"[Scout] Campaign targeting update — Q3 holiday push. Downgraded from Advisor due to Marketing budget cap enforcement.", keywords:[], cost:0.001040, saved:0.001680 });
+
+  addStreamEvent("routine",   "◈ SYSTEM ONLINE",
+    "FAGE Enterprise Demo initialized — all agents registered",
+    "Real pricing: Scout $1/$5 · Advisor $3/$15 · Strategist $5/$25 per 1M tokens",
+    { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"FAGE Enterprise Demo initialized. All 12 Agentlake agents registered across Support, Sales, Marketing, Operations. Real pricing active.", keywords:[], cost:0, saved:0 });
 
   setInterval(tick, 2500);
   setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
