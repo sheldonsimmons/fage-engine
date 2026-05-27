@@ -663,8 +663,12 @@ function addAuditRow(eventId, eventType, dept, tier, risk, outcome, cost, saved)
     : "—";
   const costStr  = cost  > 0 ? `$${cost.toFixed(6)}`  : `<span style="color:var(--accent-green)">$0.00</span>`;
   const savedStr = saved > 0 ? `<span style="color:var(--accent-green);font-weight:600">$${saved.toFixed(6)}</span>` : "—";
+
   const row = document.createElement("tr");
   row.id = `audit-row-${eventId}`;
+  row.className = "routing-row";
+  row.title = "Click to expand rationale & payload";
+  row.style.cursor = "pointer";
   row.innerHTML = `
     <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${new Date().toLocaleString()}</td>
     <td style="font-size:11px">${_TYPE_LABEL[eventType] || eventType}</td>
@@ -674,35 +678,78 @@ function addAuditRow(eventId, eventType, dept, tier, risk, outcome, cost, saved)
     <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>
     <td style="font-size:11px;font-family:var(--font-mono)">${costStr}</td>
     <td style="font-size:11px;font-family:var(--font-mono)">${savedStr}</td>`;
+  row.onclick = () => toggleLiveRationale(eventId);
+
+  const rationaleRow = document.createElement("tr");
+  rationaleRow.className = "live-rationale-row";
+  rationaleRow.id = `live-rationale-${eventId}`;
+  rationaleRow.style.display = "none";
+  rationaleRow.innerHTML = `<td colspan="8"><div class="rationale-box" id="live-rationale-content-${eventId}"></div></td>`;
+
+  tbody.prepend(rationaleRow);
   tbody.prepend(row);
-  while (tbody.children.length > 60) tbody.removeChild(tbody.lastChild);
+  while (tbody.children.length > 120) {
+    tbody.removeChild(tbody.lastChild);
+    if (tbody.lastChild) tbody.removeChild(tbody.lastChild);
+  }
 }
 
 function seedAuditLog() {
+  // [type, dept, tier, risk, outcome, inTok, outTok, stripped, payload, rationale]
   const entries = [
-    ["blocked",   "Finance",    "—",          "critical", "Blocked",          0,     0,    0],
-    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",      9200,  2800,    0],
-    ["complex",   "Support",    "Advisor",     "high",    "Escalated",      7400,  2100,    0],
-    ["pruning",   "Sales",      "Scout",       "low",     "Allowed",        1100,   280, 1420],
-    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",         740,   180,    0],
-    ["throttled", "Marketing",  "Scout",       "medium",  "Downgraded",      820,   200,    0],
-    ["complex",   "Operations", "Advisor",     "high",    "Escalated",      8800,  2400,    0],
-    ["blocked",   "Support",    "—",          "critical", "Blocked",           0,     0,    0],
-    ["routine",   "Sales",      "Scout",       "low",     "Allowed",          680,  160,    0],
-    ["pruning",   "Support",    "Scout",       "low",     "Allowed",         1050,  260, 1780],
-    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",     11200, 3400,    0],
-    ["routine",   "Operations", "Analyst",     "low",     "Allowed",          920,  220,    0],
-    ["collision", "Support",    "—",           "high",    "Locked",             0,    0,    0],
-    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",          590,  140,    0],
-    ["complex",   "Sales",      "Advisor",     "high",    "Escalated",       6800, 1900,    0],
+    ["blocked",   "Finance",    "—",         "critical", "Blocked",       0,     0,    0,
+      "[Finance] Wire transfer instructions to routing 021000021 account 987654321 — urgent payment",
+      "REQUEST BLOCKED — SENSITIVE DATA DETECTED. Bank routing and account number detected in Finance agent payload before reaching any AI model. No tokens consumed. Full payload retained as evidence of interception."],
+    ["complex",   "Legal",      "Strategist", "high",    "Escalated",  9200,  2800,    0,
+      "[Strategist] Class action filing — 340 clients seeking damages, legal discovery of all AI interaction logs required by court order.",
+      "FLAGSHIP MODEL INVOKED. Strategist tier selected for Legal department. High-complexity indicators: class action litigation, court-ordered discovery, 340 clients. Budget at 32.2% — within threshold. Scout tier insufficient for legal analysis at this risk level."],
+    ["complex",   "Support",    "Advisor",    "high",    "Escalated",  7400,  2100,    0,
+      "[Advisor] SLA breach — 4 hours downtime, 2,000 users affected. Customer threatening legal action. Board report required by Friday.",
+      "FLAGSHIP MODEL INVOKED. Advisor tier selected for Support department. High-complexity indicators: SLA breach, legal threat, board-level escalation. Customer impact: 2,000 users. Scout tier insufficient for generating board report with legal implications."],
+    ["pruning",   "Sales",      "Scout",      "low",     "Allowed",    1100,   280, 1420,
+      "[Scout] Booking reference change — TRP-8821. Customer update to loyalty tier. Previous conversation history included.",
+      "ROUTINE CALL — Scout tier selected for Sales department. No high-risk keywords detected. 1,420 tokens of stale conversation history pruned before sending to model. Budget at 35.2% — within threshold. Full payload retained for compliance audit trail."],
+    ["routine",   "Marketing",  "Scout",      "low",     "Allowed",     740,   180,    0,
+      "[Scout] Campaign targeting update — Q3 holiday email list segmentation for frequent flyer members.",
+      "ROUTINE CALL — Scout tier selected for Marketing department. No high-risk keywords detected. Low token count (740), well under complexity threshold. Budget at 101.7% but override granted. Full payload retained for compliance audit trail."],
+    ["throttled", "Marketing",  "Scout",      "medium",  "Downgraded",  820,   200,    0,
+      "[Scout] Product announcement draft — new route launch Miami to London. Originally requested Advisor tier.",
+      "BUDGET CAP ENFORCED. Marketing department reached 101.7% of its monthly cap. Request was originally classified as MODERATE but flagship model was blocked. Downgraded to Scout tier. Tier routing saved $0.001680 vs Advisor baseline. Supervisor override required to restore flagship access."],
+    ["complex",   "Operations", "Advisor",    "high",    "Escalated",  8800,  2400,    0,
+      "[Advisor] HIPAA compliance audit — health data migration across 3 hospital systems. Patient records for 12,400 individuals must be reviewed.",
+      "FLAGSHIP MODEL INVOKED. Advisor tier selected for Operations department. High-complexity indicators: HIPAA compliance, health data migration, 12,400 patient records. Scout tier insufficient for compliance-grade analysis. Budget at 32.2% — within threshold."],
+    ["blocked",   "Support",    "—",         "critical", "Blocked",       0,     0,    0,
+      "[Support] Customer SSN 472-88-3910 required to verify identity for account recovery request.",
+      "REQUEST BLOCKED — SENSITIVE DATA DETECTED. Social security number detected in Support agent payload before reaching any AI model. No tokens consumed. Content was NOT transmitted to any model. Full payload retained as evidence of interception for GDPR/HIPAA compliance."],
+    ["routine",   "Sales",      "Scout",      "low",     "Allowed",     680,   160,    0,
+      "[Scout] Account email update — customer John T. requested new email address for loyalty account.",
+      "ROUTINE CALL — Scout tier selected for Sales department. No high-risk keywords detected. Low complexity (680 tokens, under threshold). Budget at 35.2% — within threshold. Full payload retained for compliance audit trail."],
+    ["pruning",   "Support",    "Scout",      "low",     "Allowed",    1050,   260, 1780,
+      "[Scout] Password reset assistance — account #SF-44821. Prior 3 days of chat history included in context window.",
+      "ROUTINE CALL — Scout tier selected for Support department. 1,780 tokens of prior conversation history pruned before model invocation. No high-risk keywords detected. Pruning saving $0.005340 at Advisor rate. Full payload retained for compliance audit trail."],
+    ["complex",   "Legal",      "Strategist", "high",    "Escalated", 11200,  3400,    0,
+      "[Strategist] Wrongful termination complaint — HR escalation with external legal counsel retained. Discovery phase begins Monday.",
+      "FLAGSHIP MODEL INVOKED. Strategist tier selected for Legal department. High-complexity indicators: wrongful termination litigation, external legal counsel, discovery phase. Highest-capability model required. Budget at 32.2% — within threshold."],
+    ["routine",   "Operations", "Analyst",    "low",     "Allowed",     920,   220,    0,
+      "[Analyst] ServiceNow incident log — SN-28841 network timeout in data center zone B. Auto-classification requested.",
+      "ROUTINE CALL — Analyst tier selected for Operations department. Moderate token count (920) triggered Analyst rather than Scout. No high-risk keywords detected. Budget at 32.2% — within threshold. Full payload retained for compliance audit trail."],
+    ["collision", "Support",    "—",          "high",    "Locked",        0,     0,    0,
+      "Concurrent record access conflict — SF-SupportBot-1 and SF-CaseEscalator both attempted to update ticket SF-44821 simultaneously.",
+      "CONCURRENCY LOCK TRIGGERED. SF-SupportBot-1 and SF-CaseEscalator simultaneously attempted to write the same Support ticket record. Traffic Cop locked both agents to prevent data corruption. No data was written. Supervisor must review which agent should proceed first."],
+    ["routine",   "Marketing",  "Scout",      "low",     "Allowed",     590,   140,    0,
+      "[Scout] Loyalty points balance inquiry — customer requesting points total for upcoming flight redemption.",
+      "ROUTINE CALL — Scout tier selected for Marketing department. No high-risk keywords detected. Low complexity (590 tokens). Full payload retained for compliance audit trail."],
+    ["complex",   "Sales",      "Advisor",    "high",    "Escalated",  6800,  1900,    0,
+      "[Advisor] Enterprise contract review — NDA amendment required before Thursday board meeting. $2.4M annual contract renewal.",
+      "FLAGSHIP MODEL INVOKED. Advisor tier selected for Sales department. High-complexity indicators: NDA review, board-level deadline, $2.4M contract value. Scout tier insufficient for legal contract analysis. Budget at 35.2% — within threshold."],
   ];
 
   const tbody = document.getElementById("lAuditTableBody");
-  entries.forEach(([type, dept, tier, risk, outcome, inTok, outTok, stripped], i) => {
-    const ts = new Date(Date.now() - (entries.length - i) * 4 * 60000);
+  entries.forEach(([type, dept, tier, risk, outcome, inTok, outTok, stripped, payload, rationale], i) => {
+    const ts       = new Date(Date.now() - (entries.length - i) * 4 * 60000);
     const tierName = (tier !== "—") ? tier : null;
-    const cost  = tierName ? calcCost(tierName, inTok, outTok) : 0;
-    const saved = (type === "pruning")  ? calcPruningSaving(stripped)
+    const cost     = tierName ? calcCost(tierName, inTok, outTok) : 0;
+    const saved    = (type === "pruning")  ? calcPruningSaving(stripped)
       : (type === "routine" || type === "throttled") ? calcTierSaving(inTok, outTok)
       : (type === "blocked") ? calcCost("Advisor", 1500, 0)
       : 0;
@@ -710,9 +757,21 @@ function seedAuditLog() {
       ? `<span class="badge badge-${tierName === "Scout" || tierName === "Analyst" ? "micro" : "flagship"}">${tierName}</span>` : "—";
     const costStr  = cost  > 0 ? `$${cost.toFixed(6)}`  : `<span style="color:var(--accent-green)">$0.00</span>`;
     const savedStr = saved > 0 ? `<span style="color:var(--accent-green);font-weight:600">$${saved.toFixed(6)}</span>` : "—";
+    const seedId   = `audit-seed-${i}`;
+
+    // Store event data for click-to-expand
+    _liveEventData[seedId] = {
+      dept, tier: tier !== "—" ? tier : "—", agent: "—",
+      payload, keywords: [], cost, saved,
+      budgetSnap: getBudgetSnap(dept),
+      rationale,
+    };
 
     const row = document.createElement("tr");
     row.id = `audit-row-seed-${i}`;
+    row.className = "routing-row";
+    row.title = "Click to expand rationale & payload";
+    row.style.cursor = "pointer";
     row.innerHTML = `
       <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${ts.toLocaleString()}</td>
       <td style="font-size:11px">${_TYPE_LABEL[type]}</td>
@@ -722,7 +781,16 @@ function seedAuditLog() {
       <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>
       <td style="font-size:11px;font-family:var(--font-mono)">${costStr}</td>
       <td style="font-size:11px;font-family:var(--font-mono)">${savedStr}</td>`;
+    row.onclick = () => toggleLiveRationale(seedId);
+
+    const rationaleRow = document.createElement("tr");
+    rationaleRow.className = "live-rationale-row";
+    rationaleRow.id = `live-rationale-${seedId}`;
+    rationaleRow.style.display = "none";
+    rationaleRow.innerHTML = `<td colspan="8"><div class="rationale-box" id="live-rationale-content-${seedId}"></div></td>`;
+
     tbody.appendChild(row);
+    tbody.appendChild(rationaleRow);
   });
 }
 

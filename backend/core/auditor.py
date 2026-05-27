@@ -1,20 +1,20 @@
 """
 core/auditor.py — AI Decision Auditor / Black Box Recorder  [Step 6]
 
-Every high-stakes AI decision gets written to two places simultaneously:
+Every AI routing decision gets written to two places simultaneously:
   1. The audit_events DB table (queryable, filterable)
   2. An append-only JSONL flat file (fage_audit.jsonl) — simulates immutability
 
-What counts as "high-stakes" and gets audited:
-  - Any COMPLEX routing decision (flagship model invoked)
-  - Any THROTTLED routing decision (budget cap enforced)
-  - Any concurrency LOCK event (collision detected)
-  - Any supervisor OVERRIDE granted or revoked
+Every call is audited — including routine Scout calls — because:
+  - PII may slip past keyword filters and reach the model
+  - Without the payload on record, you cannot prove what data was exposed
+  - GDPR Article 33 requires knowing exactly what data was compromised
+  - Regulators and auditors want the complete picture, not just flagged events
 
 Each record captures:
   - Frozen system context snapshot (dept budget state at time of decision)
-  - The exact prompt payload sent to the model
-  - A plain-English rationale explaining the decision logic
+  - The exact prompt payload sent to the model (encrypted at rest in production)
+  - A plain-English rationale explaining why this model was chosen
   - Risk level classification (low / medium / high / critical)
   - The outcome
 """
@@ -152,7 +152,18 @@ def _build_rationale(
             f"This action is logged for compliance review."
         )
 
-    return f"Routine event logged for {department}. Decision: {routing_decision}. Reason: {routing_reason}."
+    # ROUTINE — Scout tier. Every call logged for compliance.
+    tier_label = model_tier or "Scout"
+    return (
+        f"ROUTINE CALL — {tier_label} tier selected for {department} department. "
+        f"Routing analysis: {routing_reason}. "
+        f"No high-risk keywords detected (checked against: {kw_str if matched_keywords else 'none matched'}). "
+        f"Department budget at time of call: {used_pct}% used "
+        f"(${spent} of ${cap} monthly cap) — within threshold, no throttle applied. "
+        f"Call cost: ${cost_usd:.6f}. "
+        f"Full payload retained in audit record. If PII is found in this payload, "
+        f"this record is the evidence that it reached the {tier_label} model."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
