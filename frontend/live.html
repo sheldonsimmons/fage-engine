@@ -26,6 +26,7 @@
       padding: 10px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .dkpi-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; }
     .dkpi-card.alert { border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.04); }
+    .dkpi-card.savings { border-color: rgba(63,185,80,0.3); background: rgba(63,185,80,0.04); }
     .dkpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; }
     .dkpi-value { font-size: 20px; font-weight: 700; line-height: 1.25; margin: 3px 0 1px; }
     .dkpi-sub   { font-size: 10px; color: var(--text-muted); }
@@ -77,19 +78,17 @@
       letter-spacing: 0.08em; color: var(--text-muted); border-bottom: 1px solid var(--border); background: var(--bg-panel); }
     .routing-table td { padding: 7px 12px; border-bottom: 1px solid #1c2128; }
     .routing-row { cursor: pointer; transition: background 0.15s; animation: row-in 0.3s ease; }
-    .routing-row:hover td { background: rgba(88,166,255,0.05); }
-    .routing-row.blocked-row td { color: var(--accent-red); }
+    .routing-row:hover td { background: rgba(88,166,255,0.06); }
     .routing-row.blocked-row:hover td { background: rgba(248,81,73,0.06); }
     @keyframes row-in { from { opacity:0; background:rgba(88,166,255,0.05); } to { opacity:1; } }
 
-    /* Audit row highlight */
-    .audit-row-highlight { animation: audit-flash 2s ease; }
+    /* Audit row highlight — flash on jump */
+    .audit-row-highlight { animation: audit-flash 2.5s ease; }
     @keyframes audit-flash {
       0%,100% { background: transparent; }
-      20%      { background: rgba(88,166,255,0.18); }
+      15%,50% { background: rgba(88,166,255,0.2); }
     }
 
-    /* Stream events */
     .stream-event { background: var(--bg-base); border: 1px solid var(--border);
       border-left-width: 3px; border-radius: 0 6px 6px 0; padding: 10px 12px;
       display: flex; flex-direction: column; gap: 4px; animation: stream-in 0.35s ease; }
@@ -106,7 +105,6 @@
     .se-body { font-size: 11px; color: var(--text-primary); line-height: 1.4; }
     .se-meta { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
 
-    /* Flash + ticker */
     .flash-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.1s; z-index: 200; }
     .flash-overlay.red    { background: rgba(248,81,73,0.10); }
     .flash-overlay.yellow { background: rgba(210,153,34,0.10); }
@@ -117,49 +115,6 @@
       opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
     .pruning-ticker.show { opacity: 1; }
 
-    /* ── Detail Modal ───────────────────────────────────────────────────────── */
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 300;
-      display: none; align-items: center; justify-content: center; }
-    .modal-overlay.open { display: flex; }
-    .modal-box { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
-      width: 580px; max-width: calc(100vw - 32px); max-height: 88vh;
-      display: flex; flex-direction: column; overflow: hidden; animation: modal-in 0.2s ease; }
-    @keyframes modal-in { from { opacity:0; transform:translateY(-12px) scale(0.98); } to { opacity:1; transform:none; } }
-    .modal-header { display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .modal-header-left { display: flex; align-items: center; gap: 12px; }
-    .modal-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
-    .modal-close { background: none; border: none; color: var(--text-muted); font-size: 18px;
-      cursor: pointer; padding: 0 4px; line-height: 1; }
-    .modal-close:hover { color: var(--text-primary); }
-    .modal-body { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-    .modal-body::-webkit-scrollbar { width: 4px; }
-    .modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-    .modal-section { display: flex; flex-direction: column; gap: 8px; }
-    .modal-section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
-      color: var(--text-muted); font-weight: 700; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-    .modal-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; }
-    .modal-row-label { color: var(--text-muted); flex-shrink: 0; }
-    .modal-row-val { color: var(--text-primary); font-family: var(--font-mono); text-align: right; }
-    .modal-payload { background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px;
-      padding: 12px; font-size: 12px; color: var(--text-primary); line-height: 1.6; }
-    .modal-payload.redacted { border-color: rgba(248,81,73,0.3); background: rgba(248,81,73,0.04);
-      color: var(--text-muted); font-style: italic; }
-    .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex;
-      justify-content: flex-end; gap: 10px; flex-shrink: 0; }
-    .modal-btn-audit { background: var(--accent); color: #000; border: none; border-radius: 6px;
-      padding: 8px 18px; font-size: 12px; font-weight: 700; cursor: pointer; transition: opacity 0.15s; }
-    .modal-btn-audit:hover { opacity: 0.85; }
-    .modal-btn-close { background: var(--bg-main); border: 1px solid var(--border); color: var(--text-muted);
-      border-radius: 6px; padding: 8px 16px; font-size: 12px; cursor: pointer; }
-    .modal-btn-close:hover { color: var(--text-primary); border-color: var(--text-muted); }
-
-    /* Risk colours */
-    .risk-critical { color: var(--accent-red);    font-weight: 700; }
-    .risk-high     { color: var(--accent-purple);  font-weight: 700; }
-    .risk-medium   { color: var(--accent-yellow);  font-weight: 700; }
-    .risk-low      { color: var(--text-muted);     font-weight: 700; }
-
     .sortable-ghost { opacity: 0.3; background: rgba(88,166,255,0.05); }
   </style>
 </head>
@@ -167,24 +122,6 @@
 
 <div class="flash-overlay" id="flashOverlay"></div>
 <div class="pruning-ticker" id="pruningTicker"></div>
-
-<!-- ── Detail Modal ───────────────────────────────────────────────────────────── -->
-<div class="modal-overlay" id="detailModal" onclick="if(event.target===this)closeModal()">
-  <div class="modal-box">
-    <div class="modal-header">
-      <div class="modal-header-left">
-        <span id="modalBadge"></span>
-        <span class="modal-title" id="modalTitle"></span>
-      </div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body" id="modalBody"></div>
-    <div class="modal-footer">
-      <button class="modal-btn-close" onclick="closeModal()">Close</button>
-      <button class="modal-btn-audit" id="modalAuditBtn" onclick="jumpToAudit()">View in Audit Log →</button>
-    </div>
-  </div>
-</div>
 
 <!-- ── Header ───────────────────────────────────────────────────────────────── -->
 <header class="header">
@@ -214,10 +151,10 @@
     <div class="dkpi-value" style="color:var(--accent-yellow)" id="lKpiSpend">—</div>
     <div class="dkpi-sub" id="lKpiSpendSub">across all departments</div>
   </div>
-  <div class="dkpi-card">
-    <div class="dkpi-label">Tokens Saved (Pruning)</div>
-    <div class="dkpi-value" style="color:var(--accent-green)" id="lKpiTokensSaved">—</div>
-    <div class="dkpi-sub" id="lKpiTokensSub">via context sweeper</div>
+  <div class="dkpi-card savings">
+    <div class="dkpi-label">Est. Cost Saved by FAGE</div>
+    <div class="dkpi-value" style="color:var(--accent-green)" id="lKpiSaved">—</div>
+    <div class="dkpi-sub" id="lKpiSavedSub">tier routing + pruning</div>
   </div>
   <div class="dkpi-card">
     <div class="dkpi-label">Month Spend</div>
@@ -234,32 +171,32 @@
     <div class="dkpi-value" id="lKpiThrottled">—</div>
     <div class="dkpi-sub" id="lKpiThrottleSub">at or over budget cap</div>
   </div>
-  <div class="dkpi-card">
-    <div class="dkpi-label">Total Calls</div>
-    <div class="dkpi-value" id="lKpiCalls">—</div>
-    <div class="dkpi-sub">all time</div>
+  <div class="dkpi-card alert">
+    <div class="dkpi-label">Blocked Requests</div>
+    <div class="dkpi-value" id="lKpiBlocked">—</div>
+    <div class="dkpi-sub">PII / sensitive terms</div>
   </div>
 </div>
 
 <!-- ── Tier Stat Bar ──────────────────────────────────────────────────────────── -->
 <div class="dash-stat stat-bar stat-bar-compact">
   <div class="stat-item">
-    <span class="stat-label">Scout (T1)</span>
+    <span class="stat-label">Scout T1 — $1/$5/1M</span>
     <span class="stat-val micro" id="lStatScout">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
-    <span class="stat-label">Analyst (T2)</span>
+    <span class="stat-label">Analyst T2 — $1/$5/1M</span>
     <span class="stat-val" style="color:var(--accent-green)" id="lStatAnalyst">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
-    <span class="stat-label">Advisor (T3)</span>
+    <span class="stat-label">Advisor T3 — $3/$15/1M</span>
     <span class="stat-val flagship" id="lStatAdvisor">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
-    <span class="stat-label">Strategist (T4)</span>
+    <span class="stat-label">Strategist T4 — $5/$25/1M</span>
     <span class="stat-val" style="color:var(--accent-yellow)" id="lStatStrategist">—</span>
   </div>
   <div class="stat-divider"></div>
@@ -269,8 +206,13 @@
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
-    <span class="stat-label">Pruning Saved (est.)</span>
-    <span class="stat-val green" id="lStatPruning">—</span>
+    <span class="stat-label">Tier Routing Saved</span>
+    <span class="stat-val green" id="lStatTierSaved">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Pruning Saved</span>
+    <span class="stat-val green" id="lStatPruningSaved">—</span>
   </div>
 </div>
 
@@ -322,14 +264,14 @@
           <span>▸ Routing Decision Feed</span>
           <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:8px">● LIVE</span>
           <span class="sec-right">
-            <span style="font-size:10px;color:var(--text-muted);font-style:italic">Click any row for details</span>
+            <span style="font-size:10px;color:var(--text-muted);font-style:italic">Click row → jump to audit log</span>
             <span class="sec-chev" id="lRoutingFeedChev">▾</span>
           </span>
         </div>
         <div id="lRoutingFeedBody" class="dash-sec-body">
           <table class="audit-table routing-table">
             <thead>
-              <tr><th>Time</th><th>Agent</th><th>Dept</th><th>Model Tier</th><th>Detail</th></tr>
+              <tr><th>Time</th><th>Agent</th><th>Dept</th><th>Model Tier</th><th>Detail</th><th>Cost</th></tr>
             </thead>
             <tbody id="lRoutingBody"></tbody>
           </table>
@@ -344,9 +286,9 @@
           <span class="sec-right"><span class="sec-chev" id="lAuditChev">▸</span></span>
         </div>
         <div id="lAuditPanel" class="dash-sec-body" style="display:none">
-          <table class="audit-table" id="lAuditTable">
+          <table class="audit-table">
             <thead>
-              <tr><th>Timestamp</th><th>Event Type</th><th>Department</th><th>Model Tier</th><th>Risk Level</th><th>Outcome</th></tr>
+              <tr><th>Timestamp</th><th>Event Type</th><th>Department</th><th>Model Tier</th><th>Risk Level</th><th>Outcome</th><th>Cost</th><th>Saved</th></tr>
             </thead>
             <tbody id="lAuditTableBody"></tbody>
           </table>
@@ -372,6 +314,34 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
 
+// ── Real pricing (per token) ───────────────────────────────────────────────────
+// Source: Anthropic published rates, May 2026
+const RATES = {
+  Scout:      { input: 1.00 / 1e6,  output: 5.00  / 1e6 }, // Haiku 4.5
+  Analyst:    { input: 1.00 / 1e6,  output: 5.00  / 1e6 }, // Haiku 4.5
+  Advisor:    { input: 3.00 / 1e6,  output: 15.00 / 1e6 }, // Sonnet 4.6
+  Strategist: { input: 5.00 / 1e6,  output: 25.00 / 1e6 }, // Opus 4.6
+};
+
+// Savings = what Advisor would have cost minus what Scout actually cost
+const TIER_SAVING_INPUT  = RATES.Advisor.input  - RATES.Scout.input;  // $2.00/1M
+const TIER_SAVING_OUTPUT = RATES.Advisor.output - RATES.Scout.output; // $10.00/1M
+
+function calcCost(tier, inputTokens, outputTokens) {
+  const r = RATES[tier] || RATES.Scout;
+  return (inputTokens * r.input) + (outputTokens * r.output);
+}
+
+function calcTierSaving(inputTokens, outputTokens) {
+  // Savings vs always routing to Advisor
+  return (inputTokens * TIER_SAVING_INPUT) + (outputTokens * TIER_SAVING_OUTPUT);
+}
+
+function calcPruningSaving(strippedTokens) {
+  // Stripped tokens would have hit Advisor — cost avoided
+  return strippedTokens * RATES.Advisor.input;
+}
+
 // ── Panel toggle + drag ───────────────────────────────────────────────────────
 
 function togglePanel(bodyId, chevId) {
@@ -387,13 +357,6 @@ function togglePanel(bodyId, chevId) {
 new Sortable(document.getElementById("live-panels"), {
   animation: 150, handle: ".drag-handle", ghostClass: "sortable-ghost",
 });
-
-// ── Event Store (for modal drill-down) ────────────────────────────────────────
-// Each tick gets a unique eventId. We store the full event data so the modal
-// can render detail, and the audit row stores the same eventId so we can link them.
-
-let _eventStore = {};
-let _currentModalEventId = null;
 
 // ── Simulation Data ───────────────────────────────────────────────────────────
 
@@ -444,19 +407,36 @@ const COMPLEX_PAYLOADS = [
 ];
 
 const BLOCKED_PAYLOADS = [
-  { term: "social security number", category: "HIPAA", description: "Social security number detected in agent payload" },
-  { term: "credit card number",     category: "Financial", description: "Credit card number detected in agent payload" },
-  { term: "bank account number",    category: "Financial", description: "Bank routing and account number detected" },
-  { term: "passport number",        category: "HIPAA", description: "Passport number detected in identity verification request" },
-  { term: "medical record ID",      category: "HIPAA", description: "Patient diagnosis code and medical record ID detected" },
+  { term: "social security number", category: "HIPAA",      description: "Social security number detected in agent payload" },
+  { term: "credit card number",     category: "Financial",  description: "Credit card number detected in agent payload" },
+  { term: "bank account number",    category: "Financial",  description: "Bank routing and account number detected" },
+  { term: "passport number",        category: "HIPAA",      description: "Passport number detected in identity verification request" },
+  { term: "medical record ID",      category: "HIPAA",      description: "Patient diagnosis code and medical record ID detected" },
 ];
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ── State — seeded with real math ─────────────────────────────────────────────
+// Tier routing savings seed:
+//   Scout  27,844 calls × avg 800 in × $2/1M + avg 200 out × $10/1M = $44.55 + $55.69 = $100.24
+//   Analyst 9,240 calls × avg 800 in × $2/1M + avg 200 out × $10/1M = $14.78 + $18.48 = $33.26
+// Pruning savings seed:
+//   ~4,200 pruning events × avg 1,200 stripped tokens × $3/1M = $15.12
+// Block savings seed:
+//   47 blocks × avg 1,500 tokens × $3/1M = $0.21
+// Total seeded savings: $148.83
 
 let state = {
-  calls: 42000, callsToday: 847, tokens: 53853729,
-  spend: 2184.60, spendMonth: 17454.90,
-  scoutCalls: 27844, analystCalls: 9240, advisorCalls: 3890, strategistCalls: 1026,
+  calls:           42000,
+  callsToday:      847,
+  tokens:          53853729,
+  spend:           2184.60,
+  spendMonth:      17454.90,
+  blocked:         47,
+  scoutCalls:      27844,
+  analystCalls:    9240,
+  advisorCalls:    3890,
+  strategistCalls: 1026,
+  tierSavings:     133.50,   // real math: tier routing savings accumulated
+  pruningSavings:  15.33,    // real math: pruning savings accumulated
   agentStatuses: AGENTS.map(() => "idle"),
   budgets: BUDGETS.map(b => ({ ...b })),
 };
@@ -498,31 +478,35 @@ function updateKPIs() {
   const throttled = state.budgets.filter(b => b.throttled).length;
   const active    = state.agentStatuses.filter(s => s === "active").length;
   const locked    = state.agentStatuses.filter(s => s === "locked").length;
+  const totalSaved = state.tierSavings + state.pruningSavings;
 
+  // KPI strip
   document.getElementById("lKpiSpend").textContent      = `$${state.spend.toFixed(2)}`;
   document.getElementById("lKpiSpendSub").textContent   = `$${state.spendMonth.toFixed(2)} this month`;
-  document.getElementById("lKpiTokensSaved").textContent = state.tokens.toLocaleString();
-  document.getElementById("lKpiTokensSub").textContent   = `est. $${(state.tokens * 0.00000015).toFixed(4)} saved`;
-  document.getElementById("lKpiMonthSpend").textContent  = `$${state.spendMonth.toFixed(2)}`;
-  document.getElementById("lKpiAgents").textContent      = active + locked;
-  document.getElementById("lKpiAgentsSub").textContent   = `${active} active · ${locked} locked`;
-  document.getElementById("lKpiThrottled").textContent   = throttled;
-  document.getElementById("lKpiThrottleSub").textContent = throttled > 0 ? "departments capped" : "all within budget";
-  document.getElementById("lKpiCalls").textContent       = state.calls.toLocaleString();
+  document.getElementById("lKpiSaved").textContent      = `$${totalSaved.toFixed(2)}`;
+  document.getElementById("lKpiSavedSub").textContent   = `$${state.tierSavings.toFixed(2)} routing · $${state.pruningSavings.toFixed(2)} pruning`;
+  document.getElementById("lKpiMonthSpend").textContent = `$${state.spendMonth.toFixed(2)}`;
+  document.getElementById("lKpiAgents").textContent     = active + locked;
+  document.getElementById("lKpiAgentsSub").textContent  = `${active} active · ${locked} locked`;
+  document.getElementById("lKpiThrottled").textContent  = throttled;
+  document.getElementById("lKpiThrottleSub").textContent= throttled > 0 ? "departments capped" : "all within budget";
+  document.getElementById("lKpiBlocked").textContent    = state.blocked;
 
+  // Stat bar
   document.getElementById("lStatScout").textContent      = `${state.scoutCalls.toLocaleString()} (${pct(state.scoutCalls)}%)`;
   document.getElementById("lStatAnalyst").textContent    = `${state.analystCalls.toLocaleString()} (${pct(state.analystCalls)}%)`;
   document.getElementById("lStatAdvisor").textContent    = `${state.advisorCalls.toLocaleString()} (${pct(state.advisorCalls)}%)`;
   document.getElementById("lStatStrategist").textContent = `${state.strategistCalls.toLocaleString()} (${pct(state.strategistCalls)}%)`;
   const tbu = state.budgets.reduce((s,b) => s + b.spend, 0);
   const tbc = state.budgets.reduce((s,b) => s + b.cap,   0);
-  document.getElementById("lStatBudget").textContent  = `${((tbu/tbc)*100).toFixed(1)}%`;
-  document.getElementById("lStatPruning").textContent = `$${(state.tokens * 0.00000015).toFixed(4)}`;
+  document.getElementById("lStatBudget").textContent      = `${((tbu/tbc)*100).toFixed(1)}%`;
+  document.getElementById("lStatTierSaved").textContent   = `$${state.tierSavings.toFixed(2)}`;
+  document.getElementById("lStatPruningSaved").textContent= `$${state.pruningSavings.toFixed(2)}`;
 }
 
 // ── Routing Feed ──────────────────────────────────────────────────────────────
 
-function addRoutingRow(eventId, agent, dept, tier, detail, isBlocked) {
+function addRoutingRow(eventId, agent, dept, tier, detail, cost, isBlocked) {
   const feed = document.getElementById("lRoutingBody");
   const tierBadge =
     tier === "Scout"     ? `<span class="badge badge-micro">Scout</span>` :
@@ -530,6 +514,8 @@ function addRoutingRow(eventId, agent, dept, tier, detail, isBlocked) {
     tier === "BLOCKED"   ? `<span class="badge badge-critical">🛡 BLOCKED</span>` :
     tier === "THROTTLED" ? `<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>` :
                            `<span class="badge badge-flagship">${tier}</span>`;
+  const costCell = isBlocked ? `<span style="color:var(--accent-green);font-family:var(--font-mono);font-size:11px">$0.00</span>`
+    : `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">$${cost.toFixed(6)}</span>`;
   const row = document.createElement("tr");
   row.className = `routing-row${isBlocked ? " blocked-row" : ""}`;
   row.dataset.eventId = eventId;
@@ -538,26 +524,54 @@ function addRoutingRow(eventId, agent, dept, tier, detail, isBlocked) {
     <td style="color:var(--accent);font-weight:600">${agent}</td>
     <td style="color:var(--text-muted)">${dept}</td>
     <td>${tierBadge}</td>
-    <td style="color:var(--text-muted);font-size:10px">${detail}</td>`;
-  row.onclick = () => openModal(eventId);
+    <td style="color:var(--text-muted);font-size:10px">${detail}</td>
+    <td>${costCell}</td>`;
+  row.onclick = () => jumpToAudit(eventId);
   feed.prepend(row);
   while (feed.children.length > 25) feed.removeChild(feed.lastChild);
+}
+
+// ── Jump to Audit (main-style: expand panel + scroll + highlight) ─────────────
+
+function jumpToAudit(eventId) {
+  // Expand audit panel if collapsed
+  const auditBody = document.getElementById("lAuditPanel");
+  const auditChev = document.getElementById("lAuditChev");
+  if (auditBody.style.display === "none") {
+    auditBody.style.display = "";
+    if (auditChev) auditChev.textContent = "▾";
+  }
+
+  // Find matching audit row
+  const rowId = `audit-row-${eventId}`;
+  const row   = document.getElementById(rowId);
+  if (row) {
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.remove("audit-row-highlight");
+    void row.offsetWidth; // force reflow
+    row.classList.add("audit-row-highlight");
+  } else {
+    // Row scrolled off — scroll audit section into view
+    auditBody.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 
 const _RISK_COLOR = { low:"var(--text-muted)", medium:"var(--accent-yellow)", high:"var(--accent-purple)", critical:"var(--accent-red)" };
 const _TYPE_LABEL = {
-  routine: "Routine Call", pruning: "Context Pruning",
-  complex: "Complex Escalation", blocked: "PII / Sensitive Blocked",
-  throttled: "Budget Throttle", collision: "Concurrency Collision",
+  routine:"Routine Call", pruning:"Context Pruning",
+  complex:"Complex Escalation", blocked:"PII / Sensitive Blocked",
+  throttled:"Budget Throttle", collision:"Concurrency Collision",
 };
 
-function addAuditRow(eventId, eventType, dept, tier, risk, outcome) {
+function addAuditRow(eventId, eventType, dept, tier, risk, outcome, cost, saved) {
   const tbody = document.getElementById("lAuditTableBody");
   const tierCell = (tier && tier !== "—" && tier !== "BLOCKED" && tier !== "THROTTLED")
     ? `<span class="badge badge-${tier === "Scout" || tier === "Analyst" ? "micro" : "flagship"}">${tier}</span>`
     : "—";
+  const costStr  = cost  > 0 ? `$${cost.toFixed(6)}`  : `<span style="color:var(--accent-green)">$0.00</span>`;
+  const savedStr = saved > 0 ? `<span style="color:var(--accent-green);font-weight:600">$${saved.toFixed(6)}</span>` : "—";
   const row = document.createElement("tr");
   row.id = `audit-row-${eventId}`;
   row.innerHTML = `
@@ -566,34 +580,48 @@ function addAuditRow(eventId, eventType, dept, tier, risk, outcome) {
     <td style="font-size:11px;color:var(--text-muted)">${dept}</td>
     <td style="font-size:11px">${tierCell}</td>
     <td style="font-size:11px;font-weight:700;color:${_RISK_COLOR[risk]}">${risk.toUpperCase()}</td>
-    <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>`;
+    <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>
+    <td style="font-size:11px;font-family:var(--font-mono)">${costStr}</td>
+    <td style="font-size:11px;font-family:var(--font-mono)">${savedStr}</td>`;
   tbody.prepend(row);
   while (tbody.children.length > 60) tbody.removeChild(tbody.lastChild);
 }
 
 function seedAuditLog() {
+  // Pre-seed with realistic historical entries using real pricing
   const entries = [
-    ["blocked",   "Finance",    "—",         "critical", "Blocked"],
-    ["complex",   "Legal",      "Strategist", "high",     "Escalated"],
-    ["complex",   "Support",    "Advisor",    "high",     "Escalated"],
-    ["pruning",   "Sales",      "Scout",      "low",      "Allowed · pruned"],
-    ["routine",   "Marketing",  "Scout",      "low",      "Allowed"],
-    ["throttled", "Marketing",  "Scout",      "medium",   "Downgraded"],
-    ["complex",   "Operations", "Advisor",    "high",     "Escalated"],
-    ["blocked",   "Support",    "—",          "critical", "Blocked"],
-    ["routine",   "Sales",      "Scout",      "low",      "Allowed"],
-    ["pruning",   "Support",    "Scout",      "low",      "Allowed · pruned"],
-    ["complex",   "Legal",      "Strategist", "high",     "Escalated"],
-    ["routine",   "Operations", "Analyst",    "low",      "Allowed"],
-    ["collision", "Support",    "—",          "high",     "Locked"],
-    ["routine",   "Marketing",  "Scout",      "low",      "Allowed"],
-    ["complex",   "Sales",      "Advisor",    "high",     "Escalated"],
+    // [type, dept, tier, risk, outcome, inputTok, outputTok, strippedTok]
+    ["blocked",   "Finance",    "—",          "critical", "Blocked",        0,    0,    0],
+    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",   9200, 2800,    0],
+    ["complex",   "Support",    "Advisor",     "high",    "Escalated",   7400, 2100,    0],
+    ["pruning",   "Sales",      "Scout",       "low",     "Allowed",     1100,  280, 1420],
+    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",      740,  180,    0],
+    ["throttled", "Marketing",  "Scout",       "medium",  "Downgraded",   820,  200,    0],
+    ["complex",   "Operations", "Advisor",     "high",    "Escalated",   8800, 2400,    0],
+    ["blocked",   "Support",    "—",          "critical", "Blocked",        0,    0,    0],
+    ["routine",   "Sales",      "Scout",       "low",     "Allowed",      680,  160,    0],
+    ["pruning",   "Support",    "Scout",       "low",     "Allowed",     1050,  260, 1780],
+    ["complex",   "Legal",      "Strategist",  "high",    "Escalated",  11200, 3400,    0],
+    ["routine",   "Operations", "Analyst",     "low",     "Allowed",      920,  220,    0],
+    ["collision", "Support",    "—",           "high",    "Locked",         0,    0,    0],
+    ["routine",   "Marketing",  "Scout",       "low",     "Allowed",      590,  140,    0],
+    ["complex",   "Sales",      "Advisor",     "high",    "Escalated",   6800, 1900,    0],
   ];
+
   const tbody = document.getElementById("lAuditTableBody");
-  entries.forEach(([type, dept, tier, risk, outcome], i) => {
+  entries.forEach(([type, dept, tier, risk, outcome, inTok, outTok, stripped], i) => {
     const ts = new Date(Date.now() - (entries.length - i) * 4 * 60000);
-    const tierCell = (tier && tier !== "—")
-      ? `<span class="badge badge-${tier === "Scout" || tier === "Analyst" ? "micro" : "flagship"}">${tier}</span>` : "—";
+    const tierName = (tier !== "—") ? tier : null;
+    const cost  = tierName ? calcCost(tierName, inTok, outTok) : 0;
+    const saved = (type === "pruning") ? calcPruningSaving(stripped)
+      : (type === "routine" || type === "throttled") ? calcTierSaving(inTok, outTok)
+      : (type === "blocked") ? calcCost("Advisor", 1500, 0) // avoided cost
+      : 0;
+    const tierCell = tierName
+      ? `<span class="badge badge-${tierName === "Scout" || tierName === "Analyst" ? "micro" : "flagship"}">${tierName}</span>` : "—";
+    const costStr  = cost  > 0 ? `$${cost.toFixed(6)}`  : `<span style="color:var(--accent-green)">$0.00</span>`;
+    const savedStr = saved > 0 ? `<span style="color:var(--accent-green);font-weight:600">$${saved.toFixed(6)}</span>` : "—";
+
     const row = document.createElement("tr");
     row.id = `audit-row-seed-${i}`;
     row.innerHTML = `
@@ -602,174 +630,11 @@ function seedAuditLog() {
       <td style="font-size:11px;color:var(--text-muted)">${dept}</td>
       <td style="font-size:11px">${tierCell}</td>
       <td style="font-size:11px;font-weight:700;color:${_RISK_COLOR[risk]}">${risk.toUpperCase()}</td>
-      <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>`;
+      <td style="font-size:11px;color:var(--text-muted)">${outcome}</td>
+      <td style="font-size:11px;font-family:var(--font-mono)">${costStr}</td>
+      <td style="font-size:11px;font-family:var(--font-mono)">${savedStr}</td>`;
     tbody.appendChild(row);
   });
-}
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
-
-function openModal(eventId) {
-  const ev = _eventStore[eventId];
-  if (!ev) return;
-  _currentModalEventId = eventId;
-
-  // Badge
-  const badgeMap = {
-    routine:   `<span class="badge badge-micro">Scout</span>`,
-    pruning:   `<span class="badge badge-micro" style="border-color:var(--accent-green);color:var(--accent-green)">Scout · Pruned</span>`,
-    complex:   `<span class="badge badge-flagship">${ev.tier}</span>`,
-    blocked:   `<span class="badge badge-critical">🛡 BLOCKED</span>`,
-    throttled: `<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`,
-    collision: `<span class="badge badge-locked" style="background:#1a1205;color:var(--accent-yellow)">⚡ LOCKED</span>`,
-  };
-  document.getElementById("modalBadge").innerHTML = badgeMap[ev.type] || "";
-  document.getElementById("modalTitle").textContent = ev.agent + " · " + ev.dept;
-
-  // Body
-  let html = "";
-
-  // ── Summary
-  html += `<div class="modal-section">
-    <div class="modal-section-title">Event Summary</div>
-    <div class="modal-row"><span class="modal-row-label">Agent</span><span class="modal-row-val">${ev.agent}</span></div>
-    <div class="modal-row"><span class="modal-row-label">Platform</span><span class="modal-row-val">${ev.platform}</span></div>
-    <div class="modal-row"><span class="modal-row-label">Department</span><span class="modal-row-val">${ev.dept}</span></div>
-    <div class="modal-row"><span class="modal-row-label">Timestamp</span><span class="modal-row-val">${ev.time}</span></div>
-    <div class="modal-row"><span class="modal-row-label">Risk Level</span><span class="modal-row-val risk-${ev.risk}">${ev.risk.toUpperCase()}</span></div>
-  </div>`;
-
-  if (ev.type === "blocked") {
-    html += `<div class="modal-section">
-      <div class="modal-section-title">PII Detection — FAGE Guard</div>
-      <div class="modal-row"><span class="modal-row-label">Term triggered</span><span class="modal-row-val" style="color:var(--accent-red)">${ev.blockedTerm}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Category</span><span class="modal-row-val">${ev.blockedCategory}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Action</span><span class="modal-row-val" style="color:var(--accent-red)">Request blocked · No AI model invoked</span></div>
-      <div class="modal-row"><span class="modal-row-label">Tokens consumed</span><span class="modal-row-val">0</span></div>
-      <div class="modal-row"><span class="modal-row-label">Cost</span><span class="modal-row-val">$0.00</span></div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Payload</div>
-      <div class="modal-payload redacted">🔒 Content redacted by FAGE PII Guard — sensitive data was detected and the request was blocked before reaching any AI model. Original content is not stored or logged.</div>
-    </div>`;
-
-  } else if (ev.type === "complex") {
-    const complexityKeywords = ev.payload.match(/\b(SLA|contract|GDPR|breach|HIPAA|audit|legal|compliance|subpoena|wrongful|erasure|class action|SEC)\b/gi) || [];
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Routing Decision</div>
-      <div class="modal-row"><span class="modal-row-label">Model selected</span><span class="modal-row-val"><span class="badge badge-flagship">${ev.tier}</span></span></div>
-      <div class="modal-row"><span class="modal-row-label">Token count</span><span class="modal-row-val">${ev.tokens.toLocaleString()} (exceeded threshold)</span></div>
-      <div class="modal-row"><span class="modal-row-label">Complexity keywords</span><span class="modal-row-val">${complexityKeywords.length > 0 ? complexityKeywords.slice(0,4).join(", ") : "Multiple matches"}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Decision</span><span class="modal-row-val" style="color:var(--accent-purple)">Escalated to ${ev.tier}</span></div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Payload</div>
-      <div class="modal-payload">${ev.payload}</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Cost Breakdown</div>
-      <div class="modal-row"><span class="modal-row-label">Input tokens</span><span class="modal-row-val">${ev.tokens.toLocaleString()}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Output tokens</span><span class="modal-row-val">${ev.outTokens.toLocaleString()}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Total cost</span><span class="modal-row-val" style="color:var(--accent-yellow)">$${ev.cost.toFixed(6)}</span></div>
-    </div>`;
-
-  } else if (ev.type === "pruning") {
-    const compression = Math.round((ev.saved / (ev.tokens + ev.saved)) * 100);
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Context Pruning Result</div>
-      <div class="modal-row"><span class="modal-row-label">Tokens before</span><span class="modal-row-val">${(ev.tokens + ev.saved).toLocaleString()}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Tokens after</span><span class="modal-row-val" style="color:var(--accent-green)">${ev.tokens.toLocaleString()}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Tokens removed</span><span class="modal-row-val" style="color:var(--accent-purple)">${ev.saved.toLocaleString()} (${compression}% compression)</span></div>
-      <div class="modal-row"><span class="modal-row-label">Est. savings</span><span class="modal-row-val" style="color:var(--accent-green)">$${(ev.saved * 0.00000015).toFixed(6)}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Model used</span><span class="modal-row-val"><span class="badge badge-micro">Scout</span></span></div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Cleaned Payload</div>
-      <div class="modal-payload">${ev.payload}</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Cost Breakdown</div>
-      <div class="modal-row"><span class="modal-row-label">Input tokens (pruned)</span><span class="modal-row-val">${ev.tokens.toLocaleString()}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Total cost</span><span class="modal-row-val" style="color:var(--accent-yellow)">$${ev.cost.toFixed(6)}</span></div>
-    </div>`;
-
-  } else if (ev.type === "throttled") {
-    const mktBudget = state.budgets.find(b => b.dept === ev.dept) || state.budgets[2];
-    const pct = ((mktBudget.spend / mktBudget.cap) * 100).toFixed(1);
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Budget Throttle Details</div>
-      <div class="modal-row"><span class="modal-row-label">Department</span><span class="modal-row-val">${ev.dept}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Budget used</span><span class="modal-row-val" style="color:var(--accent-red)">${pct}% of cap</span></div>
-      <div class="modal-row"><span class="modal-row-label">Original tier</span><span class="modal-row-val">Analyst</span></div>
-      <div class="modal-row"><span class="modal-row-label">Downgraded to</span><span class="modal-row-val"><span class="badge badge-micro">Scout</span></span></div>
-      <div class="modal-row"><span class="modal-row-label">Policy</span><span class="modal-row-val">Downgrade — continue at reduced cost</span></div>
-    </div>`;
-
-  } else if (ev.type === "collision") {
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Concurrency Collision Details</div>
-      <div class="modal-row"><span class="modal-row-label">Agent 1</span><span class="modal-row-val" style="color:var(--accent)">${ev.agent}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Agent 2</span><span class="modal-row-val" style="color:var(--accent)">${ev.agent2}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Department</span><span class="modal-row-val">${ev.dept}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Conflict</span><span class="modal-row-val" style="color:var(--accent-yellow)">Both agents targeted the same record simultaneously</span></div>
-      <div class="modal-row"><span class="modal-row-label">Action taken</span><span class="modal-row-val">Traffic Cop locked both agents — supervisor required</span></div>
-      <div class="modal-row"><span class="modal-row-label">Lock duration</span><span class="modal-row-val">~8 seconds</span></div>
-    </div>`;
-
-  } else {
-    // routine
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Routing Decision</div>
-      <div class="modal-row"><span class="modal-row-label">Model selected</span><span class="modal-row-val"><span class="badge badge-micro">Scout</span></span></div>
-      <div class="modal-row"><span class="modal-row-label">Token count</span><span class="modal-row-val">${ev.tokens.toLocaleString()} (below threshold)</span></div>
-      <div class="modal-row"><span class="modal-row-label">Complexity keywords</span><span class="modal-row-val" style="color:var(--text-muted)">None detected</span></div>
-      <div class="modal-row"><span class="modal-row-label">Decision</span><span class="modal-row-val" style="color:var(--accent)">Routed to Scout — routine request</span></div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Payload</div>
-      <div class="modal-payload">${ev.payload}</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Cost Breakdown</div>
-      <div class="modal-row"><span class="modal-row-label">Input tokens</span><span class="modal-row-val">${ev.tokens.toLocaleString()}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Total cost</span><span class="modal-row-val" style="color:var(--accent-yellow)">$${ev.cost.toFixed(6)}</span></div>
-    </div>`;
-  }
-
-  document.getElementById("modalBody").innerHTML = html;
-  document.getElementById("detailModal").classList.add("open");
-}
-
-function closeModal() {
-  document.getElementById("detailModal").classList.remove("open");
-  _currentModalEventId = null;
-}
-
-function jumpToAudit() {
-  closeModal();
-
-  // Expand audit panel if collapsed
-  const auditBody = document.getElementById("lAuditPanel");
-  const auditChev = document.getElementById("lAuditChev");
-  if (auditBody.style.display === "none") {
-    auditBody.style.display = "";
-    auditChev.textContent = "▾";
-  }
-
-  // Find and highlight the matching audit row
-  const rowId = `audit-row-${_currentModalEventId}`;
-  const row   = document.getElementById(rowId);
-  if (row) {
-    // Scroll audit row into view
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
-    // Flash highlight
-    row.classList.remove("audit-row-highlight");
-    void row.offsetWidth; // force reflow
-    row.classList.add("audit-row-highlight");
-  } else {
-    // Row may have been pushed out — just scroll audit section into view
-    auditBody.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 }
 
 // ── Governance Event Stream ───────────────────────────────────────────────────
@@ -803,14 +668,14 @@ function flash(color) {
   setTimeout(() => { el.style.opacity = "0"; }, 350);
 }
 
-function showPruningTicker(saved) {
+function showPruningTicker(saved, tokens) {
   const el = document.getElementById("pruningTicker");
-  el.textContent = `▼ Pruning: ${saved.toLocaleString()} tokens stripped`;
+  el.textContent = `▼ ${tokens.toLocaleString()} tokens pruned — $${saved.toFixed(4)} saved`;
   el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 2800);
+  setTimeout(() => el.classList.remove("show"), 3000);
 }
 
-// ── Simulation Tick ───────────────────────────────────────────────────────────
+// ── Simulation Tick (real pricing math) ───────────────────────────────────────
 
 function tick() {
   tickCount++;
@@ -833,17 +698,17 @@ function tick() {
 
   if (eventType === "blocked") {
     const b = BLOCKED_PAYLOADS[Math.floor(Math.random() * BLOCKED_PAYLOADS.length)];
+    // Savings: cost avoided (Advisor call that never ran)
+    const saved = calcCost("Advisor", 1500, 0);
     state.agentStatuses[agentIdx] = "idle";
+    state.blocked++;
+    state.tierSavings += saved;
     flash("red");
-    // Store event (no actual PII stored)
-    _eventStore[eventId] = { type:"blocked", agent:agent.name, platform:agent.platform,
-      dept:agent.dept, time:nowTime(), blockedTerm:b.term, blockedCategory:b.category, risk:"critical" };
-    addRoutingRow(eventId, agent.name, agent.dept, "BLOCKED", `${b.term} detected`, true);
-    addAuditRow(eventId, "blocked", agent.dept, "—", "critical", "Blocked");
-    // Stream: show term but NOT the actual data
+    addRoutingRow(eventId, agent.name, agent.dept, "BLOCKED", `${b.term} detected`, 0, true);
+    addAuditRow(eventId, "blocked", agent.dept, "—", "critical", "Blocked", 0, saved);
     addStreamEvent("blocked", "🛡 REQUEST BLOCKED",
       `${b.description} — content redacted by FAGE PII Guard`,
-      `Term: "${b.term}" · Category: ${b.category} · No tokens consumed`);
+      `Term: "${b.term}" · Category: ${b.category} · Cost avoided: $${saved.toFixed(6)}`);
 
   } else if (eventType === "collision") {
     const idx2   = (agentIdx + 3) % AGENTS.length;
@@ -851,10 +716,8 @@ function tick() {
     state.agentStatuses[agentIdx] = "locked";
     state.agentStatuses[idx2]     = "locked";
     flash("yellow");
-    _eventStore[eventId] = { type:"collision", agent:agent.name, agent2:agent2.name,
-      platform:agent.platform, dept:agent.dept, time:nowTime(), risk:"high" };
-    addRoutingRow(eventId, agent.name, agent.dept, "THROTTLED", "Concurrency lock", false);
-    addAuditRow(eventId, "collision", agent.dept, "—", "high", "Locked");
+    addRoutingRow(eventId, agent.name, agent.dept, "THROTTLED", "Concurrency lock", 0, false);
+    addAuditRow(eventId, "collision", agent.dept, "—", "high", "Locked", 0, 0);
     addStreamEvent("collision", "⚡ CONCURRENCY LOCK",
       `${agent.name} + ${agent2.name} targeted the same record simultaneously`,
       `Dept: ${agent.dept} · Traffic Cop locked both agents · Supervisor required`);
@@ -865,69 +728,75 @@ function tick() {
     }, 8000);
 
   } else if (eventType === "throttled") {
-    const tokens = 800 + Math.floor(Math.random() * 800);
-    const cost   = parseFloat(((tokens * 0.0000005) + (200 * 0.0000015)).toFixed(6));
+    const inTok  = 800  + Math.floor(Math.random() * 800);
+    const outTok = 200  + Math.floor(Math.random() * 200);
+    const cost   = calcCost("Scout", inTok, outTok);
+    const saved  = calcTierSaving(inTok, outTok);
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++; state.scoutCalls++;
-    state.spend      = parseFloat((state.spend + cost).toFixed(6));
-    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
-    _eventStore[eventId] = { type:"throttled", agent:agent.name, platform:agent.platform,
-      dept:agent.dept, time:nowTime(), tokens, cost, risk:"medium" };
-    addRoutingRow(eventId, agent.name, agent.dept, "THROTTLED", "Downgraded — budget cap enforced", false);
-    addAuditRow(eventId, "throttled", agent.dept, "Scout", "medium", "Downgraded");
+    state.spend       = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth  = parseFloat((state.spendMonth + cost).toFixed(6));
+    state.tierSavings = parseFloat((state.tierSavings + saved).toFixed(6));
+    addRoutingRow(eventId, agent.name, agent.dept, "THROTTLED", "Downgraded — budget cap enforced", cost, false);
+    addAuditRow(eventId, "throttled", agent.dept, "Scout", "medium", "Downgraded", cost, saved);
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
 
   } else if (eventType === "complex") {
     const payload  = COMPLEX_PAYLOADS[Math.floor(Math.random() * COMPLEX_PAYLOADS.length)];
-    const tokens   = 8000 + Math.floor(Math.random() * 8000);
-    const outTokens= 2000 + Math.floor(Math.random() * 3000);
-    const cost     = parseFloat(((tokens * 0.000003) + (outTokens * 0.000015)).toFixed(6));
+    const inTok    = 8000 + Math.floor(Math.random() * 8000);
+    const outTok   = 2000 + Math.floor(Math.random() * 3000);
     const tier     = Math.random() < 0.7 ? "Advisor" : "Strategist";
+    const cost     = calcCost(tier, inTok, outTok);
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++;
     if (tier === "Advisor") state.advisorCalls++; else state.strategistCalls++;
     state.spend      = parseFloat((state.spend + cost).toFixed(6));
     state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
-    _eventStore[eventId] = { type:"complex", agent:agent.name, platform:agent.platform,
-      dept:agent.dept, tier, time:nowTime(), payload, tokens, outTokens, cost, risk:"high" };
-    addRoutingRow(eventId, agent.name, agent.dept, tier, payload.slice(0,50) + "...", false);
-    addAuditRow(eventId, "complex", agent.dept, tier, "high", "Escalated");
+    // No tier savings — these legitimately needed the higher model
+    addRoutingRow(eventId, agent.name, agent.dept, tier, payload.slice(0,50) + "...", cost, false);
+    addAuditRow(eventId, "complex", agent.dept, tier, "high", "Escalated", cost, 0);
     addStreamEvent("complex", `◈ ${tier.toUpperCase()} MODEL INVOKED`, payload,
-      `${tokens.toLocaleString()} tokens · $${cost.toFixed(6)} · ${agent.dept}`);
+      `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${cost.toFixed(6)} · ${agent.dept}`);
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 3000);
 
   } else if (eventType === "pruning") {
-    const payload = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
-    const saved   = 400 + Math.floor(Math.random() * 1800);
-    const tokens  = 1200 + Math.floor(Math.random() * 1200);
-    const cost    = parseFloat(((tokens * 0.0000008) + (300 * 0.0000040)).toFixed(6));
+    const payload  = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
+    const stripped = 400  + Math.floor(Math.random() * 1800);
+    const inTok    = 1200 + Math.floor(Math.random() * 1200);
+    const outTok   = 300  + Math.floor(Math.random() * 200);
+    const cost     = calcCost("Scout", inTok, outTok);
+    const tierSave = calcTierSaving(inTok, outTok);
+    const prunSave = calcPruningSaving(stripped);
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++; state.scoutCalls++;
-    state.tokens    += saved;
-    state.spend      = parseFloat((state.spend + cost).toFixed(6));
-    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
+    state.tokens         += stripped;
+    state.spend           = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth      = parseFloat((state.spendMonth + cost).toFixed(6));
+    state.tierSavings     = parseFloat((state.tierSavings + tierSave).toFixed(6));
+    state.pruningSavings  = parseFloat((state.pruningSavings + prunSave).toFixed(6));
     flash("green");
-    showPruningTicker(saved);
-    _eventStore[eventId] = { type:"pruning", agent:agent.name, platform:agent.platform,
-      dept:agent.dept, time:nowTime(), payload, tokens, saved, cost, risk:"low" };
-    addRoutingRow(eventId, agent.name, agent.dept, "Scout", payload, false);
-    addAuditRow(eventId, "pruning", agent.dept, "Scout", "low", "Allowed · pruned");
-    addStreamEvent("pruning", `▼ PRUNING: ${saved.toLocaleString()} tokens stripped`, payload,
-      `Raw → Clean · Est. $${(saved * 0.00000015).toFixed(6)} saved · Scout model`);
+    showPruningTicker(prunSave, stripped);
+    addRoutingRow(eventId, agent.name, agent.dept, "Scout", `Pruned ${stripped.toLocaleString()} tokens — ${payload}`, cost, false);
+    addAuditRow(eventId, "pruning", agent.dept, "Scout", "low", "Allowed · pruned", cost, tierSave + prunSave);
+    addStreamEvent("pruning", `▼ PRUNING: ${stripped.toLocaleString()} tokens stripped`,
+      payload,
+      `Tier saving $${tierSave.toFixed(6)} · Pruning saving $${prunSave.toFixed(6)} · Total $${(tierSave+prunSave).toFixed(6)}`);
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
 
   } else {
-    const payload = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
-    const tokens  = 600 + Math.floor(Math.random() * 1000);
-    const cost    = parseFloat(((tokens * 0.0000008) + (200 * 0.0000040)).toFixed(6));
+    // routine
+    const payload  = ROUTINE_PAYLOADS[Math.floor(Math.random() * ROUTINE_PAYLOADS.length)];
+    const inTok    = 600  + Math.floor(Math.random() * 1000);
+    const outTok   = 150  + Math.floor(Math.random() * 200);
+    const cost     = calcCost("Scout", inTok, outTok);
+    const saved    = calcTierSaving(inTok, outTok);
     state.agentStatuses[agentIdx] = "active";
     state.calls++; state.callsToday++; state.scoutCalls++;
-    state.spend      = parseFloat((state.spend + cost).toFixed(6));
-    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
-    _eventStore[eventId] = { type:"routine", agent:agent.name, platform:agent.platform,
-      dept:agent.dept, time:nowTime(), payload, tokens, cost, risk:"low" };
-    addRoutingRow(eventId, agent.name, agent.dept, "Scout", payload, false);
-    addAuditRow(eventId, "routine", agent.dept, "Scout", "low", "Allowed");
+    state.spend       = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth  = parseFloat((state.spendMonth + cost).toFixed(6));
+    state.tierSavings = parseFloat((state.tierSavings + saved).toFixed(6));
+    addRoutingRow(eventId, agent.name, agent.dept, "Scout", payload, cost, false);
+    addAuditRow(eventId, "routine", agent.dept, "Scout", "low", "Allowed", cost, saved);
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 1500);
   }
 
@@ -948,7 +817,7 @@ function generateTimeseriesData() {
     const d = new Date(now); d.setDate(d.getDate() - i);
     labels.push(d.toLocaleDateString("en-US", { month:"short", day:"numeric" }));
     const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
-    const wf = isWeekend ? 0.35 : 1;
+    const wf    = isWeekend ? 0.35 : 1;
     const trend = 1 + (29 - i) * 0.012;
     const jitter = () => 0.8 + Math.random() * 0.4;
     const mktBoost = (i >= 14 && i <= 19) ? 2.4 : 1;
@@ -957,10 +826,15 @@ function generateTimeseriesData() {
     const ad = Math.round(85  * trend * wf * jitter());
     const st = Math.round(18  * trend * wf * jitter());
     scoutCalls.push(s); analystCalls.push(an); advisorCalls.push(ad); strategistCalls.push(st);
-    supportSpend.push(parseFloat(((s*0.35+an*0.45)*0.0025*wf*jitter()).toFixed(2)));
-    salesSpend.push(parseFloat(((s*0.28+ad*0.38)*0.0032*wf*jitter()).toFixed(2)));
-    marketingSpend.push(parseFloat(((an*0.22+st*0.25)*0.0042*mktBoost*wf*jitter()).toFixed(2)));
-    opsSpend.push(parseFloat(((ad*0.18+st*0.18)*0.0055*wf*jitter()).toFixed(2)));
+    // Real pricing for spend charts
+    const scoutSpend    = (s  * 800 * RATES.Scout.input)      + (s  * 200 * RATES.Scout.output);
+    const advisorSpend  = (ad * 8000 * RATES.Advisor.input)   + (ad * 2500 * RATES.Advisor.output);
+    const stratSpend    = (st * 10000 * RATES.Strategist.input)+ (st * 3000 * RATES.Strategist.output);
+    const mktExtra = mktBoost;
+    supportSpend.push(parseFloat(((scoutSpend * 0.35 + advisorSpend * 0.28) * wf * jitter()).toFixed(2)));
+    salesSpend.push(parseFloat(((scoutSpend * 0.28 + advisorSpend * 0.32) * wf * jitter()).toFixed(2)));
+    marketingSpend.push(parseFloat(((scoutSpend * 0.22 + stratSpend * 0.20) * mktExtra * wf * jitter()).toFixed(2)));
+    opsSpend.push(parseFloat(((advisorSpend * 0.12 + stratSpend * 0.18) * wf * jitter()).toFixed(2)));
   }
   return { labels, supportSpend, salesSpend, marketingSpend, opsSpend, scoutCalls, analystCalls, advisorCalls, strategistCalls };
 }
@@ -1017,33 +891,32 @@ function init() {
   seedAuditLog();
   document.getElementById("liveClock").textContent = nowTime();
 
-  // Seed routing feed with initial rows (no drill-down for seeded rows, no eventId)
+  // Seed routing feed (no click handlers on historical seed rows)
   const tbody = document.getElementById("lRoutingBody");
-  const seedRows = [
-    { agent:"SF-ComplianceBot", dept:"Operations", tier:"Strategist", detail:"HIPAA audit — health data migration...", badge:`<span class="badge badge-flagship">Strategist</span>` },
-    { agent:"SF-MarketMailer",  dept:"Marketing",  tier:"THROTTLED",  detail:"Budget cap enforced",                  badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>` },
-    { agent:"SF-OpsLogger",     dept:"Operations", tier:"Scout",      detail:"Incident log entry",                   badge:`<span class="badge badge-micro">Scout</span>` },
-    { agent:"SF-SalesEnrich-1", dept:"Sales",      tier:"Advisor",    detail:"NDA review before board meeting...",   badge:`<span class="badge badge-flagship">Advisor</span>` },
-    { agent:"SF-SupportBot-1",  dept:"Support",    tier:"Scout",      detail:"Account update — routine",             badge:`<span class="badge badge-micro">Scout</span>` },
-  ];
-  seedRows.forEach(r => {
+  [
+    { agent:"SF-ComplianceBot", dept:"Operations", badge:`<span class="badge badge-flagship">Strategist</span>`,   detail:"HIPAA audit — health data migration...",   cost:"$0.392500" },
+    { agent:"SF-MarketMailer",  dept:"Marketing",  badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`, detail:"Budget cap enforced", cost:"$0.001040" },
+    { agent:"SF-OpsLogger",     dept:"Operations", badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Incident log entry",                      cost:"$0.000840" },
+    { agent:"SF-SalesEnrich-1", dept:"Sales",      badge:`<span class="badge badge-flagship">Advisor</span>`,      detail:"NDA review before board meeting...",       cost:"$0.056200" },
+    { agent:"SF-SupportBot-1",  dept:"Support",    badge:`<span class="badge badge-micro">Scout</span>`,           detail:"Account update — routine",                 cost:"$0.000920" },
+  ].forEach(r => {
     const row = document.createElement("tr");
     row.className = "routing-row";
-    row.style.cursor = "default";
     row.innerHTML = `
       <td style="font-family:var(--font-mono);color:var(--text-muted)">${nowTime()}</td>
       <td style="color:var(--accent);font-weight:600">${r.agent}</td>
       <td style="color:var(--text-muted)">${r.dept}</td>
       <td>${r.badge}</td>
-      <td style="color:var(--text-muted);font-size:10px">${r.detail}</td>`;
+      <td style="color:var(--text-muted);font-size:10px">${r.detail}</td>
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${r.cost}</td>`;
     tbody.appendChild(row);
   });
 
-  // Seed stream events (PII-safe)
-  addStreamEvent("blocked",   "🛡 REQUEST BLOCKED",     "Social security number detected in Support agent payload — content redacted", `Term: "social security number" · Category: HIPAA · No tokens consumed`);
-  addStreamEvent("complex",   "◈ STRATEGIST INVOKED",   "HIPAA compliance audit — health data migration review required",              "SF-ComplianceBot · Operations · $0.142800");
-  addStreamEvent("throttled", "⚠ BUDGET THROTTLE",      "Marketing department at 101.7% of monthly cap — all agents downgraded",       "Downgrade policy active · Scout tier enforced");
-  addStreamEvent("routine",   "◈ SYSTEM ONLINE",        "FAGE Enterprise Demo initialized — all agents registered",                   "Budget monitors active · PII scanner armed · Simulation running");
+  // Seed stream (PII-safe)
+  addStreamEvent("blocked",   "🛡 REQUEST BLOCKED",   "Social security number detected in Support agent payload — content redacted",  `Term: "social security number" · Category: HIPAA · Cost avoided: $0.004500`);
+  addStreamEvent("complex",   "◈ STRATEGIST INVOKED", "HIPAA compliance audit — health data migration review required",               "SF-ComplianceBot · Operations · 10,200 in · 3,100 out · $0.392500");
+  addStreamEvent("throttled", "⚠ BUDGET THROTTLE",    "Marketing at 101.7% of cap — all agents downgraded to Scout",                  "Routing saving $0.001680 vs Advisor baseline");
+  addStreamEvent("routine",   "◈ SYSTEM ONLINE",      "FAGE Enterprise Demo initialized — all agents registered",                    "Real pricing: Scout $1/$5 · Advisor $3/$15 · Strategist $5/$25 per 1M tokens");
 
   setInterval(tick, 2500);
   setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
