@@ -104,16 +104,20 @@ function renderAuditTable(events) {
 
     // Normalize tier display name
     const tierLabel = e.model_tier || "—";
-    const tierBadge = ["Scout","Analyst","micro"].includes(tierLabel) ? "badge-micro"
-                    : ["Advisor","Strategist","flagship"].includes(tierLabel) ? "badge-flagship"
-                    : "badge-micro";
+    const tierBadgeClass = tierLabel === "Scout"      ? "badge-scout"
+                         : tierLabel === "Analyst"    ? "badge-analyst"
+                         : tierLabel === "Advisor"    ? "badge-advisor"
+                         : tierLabel === "Strategist" ? "badge-strategist"
+                         : tierLabel === "micro"      ? "badge-scout"
+                         : tierLabel === "flagship"   ? "badge-advisor"
+                         : "badge-scout";
 
     return `
       <tr class="${rowClass}" id="audit-entry-${e.id}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale & payload">
         <td style="font-family:var(--font-mono); font-size:11px">${ts}</td>
-        <td><span class="badge ${isBlocked ? 'badge-critical' : 'badge-micro'}">${isBlocked ? "🛡 BLOCKED" : e.event_type}</span></td>
+        <td><span class="badge ${isBlocked ? 'badge-critical' : 'badge-scout'}">${isBlocked ? "🛡 BLOCKED" : e.event_type}</span></td>
         <td>${e.department}</td>
-        <td><span class="badge ${tierBadge}">${tierLabel}</span></td>
+        <td><span class="badge ${tierBadgeClass}">${tierLabel}</span></td>
         <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
         <td style="font-size:11px; color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}; font-weight:${isBlocked ? '600' : 'normal'}">${blockedIcon}${outcome}</td>
       </tr>
@@ -216,13 +220,18 @@ function _renderRoutingRows(events) {
       : "—";
     const isBlocked = (e.decision_outcome || "").toLowerCase().includes("blocked");
     const tierLabel = e.model_tier || "—";
-    const tierBadge = ["Scout","micro"].includes(tierLabel)
-      ? `<span class="badge badge-micro">Scout</span>`
-      : isBlocked
+    const _tierBadgeCls = tierLabel === "Scout"      ? "badge-scout"
+                         : tierLabel === "Analyst"    ? "badge-analyst"
+                         : tierLabel === "Advisor"    ? "badge-advisor"
+                         : tierLabel === "Strategist" ? "badge-strategist"
+                         : tierLabel === "micro"      ? "badge-scout"
+                         : tierLabel === "flagship"   ? "badge-advisor"
+                         : "badge-scout";
+    const tierBadge = isBlocked
       ? `<span class="badge badge-critical">🛡 BLOCKED</span>`
       : tierLabel === "—"
       ? `<span style="color:var(--text-muted)">—</span>`
-      : `<span class="badge badge-flagship">${tierLabel}</span>`;
+      : `<span class="badge ${_tierBadgeCls}">${tierLabel === "micro" ? "Scout" : tierLabel}</span>`;
     const riskClass = `badge-${e.risk_level || "low"}`;
     const rowClass  = isBlocked ? "audit-row row-blocked" : "audit-row";
     return `

@@ -17,9 +17,9 @@ const _DEPT_COLORS = [
 ];
 
 const _TIER_COLORS = {
-  Scout:      "#58a6ff",
-  Analyst:    "#3fb950",
-  Advisor:    "#d2993a",
+  Scout:      "#3fb950",
+  Analyst:    "#58a6ff",
+  Advisor:    "#d29922",
   Strategist: "#f85149",
 };
 

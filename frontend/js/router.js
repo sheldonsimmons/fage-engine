@@ -47,13 +47,18 @@ async function runRouter() {
     complexityBadge.textContent  = data.complexity;
     complexityBadge.className    = "badge " + (
       data.routing_decision === "THROTTLED" ? "badge-locked" :
-      data.complexity === "COMPLEX"         ? "badge-flagship" : "badge-micro"
+      data.complexity === "COMPLEX"         ? "badge-advisor" : "badge-scout"
     );
 
     // ── Model tier badge ──────────────────────────────────────────────────────
     const modelBadge = document.getElementById("routerModelBadge");
     modelBadge.textContent = data.model_name;
-    modelBadge.className   = "badge " + (data.model_tier === "flagship" ? "badge-flagship" : "badge-micro");
+    const _tierCls = data.model_tier === "Strategist" ? "badge-strategist"
+                   : data.model_tier === "Advisor"    ? "badge-advisor"
+                   : data.model_tier === "Analyst"    ? "badge-analyst"
+                   : data.model_tier === "flagship"   ? "badge-advisor"
+                   : "badge-scout";
+    modelBadge.className   = "badge " + _tierCls;
 
     // ── Throttle badge (only shown when throttled) ────────────────────────────
     const throttleBadge = document.getElementById("routerThrottleBadge");

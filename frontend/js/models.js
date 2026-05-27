@@ -7,8 +7,8 @@
 const TIERS = {
   1: { name: "Scout",      icon: "⚡", tagline: "Fast, affordable, handles routine tasks",              best_for: "FAQs, status lookups, simple summaries",           examples: "GPT-4o mini, Claude Haiku", color: "#3fb950" },
   2: { name: "Analyst",    icon: "🔍", tagline: "Balanced reasoning for most business tasks",           best_for: "Customer emails, data summarization, drafting",     examples: "GPT-4o, Claude Sonnet",     color: "#58a6ff" },
-  3: { name: "Advisor",    icon: "💡", tagline: "Deep reasoning for complex or sensitive work",         best_for: "Contract review, escalations, multi-step analysis", examples: "GPT-4 Turbo, Claude Opus",  color: "#bc8cff" },
-  4: { name: "Strategist", icon: "🎯", tagline: "Highest capability for mission-critical decisions",    best_for: "Legal, financial, compliance-heavy tasks",          examples: "o3, Claude Opus Max",       color: "#d29922" },
+  3: { name: "Advisor",    icon: "💡", tagline: "Deep reasoning for complex or sensitive work",         best_for: "Contract review, escalations, multi-step analysis", examples: "GPT-4 Turbo, Claude Opus",  color: "#d29922" },
+  4: { name: "Strategist", icon: "🎯", tagline: "Highest capability for mission-critical decisions",    best_for: "Legal, financial, compliance-heavy tasks",          examples: "o3, Claude Opus Max",       color: "#f85149" },
 };
 
 let _editingId  = null;

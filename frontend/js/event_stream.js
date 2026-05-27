@@ -85,7 +85,7 @@ function _streamEventColor(type) {
   return type === "blocked"   ? "var(--accent-red)"
        : type === "throttled" ? "var(--accent-yellow)"
        : type === "collision" ? "var(--accent-yellow)"
-       : type === "complex"   ? "var(--accent-purple)"
+       : type === "complex"   ? "var(--tier-advisor)"
        : type === "pruning"   ? "var(--accent-green)"
        : "var(--accent)";
 }

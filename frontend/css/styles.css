@@ -16,6 +16,22 @@
   --accent-purple: #bc8cff;
   --font-mono:     "SF Mono", "Fira Code", "Consolas", monospace;
   --font-sans:     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* ── Tier color system — cost/risk gradient ───────────────────────────────
+     Scout     = green  (cheap, routine, no action needed)
+     Analyst   = blue   (moderate, normal operations)
+     Advisor   = amber  (elevated cost, worth reviewing)
+     Strategist= red    (premium cost, high-stakes)
+  ── */
+  --tier-scout:      #3fb950;
+  --tier-analyst:    #58a6ff;
+  --tier-advisor:    #d29922;
+  --tier-strategist: #f85149;
+
+  --tier-scout-bg:      rgba(63,185,80,0.12);
+  --tier-analyst-bg:    rgba(88,166,255,0.12);
+  --tier-advisor-bg:    rgba(210,153,34,0.12);
+  --tier-strategist-bg: rgba(248,81,73,0.12);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -137,6 +153,12 @@ body {
 .badge-medium   { background: #2d1a0d; color: var(--accent-yellow); }
 .badge-high     { background: #2d0d0d; color: var(--accent-red); }
 .badge-critical { background: var(--accent-red); color: #fff; }
+
+/* ── Tier badges — consistent cost/risk gradient ──────────────────────────── */
+.badge-scout      { background: var(--tier-scout-bg);      color: var(--tier-scout);      border: 1px solid var(--tier-scout); }
+.badge-analyst    { background: var(--tier-analyst-bg);    color: var(--tier-analyst);    border: 1px solid var(--tier-analyst); }
+.badge-advisor    { background: var(--tier-advisor-bg);    color: var(--tier-advisor);    border: 1px solid var(--tier-advisor); }
+.badge-strategist { background: var(--tier-strategist-bg); color: var(--tier-strategist); border: 1px solid var(--tier-strategist); }
 
 /* ── Pruner Panel ────────────────────────────────────────────────────────────── */
 .pruner-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -286,8 +308,10 @@ body {
   gap: 5px;
 }
 .gov-event:hover { background: #1c2128; }
-.gov-event.type-routine   { border-left-color: var(--accent); }
-.gov-event.type-complex   { border-left-color: var(--accent-purple); }
+.gov-event.type-routine   { border-left-color: var(--tier-scout); }
+.gov-event.type-moderate  { border-left-color: var(--tier-analyst); }
+.gov-event.type-complex   { border-left-color: var(--tier-advisor); }
+.gov-event.type-strategist{ border-left-color: var(--tier-strategist); }
 .gov-event.type-blocked   { border-left-color: var(--accent-red); background: #1a0505; }
 .gov-event.type-blocked:hover { background: #220808; }
 .gov-event.type-throttled { border-left-color: var(--accent-yellow); }

@@ -288,7 +288,7 @@ function renderRoutingChart(d) {
       labels: ["Micro (Routine)", "Flagship (Complex)"],
       datasets: [{
         data: [d.microCalls, d.flagshipCalls],
-        backgroundColor: ["#58a6ff", "#bc8cff"],
+        backgroundColor: ["#3fb950", "#d29922"],
         borderColor: "#161b22",
         borderWidth: 3,
       }],

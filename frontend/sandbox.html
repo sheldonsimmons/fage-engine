@@ -93,11 +93,11 @@
       border-radius: 6px; padding: 12px; font-size: 12px; color: var(--text-primary);
       line-height: 1.6; max-height: 280px; overflow-y: auto; white-space: pre-wrap; }
 
-    /* Tier badge colours */
-    .tier-Scout     { background:rgba(88,166,255,0.15); color:var(--accent);        border:1px solid var(--accent); }
-    .tier-Analyst   { background:rgba(63,185,80,0.15);  color:var(--accent-green);  border:1px solid var(--accent-green); }
-    .tier-Advisor   { background:rgba(188,140,255,0.15);color:var(--accent-purple); border:1px solid var(--accent-purple); }
-    .tier-Strategist{ background:rgba(255,100,50,0.15); color:var(--accent-orange, #ff6432); border:1px solid #ff6432; }
+    /* Tier badge colours — cost/risk gradient: green→blue→amber→red */
+    .tier-Scout     { background:var(--tier-scout-bg);      color:var(--tier-scout);      border:1px solid var(--tier-scout); }
+    .tier-Analyst   { background:var(--tier-analyst-bg);    color:var(--tier-analyst);    border:1px solid var(--tier-analyst); }
+    .tier-Advisor   { background:var(--tier-advisor-bg);    color:var(--tier-advisor);    border:1px solid var(--tier-advisor); }
+    .tier-Strategist{ background:var(--tier-strategist-bg); color:var(--tier-strategist); border:1px solid var(--tier-strategist); }
     .tier-badge { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 4px;
       text-transform: uppercase; letter-spacing: 0.06em; display: inline-block; }
 

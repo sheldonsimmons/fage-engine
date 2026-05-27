@@ -190,22 +190,22 @@
 <div class="dash-stat stat-bar stat-bar-compact">
   <div class="stat-item">
     <span class="stat-label">Scout T1 — $1/$5/1M</span>
-    <span class="stat-val micro" id="lStatScout">—</span>
+    <span class="stat-val" style="color:var(--tier-scout)" id="lStatScout">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
     <span class="stat-label">Analyst T2 — $1/$5/1M</span>
-    <span class="stat-val" style="color:var(--accent-green)" id="lStatAnalyst">—</span>
+    <span class="stat-val" style="color:var(--tier-analyst)" id="lStatAnalyst">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
     <span class="stat-label">Advisor T3 — $3/$15/1M</span>
-    <span class="stat-val flagship" id="lStatAdvisor">—</span>
+    <span class="stat-val" style="color:var(--tier-advisor)" id="lStatAdvisor">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
     <span class="stat-label">Strategist T4 — $5/$25/1M</span>
-    <span class="stat-val" style="color:var(--accent-yellow)" id="lStatStrategist">—</span>
+    <span class="stat-val" style="color:var(--tier-strategist)" id="lStatStrategist">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
@@ -552,11 +552,12 @@ function updateKPIs() {
 function addRoutingRow(eventId, agent, dept, tier, detail, cost, isBlocked) {
   const feed = document.getElementById("lRoutingBody");
   const tierBadge =
-    tier === "Scout"     ? `<span class="badge badge-micro">Scout</span>` :
-    tier === "Analyst"   ? `<span class="badge badge-micro" style="background:rgba(63,185,80,0.15);color:var(--accent-green);border-color:var(--accent-green)">Analyst</span>` :
+    tier === "Scout"     ? `<span class="badge badge-scout">Scout</span>` :
+    tier === "Analyst"   ? `<span class="badge badge-analyst">Analyst</span>` :
+    tier === "Advisor"   ? `<span class="badge badge-advisor">Advisor</span>` :
     tier === "BLOCKED"   ? `<span class="badge badge-critical">🛡 BLOCKED</span>` :
     tier === "THROTTLED" ? `<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>` :
-                           `<span class="badge badge-flagship">${tier}</span>`;
+                           `<span class="badge badge-strategist">${tier}</span>`;
   const costCell = isBlocked ? `<span style="color:var(--accent-green);font-family:var(--font-mono);font-size:11px">$0.00</span>`
     : `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">$${cost.toFixed(6)}</span>`;
 
@@ -774,7 +775,7 @@ function seedAuditLog() {
       : (type === "blocked") ? calcCost("Advisor", 1500, 0)
       : 0;
     const tierCell = tierName
-      ? `<span class="badge badge-${tierName === "Scout" || tierName === "Analyst" ? "micro" : "flagship"}">${tierName}</span>` : "—";
+      ? `<span class="badge badge-${tierName === "Scout" ? "scout" : tierName === "Analyst" ? "analyst" : tierName === "Advisor" ? "advisor" : "strategist"}">${tierName}</span>` : "—";
     const costStr  = cost  > 0 ? `$${cost.toFixed(6)}`  : `<span style="color:var(--accent-green)">$0.00</span>`;
     const savedStr = saved > 0 ? `<span style="color:var(--accent-green);font-weight:600">$${saved.toFixed(6)}</span>` : "—";
     const seedId   = `seed-${i}`;
@@ -1181,9 +1182,9 @@ function initTimeseries() {
   _lCallsChart = new Chart(callsCtx, {
     type: "bar",
     data: { labels: d.labels, datasets: [
-      { label:"Scout",      data:d.scoutCalls,      backgroundColor:"#58a6ffbb", borderColor:"#58a6ff", borderWidth:1, stack:"calls" },
-      { label:"Analyst",    data:d.analystCalls,    backgroundColor:"#3fb950bb", borderColor:"#3fb950", borderWidth:1, stack:"calls" },
-      { label:"Advisor",    data:d.advisorCalls,    backgroundColor:"#d2993abb", borderColor:"#d2993a", borderWidth:1, stack:"calls" },
+      { label:"Scout",      data:d.scoutCalls,      backgroundColor:"#3fb950bb", borderColor:"#3fb950", borderWidth:1, stack:"calls" },
+      { label:"Analyst",    data:d.analystCalls,    backgroundColor:"#58a6ffbb", borderColor:"#58a6ff", borderWidth:1, stack:"calls" },
+      { label:"Advisor",    data:d.advisorCalls,    backgroundColor:"#d29922bb", borderColor:"#d29922", borderWidth:1, stack:"calls" },
       { label:"Strategist", data:d.strategistCalls, backgroundColor:"#f85149bb", borderColor:"#f85149", borderWidth:1, stack:"calls" },
     ]},
     options: { responsive:true, maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
@@ -1212,11 +1213,11 @@ function init() {
   const tbody = document.getElementById("lRoutingBody");
   // auditId maps to the seedId used in seedAuditLog() — seed-${i} where i = audit entry index
   const seedRows = [
-    { auditId:"seed-6",  agent:"SF-ComplianceBot",  dept:"Operations", badge:`<span class="badge badge-flagship">Strategist</span>`,                                                                     detail:"HIPAA audit — health data migration...",   cost:"$0.392500" },
-    { auditId:"seed-5",  agent:"SF-MarketMailer",   dept:"Marketing",  badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`,                 detail:"Budget cap enforced",                      cost:"$0.001040" },
-    { auditId:"seed-11", agent:"SF-OpsLogger",      dept:"Operations", badge:`<span class="badge badge-micro">Scout</span>`,                                                                             detail:"Incident log entry",                       cost:"$0.000840" },
-    { auditId:"seed-14", agent:"SF-SalesEnrich-1",  dept:"Sales",      badge:`<span class="badge badge-flagship">Advisor</span>`,                                                                        detail:"NDA review before board meeting...",        cost:"$0.056200" },
-    { auditId:"seed-8",  agent:"SF-SupportBot-1",   dept:"Support",    badge:`<span class="badge badge-micro">Scout</span>`,                                                                             detail:"Account update — routine",                 cost:"$0.000920" },
+    { auditId:"seed-6",  agent:"SF-ComplianceBot",  dept:"Operations", badge:`<span class="badge badge-strategist">Strategist</span>`,  detail:"HIPAA audit — health data migration...",   cost:"$0.392500" },
+    { auditId:"seed-5",  agent:"SF-MarketMailer",   dept:"Marketing",  badge:`<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>`, detail:"Budget cap enforced", cost:"$0.001040" },
+    { auditId:"seed-11", agent:"SF-OpsLogger",      dept:"Operations", badge:`<span class="badge badge-scout">Scout</span>`,       detail:"Incident log entry",                       cost:"$0.000840" },
+    { auditId:"seed-14", agent:"SF-SalesEnrich-1",  dept:"Sales",      badge:`<span class="badge badge-advisor">Advisor</span>`,   detail:"NDA review before board meeting...",        cost:"$0.056200" },
+    { auditId:"seed-8",  agent:"SF-SupportBot-1",   dept:"Support",    badge:`<span class="badge badge-scout">Scout</span>`,       detail:"Account update — routine",                 cost:"$0.000920" },
   ];
   seedRows.forEach(r => {
     const rowEl = document.createElement("tr");

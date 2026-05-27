@@ -15,15 +15,20 @@ let _rptDeptData    = [];
 let _rptSavingsData = null;
 
 const COLORS = {
-  micro:    "#58a6ff",
-  flagship: "#bc8cff",
+  scout:     "#3fb950",   // Tier 1 — green (cheapest)
+  analyst:   "#58a6ff",   // Tier 2 — blue
+  advisor:   "#d29922",   // Tier 3 — amber
+  strategist:"#f85149",   // Tier 4 — red (most expensive)
+  // Legacy aliases
+  micro:    "#3fb950",
+  flagship: "#d29922",
   green:    "#3fb950",
   yellow:   "#d29922",
   red:      "#f85149",
   muted:    "#8b949e",
   border:   "#30363d",
   panel:    "#161b22",
-  dept: ["#58a6ff","#3fb950","#bc8cff","#d29922","#f85149","#79c0ff","#56d364","#d2a8ff"],
+  dept: ["#58a6ff","#3fb950","#d29922","#f85149","#a371f7","#79c0ff","#56d364","#ffa657"],
 };
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -793,12 +798,12 @@ function renderCallLog(agent) {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
     });
     const tierColorMap = {
-      "Scout":      "var(--accent-green)",
-      "Analyst":    "var(--accent)",
-      "Advisor":    "var(--accent-purple)",
-      "Strategist": "var(--accent-yellow)",
-      "micro":      "var(--accent-green)",
-      "flagship":   "var(--accent-red)",
+      "Scout":      "var(--tier-scout)",
+      "Analyst":    "var(--tier-analyst)",
+      "Advisor":    "var(--tier-advisor)",
+      "Strategist": "var(--tier-strategist)",
+      "micro":      "var(--tier-scout)",
+      "flagship":   "var(--tier-advisor)",
     };
     const tierColor = tierColorMap[t.model_tier] || "var(--text-muted)";
     const tierLabel = t.model_tier || "—";

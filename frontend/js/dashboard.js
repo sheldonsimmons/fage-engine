@@ -143,7 +143,7 @@ async function runPruner() {
       <span style="color:var(--text-muted)">Cost avoided &rarr;</span>
       <span style="color:var(--accent-green); font-weight:600;">&nbsp;Micro: $${microSaved}</span>
       &nbsp;&nbsp;
-      <span style="color:var(--accent-purple); font-weight:600;">Flagship: $${flagshipSaved}</span>
+      <span style="color:var(--tier-advisor); font-weight:600;">Flagship: $${flagshipSaved}</span>
       &nbsp;&nbsp;
       <span style="color:var(--text-muted); font-size:11px;">| Filters: ${result.filters_applied.join(", ")}</span>
     `;
