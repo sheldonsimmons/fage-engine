@@ -385,18 +385,18 @@ new Sortable(document.getElementById("live-panels"), {
 // ── Simulation Data ───────────────────────────────────────────────────────────
 
 const AGENTS = [
-  { name: "SF-SupportBot-1",   dept: "Support",    platform: "Salesforce" },
-  { name: "SF-SupportBot-2",   dept: "Support",    platform: "Salesforce" },
-  { name: "SF-CaseEscalator",  dept: "Support",    platform: "Salesforce" },
-  { name: "SF-BillingAuditor", dept: "Support",    platform: "Salesforce" },
-  { name: "SF-SalesEnrich-1",  dept: "Sales",      platform: "Salesforce" },
-  { name: "SF-SalesEnrich-2",  dept: "Sales",      platform: "Salesforce" },
-  { name: "SF-OpportunityBot", dept: "Sales",      platform: "Salesforce" },
-  { name: "SF-MarketMailer",   dept: "Marketing",  platform: "Salesforce" },
-  { name: "SF-CampaignBot",    dept: "Marketing",  platform: "Salesforce" },
-  { name: "SF-OpsLogger",      dept: "Operations", platform: "Salesforce" },
-  { name: "SF-ComplianceBot",  dept: "Operations", platform: "Salesforce" },
-  { name: "SN-IncidentRouter", dept: "Operations", platform: "ServiceNow" },
+  { name: "SF-SupportBot-1",   dept: "Support",    platform: "Salesforce", min_tier: 1, max_tier: 3 },
+  { name: "SF-SupportBot-2",   dept: "Support",    platform: "Salesforce", min_tier: 1, max_tier: 3 },
+  { name: "SF-CaseEscalator",  dept: "Support",    platform: "Salesforce", min_tier: 2, max_tier: 4 },
+  { name: "SF-BillingAuditor", dept: "Support",    platform: "Salesforce", min_tier: 2, max_tier: 3 },
+  { name: "SF-SalesEnrich-1",  dept: "Sales",      platform: "Salesforce", min_tier: 1, max_tier: 2 },
+  { name: "SF-SalesEnrich-2",  dept: "Sales",      platform: "Salesforce", min_tier: 1, max_tier: 2 },
+  { name: "SF-OpportunityBot", dept: "Sales",      platform: "Salesforce", min_tier: 2, max_tier: 3 },
+  { name: "SF-MarketMailer",   dept: "Marketing",  platform: "Salesforce", min_tier: 1, max_tier: 2 },
+  { name: "SF-CampaignBot",    dept: "Marketing",  platform: "Salesforce", min_tier: 1, max_tier: 2 },
+  { name: "SF-OpsLogger",      dept: "Operations", platform: "Salesforce", min_tier: 1, max_tier: 1 },
+  { name: "SF-ComplianceBot",  dept: "Operations", platform: "Salesforce", min_tier: 3, max_tier: 4 },
+  { name: "SN-IncidentRouter", dept: "Operations", platform: "ServiceNow", min_tier: 2, max_tier: 4 },
 ];
 
 const BUDGETS = [
@@ -490,14 +490,29 @@ function getBudgetSnap(dept) {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
+const TIER_LABELS = { 1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist" };
+const TIER_CSS    = { 1: "var(--tier-scout)", 2: "var(--tier-analyst)", 3: "var(--tier-advisor)", 4: "var(--tier-strategist)" };
+
 function renderAgents() {
   document.getElementById("lAgentGrid").innerHTML = AGENTS.map((a, i) => {
-    const st = state.agentStatuses[i];
-    const bc = st === "active" ? "badge-active" : st === "locked" ? "badge-locked" : "badge-idle";
+    const st  = state.agentStatuses[i];
+    const bc  = st === "active" ? "badge-active" : st === "locked" ? "badge-locked" : "badge-idle";
+    const min = a.min_tier || 1;
+    const max = a.max_tier || 4;
+    const minLabel = TIER_LABELS[min];
+    const maxLabel = TIER_LABELS[max];
+    const minColor = TIER_CSS[min];
+    const maxColor = TIER_CSS[max];
+    const boundsLine = (min === 1 && max === 4)
+      ? `<span style="font-size:9px;color:var(--text-muted)">Unrestricted</span>`
+      : `<span style="font-size:9px;color:${minColor};font-weight:600">${minLabel}</span>
+         <span style="font-size:9px;color:var(--text-muted)">→</span>
+         <span style="font-size:9px;color:${maxColor};font-weight:600">${maxLabel}</span>`;
     return `<div class="live-agent-card ${st}">
       <div class="a-name">${a.name}</div>
       <div class="a-dept">${a.dept}</div>
-      <span class="badge ${bc}" style="font-size:9px;padding:1px 6px">${st.toUpperCase()}</span>
+      <span class="badge ${bc}" style="font-size:9px;padding:1px 6px;margin-top:2px">${st.toUpperCase()}</span>
+      <div style="display:flex;align-items:center;gap:4px;margin-top:3px">${boundsLine}</div>
     </div>`;
   }).join("");
 }
