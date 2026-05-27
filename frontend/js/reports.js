@@ -983,3 +983,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Auto-refresh active tab every 30 seconds so KPIs tick to new values live
 setInterval(() => loadActiveTab(), 30000);
+
+// ── Today Counter ─────────────────────────────────────────────────────────────
+
+async function refreshTodayCounter() {
+  try {
+    const d = await apiGet("/api/dashboard");
+    countUp(document.getElementById("td-calls"),  String(d.calls_today ?? 0));
+    countUp(document.getElementById("td-cost"),   "$" + (d.spend_today_usd ?? 0).toFixed(4));
+    countUp(document.getElementById("td-tokens"), fmtNum(d.tokens_saved_today ?? 0));
+    const el = document.getElementById("td-updated");
+    if (el) el.textContent = "updated " + new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  } catch (e) { /* silent — counter just stays at last value */ }
+}
+
+// Load immediately, then refresh every 10 seconds
+refreshTodayCounter();
+setInterval(refreshTodayCounter, 10000);

@@ -106,6 +106,36 @@
         <button class="export-btn" onclick="exportSavingsPdf()">🖨 PDF</button>
       </div>
 
+      <!-- Today Counter — live, refreshes every 10s -->
+      <div id="todayBar" style="
+        display:flex; align-items:center; gap:24px;
+        padding:10px 20px; margin-bottom:2px;
+        background:var(--bg-panel); border:1px solid var(--border);
+        border-radius:8px; font-size:12px;
+      ">
+        <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
+          <span id="todayDot" style="width:7px;height:7px;border-radius:50%;background:var(--accent-green);
+            box-shadow:0 0 5px var(--accent-green);display:inline-block;
+            animation:live-pulse 1.5s infinite"></span>
+          <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;color:var(--text-muted)">TODAY</span>
+        </div>
+        <div style="display:flex;gap:28px;flex:1">
+          <div>
+            <span style="color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em">Calls</span>
+            <span id="td-calls" style="margin-left:8px;font-weight:700;color:var(--text-primary);font-family:var(--font-mono)">—</span>
+          </div>
+          <div>
+            <span style="color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em">Cost</span>
+            <span id="td-cost" style="margin-left:8px;font-weight:700;color:var(--accent-yellow);font-family:var(--font-mono)">—</span>
+          </div>
+          <div>
+            <span style="color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em">Tokens Saved</span>
+            <span id="td-tokens" style="margin-left:8px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</span>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);flex-shrink:0" id="td-updated">—</div>
+      </div>
+
       <!-- KPI strip -->
       <div class="rpt-kpi-row">
         <div class="rpt-kpi">
