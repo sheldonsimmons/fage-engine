@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Admin</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/demo.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg-base); }
+
+    .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+      transition: color 0.15s, border-color 0.15s; background: none; cursor: pointer; font: inherit; }
+    .header-nav-link:hover,
+    .header-nav-link.active { color: var(--text-primary); border-color: var(--accent); }
+
+    .admin-body { flex: 1; overflow-y: auto; padding: 24px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+
+    .admin-grid { display: grid; grid-template-columns: 400px 1fr; gap: 24px; align-items: start; }
+
+    @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <div>
+      <div class="header-title">FAGE</div>
+      <div class="header-sub">FinOps Agentlake &amp; Governance Engine</div>
+    </div>
+  </div>
+  <div class="header-status" id="systemStatus">
+    <span class="status-dot offline"></span>
+    <span id="statusLabel">Connecting...</span>
+    <span class="mode-badge" id="modeBadge" style="display:none"></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="/"               class="header-nav-link">← Dashboard</a>
+    <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
+    <a href="/policy.html"    class="header-nav-link">⚖ Policy &amp; Rules</a>
+    <a href="/reports.html"   class="header-nav-link">📊 Reports</a>
+    <a href="/models.html"    class="header-nav-link">🤖 Models</a>
+    <a href="/admin.html"     class="header-nav-link active">🛠 Admin</a>
+    <a href="/sandbox.html"   class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
+    <a href="/live.html"      class="header-nav-link" style="color:var(--accent-green)">● LIVE</a>
+    <button class="tour-btn"  onclick="startTour()">? Guide</button>
+  </div>
+</header>
+
+<!-- ── Page heading ────────────────────────────────────────────────────────── -->
+<div style="padding:16px 24px 0;border-bottom:1px solid var(--border);background:var(--bg-panel)">
+  <h1 style="font-size:16px;font-weight:700;margin:0 0 4px">Budget Controls &amp; Agent Management</h1>
+  <p style="font-size:11px;color:var(--text-muted);margin:0 0 12px">
+    Set department budget caps, configure throttle floors, manage agents, and register new bots.
+  </p>
+</div>
+
+<!-- ── Main ────────────────────────────────────────────────────────────────── -->
+<div class="admin-body">
+  <div class="admin-grid">
+
+    <!-- ── Left: Department Budgets ────────────────────────────────────────── -->
+    <div class="panel" id="budgetPanel">
+      <h2 class="panel-title">Department Budgets
+        <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span>
+      </h2>
+      <div id="budgetList"><p class="placeholder">Loading...</p></div>
+    </div>
+
+    <!-- ── Right: Agentlake Registry ───────────────────────────────────────── -->
+    <div class="panel" id="agentPanel">
+      <div class="agent-panel-header">
+        <h2 class="panel-title">Agentlake Registry
+          <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span>
+        </h2>
+        <div class="agent-filters">
+          <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
+            <option value="">All Platforms</option>
+            <option>Salesforce</option><option>ServiceNow</option>
+            <option>HubSpot</option><option>Dynamics365</option>
+            <option>Zendesk</option><option>Custom</option>
+          </select>
+          <select class="agent-filter-select" id="filterStatus" onchange="applyAgentFilters()">
+            <option value="">All Statuses</option>
+            <option value="idle">Idle</option>
+            <option value="active">Active</option>
+            <option value="locked">Locked</option>
+            <option value="queued">Queued</option>
+          </select>
+          <select class="agent-filter-select" id="filterDept" onchange="applyAgentFilters()">
+            <option value="">All Departments</option>
+          </select>
+          <input type="text" class="agent-filter-search" id="filterSearch"
+                 placeholder="Search agents..." oninput="applyAgentFilters()" />
+        </div>
+      </div>
+
+      <table class="agent-table">
+        <thead>
+          <tr>
+            <th>Agent</th><th>Department</th><th>Platform</th><th>Target</th>
+            <th>Policy</th><th>Status</th><th>Last Active</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="agentTableBody">
+          <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+        </tbody>
+      </table>
+
+      <div class="agent-controls">
+        <button class="btn-collision" onclick="runCollisionSim()">&#9888; Simulate Collision</button>
+        <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
+        <button id="toggleArchivedBtn" class="btn-deregister" style="margin-left:auto" onclick="toggleArchivedAgents()">Show Archived</button>
+      </div>
+      <div id="collisionAlert" class="collision-alert" style="display:none"></div>
+
+      <!-- Register New Agent -->
+      <div class="register-agent-form">
+        <h3 class="register-title">Register New Agent</h3>
+        <div class="register-grid">
+          <div class="register-field">
+            <label class="field-label">Agent Name</label>
+            <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+          </div>
+          <div class="register-field">
+            <label class="field-label">Source Platform</label>
+            <select id="regPlatform" class="reg-input">
+              <option value="">— Infer from name prefix —</option>
+              <option value="Salesforce">Salesforce</option>
+              <option value="ServiceNow">ServiceNow</option>
+              <option value="HubSpot">HubSpot</option>
+              <option value="Microsoft">Microsoft</option>
+              <option value="Zendesk">Zendesk</option>
+              <option value="SAP">SAP</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </div>
+          <div class="register-field">
+            <label class="field-label">Department</label>
+            <select id="regDept" class="reg-input">
+              <option>Support</option><option>Sales</option>
+              <option>Marketing</option><option>Operations</option>
+            </select>
+          </div>
+          <div class="register-field">
+            <label class="field-label">Target Table</label>
+            <select id="regTable" class="reg-input">
+              <option value="tickets">tickets</option>
+              <option value="crm_records">crm_records</option>
+              <option value="customers">customers</option>
+              <option value="token_transactions">token_transactions</option>
+            </select>
+          </div>
+          <div class="register-field">
+            <label class="field-label">Permissions</label>
+            <select id="regPerms" class="reg-input">
+              <option value="read">read</option>
+              <option value="read,write" selected>read, write</option>
+              <option value="read,write,delete">read, write, delete</option>
+            </select>
+          </div>
+          <div class="register-field">
+            <label class="field-label">Collision Policy</label>
+            <select id="regPolicy" class="reg-input">
+              <option value="lock" selected>Lock — require supervisor</option>
+              <option value="queue">Queue — auto-retry when free</option>
+              <option value="skip">Skip — abandon silently</option>
+            </select>
+          </div>
+        </div>
+        <div class="register-actions">
+          <button class="btn-primary" onclick="registerAgent()">+ Register Agent</button>
+          <span id="registerStatus" class="register-status"></span>
+        </div>
+      </div>
+    </div><!-- end agentPanel -->
+
+  </div><!-- end admin-grid -->
+</div><!-- end admin-body -->
+
+<script src="js/api.js"></script>
+<script src="js/budget.js"></script>
+<script src="js/agentlake.js"></script>
+<script src="js/help.js"></script>
+<script>
+// Status check
+async function checkStatus() {
+  try {
+    const r = await fetch("/health");
+    const d = await r.json();
+    document.getElementById("statusLabel").textContent = "Backend online — " + (d.version || "");
+    document.querySelector(".status-dot").classList.replace("offline", "online");
+    const badge = document.getElementById("modeBadge");
+    if (d.model_mode) {
+      badge.textContent = d.model_mode.toUpperCase() + " · " + (d.provider || "");
+      badge.style.display = "inline";
+    }
+  } catch(e) {
+    document.getElementById("statusLabel").textContent = "Backend offline";
+  }
+}
+
+// Init
+window.addEventListener("DOMContentLoaded", () => {
+  checkStatus();
+  loadBudgets();
+  loadAgents();
+});
+
+window.PAGE_TOUR_STEPS = [
+  { target:"budgetPanel",  title:"Department Budgets",  body:"Set monthly caps, reset spend at period end, and configure the throttle floor — the minimum model tier when a department exceeds its budget.",  position:"right" },
+  { target:"agentPanel",   title:"Agentlake Registry",  body:"Every registered AI agent appears here. Filter by platform, status, or department. Archive agents that are no longer active.",                 position:"left",  last:true },
+];
+</script>
+</body>
+</html>

@@ -145,6 +145,7 @@
     <a href="/" class="header-nav-link">← Dashboard</a>
     <a href="/live-reports.html" class="header-nav-link">📊 Reports</a>
     <a href="/policy.html" class="header-nav-link">⚖ Policy &amp; Rules</a>
+    <a href="/admin.html" class="header-nav-link">🛠 Admin</a>
     <a href="/sandbox.html" class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
     <button class="tour-btn" onclick="startTour()">? Guide</button>
   </div>
@@ -239,46 +240,6 @@
           <div class="agent-grid-6" id="lAgentGrid"></div>
           <div class="sec-sub-label">Department Budget Utilization</div>
           <div id="lBudgetRows"></div>
-        </div>
-      </div>
-
-      <!-- Panel 1b: Budget Controls & Agent Management (live backend) -->
-      <div class="dp-wrap dash-section" data-panel-id="l-budget-controls">
-        <div class="dash-sec-head" onclick="togglePanel('lBudgetControlBody','lBudgetControlChev')">
-          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Budget Controls &amp; Agent Management</span>
-          <span class="sec-right"><span class="sec-chev" id="lBudgetControlChev">▸</span></span>
-        </div>
-        <div id="lBudgetControlBody" class="dash-sec-body" style="display:none">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
-
-            <!-- Department Budgets -->
-            <div>
-              <div class="sec-sub-label">Department Budgets</div>
-              <div id="lBudgetControls"><p class="placeholder">Loading…</p></div>
-            </div>
-
-            <!-- Agentlake Registry -->
-            <div>
-              <div class="sec-sub-label">Agentlake Registry</div>
-              <div id="lAgentControls"><p class="placeholder">Loading…</p></div>
-              <div style="margin-top:12px">
-                <div class="sec-sub-label">Register New Agent</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                  <input id="lRegName"  class="form-input" placeholder="Agent name" style="font-size:11px;padding:5px 8px">
-                  <input id="lRegDept"  class="form-input" placeholder="Department" style="font-size:11px;padding:5px 8px">
-                  <input id="lRegTable" class="form-input" placeholder="Target table" style="font-size:11px;padding:5px 8px">
-                  <select id="lRegPerms" class="form-input" style="font-size:11px;padding:5px 8px">
-                    <option value="read">read</option>
-                    <option value="read,write">read,write</option>
-                    <option value="read,write,delete">read,write,delete</option>
-                  </select>
-                </div>
-                <button class="btn btn-primary" style="font-size:11px;padding:4px 14px" onclick="lRegisterAgent()">+ Register Agent</button>
-                <span id="lRegStatus" style="font-size:11px;margin-left:8px;color:var(--accent-green)"></span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1299,7 +1260,7 @@ function init() {
 init();
 </script>
 <script>
-// ── Budget Controls & Agent Management (live backend panel) ───────────────────
+// Budget Controls moved to /admin.html
 
 async function lLoadBudgetControls() {
   try {
