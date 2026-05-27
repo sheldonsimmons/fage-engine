@@ -1009,6 +1009,23 @@ def process_transcript(raw: str) -> VoiceGuardResult:
             pos = trigger_end
             continue
 
+        # Ambiguous trigger disambiguation — "my number is" / "other number is"
+        # could be SSN (9 digits) or PHONE (10 digits). Relabel based on count.
+        _AMBIGUOUS_PHONE_TRIGGERS = {"my number is", "other number is"}
+        if trigger_text in _AMBIGUOUS_PHONE_TRIGGERS:
+            if len(digits) == 9:
+                # Treat as SSN — same digit count, more sensitive label
+                from dataclasses import replace as _dc_replace
+                pattern = _dc_replace(
+                    pattern,
+                    pii_type="SSN",
+                    redact_label="SSN",
+                    digit_count=9,
+                    digit_min=0,
+                    digit_max=0,
+                )
+            # 10 digits → stays PHONE (original pattern unchanged)
+
         # For DATE_OF_BIRTH: months are not normalized globally, so extend the
         # span backward from first_pos to include any month name between the
         # trigger and the first digit. "date of birth is January 3 1977" →
