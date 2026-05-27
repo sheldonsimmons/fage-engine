@@ -179,6 +179,24 @@ def _seed_on_startup():
 
 _seed_on_startup()
 
+# ── One-time config migrations (safe to re-run) ────────────────────────────────
+def _patch_routing_config():
+    """Push config.py defaults into the live RoutingConfig row if they differ."""
+    from config import COMPLEXITY_TOKEN_THRESHOLD
+    from core.routing_config import get_routing_config
+    db = SessionLocal()
+    try:
+        cfg = get_routing_config(db)
+        if cfg.complexity_token_threshold != COMPLEXITY_TOKEN_THRESHOLD:
+            cfg.complexity_token_threshold = COMPLEXITY_TOKEN_THRESHOLD
+            db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+_patch_routing_config()
+
 app = FastAPI(
     title="FAGE — FinOps Agentlake & Governance Engine",
     description=(
