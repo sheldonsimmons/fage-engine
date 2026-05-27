@@ -87,13 +87,13 @@
     </div>
 
     <!-- ── Tabs ───────────────────────────────────────────────────────── -->
-    <div class="rpt-tabs">
-      <button class="rpt-tab active" data-tab="savings">💰 Savings</button>
-      <button class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
-      <button class="rpt-tab" data-tab="departments">🏢 Departments</button>
-      <button class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
-      <button class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
-      <button class="rpt-tab" data-tab="roi" onclick="initRoiTab()">📈 ROI Calculator</button>
+    <div class="rpt-tabs" id="rptTabRow">
+      <button id="rptTabSavings"    class="rpt-tab active" data-tab="savings">💰 Savings</button>
+      <button id="rptTabRisk"       class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
+      <button id="rptTabDepts"      class="rpt-tab" data-tab="departments">🏢 Departments</button>
+      <button id="rptTabEfficiency" class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
+      <button id="rptTabActivity"   class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
+      <button id="rptTabRoi"        class="rpt-tab" data-tab="roi" onclick="initRoiTab()">📈 ROI Calculator</button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
@@ -748,15 +748,16 @@
   <script src="js/help.js"></script>
   <script>
   window.PAGE_TOUR_STEPS = [
-    { target:"rptDatePreset",   title:"Time Range",              body:"Change the reporting period here. Every chart and KPI updates instantly — choose from presets like Last 30 Days, This Quarter, or set a custom date range.",                       position:"bottom" },
-    { target:"tab-savings",     title:"Savings Tab",             body:"Your headline ROI view. Shows total cost saved vs. a no-routing baseline, broken down into pruning savings and tier routing savings. Export to CSV or PDF.",                       position:"bottom" },
-    { target:"sv-total-saved",  title:"Total Saved",             body:"What FAGE saved this period — actual tokens pruned plus the cost difference between economy and flagship tiers for all routed calls.",                                            position:"bottom" },
-    { target:"sv-no-fage",      title:"Without FAGE Baseline",   body:"Estimated cost if every call had gone to your flagship model with no pruning or routing. The gap between this and Actual Cost is your FAGE ROI.",                                 position:"bottom" },
-    { target:"tab-risk",        title:"Risk & Compliance",       body:"Every governance event — blocked PII, high-risk escalations, agent collisions, and term matches. Drill into the recent events table to see individual audit entries.",             position:"bottom" },
-    { target:"tab-departments", title:"Departments",             body:"Scorecard for every department — call volume, economy-tier %, actual cost, and budget bar. Throttled departments are flagged. Drag cards to rearrange the layout.",               position:"bottom" },
-    { target:"tab-efficiency",  title:"Bot Efficiency Review",   body:"Click Generate Review to run AI analysis on every agent's 30-day history. Each agent gets a grade, findings, and specific recommendations with projected savings.",               position:"bottom" },
-    { target:"tab-activity",    title:"Agent Activity",          body:"Filter by platform, agent, department, or model tier. Click any agent row to expand its full transaction log for the selected period.",                                           position:"bottom" },
-    { target:"tab-roi",         title:"ROI Calculator",          body:"Model your own AI usage — calls per month, token counts, model tier, and FAGE plan. See payback period and net annual savings. Use industry presets to auto-fill.", position:"bottom", last:true },
+    { target:"rptDatePreset",    title:"Time Range",              body:"Change the reporting period — every chart and KPI updates instantly. Choose from presets or set a custom date range.",                                                           position:"bottom" },
+    { target:"rptTabSavings",    title:"💰 Savings Tab",          body:"Active now. Shows total cost saved vs. a full-flagship baseline, broken into pruning savings and tier routing savings. Export to CSV or PDF.",                                   position:"bottom" },
+    { target:"sv-total-saved",   title:"Total Saved",             body:"Headline ROI — tokens pruned plus the cost difference between economy and flagship tiers across all routed calls.",                                                             position:"bottom" },
+    { target:"sv-no-fage",       title:"Without FAGE Baseline",   body:"Estimated cost if every call had gone to flagship with no pruning. The gap between this and Actual Cost is your FAGE ROI.",                                                    position:"bottom" },
+    { target:"sv-calls",         title:"Call Volume Split",       body:"Total calls routed this period with economy vs. flagship breakdown. High economy % = strong routing efficiency.",                                                               position:"bottom" },
+    { target:"rptTabRisk",       title:"🛡 Risk & Compliance",    body:"Click this tab to see every governance event — blocked PII, high-risk escalations, collision locks, and a board-ready executive summary.",                                       position:"bottom" },
+    { target:"rptTabDepts",      title:"🏢 Departments",          body:"Click to see a scorecard per department — call volume, economy-tier %, actual cost, and budget bar. Throttled departments flagged.",                                             position:"bottom" },
+    { target:"rptTabEfficiency", title:"🤖 Bot Efficiency",       body:"Click then hit Generate Review to run AI analysis on every agent — grade, findings, and recommendations with projected savings.",                                              position:"bottom" },
+    { target:"rptTabActivity",   title:"📡 Agent Activity",       body:"Click to filter by platform, agent, or tier. Expand any agent row to see its full transaction log.",                                                                           position:"bottom" },
+    { target:"rptTabRoi",        title:"📈 ROI Calculator",       body:"Click to model your own AI usage — calls, token counts, model tier, FAGE plan. See payback period and net annual savings.", position:"bottom", last:true },
   ];
   </script>
 </body>
