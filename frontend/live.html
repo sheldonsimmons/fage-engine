@@ -851,20 +851,33 @@ function addStreamEvent(type, title, body, meta, ctx) {
     rationale,
   };
 
+  // Resolve tier-specific type for color + border-left
+  const tier = (ctx && ctx.tier) || "";
+  const tierType = tier === "Strategist" ? "strategist"
+                 : tier === "Advisor"    ? "advisor"
+                 : tier === "Analyst"    ? "analyst"
+                 : (type === "routine" || type === "complex") ? "scout"
+                 : type;
+
   const colors = {
-    routine:"var(--accent)", complex:"var(--accent-purple)",
-    blocked:"var(--accent-red)", throttled:"var(--accent-yellow)",
-    collision:"var(--accent-yellow)", pruning:"var(--accent-green)",
+    scout:      "var(--tier-scout)",
+    analyst:    "var(--tier-analyst)",
+    advisor:    "var(--tier-advisor)",
+    strategist: "var(--tier-strategist)",
+    blocked:    "var(--accent-red)",
+    throttled:  "var(--accent-yellow)",
+    collision:  "var(--accent-yellow)",
+    pruning:    "var(--tier-scout)",
   };
 
   const el = document.createElement("div");
-  el.className = `gov-event type-${type}`;
+  el.className = `gov-event type-${tierType}`;
   el.id = `gov-ev-${eventId}`;
   el.dataset.type = type;
   el.dataset.dept = (ctx && ctx.dept || "").toLowerCase();
   el.innerHTML = `
     <div class="gov-event-header">
-      <span class="gov-event-type" style="color:${colors[type]}">${title}</span>
+      <span class="gov-event-type" style="color:${colors[tierType] || colors[type] || 'var(--tier-scout)'}">${title}</span>
       <span class="gov-event-time">${nowTime()}</span>
     </div>
     <div class="gov-event-body">${body}</div>
