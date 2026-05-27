@@ -131,7 +131,7 @@ async function sbRunVoiceGuard() {
   result.classList.remove("visible");
 
   try {
-    const data = await apiPost("/api/voice/redact", { transcript: text, department: "Sandbox" });
+    const data = await apiPost("/api/voice/transcript", { transcript: text, department: "Sandbox" });
 
     document.getElementById("sb-vg-count").textContent      = data.redactions_count || 0;
     document.getElementById("sb-vg-confidence").textContent = data.confidence_score != null
