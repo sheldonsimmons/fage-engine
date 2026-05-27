@@ -792,18 +792,18 @@ def _level3_boost(spans: List[RedactionSpan], text: str, warnings: List[str]) ->
             continue
         # Check 80 chars before the span for business context words
         window_before = text_lower[max(0, span.start - 80):span.start]
-        # DATE-OF-BIRTH: drop immediately on ANY business context word —
-        # "invoice number 123456" is never a date-of-birth.
-        if span.pii_type == "DATE-OF-BIRTH":
+        # DATE-OF-BIRTH and MEMBER-ID: drop immediately on ANY business context
+        # word — "invoice number 123456" is never a date-of-birth or member ID.
+        if span.pii_type in ("DATE-OF-BIRTH", "MEMBER-ID"):
             if _BUSINESS_CONTEXT.search(window_before) or _DATE_BUSINESS_CONTEXT.search(window_before):
                 warnings.append(
-                    f"Level 3: suppressed DATE-OF-BIRTH (business context near pos {span.start})"
+                    f"Level 3: suppressed {span.pii_type} (business context near pos {span.start})"
                 )
                 continue  # drop — it's a false positive
             suppressed.append(span)
             continue
 
-        # Other types (MEMBER-ID, ROUTING-NUMBER, BANK-ACCOUNT): reduce confidence
+        # Other types (ROUTING-NUMBER, BANK-ACCOUNT): reduce confidence
         if _BUSINESS_CONTEXT.search(window_before):
             span.confidence = round(max(span.confidence - 0.20, 0.10), 3)
             if span.confidence < 0.40:
@@ -1003,11 +1003,55 @@ def process_transcript(raw: str) -> VoiceGuardResult:
     # Step 6b: Level 3 — context-aware confidence boost + cluster detection
     merged, l3_flagged = _level3_boost(merged, normalized, warnings)
 
-    # Step 7: Apply redactions (process in reverse to preserve indices)
-    clean = normalized
-    for span in sorted(merged, key=lambda s: s.start, reverse=True):
+    # Step 7: Apply redactions to the ORIGINAL (stripped) text so the clean
+    # transcript preserves the caller's natural language (month names, ordinals,
+    # etc.) everywhere except the redacted PII spans.
+    #
+    # Normalization shifts character positions (e.g. "March" → "03" is -3 chars),
+    # so we can't use normalized span positions directly on stripped text.
+    # Strategy: for each span, extract the digit string from normalized text,
+    # then locate those same digits in stripped text within a search window
+    # centred on the approximate original position. Fall back to normalized
+    # position if the digits can't be found in the original (shouldn't happen).
+    clean = stripped
+    orig_redactions = []  # (orig_start, orig_end, tag)
+
+    for span in merged:
         tag = f"[REDACTED-{span.pii_type}]"
-        clean = clean[:span.start] + tag + clean[span.end:]
+        # Digits that were redacted (in normalized text)
+        digit_run = re.sub(r'\D', '', normalized[span.start:span.end])
+
+        # Search window in stripped text — wider than the span to absorb offset drift
+        search_start = max(0, span.start - 50)
+        search_end   = min(len(stripped), span.end + 100)
+        window       = stripped[search_start:search_end]
+
+        # Find first occurrence of these exact digits (ignoring non-digits) in window
+        win_digits = []
+        win_pos    = []
+        for i, ch in enumerate(window):
+            if ch.isdigit():
+                win_digits.append(ch)
+                win_pos.append(i)
+
+        # Slide over win_digits to find where digit_run starts
+        found_orig = False
+        dl = len(digit_run)
+        for k in range(len(win_digits) - dl + 1):
+            if ''.join(win_digits[k:k + dl]) == digit_run:
+                orig_start = search_start + win_pos[k]
+                orig_end   = search_start + win_pos[k + dl - 1] + 1
+                orig_redactions.append((orig_start, orig_end, tag))
+                found_orig = True
+                break
+
+        if not found_orig:
+            # Fallback: use normalized span position directly on clean (may look odd)
+            orig_redactions.append((span.start, span.end, tag))
+
+    # Apply in reverse order to preserve indices
+    for orig_start, orig_end, tag in sorted(orig_redactions, key=lambda x: x[0], reverse=True):
+        clean = clean[:orig_start] + tag + clean[orig_end:]
 
     # Step 8: Build result
     pii_types   = list({s.pii_type for s in merged})
