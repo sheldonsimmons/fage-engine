@@ -117,12 +117,12 @@
 
 <!-- ── KPI Strip (6 cols) ──────────────────────────────────────────────────── -->
 <div class="dash-kpi">
-  <div class="dkpi-card">
+  <div class="dkpi-card" id="kpiSpendCard">
     <div class="dkpi-label">Total Spend Today <span class="help-icon" data-help="kpiSpend" onclick="showHelp('kpiSpend')">?</span></div>
     <div class="dkpi-value" style="color:var(--accent-yellow)" id="kpiSpend">—</div>
     <div class="dkpi-sub" id="kpiSpendSub">across all departments</div>
   </div>
-  <div class="dkpi-card">
+  <div class="dkpi-card" id="kpiTokensSavedCard">
     <div class="dkpi-label">Tokens Saved (Pruning) <span class="help-icon" data-help="kpiTokensSaved" onclick="showHelp('kpiTokensSaved')">?</span></div>
     <div class="dkpi-value" style="color:var(--accent-green)" id="kpiTokensSaved">—</div>
     <div class="dkpi-sub" id="kpiTokensSub">via context sweeper</div>
@@ -132,7 +132,7 @@
     <div class="dkpi-value" id="statMonthSpend">—</div>
     <div class="dkpi-sub">this billing period</div>
   </div>
-  <div class="dkpi-card">
+  <div class="dkpi-card" id="kpiAgentsCard">
     <div class="dkpi-label">Active Agents <span class="help-icon" data-help="kpiAgents" onclick="showHelp('kpiAgents')">?</span></div>
     <div class="dkpi-value" style="color:var(--accent)" id="kpiAgents">—</div>
     <div class="dkpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
@@ -142,7 +142,7 @@
     <div class="dkpi-value" id="kpiThrottled">—</div>
     <div class="dkpi-sub" id="kpiThrottleSub">at or over budget cap</div>
   </div>
-  <div class="dkpi-card alert">
+  <div class="dkpi-card alert" id="kpiBlockedCard">
     <div class="dkpi-label">Blocked Requests</div>
     <div class="dkpi-value" id="kpiBlockedRequests">—</div>
     <div class="dkpi-sub">PII / sensitive terms</div>
@@ -197,7 +197,7 @@
     <div id="draggable-panels">
 
       <!-- ── Agentlake & Budget ───────────────────────────────────────────── -->
-      <div class="dp-wrap dash-section" data-panel-id="budgets-agents">
+      <div class="dp-wrap dash-section" data-panel-id="budgets-agents" id="budgetsAgentsSection">
         <div class="dash-sec-head" onclick="togglePanel('agentBudgetBody','agentBudgetChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
           <span>▸ Agentlake Registry &amp; Budget
@@ -356,7 +356,7 @@
       </div>
 
       <!-- ── Routing Decision Feed ──────────────────────────────────────────── -->
-      <div class="dp-wrap dash-section" data-panel-id="routing-feed">
+      <div class="dp-wrap dash-section" data-panel-id="routing-feed" id="routingFeedSection">
         <div class="dash-sec-head" onclick="togglePanel('routingFeedBody','routingFeedChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
           <span>▸ Routing Decision Feed</span>
@@ -399,7 +399,7 @@
       </div>
 
       <!-- ── AI Decision Audit Log ──────────────────────────────────────────── -->
-      <div class="dp-wrap dash-section" data-panel-id="audit">
+      <div class="dp-wrap dash-section" data-panel-id="audit" id="auditSection">
         <div id="blockedAlertBanner" style="display:none">
           <div class="blocked-banner-inner">
             <span class="blocked-banner-icon">🛡</span>
@@ -466,7 +466,7 @@
   </div><!-- end dash-left -->
 
   <!-- ── Right column — Governance Event Stream (always visible) ──────────── -->
-  <div class="dash-right">
+  <div class="dash-right" id="eventStreamSection">
     <div class="stream-head">
       <div class="stream-head-row">
         <div class="stream-head-label">▸ Governance Event Stream</div>
