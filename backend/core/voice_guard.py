@@ -820,7 +820,8 @@ def _run_presidio(text: str) -> List[RedactionSpan]:
 # Words that suggest a number is business/operational, not personal
 _BUSINESS_CONTEXT = re.compile(
     r'\b(invoice|order|ticket|ref|reference|case|tracking|po number|item|sku|'
-    r'serial|transaction|confirmation|booking|reservation|claim)\b',
+    r'serial|transaction|confirmation|booking|reservation|claim|extension|'
+    r'flight|hotel|rental|appointment|schedule)\b',
     re.IGNORECASE,
 )
 
@@ -890,14 +891,15 @@ def _level3_boost(spans: List[RedactionSpan], text: str, warnings: List[str]) ->
     suppressed = []
     for span in spans:
         if span.pii_type not in ("MEMBER-ID", "ROUTING-NUMBER", "BANK-ACCOUNT", "DATE-OF-BIRTH",
-                                  "CVV", "PIN", "OTP", "CARD-EXPIRY", "ZIP-CODE"):
+                                  "CVV", "PIN", "CARD-EXPIRY", "ZIP-CODE"):
             suppressed.append(span)
             continue
         # Check 80 chars before the span for business context words
         window_before = text_lower[max(0, span.start - 80):span.start]
-        # DATE-OF-BIRTH and MEMBER-ID: drop immediately on ANY business context
-        # word — "invoice number 123456" is never a date-of-birth or member ID.
-        if span.pii_type in ("DATE-OF-BIRTH", "MEMBER-ID"):
+        # DATE-OF-BIRTH, MEMBER-ID, OTP: drop immediately on ANY business context
+        # word — "confirmation code for the booking" is a reference number,
+        # not an auth OTP. Same logic applies to invoice/order numbers.
+        if span.pii_type in ("DATE-OF-BIRTH", "MEMBER-ID", "OTP"):
             if _BUSINESS_CONTEXT.search(window_before) or _DATE_BUSINESS_CONTEXT.search(window_before):
                 warnings.append(
                     f"Level 3: suppressed {span.pii_type} (business context near pos {span.start})"
