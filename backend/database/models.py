@@ -84,6 +84,8 @@ class RegisteredAgent(Base):
     last_used_at     = Column(DateTime, nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
     archived         = Column(Boolean,  nullable=True, default=False)  # soft-delete: hides from live grid, keeps history
+    min_tier         = Column(Integer,  nullable=True, default=1)      # floor tier: routing never goes below this (1=Scout)
+    max_tier         = Column(Integer,  nullable=True, default=4)      # ceiling tier: routing never goes above this (4=Strategist)
 
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")

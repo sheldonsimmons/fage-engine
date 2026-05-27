@@ -168,6 +168,35 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # Run the routing pipeline
     result = route(req.text, req.department, db=db, auto_prune=req.auto_prune, is_throttled=is_throttled, throttle_tier=throttle_tier, force_complex=force_complex)
 
+    # ── Apply agent tier bounds (clamp result to agent's min/max tier) ────────
+    TIER_NUM  = {"Scout": 1, "Analyst": 2, "Advisor": 3, "Strategist": 4,
+                 "micro": 1, "flagship": 3}
+    TIER_NAME = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
+    if agent and (agent.min_tier or agent.max_tier):
+        agent_min = agent.min_tier or 1
+        agent_max = agent.max_tier or 4
+        current_num = TIER_NUM.get(result.get("model_tier", "Scout"), 1)
+        clamped_num = max(agent_min, min(agent_max, current_num))
+        if clamped_num != current_num:
+            # Re-run the model selection for the clamped tier
+            from core.router import _get_model_from_registry
+            clamped_model = _get_model_from_registry(clamped_num, db, req.department) or {}
+            direction = "bumped up" if clamped_num > current_num else "capped down"
+            result = dict(result)
+            result["model_tier"]     = TIER_NAME[clamped_num]
+            result["model_name"]     = clamped_model.get("display_name", result["model_name"])
+            result["routing_reason"] = (
+                f"[AGENT BOUND: {direction} from {TIER_NAME[current_num]} to {TIER_NAME[clamped_num]} "
+                f"by agent policy] " + result["routing_reason"]
+            )
+            # Recalculate cost at clamped tier rates
+            cost_in  = clamped_model.get("cost_input_per_1m",  0.0)
+            cost_out = clamped_model.get("cost_output_per_1m", 0.0)
+            result["cost_usd"] = round(
+                (result["input_tokens"]  / 1_000_000) * cost_in +
+                (result["output_tokens"] / 1_000_000) * cost_out, 6
+            )
+
     if not req.is_test:
         # ── Persist the token transaction ──────────────────────────────────────
         from core.agentlake import infer_platform

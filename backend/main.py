@@ -47,6 +47,20 @@ def _run_migrations():
             conn.commit()
         except Exception:
             pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE registered_agents ADD COLUMN IF NOT EXISTS min_tier INTEGER DEFAULT 1"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE registered_agents ADD COLUMN IF NOT EXISTS max_tier INTEGER DEFAULT 4"
+            ))
+            conn.commit()
+        except Exception:
+            pass
 
 _run_migrations()
 

@@ -37,6 +37,13 @@ class AgentStatus(BaseModel):
     locked_at:        Optional[str]
     lock_reason:      Optional[str]
     archived:         Optional[bool] = False
+    min_tier:         Optional[int]  = 1
+    max_tier:         Optional[int]  = 4
+
+
+class TierBoundsRequest(BaseModel):
+    min_tier: int  # 1–4
+    max_tier: int  # 1–4
 
 
 class RegisterRequest(BaseModel):
@@ -132,6 +139,24 @@ def release_agent(agent_id: int, db: Session = Depends(get_db)):
         return release_lock(db, agent_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.patch("/{agent_id}/tier-bounds")
+def set_tier_bounds(agent_id: int, req: TierBoundsRequest, db: Session = Depends(get_db)):
+    """Set the min/max routing tier for an agent. Clamps future routing decisions."""
+    if not (1 <= req.min_tier <= 4) or not (1 <= req.max_tier <= 4):
+        raise HTTPException(status_code=422, detail="Tier values must be between 1 and 4.")
+    if req.min_tier > req.max_tier:
+        raise HTTPException(status_code=422, detail="min_tier cannot exceed max_tier.")
+    from database.models import RegisteredAgent
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent.min_tier = req.min_tier
+    agent.max_tier = req.max_tier
+    db.commit()
+    db.refresh(agent)
+    return agent
 
 
 @router.post("/{agent_id}/archive")

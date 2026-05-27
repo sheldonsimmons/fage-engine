@@ -10,7 +10,7 @@ async function loadAgents() {
     updateKpiAgents(agents);
   } catch (err) {
     document.getElementById("agentTableBody").innerHTML =
-      `<tr><td colspan="7" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
+      `<tr><td colspan="9" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
   }
 }
 
@@ -48,7 +48,7 @@ function renderAgentTable(agents) {
   }
 
   if (!agents.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No agents registered.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="placeholder">No agents registered.</td></tr>';
     return;
   }
 
@@ -89,6 +89,24 @@ function renderAgentTable(agents) {
       : platform === "HubSpot"    ? "var(--accent-yellow)"
       : "var(--text-muted)";
 
+    const TIER_OPTS = [
+      [1, "Scout",      "var(--tier-scout)"],
+      [2, "Analyst",    "var(--tier-analyst)"],
+      [3, "Advisor",    "var(--tier-advisor)"],
+      [4, "Strategist", "var(--tier-strategist)"],
+    ];
+    const tierSelect = (id, label, current) =>
+      `<select id="${id}" onchange="saveTierBounds(${a.id})"
+         style="background:var(--panel-bg);border:1px solid var(--border);color:var(--text-muted);
+                font-size:10px;padding:2px 4px;border-radius:3px;cursor:pointer">
+        ${TIER_OPTS.map(([v, n]) =>
+          `<option value="${v}" ${v === current ? "selected" : ""}>${label}: ${n}</option>`
+        ).join("")}
+       </select>`;
+
+    const minVal = a.min_tier || 1;
+    const maxVal = a.max_tier || 4;
+
     return `
       <tr id="agent-row-${a.id}" ${a.status === "locked" ? 'class="row-locked"' : ""}>
         <td ${lockTip}>${a.name}</td>
@@ -98,10 +116,46 @@ function renderAgentTable(agents) {
         <td style="font-size:11px; font-weight:600; color:${policyColor}">${policyLabel}</td>
         <td><span class="badge ${badgeClass}">${a.status.toUpperCase()}</span></td>
         <td style="font-size:11px; color:var(--text-muted)">${lastActive}</td>
+        <td style="white-space:nowrap">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            ${tierSelect(`min-tier-${a.id}`, "Min", minVal)}
+            ${tierSelect(`max-tier-${a.id}`, "Max", maxVal)}
+          </div>
+        </td>
         <td>${actionBtn}</td>
       </tr>
     `;
   }).join("");
+}
+
+/** Save tier bounds for an agent — called on dropdown change */
+async function saveTierBounds(agentId) {
+  const minEl = document.getElementById(`min-tier-${agentId}`);
+  const maxEl = document.getElementById(`max-tier-${agentId}`);
+  if (!minEl || !maxEl) return;
+
+  const minTier = parseInt(minEl.value, 10);
+  const maxTier = parseInt(maxEl.value, 10);
+
+  if (minTier > maxTier) {
+    // Snap max up to match min if user set min above max
+    maxEl.value = minTier;
+  }
+
+  try {
+    await apiPatch(`/api/agents/${agentId}/tier-bounds`, {
+      min_tier: parseInt(minEl.value, 10),
+      max_tier: parseInt(maxEl.value, 10),
+    });
+    // Brief visual confirmation
+    const row = document.getElementById(`agent-row-${agentId}`);
+    if (row) {
+      row.style.outline = "1px solid var(--tier-scout)";
+      setTimeout(() => { row.style.outline = ""; }, 800);
+    }
+  } catch (err) {
+    alert("Failed to save tier bounds: " + err.message);
+  }
 }
 
 function updateKpiAgents(agents) {
