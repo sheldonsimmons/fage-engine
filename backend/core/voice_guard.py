@@ -607,6 +607,8 @@ _RESUMPTION_PHRASES = re.compile(
     r'ok\s+(?:it\'?s?|so|here|got)|'
     r'here\s+(?:it\s+is|it\'?s?|they\s+are|are\s+the)|'
     r'got\s+it|alright\s+(?:it\'?s?|so|here)|'
+    r'sorry[,\s]+|excuse\s+me[,\s]+|'
+    r'actually[,\s]+|wait[,\s]+|'
     r'(?:it\'?s?|the\s+rest\s+is|continuing\s+with|rest\s+of\s+(?:it|the\s+number)\s+is))\b',
     re.IGNORECASE,
 )
