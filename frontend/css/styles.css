@@ -319,6 +319,13 @@ body {
 /* ── Audit Log ───────────────────────────────────────────────────────────────── */
 .audit-row:hover td { background: #1c2128; }
 
+/* Flash highlight when jumped to from routing feed */
+.audit-row-highlight td { animation: audit-row-flash 2.5s ease; }
+@keyframes audit-row-flash {
+  0%,100% { background: transparent; }
+  15%,50% { background: rgba(88,166,255,0.18); }
+}
+
 /* BLOCKED row treatment */
 .audit-row.row-blocked td {
   background: #1a0505;

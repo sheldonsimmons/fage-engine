@@ -109,7 +109,7 @@ function renderAuditTable(events) {
                     : "badge-micro";
 
     return `
-      <tr class="${rowClass}" onclick="toggleRationale(${e.id})" style="cursor:pointer">
+      <tr class="${rowClass}" id="audit-entry-${e.id}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale & payload">
         <td style="font-family:var(--font-mono); font-size:11px">${ts}</td>
         <td><span class="badge ${isBlocked ? 'badge-critical' : 'badge-micro'}">${isBlocked ? "🛡 BLOCKED" : e.event_type}</span></td>
         <td>${e.department}</td>
@@ -226,7 +226,7 @@ function _renderRoutingRows(events) {
     const riskClass = `badge-${e.risk_level || "low"}`;
     const rowClass  = isBlocked ? "audit-row row-blocked" : "audit-row";
     return `
-      <tr class="${rowClass}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale">
+      <tr class="${rowClass}" onclick="jumpToMainAuditRow(${e.id})" style="cursor:pointer" title="Click to jump to audit log entry">
         <td style="font-family:var(--font-mono);color:var(--text-muted);font-size:11px">${ts}</td>
         <td style="font-weight:600;color:var(--accent);font-size:11px">${e.agent_name || "—"}</td>
         <td style="color:var(--text-muted);font-size:11px">${e.department || "—"}</td>
@@ -338,3 +338,46 @@ function exportAuditPdf() {
 // Staggered 1200ms
 setTimeout(loadAuditLog, 1200);
 setInterval(loadAuditLog, 15000);
+
+// ── Jump from Routing Feed → Audit Log ───────────────────────────────────────
+// Called when user clicks a routing feed row. Expands the audit panel,
+// scrolls to the matching audit log entry, highlights it, then opens its
+// inline rationale so the full detail is visible immediately.
+
+function jumpToMainAuditRow(eventId) {
+  // 1. Expand audit panel if collapsed
+  const auditBody = document.getElementById("auditBody");
+  const auditChev = document.getElementById("auditChevron");
+  if (auditBody && auditBody.style.display === "none") {
+    auditBody.style.display = "";
+    if (auditChev) auditChev.textContent = "▾";
+  }
+
+  // 2. Load audit log if not yet loaded (first time)
+  const tbody = document.getElementById("auditTableBody");
+  if (tbody && !tbody.querySelector(`#audit-entry-${eventId}`)) {
+    // Reload audit log then retry jump after render
+    loadAuditLog().then(() => {
+      setTimeout(() => _doJumpToAuditEntry(eventId), 400);
+    }).catch(() => _doJumpToAuditEntry(eventId));
+    return;
+  }
+
+  _doJumpToAuditEntry(eventId);
+}
+
+function _doJumpToAuditEntry(eventId) {
+  const row = document.getElementById(`audit-entry-${eventId}`);
+  if (!row) return;
+
+  // 3. Scroll into view
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  // 4. Flash highlight
+  row.classList.remove("audit-row-highlight");
+  void row.offsetWidth; // force reflow so animation restarts
+  row.classList.add("audit-row-highlight");
+
+  // 5. Auto-expand the rationale inline
+  setTimeout(() => toggleRationale(eventId), 400);
+}
