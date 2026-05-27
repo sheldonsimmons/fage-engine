@@ -281,4 +281,6 @@ def _serialize(a: RegisteredAgent) -> dict:
         "lock_reason":      a.lock_reason,
         "last_used_at":     a.last_used_at.isoformat() if a.last_used_at else None,
         "archived":         bool(a.archived),
+        "min_tier":         a.min_tier if a.min_tier is not None else 1,
+        "max_tier":         a.max_tier if a.max_tier is not None else 4,
     }
