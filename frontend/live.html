@@ -450,6 +450,7 @@ let tickCount = 0, lastBlockedAt = -20, lastCollisionAt = -30, lastComplexAt = -
 // ── Governance Event Data Store ────────────────────────────────────────────────
 // Keyed by eventId so clicking any stream event can show full detail
 const _liveEventData = {};
+let _streamEvtCounter = 0; // guarantees unique IDs even within the same ms
 
 // ── Rationale generator ────────────────────────────────────────────────────────
 function genRationale(type, tier, dept, cost, saved, stripped) {
@@ -729,7 +730,7 @@ function seedAuditLog() {
 
 function addStreamEvent(type, title, body, meta, ctx) {
   // ctx = { dept, tier, agent, payload, keywords, cost, saved, stripped }
-  const eventId = `lev-${tickCount}-${Date.now()}`;
+  const eventId = `lev-${++_streamEvtCounter}`;
   const budgetSnap = ctx && ctx.dept ? getBudgetSnap(ctx.dept) : null;
   const rationale  = genRationale(type, ctx && ctx.tier, ctx && ctx.dept, ctx && ctx.cost || 0, ctx && ctx.saved || 0, ctx && ctx.stripped);
 
