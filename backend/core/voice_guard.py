@@ -244,10 +244,9 @@ def normalize_spoken_numbers(text: str) -> str:
             i += 1
             continue
 
-        if word in _MONTHS:
-            result.append(_MONTHS[word])
-            i += 1
-            continue
+        # Month names are NOT normalized globally — they are handled specifically
+        # in the DOB trigger state machine so they don't corrupt the clean output
+        # for non-PII contexts ("the meeting is scheduled for March 15th").
 
         # Spoken separator words → punctuation
         if word in ("dash", "hyphen", "slash"):
@@ -303,7 +302,7 @@ PII_PATTERNS = [
             "my social", "your social", "social is", "social number",
             "full social", "confirm your social", "your full social",
             "social for me", "social on file", "my social number",
-            "social number is", "my number is",
+            "social number is",
         ],
         digit_count=9,
         window_seconds=20,
@@ -365,7 +364,7 @@ PII_PATTERNS = [
             "date of birth", "date of birth is", "dob", "birthday",
             "born on", "born in", "birth date",
         ],
-        digit_count=8,
+        digit_count=0, digit_min=4, digit_max=8,
         window_seconds=20,
         redact_label="DATE-OF-BIRTH",
     ),
@@ -378,6 +377,7 @@ PII_PATTERNS = [
             "my phone", "phone is", "my new number", "new number is",
             "my cell is", "my direct", "direct number", "direct line",
             "text me at", "call me on", "my phone number", "my cell number",
+            "my number is", "other number is",
         ],
         digit_count=10,
         window_seconds=15,
@@ -915,6 +915,19 @@ def process_transcript(raw: str) -> VoiceGuardResult:
             pos = trigger_end
             continue
 
+        # For DATE_OF_BIRTH: months are not normalized globally, so extend the
+        # span backward from first_pos to include any month name between the
+        # trigger and the first digit. "date of birth is January 3 1977" →
+        # span covers "January 3 1977" not just "3 1977".
+        dob_span_start = first_pos
+        if pattern.pii_type == "DATE_OF_BIRTH":
+            pre_digit = normalized[trigger_end:first_pos].lower()
+            for month_name in _MONTHS.keys():
+                idx = pre_digit.rfind(month_name)
+                if idx != -1:
+                    dob_span_start = trigger_end + idx
+                    break
+
         conf, flagged = _score_confidence(
             len(digits),
             pattern.digit_count,
@@ -926,7 +939,7 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         if len(digits) >= max(pattern.digit_min, pattern.digit_count) - 1 and last_pos > first_pos:
             if len(digits) >= (pattern.digit_min if pattern.digit_count == 0 else pattern.digit_count) - 1:
                 all_spans.append(RedactionSpan(
-                    start=first_pos,
+                    start=dob_span_start,
                     end=last_pos + 1,
                     pii_type=pattern.pii_type,
                     digits_found=len(digits),
@@ -1003,55 +1016,13 @@ def process_transcript(raw: str) -> VoiceGuardResult:
     # Step 6b: Level 3 — context-aware confidence boost + cluster detection
     merged, l3_flagged = _level3_boost(merged, normalized, warnings)
 
-    # Step 7: Apply redactions to the ORIGINAL (stripped) text so the clean
-    # transcript preserves the caller's natural language (month names, ordinals,
-    # etc.) everywhere except the redacted PII spans.
-    #
-    # Normalization shifts character positions (e.g. "March" → "03" is -3 chars),
-    # so we can't use normalized span positions directly on stripped text.
-    # Strategy: for each span, extract the digit string from normalized text,
-    # then locate those same digits in stripped text within a search window
-    # centred on the approximate original position. Fall back to normalized
-    # position if the digits can't be found in the original (shouldn't happen).
-    clean = stripped
-    orig_redactions = []  # (orig_start, orig_end, tag)
-
-    for span in merged:
+    # Step 7: Apply redactions (process in reverse to preserve indices).
+    # Month names are no longer normalized globally so normalized ≈ stripped
+    # for non-PII text — "March 15th at 2pm" stays readable.
+    clean = normalized
+    for span in sorted(merged, key=lambda s: s.start, reverse=True):
         tag = f"[REDACTED-{span.pii_type}]"
-        # Digits that were redacted (in normalized text)
-        digit_run = re.sub(r'\D', '', normalized[span.start:span.end])
-
-        # Search window in stripped text — wider than the span to absorb offset drift
-        search_start = max(0, span.start - 50)
-        search_end   = min(len(stripped), span.end + 100)
-        window       = stripped[search_start:search_end]
-
-        # Find first occurrence of these exact digits (ignoring non-digits) in window
-        win_digits = []
-        win_pos    = []
-        for i, ch in enumerate(window):
-            if ch.isdigit():
-                win_digits.append(ch)
-                win_pos.append(i)
-
-        # Slide over win_digits to find where digit_run starts
-        found_orig = False
-        dl = len(digit_run)
-        for k in range(len(win_digits) - dl + 1):
-            if ''.join(win_digits[k:k + dl]) == digit_run:
-                orig_start = search_start + win_pos[k]
-                orig_end   = search_start + win_pos[k + dl - 1] + 1
-                orig_redactions.append((orig_start, orig_end, tag))
-                found_orig = True
-                break
-
-        if not found_orig:
-            # Fallback: use normalized span position directly on clean (may look odd)
-            orig_redactions.append((span.start, span.end, tag))
-
-    # Apply in reverse order to preserve indices
-    for orig_start, orig_end, tag in sorted(orig_redactions, key=lambda x: x[0], reverse=True):
-        clean = clean[:orig_start] + tag + clean[orig_end:]
+        clean = clean[:span.start] + tag + clean[span.end:]
 
     # Step 8: Build result
     pii_types   = list({s.pii_type for s in merged})
