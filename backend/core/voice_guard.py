@@ -303,7 +303,7 @@ PII_PATTERNS = [
             "my social", "your social", "social is", "social number",
             "full social", "confirm your social", "your full social",
             "social for me", "social on file", "my social number",
-            "social number is",
+            "social number is", "my number is",
         ],
         digit_count=9,
         window_seconds=20,
@@ -941,10 +941,12 @@ def process_transcript(raw: str) -> VoiceGuardResult:
         existing = merged[-1]
         prev_method = existing.detection_method
 
-        # Determine if either span came from the trigger state machine
-        # (detection_method == "rule" and pii_type matches a trigger-defined type)
-        existing_is_triggered = (existing.detection_method == "rule")
-        incoming_is_triggered = (span.detection_method == "rule")
+        # Determine if either span came from the TRIGGER state machine.
+        # Use trigger_phrase (non-empty only on state machine spans) to
+        # distinguish triggered spans from direct-pattern spans — both have
+        # detection_method="rule" but direct patterns have no trigger context.
+        existing_is_triggered = (existing.detection_method == "rule" and bool(existing.trigger_phrase))
+        incoming_is_triggered = (span.detection_method == "rule" and bool(span.trigger_phrase))
 
         if existing_is_triggered and not incoming_is_triggered:
             # Keep existing — its label came from trigger context, don't overwrite with AI guess
