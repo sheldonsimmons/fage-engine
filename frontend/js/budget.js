@@ -158,9 +158,10 @@ function renderLiveBudgetBars() {
 
 function updateKpiThrottled() {
   const count = budgetData.filter(b => b.throttled).length;
-  document.getElementById("kpiThrottled").textContent = count;
-  document.getElementById("kpiThrottleCard").className =
-    "kpi-card" + (count > 0 ? " alert" : "");
+  const kpiEl   = document.getElementById("kpiThrottled");
+  const kpiCard = document.getElementById("kpiThrottleCard");
+  if (kpiEl)   kpiEl.textContent = count;
+  if (kpiCard) kpiCard.className = "kpi-card" + (count > 0 ? " alert" : "");
 }
 
 /** Supervisor: update a department's monthly cap */
