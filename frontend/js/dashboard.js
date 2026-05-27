@@ -70,7 +70,7 @@ function renderKpis(d) {
 }
 
 function renderStatBar(d) {
-  document.getElementById("statTotalCalls").textContent      = d.total_calls.toLocaleString();
+  document.getElementById("kpiBlockedRequests").textContent  = (d.blocked_count || 0).toLocaleString();
   document.getElementById("statScoutCalls").textContent      = `${d.scout_calls} (${d.scout_pct}%)`;
   document.getElementById("statAnalystCalls").textContent    = `${d.analyst_calls} (${d.analyst_pct}%)`;
   document.getElementById("statAdvisorCalls").textContent    = `${d.advisor_calls} (${d.advisor_pct}%)`;
