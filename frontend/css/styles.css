@@ -308,15 +308,18 @@ body {
   gap: 5px;
 }
 .gov-event:hover { background: #1c2128; }
-.gov-event.type-routine   { border-left-color: var(--tier-scout); }
-.gov-event.type-moderate  { border-left-color: var(--tier-analyst); }
-.gov-event.type-complex   { border-left-color: var(--tier-advisor); }
-.gov-event.type-strategist{ border-left-color: var(--tier-strategist); }
-.gov-event.type-blocked   { border-left-color: var(--accent-red); background: #1a0505; }
+.gov-event.type-scout      { border-left-color: var(--tier-scout); }
+.gov-event.type-analyst    { border-left-color: var(--tier-analyst); }
+.gov-event.type-advisor    { border-left-color: var(--tier-advisor); }
+.gov-event.type-strategist { border-left-color: var(--tier-strategist); }
+.gov-event.type-routine    { border-left-color: var(--tier-scout); }
+.gov-event.type-moderate   { border-left-color: var(--tier-analyst); }
+.gov-event.type-complex    { border-left-color: var(--tier-advisor); }
+.gov-event.type-blocked    { border-left-color: var(--accent-red); background: #1a0505; }
 .gov-event.type-blocked:hover { background: #220808; }
-.gov-event.type-throttled { border-left-color: var(--accent-yellow); }
-.gov-event.type-collision { border-left-color: var(--accent-yellow); background: #1a1205; }
-.gov-event.type-pruning   { border-left-color: var(--accent-green); }
+.gov-event.type-throttled  { border-left-color: var(--accent-yellow); }
+.gov-event.type-collision  { border-left-color: var(--accent-yellow); background: #1a1205; }
+.gov-event.type-pruning    { border-left-color: var(--tier-scout); }
 
 .gov-event-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .gov-event-type { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }

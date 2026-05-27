@@ -62,32 +62,36 @@ function _streamEventType(e) {
   const outcome = (e.decision_outcome || "").toLowerCase();
   if (outcome.includes("blocked"))    return "blocked";
   if (outcome.includes("throttled") || outcome.includes("downgrad")) return "throttled";
-  const tier = (e.model_tier || "").toLowerCase();
-  if (tier === "advisor" || tier === "strategist") return "complex";
   if (outcome.includes("collision") || outcome.includes("locked")) return "collision";
-  if ((e.tokens_saved || 0) > 0)     return "pruning";
-  return "routine";
+  const tier = (e.model_tier || "").toLowerCase();
+  if (tier === "strategist" || tier === "flagship") return "strategist";
+  if (tier === "advisor")   return "advisor";
+  if (tier === "analyst")   return "analyst";
+  if ((e.tokens_saved || 0) > 0) return "pruning";
+  return "scout";
 }
 
 function _streamEventTitle(e) {
   const type = _streamEventType(e);
-  const tier  = e.model_tier || "";
-  if (type === "blocked")   return "🛡 REQUEST BLOCKED";
-  if (type === "throttled") return "⚡ THROTTLED — Budget Cap";
-  if (type === "collision") return "⚡ CONCURRENCY LOCK";
-  if (type === "pruning")   return "▼ CONTEXT PRUNING";
-  if (tier === "Strategist") return "◈ STRATEGIST MODEL INVOKED";
-  if (tier === "Advisor")    return "◈ ADVISOR MODEL INVOKED";
+  if (type === "blocked")    return "🛡 REQUEST BLOCKED";
+  if (type === "throttled")  return "⚡ THROTTLED — Budget Cap";
+  if (type === "collision")  return "⚡ CONCURRENCY LOCK";
+  if (type === "pruning")    return "▼ CONTEXT PRUNING";
+  if (type === "strategist") return "◈ STRATEGIST MODEL INVOKED";
+  if (type === "advisor")    return "◈ ADVISOR MODEL INVOKED";
+  if (type === "analyst")    return "◈ ROUTINE ROUTING";
   return "◈ ROUTINE ROUTING";
 }
 
 function _streamEventColor(type) {
-  return type === "blocked"   ? "var(--accent-red)"
-       : type === "throttled" ? "var(--accent-yellow)"
-       : type === "collision" ? "var(--accent-yellow)"
-       : type === "complex"   ? "var(--tier-advisor)"
-       : type === "pruning"   ? "var(--accent-green)"
-       : "var(--accent)";
+  return type === "blocked"    ? "var(--accent-red)"
+       : type === "throttled"  ? "var(--accent-yellow)"
+       : type === "collision"  ? "var(--accent-yellow)"
+       : type === "strategist" ? "var(--tier-strategist)"
+       : type === "advisor"    ? "var(--tier-advisor)"
+       : type === "analyst"    ? "var(--tier-analyst)"
+       : type === "pruning"    ? "var(--tier-scout)"
+       : "var(--tier-scout)";
 }
 
 function _fmtStreamTs(iso) {

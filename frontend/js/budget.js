@@ -11,14 +11,28 @@ let budgetData = [];
 
 /** Fetch all budgets and re-render the panel */
 async function loadBudgets() {
+  // Show cached data instantly while fresh data loads in background
+  const cached = localStorage.getItem("fage_budgets");
+  if (cached) {
+    try {
+      budgetData = JSON.parse(cached);
+      renderBudgets();
+      renderLiveBudgetBars();
+      updateKpiThrottled();
+    } catch {}
+  }
+
   try {
     budgetData = await apiGet("/api/budget");
+    localStorage.setItem("fage_budgets", JSON.stringify(budgetData));
     renderBudgets();
     renderLiveBudgetBars();
     updateKpiThrottled();
   } catch (err) {
-    document.getElementById("budgetList").innerHTML =
-      `<p class="placeholder" style="color:var(--accent-red)">Failed to load budgets: ${err.message}</p>`;
+    if (!cached) {
+      document.getElementById("budgetList").innerHTML =
+        `<p class="placeholder" style="color:var(--accent-red)">Failed to load budgets: ${err.message}</p>`;
+    }
   }
 }
 
