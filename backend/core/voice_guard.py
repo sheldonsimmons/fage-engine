@@ -601,15 +601,53 @@ def _vacuum_digits(text: str, start: int, window_chars: int = 300,
 
 
 # Phrases that signal a caller is resuming a number after an interruption.
-# "hold on let me get my card ... okay it's 5 2 1 1 6 6 7 7"
+# Organised by category — all additive, nothing removed from existing patterns.
+#
+# Category 1: Caller pauses to find the number (these appear BEFORE the gap —
+#   not used as resumption markers but consumed by the wide scan window)
+#
+# Category 2: Caller signals they are back / found it
+# Category 3: Self-correction mid-number
+# Category 4: Restatement / confirmation of what follows
+# Category 5: Agent echo response ("yes and the rest is")
 _RESUMPTION_PHRASES = re.compile(
-    r'\b(okay\s+(?:it\'?s?|so|here|got|continuing|the\s+rest|back)|'
-    r'ok\s+(?:it\'?s?|so|here|got)|'
-    r'here\s+(?:it\s+is|it\'?s?|they\s+are|are\s+the)|'
-    r'got\s+it|alright\s+(?:it\'?s?|so|here)|'
-    r'sorry[,\s]+|excuse\s+me[,\s]+|'
-    r'actually[,\s]+|wait[,\s]+|'
-    r'(?:it\'?s?|the\s+rest\s+is|continuing\s+with|rest\s+of\s+(?:it|the\s+number)\s+is))\b',
+    r'\b('
+    # ── Category 2: back / found it / resuming ────────────────────────────
+    r'okay\s+(?:it\'?s?|so|here|got|continuing|the\s+rest|back|where\s+was\s+i|continuing|go(?:ing)?)|'
+    r'ok\s+(?:it\'?s?|so|here|got|back)|'
+    r'alright\s+(?:it\'?s?|so|here|we\s+go|continuing|back)|'
+    r'here\s+(?:it\s+is|it\'?s?|they\s+are|are\s+the\s+rest|we\s+go)|'
+    r'got\s+(?:it|them|it\s+here|it\s+right\s+here)|'
+    r'found\s+it|'
+    r'there\s+(?:it\s+is|we\s+go|they\s+are)|'
+    r"i\'?m\s+back|back[,\s]|"
+    r'bear\s+with\s+me[,\s]*|'
+    # ── Category 3: self-correction ───────────────────────────────────────
+    r'sorry(?:[,\s]|$)|'
+    r'sorry\s+about\s+that[,\s]*|'
+    r'my\s+bad[,\s]*|'
+    r'excuse\s+me[,\s]*|'
+    r'actually(?:[,\s]|$)|'
+    r'wait[,\s]+|'
+    r'no\s+wait[,\s]*|'
+    r'wait\s+no[,\s]*|'
+    r'let\s+me\s+(?:start\s+over|redo\s+that|try\s+again|repeat\s+that)[,\s]*|'
+    r'start(?:ing)?\s+over[,\s]*|'
+    r'from\s+the\s+beginning[,\s]*|'
+    # ── Category 4: restatement / "so it is" confirmations ────────────────
+    r'so\s+(?:it\'?s?|that\'?s?|the\s+number\s+is)[,\s]*|'
+    r'that\s+(?:would\s+be|is)[,\s]*|'
+    r'the\s+(?:number\s+is|rest\s+is|remaining\s+(?:digits?\s+(?:are|is)))[,\s]*|'
+    r'continuing\s+with[,\s]*|'
+    r'rest\s+of\s+(?:it|the\s+number)\s+is[,\s]*|'
+    r'to\s+repeat[,\s]*|'
+    r'again\s+(?:it\'?s?|that\'?s?)[,\s]*|'
+    # ── Category 5: agent-echo response ("yes and the rest is") ──────────
+    r'yes\s+(?:and\s+)?(?:the\s+)?(?:rest|remaining|next\s+(?:part|digits?))\s+(?:is|are)[,\s]*|'
+    r'yes\s+and\s+then[,\s]*|'
+    r'(?:and\s+)?the\s+rest\s+(?:of\s+(?:it\s+)?)?is[,\s]*|'
+    r'(?:and\s+)?then\s+(?:it\'?s?|the\s+rest\s+is)[,\s]*'
+    r')',
     re.IGNORECASE,
 )
 
