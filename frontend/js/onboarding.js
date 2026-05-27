@@ -8,7 +8,7 @@
  *   4. Launch (API calls to create budgets, redirect to dashboard)
  */
 
-let selectedProvider  = "openai";
+let selectedProvider  = "anthropic";
 let voiceGuardEnabled = false;
 
 function toggleVoiceGuard() {
@@ -36,6 +36,7 @@ const defaultDepartments = [
   { name: "Sales",      cap: 0 },
   { name: "Marketing",  cap: 0 },
   { name: "Operations", cap: 0 },
+  { name: "Trips Team", cap: 0 },
 ];
 
 let departments = defaultDepartments.map(d => ({ ...d }));
@@ -185,7 +186,7 @@ function updateBudgetSummary(total) {
 function renderReview() {
   const company  = document.getElementById("companyName").value.trim();
   const budget   = parseFloat(document.getElementById("totalBudget").value);
-  const provider = selectedProvider === "openai" ? "OpenAI (gpt-3.5-turbo · gpt-4o)" : "Anthropic (claude-haiku · claude-sonnet)";
+  const provider = selectedProvider === "openai" ? "OpenAI (GPT-4o Mini · GPT-4o)" : "Anthropic (Claude Haiku 4.5 · Claude Sonnet 4.6)";
 
   document.getElementById("reviewCompany").textContent  = company;
   document.getElementById("reviewProvider").textContent = provider;
