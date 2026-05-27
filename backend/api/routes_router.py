@@ -30,7 +30,7 @@ class RouteRequest(BaseModel):
     agent_name:             Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
     source_platform:        Optional[str] = None   # e.g. "Salesforce" — inferred from agent name if omitted
     voice_guard_processed:  bool = False           # True = Voice Guard already redacted PII numbers, skip PII keyword block
-    min_tokens:             int  = 20              # Skip routing if pruned payload is below this token count (catches empty Salesforce on-create fires)
+    min_tokens:             int  = 3               # Skip routing if pruned payload is below this token count (catches truly empty Salesforce on-create fires)
     is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
 
 
