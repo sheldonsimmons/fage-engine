@@ -366,6 +366,504 @@ const CASE_LIBRARY = [
     subject: "Mobile app keeps crashing on login screen",
     body: "The iOS app crashes every time I try to log in. I've deleted and reinstalled it twice and the problem persists. I'm on an iPhone 15 Pro running iOS 18.3. The crash happens right after I enter my password and tap the login button. Can you check if there's a known issue or a beta fix available?" },
 
+  // ── PRUNING HEAVY — maximum token savings demo ────────────────────────────────
+  // These cases are loaded with email headers, reply chains, signatures,
+  // legal disclaimers, and HTML. The pruner strips all of it.
+
+  { tag:"complex", dept:"Support",
+    subject: "RE: RE: RE: RE: RE: RE: RE: Login broken — Ticket #77431",
+    body: `From: david.morrison@enterprisecorp.com
+To: support@company.com
+CC: it-team@enterprisecorp.com; manager@enterprisecorp.com; helpdesk@enterprisecorp.com
+Date: Wednesday, May 27, 2026, 9:14 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: Login broken — Ticket #77431
+X-Mailer: Microsoft Outlook 16.0
+X-Originating-IP: 192.168.1.44
+X-Spam-Status: No
+MIME-Version: 1.0
+
+Still broken. Nothing has changed on our end. This has been going on for 7 days now.
+
+David Morrison | Senior IT Administrator
+Enterprise Corporation | IT Infrastructure Division
+📍 1200 Business Park Drive, Suite 800, Dallas, TX 75201
+📞 Office: (214) 555-4400 | 📱 Mobile: (214) 555-8812 | 📠 Fax: (214) 555-4401
+✉ david.morrison@enterprisecorp.com | Slack: @dmorrison
+🌐 www.enterprisecorp.com | LinkedIn: linkedin.com/in/davidmorrison
+Microsoft Certified Systems Engineer | CompTIA Security+
+Enterprise Corporation — Powering Business Since 1998
+
+CONFIDENTIALITY NOTICE: This electronic message and any files transmitted with it are intended exclusively for the individual or entity to whom they are addressed. This communication may contain information that is proprietary, privileged, confidential or otherwise legally exempt from disclosure. If you are not the named addressee, you are not authorized to read, print, retain, copy or disseminate this message or any part of it. If you have received this message in error, please notify the originator immediately and destroy all copies of the original message and any attachments. This message has been scanned for malware by Enterprise Corp IT Security (Powered by CrowdStrike Falcon). Enterprise Corporation is an Equal Opportunity Employer.
+
+-----Original Message-----
+From: Support Team [mailto:support@company.com]
+Sent: Tuesday, May 26, 2026 4:32 PM
+To: David Morrison
+CC: it-team@enterprisecorp.com
+Subject: RE: RE: RE: RE: RE: RE: Login broken — Ticket #77431
+
+Hi David,
+
+Thank you for your continued patience as we work through this matter. Our engineering team has been notified and we have escalated this to Tier 2 support. We understand this is frustrating and we appreciate your understanding. A senior engineer will review your case within the next 2 business days. We value your partnership and remain committed to resolving this as quickly as possible.
+
+Best regards,
+Amanda Torres | Customer Support Specialist
+support@company.com | 1-800-555-2000 ext. 4421
+Hours: Monday–Friday 8AM–6PM PT
+Ranked #1 in Customer Satisfaction — G2 Spring 2026
+
+This email and any attachments are confidential. Company Inc. is registered in Delaware, USA. Privacy policy: www.company.com/privacy. This email was automatically scanned by Proofpoint Email Security.
+
+-----Original Message-----
+From: David Morrison [mailto:david.morrison@enterprisecorp.com]
+Sent: Tuesday, May 26, 2026 10:15 AM
+To: Support Team
+Subject: RE: RE: RE: RE: RE: Login broken — Ticket #77431
+
+This is day 6. Our entire finance department cannot access their accounts. 22 users are locked out. I've already tried clearing cache, different browsers, incognito mode, and a different network. None of it works. I need an engineer on this today.
+
+David Morrison | Senior IT Administrator | Enterprise Corporation
+📞 (214) 555-4400 | ✉ david.morrison@enterprisecorp.com
+
+CONFIDENTIALITY NOTICE: This message is intended exclusively for the named recipient. If received in error notify sender and destroy all copies. Scanned by CrowdStrike Falcon.
+
+-----Original Message-----
+From: Support Team [mailto:support@company.com]
+Sent: Monday, May 25, 2026 3:30 PM
+To: David Morrison
+Subject: RE: RE: RE: RE: Login broken — Ticket #77431
+
+Hi David, thank you for following up. We've escalated to our Tier 2 team and expect to have an update within 1-2 business days. We sincerely apologize for the inconvenience and appreciate your continued patience.
+
+James Whitfield | Customer Support Representative — Tier 1
+📞 1-800-555-9000 | ✉ j.whitfield@company.com
+Ranked #1 in Customer Satisfaction — G2 Spring 2026
+This email and any attachments are confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: David Morrison
+Sent: Monday, May 25, 2026 9:02 AM
+To: Support Team
+Subject: RE: RE: RE: Login broken — Ticket #77431
+
+Still no resolution. Five days in. I've escalated internally and my VP is now asking for daily updates. When will this be fixed?
+
+David Morrison | Enterprise Corporation | (214) 555-4400
+CONFIDENTIALITY NOTICE: Unauthorized disclosure prohibited. Scanned by CrowdStrike.
+
+-----Original Message-----
+From: Support Team
+Sent: Friday, May 23, 2026 2:17 PM
+Subject: RE: RE: Login broken — Ticket #77431
+
+Hi David, we've received your follow-up and have assigned this to our Tier 2 team. Please try clearing your browser cache and cookies and attempt login using an incognito window. You can also check our status page at status.company.com.
+
+Sarah Mitchell | Support Specialist | support@company.com | 1-800-555-2000
+This email is confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: David Morrison
+Sent: Thursday, May 22, 2026 8:45 AM
+Subject: Login broken — Ticket #77431
+
+Our entire finance team cannot log in. The error says "Authentication service unavailable." This started yesterday morning after your platform update. 22 users affected. We need this fixed today.` },
+
+  { tag:"complex", dept:"Operations",
+    subject: "FW: FW: FW: FW: FW: Server migration — data sync failure",
+    body: `<!DOCTYPE html><html><head><style>body{font-family:Calibri,Arial,sans-serif;font-size:14px;color:#1a1a1a}.disclaimer{font-size:10px;color:#888;border-top:1px solid #ccc;margin-top:20px;padding-top:10px}.sig{color:#555;font-size:12px}table{border-collapse:collapse}td{padding:2px 6px}</style></head><body>
+<p>Team,</p>
+<p>Forwarding again. Still waiting on resolution. The data sync has been failing for 4 days and our quarterly close is tomorrow morning.</p>
+<p class="sig">
+Rachel Kim, CPA, MBA<br/>
+Vice President of Finance &amp; Accounting<br/>
+Meridian Global Holdings — Finance Division<br/>
+📍 One Financial Plaza, 28th Floor, Chicago, IL 60601<br/>
+📞 Direct: (312) 555-7700 | 📱 Cell: (312) 555-9914 | 📠 Fax: (312) 555-7701<br/>
+✉ r.kim@meridianglobal.com<br/>
+🌐 www.meridianglobal.com | Bloomberg: MRDNG:US<br/>
+CPA License #IL-449821 | CFA Level III Candidate<br/>
+<img src="cid:meridian-logo" alt="Meridian Global Holdings" width="200"/><br/>
+<em>Meridian Global Holdings — Excellence in Financial Management Since 1974</em><br/>
+<em>Fortune 500 | NYSE: MRDNG | ISO 27001 Certified | SOC 2 Type II Audited</em>
+</p>
+<div class="disclaimer">CONFIDENTIALITY NOTICE: This electronic message and any attachments are for the exclusive and confidential use of the intended recipient. This communication may contain information that is proprietary, privileged, or otherwise legally exempt from disclosure. If you are not the intended recipient please notify the sender immediately and destroy all copies. Meridian Global Holdings complies with all applicable data protection laws including GDPR and CCPA. This message has been scanned for malware by Meridian IT Security (CrowdStrike Falcon + Microsoft Defender). Meridian Global Holdings is a publicly traded company. Any information contained in this communication that relates to the business affairs of Meridian Global Holdings may constitute material non-public information. Trading on such information may violate securities laws. This email was sent using Microsoft Exchange Server 2019 on-premises. For IT support please contact the Meridian Help Desk at helpdesk@meridianglobal.com or call (312) 555-HELP (4357).</div>
+<hr style="border:none;border-top:1px solid #ccc;margin:20px 0"/>
+<p style="font-size:12px;color:#555"><strong>-----Original Message-----</strong><br/>From: Enterprise Support &lt;support@company.com&gt;<br/>Sent: Tuesday, May 26, 2026 5:18 PM<br/>Subject: RE: FW: FW: FW: FW: Server migration — data sync failure</p>
+<p>Hi Rachel, thank you for your patience. Our engineering team has been notified and we are treating this as a high priority. We expect to have an update within 4 business hours. We sincerely apologize for the disruption this has caused to your operations.</p>
+<p class="sig">Kevin Rasmussen<br/>Senior Customer Success Manager<br/>📞 (628) 555-4490 | ✉ k.rasmussen@company.com<br/>Certified Customer Success Professional<br/><em>"Customers First, Always."</em></p>
+<div class="disclaimer">This email is confidential. Company Inc. | www.company.com. Scanned by Proofpoint.</div>
+<hr style="border:none;border-top:1px solid #ccc;margin:20px 0"/>
+<p style="font-size:12px;color:#555"><strong>-----Original Message-----</strong><br/>From: Rachel Kim &lt;r.kim@meridianglobal.com&gt;<br/>Sent: Tuesday, May 26, 2026 9:44 AM</p>
+<p>This is day 4. Our general ledger sync has been broken since Saturday. We cannot close our books for Q1 without this data. I am formally escalating to your VP of Customer Success. If this is not resolved by 8 AM tomorrow I will be contacting your CEO directly.</p>
+<p class="sig">Rachel Kim, CPA, MBA | VP Finance | Meridian Global Holdings<br/>📞 (312) 555-7700 | ✉ r.kim@meridianglobal.com</p>
+<div class="disclaimer">CONFIDENTIALITY NOTICE: Unauthorized disclosure prohibited. GDPR and CCPA compliant. Scanned by CrowdStrike Falcon.</div>
+<hr style="border:none;border-top:1px solid #ccc;margin:20px 0"/>
+<p style="font-size:12px;color:#555"><strong>-----Original Message-----</strong><br/>Sent: Monday, May 25, 2026 2:30 PM</p>
+<p>Still broken. Four attempts to reconnect the sync have all failed. Error: "Database connection timeout after 30000ms." Our IT team has confirmed the issue is on your platform side, not ours.</p>
+<hr style="border:none;border-top:1px solid #ccc;margin:20px 0"/>
+<p style="font-size:12px;color:#555"><strong>-----Original Message-----</strong><br/>Sent: Saturday, May 23, 2026 11:02 AM</p>
+<p>The data sync between our ERP system and your platform stopped working at approximately 6 PM Friday. We are getting timeout errors on every sync attempt. This is blocking our quarter-close process which must complete by Wednesday morning.</p>
+</body></html>` },
+
+  { tag:"escalate", dept:"Sales",
+    subject: "RE: RE: RE: RE: RE: RE: RE: RE: RE: Contract renewal — legal review",
+    body: `From: margaret.osei@globalventures.com
+To: enterprise@company.com
+CC: legal@globalventures.com; procurement@globalventures.com; cfo@globalventures.com; board-secretary@globalventures.com
+Date: Wednesday, May 27, 2026, 8:22 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: RE: RE: Contract renewal — legal review
+X-Mailer: Microsoft Outlook 16.0
+Importance: High
+
+Forwarding the entire chain for context. Our attorney has reviewed the MSA and we have 14 specific items that require negotiation before we can sign. The contract expires in 12 days. We need a call with your General Counsel this week.
+
+Margaret Osei, JD, MBA
+Chief Procurement Officer & Deputy General Counsel
+Global Ventures International — Legal & Procurement Division
+📍 500 Park Avenue, 42nd Floor, New York, NY 10022
+📞 Direct: (212) 555-3300 | 📱 Mobile: (212) 555-9981 | 📠 Fax: (212) 555-3301
+✉ m.osei@globalventures.com | Assistant: assistant@globalventures.com
+🌐 www.globalventures.com | LinkedIn: linkedin.com/in/margaretosei
+Admitted to the Bar: New York, California, DC
+Global Ventures International — Assets Under Management: $4.2B
+
+CONFIDENTIALITY NOTICE: This communication is from an attorney and may contain attorney-client privileged information and/or work product. It is intended only for the use of the individual or entity to which it is addressed. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution, or use of the contents of this transmission is strictly prohibited. If you have received this communication in error, please immediately notify the sender and destroy this communication and all copies thereof. This message has been scanned for malware. Global Ventures International is regulated by the SEC and FINRA.
+
+-----Original Message-----
+From: Enterprise Sales [mailto:enterprise@company.com]
+Sent: Monday, May 25, 2026 3:15 PM
+Subject: RE: RE: RE: RE: RE: RE: RE: RE: Contract renewal — legal review
+
+Hi Margaret, thank you for your patience throughout this process. We've escalated to our Legal team and they will be in touch within 2 business days. We remain committed to finding mutually agreeable terms and look forward to continuing our partnership.
+
+Thomas Bradley | VP Enterprise Sales
+📞 (415) 555-8800 | ✉ t.bradley@company.com
+Certified: Salesforce, HubSpot, Challenger Sales
+This email is confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: Margaret Osei
+Sent: Monday, May 25, 2026 10:08 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: Contract renewal
+
+Our legal team has completed its review. The indemnification clause in Section 12, the limitation of liability cap in Section 15, the data processing addendum, the governing law clause in Section 22, the auto-renewal terms, and the IP ownership language in Section 8 all require revision before we can execute. We will not sign the agreement as currently written. Please have your General Counsel contact ours directly.
+
+Margaret Osei, JD, MBA | CPO & Deputy GC | Global Ventures International
+📞 (212) 555-3300 | ✉ m.osei@globalventures.com
+CONFIDENTIALITY NOTICE: Attorney-client privileged. Unauthorized disclosure prohibited.
+
+-----Original Message-----
+Sent: Friday, May 23, 2026
+Subject: RE: RE: RE: RE: RE: Contract renewal
+
+We received the redlined MSA. Our legal team is reviewing and will respond by end of next week. The auto-renewal clause is particularly concerning given the 90-day notice requirement.
+
+CONFIDENTIALITY NOTICE: Attorney-client privileged communication. Unauthorized disclosure prohibited. Scanned for malware.
+
+-----Original Message-----
+Sent: Wednesday, May 21, 2026
+Subject: RE: RE: RE: Contract renewal
+
+Sending our redlines to the MSA for your review. We have significant concerns about the indemnification, liability cap, and data processing terms. Our attorney will follow up separately.
+
+CONFIDENTIALITY NOTICE: This communication is attorney-client privileged.` },
+
+  { tag:"complex", dept:"Operations",
+    subject: "RE: RE: RE: RE: RE: RE: RE: RE: Compliance audit — system access logs",
+    body: `From: compliance-team@healthnetwork.org
+To: enterprise-support@company.com
+CC: ciso@healthnetwork.org; legal@healthnetwork.org; audit@healthnetwork.org; dpo@healthnetwork.org; ceo-office@healthnetwork.org
+Date: Wednesday, May 27, 2026, 7:55 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: RE: Compliance audit — system access logs
+X-Mailer: Microsoft Outlook 16.0
+Sensitivity: Confidential
+
+Still waiting. Our external auditor arrives on Monday. We must have the complete system access log export before then.
+
+Dr. Patricia Okonkwo-Williams, MD, MBA, CHCIO, CPHIMS
+Chief Health Informatics & Compliance Officer
+National Health Network — Enterprise Technology & Compliance Division
+📍 4400 Health Sciences Drive, Suite 2200, Atlanta, GA 30339
+📞 Office: (404) 555-3310 | 📱 Cell: (404) 555-8821 | 📠 Fax: (404) 555-3311
+✉ p.okonkwo-williams@healthnetwork.org
+🌐 www.healthnetwork.org
+Diplomate, American Board of Medical Informatics
+Fellow, American College of Healthcare Executives
+Certified in Healthcare Information and Management Systems (CPHIMS)
+HIPAA Privacy Officer | HITECH Compliance Officer
+National Health Network — Serving 2.4M patients across 14 states
+Accredited by The Joint Commission | HIMSS Stage 7 | HITRUST CSF Certified | ISO 27001
+
+CONFIDENTIALITY NOTICE: This electronic message and any files transmitted with it are intended exclusively for the individual or entity to whom it is addressed. This communication may contain protected health information (PHI) subject to HIPAA Privacy and Security Rules (45 CFR Parts 160 and 164), information protected by attorney-client privilege, and/or information that is otherwise legally exempt from disclosure. If you are not the named addressee, you are strictly prohibited from reading, copying, distributing, or taking any action based on the contents of this communication. If received in error, immediately notify the sender and permanently destroy all copies. Unauthorized disclosure of PHI may result in civil penalties up to $1.9 million per violation category per year and criminal penalties under 42 U.S.C. § 1320d-6. This message has been scanned for malware by National Health Network IT Security (CrowdStrike Falcon + Carbon Black). National Health Network is a not-for-profit health system. This email was transmitted using TLS 1.3 encryption.
+
+-----Original Message-----
+From: Enterprise Support [mailto:enterprise-support@company.com]
+Sent: Tuesday, May 26, 2026 6:18 PM
+Subject: RE: RE: RE: RE: RE: RE: RE: Compliance audit — system access logs
+
+Dr. Okonkwo-Williams, thank you for your patience. We have escalated this to our compliance team and our data engineering team is working on preparing the export. We understand the urgency and will provide an update by end of business tomorrow.
+
+Kevin Rasmussen | Senior CSM | k.rasmussen@company.com | (628) 555-4490
+CCSP Certified | This email is confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: Dr. Patricia Okonkwo-Williams
+Sent: Tuesday, May 26, 2026 9:44 AM
+Subject: RE: RE: RE: RE: RE: RE: Compliance audit
+
+This is the fourth time I am requesting the 18-month system access log export. Our HIPAA compliance audit begins Monday. The external auditor requires: all API access logs, user authentication records, data export events, and permission change logs for the period January 1, 2025 through present. The export must be in a format suitable for regulatory submission. We also need your Business Associate Agreement updated to reflect the 2024 HIPAA Omnibus amendments.
+
+CONFIDENTIALITY NOTICE: Contains PHI. HIPAA protected. Unauthorized disclosure prohibited.
+
+-----Original Message-----
+Sent: Monday, May 25, 2026
+Subject: RE: RE: RE: RE: RE: Compliance audit
+
+Still waiting for the log export and updated BAA. Our audit starts in 5 days.
+
+CONFIDENTIALITY NOTICE: PHI protected under HIPAA 45 CFR Parts 160 and 164. Scanned by CrowdStrike.
+
+-----Original Message-----
+Sent: Friday, May 23, 2026
+Subject: RE: RE: RE: RE: Compliance audit
+
+We need the access logs and BAA update urgently. External auditor confirmed for Monday.
+
+CONFIDENTIALITY NOTICE: Contains PHI. HIPAA protected.` },
+
+  { tag:"routine", dept:"Sales",
+    subject: "RE: RE: RE: RE: RE: RE: Pricing inquiry — annual plan",
+    body: `From: james.thornton@acmecorp.com
+To: sales@company.com
+CC: it@acmecorp.com; finance@acmecorp.com
+Date: Wednesday, May 27, 2026, 10:02 AM
+Subject: RE: RE: RE: RE: RE: RE: Pricing inquiry — annual plan
+
+Hi, just following up. Still haven't received the quote.
+
+James Thornton | Director of Technology
+Acme Corporation | Technology Division
+📍 800 Innovation Blvd, Suite 300, Austin, TX 78701
+📞 Direct: (512) 555-2200 | 📱 Mobile: (512) 555-8844
+✉ j.thornton@acmecorp.com
+🌐 www.acmecorp.com
+PMP Certified | AWS Solutions Architect Associate
+
+This email and any attachments are confidential and may be privileged. If you have received this email in error, please notify the sender immediately and delete it. Acme Corporation | www.acmecorp.com. This email was scanned by Symantec Email Security.
+
+-----Original Message-----
+From: Sales Team [mailto:sales@company.com]
+Sent: Monday, May 26, 2026 2:44 PM
+To: James Thornton
+Subject: RE: RE: RE: RE: RE: Pricing inquiry — annual plan
+
+Hi James, thank you for your interest. Our team is preparing a custom quote based on your requirements. We will have it to you by end of this week. We appreciate your patience.
+
+Sarah Mitchell | Account Executive | s.mitchell@company.com | (415) 555-3300
+Salesforce Certified | HubSpot Certified | This email is confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: James Thornton
+Sent: Friday, May 23, 2026 9:15 AM
+Subject: RE: RE: RE: RE: Pricing inquiry — annual plan
+
+Hi, it's been a week. Still waiting on the quote for the annual Business plan for 25 users. Our Q2 budget needs to be finalized by June 1st.
+
+James Thornton | Director of Technology | Acme Corporation | (512) 555-2200
+This email is confidential. Scanned by Symantec.
+
+-----Original Message-----
+From: Sales Team
+Sent: Monday, May 19, 2026
+Subject: RE: RE: RE: Pricing inquiry
+
+Hi James, thank you for reaching out. We'd love to help you find the right plan. Could you confirm the number of users, your primary use case, and whether you need SSO or advanced security features? We'll get you a custom quote.
+
+This email is confidential. Company Inc. | www.company.com. Scanned by Proofpoint.
+
+-----Original Message-----
+From: James Thornton
+Sent: Monday, May 19, 2026
+Subject: Pricing inquiry — annual plan
+
+Hi, we're interested in the annual Business plan for approximately 25 users. Can you send me pricing?
+
+James Thornton | Acme Corporation` },
+
+  { tag:"complex", dept:"Marketing",
+    subject: "RE: RE: RE: RE: RE: RE: RE: Campaign attribution discrepancy — board presentation tomorrow",
+    body: `From: cmo@nexusbrands.com
+To: enterprise-support@company.com
+CC: cfo@nexusbrands.com; analytics@nexusbrands.com; board-prep@nexusbrands.com; legal@nexusbrands.com
+Date: Wednesday, May 27, 2026, 7:08 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: Campaign attribution discrepancy — board presentation tomorrow
+X-Priority: 1
+X-Mailer: Microsoft Outlook 16.0
+
+URGENT. Board presentation is at 9 AM tomorrow. The $1.2M budget discrepancy between your platform and our internal data is still unresolved. We cannot present to the board with unexplained numbers.
+
+Alexandra Chen | Chief Marketing Officer
+Nexus Brands Group — Global Marketing Division
+📍 200 Brand Avenue, 15th Floor, San Francisco, CA 94105
+📞 Direct: (415) 555-6600 | 📱 Cell: (415) 555-9920 | 📠 Fax: (415) 555-6601
+✉ a.chen@nexusbrands.com | Twitter: @alexchen_cmo
+🌐 www.nexusbrands.com | LinkedIn: linkedin.com/in/alexandrachen
+Forbes CMO Next 2025 | AdAge Top 40 Under 40 | Cannes Lions Grand Prix Winner
+Nexus Brands Group — $2.1B Revenue | 34 Countries | 180 Brands
+
+This email and any attachments are strictly confidential and intended solely for the named recipient. If you received this in error, notify the sender immediately and delete all copies. Nexus Brands Group complies with GDPR, CCPA, and all applicable privacy regulations. This communication may contain material non-public business information. This email was automatically scanned by Nexus Brands IT Security.
+
+-----Original Message-----
+From: Enterprise Support [mailto:enterprise-support@company.com]
+Sent: Tuesday, May 26, 2026 8:44 PM
+Subject: RE: RE: RE: RE: RE: RE: Campaign attribution discrepancy
+
+Hi Alexandra, our data science team has been notified and is investigating the attribution discrepancy. We are treating this as urgent given your board presentation timeline. We will have an explanation ready by 7 AM tomorrow morning.
+
+Kevin Rasmussen | Senior CSM | (628) 555-4490 | k.rasmussen@company.com
+This email is confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: Alexandra Chen
+Sent: Tuesday, May 26, 2026 3:22 PM
+Subject: RE: RE: RE: RE: RE: Campaign attribution discrepancy
+
+This is unacceptable. Your platform shows $847,000 attributed to our Q1 spring campaign. Our Salesforce CRM shows $654,000. Our Google Analytics shows $612,000. Three different numbers for the same campaign. Our CFO and board will not accept this tomorrow. I need your data science team on a call today, not tomorrow.
+
+Alexandra Chen | CMO | Nexus Brands Group | (415) 555-6600
+CONFIDENTIALITY NOTICE: Proprietary business information. Unauthorized disclosure prohibited.
+
+-----Original Message-----
+Sent: Monday, May 25, 2026
+Subject: RE: RE: RE: Campaign attribution discrepancy
+
+Week 2 with no explanation for the $1.2M discrepancy. Board presentation rescheduled to Wednesday. This must be resolved before then.
+
+-----Original Message-----
+Sent: Wednesday, May 21, 2026
+Subject: Attribution discrepancy — urgent
+
+Our platform shows $847K attributed revenue for Q1 spring campaign. Our CRM shows $654K. That is a $193,000 discrepancy on a campaign with $1.2M in associated spend. We need an explanation before our board presentation next week.` },
+
+  { tag:"escalate", dept:"Operations",
+    subject: "RE: RE: RE: RE: RE: RE: RE: RE: RE: RE: Litigation hold — data preservation required",
+    body: `From: general-counsel@fortresscapital.com
+To: legal@company.com
+CC: ceo@fortresscapital.com; cfo@fortresscapital.com; compliance@fortresscapital.com; outside-counsel@millerlaw.com; board-chair@fortresscapital.com
+Date: Wednesday, May 27, 2026, 6:45 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: RE: RE: RE: Litigation hold — data preservation required
+X-Priority: 1
+Sensitivity: Confidential
+X-Mailer: Microsoft Outlook 16.0
+
+NOTICE OF LITIGATION HOLD AND PRESERVATION DEMAND — THIRD REQUEST
+
+This is our third written request. We have not received written confirmation of data preservation. Our outside counsel is prepared to seek emergency injunctive relief if written confirmation is not received by 5 PM today.
+
+Jonathan Reeves, JD, LLM
+General Counsel & Chief Legal Officer
+Fortress Capital Management — Legal & Compliance Division
+📍 245 Park Avenue, 38th Floor, New York, NY 10167
+📞 Direct: (212) 555-5500 | 📱 Mobile: (212) 555-9971 | 📠 Fax: (212) 555-5501
+✉ j.reeves@fortresscapital.com | Assistant: legal-assistant@fortresscapital.com
+🌐 www.fortresscapital.com
+New York State Bar | District of Columbia Bar | U.S. Supreme Court Bar
+Fortress Capital Management — AUM: $18.7B | SEC-Registered Investment Adviser
+
+PRIVILEGED AND CONFIDENTIAL — ATTORNEY-CLIENT COMMUNICATION: This message constitutes a privileged and confidential attorney-client communication and/or attorney work product. It is intended solely for the individual or entity to whom it is addressed. Any interception, review, retransmission, dissemination, or other use of, or taking of any action upon, this information by persons or entities other than the intended recipient is prohibited and may subject you to criminal and civil liability. If you received this in error, contact the sender immediately and destroy all copies. This communication is also subject to the attorney-client privilege and work-product doctrine. Fortress Capital Management is a registered investment adviser with the U.S. Securities and Exchange Commission. Communications from Fortress Capital Management may constitute material non-public information. Trading based on such information may violate federal securities laws including Section 10(b) of the Securities Exchange Act of 1934. This email was sent via encrypted transport (TLS 1.3) and has been scanned by Fortress Capital IT Security (Palo Alto Cortex XDR).
+
+-----Original Message-----
+From: Legal Department [mailto:legal@company.com]
+Sent: Tuesday, May 26, 2026 11:30 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: RE: RE: Litigation hold
+
+Dear Mr. Reeves, we have received your litigation hold notice and have escalated to our General Counsel. We will provide written confirmation of data preservation measures by end of business today. We take litigation hold obligations seriously and are committed to full compliance.
+
+Maria Santos | Associate General Counsel | legal@company.com
+PRIVILEGED AND CONFIDENTIAL — ATTORNEY-CLIENT COMMUNICATION. This email is confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: Jonathan Reeves
+Sent: Tuesday, May 26, 2026 9:02 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: RE: Litigation hold — SECOND REQUEST
+
+This is our second request for written confirmation. The litigation hold covers all data, communications, logs, and records associated with account #ENT-00884421 for the period January 1, 2023 through present. Any destruction, alteration, or failure to preserve this data may constitute spoliation of evidence and will be raised with the court.
+
+Jonathan Reeves, JD, LLM | GC & CLO | Fortress Capital Management
+PRIVILEGED AND CONFIDENTIAL — ATTORNEY-CLIENT COMMUNICATION.
+
+-----Original Message-----
+Sent: Monday, May 25, 2026
+Subject: Litigation hold — data preservation demand
+
+We are placing a formal litigation hold on all data associated with our account effective immediately. Preserve all records. Written confirmation required within 24 hours. Outside counsel: Miller & Associates, (212) 555-8800.
+
+PRIVILEGED AND CONFIDENTIAL — ATTORNEY-CLIENT COMMUNICATION.` },
+
+  { tag:"complex", dept:"Support",
+    subject: "RE: RE: RE: RE: RE: RE: RE: RE: Platform outage — SLA breach — $2.4M client at risk",
+    body: `From: vp-operations@titanlogistics.com
+To: enterprise-support@company.com; escalations@company.com; ceo@company.com
+CC: cto@titanlogistics.com; cfo@titanlogistics.com; legal@titanlogistics.com; enterprise-client-lead@titanlogistics.com
+Date: Wednesday, May 27, 2026, 6:30 AM
+Subject: RE: RE: RE: RE: RE: RE: RE: RE: Platform outage — SLA breach — $2.4M client at risk
+X-Priority: 1
+Importance: High
+
+Day 3. Still down. We are formally documenting this as an SLA breach. Our $2.4M annual contract is under review.
+
+Robert Nakamura | Vice President of Operations & Technology
+Titan Logistics Group — Enterprise Operations Division
+📍 1500 Harbor Drive, Suite 1200, Long Beach, CA 90802
+📞 Direct: (562) 555-7700 | 📱 Cell: (562) 555-9944 | 📠 Fax: (562) 555-7701
+✉ r.nakamura@titanlogistics.com
+🌐 www.titanlogistics.com | SCAC: TITL
+Certified in Production and Inventory Management (CPIM)
+Lean Six Sigma Black Belt | Project Management Professional (PMP)
+Titan Logistics Group — 14,000 Shipments Daily | 47 Countries | ISO 9001 Certified
+
+CONFIDENTIALITY NOTICE: This electronic communication is intended only for the named recipient. If received in error, notify the sender and delete all copies. Titan Logistics Group is an interstate carrier subject to federal regulation. This email was scanned by Titan IT Security (Palo Alto + Splunk SIEM).
+
+-----Original Message-----
+From: Enterprise Support [mailto:escalations@company.com]
+Sent: Tuesday, May 26, 2026 9:55 PM
+Subject: RE: RE: RE: RE: RE: RE: RE: Platform outage — SLA breach
+
+Robert, our engineering team has been working around the clock on this. We have identified the root cause — a corrupted database index following last Friday's maintenance update — and are in the process of rebuilding it. We estimate 4-6 hours to full restoration. We sincerely apologize for the impact this has had on your operations.
+
+Director of Enterprise Support | escalations@company.com | 1-800-555-9000
+This email is confidential. Scanned by Proofpoint.
+
+-----Original Message-----
+From: Robert Nakamura
+Sent: Tuesday, May 26, 2026 4:18 PM
+Subject: RE: RE: RE: RE: RE: RE: Platform outage — SLA breach
+
+Our shipment tracking system has been completely down for 72 hours. We have 847 shipments in transit with no visibility. Three of our largest retail clients — combined annual revenue of $2.4M — have escalated to their own executive teams. Our legal team is reviewing the SLA breach provisions in our contract. We need the system restored immediately and a full post-incident report within 48 hours of restoration.
+
+Robert Nakamura | VP Operations | Titan Logistics Group | (562) 555-7700
+CONFIDENTIALITY NOTICE: Proprietary business information.
+
+-----Original Message-----
+Sent: Monday, May 25, 2026
+Subject: RE: RE: RE: Platform outage — Day 2
+
+Still down. 48 hours. Our on-call operations team has been manually processing shipments. This is not sustainable. We need an ETA.
+
+CONFIDENTIALITY NOTICE: Proprietary. Scanned by Palo Alto.
+
+-----Original Message-----
+Sent: Sunday, May 24, 2026
+Subject: RE: RE: Platform outage
+
+24 hours with no resolution and no ETA. Our CEO is now involved. We need executive escalation on your side.
+
+-----Original Message-----
+Sent: Saturday, May 23, 2026
+Subject: Platform outage — shipment tracking down
+
+Our shipment tracking integration went down at 11 PM Friday. We cannot track any of our 847 active shipments. This is mission critical. We need immediate resolution.` },
+
 ];
 
 // Shuffle tracker — ensures no repeats until all 60 are shown
