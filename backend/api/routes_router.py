@@ -75,7 +75,21 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # collapse_whitespace destroys indentation; strip_signatures can mangle
     # function signatures. The pruner was built for prose (emails, tickets).
     # Code lane: pass through raw → secrets detection → routing → audit.
-    _is_code = req.payload_type == "code"
+    from core.pruner import detect_payload_type as _detect_type
+
+    _explicit_code       = req.payload_type == "code"
+    _auto_detected_type  = None
+    _auto_detect_reason  = None
+
+    # Only run auto-detection when caller did NOT explicitly say "code".
+    # If they said "text" or left it blank (defaults to "text"), check the payload.
+    if not _explicit_code:
+        _auto_detected_type, _auto_detect_reason = _detect_type(req.text)
+        if _auto_detected_type == "code":
+            # Override to code lane — log that this was inferred, not declared
+            _explicit_code = True
+
+    _is_code              = _explicit_code
     _effective_auto_prune = req.auto_prune and not _is_code
 
     # ── Minimum payload check ─────────────────────────────────────────────────
@@ -261,7 +275,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 department       = req.department,
                 routing_decision = result["routing_decision"],
                 routing_reason   = (
-                    f"[CODE LANE — pruner bypassed] "
+                    (f"[CODE LANE — auto-detected: {_auto_detect_reason}] "
+                     if (_auto_detected_type == "code")
+                     else "[CODE LANE — pruner bypassed (explicit)] ")
                     + (f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] " if term_result["triggered"] else "")
                     + result["routing_reason"]
                 ) if _is_code else (

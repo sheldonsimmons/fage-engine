@@ -176,6 +176,58 @@ def estimate_tokens(text: str) -> int:
 # Main public function
 # ─────────────────────────────────────────────────────────────────────────────
 
+def detect_payload_type(text: str) -> tuple:
+    """
+    Inspect a payload and infer whether it looks like code or prose.
+
+    Returns (detected_type, reason) where:
+      detected_type — "code" | "text"
+      reason        — plain-English explanation logged in the audit trail
+
+    Signals checked (first match wins, ordered by confidence):
+      1. PEM / private key header          → code, very high confidence
+      2. Shebang line                       → code, high confidence
+      3. Common code block markers          → code, high confidence
+      4. Function / class definition lines  → code, medium confidence
+      5. High density of code punctuation  → code, medium confidence
+      6. Falls through                      → text (prose assumed)
+    """
+    sample = text[:2000]  # inspect first 2000 chars only — fast
+    first_line = sample.splitlines()[0].strip() if sample.strip() else ""
+
+    # 1. PEM / private key header — unambiguous
+    if re.search(r"-----BEGIN\s+\S+\s+(?:PRIVATE\s+)?KEY-----", sample):
+        return ("code", "AUTO-DETECTED as code: PEM key header found — pruner bypassed to protect key structure")
+
+    # 2. Shebang line — unambiguous
+    if first_line.startswith("#!") and ("python" in first_line or "node" in first_line
+                                         or "bash" in first_line or "sh" in first_line):
+        return ("code", "AUTO-DETECTED as code: shebang line found — pruner bypassed")
+
+    # 3. Fenced code block markers (Markdown ```python etc.)
+    if re.search(r"^```\s*\w*\s*$", sample, re.MULTILINE):
+        return ("code", "AUTO-DETECTED as code: fenced code block marker found — pruner bypassed")
+
+    # 4. Function / class / import definition lines
+    code_def_patterns = [
+        r"^(def |async def |class |public class |private class |function |const |let |var )\s*\w+",
+        r"^(import |from \w+ import |require\(|#include |using namespace )",
+        r"^(SELECT |INSERT INTO |UPDATE |DELETE FROM |CREATE TABLE |ALTER TABLE )\s",
+    ]
+    for pat in code_def_patterns:
+        if re.search(pat, sample, re.MULTILINE | re.IGNORECASE):
+            return ("code", f"AUTO-DETECTED as code: code definition pattern matched — pruner bypassed")
+
+    # 5. High punctuation density — code has lots of {}[]();: relative to words
+    #    Count code-specific chars vs total length
+    code_chars = sum(sample.count(c) for c in "{}[]();=><")
+    words       = len(re.findall(r"[a-zA-Z]{3,}", sample))
+    if words > 0 and (code_chars / max(len(sample), 1)) > 0.05 and code_chars > words:
+        return ("code", "AUTO-DETECTED as code: high code-character density — pruner bypassed")
+
+    return ("text", "payload classified as text — standard pruning pipeline applied")
+
+
 def prune(raw_text: str) -> dict:
     """
     Run the full pruning pipeline on a raw text payload.
