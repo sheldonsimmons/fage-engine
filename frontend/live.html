@@ -396,14 +396,19 @@ const AGENTS = [
   { name: "SF-CampaignBot",    dept: "Marketing",  platform: "Salesforce", min_tier: 1, max_tier: 2 },
   { name: "SF-OpsLogger",      dept: "Operations", platform: "Salesforce", min_tier: 1, max_tier: 1 },
   { name: "SF-ComplianceBot",  dept: "Operations", platform: "Salesforce", min_tier: 3, max_tier: 4 },
-  { name: "SN-IncidentRouter", dept: "Operations", platform: "ServiceNow", min_tier: 2, max_tier: 4 },
+  { name: "SN-IncidentRouter",  dept: "Operations",  platform: "ServiceNow", min_tier: 2, max_tier: 4 },
+  { name: "cursor-jsmith",      dept: "Engineering", platform: "Custom",     min_tier: 1, max_tier: 3 },
+  { name: "devin-prod-agent",   dept: "Engineering", platform: "Custom",     min_tier: 2, max_tier: 3 },
+  { name: "github-copilot-ci",  dept: "Engineering", platform: "GitHub",     min_tier: 1, max_tier: 2 },
+  { name: "claude-code-backend",dept: "Engineering", platform: "Custom",     min_tier: 2, max_tier: 3 },
 ];
 
 const BUDGETS = [
-  { dept: "Support",    cap: 8000,  spend: 5842.10, throttled: false },
-  { dept: "Sales",      cap: 12000, spend: 4218.60, throttled: false },
-  { dept: "Marketing",  cap: 6000,  spend: 6104.80, throttled: true  },
-  { dept: "Operations", cap: 4000,  spend: 1289.40, throttled: false },
+  { dept: "Support",     cap: 8000,  spend: 5842.10, throttled: false },
+  { dept: "Sales",       cap: 12000, spend: 4218.60, throttled: false },
+  { dept: "Marketing",   cap: 6000,  spend: 6104.80, throttled: true  },
+  { dept: "Operations",  cap: 4000,  spend: 1289.40, throttled: false },
+  { dept: "Engineering", cap: 200,   spend: 171.40,  throttled: false },
 ];
 
 const ROUTINE_PAYLOADS = [
@@ -436,6 +441,26 @@ const BLOCKED_PAYLOADS = [
   { term: "bank account number",    category: "Financial",  description: "Bank routing and account number detected" },
   { term: "passport number",        category: "HIPAA",      description: "Passport number detected in identity verification request" },
   { term: "medical record ID",      category: "HIPAA",      description: "Patient diagnosis code and medical record ID detected" },
+];
+
+const CODE_PAYLOADS = [
+  "Architecture review: event-driven microservices migration plan — Kafka topic design and consumer group strategy",
+  "Code review: async payment processor with connection pooling across 3 microservices",
+  "SQL query optimization — slow JOIN across orders/users tables, 2.4s avg response time",
+  "Unit test coverage analysis: 47% → 68% after refactor. Review mock strategy for payment service.",
+  "PR review: authentication middleware refactor — JWT validation and session management changes",
+  "Debug: memory leak in Node.js worker — heap dump analysis and fix recommendation",
+  "Design review: database schema migration for multi-tenant SaaS — zero-downtime strategy",
+  "Code audit: rate limiter implementation review before production deploy",
+];
+
+const CODE_BLOCKED_PAYLOADS = [
+  { term: "password=",        category: "Code Secret", description: "Hardcoded database password detected in code payload" },
+  { term: "api_key=",         category: "Code Secret", description: "Hardcoded API key detected in source code" },
+  { term: "AWS Access Key",   category: "Code Secret", description: "AWS AKIA key pattern detected in CI config" },
+  { term: "sk_live_ (Stripe)",category: "Code Secret", description: "Stripe live secret key detected in environment config" },
+  { term: "JWT Bearer token", category: "Code Secret", description: "Production JWT token detected in code payload" },
+  { term: "private_key",      category: "Code Secret", description: "PEM private key header detected in payload" },
 ];
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -478,6 +503,10 @@ function genRationale(type, tier, dept, cost, saved, stripped) {
       return `CostPilot Context Pruner applied before Scout invocation. ${stripped ? stripped.toLocaleString() : "—"} redundant tokens removed from payload history. Pruning savings: $${saved.toFixed(6)} at Advisor rate. Payload quality preserved — only stale context removed.`;
     case "collision":
       return `CostPilot Traffic Cop detected concurrent record access conflict. Two agents targeted the same resource simultaneously. Both agents locked — supervisor action required to unlock and prevent conflicting AI outputs or data corruption.`;
+    case "code":
+      return `CODE LANE — auto-detected as code payload. Pruner bypassed to protect indentation and function signatures. CostPilot routed to ${tier} model for Engineering code review. Secrets detection ran — no credentials found. Cost: $${cost.toFixed(6)}.`;
+    case "code-blocked":
+      return `CODE SECRETS BLOCK. CostPilot intercepted a hardcoded credential in the code payload before reaching any AI model. Zero tokens sent. Engineering agent notified — rotate the credential immediately. Cost avoided: $${saved.toFixed(6)}.`;
     default:
       return "—";
   }
@@ -989,10 +1018,12 @@ function tick() {
   const canComplex   = (tickCount - lastComplexAt)   >= 4;
 
   let eventType;
-  if      (canBlock     && rand < 0.08) { eventType = "blocked";   lastBlockedAt   = tickCount; }
-  else if (canCollision && rand < 0.04) { eventType = "collision"; lastCollisionAt = tickCount; }
-  else if (agent.dept === "Marketing" && state.budgets[2].throttled) { eventType = "throttled"; }
-  else if (canComplex   && rand < 0.28) { eventType = "complex";   lastComplexAt   = tickCount; }
+  if      (canBlock     && rand < 0.08) { eventType = "blocked";      lastBlockedAt   = tickCount; }
+  else if (canCollision && rand < 0.04) { eventType = "collision";    lastCollisionAt = tickCount; }
+  else if (agent.dept === "Marketing" && state.budgets[2].throttled)  { eventType = "throttled"; }
+  else if (agent.dept === "Engineering" && canBlock && rand < 0.22)   { eventType = "code-blocked"; lastBlockedAt = tickCount; }
+  else if (agent.dept === "Engineering")                               { eventType = "code"; }
+  else if (canComplex   && rand < 0.28) { eventType = "complex";      lastComplexAt   = tickCount; }
   else if (rand < 0.12)                 { eventType = "pruning"; }
   else                                  { eventType = "routine"; }
 
@@ -1063,6 +1094,54 @@ function tick() {
       `Routing saving $${saved.toFixed(6)} vs Advisor baseline`,
       { dept: agent.dept, tier: "Scout", agent: agent.name, payload, keywords: [], cost, saved });
     setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 2000);
+
+  } else if (eventType === "code-blocked") {
+    const b     = CODE_BLOCKED_PAYLOADS[Math.floor(Math.random() * CODE_BLOCKED_PAYLOADS.length)];
+    const saved = calcCost("Advisor", 1500, 0);
+    state.agentStatuses[agentIdx] = "idle";
+    state.blocked++;
+    state.tierSavings += saved;
+    flash("red");
+    _liveEventData[eventId] = {
+      dept: agent.dept, tier: "—", agent: agent.name,
+      payload: `[Engineering · CODE LANE] ${b.description}. Credential intercepted before reaching AI model — rotate immediately.`,
+      keywords: [b.term], cost: 0, saved, budgetSnap: getBudgetSnap(agent.dept),
+      rationale: genRationale("code-blocked", "—", agent.dept, 0, saved, 0),
+    };
+    addRoutingRow(eventId, agent.name, agent.dept, "BLOCKED", `CODE SECRET: ${b.term}`, 0, true);
+    addAuditRow(eventId, "blocked", agent.dept, "—", "critical", "Code Secret Blocked", 0, saved);
+    addStreamEvent("blocked", "🔐 CODE SECRET BLOCKED",
+      `${b.description} — credential intercepted by CostPilot Secrets Guard`,
+      `Term: "${b.term}" · Category: ${b.category} · Cost avoided: $${saved.toFixed(6)}`,
+      { dept: agent.dept, tier: "—", agent: agent.name, payload: `[Engineering · CODE LANE] ${b.description}. Credential intercepted before reaching AI.`, keywords: [b.term], cost: 0, saved });
+
+  } else if (eventType === "code") {
+    const payload = CODE_PAYLOADS[Math.floor(Math.random() * CODE_PAYLOADS.length)];
+    const inTok   = 4000 + Math.floor(Math.random() * 8000);
+    const outTok  = 800  + Math.floor(Math.random() * 2000);
+    const tier    = Math.random() < 0.65 ? "Advisor" : "Analyst";
+    const cost    = calcCost(tier, inTok, outTok);
+    state.agentStatuses[agentIdx] = "active";
+    state.calls++; state.callsToday++;
+    if (tier === "Advisor") state.advisorCalls++; else state.analystCalls++;
+    state.spend      = parseFloat((state.spend + cost).toFixed(6));
+    state.spendMonth = parseFloat((state.spendMonth + cost).toFixed(6));
+    // Also tick Engineering budget spend
+    const engBudget = state.budgets.find(b => b.dept === "Engineering");
+    if (engBudget) engBudget.spend = parseFloat((engBudget.spend + cost).toFixed(6));
+    _liveEventData[eventId] = {
+      dept: agent.dept, tier, agent: agent.name,
+      payload: `[${tier} · CODE LANE] ${payload}`, keywords: [], cost, saved: 0,
+      budgetSnap: getBudgetSnap(agent.dept),
+      rationale: genRationale("code", tier, agent.dept, cost, 0, 0),
+    };
+    addRoutingRow(eventId, agent.name, agent.dept, tier, `[CODE] ${payload.slice(0,45)}...`, cost, false);
+    addAuditRow(eventId, "complex", agent.dept, tier, "medium", "Code Lane · Pruner bypassed", cost, 0);
+    addStreamEvent("complex", `◈ CODE LANE — ${tier.toUpperCase()}`,
+      payload,
+      `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${cost.toFixed(6)} · Pruner bypassed`,
+      { dept: agent.dept, tier, agent: agent.name, payload: `[${tier} · CODE LANE] ${payload}`, keywords: [], cost, saved: 0 });
+    setTimeout(() => { state.agentStatuses[agentIdx] = "idle"; renderAgents(); updateKPIs(); }, 3000);
 
   } else if (eventType === "complex") {
     const payload = COMPLEX_PAYLOADS[Math.floor(Math.random() * COMPLEX_PAYLOADS.length)];
@@ -1281,7 +1360,7 @@ function init() {
   addStreamEvent("routine",   "◈ SYSTEM ONLINE",
     "CostPilot Enterprise Demo initialized — all agents registered",
     "Real pricing: Scout $1/$5 · Advisor $3/$15 · Strategist $5/$25 per 1M tokens",
-    { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"CostPilot Enterprise Demo initialized. All 12 Agentlake agents registered across Support, Sales, Marketing, Operations. Real pricing active.", keywords:[], cost:0, saved:0 });
+    { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"CostPilot Enterprise Demo initialized. All 16 Agentlake agents registered across Support, Sales, Marketing, Operations, Engineering. Real pricing active. Engineering code lane enabled — pruner bypassed for code payloads.", keywords:[], cost:0, saved:0 });
 
   setInterval(tick, 2500);
   setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
