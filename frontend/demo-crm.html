@@ -420,9 +420,9 @@
         </div>
       </div>
 
-      <!-- Scenario presets -->
+      <!-- Scenario presets + generate -->
       <div>
-        <div class="form-section-title">2 · Load a Scenario (or write your own)</div>
+        <div class="form-section-title">2 · Load a Scenario</div>
         <div class="scenario-grid">
           <button class="scenario-btn" onclick="loadScenario('routine')">
             <span class="scen-icon">⚡</span>Routine
@@ -439,6 +439,19 @@
           <button class="scenario-btn" onclick="loadScenario('voice')">
             <span class="scen-icon">🎙</span>Voice
           </button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+          <button id="generateBtn" onclick="generateCase()" style="
+            flex:1; background:rgba(188,140,255,0.08); border:1px solid var(--accent-purple);
+            color:var(--accent-purple); border-radius:7px; padding:10px 16px;
+            font:inherit; font-size:12px; font-weight:700; letter-spacing:0.04em;
+            cursor:pointer; transition:opacity 0.15s; display:flex; align-items:center;
+            justify-content:center; gap:6px;">
+            ⚡ Generate Case
+          </button>
+          <span style="font-size:11px;color:var(--text-muted);flex:1;line-height:1.5">
+            60 hand-crafted cases across industries — or write your own in the fields below
+          </span>
         </div>
       </div>
 
