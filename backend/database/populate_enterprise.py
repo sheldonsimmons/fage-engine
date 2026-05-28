@@ -6,9 +6,10 @@ Simulates: Meridian Financial Group
   - Phase 1 (days 1-60):   Early rollout — 100 calls/day, 50% flagship, 60% pruned
   - Phase 2 (days 61-180): Expansion — 250 calls/day, 40% flagship, 72% pruned
   - Phase 3 (days 181-365): Full scale — 500 calls/day, 35% flagship, 76% pruned
-  - ~128,500 total transactions across 4 departments
+  - ~139,000 total transactions across 5 departments (incl. Engineering)
   - Marketing throttled (hits cap repeatedly in Phase 3)
-  - 40 audit events spread across the year — visible in Risk tab timeline
+  - Engineering added: code lane, secrets blocks, runaway loop throttle
+  - 50 audit events spread across the year — visible in Risk tab timeline
   - All range buttons (7D / 30D / 90D / 1Y) have real data
 
 Run from backend folder:
@@ -53,7 +54,9 @@ def populate_enterprise():
         dict(department="Support",    monthly_cap_usd=8000.00,  current_spend_usd=5842.10,  throttled=False, override_granted=False, throttle_tier=2, raw_payload_logging_enabled=True,  raw_retention_days=30),
         dict(department="Sales",      monthly_cap_usd=12000.00, current_spend_usd=4218.60,  throttled=False, override_granted=False, throttle_tier=2, raw_payload_logging_enabled=False, raw_retention_days=30),
         dict(department="Marketing",  monthly_cap_usd=6000.00,  current_spend_usd=6104.80,  throttled=True,  override_granted=False, throttle_tier=1, raw_payload_logging_enabled=False, raw_retention_days=30),
-        dict(department="Operations", monthly_cap_usd=4000.00,  current_spend_usd=1289.40,  throttled=False, override_granted=False, throttle_tier=1, raw_payload_logging_enabled=False, raw_retention_days=30),
+        dict(department="Operations",  monthly_cap_usd=4000.00,  current_spend_usd=1289.40,  throttled=False, override_granted=False, throttle_tier=1, raw_payload_logging_enabled=False, raw_retention_days=30),
+        # Engineering: code lane active, secrets detection, raw logging on for forensics
+        dict(department="Engineering", monthly_cap_usd=200.00,   current_spend_usd=171.40,   throttled=False, override_granted=False, throttle_tier=3, raw_payload_logging_enabled=True,  raw_retention_days=90),
     ]
     for bd in budget_data:
         b = db.query(models.DepartmentBudget).filter_by(department=bd["department"]).first()
@@ -87,7 +90,12 @@ def populate_enterprise():
         dict(name="SF-CampaignBot",    source_platform="Salesforce",   department="Marketing",  permissions="read,write",        target_table="crm_records",        collision_policy="skip",  status="idle"),
         dict(name="SF-OpsLogger",      source_platform="Salesforce",   department="Operations", permissions="read,write,delete", target_table="crm_records",        collision_policy="lock",  status="idle"),
         dict(name="SF-ComplianceBot",  source_platform="Salesforce",   department="Operations", permissions="read",              target_table="audit_events",       collision_policy="lock",  status="idle"),
-        dict(name="SN-IncidentRouter", source_platform="ServiceNow",   department="Operations", permissions="read,write",        target_table="tickets",            collision_policy="queue", status="idle"),
+        dict(name="SN-IncidentRouter",  source_platform="ServiceNow",   department="Operations", permissions="read,write",        target_table="tickets",            collision_policy="queue", status="idle"),
+        # Engineering agents — coding assistants and CI pipeline bots
+        dict(name="cursor-jsmith",       source_platform="Custom",        department="Engineering", permissions="read,write",        target_table="tickets",            collision_policy="lock",  status="idle"),
+        dict(name="devin-prod-agent",    source_platform="Custom",        department="Engineering", permissions="read,write",        target_table="tickets",            collision_policy="queue", status="idle"),
+        dict(name="github-copilot-ci",   source_platform="GitHub",        department="Engineering", permissions="read",              target_table="tickets",            collision_policy="skip",  status="idle"),
+        dict(name="claude-code-backend", source_platform="Custom",        department="Engineering", permissions="read,write",        target_table="tickets",            collision_policy="lock",  status="idle"),
     ]
 
     agents = []
@@ -103,10 +111,11 @@ def populate_enterprise():
     print(f"   → {len(agents)} agents registered")
 
     dept_agents = {
-        "Support":    [a for a in agents if a.department == "Support"],
-        "Sales":      [a for a in agents if a.department == "Sales"],
-        "Marketing":  [a for a in agents if a.department == "Marketing"],
-        "Operations": [a for a in agents if a.department == "Operations"],
+        "Support":     [a for a in agents if a.department == "Support"],
+        "Sales":       [a for a in agents if a.department == "Sales"],
+        "Marketing":   [a for a in agents if a.department == "Marketing"],
+        "Operations":  [a for a in agents if a.department == "Operations"],
+        "Engineering": [a for a in agents if a.department == "Engineering"],
     }
 
     # ── 365-day adoption curve transaction history ─────────────────────────────
@@ -121,10 +130,11 @@ def populate_enterprise():
     ]
 
     dept_call_split = {
-        "Support":    0.34,
-        "Sales":      0.28,
-        "Marketing":  0.22,
-        "Operations": 0.16,
+        "Support":     0.30,
+        "Sales":       0.25,
+        "Marketing":   0.20,
+        "Operations":  0.15,
+        "Engineering": 0.10,   # code lane — higher tier mix, lower volume
     }
 
     BATCH_SIZE = 500   # commit every 500 rows — keeps memory low on Heroku
@@ -148,6 +158,10 @@ def populate_enterprise():
                     if dept == "Marketing" and mkt_throttled:
                         is_complex = random.random() < 0.10
                         reason = "THROTTLED" if not is_complex else "COMPLEX"
+                    elif dept == "Engineering":
+                        # Engineering agents use flagship more — code review / complex tasks
+                        is_complex = random.random() < min(complex_pct + 0.20, 0.70)
+                        reason = "COMPLEX" if is_complex else "ROUTINE"
                     else:
                         is_complex = random.random() < complex_pct
                         reason = "COMPLEX" if is_complex else "ROUTINE"
@@ -211,8 +225,13 @@ def populate_enterprise():
         ("Marketing",  agents[8].id, "micro",     1900,  440, True,   590, "THROTTLED"),
         ("Operations", agents[9].id, "flagship",  8400, 2200, True,  1640, "COMPLEX"),
         ("Operations", agents[10].id,"micro",     1400,  320, False,    0, "ROUTINE"),
-        ("Support",    agents[0].id, "micro",     2200,  510, True,   780, "ROUTINE"),
-        ("Sales",      agents[4].id, "micro",     1700,  390, True,   430, "ROUTINE"),
+        ("Support",     agents[0].id,  "micro",     2200,  510, True,   780, "ROUTINE"),
+        ("Sales",       agents[4].id,  "micro",     1700,  390, True,   430, "ROUTINE"),
+        # Engineering today — code reviews and architecture queries, no pruning (code lane)
+        ("Engineering", agents[12].id, "flagship", 10400, 2800, False,    0, "COMPLEX"),
+        ("Engineering", agents[13].id, "flagship", 13200, 3600, False,    0, "COMPLEX"),
+        ("Engineering", agents[14].id, "micro",     2800,  620, False,    0, "ROUTINE"),
+        ("Engineering", agents[15].id, "flagship",  9100, 2400, False,    0, "COMPLEX"),
     ]
     today_batch = []
     for dept, agent_id, tier, inp, out, pruned, saved, reason in today_data:
@@ -244,8 +263,8 @@ def populate_enterprise():
     print("Building enterprise audit events (spread across 365 days)...")
 
     def snap(dept, days_ago=0):
-        caps  = {"Support": 8000, "Sales": 12000, "Marketing": 6000, "Operations": 4000}
-        spent = {"Support": 5842.10, "Sales": 4218.60, "Marketing": 6104.80, "Operations": 1289.40}
+        caps  = {"Support": 8000, "Sales": 12000, "Marketing": 6000, "Operations": 4000, "Engineering": 200}
+        spent = {"Support": 5842.10, "Sales": 4218.60, "Marketing": 6104.80, "Operations": 1289.40, "Engineering": 171.40}
         cap   = caps.get(dept, 5000)
         sp    = spent.get(dept, 0)
         ts    = (now - timedelta(days=days_ago)).isoformat()
@@ -271,6 +290,10 @@ def populate_enterprise():
     ol = agents[9]   # SF-OpsLogger
     co = agents[10]  # SF-ComplianceBot
     ir = agents[11]  # SN-IncidentRouter
+    cj = agents[12]  # cursor-jsmith
+    dv = agents[13]  # devin-prod-agent
+    gh = agents[14]  # github-copilot-ci
+    cc = agents[15]  # claude-code-backend
 
     audit_events = [
 
@@ -589,6 +612,81 @@ def populate_enterprise():
             decision_outcome="Both agents locked — supervisor action required",
             risk_level="high", timestamp=now - timedelta(hours=7, minutes=3),
         ),
+
+        # ── Engineering lane events ────────────────────────────────────────────
+
+        models.AuditEvent(
+            event_type="DECISION", department="Engineering", agent_id=cj.id,
+            model_tier="none", context_snapshot=snap("Engineering", 280),
+            prompt_payload="def connect_db():\n    conn = psycopg2.connect(host='prod-db.internal', user='admin', password='Sup3rS3cr3t!', database='orders')\n    return conn",
+            rationale="CODE SECRETS BLOCK. Keyword match: 'password=' detected in code payload. Hardcoded database credential intercepted before reaching AI model. cursor-jsmith agent — day 85 of Engineering rollout. Developer notified to use environment variables.",
+            decision_outcome="Request blocked by sensitive term policy",
+            risk_level="critical", timestamp=now - timedelta(days=280, hours=11),
+        ),
+        models.AuditEvent(
+            event_type="ROUTING", department="Engineering", agent_id=cc.id,
+            model_tier="flagship", context_snapshot=snap("Engineering", 240),
+            prompt_payload="Review this Python service for architecture issues — handles payment processing, async queue consumers, and database connection pooling across 3 microservices.",
+            rationale="CODE LANE — auto-detected: AUTO-DETECTED as code: code definition pattern matched — pruner bypassed. FLAGSHIP MODEL INVOKED. Complex multi-service architecture review. Pruner bypassed to preserve code structure.",
+            decision_outcome="flagship model used — $0.031800",
+            risk_level="medium", timestamp=now - timedelta(days=240, hours=14),
+        ),
+        models.AuditEvent(
+            event_type="DECISION", department="Engineering", agent_id=dv.id,
+            model_tier="none", context_snapshot=snap("Engineering", 195),
+            prompt_payload="AKIAIOSFODNN7EXAMPLE — use this AWS key to deploy the Lambda function to prod. Access key ID above, secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            rationale="CODE SECRETS BLOCK. Regex match: AWS Access Key ID pattern (AKIA...) detected. Secret access key also present. Both credentials intercepted. devin-prod-agent blocked before AI call. AWS key rotation recommended immediately.",
+            decision_outcome="Request blocked by sensitive term policy",
+            risk_level="critical", timestamp=now - timedelta(days=195, hours=9),
+        ),
+        models.AuditEvent(
+            event_type="THROTTLE", department="Engineering", agent_id=dv.id,
+            model_tier="micro", context_snapshot=snap("Engineering", 155),
+            prompt_payload=None,
+            rationale="BUDGET CAP ENFORCED — RUNAWAY LOOP DETECTED. devin-prod-agent submitted 847 code review requests in 4 hours — agent entered recursive self-improvement loop. Engineering throttled at Advisor ceiling. Loop broken at 89.2% of $200 monthly cap. On-call engineer paged.",
+            decision_outcome="Throttle engaged — Advisor model ceiling enforced for all Engineering requests",
+            risk_level="critical", timestamp=now - timedelta(days=155, hours=3),
+        ),
+        models.AuditEvent(
+            event_type="DECISION", department="Engineering", agent_id=gh.id,
+            model_tier="none", context_snapshot=snap("Engineering", 118),
+            prompt_payload="CI pipeline config: STRIPE_SECRET=sk_live_4eC39HqLyjWDarjtT7vdqe8 — inject into Lambda environment before deployment.",
+            rationale="CODE SECRETS BLOCK. Regex match: Stripe secret key (sk_live_...) pattern detected. Live production Stripe key intercepted in CI config. github-copilot-ci blocked. Key immediately invalidated per incident response procedure.",
+            decision_outcome="Request blocked by sensitive term policy",
+            risk_level="critical", timestamp=now - timedelta(days=118, hours=16),
+        ),
+        models.AuditEvent(
+            event_type="ROUTING", department="Engineering", agent_id=cj.id,
+            model_tier="flagship", context_snapshot=snap("Engineering", 72),
+            prompt_payload="SELECT u.id, u.email, o.total FROM users u JOIN orders o ON u.id = o.user_id WHERE o.created_at > NOW() - INTERVAL '30 days' AND o.status = 'failed' ORDER BY o.total DESC LIMIT 100;",
+            rationale="CODE LANE — auto-detected: AUTO-DETECTED as code: code definition pattern matched (SELECT) — pruner bypassed. FLAGSHIP MODEL INVOKED. SQL query optimization and index recommendation. Pruner bypassed to preserve query syntax.",
+            decision_outcome="flagship model used — $0.019400",
+            risk_level="low", timestamp=now - timedelta(days=72, hours=10),
+        ),
+        models.AuditEvent(
+            event_type="DECISION", department="Engineering", agent_id=cc.id,
+            model_tier="none", context_snapshot=snap("Engineering", 38),
+            prompt_payload="Header: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluVXNlciIsImlhdCI6MTUxNjIzOTAyMn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c — use this prod JWT to test the endpoint.",
+            rationale="CODE SECRETS BLOCK. Regex match: JWT token (eyJ...) pattern detected. Production admin JWT token intercepted. claude-code-backend blocked. Token revoked and re-issued. Prod credential hygiene violation logged.",
+            decision_outcome="Request blocked by sensitive term policy",
+            risk_level="critical", timestamp=now - timedelta(days=38, hours=13),
+        ),
+        models.AuditEvent(
+            event_type="ROUTING", department="Engineering", agent_id=gh.id,
+            model_tier="micro", context_snapshot=snap("Engineering", 14),
+            prompt_payload="Unit test coverage report: 47% → 68% after refactor. All 214 tests passing. Review the attached diff for the payment service and confirm the mocking strategy is correct.",
+            rationale="CODE LANE — explicit payload_type=code declared by caller. MICRO MODEL — routine code review. Test coverage analysis and mock strategy validation. No secrets detected. Pruner bypassed (code lane).",
+            decision_outcome="micro model used — $0.001840",
+            risk_level="low", timestamp=now - timedelta(days=14, hours=11),
+        ),
+        models.AuditEvent(
+            event_type="ROUTING", department="Engineering", agent_id=dv.id,
+            model_tier="flagship", context_snapshot=snap("Engineering", 2),
+            prompt_payload="Full architecture review: event-driven microservices migration plan, Kafka topic design, consumer group strategy, and dead-letter queue configuration for the order processing pipeline.",
+            rationale="CODE LANE — auto-detected: AUTO-DETECTED as code: high code-character density — pruner bypassed. FLAGSHIP MODEL INVOKED. Complex architecture design. Budget: 85.7% used ($171.40 of $200 cap). Approaching cap — throttle pending.",
+            decision_outcome="flagship model used — $0.038200",
+            risk_level="medium", timestamp=now - timedelta(days=2, hours=15, minutes=22),
+        ),
     ]
 
     db.add_all(audit_events)
@@ -597,9 +695,9 @@ def populate_enterprise():
 
     db.close()
     print("\n✅ Enterprise demo loaded — 1 year of adoption curve data")
-    print(f"   → 12 agents · 4 departments · {len(transactions):,} transactions · {len(audit_events)} audit events")
+    print(f"   → 16 agents · 5 departments · {total_inserted:,} transactions · {len(audit_events)} audit events")
     print("   → Phase 1 (100/day) → Phase 2 (250/day) → Phase 3 (500/day)")
-    print("   → Marketing THROTTLED monthly · All range buttons have real data")
+    print("   → Marketing THROTTLED monthly · Engineering code lane active · All range buttons have real data")
     print("   Refresh your dashboard.\n")
 
 
