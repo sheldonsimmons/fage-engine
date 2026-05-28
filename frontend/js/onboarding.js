@@ -1,5 +1,5 @@
 /**
- * onboarding.js — FAGE Client Onboarding Wizard
+ * onboarding.js — CostPilot Client Onboarding Wizard
  *
  * 4-screen wizard:
  *   1. Company setup (name, industry, provider, total budget)
@@ -234,7 +234,7 @@ async function launchFage() {
 
     // Step 2 — Done
     spinner.style.display = "none";
-    title.textContent = "FAGE is ready.";
+    title.textContent = "CostPilot is ready.";
     sub.textContent   = "Your AI governance layer is live. Connect a platform or try Voice Guard now.";
     log("Setup complete!", true);
     document.getElementById("launchPlatformPicker").style.display = "";
@@ -292,7 +292,7 @@ function resetObPlatformScreen() {
 
 // ── Platform Integration (Screen 5) ──────────────────────────────────────────
 
-const FAGE_URL = "https://fage-engine-21cb49fe4806.herokuapp.com";
+const CostPilot_URL = "https://fage-engine-21cb49fe4806.herokuapp.com";
 
 const OB_PLATFORMS = {
   salesforce: { label: "Salesforce",    objects: ["Case","Lead","Opportunity","Contact","Account","Task"],              agentDefault: "SF-CaseBot"    },
@@ -300,7 +300,7 @@ const OB_PLATFORMS = {
   hubspot:    { label: "HubSpot",       objects: ["contacts","deals","tickets","companies","tasks"],                    agentDefault: "HS-TicketBot"  },
   dynamics:   { label: "Dynamics 365", objects: ["incident","lead","opportunity","contact","account"],                  agentDefault: "D365-CaseBot"  },
   zendesk:    { label: "Zendesk",       objects: ["ticket","user","organization","request"],                            agentDefault: "ZD-TicketBot"  },
-  custom:     { label: "Custom/Other",  objects: ["record","event","document","message"],                               agentDefault: "FAGE-Bot"      },
+  custom:     { label: "Custom/Other",  objects: ["record","event","document","message"],                               agentDefault: "CostPilot-Bot"      },
 };
 
 let obSelectedPlatform = null;
@@ -348,7 +348,7 @@ function _obCodeSection(label, hint, code) {
 
 function _obBanner(platform, obj, dept, agent) {
   const lbl = (OB_PLATFORMS[platform] || {}).label || platform;
-  return `<div class="ob-success-banner">FAGE configured for <strong>${_obEsc(lbl)} · ${_obEsc(obj)} → ${_obEsc(dept)}</strong>. Agent: <strong>${_obEsc(agent)}</strong>. Agents appear in the Agentlake Registry on first use.</div>`;
+  return `<div class="ob-success-banner">CostPilot configured for <strong>${_obEsc(lbl)} · ${_obEsc(obj)} → ${_obEsc(dept)}</strong>. Agent: <strong>${_obEsc(agent)}</strong>. Agents appear in the Agentlake Registry on first use.</div>`;
 }
 
 function _obActions() {
@@ -390,18 +390,18 @@ function generateObCode() {
 
 function _genSalesforce(obj, dept, agent) {
   const apex =
-`public class FAGECallout {
-    @InvocableMethod(label='Send to FAGE')
-    public static void sendToFAGE(List<FAGERequest> requests) {
+`public class CostPilotCallout {
+    @InvocableMethod(label='Send to CostPilot')
+    public static void sendToCostPilot(List<CostPilotRequest> requests) {
         if (System.isFuture() || System.isBatch()) return;
-        FAGERequest req = requests[0];
+        CostPilotRequest req = requests[0];
         sendAsync(req.recordId, req.subject, req.recordText, req.department, req.agentName);
     }
 
     @future(callout=true)
     public static void sendAsync(String recordId, String subject,
                                  String recordText, String department, String agentName) {
-        // Always combine Subject + Description so short cases (subject-only) reach FAGE
+        // Always combine Subject + Description so short cases (subject-only) reach CostPilot
         String subj = String.isBlank(subject)     ? '' : subject.trim();
         String body = String.isBlank(recordText)  ? '' : recordText.trim();
         String payload = String.isBlank(subj)
@@ -409,7 +409,7 @@ function _genSalesforce(obj, dept, agent) {
             : (String.isBlank(body) ? subj : subj + '\\n\\n' + body);
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
-        httpReq.setEndpoint('${FAGE_URL}/api/route');
+        httpReq.setEndpoint('${CostPilot_URL}/api/route');
         httpReq.setMethod('POST');
         httpReq.setHeader('Content-Type', 'application/json');
         httpReq.setBody(JSON.serialize(new Map<String, Object>{
@@ -424,15 +424,15 @@ function _genSalesforce(obj, dept, agent) {
         if (res.getStatusCode() == 200 && recordId != null) {
             Map<String,Object> r = (Map<String,Object>) JSON.deserializeUntyped(res.getBody());
             ${obj} rec = new ${obj}(Id = recordId);
-            rec.FAGE_AI_Response__c      = (String)  r.get('simulated_response');
-            rec.FAGE_Model_Used__c       = (String)  r.get('model_name');
-            rec.FAGE_Routing_Decision__c = (String)  r.get('routing_decision');
-            rec.FAGE_Cost_USD__c         = Decimal.valueOf(String.valueOf(r.get('cost_usd')));
+            rec.CostPilot_AI_Response__c      = (String)  r.get('simulated_response');
+            rec.CostPilot_Model_Used__c       = (String)  r.get('model_name');
+            rec.CostPilot_Routing_Decision__c = (String)  r.get('routing_decision');
+            rec.CostPilot_Cost_USD__c         = Decimal.valueOf(String.valueOf(r.get('cost_usd')));
             update rec;
         }
     }
 
-    public class FAGERequest {
+    public class CostPilotRequest {
         @InvocableVariable(required=true  label='Record ID')          public String recordId;
         @InvocableVariable(required=true  label='Subject')            public String subject;
         @InvocableVariable(required=false label='Description / Body') public String recordText;
@@ -445,20 +445,20 @@ function _genSalesforce(obj, dept, agent) {
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-      <div><strong>Add Action → Apex → Send to FAGE</strong><br/>Map these fields:<br/>• Record ID → ${_obEsc(obj)} ID<br/>• <strong>Subject → Subject</strong> (required — short cases like "My email is down" route via Subject)<br/>• Description / Body → Description (optional)<br/>• Department → ${_obEsc(dept)}<br/>• Agent Name → ${_obEsc(agent)}</div></div>
+      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map these fields:<br/>• Record ID → ${_obEsc(obj)} ID<br/>• <strong>Subject → Subject</strong> (required — short cases like "My email is down" route via Subject)<br/>• Description / Body → Description (optional)<br/>• Department → ${_obEsc(dept)}<br/>• Agent Name → ${_obEsc(agent)}</div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">3</span>
       <div><strong>Save &amp; Activate</strong> — agents appear in the Agentlake Registry on first use.</div></div>
   </div>`;
 
   const fieldHtml = `<div class="ob-field-table">
     <div class="ob-field-row ob-field-row-header"><span>Label</span><span>API Name</span><span>Type</span><span>Settings</span></div>
-    <div class="ob-field-row"><span>FAGE AI Response</span><span class="mono">FAGE_AI_Response__c</span><span>Long Text</span><span>32,768 chars</span></div>
-    <div class="ob-field-row"><span>FAGE Model Used</span><span class="mono">FAGE_Model_Used__c</span><span>Text</span><span>255 chars</span></div>
-    <div class="ob-field-row"><span>FAGE Routing</span><span class="mono">FAGE_Routing_Decision__c</span><span>Text</span><span>50 chars</span></div>
-    <div class="ob-field-row"><span>FAGE Cost USD</span><span class="mono">FAGE_Cost_USD__c</span><span>Currency</span><span>12,6</span></div>
+    <div class="ob-field-row"><span>CostPilot AI Response</span><span class="mono">CostPilot_AI_Response__c</span><span>Long Text</span><span>32,768 chars</span></div>
+    <div class="ob-field-row"><span>CostPilot Model Used</span><span class="mono">CostPilot_Model_Used__c</span><span>Text</span><span>255 chars</span></div>
+    <div class="ob-field-row"><span>CostPilot Routing</span><span class="mono">CostPilot_Routing_Decision__c</span><span>Text</span><span>50 chars</span></div>
+    <div class="ob-field-row"><span>CostPilot Cost USD</span><span class="mono">CostPilot_Cost_USD__c</span><span>Currency</span><span>12,6</span></div>
   </div>`;
 
-  return _obCodeSection("Step 1 — Apex Class", "Developer Console → File → Open → FAGECallout → Replace all → Save", apex)
+  return _obCodeSection("Step 1 — Apex Class", "Developer Console → File → Open → CostPilotCallout → Replace all → Save", apex)
     + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 2 — Salesforce Flow</span></div>${flowHtml}</div>`
     + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 3 — Custom Fields on ${_obEsc(obj)}</span><span class="ob-code-hint">Setup → Object Manager → ${_obEsc(obj)} → Fields &amp; Relationships → New</span></div>${fieldHtml}</div>`
     + _obBanner("salesforce", obj, dept, agent) + _obActions();
@@ -471,7 +471,7 @@ function _genServiceNow(obj, dept, agent) {
 
 (function executeRule(current, previous) {
     var rm = new sn_ws.RESTMessageV2();
-    rm.setEndpoint('${FAGE_URL}/api/route');
+    rm.setEndpoint('${CostPilot_URL}/api/route');
     rm.setHttpMethod('POST');
     rm.setRequestHeader('Content-Type', 'application/json');
     rm.setRequestBody(JSON.stringify({
@@ -484,7 +484,7 @@ function _genServiceNow(obj, dept, agent) {
     var response = rm.execute();
     if (response.getStatusCode() == 200) {
         var r = JSON.parse(response.getBody());
-        current.work_notes = '[FAGE] ' + r.simulated_response +
+        current.work_notes = '[CostPilot] ' + r.simulated_response +
             '\\nModel: ' + r.model_name + ' | Cost: $' + r.cost_usd;
     }
 })(current, previous);`;
@@ -504,7 +504,7 @@ const axios = require('axios');
 
 exports.main = async (event, callback) => {
   const text = event.inputFields['description'] || event.inputFields['content'] || '';
-  const res  = await axios.post('${FAGE_URL}/api/route', {
+  const res  = await axios.post('${CostPilot_URL}/api/route', {
     text,
     department:      '${dept}',
     auto_prune:      true,
@@ -534,7 +534,7 @@ function _genDynamics(obj, dept, agent) {
 // Trigger: When a row is added, modified or deleted · Table: ${obj}
 
 Method:  POST
-URI:     ${FAGE_URL}/api/route
+URI:     ${CostPilot_URL}/api/route
 Headers: { "Content-Type": "application/json" }
 Body:
 {
@@ -567,7 +567,7 @@ module.exports = async (event) => {
   const ticketId = event.payload.ticket_id;
   const body     = event.payload.comment.body || '';
 
-  const res  = await fetch('${FAGE_URL}/api/route', {
+  const res  = await fetch('${CostPilot_URL}/api/route', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -582,7 +582,7 @@ module.exports = async (event) => {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_TOKEN' },
     body: JSON.stringify({
-      ticket: { comment: { body: '[FAGE] ' + data.simulated_response, public: false } }
+      ticket: { comment: { body: '[CostPilot] ' + data.simulated_response, public: false } }
     }),
   });
   return { status: 200, model: data.model_name };
@@ -599,10 +599,10 @@ function _genCustom(obj, dept, agent) {
   const python =
 `import requests
 
-FAGE_URL = "${FAGE_URL}"
+CostPilot_URL = "${CostPilot_URL}"
 
 def send_to_fage(text: str) -> dict:
-    resp = requests.post(FAGE_URL + "/api/route", json={
+    resp = requests.post(CostPilot_URL + "/api/route", json={
         "text":            text,
         "department":      "${dept}",
         "auto_prune":      True,
@@ -616,7 +616,7 @@ def send_to_fage(text: str) -> dict:
 # print(result["simulated_response"])`;
 
   const curl =
-`curl -X POST ${FAGE_URL}/api/route \\
+`curl -X POST ${CostPilot_URL}/api/route \\
   -H "Content-Type: application/json" \\
   -d '{
     "text":            "Your ${obj} text here",

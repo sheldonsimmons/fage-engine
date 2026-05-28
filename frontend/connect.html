@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Connect a Platform</title>
+  <title>CostPilot — Connect a Platform</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/onboarding.css" />
   <link rel="stylesheet" href="css/connect.css" />
@@ -15,7 +15,7 @@
     <!-- Brand -->
     <div class="ob-brand">
       <span class="header-logo">◈</span>
-      <span class="header-title">FAGE</span>
+      <span class="header-title">CostPilot</span>
       <span class="ob-brand-sub">Platform Connector</span>
       <a href="/" class="conn-back-link">← Dashboard</a>
     </div>
@@ -37,7 +37,7 @@
     <!-- ── Screen 1: Pick Platform ───────────────────────────────────────── -->
     <div class="ob-screen active" id="screen-1">
       <h1 class="ob-title">Connect a Platform</h1>
-      <p class="ob-subtitle">Which platform do you want to connect to FAGE? Every AI action on this platform will route through your governance layer.</p>
+      <p class="ob-subtitle">Which platform do you want to connect to CostPilot? Every AI action on this platform will route through your governance layer.</p>
 
       <div class="conn-platform-grid">
 
@@ -89,7 +89,7 @@
     <!-- ── Screen 2: Configure Agent ─────────────────────────────────────── -->
     <div class="ob-screen" id="screen-2">
       <h1 class="ob-title" id="configTitle">Configure Your Agent</h1>
-      <p class="ob-subtitle">FAGE will register an AI agent for this platform. Fill in the details below — we've pre-filled sensible defaults to get you started quickly.</p>
+      <p class="ob-subtitle">CostPilot will register an AI agent for this platform. Fill in the details below — we've pre-filled sensible defaults to get you started quickly.</p>
 
       <div class="ob-form">
 
@@ -142,7 +142,7 @@
           <div class="conn-object-grid" id="objectGrid">
             <!-- Rendered by JS based on platform -->
           </div>
-          <span class="conn-field-hint">This tells FAGE what kind of records to lock when the agent is working. For example, if two automations try to update the same Case at the same time, FAGE will detect the conflict and handle it based on your collision policy below.</span>
+          <span class="conn-field-hint">This tells CostPilot what kind of records to lock when the agent is working. For example, if two automations try to update the same Case at the same time, CostPilot will detect the conflict and handle it based on your collision policy below.</span>
         </div>
 
         <div class="ob-field">
@@ -150,7 +150,7 @@
             <span class="conn-label-hint">— What happens if two agents try to work on the same record simultaneously?</span>
           </label>
           <div class="conn-explainer">
-            <strong>Why does this matter?</strong> If Salesforce and ServiceNow both try to update the same customer record at the same time, only one should win. FAGE detects this conflict automatically — your policy below decides what happens next.
+            <strong>Why does this matter?</strong> If Salesforce and ServiceNow both try to update the same customer record at the same time, only one should win. CostPilot detects this conflict automatically — your policy below decides what happens next.
           </div>
           <div class="conn-policy-grid">
             <div class="conn-policy selected" id="policy-lock" onclick="selectPolicy('lock')">
@@ -182,11 +182,11 @@
     <div class="ob-screen" id="screen-3">
       <div class="conn-success-icon">✓</div>
       <h1 class="ob-title">Agent Registered</h1>
-      <p class="ob-subtitle"><strong id="finalAgentName"></strong> is live in your Agentlake Registry. Now point your platform at FAGE using the details below.</p>
+      <p class="ob-subtitle"><strong id="finalAgentName"></strong> is live in your Agentlake Registry. Now point your platform at CostPilot using the details below.</p>
 
       <!-- Webhook URL -->
       <div class="conn-url-card">
-        <div class="conn-url-label">YOUR FAGE WEBHOOK URL</div>
+        <div class="conn-url-label">YOUR CostPilot WEBHOOK URL</div>
         <div class="conn-url-row">
           <code class="conn-url" id="webhookUrl"></code>
           <button class="conn-copy-btn" onclick="copyUrl()">Copy</button>
@@ -212,7 +212,7 @@
 
       <!-- One-way notice + guide for non-Salesforce platforms -->
       <div id="onewayNotice" style="display:none" class="conn-oneway-notice">
-        <strong>&#9888; One-Way Integration:</strong> Data goes <em>to FAGE</em> for governance, routing, and budget tracking. AI responses are visible in your FAGE dashboard but are not automatically written back to your records.
+        <strong>&#9888; One-Way Integration:</strong> Data goes <em>to CostPilot</em> for governance, routing, and budget tracking. AI responses are visible in your CostPilot dashboard but are not automatically written back to your records.
       </div>
       <div class="conn-guide" id="platformGuide"></div>
 

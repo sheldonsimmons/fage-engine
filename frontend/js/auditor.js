@@ -341,7 +341,7 @@ function exportAuditCsv() {
 }
 
 function exportAuditPdf() {
-  printSection("auditBody", "FAGE — AI Decision Audit Log");
+  printSection("auditBody", "CostPilot — AI Decision Audit Log");
 }
 
 // Staggered 1200ms

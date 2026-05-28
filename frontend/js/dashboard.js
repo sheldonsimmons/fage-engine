@@ -1,5 +1,5 @@
 /**
- * dashboard.js — FAGE Executive Dashboard  [Step 7]
+ * dashboard.js — CostPilot Executive Dashboard  [Step 7]
  *
  * Loads GET /api/dashboard on page load and every 15 seconds.
  * Populates all KPI cards, stat bar, and the health indicator.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Setup</title>
+  <title>CostPilot — Setup</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/onboarding.css" />
 </head>
@@ -14,8 +14,8 @@
     <!-- Brand -->
     <div class="ob-brand">
       <span class="header-logo">◈</span>
-      <span class="header-title">FAGE</span>
-      <span class="ob-brand-sub">FinOps Agentlake &amp; Governance Engine</span>
+      <span class="header-title">CostPilot</span>
+      <span class="ob-brand-sub">Navigate AI Spend with Precision</span>
       <a href="/" class="conn-back-link" style="margin-left:auto">← Dashboard</a>
       <a href="/connect.html" class="conn-back-link" style="margin-left:16px">+ Connect Platform</a>
     </div>
@@ -45,7 +45,7 @@
 
     <!-- ── Screen 1: Company Setup ───────────────────────────────────────── -->
     <div class="ob-screen active" id="screen-1">
-      <h1 class="ob-title">Welcome to FAGE</h1>
+      <h1 class="ob-title">Welcome to CostPilot</h1>
       <p class="ob-subtitle">Let's get your AI governance layer set up. This takes about 2 minutes.</p>
 
       <div class="ob-form">
@@ -69,13 +69,13 @@
         <div class="ob-field">
           <label class="ob-label">AI Provider</label>
           <div class="ob-provider-grid">
-            <div class="ob-provider selected" id="prov-openai" onclick="selectProvider('openai')">
+            <div class="ob-provider" id="prov-openai" onclick="selectProvider('openai')">
               <div class="ob-provider-name">OpenAI</div>
-              <div class="ob-provider-models">gpt-3.5-turbo · gpt-4o</div>
+              <div class="ob-provider-models">GPT-4o Mini · GPT-4o</div>
             </div>
-            <div class="ob-provider" id="prov-anthropic" onclick="selectProvider('anthropic')">
+            <div class="ob-provider selected" id="prov-anthropic" onclick="selectProvider('anthropic')">
               <div class="ob-provider-name">Anthropic</div>
-              <div class="ob-provider-models">claude-haiku · claude-sonnet</div>
+              <div class="ob-provider-models">Claude Haiku 4.5 · Claude Sonnet 4.6</div>
             </div>
           </div>
         </div>
@@ -137,7 +137,7 @@
     <!-- ── Screen 3: Review ──────────────────────────────────────────────── -->
     <div class="ob-screen" id="screen-3">
       <h1 class="ob-title">Review Your Setup</h1>
-      <p class="ob-subtitle">Here's what FAGE will configure for you.</p>
+      <p class="ob-subtitle">Here's what CostPilot will configure for you.</p>
 
       <div class="ob-review-card">
         <div class="ob-review-section">
@@ -158,13 +158,13 @@
       <div id="reviewDepts" class="ob-review-depts"></div>
 
       <div class="ob-review-note">
-        FAGE will create these departments and budget caps automatically.
+        CostPilot will create these departments and budget caps automatically.
         You can adjust them anytime from the dashboard.
       </div>
 
       <div class="ob-actions">
         <button class="ob-btn-ghost" onclick="goToScreen(2)">← Back</button>
-        <button class="ob-btn-primary" onclick="launchFage()">Launch FAGE →</button>
+        <button class="ob-btn-primary" onclick="launchFage()">Launch CostPilot →</button>
       </div>
       <div class="ob-error" id="error-3"></div>
     </div>
@@ -173,7 +173,7 @@
     <div class="ob-screen" id="screen-4">
       <div class="ob-launch-wrap">
         <div class="ob-launch-icon">◈</div>
-        <h1 class="ob-title" id="launchTitle">Setting up FAGE...</h1>
+        <h1 class="ob-title" id="launchTitle">Setting up CostPilot...</h1>
         <p class="ob-subtitle" id="launchSub">Creating your departments and budget caps.</p>
         <div class="ob-launch-steps" id="launchSteps"></div>
         <div class="ob-launch-spinner" id="launchSpinner"></div>
@@ -223,7 +223,7 @@
     <!-- ── Screen 5: Connect a Platform ─────────────────────────────────────── -->
     <div class="ob-screen" id="screen-5">
       <h1 class="ob-title">Connect a Platform</h1>
-      <p class="ob-subtitle">Choose your CRM or support platform — FAGE generates the integration code automatically.</p>
+      <p class="ob-subtitle">Choose your CRM or support platform — CostPilot generates the integration code automatically.</p>
 
       <!-- 6 platform tiles using existing ob-provider styles -->
       <div class="ob-provider-grid" style="grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
@@ -302,7 +302,7 @@
           </div>
           <div style="text-align:center;padding:12px;border-left:1px solid var(--border,#30363d);border-right:1px solid var(--border,#30363d)">
             <div style="font-size:28px;margin-bottom:8px">🛡</div>
-            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">FAGE Redacts</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">CostPilot Redacts</div>
             <div style="font-size:11px;color:var(--text-muted)">Names, card numbers, SSNs replaced in &lt;200ms</div>
           </div>
           <div style="text-align:center;padding:12px">
@@ -358,7 +358,7 @@
       </div>
 
       <div class="ob-review-note">
-        Voice Guard is active on your FAGE instance. Connect it to your call platform by piping transcripts to <code style="font-family:monospace;font-size:12px;color:#58a6ff">/api/voice/transcript</code> — it redacts PII before any text reaches the AI.
+        Voice Guard is active on your CostPilot instance. Connect it to your call platform by piping transcripts to <code style="font-family:monospace;font-size:12px;color:#58a6ff">/api/voice/transcript</code> — it redacts PII before any text reaches the AI.
       </div>
 
       <div class="ob-actions" style="margin-top:24px">

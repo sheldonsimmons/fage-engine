@@ -5,8 +5,8 @@ Single entry point for all model calls. Reads .env on startup and routes
 to the correct provider, or falls back to simulation if mode is "simulated".
 
 Environment variables:
-  FAGE_MODEL_MODE   — "simulated" (default) or "live"
-  FAGE_PROVIDER     — "openai" or "anthropic"
+  CostPilot_MODEL_MODE   — "simulated" (default) or "live"
+  CostPilot_PROVIDER     — "openai" or "anthropic"
   OPENAI_API_KEY    — your OpenAI key
   ANTHROPIC_API_KEY — your Anthropic key
   OPENAI_MICRO_MODEL      — e.g. gpt-3.5-turbo
@@ -22,8 +22,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Read config from environment ───────────────────────────────────────────────
-MODEL_MODE = os.getenv("FAGE_MODEL_MODE", "simulated").lower()
-PROVIDER   = os.getenv("FAGE_PROVIDER",   "openai").lower()
+MODEL_MODE = os.getenv("CostPilot_MODEL_MODE", "simulated").lower()
+PROVIDER   = os.getenv("CostPilot_PROVIDER",   "openai").lower()
 
 OPENAI_KEY          = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MICRO        = os.getenv("OPENAI_MICRO_MODEL",    "gpt-3.5-turbo")
@@ -61,7 +61,7 @@ def get_mode_info() -> dict:
 
 def call_model(text: str, model_id: str = None, fallback_tier: str = "micro") -> dict:
     """
-    Main entry point. Routes to live or simulated based on FAGE_MODEL_MODE.
+    Main entry point. Routes to live or simulated based on CostPilot_MODEL_MODE.
 
     Args:
         text          — the prompt text
@@ -87,7 +87,7 @@ def call_model(text: str, model_id: str = None, fallback_tier: str = "micro") ->
 
         # Auto-detect provider from model ID prefix — registry model IDs
         # are authoritative. "claude-*" always goes to Anthropic regardless
-        # of FAGE_PROVIDER env var, so swapping models in the registry
+        # of CostPilot_PROVIDER env var, so swapping models in the registry
         # doesn't require an env var change.
         if resolved_id and resolved_id.startswith("claude-"):
             return _call_anthropic(text, resolved_id)

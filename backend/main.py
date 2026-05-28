@@ -1,5 +1,5 @@
 """
-main.py — FAGE FastAPI application entry point.
+main.py — CostPilot FastAPI application entry point.
 
 Start the server:
     cd backend
@@ -198,7 +198,7 @@ def _patch_routing_config():
 _patch_routing_config()
 
 app = FastAPI(
-    title="FAGE — FinOps Agentlake & Governance Engine",
+    title="CostPilot — FinOps Agentlake & Governance Engine",
     description=(
         "Enterprise AI middleware POC: intelligent token routing, departmental budget "
         "tracking, context pruning, agent registry & concurrency control, and immutable "
@@ -219,12 +219,12 @@ app.add_middleware(
 
 @app.get("/health", tags=["System"])
 def health_check():
-    """Confirms the FAGE backend is live."""
+    """Confirms the CostPilot backend is live."""
     from core.model_client import get_mode_info
     mode = get_mode_info()
     return {
         "status":    "ok",
-        "system":    "FAGE — FinOps Agentlake & Governance Engine",
+        "system":    "CostPilot — FinOps Agentlake & Governance Engine",
         "version":   "0.1.0",
         "dashboard": "http://localhost:8001/",
         "docs_url":  "http://localhost:8001/docs",
@@ -294,7 +294,7 @@ app.include_router(routes_routing_config.router, prefix="/api/routing-config", t
 from api import routes_timeseries
 app.include_router(routes_timeseries.router, prefix="/api/timeseries", tags=["Timeseries"])
 
-# Platform Context Enrichment — FAGE fetches full case context directly from CRM APIs
+# Platform Context Enrichment — CostPilot fetches full case context directly from CRM APIs
 from api import routes_enrich
 app.include_router(routes_enrich.router, prefix="/api/enrich", tags=["Enrichment"])
 
@@ -314,7 +314,7 @@ def populate_demo_data():
 @app.post("/api/admin/populate-enterprise-demo", tags=["Admin"])
 def populate_enterprise_demo_data(background_tasks: BackgroundTasks):
     """
-    DEV/DEMO ONLY — Loads the real FAGE dashboard with enterprise-scale data.
+    DEV/DEMO ONLY — Loads the real CostPilot dashboard with enterprise-scale data.
     12 named agents, 4 departments, 9K transactions over 30 days, Marketing throttled,
     and 12 rich audit events covering blocks, escalations, GDPR, HIPAA, and more.
     Returns immediately — data loads in the background. Refresh dashboard in ~10 seconds.

@@ -1,5 +1,5 @@
 /**
- * demo.js — FAGE Enterprise ROI Demo Page
+ * demo.js — CostPilot Enterprise ROI Demo Page
  *
  * Hardcoded realistic enterprise data for CFO/CTO presentations.
  * Based on real OpenAI gpt-4o and gpt-3.5-turbo pricing:
@@ -36,10 +36,10 @@ function generateData(days) {
   const microDaily    = Math.round(DAILY_CALLS * MICRO_PCT);
   const flagshipDaily = Math.round(DAILY_CALLS * FLAGSHIP_PCT);
 
-  // Cost WITH FAGE (smart routing + pruning)
+  // Cost WITH CostPilot (smart routing + pruning)
   const dailyCostFage = (microDaily * AVG_MICRO_COST) + (flagshipDaily * AVG_FLAGSHIP_COST);
 
-  // Cost WITHOUT FAGE (everything goes flagship, no pruning)
+  // Cost WITHOUT CostPilot (everything goes flagship, no pruning)
   const dailyCostBaseline = (DAILY_CALLS * AVG_FLAGSHIP_UNPRUNED);
 
   // Pruning savings
@@ -150,17 +150,17 @@ const CHART_DEFAULTS = {
 function renderROI(d) {
   document.getElementById("roiRow").innerHTML = `
     <div class="demo-roi-card hero">
-      <div class="demo-roi-label">Total Savings with FAGE</div>
+      <div class="demo-roi-label">Total Savings with CostPilot</div>
       <div class="demo-roi-value green">${fmt$(d.totalSaved)}</div>
       <div class="demo-roi-sub">${d.savingsPct}% reduction vs. unmanaged AI spend</div>
     </div>
     <div class="demo-roi-card">
-      <div class="demo-roi-label">Baseline Spend (No FAGE)</div>
+      <div class="demo-roi-label">Baseline Spend (No CostPilot)</div>
       <div class="demo-roi-value red">${fmt$(d.totalBase)}</div>
       <div class="demo-roi-sub">Everything routed to flagship · no pruning · no throttle</div>
     </div>
     <div class="demo-roi-card">
-      <div class="demo-roi-label">Actual Spend (With FAGE)</div>
+      <div class="demo-roi-label">Actual Spend (With CostPilot)</div>
       <div class="demo-roi-value">${fmt$(d.totalFage)}</div>
       <div class="demo-roi-sub">Smart routing + pruning + budget enforcement</div>
     </div>
@@ -250,14 +250,14 @@ function renderSpendChart(d) {
       labels: d.charts.labels,
       datasets: [
         {
-          label: "Without FAGE (Baseline)",
+          label: "Without CostPilot (Baseline)",
           data: d.charts.spendBaseline,
           borderColor: "#f85149",
           backgroundColor: "rgba(248,81,73,0.08)",
           tension: 0.4, fill: true, pointRadius: 2,
         },
         {
-          label: "With FAGE",
+          label: "With CostPilot",
           data: d.charts.spendWithFage,
           borderColor: "#3fb950",
           backgroundColor: "rgba(63,185,80,0.08)",
@@ -393,7 +393,7 @@ function renderCompliance(d) {
 
 function renderExecSummary(d) {
   const annualSavings = d.totalSaved * (365 / d.days);
-  const fageCost      = 499 * (d.days / 30); // hypothetical FAGE license
+  const fageCost      = 499 * (d.days / 30); // hypothetical CostPilot license
   const netRoi        = annualSavings - (499 * 12);
   const roiMultiple   = (annualSavings / (499 * 12)).toFixed(1);
 

@@ -1,5 +1,5 @@
 """
-api/routes_voice.py — FAGE Voice Guard endpoints
+api/routes_voice.py — CostPilot Voice Guard endpoints
 
 POST /api/voice/transcript  — Process a full post-call transcript
 POST /api/voice/stream      — Process a real-time chunk (Phase 2)

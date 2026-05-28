@@ -10,19 +10,19 @@
 const HELP_CONTENT = {
   kpiSpend: {
     title: "Total Spend Today",
-    body:  "The total cost of all AI model calls made today across every department. FAGE tracks every fraction of a cent — so leadership always knows exactly what AI is costing in real time.",
+    body:  "The total cost of all AI model calls made today across every department. CostPilot tracks every fraction of a cent — so leadership always knows exactly what AI is costing in real time.",
   },
   kpiTokensSaved: {
     title: "Tokens Saved (Pruning)",
-    body:  "Before any text reaches an AI model, FAGE's Context Sweeper strips out junk — email signatures, repeated content, boilerplate noise. Fewer tokens in = lower cost on every call. This counter shows how many tokens have been eliminated.",
+    body:  "Before any text reaches an AI model, CostPilot's Context Sweeper strips out junk — email signatures, repeated content, boilerplate noise. Fewer tokens in = lower cost on every call. This counter shows how many tokens have been eliminated.",
   },
   kpiAgents: {
     title: "Active Agents",
-    body:  "Every AI digital worker connected to FAGE is tracked here. Agents auto-register on first contact — no manual setup needed. Status updates in real time: idle, active, locked, or queued.",
+    body:  "Every AI digital worker connected to CostPilot is tracked here. Agents auto-register on first contact — no manual setup needed. Status updates in real time: idle, active, locked, or queued.",
   },
   kpiThrottled: {
     title: "Throttled Departments",
-    body:  "When a department hits its monthly AI budget cap, FAGE automatically throttles it — switching to a lighter model so work continues without blowing the budget. A supervisor must grant an override to restore full access.",
+    body:  "When a department hits its monthly AI budget cap, CostPilot automatically throttles it — switching to a lighter model so work continues without blowing the budget. A supervisor must grant an override to restore full access.",
   },
   budgetPanel: {
     title: "Department Budgets",
@@ -30,23 +30,23 @@ const HELP_CONTENT = {
   },
   agentPanel: {
     title: "Agentlake Registry",
-    body:  "Every AI agent connected to FAGE appears here automatically on first use. The Traffic Cop monitors all agents in real time — if two agents try to update the same record simultaneously, FAGE detects the collision and locks both until a supervisor resolves it. No data corruption, no silent overwrites.",
+    body:  "Every AI agent connected to CostPilot appears here automatically on first use. The Traffic Cop monitors all agents in real time — if two agents try to update the same record simultaneously, CostPilot detects the collision and locks both until a supervisor resolves it. No data corruption, no silent overwrites.",
   },
   prunerPanel: {
     title: "Context-Pruning Sweeper",
-    body:  "Paste any raw text — a support email, a log, a messy ticket — and FAGE strips it down to only the meaningful content before sending it to an AI model. The savings are shown instantly: tokens removed, cost avoided for both micro and flagship models.",
+    body:  "Paste any raw text — a support email, a log, a messy ticket — and CostPilot strips it down to only the meaningful content before sending it to an AI model. The savings are shown instantly: tokens removed, cost avoided for both micro and flagship models.",
   },
   routerPanel: {
     title: "Token Router & Model Cascader",
-    body:  "FAGE scores every payload for complexity and routes it to the right model tier. Routine requests go to a fast, cheap micro model. Complex or high-risk requests escalate to a flagship model. Throttled departments are automatically downgraded. Every routing decision is logged.",
+    body:  "CostPilot scores every payload for complexity and routes it to the right model tier. Routine requests go to a fast, cheap micro model. Complex or high-risk requests escalate to a flagship model. Throttled departments are automatically downgraded. Every routing decision is logged.",
   },
   keywordsPanel: {
     title: "Sensitive Term Library",
-    body:  "Add any word or phrase your company considers sensitive — legal terms, HIPAA keywords, financial triggers, or custom terms. When FAGE detects a match in a payload, it can flag it in the audit log, escalate it to a flagship model for compliance review, or block the request entirely.",
+    body:  "Add any word or phrase your company considers sensitive — legal terms, HIPAA keywords, financial triggers, or custom terms. When CostPilot detects a match in a payload, it can flag it in the audit log, escalate it to a flagship model for compliance review, or block the request entirely.",
   },
   voiceGuardPanel: {
     title: "Voice Guard — PII Redaction",
-    body:  "Intercepts voice call transcripts before they reach any AI model and strips PII — Social Security numbers, credit cards, routing numbers, dates of birth, phone numbers, and bank accounts — even when a caller says them with hesitations, filler words, or interruptions. Powered by a dual-layer engine: trigger-phrase state machine + Presidio AI pattern recognition. The clean transcript is then passed safely to FAGE for routing.",
+    body:  "Intercepts voice call transcripts before they reach any AI model and strips PII — Social Security numbers, credit cards, routing numbers, dates of birth, phone numbers, and bank accounts — even when a caller says them with hesitations, filler words, or interruptions. Powered by a dual-layer engine: trigger-phrase state machine + Presidio AI pattern recognition. The clean transcript is then passed safely to CostPilot for routing.",
   },
   auditPanel: {
     title: "AI Decision Audit Log",
@@ -58,26 +58,26 @@ const HELP_CONTENT = {
 const TOUR_STEPS = [
   {
     target:   "kpiSpendCard",
-    title:    "Welcome to FAGE",
+    title:    "Welcome to CostPilot",
     body:     "Your real-time AI spend dashboard. Every dollar your AI agents spend is tracked here — by department, by day, by month. Let's take a quick tour.",
     position: "bottom",
   },
   {
     target:   "kpiTokensSavedCard",
     title:    "Instant Cost Savings",
-    body:     "Before any text reaches an AI model, FAGE strips out noise — email signatures, reply chains, HTML, boilerplate. Fewer tokens in means lower cost on every call. Savings stack from the very first request.",
+    body:     "Before any text reaches an AI model, CostPilot strips out noise — email signatures, reply chains, HTML, boilerplate. Fewer tokens in means lower cost on every call. Savings stack from the very first request.",
     position: "bottom",
   },
   {
     target:   "kpiAgentsCard",
     title:    "AI Agent Tracking",
-    body:     "Every AI digital worker connected to FAGE appears here automatically. Agents self-register on first contact — no manual setup required. Status updates in real time: idle, active, locked, or queued.",
+    body:     "Every AI digital worker connected to CostPilot appears here automatically. Agents self-register on first contact — no manual setup required. Status updates in real time: idle, active, locked, or queued.",
     position: "bottom",
   },
   {
     target:   "kpiThrottleCard",
     title:    "Budget Protection",
-    body:     "When a department hits its monthly spend cap, FAGE auto-throttles it — switching all calls to a lighter model so work keeps running without blowing the budget. A supervisor override restores full access.",
+    body:     "When a department hits its monthly spend cap, CostPilot auto-throttles it — switching all calls to a lighter model so work keeps running without blowing the budget. A supervisor override restores full access.",
     position: "bottom",
   },
   {
@@ -107,7 +107,7 @@ const TOUR_STEPS = [
   {
     target:   "eventStreamSection",
     title:    "Governance Event Stream",
-    body:     "Live feed of every governance event across all departments — blocks, escalations, throttles, and routine calls. Filter by type or department. This is your real-time view of everything FAGE is doing right now.",
+    body:     "Live feed of every governance event across all departments — blocks, escalations, throttles, and routine calls. Filter by type or department. This is your real-time view of everything CostPilot is doing right now.",
     position: "left",
     last:     true,
   },
@@ -262,13 +262,13 @@ function endTour() {
   if (tourBox)     { tourBox.remove();     tourBox     = null; }
   document.querySelectorAll(".tour-highlight").forEach(el => el.classList.remove("tour-highlight"));
   // Remember tour was completed
-  try { localStorage.setItem("fage_tour_done", "1"); } catch(e) {}
+  try { localStorage.setItem("costpilot_tour_done", "1"); } catch(e) {}
 }
 
 // ── Auto-launch tour on first visit ──────────────────────────────────────────
 window.addEventListener("load", () => {
   try {
-    if (!localStorage.getItem("fage_tour_done")) {
+    if (!localStorage.getItem("costpilot_tour_done")) {
       setTimeout(startTour, 1200);
     }
   } catch(e) {}

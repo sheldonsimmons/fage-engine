@@ -1,5 +1,5 @@
 /**
- * connect.js — FAGE Platform Connector UI
+ * connect.js — CostPilot Platform Connector UI
  *
  * 3-screen flow:
  *   1. Pick platform (Salesforce, ServiceNow, HubSpot, Dynamics, Zendesk, Other)
@@ -14,8 +14,8 @@ let registeredAgentId = null;
 
 // ── Platform metadata ─────────────────────────────────────────────────────────
 // Each platform has:
-//   oneWay  — the simple, no-code webhook path (data goes TO FAGE only)
-//   biDir   — the full integration path (FAGE response writes BACK to the record)
+//   oneWay  — the simple, no-code webhook path (data goes TO CostPilot only)
+//   biDir   — the full integration path (CostPilot response writes BACK to the record)
 //             biDir is null for "Other/Custom" since there's no universal code path
 
 const PLATFORMS = {
@@ -29,7 +29,7 @@ const PLATFORMS = {
       cardIcon:    "⚡",
       badge:       "Quick Setup · No Code",
       pros:        ["No code required", "Live in under 5 minutes"],
-      cons:        ["One-way only — AI responses stay in your FAGE dashboard and are not written back to the Salesforce record"],
+      cons:        ["One-way only — AI responses stay in your CostPilot dashboard and are not written back to the Salesforce record"],
       toggleLabel: "Show Setup Steps",
       guide: `
         <div class="conn-guide-title">Salesforce Flow Builder — One-Way Setup</div>
@@ -37,11 +37,11 @@ const PLATFORMS = {
           <li>Go to <strong>Setup → Flows → New Flow</strong> and choose <em>Record-Triggered Flow</em></li>
           <li>Set the trigger object (e.g. <strong>Case</strong>) and trigger condition: <em>A record is created or updated</em></li>
           <li>Add an <strong>Action</strong> element → <em>HTTP Callout</em></li>
-          <li>Paste your FAGE Webhook URL as the endpoint. Method: <strong>POST</strong>, Content-Type: <strong>application/json</strong></li>
+          <li>Paste your CostPilot Webhook URL as the endpoint. Method: <strong>POST</strong>, Content-Type: <strong>application/json</strong></li>
           <li>Paste the Request Body above, replacing the placeholder with your Flow variable (e.g. <code>{!$Record.Description}</code>)</li>
           <li>Save and <strong>Activate</strong> the Flow</li>
         </ol>
-        <div class="conn-guide-note">💡 AI responses are visible in your FAGE dashboard under each department. To write responses back to the record, use the <strong>Apex Class</strong> path instead.</div>
+        <div class="conn-guide-note">💡 AI responses are visible in your CostPilot dashboard under each department. To write responses back to the record, use the <strong>Apex Class</strong> path instead.</div>
       `,
     },
     biDir: {
@@ -52,10 +52,10 @@ const PLATFORMS = {
       tierNote:    null,
       toggleLabel: "Show Apex Class",
       hasCode:     true,
-      codeLabel:   "FAGECallout.cls — paste into Setup → Apex Classes → New",
-      buildCode:   (obj, dept, agent, url) => `public class FAGECallout {
-    @InvocableMethod(label='Send to FAGE')
-    public static void sendToFAGE(List<FAGERequest> requests) {
+      codeLabel:   "CostPilotCallout.cls — paste into Setup → Apex Classes → New",
+      buildCode:   (obj, dept, agent, url) => `public class CostPilotCallout {
+    @InvocableMethod(label='Send to CostPilot')
+    public static void sendToCostPilot(List<CostPilotRequest> requests) {
         if (System.isFuture() || System.isBatch()) return;
         sendAsync(requests[0].recordId, requests[0].recordText,
                   requests[0].department, requests[0].agentName);
@@ -83,16 +83,16 @@ const PLATFORMS = {
             Map<String, Object> r =
                 (Map<String, Object>) JSON.deserializeUntyped(res.getBody());
             ${obj} record = new ${obj}(Id = recordId);
-            record.FAGE_AI_Response__c      = (String)  r.get('simulated_response');
-            record.FAGE_Model_Used__c       = (String)  r.get('model_name');
-            record.FAGE_Routing_Decision__c = (String)  r.get('routing_decision');
-            record.FAGE_Cost_USD__c         = Decimal.valueOf(
+            record.CostPilot_AI_Response__c      = (String)  r.get('simulated_response');
+            record.CostPilot_Model_Used__c       = (String)  r.get('model_name');
+            record.CostPilot_Routing_Decision__c = (String)  r.get('routing_decision');
+            record.CostPilot_Cost_USD__c         = Decimal.valueOf(
                                                String.valueOf(r.get('cost_usd')));
             update record;
         }
     }
 
-    public class FAGERequest {
+    public class CostPilotRequest {
         @InvocableVariable(required=true  label='Record ID')   public String recordId;
         @InvocableVariable(required=true  label='Record Text') public String recordText;
         @InvocableVariable(required=true  label='Department')  public String department;
@@ -100,23 +100,23 @@ const PLATFORMS = {
     }
 }`,
       fields: [
-        { label: "FAGE AI Response",      api: "FAGE_AI_Response__c",      type: "Long Text Area", setting: "32,768 chars" },
-        { label: "FAGE Model Used",       api: "FAGE_Model_Used__c",       type: "Text",           setting: "255 chars" },
-        { label: "FAGE Routing Decision", api: "FAGE_Routing_Decision__c", type: "Text",           setting: "50 chars" },
-        { label: "FAGE Cost USD",         api: "FAGE_Cost_USD__c",         type: "Currency",       setting: "Length 12, Decimals 6" },
+        { label: "CostPilot AI Response",      api: "CostPilot_AI_Response__c",      type: "Long Text Area", setting: "32,768 chars" },
+        { label: "CostPilot Model Used",       api: "CostPilot_Model_Used__c",       type: "Text",           setting: "255 chars" },
+        { label: "CostPilot Routing Decision", api: "CostPilot_Routing_Decision__c", type: "Text",           setting: "50 chars" },
+        { label: "CostPilot Cost USD",         api: "CostPilot_Cost_USD__c",         type: "Currency",       setting: "Length 12, Decimals 6" },
       ],
       buildSetupSteps: (obj, field, dept, agent) => `
         <div class="conn-guide-title">Wire the Apex Class to a Flow</div>
         <ol class="conn-guide-steps">
           <li>Go to <strong>Setup → Flows → New Flow</strong><br/>
               Type: <em>Record-Triggered Flow</em> · Object: <strong>${obj}</strong> · Trigger: <em>A record is created or updated</em></li>
-          <li>Add an <strong>Action</strong> element · Category: <em>Apex</em> · Action: <em>Send to FAGE</em></li>
+          <li>Add an <strong>Action</strong> element · Category: <em>Apex</em> · Action: <em>Send to CostPilot</em></li>
           <li>Set input values:<br/>
               <code>Record ID</code> → <em>${obj} ID</em><br/>
               <code>Record Text</code> → <em>${obj} · ${field}</em><br/>
               <code>Department</code> → <em>${dept}</em><br/>
               <code>Agent Name</code> → <em>${agent}</em></li>
-          <li><strong>Save &amp; Activate</strong> — the next time a <strong>${obj}</strong> is saved, FAGE processes it and writes the response back automatically</li>
+          <li><strong>Save &amp; Activate</strong> — the next time a <strong>${obj}</strong> is saved, CostPilot processes it and writes the response back automatically</li>
         </ol>
       `,
     },
@@ -131,7 +131,7 @@ const PLATFORMS = {
       cardIcon:    "⚡",
       badge:       "Quick Setup · No Code",
       pros:        ["No code required", "Built-in REST Step in Flow Designer"],
-      cons:        ["One-way only — AI responses appear in FAGE dashboard but are not written back to the ServiceNow record"],
+      cons:        ["One-way only — AI responses appear in CostPilot dashboard but are not written back to the ServiceNow record"],
       toggleLabel: "Show Setup Steps",
       guide: `
         <div class="conn-guide-title">ServiceNow Flow Designer — One-Way Setup</div>
@@ -139,11 +139,11 @@ const PLATFORMS = {
           <li>Go to <strong>Flow Designer → New → Flow</strong></li>
           <li>Add a trigger: <em>Record · Created · Incident</em> (or your chosen table)</li>
           <li>Add a <strong>REST Step</strong> action</li>
-          <li>Set the Base URL to your FAGE Webhook URL. Method: <strong>POST</strong></li>
+          <li>Set the Base URL to your CostPilot Webhook URL. Method: <strong>POST</strong></li>
           <li>In the Request Body, paste the JSON above — replace the text placeholder with <code>trigger.current.description</code></li>
           <li>Save and <strong>Activate</strong> the flow</li>
         </ol>
-        <div class="conn-guide-note">💡 AI responses are visible in your FAGE dashboard. To write them back to the incident record automatically, use the <strong>Script Include</strong> path instead.</div>
+        <div class="conn-guide-note">💡 AI responses are visible in your CostPilot dashboard. To write them back to the incident record automatically, use the <strong>Script Include</strong> path instead.</div>
       `,
     },
     biDir: {
@@ -154,15 +154,15 @@ const PLATFORMS = {
       tierNote:    null,
       toggleLabel: "Show Script Include",
       hasCode:     true,
-      codeLabel:   "FAGECallout.js — create in System Definition → Script Includes",
-      buildCode:   (obj, dept, agent, url) => `var FAGECallout = Class.create();
-FAGECallout.prototype = {
+      codeLabel:   "CostPilotCallout.js — create in System Definition → Script Includes",
+      buildCode:   (obj, dept, agent, url) => `var CostPilotCallout = Class.create();
+CostPilotCallout.prototype = {
 
     /**
-     * Call FAGE and write the AI response back to a record.
+     * Call CostPilot and write the AI response back to a record.
      * @param {string} recordId   - sys_id of the record to update
      * @param {string} recordText - the field text to send (e.g. description)
-     * @param {string} department - FAGE department name
+     * @param {string} department - CostPilot department name
      * @param {string} agentName  - registered agent name
      * @param {string} tableName  - ServiceNow table (e.g. 'incident')
      */
@@ -197,13 +197,13 @@ FAGECallout.prototype = {
         return response;
     },
 
-    type: 'FAGECallout'
+    type: 'CostPilotCallout'
 };`,
       fields: [
-        { label: "FAGE AI Response",      api: "u_fage_ai_response",      type: "String (4000)",  setting: "Add to your table" },
-        { label: "FAGE Model Used",       api: "u_fage_model_used",       type: "String (100)",   setting: "Add to your table" },
-        { label: "FAGE Routing Decision", api: "u_fage_routing_decision", type: "String (50)",    setting: "Add to your table" },
-        { label: "FAGE Cost USD",         api: "u_fage_cost_usd",         type: "Decimal",        setting: "Add to your table" },
+        { label: "CostPilot AI Response",      api: "u_fage_ai_response",      type: "String (4000)",  setting: "Add to your table" },
+        { label: "CostPilot Model Used",       api: "u_fage_model_used",       type: "String (100)",   setting: "Add to your table" },
+        { label: "CostPilot Routing Decision", api: "u_fage_routing_decision", type: "String (50)",    setting: "Add to your table" },
+        { label: "CostPilot Cost USD",         api: "u_fage_cost_usd",         type: "Decimal",        setting: "Add to your table" },
       ],
       buildSetupSteps: (obj, field, dept, agent) => `
         <div class="conn-guide-title">Trigger the Script Include via a Business Rule</div>
@@ -211,9 +211,9 @@ FAGECallout.prototype = {
           <li>Go to <strong>System Definition → Business Rules → New</strong></li>
           <li>Table: <strong>${obj}</strong> · When: <em>after</em> · Insert: ✓ · Update: ✓</li>
           <li>Check <strong>Advanced</strong> and add this to the Script field:
-            <br/><code>(new FAGECallout()).call(current.sys_id, current.${field}, '${dept}', '${agent}', '${obj}');</code>
+            <br/><code>(new CostPilotCallout()).call(current.sys_id, current.${field}, '${dept}', '${agent}', '${obj}');</code>
           </li>
-          <li><strong>Submit</strong> — the next time a <strong>${obj}</strong> record is saved, FAGE processes it and writes the response back</li>
+          <li><strong>Submit</strong> — the next time a <strong>${obj}</strong> record is saved, CostPilot processes it and writes the response back</li>
         </ol>
         <div class="conn-guide-note">💡 Alternatively, call the Script Include from a <strong>Flow Designer</strong> action for a no-code trigger with the same bidirectional write-back.</div>
       `,
@@ -229,7 +229,7 @@ FAGECallout.prototype = {
       cardIcon:    "⚡",
       badge:       "Quick Setup · No Code",
       pros:        ["No code required", "Available on all HubSpot plans", "Live in minutes"],
-      cons:        ["One-way only — AI responses appear in FAGE dashboard but are not written back to the HubSpot record"],
+      cons:        ["One-way only — AI responses appear in CostPilot dashboard but are not written back to the HubSpot record"],
       toggleLabel: "Show Setup Steps",
       guide: `
         <div class="conn-guide-title">HubSpot Workflows — One-Way Setup</div>
@@ -238,11 +238,11 @@ FAGECallout.prototype = {
           <li>Choose <em>Ticket-based</em> (or Contact / Deal depending on your object)</li>
           <li>Set trigger: <em>Ticket is created</em></li>
           <li>Add action: <strong>Send a webhook</strong></li>
-          <li>Paste your FAGE Webhook URL. Method: <strong>POST</strong></li>
+          <li>Paste your CostPilot Webhook URL. Method: <strong>POST</strong></li>
           <li>In the Request Body, paste the JSON above and map ticket properties to the fields</li>
           <li>Save and <strong>Turn On</strong> the workflow</li>
         </ol>
-        <div class="conn-guide-note">💡 AI responses are visible in your FAGE dashboard. To write them back to the HubSpot record, upgrade to <strong>Operations Hub Professional</strong> and use the Custom Coded Action path.</div>
+        <div class="conn-guide-note">💡 AI responses are visible in your CostPilot dashboard. To write them back to the HubSpot record, upgrade to <strong>Operations Hub Professional</strong> and use the Custom Coded Action path.</div>
       `,
     },
     biDir: {
@@ -250,7 +250,7 @@ FAGECallout.prototype = {
       cardIcon:    "🔁",
       badge:       "Full Integration · Bidirectional",
       pros:        ["AI response written directly back to the HubSpot record", "Runs inside a Workflow — no external server needed", "Output fields can update any HubSpot property"],
-      tierNote:    "Requires Operations Hub Professional or Enterprise. This is a HubSpot licensing requirement — not a FAGE limitation.",
+      tierNote:    "Requires Operations Hub Professional or Enterprise. This is a HubSpot licensing requirement — not a CostPilot limitation.",
       toggleLabel: "Show Coded Action",
       hasCode:     true,
       codeLabel:   "Add inside Workflows → Custom Coded Action (Node.js)",
@@ -285,15 +285,15 @@ exports.main = async (event, callback) => {
 
   } catch (err) {
     callback({
-      outputFields: { fage_ai_response: 'FAGE Error: ' + err.message }
+      outputFields: { fage_ai_response: 'CostPilot Error: ' + err.message }
     });
   }
 };`,
       fields: [
-        { label: "FAGE AI Response",      api: "fage_ai_response",      type: "Single-line text", setting: "Create in Properties" },
-        { label: "FAGE Model Used",       api: "fage_model_used",       type: "Single-line text", setting: "Create in Properties" },
-        { label: "FAGE Routing Decision", api: "fage_routing_decision", type: "Single-line text", setting: "Create in Properties" },
-        { label: "FAGE Cost USD",         api: "fage_cost_usd",         type: "Single-line text", setting: "Create in Properties" },
+        { label: "CostPilot AI Response",      api: "fage_ai_response",      type: "Single-line text", setting: "Create in Properties" },
+        { label: "CostPilot Model Used",       api: "fage_model_used",       type: "Single-line text", setting: "Create in Properties" },
+        { label: "CostPilot Routing Decision", api: "fage_routing_decision", type: "Single-line text", setting: "Create in Properties" },
+        { label: "CostPilot Cost USD",         api: "fage_cost_usd",         type: "Single-line text", setting: "Create in Properties" },
       ],
       buildSetupSteps: (obj, field, dept, agent) => `
         <div class="conn-guide-title">Wire the Coded Action in a Workflow</div>
@@ -302,7 +302,7 @@ exports.main = async (event, callback) => {
           <li>Paste the code above into the code editor</li>
           <li>Define input fields: <code>description</code> → map to your <strong>${obj} · ${field}</strong> property</li>
           <li>After the coded action, add a <strong>Set property value</strong> action for each output field:<br/>
-              Map <code>fage_ai_response</code> → your FAGE AI Response property, etc.</li>
+              Map <code>fage_ai_response</code> → your CostPilot AI Response property, etc.</li>
           <li><strong>Save and Turn On</strong> the workflow</li>
         </ol>
         <div class="conn-guide-note">💡 The output fields from the coded action are available as workflow tokens — no separate API call needed to write back to the record.</div>
@@ -319,7 +319,7 @@ exports.main = async (event, callback) => {
       cardIcon:    "⚡",
       badge:       "Quick Setup · No Code",
       pros:        ["No code required", "Available with any Power Automate license", "Visual flow builder"],
-      cons:        ["One-way only — AI responses appear in FAGE dashboard but are not written back to the Dynamics record"],
+      cons:        ["One-way only — AI responses appear in CostPilot dashboard but are not written back to the Dynamics record"],
       toggleLabel: "Show Setup Steps",
       guide: `
         <div class="conn-guide-title">Power Automate — One-Way Setup</div>
@@ -327,12 +327,12 @@ exports.main = async (event, callback) => {
           <li>Go to <strong>Power Automate → Create → Automated Cloud Flow</strong></li>
           <li>Trigger: <em>When a row is added, modified or deleted (Dataverse)</em> → Table: <strong>Cases</strong></li>
           <li>Add step: <strong>HTTP</strong></li>
-          <li>Method: <strong>POST</strong> · URI: paste your FAGE Webhook URL</li>
+          <li>Method: <strong>POST</strong> · URI: paste your CostPilot Webhook URL</li>
           <li>Headers: <code>Content-Type: application/json</code></li>
           <li>Body: paste the Request Body above, mapping Dynamics field values</li>
           <li>Save and <strong>Turn On</strong> the flow</li>
         </ol>
-        <div class="conn-guide-note">💡 AI responses go to your FAGE dashboard. To have them write back to the record automatically, use the <strong>Full Power Automate</strong> path — no extra license required.</div>
+        <div class="conn-guide-note">💡 AI responses go to your CostPilot dashboard. To have them write back to the record automatically, use the <strong>Full Power Automate</strong> path — no extra license required.</div>
       `,
     },
     biDir: {
@@ -350,8 +350,8 @@ exports.main = async (event, callback) => {
         </div>
         <ol class="conn-guide-steps">
           <li><strong>Trigger:</strong> When a row is added, modified or deleted (Dataverse) → Table: <strong>${obj}</strong></li>
-          <li><strong>Step 1 — Call FAGE:</strong> Add an <strong>HTTP</strong> action<br/>
-              Method: POST · URI: your FAGE Webhook URL<br/>
+          <li><strong>Step 1 — Call CostPilot:</strong> Add an <strong>HTTP</strong> action<br/>
+              Method: POST · URI: your CostPilot Webhook URL<br/>
               Body: paste the Request Body JSON, mapping <code>text</code> to <em>${obj} · ${field}</em></li>
           <li><strong>Step 2 — Parse the response:</strong> Add a <strong>Parse JSON</strong> action<br/>
               Content: <em>Body</em> from the previous HTTP step<br/>
@@ -365,10 +365,10 @@ exports.main = async (event, callback) => {
         </ol>
       `,
       fields: [
-        { label: "FAGE AI Response",      api: "fage_ai_response",      type: "Multiple Lines of Text", setting: "Add to table" },
-        { label: "FAGE Model Used",       api: "fage_model_used",       type: "Single Line of Text",    setting: "Add to table" },
-        { label: "FAGE Routing Decision", api: "fage_routing_decision", type: "Single Line of Text",    setting: "Add to table" },
-        { label: "FAGE Cost USD",         api: "fage_cost_usd",         type: "Currency",               setting: "Add to table" },
+        { label: "CostPilot AI Response",      api: "fage_ai_response",      type: "Multiple Lines of Text", setting: "Add to table" },
+        { label: "CostPilot Model Used",       api: "fage_model_used",       type: "Single Line of Text",    setting: "Add to table" },
+        { label: "CostPilot Routing Decision", api: "fage_routing_decision", type: "Single Line of Text",    setting: "Add to table" },
+        { label: "CostPilot Cost USD",         api: "fage_cost_usd",         type: "Currency",               setting: "Add to table" },
       ],
     },
   },
@@ -382,20 +382,20 @@ exports.main = async (event, callback) => {
       cardIcon:    "⚡",
       badge:       "Quick Setup · No Code",
       pros:        ["No code required", "Available on all Zendesk plans", "Live in minutes"],
-      cons:        ["One-way only — AI responses appear in FAGE dashboard but are not written back to the Zendesk ticket"],
+      cons:        ["One-way only — AI responses appear in CostPilot dashboard but are not written back to the Zendesk ticket"],
       toggleLabel: "Show Setup Steps",
       guide: `
         <div class="conn-guide-title">Zendesk — One-Way Setup (Triggers + Webhooks)</div>
         <ol class="conn-guide-steps">
           <li>Go to <strong>Admin → Objects and Rules → Webhooks → Create Webhook</strong></li>
-          <li>Paste your FAGE Webhook URL as the Endpoint URL. Method: <strong>POST</strong> · Format: <strong>JSON</strong></li>
+          <li>Paste your CostPilot Webhook URL as the Endpoint URL. Method: <strong>POST</strong> · Format: <strong>JSON</strong></li>
           <li>Go to <strong>Triggers → Add Trigger</strong></li>
           <li>Condition: <em>Ticket is created</em></li>
-          <li>Action: <em>Notify webhook</em> → select your FAGE webhook</li>
+          <li>Action: <em>Notify webhook</em> → select your CostPilot webhook</li>
           <li>Paste the Request Body above in the JSON body field. Map <code>{{ticket.description}}</code> to the text field</li>
           <li>Save the trigger</li>
         </ol>
-        <div class="conn-guide-note">💡 AI responses are visible in your FAGE dashboard. To write them back to the ticket automatically, use the <strong>Sunshine Function</strong> path — requires Zendesk Suite or Sunshine Platform.</div>
+        <div class="conn-guide-note">💡 AI responses are visible in your CostPilot dashboard. To write them back to the ticket automatically, use the <strong>Sunshine Function</strong> path — requires Zendesk Suite or Sunshine Platform.</div>
       `,
     },
     biDir: {
@@ -403,7 +403,7 @@ exports.main = async (event, callback) => {
       cardIcon:    "🔁",
       badge:       "Full Integration · Bidirectional",
       pros:        ["AI response written directly back to the Zendesk ticket", "Serverless — no server to manage", "Runs inside Zendesk's own infrastructure"],
-      tierNote:    "Requires Zendesk Suite Professional (or higher) or the Sunshine Platform add-on. This is a Zendesk licensing requirement — not a FAGE limitation.",
+      tierNote:    "Requires Zendesk Suite Professional (or higher) or the Sunshine Platform add-on. This is a Zendesk licensing requirement — not a CostPilot limitation.",
       toggleLabel: "Show Sunshine Function",
       hasCode:     true,
       codeLabel:   "Deploy via Zendesk CLI (zaf app:create) or Developer Tools",
@@ -435,10 +435,10 @@ module.exports = async (event, callback) => {
     callback(null, {
       ticket: {
         custom_fields: [
-          { id: 'FAGE_RESPONSE_FIELD_ID',  value: data.simulated_response },
-          { id: 'FAGE_MODEL_FIELD_ID',     value: data.model_name },
-          { id: 'FAGE_ROUTING_FIELD_ID',   value: data.routing_decision },
-          { id: 'FAGE_COST_FIELD_ID',      value: String(data.cost_usd) }
+          { id: 'CostPilot_RESPONSE_FIELD_ID',  value: data.simulated_response },
+          { id: 'CostPilot_MODEL_FIELD_ID',     value: data.model_name },
+          { id: 'CostPilot_ROUTING_FIELD_ID',   value: data.routing_decision },
+          { id: 'CostPilot_COST_FIELD_ID',      value: String(data.cost_usd) }
         ]
       }
     });
@@ -448,10 +448,10 @@ module.exports = async (event, callback) => {
   }
 };`,
       fields: [
-        { label: "FAGE AI Response",      api: "FAGE_RESPONSE_FIELD_ID",  type: "Multi-line text", setting: "Note the numeric field ID" },
-        { label: "FAGE Model Used",       api: "FAGE_MODEL_FIELD_ID",     type: "Text",            setting: "Note the numeric field ID" },
-        { label: "FAGE Routing Decision", api: "FAGE_ROUTING_FIELD_ID",   type: "Text",            setting: "Note the numeric field ID" },
-        { label: "FAGE Cost USD",         api: "FAGE_COST_FIELD_ID",      type: "Decimal",         setting: "Note the numeric field ID" },
+        { label: "CostPilot AI Response",      api: "CostPilot_RESPONSE_FIELD_ID",  type: "Multi-line text", setting: "Note the numeric field ID" },
+        { label: "CostPilot Model Used",       api: "CostPilot_MODEL_FIELD_ID",     type: "Text",            setting: "Note the numeric field ID" },
+        { label: "CostPilot Routing Decision", api: "CostPilot_ROUTING_FIELD_ID",   type: "Text",            setting: "Note the numeric field ID" },
+        { label: "CostPilot Cost USD",         api: "CostPilot_COST_FIELD_ID",      type: "Decimal",         setting: "Note the numeric field ID" },
       ],
       buildSetupSteps: (obj, field, dept, agent) => `
         <div class="conn-guide-title">Deploy the Sunshine Function</div>
@@ -460,7 +460,7 @@ module.exports = async (event, callback) => {
           <li>Run <code>zaf app:create</code> and choose <em>Serverless Function</em>. Paste the code above.</li>
           <li>In your Zendesk Admin, go to <strong>Objects and Rules → Tickets → Fields</strong> and create the four custom fields. Note each numeric field ID and replace the placeholder IDs in the code.</li>
           <li>Deploy the function: <code>zaf app:upload</code></li>
-          <li>Create a <strong>Trigger</strong> (Ticket created) with the action <em>Invoke Sunshine Function → your FAGE function</em></li>
+          <li>Create a <strong>Trigger</strong> (Ticket created) with the action <em>Invoke Sunshine Function → your CostPilot function</em></li>
           <li>Save and test by creating a ticket</li>
         </ol>
         <div class="conn-guide-note">💡 If you don't have Zendesk Suite Pro, you can achieve the same write-back using a middleware service (Make, Zapier, or n8n) between the one-way webhook and HubSpot's API.</div>
@@ -476,16 +476,16 @@ module.exports = async (event, callback) => {
       cardLabel:   "HTTP Webhook",
       cardIcon:    "⚡",
       badge:       "Universal · Works Anywhere",
-      pros:        ["Any platform that can send an HTTP POST can connect to FAGE", "No SDK or library required"],
+      pros:        ["Any platform that can send an HTTP POST can connect to CostPilot", "No SDK or library required"],
       cons:        ["One-way by default — write-back depends on your platform's capabilities"],
       toggleLabel: "Show Setup Steps",
       guide: `
         <div class="conn-guide-title">Generic Webhook Setup</div>
         <ol class="conn-guide-steps">
           <li>In your platform's automation or integration builder, find the <strong>HTTP / Webhook</strong> action</li>
-          <li>Set the URL to your FAGE Webhook URL. Method: <strong>POST</strong> · Content-Type: <strong>application/json</strong></li>
+          <li>Set the URL to your CostPilot Webhook URL. Method: <strong>POST</strong> · Content-Type: <strong>application/json</strong></li>
           <li>Paste the Request Body above, replacing placeholders with your platform's field variables</li>
-          <li>To write the FAGE response back to your record, add a second step that reads the HTTP response body and maps <code>simulated_response</code>, <code>model_name</code>, <code>routing_decision</code>, and <code>cost_usd</code> to your record fields</li>
+          <li>To write the CostPilot response back to your record, add a second step that reads the HTTP response body and maps <code>simulated_response</code>, <code>model_name</code>, <code>routing_decision</code>, and <code>cost_usd</code> to your record fields</li>
         </ol>
         <div class="conn-guide-note">💡 Need a write-back but your platform doesn't support reading HTTP responses? Use a middleware tool like Make, Zapier, or n8n to bridge the gap.</div>
       `,
@@ -845,8 +845,8 @@ function buildOneWayContent(plat) {
   return (
     '<div class="conn-method-content">' +
       '<div class="conn-oneway-inline">' +
-        "&#9888; <strong>One-way integration:</strong> Data goes <em>to FAGE</em> for governance, " +
-        "routing, and budget tracking. AI responses are visible in your FAGE dashboard but are " +
+        "&#9888; <strong>One-way integration:</strong> Data goes <em>to CostPilot</em> for governance, " +
+        "routing, and budget tracking. AI responses are visible in your CostPilot dashboard but are " +
         "<strong>not</strong> written back to the record automatically." + biDirHint +
       "</div>" +
       '<div class="conn-guide">' + plat.oneWay.guide + "</div>" +

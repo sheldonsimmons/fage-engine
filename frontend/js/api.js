@@ -1,32 +1,32 @@
 /**
- * api.js — Shared fetch wrapper for all FAGE backend calls.
+ * api.js — Shared fetch wrapper for all CostPilot backend calls.
  *
  * All frontend modules import from this file so the backend URL
  * is configured in exactly one place.
  */
 
 // Empty string = same origin (frontend is now served by FastAPI)
-const FAGE_API = "";
+const CostPilot_API = "";
 
 /**
- * GET a JSON endpoint from the FAGE backend.
+ * GET a JSON endpoint from the CostPilot backend.
  * @param {string} path - e.g. "/health" or "/api/budget"
  * @returns {Promise<any>} parsed JSON response
  */
 async function apiGet(path) {
-  const response = await fetch(`${FAGE_API}${path}`);
+  const response = await fetch(`${CostPilot_API}${path}`);
   if (!response.ok) throw new Error(`GET ${path} failed: ${response.status}`);
   return response.json();
 }
 
 /**
- * POST JSON data to a FAGE backend endpoint.
+ * POST JSON data to a CostPilot backend endpoint.
  * @param {string} path  - e.g. "/api/prune"
  * @param {object} body  - data to send as JSON
  * @returns {Promise<any>} parsed JSON response
  */
 async function apiPost(path, body) {
-  const response = await fetch(`${FAGE_API}${path}`, {
+  const response = await fetch(`${CostPilot_API}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -36,10 +36,10 @@ async function apiPost(path, body) {
 }
 
 /**
- * PUT JSON data to a FAGE backend endpoint.
+ * PUT JSON data to a CostPilot backend endpoint.
  */
 async function apiPut(path, body) {
-  const response = await fetch(`${FAGE_API}${path}`, {
+  const response = await fetch(`${CostPilot_API}${path}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -49,10 +49,10 @@ async function apiPut(path, body) {
 }
 
 /**
- * PATCH a FAGE backend endpoint.
+ * PATCH a CostPilot backend endpoint.
  */
 async function apiPatch(path, body) {
-  const response = await fetch(`${FAGE_API}${path}`, {
+  const response = await fetch(`${CostPilot_API}${path}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
@@ -62,12 +62,12 @@ async function apiPatch(path, body) {
 }
 
 /**
- * DELETE a FAGE backend resource.
+ * DELETE a CostPilot backend resource.
  * @param {string} path - e.g. "/api/agents/7"
  * @returns {Promise<any>} parsed JSON response
  */
 async function apiDelete(path) {
-  const response = await fetch(`${FAGE_API}${path}`, { method: "DELETE" });
+  const response = await fetch(`${CostPilot_API}${path}`, { method: "DELETE" });
   if (!response.ok) throw new Error(`DELETE ${path} failed: ${response.status}`);
   return response.json();
 }
@@ -107,7 +107,7 @@ function printSection(sectionId, title) {
   const el = document.getElementById(sectionId);
   if (!el) return;
   const prev = document.title;
-  document.title = title || "FAGE Export";
+  document.title = title || "CostPilot Export";
   // Clone element into a print-only overlay
   const overlay = document.createElement("div");
   overlay.id    = "printOverlay";

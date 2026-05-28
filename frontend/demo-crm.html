@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Live Demo</title>
+  <title>CostPilot — Live Demo</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     body { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg-base); }
@@ -357,8 +357,8 @@
   <div class="header-brand">
     <span class="header-logo">◈</span>
     <div>
-      <div class="header-title">FAGE</div>
-      <div class="header-sub">FinOps Agentlake &amp; Governance Engine</div>
+      <div class="header-title">CostPilot</div>
+      <div class="header-sub">Navigate AI Spend with Precision</div>
     </div>
   </div>
   <div class="header-status" id="systemStatus">
@@ -382,11 +382,11 @@
   <div class="demo-banner">
     <div class="demo-banner-left">
       <div class="demo-banner-title">🎯 Live Platform Demo</div>
-      <div class="demo-banner-sub">Submit a case as if you're an agent — watch FAGE make a real governance decision in real time</div>
+      <div class="demo-banner-sub">Submit a case as if you're an agent — watch CostPilot make a real governance decision in real time</div>
     </div>
     <div class="demo-banner-right">
       <span class="live-badge">● LIVE ENGINE</span>
-      <span style="font-size:11px;color:var(--text-muted)">Every submission hits the real FAGE routing pipeline</span>
+      <span style="font-size:11px;color:var(--text-muted)">Every submission hits the real CostPilot routing pipeline</span>
     </div>
   </div>
 
@@ -415,7 +415,7 @@
           <div class="plat-tile" id="plat-dynamics" onclick="selectPlatform('dynamics','D365-CaseBot')">
             <span class="plat-icon">🔷</span>Dynamics 365
           </div>
-          <div class="plat-tile" id="plat-custom" onclick="selectPlatform('custom','FAGE-Bot')">
+          <div class="plat-tile" id="plat-custom" onclick="selectPlatform('custom','CostPilot-Bot')">
             <span class="plat-icon">⚡</span>Custom
           </div>
         </div>
@@ -499,7 +499,7 @@
 
       <!-- Submit -->
       <button class="submit-btn" id="submitBtn" onclick="submitCase()">
-        <span id="submitBtnText">Submit to FAGE →</span>
+        <span id="submitBtnText">Submit to CostPilot →</span>
       </button>
 
     </div>
@@ -513,7 +513,7 @@
         <div class="result-waiting-title">Ready for your first case</div>
         <div class="result-waiting-sub">
           Fill out the form on the left and hit Submit.<br/>
-          FAGE will make a real routing decision and show you the result here — instantly.
+          CostPilot will make a real routing decision and show you the result here — instantly.
         </div>
         <div style="margin-top:16px;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%;max-width:280px">
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);font-weight:600;margin-bottom:4px">What to try</div>
@@ -527,7 +527,7 @@
       <!-- Processing state (shown while fetching) -->
       <div class="result-processing" id="resultProcessing" style="display:none">
         <div class="spinner"></div>
-        <div style="font-size:13px;color:var(--text-muted)" id="processingLabel">Running FAGE pipeline...</div>
+        <div style="font-size:13px;color:var(--text-muted)" id="processingLabel">Running CostPilot pipeline...</div>
       </div>
 
       <!-- Result content (filled by JS) -->
@@ -538,7 +538,7 @@
 
   <!-- ── Footer ────────────────────────────────────────────────────────────────── -->
   <div class="demo-footer">
-    <span>Every submission hits the real FAGE routing pipeline — transactions, audit events, and budget spend are all live</span>
+    <span>Every submission hits the real CostPilot routing pipeline — transactions, audit events, and budget spend are all live</span>
     <div style="display:flex;gap:12px">
       <a href="/" style="color:var(--accent);text-decoration:none;font-weight:600">View Dashboard →</a>
       <a href="/reports.html" style="color:var(--text-muted);text-decoration:none">Reports</a>

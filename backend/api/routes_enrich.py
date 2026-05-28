@@ -4,9 +4,9 @@ api/routes_enrich.py — Platform Context Enrichment
 POST /api/enrich/salesforce
   Takes a Salesforce Case ID + access token, fetches the full case context
   (description, comments, emails) directly from the Salesforce REST API in
-  parallel, assembles it, then runs the full FAGE routing pipeline.
+  parallel, assembles it, then runs the full CostPilot routing pipeline.
 
-  The Apex class only needs to send the Case ID and session token — FAGE
+  The Apex class only needs to send the Case ID and session token — CostPilot
   handles all data retrieval and routing decisions.
 """
 
@@ -183,7 +183,7 @@ async def enrich_and_route_salesforce(
     db: Session = Depends(get_db),
 ):
     """
-    Fetch full Salesforce case context and route through FAGE in one call.
+    Fetch full Salesforce case context and route through CostPilot in one call.
 
     Steps:
       1. Fetch Case + CaseComments + EmailMessages in parallel from Salesforce API

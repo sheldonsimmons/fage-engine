@@ -1,5 +1,5 @@
 """
-models.py — All SQLAlchemy ORM table definitions for FAGE.
+models.py — All SQLAlchemy ORM table definitions for CostPilot.
 
 Seven tables cover the full POC surface area:
   customers          — mock enterprise CRM contacts

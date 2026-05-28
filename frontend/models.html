@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Model Registry</title>
+  <title>CostPilot — Model Registry</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/models.css" />
 </head>
@@ -13,8 +13,8 @@
   <header class="header">
     <div class="header-brand">
       <span class="header-logo">◈</span>
-      <span class="header-title">FAGE</span>
-      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+      <span class="header-title">CostPilot</span>
+      <span class="header-sub">Navigate AI Spend with Precision</span>
     </div>
     <div class="header-nav">
       <a href="/" class="header-nav-link">Dashboard</a>
@@ -36,7 +36,7 @@
     <div class="mdl-page-header">
       <div>
         <h1 class="mdl-title">Model Registry</h1>
-        <p class="mdl-subtitle">Register and manage the AI models your company uses. FAGE routes every request to the right model based on tier, complexity, and budget.</p>
+        <p class="mdl-subtitle">Register and manage the AI models your company uses. CostPilot routes every request to the right model based on tier, complexity, and budget.</p>
       </div>
       <button class="mdl-add-btn" onclick="openAddModal()">+ Add Model</button>
     </div>
@@ -209,7 +209,7 @@
   </div>
 
   <footer class="footer">
-    FAGE v0.1.0 — Model Registry &nbsp;|&nbsp;
+    CostPilot v0.1.0 — Model Registry &nbsp;|&nbsp;
     <a href="/">← Dashboard</a>
   </footer>
 
@@ -218,10 +218,10 @@
   <script src="js/help.js"></script>
   <script>
   window.PAGE_TOUR_STEPS = [
-    { target:"tierCards",      title:"Model Tier Cards",         body:"Four tiers — Scout, Analyst, Advisor, Strategist. FAGE routes every payload to the right tier automatically. Scout handles cheap routine calls; Strategist handles high-stakes complex ones.",  position:"bottom" },
+    { target:"tierCards",      title:"Model Tier Cards",         body:"Four tiers — Scout, Analyst, Advisor, Strategist. CostPilot routes every payload to the right tier automatically. Scout handles cheap routine calls; Strategist handles high-stakes complex ones.",  position:"bottom" },
     { target:"filterTier",     title:"Filter by Tier",           body:"Filter the model table by tier, provider, or enabled status. Use this to quickly see which models are active in each tier.",                                                                     position:"bottom" },
-    { target:"modelTableBody", title:"Model Registry Table",     body:"Every model FAGE can route to appears here — name, provider, tier, cost per 1M tokens, department assignment, and enabled status. Click the edit icon to modify any model.",                     position:"top"    },
-    { target:"modalOverlay",   title:"Add / Edit a Model",       body:"Click Add Model to register a new model. Set the tier, provider ID, input/output costs, and optionally restrict it to a specific department. FAGE uses this registry to calculate real costs.",  position:"top", last:true },
+    { target:"modelTableBody", title:"Model Registry Table",     body:"Every model CostPilot can route to appears here — name, provider, tier, cost per 1M tokens, department assignment, and enabled status. Click the edit icon to modify any model.",                     position:"top"    },
+    { target:"modalOverlay",   title:"Add / Edit a Model",       body:"Click Add Model to register a new model. Set the tier, provider ID, input/output costs, and optionally restrict it to a specific department. CostPilot uses this registry to calculate real costs.",  position:"top", last:true },
   ];
   // modalOverlay is hidden by default — target tier cards as fallback for last step
   window.PAGE_TOUR_STEPS[3].target = "tierCards";

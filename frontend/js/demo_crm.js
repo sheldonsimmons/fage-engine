@@ -1,7 +1,7 @@
 /**
  * demo_crm.js — Live Platform Demo
  *
- * Lets partners submit a fake CRM case directly into the real FAGE
+ * Lets partners submit a fake CRM case directly into the real CostPilot
  * routing pipeline and see the governance decision in real time.
  */
 
@@ -19,7 +19,7 @@ function selectPlatform(platform, defaultAgent) {
   document.querySelectorAll(".plat-tile").forEach(el => el.classList.remove("selected"));
   document.getElementById("plat-" + platform).classList.add("selected");
   // Update agent name only if it still matches a default
-  const defaults = ["SF-CaseBot","SN-IncidentBot","HS-TicketBot","ZD-TicketBot","D365-CaseBot","FAGE-Bot"];
+  const defaults = ["SF-CaseBot","SN-IncidentBot","HS-TicketBot","ZD-TicketBot","D365-CaseBot","CostPilot-Bot"];
   const current  = document.getElementById("agentName").value.trim();
   if (!current || defaults.includes(current)) {
     document.getElementById("agentName").value = defaultAgent;
@@ -92,7 +92,7 @@ function loadScenario(name) {
 // ── 60-case generated library ─────────────────────────────────────────────────
 // Each case is hand-crafted with realistic detail.
 // Tags: routine | complex | escalate | block | voice
-// FAGE expected outcomes noted in comments for reference.
+// CostPilot expected outcomes noted in comments for reference.
 
 const CASE_LIBRARY = [
 
@@ -944,7 +944,7 @@ function showProcessing(label) {
   document.getElementById("resultWaiting").style.display    = "none";
   document.getElementById("resultProcessing").style.display = "flex";
   document.getElementById("resultContent").style.display    = "none";
-  document.getElementById("processingLabel").textContent    = label || "Running FAGE pipeline...";
+  document.getElementById("processingLabel").textContent    = label || "Running CostPilot pipeline...";
 }
 
 function showResult(html) {
@@ -961,7 +961,7 @@ async function submitCase() {
   const subject = document.getElementById("caseSubject").value.trim();
   const body    = document.getElementById("caseBody").value.trim();
   const dept    = document.getElementById("deptSelect").value;
-  const agent   = document.getElementById("agentName").value.trim() || "FAGE-Demo-Bot";
+  const agent   = document.getElementById("agentName").value.trim() || "CostPilot-Demo-Bot";
 
   if (!subject && !body) {
     document.getElementById("caseBody").focus();
@@ -1054,7 +1054,7 @@ async function submitCase() {
     `);
   } finally {
     btn.disabled = false;
-    document.getElementById("submitBtnText").textContent = "Submit to FAGE →";
+    document.getElementById("submitBtnText").textContent = "Submit to CostPilot →";
   }
 }
 
@@ -1166,11 +1166,11 @@ function renderRouted(r, latencyMs, vgResult, cleanText, rawText) {
           <div class="result-section-label">Cost Comparison</div>
           <div class="savings-bar">
             <div class="savings-row">
-              <span class="label">Without FAGE (all Advisor)</span>
+              <span class="label">Without CostPilot (all Advisor)</span>
               <span class="value">$${costWithout.toFixed(6)}</span>
             </div>
             <div class="savings-row">
-              <span class="label">With FAGE routing + pruning</span>
+              <span class="label">With CostPilot routing + pruning</span>
               <span class="value">$${costWith.toFixed(6)}</span>
             </div>
             <hr class="savings-divider"/>
@@ -1279,7 +1279,7 @@ async function initStatus() {
     const label = document.getElementById("statusLabel");
     const badge = document.getElementById("modeBadge");
     dot.className   = "status-dot online";
-    label.textContent = "FAGE Online";
+    label.textContent = "CostPilot Online";
     badge.style.display = "inline-block";
     badge.className     = `mode-badge ${cfg.mode === "live" ? "live" : "simulated"}`;
     badge.textContent   = cfg.mode === "live" ? `Live · ${cfg.provider}` : "Simulated";

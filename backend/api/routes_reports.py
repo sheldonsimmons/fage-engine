@@ -1,5 +1,5 @@
 """
-api/routes_reports.py — FAGE Reporting Engine
+api/routes_reports.py — CostPilot Reporting Engine
 
 GET /api/reports/savings     — Savings report: pruning + model downgrade savings over time
 GET /api/reports/risk        — Risk report: sensitive term hits, audit events, blocks
@@ -64,7 +64,7 @@ def savings_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(ge
         if _tier_bucket(t.model_tier) == "micro"
     ), 6)
 
-    # Hypothetical cost with no FAGE routing (all calls at flagship rates, no pruning savings)
+    # Hypothetical cost with no CostPilot routing (all calls at flagship rates, no pruning savings)
     cost_if_all_flagship = round(total_cost + downgrade_saved, 6)
     total_saved          = round(pruning_saved + downgrade_saved, 6)
 

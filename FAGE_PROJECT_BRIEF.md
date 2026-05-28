@@ -19,12 +19,12 @@ FAGE sits between a company's data systems and its AI tools. Every AI request pa
 
 | Layer | Technology | Why |
 |---|---|---|
-| Backend | Python 3.11 + FastAPI | Async, auto-generates API docs, best AI ecosystem |
-| Database | SQLite + SQLAlchemy ORM | Zero setup, file-based, portable |
+| Backend | Python 3.13 + FastAPI | Async, auto-generates API docs, best AI ecosystem |
+| Database | SQLite (local) / PostgreSQL (production) + SQLAlchemy ORM | Zero setup locally, production-grade on Heroku |
 | Frontend | Vanilla HTML/CSS/JavaScript | No build step, runs anywhere, beginner-readable |
 | Audit Logs | Append-only JSONL flat files | Simulates immutability, human-readable, exportable |
-| AI Models | OpenAI (GPT-3.5-turbo + GPT-4o) | Live API calls with real token counts and costs |
-| Alt Provider | Anthropic (Claude Haiku + Claude Sonnet) | Swappable via single environment variable |
+| AI Models | Anthropic (Claude Haiku 4.5 · Claude Sonnet 4.6 · Claude Opus 4.6) | Live API calls with real token counts and costs |
+| Alt Provider | OpenAI (GPT-4o Mini · GPT-4o) — optional, disabled by default | Swappable via single environment variable |
 | Config | python-dotenv (.env file) | Secure key management, never committed to git |
 
 ---
@@ -73,34 +73,36 @@ After pruning, FAGE evaluates the payload complexity and automatically selects t
 
 1. **Check throttle status** — if the requesting department has hit its budget cap, force micro-model regardless of complexity
 2. **Keyword scan** — if any high-risk keyword is present, escalate to flagship
-3. **Token count check** — if cleaned payload exceeds 150 tokens, escalate to flagship
+3. **Token count check** — if cleaned payload exceeds 250 tokens, escalate to flagship
 4. **Default** — route to micro-model
 
 **High-risk keywords that trigger flagship escalation:**
-legal, compliance, lawsuit, contract, audit, fraud, critical, escalate, billing dispute, breach, regulatory, urgent, data loss, outage, enterprise, gdpr, hipaa
+legal, compliance, lawsuit, contract, audit, fraud, critical, billing dispute, breach, regulatory, data loss, outage, gdpr, hipaa, analyze, analysis, assessment, evaluate, evaluation, root cause, integration, migration, architecture, performance review, optimization, forecast, strategy, risk assessment, incident, escalate, escalation, investigate, investigation, troubleshoot, diagnose, recommendation, summarize, compare, benchmark
 
 **Model tiers:**
 
-| Tier | Model (OpenAI) | Input Cost | Output Cost | Used For |
+| Tier | Model | Input Cost | Output Cost | Used For |
 |---|---|---|---|---|
-| Micro (Economy) | gpt-3.5-turbo | $0.15/M tokens | $0.60/M tokens | ROUTINE requests |
-| Flagship (Premium) | gpt-4o | $3.00/M tokens | $15.00/M tokens | COMPLEX requests |
+| Scout (Tier 1) | Claude Haiku 4.5 | $0.80/M | $4.00/M | Routine requests |
+| Analyst (Tier 2) | Claude Haiku 4.5 or Sonnet 4.6 | — | — | Moderate complexity |
+| Advisor (Tier 3) | Claude Sonnet 4.6 | $3.00/M | $15.00/M | Complex/sensitive work |
+| Strategist (Tier 4) | Claude Opus 4.6 | $15.00/M | $75.00/M | Mission-critical decisions only |
 
 **Routing decisions:**
-- `ROUTINE` — micro model, cheap, fast
-- `COMPLEX` — flagship model, expensive, thorough
+- `ROUTINE` — Scout tier, cheap, fast
+- `COMPLEX` — Advisor/Strategist tier, expensive, thorough
 - `THROTTLED` — department over budget cap, forced to micro regardless of complexity
 
 **Live test results:**
-- "What are your business hours?" → ROUTINE → gpt-3.5-turbo → $0.000025
-- GDPR compliance audit request → COMPLEX → gpt-4o → $0.004740
-- Same GDPR request when Marketing is over cap → THROTTLED → gpt-3.5-turbo → $0.000072 (98% cheaper)
+- "What are your business hours?" → ROUTINE → Claude Haiku → $0.000025
+- GDPR compliance audit request → COMPLEX → Claude Sonnet → $0.004740
+- Same GDPR request when Marketing is over cap → THROTTLED → Claude Haiku → $0.000072 (98% cheaper)
 
 **Provider switching:**
-The model client supports OpenAI and Anthropic. Switching providers requires changing one line in the `.env` file:
+The model client supports Anthropic (primary) and OpenAI (optional). Switching providers requires changing one line in the `.env` file:
 ```
-FAGE_PROVIDER=openai      # uses GPT-3.5-turbo + GPT-4o
-FAGE_PROVIDER=anthropic   # uses Claude Haiku + Claude Sonnet
+FAGE_PROVIDER=anthropic   # uses Claude Haiku 4.5 + Claude Sonnet 4.6 (default)
+FAGE_PROVIDER=openai      # uses GPT-4o Mini + GPT-4o (optional, disabled by default)
 ```
 
 ---
@@ -140,6 +142,7 @@ When a department reaches 100% of its monthly cap:
 | Sales | $300 | $87.20 | 29% (healthy) |
 | Marketing | $250 | $249.10 | 99.6% (warning) |
 | Operations | $150 | $23.80 | 16% (healthy) |
+| Trips Team | $200 | — | — (healthy) |
 
 ---
 
@@ -185,8 +188,8 @@ The "Simulate Collision" button forces SupportBot-Alpha and SupportBot-Beta to s
 Every high-stakes AI decision is written to two places simultaneously — the database and an append-only JSONL flat file. The file simulates an immutable black box: records are only ever appended, never modified or deleted.
 
 **What triggers an audit event:**
-- Any `COMPLEX` routing decision (flagship model invoked)
-- Any `THROTTLED` routing decision (budget cap enforced)
+- ALL routing decisions (`ROUTINE`, `COMPLEX`, `THROTTLED`) — every call is audited
+- Any `BLOCKED` event (sensitive term policy violation) — audited at critical risk level
 - Any concurrency `LOCK` event (collision detected)
 - Any supervisor `OVERRIDE` granted or revoked
 
@@ -211,6 +214,27 @@ Every high-stakes AI decision is written to two places simultaneously — the da
 The full JSONL audit file is downloadable at any time from the dashboard. Each line is a complete, self-contained JSON object. Format is compatible with SIEM tools, Splunk, and standard log aggregators.
 
 **Audit log file location:** `backend/audit_logs/fage_audit.jsonl`
+
+---
+
+## Additional Capabilities
+
+Beyond the five core engines, FAGE includes the following production features:
+
+**Sensitive Term Library**
+A configurable list of prohibited or flagged terms (e.g., competitor names, internal code words, regulated phrases). Any payload containing a sensitive term is immediately `BLOCKED` before reaching the model — the block event is logged as a `BLOCKED` audit record at critical risk level.
+
+**Voice Guard**
+PII redaction layer purpose-built for voice call transcripts. Before any transcript text reaches the AI, Voice Guard strips names, card numbers, SSNs, phone numbers, and other PII patterns — replacing them with typed placeholders (e.g., `[CARD_NUMBER]`). Available via `/api/voice/transcript`.
+
+**Model Registry**
+A database-backed registry of all AI provider models available to FAGE. Each model entry stores provider, model ID, tier assignment, pricing (input/output per 1M tokens), and enabled/disabled status. The registry drives routing decisions and cost calculations without hard-coding model data.
+
+**Reports & Analytics**
+Pre-built reporting views accessible from the dashboard: Agent Activity reports (per-agent call volumes, costs, routing outcomes), Bot Efficiency reports (pruning savings, token compression rates), and time-series charts showing spend trends over configurable date ranges.
+
+**Platform Context Enrichment**
+When FAGE receives a routing request from a connected CRM platform (Salesforce, ServiceNow, HubSpot, etc.), it can enrich the payload context with platform-specific metadata — ticket priority, customer tier, SLA status — before complexity scoring. This improves routing accuracy without requiring the calling platform to re-structure its payloads.
 
 ---
 
@@ -294,8 +318,8 @@ Raw Payload (email, ticket, log)
     ▼          ▼
 [THROTTLE]  [ROUTER] Score complexity
 Force micro   │
-              ├── ROUTINE → Micro model (gpt-3.5-turbo)
-              └── COMPLEX → Flagship model (gpt-4o)
+              ├── ROUTINE → Scout/Analyst (Claude Haiku)
+              └── COMPLEX → Advisor/Strategist (Claude Sonnet/Opus)
                        │
                        ▼
               [AGENTLAKE] Is another agent writing the same record?
@@ -312,7 +336,7 @@ Force micro   │
                                  │
                                  ▼
                          [BUDGET] Record spend
-                         [AUDITOR] Write audit event (if COMPLEX/THROTTLED)
+                         [AUDITOR] Write audit event (ALL routing decisions)
                                  │
                                  ▼
                          Response + full routing report returned
@@ -351,15 +375,16 @@ All endpoints auto-documented at `http://localhost:8001/docs`
 
 ```
 FAGE_MODEL_MODE=live          # "simulated" or "live"
-FAGE_PROVIDER=openai          # "openai" or "anthropic"
-
-OPENAI_API_KEY=sk-...
-OPENAI_MICRO_MODEL=gpt-3.5-turbo
-OPENAI_FLAGSHIP_MODEL=gpt-4o
+FAGE_PROVIDER=anthropic       # "anthropic" (default/primary) or "openai" (optional)
 
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MICRO_MODEL=claude-haiku-4-5-20251001
 ANTHROPIC_FLAGSHIP_MODEL=claude-sonnet-4-6
+
+# Optional — only needed if switching to OpenAI provider
+OPENAI_API_KEY=sk-...
+OPENAI_MICRO_MODEL=gpt-4o-mini
+OPENAI_FLAGSHIP_MODEL=gpt-4o
 ```
 
 Setting `FAGE_MODEL_MODE=simulated` disables all API calls and runs entirely on local mock responses. No API keys needed in simulated mode.
@@ -387,27 +412,28 @@ uvicorn main:app --reload --port 8001
 
 ---
 
-## Proven Test Results (Live GPT-4o)
+## Proven Test Results (Live — Anthropic)
 
 | Test | Payload | Decision | Model | Cost |
 |---|---|---|---|---|
-| 1 | "What are your business hours?" | ROUTINE | gpt-3.5-turbo | $0.000025 |
-| 2 | GDPR compliance audit request | COMPLEX | gpt-4o | $0.004740 |
-| 3 | Long pipeline review (no keywords) | COMPLEX | gpt-4o | token count trigger |
-| 4 | GDPR request, Marketing over cap | THROTTLED | gpt-3.5-turbo | $0.000072 (98% cheaper) |
+| 1 | "What are your business hours?" | ROUTINE | Claude Haiku | $0.000025 |
+| 2 | GDPR compliance audit request | COMPLEX | Claude Sonnet | $0.004740 |
+| 3 | Long pipeline review (no keywords) | COMPLEX | Claude Sonnet | token count trigger |
+| 4 | GDPR request, Marketing over cap | THROTTLED | Claude Haiku | $0.000072 (98% cheaper) |
 | 5 | Two agents → same ticket | COLLISION | Both locked | $0 (no call made) |
-| 6 | Raw HTML email → Sweeper → Router | COMPLEX + pruned | gpt-4o | $0.004740 vs $0.006438 without pruning |
+| 6 | Raw HTML email → Sweeper → Router | COMPLEX + pruned | Claude Sonnet | $0.004740 vs $0.006438 without pruning |
 
 ---
 
 ## Future Roadmap
 
 **Near-term (next build phase):**
-- Push to GitHub as open-source repository
-- Deploy to Heroku for a live shareable URL
-- 30-day rolling cost graphs using Chart.js
-- Email/Slack alerts when budget thresholds are hit
 - Role-based access control (supervisor vs read-only)
+- Slack alerts when budget thresholds are hit
+- Email alerts when budget thresholds are hit
+- Expanded Voice Guard — real-time streaming PII redaction
+- Multi-tenant support (isolated environments per client/org)
+- 30-day rolling cost graphs using Chart.js
 
 **Platform Integration Targets:**
 - **Salesforce** — Named Credentials + Apex callouts + Connected App (Heroku-hosted)

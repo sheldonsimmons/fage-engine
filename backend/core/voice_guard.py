@@ -1,8 +1,8 @@
 """
-core/voice_guard.py — FAGE Voice Guard Pipeline
+core/voice_guard.py — CostPilot Voice Guard Pipeline
 
 Processes raw voice transcripts (from any ASR platform) and redacts PII
-before the transcript is passed to FAGE's AI governance pipeline.
+before the transcript is passed to CostPilot's AI governance pipeline.
 
 Pipeline:
   1. Normalization     — convert spoken numbers to digits, strip ASR artifacts

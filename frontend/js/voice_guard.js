@@ -449,7 +449,7 @@ function exportVgDetailedCsv() {
 }
 
 function exportVgPdf() {
-  printSection("voiceGuardBody", "FAGE — Voice Guard Audit Log");
+  printSection("voiceGuardBody", "CostPilot — Voice Guard Audit Log");
 }
 
 // ── Live Microphone / Speech Recognition ──────────────────────────────────────

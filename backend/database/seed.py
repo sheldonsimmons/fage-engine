@@ -1,5 +1,5 @@
 """
-seed.py — Populates the FAGE SQLite database with realistic mock CRM data.
+seed.py — Populates the CostPilot SQLite database with realistic mock CRM data.
 
 Run once before starting the server:
     cd backend
@@ -168,7 +168,7 @@ def seed():
 
     db.close()
 
-    print("\n✅ FAGE database seeded successfully.")
+    print("\n✅ CostPilot database seeded successfully.")
     print(f"   → {len(customers)} customers")
     print(f"   → {len(tickets)} support tickets")
     print(f"   → {len(crm_records)} CRM records")

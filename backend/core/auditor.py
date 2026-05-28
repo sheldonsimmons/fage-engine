@@ -128,7 +128,7 @@ def _build_rationale(
             f"Matched sensitive terms: {kw_str}. "
             f"No tokens were consumed. No data was sent to OpenAI or any external provider. "
             f"This event is logged for compliance review. "
-            f"If this block was in error, review the sensitive term library in FAGE Setup."
+            f"If this block was in error, review the sensitive term library in CostPilot Setup."
         )
 
     if routing_decision == "COMPLEX":

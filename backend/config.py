@@ -1,5 +1,5 @@
 """
-config.py — Central configuration for FAGE.
+config.py — Central configuration for CostPilot.
 
 All pricing parameters, model definitions, and system defaults live here.
 To swap from simulated to live models, update the model names and API endpoints.

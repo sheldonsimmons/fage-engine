@@ -1,5 +1,5 @@
 /**
- * reports.js — FAGE Reporting Engine UI
+ * reports.js — CostPilot Reporting Engine UI
  *
  * Three tabs: Savings, Risk & Compliance, Departments
  * Chart.js for all visualizations.
@@ -560,7 +560,7 @@ async function generateEfficiencyReview() {
     document.getElementById("effFleetGrade").textContent   = data.fleet_grade || "—";
     document.getElementById("effAgentsCount").textContent  = data.total_agents_analyzed;
     document.getElementById("effTotalSavings").textContent = "$" + (data.total_projected_savings || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    document.getElementById("effGeneratedBy").textContent  = data.generated_by === "ai" ? "GPT-4o" : "FAGE Analytics";
+    document.getElementById("effGeneratedBy").textContent  = data.generated_by === "ai" ? "GPT-4o" : "CostPilot Analytics";
     document.getElementById("effFleetBar").style.display   = "grid";
 
     if (!data.reviews || !data.reviews.length) {
@@ -602,7 +602,7 @@ function renderEfficiencyCard(r) {
 
   const aiBadge = r.generated_by === "ai"
     ? `<div class="eff-ai-badge">◈ GPT-4o Analysis</div>`
-    : `<div class="eff-ai-badge" style="color:var(--text-muted)">◈ FAGE Analytics Engine</div>`;
+    : `<div class="eff-ai-badge" style="color:var(--text-muted)">◈ CostPilot Analytics Engine</div>`;
 
   return `
     <div class="eff-card grade-${grad}">
@@ -873,7 +873,7 @@ function exportRiskCsv() {
 }
 
 function exportRiskPdf() {
-  printSection("tab-risk", "FAGE — Risk & Compliance Report");
+  printSection("tab-risk", "CostPilot — Risk & Compliance Report");
 }
 
 function exportDeptCsv() {
@@ -894,7 +894,7 @@ function exportDeptCsv() {
 }
 
 function exportDeptPdf() {
-  printSection("tab-departments", "FAGE — Department Report");
+  printSection("tab-departments", "CostPilot — Department Report");
 }
 
 function exportSavingsCsv() {
@@ -903,7 +903,7 @@ function exportSavingsCsv() {
   const headers = ["Metric", "Value"];
   const rows = [
     ["Total Saved (USD)",         d.total_saved_usd?.toFixed(4)    ?? ""],
-    ["Cost Without FAGE (USD)",   d.cost_if_no_fage_usd?.toFixed(4)?? ""],
+    ["Cost Without CostPilot (USD)",   d.cost_if_no_fage_usd?.toFixed(4)?? ""],
     ["Actual Cost (USD)",         d.total_cost_usd?.toFixed(4)     ?? ""],
     ["Pruning Savings (USD)",     d.pruning_saved_usd?.toFixed(4)  ?? ""],
     ["Tokens Pruned",             d.tokens_pruned ?? ""],
@@ -916,7 +916,7 @@ function exportSavingsCsv() {
 }
 
 function exportSavingsPdf() {
-  printSection("tab-savings", "FAGE — Savings Report");
+  printSection("tab-savings", "CostPilot — Savings Report");
 }
 
 // ── Draggable report cards ────────────────────────────────────────────────────

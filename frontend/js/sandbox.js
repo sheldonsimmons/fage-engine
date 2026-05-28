@@ -1,5 +1,5 @@
 /**
- * sandbox.js — FAGE Sandbox / Isolated Test Environment
+ * sandbox.js — CostPilot Sandbox / Isolated Test Environment
  *
  * All calls pass is_test: true to the backend — no transactions, budgets,
  * or audit events are written. Results are session-only.

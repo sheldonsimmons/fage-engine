@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Sandbox</title>
+  <title>CostPilot — Sandbox</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
@@ -125,7 +125,7 @@
 <header class="header">
   <div class="header-brand">
     <span class="header-logo">◈</span>
-    <span class="header-title">FAGE</span>
+    <span class="header-title">CostPilot</span>
     <span class="header-sub">Sandbox — Isolated Test Environment</span>
   </div>
   <div class="header-nav" style="gap:10px;align-items:center">
@@ -475,12 +475,12 @@
 <script>
 window.PAGE_TOUR_STEPS = [
   { target:"sb-stat-calls",    title:"Session Stats",           body:"Every call you make in the sandbox is tracked here — total calls, tokens saved by pruning, cost, and which model tier was selected. Resets when you refresh.",                      position:"bottom" },
-  { target:"sb-vg-input",      title:"Voice Guard — PII Redaction", body:"Paste a voice transcript here and FAGE strips PII before it reaches any AI model — SSNs, credit cards, bank accounts, dates of birth, even spoken hesitantly or interrupted.", position:"bottom" },
+  { target:"sb-vg-input",      title:"Voice Guard — PII Redaction", body:"Paste a voice transcript here and CostPilot strips PII before it reaches any AI model — SSNs, credit cards, bank accounts, dates of birth, even spoken hesitantly or interrupted.", position:"bottom" },
   { target:"sb-vg-result",     title:"Voice Guard Results",     body:"After redaction, see how many PII items were caught, the detection method (pattern vs. AI), and the cleaned transcript ready to pass safely through the router.",                  position:"top"    },
-  { target:"sb-pruner-input",  title:"Context Pruner",          body:"Paste any raw text — a support email, log dump, ticket thread — and FAGE strips it to only the meaningful content. See tokens removed and cost avoided before it hits a model.",   position:"bottom" },
+  { target:"sb-pruner-input",  title:"Context Pruner",          body:"Paste any raw text — a support email, log dump, ticket thread — and CostPilot strips it to only the meaningful content. See tokens removed and cost avoided before it hits a model.",   position:"bottom" },
   { target:"sb-pruner-result", title:"Pruner Results",          body:"Token counts before and after, percentage compressed, and estimated cost savings at both micro and flagship rates. The cleaned text is what gets sent to the AI.",                  position:"top"    },
-  { target:"sb-router-input",  title:"Token Router",            body:"Route a real payload through FAGE's full pipeline — prune, score complexity, select model tier, simulate the call. No budget impact. Real routing logic, sandboxed result.",        position:"bottom" },
-  { target:"sb-router-result", title:"Router Results",          body:"See the full routing decision: complexity classification, model selected, cost, tokens, and the plain-English reason FAGE chose this tier.", position:"top", last:true },
+  { target:"sb-router-input",  title:"Token Router",            body:"Route a real payload through CostPilot's full pipeline — prune, score complexity, select model tier, simulate the call. No budget impact. Real routing logic, sandboxed result.",        position:"bottom" },
+  { target:"sb-router-result", title:"Router Results",          body:"See the full routing decision: complexity classification, model selected, cost, tokens, and the plain-English reason CostPilot chose this tier.", position:"top", last:true },
 ];
 </script>
 </body>

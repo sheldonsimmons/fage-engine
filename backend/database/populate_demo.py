@@ -1,5 +1,5 @@
 """
-populate_demo.py — Load the FAGE dashboard with impressive demo data for screenshots.
+populate_demo.py — Load the CostPilot dashboard with impressive demo data for screenshots.
 
 Does NOT wipe departments, agents, or sensitive terms.
 Clears only transactions and audit events, then rebuilds with rich data.

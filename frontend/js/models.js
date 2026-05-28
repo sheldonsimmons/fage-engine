@@ -1,5 +1,5 @@
 /**
- * models.js — FAGE Model Registry UI
+ * models.js — CostPilot Model Registry UI
  *
  * Renders tier reference cards, model table, and add/edit modal.
  */

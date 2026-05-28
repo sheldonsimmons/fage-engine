@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Calculate Your AI Savings</title>
+  <title>CostPilot — Calculate Your AI Savings</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     body { min-height:100vh; display:flex; flex-direction:column; background:var(--bg-base); }
@@ -254,8 +254,8 @@
   <div class="header-brand">
     <span class="header-logo">◈</span>
     <div>
-      <div class="header-title">FAGE</div>
-      <div class="header-sub">FinOps Agentlake &amp; Governance Engine</div>
+      <div class="header-title">CostPilot</div>
+      <div class="header-sub">Navigate AI Spend with Precision</div>
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
@@ -271,7 +271,7 @@
   <!-- ── Hero ─────────────────────────────────────────────────────────────── -->
   <div class="hero">
     <div class="hero-eyebrow">● Free · No commitment · 3 minutes</div>
-    <h1 class="hero-title">See exactly what FAGE would<br/><span>save your company</span></h1>
+    <h1 class="hero-title">See exactly what CostPilot would<br/><span>save your company</span></h1>
     <p class="hero-sub">Use your real AI usage data or enter your numbers manually. Get a precise savings estimate before you ever talk to anyone.</p>
   </div>
 
@@ -446,7 +446,7 @@
   <div class="results-card" id="resultsCard">
 
     <div class="results-header">
-      <div class="results-eyebrow">Your FAGE Savings Estimate</div>
+      <div class="results-eyebrow">Your CostPilot Savings Estimate</div>
       <div class="results-headline" id="resultsHeadline">$0 / month</div>
       <div class="results-sub" id="resultsSub">Based on your usage data</div>
     </div>
@@ -454,14 +454,14 @@
     <div class="results-kpi" id="resultsKpi"></div>
 
     <div class="comparison" id="resultsComparison">
-      <div class="comparison-title">Monthly Cost — Without FAGE vs. With FAGE</div>
+      <div class="comparison-title">Monthly Cost — Without CostPilot vs. With CostPilot</div>
       <div class="comparison-row">
-        <div class="comparison-label" style="color:var(--accent-red)">Without FAGE</div>
+        <div class="comparison-label" style="color:var(--accent-red)">Without CostPilot</div>
         <div class="comparison-bar-wrap"><div class="comparison-bar red" id="barWithout" style="width:100%"></div></div>
         <div class="comparison-value" style="color:var(--accent-red)" id="valWithout">$0</div>
       </div>
       <div class="comparison-row">
-        <div class="comparison-label" style="color:var(--accent-green)">With FAGE</div>
+        <div class="comparison-label" style="color:var(--accent-green)">With CostPilot</div>
         <div class="comparison-bar-wrap"><div class="comparison-bar green" id="barWith" style="width:0%"></div></div>
         <div class="comparison-value" style="color:var(--accent-green)" id="valWith">$0</div>
       </div>
@@ -833,11 +833,11 @@ function calcSavings(usage) {
   const currentCost = usage.totalCost;
 
   // Downgrade savings: calls currently on flagship that would go to Scout
-  // Assume FAGE routes 70% of flagship calls to Scout (complex stays, routine downgrades)
+  // Assume CostPilot routes 70% of flagship calls to Scout (complex stays, routine downgrades)
   const currentFlagshipIn  = totalIn  * usage.flagshipPct;
   const currentFlagshipOut = totalOut * usage.flagshipPct;
 
-  // FAGE re-routes ~65% of those to Scout
+  // CostPilot re-routes ~65% of those to Scout
   const reroutePct = 0.65;
   const reroutedIn  = currentFlagshipIn  * reroutePct;
   const reroutedOut = currentFlagshipOut * reroutePct;
@@ -900,10 +900,10 @@ function showResults(usage, source, days) {
     <div class="kpi-box">
       <div class="kpi-box-label">Current Monthly Spend</div>
       <div class="kpi-box-value red">$${fmt(s.currentCost)}</div>
-      <div class="kpi-box-sub">before FAGE governance</div>
+      <div class="kpi-box-sub">before CostPilot governance</div>
     </div>
     <div class="kpi-box">
-      <div class="kpi-box-label">With FAGE</div>
+      <div class="kpi-box-label">With CostPilot</div>
       <div class="kpi-box-value yellow">$${fmt(s.costWithFage)}</div>
       <div class="kpi-box-sub">estimated monthly cost</div>
     </div>
@@ -941,7 +941,7 @@ function showResults(usage, source, days) {
       <span class="saved">− $${fmt(s.pruningSaved)}</span>
     </div>
     <div class="breakdown-row total">
-      <span class="label">Estimated monthly spend with FAGE</span>
+      <span class="label">Estimated monthly spend with CostPilot</span>
       <span class="value" style="color:var(--accent-green)">$${fmt(s.costWithFage)}</span>
     </div>
   `;
@@ -949,7 +949,7 @@ function showResults(usage, source, days) {
   // Disclaimer
   document.getElementById("resultsDisclaimer").textContent = source === "manual"
     ? "Estimate based on your inputs. Assumes 65% of flagship calls are re-routable to Scout tier and industry-average pruning compression. Actual savings depend on payload content, routing configuration, and model selection."
-    : "Savings calculated using FAGE routing simulation against your real usage data. Assumes 65% of complex-tier calls can be safely re-routed to Scout. Actual savings may vary based on content and routing configuration.";
+    : "Savings calculated using CostPilot routing simulation against your real usage data. Assumes 65% of complex-tier calls can be safely re-routed to Scout. Actual savings may vary based on content and routing configuration.";
 
   const card = document.getElementById("resultsCard");
   card.classList.add("visible");

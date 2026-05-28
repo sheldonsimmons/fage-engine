@@ -105,7 +105,7 @@ def _agent_stats(db: Session, agent: RegisteredAgent, days: int) -> dict:
 
 def _generate_simulated_review(stats: dict) -> dict:
     """
-    Rule-based efficiency recommendations — used when FAGE is in simulated mode.
+    Rule-based efficiency recommendations — used when CostPilot is in simulated mode.
     Produces realistic, specific recommendations without an API call.
     """
     name       = stats["agent_name"]
@@ -154,7 +154,7 @@ def _generate_simulated_review(stats: dict) -> dict:
     if pr < 50:
         findings.append(f"Only {pr}% of payloads are being pruned — significant noise likely in upstream inputs.")
         prune_save = round(cost * 0.25, 2)
-        recs.append(f"Improve upstream data quality before payloads reach FAGE. Structured Salesforce fields instead of raw case descriptions could push pruning rate to 70%+, saving ~${prune_save:,.2f} over {days} days.")
+        recs.append(f"Improve upstream data quality before payloads reach CostPilot. Structured Salesforce fields instead of raw case descriptions could push pruning rate to 70%+, saving ~${prune_save:,.2f} over {days} days.")
         proj_save += prune_save
         grade = "B" if grade == "A" else grade
     elif pr > 80:

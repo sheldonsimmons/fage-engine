@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Reports</title>
+  <title>CostPilot — Reports</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/reports.css" />
   <link rel="stylesheet" href="css/demo.css" />
@@ -16,8 +16,8 @@
   <header class="header">
     <div class="header-brand">
       <span class="header-logo">◈</span>
-      <span class="header-title">FAGE</span>
-      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+      <span class="header-title">CostPilot</span>
+      <span class="header-sub">Navigate AI Spend with Precision</span>
     </div>
     <div class="header-nav">
       <a href="/" class="header-nav-link">Dashboard</a>
@@ -144,7 +144,7 @@
           <div class="rpt-kpi-sub">pruning + model downgrade</div>
         </div>
         <div class="rpt-kpi">
-          <div class="rpt-kpi-label">Without FAGE</div>
+          <div class="rpt-kpi-label">Without CostPilot</div>
           <div class="rpt-kpi-value" id="sv-no-fage">—</div>
           <div class="rpt-kpi-sub">est. cost at full flagship rate</div>
         </div>
@@ -554,7 +554,7 @@
           </div>
 
           <div style="margin-bottom:18px">
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><strong style="color:var(--text-primary);font-size:13px">FAGE Plan</strong></div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><strong style="color:var(--text-primary);font-size:13px">CostPilot Plan</strong></div>
             <select id="roi-plan" onchange="roiCalc()" style="width:100%;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:13px">
               <option value="299">Starter — $299/month</option>
               <option value="599">Growth — $599/month</option>
@@ -573,11 +573,11 @@
 
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px">
             <div class="panel" style="padding:14px 16px">
-              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly Without FAGE</div>
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly Without CostPilot</div>
               <div id="roi-cost-without" style="font-size:22px;font-weight:700;color:var(--accent-red);font-family:var(--font-mono)">—</div>
             </div>
             <div class="panel" style="padding:14px 16px">
-              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly With FAGE</div>
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px">Monthly With CostPilot</div>
               <div id="roi-cost-with" style="font-size:22px;font-weight:700;color:var(--accent-green);font-family:var(--font-mono)">—</div>
             </div>
             <div class="panel" style="padding:14px 16px">
@@ -630,7 +630,7 @@
   </main>
 
   <footer class="footer">
-    FAGE v0.1.0 — Reports &nbsp;|&nbsp;
+    CostPilot v0.1.0 — Reports &nbsp;|&nbsp;
     <a href="/">← Dashboard</a>
   </footer>
 
@@ -720,17 +720,17 @@
       if (monthlySaved <= 0) {
         paybackEl.style.background = "#1a0505"; paybackEl.style.borderColor = "var(--accent-red)";
         paybackTxt.style.color = "var(--accent-red)";
-        paybackTxt.textContent = "FAGE cost exceeds routing savings at this volume";
+        paybackTxt.textContent = "CostPilot cost exceeds routing savings at this volume";
         paybackSub.textContent = "Consider a lower plan, or volume may be too low.";
       } else if (paybackMo && paybackMo < 1) {
         paybackEl.style.background = "#0d2d1a"; paybackEl.style.borderColor = "var(--accent-green)";
         paybackTxt.style.color = "var(--accent-green)";
-        paybackTxt.textContent = "FAGE pays for itself immediately";
-        paybackSub.textContent = "Routing savings exceed the FAGE fee from day one.";
+        paybackTxt.textContent = "CostPilot pays for itself immediately";
+        paybackSub.textContent = "Routing savings exceed the CostPilot fee from day one.";
       } else if (paybackMo) {
         paybackEl.style.background = "#0d2d1a"; paybackEl.style.borderColor = "var(--accent-green)";
         paybackTxt.style.color = "var(--accent-green)";
-        paybackTxt.textContent = `FAGE pays for itself in ${paybackMo} months`;
+        paybackTxt.textContent = `CostPilot pays for itself in ${paybackMo} months`;
         paybackSub.textContent = `After that, every month is ${fmt(monthlySaved)} back in your budget.`;
       }
 
@@ -749,11 +749,11 @@
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">${fmt(complexCost)}</td>
         </tr>
         <tr>
-          <td colspan="3" style="padding:9px 10px;border-bottom:1px solid #1c2128;color:var(--text-muted);font-size:11px">FAGE Platform Fee</td>
+          <td colspan="3" style="padding:9px 10px;border-bottom:1px solid #1c2128;color:var(--text-muted);font-size:11px">CostPilot Platform Fee</td>
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono);color:var(--text-muted)">${fmt(fee)}</td>
         </tr>
         <tr style="font-weight:700">
-          <td colspan="3" style="padding:9px 10px;border-top:1px solid var(--border)">Total With FAGE</td>
+          <td colspan="3" style="padding:9px 10px;border-top:1px solid var(--border)">Total With CostPilot</td>
           <td style="padding:9px 10px;font-family:var(--font-mono)">${fmt(costWith)}</td>
         </tr>
         <tr style="color:var(--accent-green);font-weight:700">
@@ -768,7 +768,7 @@
       const d = window._roiTabData;
       if (!d) return;
       const fmt = (n) => "$" + Math.abs(n).toFixed(2);
-      const text = `FAGE ROI Summary\nGenerated: ${new Date().toLocaleDateString()}\n\nMonthly Calls: ${d.totalCalls.toLocaleString()}\nRoutine/Complex: ${(d.routinePct*100).toFixed(0)}%/${(100-d.routinePct*100).toFixed(0)}%\nCost Without FAGE: ${fmt(d.costWithout)}/mo\nCost With FAGE: ${fmt(d.costWith)}/mo (incl. $${d.fee} fee)\nNet Monthly Savings: ${fmt(d.monthlySaved)}\nNet Annual Savings: ${fmt(d.annualSaved)}\n${d.paybackMo ? "Payback: " + d.paybackMo + " months" : ""}`;
+      const text = `CostPilot ROI Summary\nGenerated: ${new Date().toLocaleDateString()}\n\nMonthly Calls: ${d.totalCalls.toLocaleString()}\nRoutine/Complex: ${(d.routinePct*100).toFixed(0)}%/${(100-d.routinePct*100).toFixed(0)}%\nCost Without CostPilot: ${fmt(d.costWithout)}/mo\nCost With CostPilot: ${fmt(d.costWith)}/mo (incl. $${d.fee} fee)\nNet Monthly Savings: ${fmt(d.monthlySaved)}\nNet Annual Savings: ${fmt(d.annualSaved)}\n${d.paybackMo ? "Payback: " + d.paybackMo + " months" : ""}`;
       navigator.clipboard.writeText(text).then(() => {
         event.target.textContent = "✓ Copied!";
         setTimeout(() => event.target.textContent = "⎘ Copy Summary", 2000);
@@ -781,13 +781,13 @@
     { target:"rptDatePreset",    title:"Time Range",              body:"Change the reporting period — every chart and KPI updates instantly. Choose from presets or set a custom date range.",                                                           position:"bottom" },
     { target:"rptTabSavings",    title:"💰 Savings Tab",          body:"Active now. Shows total cost saved vs. a full-flagship baseline, broken into pruning savings and tier routing savings. Export to CSV or PDF.",                                   position:"bottom" },
     { target:"sv-total-saved",   title:"Total Saved",             body:"Headline ROI — tokens pruned plus the cost difference between economy and flagship tiers across all routed calls.",                                                             position:"bottom" },
-    { target:"sv-no-fage",       title:"Without FAGE Baseline",   body:"Estimated cost if every call had gone to flagship with no pruning. The gap between this and Actual Cost is your FAGE ROI.",                                                    position:"bottom" },
+    { target:"sv-no-fage",       title:"Without CostPilot Baseline",   body:"Estimated cost if every call had gone to flagship with no pruning. The gap between this and Actual Cost is your CostPilot ROI.",                                                    position:"bottom" },
     { target:"sv-calls",         title:"Call Volume Split",       body:"Total calls routed this period with economy vs. flagship breakdown. High economy % = strong routing efficiency.",                                                               position:"bottom" },
     { target:"rptTabRisk",       title:"🛡 Risk & Compliance",    body:"Click this tab to see every governance event — blocked PII, high-risk escalations, collision locks, and a board-ready executive summary.",                                       position:"bottom" },
     { target:"rptTabDepts",      title:"🏢 Departments",          body:"Click to see a scorecard per department — call volume, economy-tier %, actual cost, and budget bar. Throttled departments flagged.",                                             position:"bottom" },
     { target:"rptTabEfficiency", title:"🤖 Bot Efficiency",       body:"Click then hit Generate Review to run AI analysis on every agent — grade, findings, and recommendations with projected savings.",                                              position:"bottom" },
     { target:"rptTabActivity",   title:"📡 Agent Activity",       body:"Click to filter by platform, agent, or tier. Expand any agent row to see its full transaction log.",                                                                           position:"bottom" },
-    { target:"rptTabRoi",        title:"📈 ROI Calculator",       body:"Click to model your own AI usage — calls, token counts, model tier, FAGE plan. See payback period and net annual savings.", position:"bottom", last:true },
+    { target:"rptTabRoi",        title:"📈 ROI Calculator",       body:"Click to model your own AI usage — calls, token counts, model tier, CostPilot plan. See payback period and net annual savings.", position:"bottom", last:true },
   ];
   </script>
 </body>

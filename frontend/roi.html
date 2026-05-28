@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — ROI Calculator</title>
+  <title>CostPilot — ROI Calculator</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     .roi-grid {
@@ -337,8 +337,8 @@
   <header class="header">
     <div class="header-brand">
       <span class="header-logo">◈</span>
-      <span class="header-title">FAGE</span>
-      <span class="header-sub">FinOps Agentlake &amp; Governance Engine</span>
+      <span class="header-title">CostPilot</span>
+      <span class="header-sub">Navigate AI Spend with Precision</span>
     </div>
     <div class="header-nav">
       <a href="/connect.html" class="header-nav-link">+ Connect Platform</a>
@@ -357,7 +357,7 @@
 
     <div style="margin-bottom:24px">
       <h1 style="font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 6px">
-        💰 FAGE ROI Calculator
+        💰 CostPilot ROI Calculator
       </h1>
       <p style="font-size:13px; color:var(--text-muted); margin:0">
         Enter your AI usage profile to see cost savings and compliance risk exposure. Adjust any input and results update instantly.
@@ -450,7 +450,7 @@
         </div>
 
         <div class="roi-field">
-          <div class="roi-label"><strong>FAGE Plan</strong></div>
+          <div class="roi-label"><strong>CostPilot Plan</strong></div>
           <select class="roi-select" id="fagePlan" onchange="calculate()">
             <option value="299">Starter — $299/month (up to 10K calls)</option>
             <option value="599">Growth — $599/month (up to 100K calls)</option>
@@ -461,7 +461,7 @@
         </div>
 
         <div class="roi-field" id="customPlanField" style="display:none">
-          <div class="roi-label"><strong>Custom FAGE Monthly Cost</strong></div>
+          <div class="roi-label"><strong>Custom CostPilot Monthly Cost</strong></div>
           <div class="roi-input-row">
             <input type="number" id="customPlanCost" value="0" min="0"
               oninput="calculate()" style="width:130px">
@@ -543,14 +543,14 @@
 
           <div class="roi-result-grid">
             <div class="roi-result-card">
-              <div class="roi-result-label">Monthly Cost Without FAGE</div>
+              <div class="roi-result-label">Monthly Cost Without CostPilot</div>
               <div class="roi-result-value red" id="costWithout">—</div>
               <div class="roi-result-sub">Everything at current model</div>
             </div>
             <div class="roi-result-card">
-              <div class="roi-result-label">Monthly Cost With FAGE</div>
+              <div class="roi-result-label">Monthly Cost With CostPilot</div>
               <div class="roi-result-value green" id="costWith">—</div>
-              <div class="roi-result-sub">Smart routing + FAGE fee</div>
+              <div class="roi-result-sub">Smart routing + CostPilot fee</div>
             </div>
             <div class="roi-result-card">
               <div class="roi-result-label">Monthly Net Savings</div>
@@ -640,9 +640,9 @@
 
           <!-- Value vs fee ratio -->
           <div class="compliance-ratio">
-            <div class="compliance-ratio-label">Compliance Value vs. FAGE Annual Fee</div>
+            <div class="compliance-ratio-label">Compliance Value vs. CostPilot Annual Fee</div>
             <div class="compliance-ratio-value" id="complianceRatio" style="color:var(--accent-green)">—</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px" id="complianceRatioSub">For every $1 spent on FAGE, risk exposure avoided</div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px" id="complianceRatioSub">For every $1 spent on CostPilot, risk exposure avoided</div>
           </div>
 
           <!-- Fine breakdown by regulation -->
@@ -828,21 +828,21 @@
         banner.style.borderColor = "var(--accent-red)";
         document.querySelector(".roi-payback-icon").textContent = "⚠";
         paybackText.style.color = "var(--accent-red)";
-        paybackText.textContent = "FAGE cost exceeds routing savings at this volume";
+        paybackText.textContent = "CostPilot cost exceeds routing savings at this volume";
         paybackSub.textContent  = "Consider a lower plan tier, or your call volume may be too low for routing savings to offset the fee.";
       } else if (paybackMonths && paybackMonths < 1) {
         banner.style.background  = "#0d2d1a";
         banner.style.borderColor = "var(--accent-green)";
         document.querySelector(".roi-payback-icon").textContent = "✓";
         paybackText.style.color = "var(--accent-green)";
-        paybackText.textContent = "FAGE pays for itself immediately";
-        paybackSub.textContent  = "Routing savings exceed the FAGE fee from day one.";
+        paybackText.textContent = "CostPilot pays for itself immediately";
+        paybackSub.textContent  = "Routing savings exceed the CostPilot fee from day one.";
       } else if (paybackMonths) {
         banner.style.background  = "#0d2d1a";
         banner.style.borderColor = "var(--accent-green)";
         document.querySelector(".roi-payback-icon").textContent = "✓";
         paybackText.style.color = "var(--accent-green)";
-        paybackText.textContent = `FAGE pays for itself in ${paybackMonths} months`;
+        paybackText.textContent = `CostPilot pays for itself in ${paybackMonths} months`;
         paybackSub.textContent  = `After that, every month is ${fmt(monthlySavings)} back in your budget.`;
       }
 
@@ -861,15 +861,15 @@
           <td style="font-family:var(--font-mono)">${fmt(complexCost)}</td>
         </tr>
         <tr>
-          <td colspan="3" style="color:var(--text-muted);font-size:11px">FAGE Platform Fee</td>
+          <td colspan="3" style="color:var(--text-muted);font-size:11px">CostPilot Platform Fee</td>
           <td style="font-family:var(--font-mono);color:var(--text-muted)">${fmt(fageFee)}</td>
         </tr>
         <tr class="total-row">
-          <td colspan="3">Total Monthly Cost With FAGE</td>
+          <td colspan="3">Total Monthly Cost With CostPilot</td>
           <td style="font-family:var(--font-mono)">${fmt(totalCostWith)}</td>
         </tr>
         <tr class="total-row" style="color:var(--text-muted)">
-          <td colspan="3" style="font-weight:400;color:var(--text-muted)">Total Monthly Cost Without FAGE</td>
+          <td colspan="3" style="font-weight:400;color:var(--text-muted)">Total Monthly Cost Without CostPilot</td>
           <td style="font-family:var(--font-mono);color:var(--accent-red)">${fmt(costWithout)}</td>
         </tr>
         <tr class="savings-row">
@@ -908,7 +908,7 @@
       // Conservative: 1 reportable incident per 500 blocked calls
       const incidentsPrevented = Math.max(1, Math.round(callsBlockedYr / 500));
 
-      // Audit hours: 2 hrs manual work per blocked call to reconstruct without FAGE
+      // Audit hours: 2 hrs manual work per blocked call to reconstruct without CostPilot
       const auditHoursYr  = callsBlockedYr * 2;
       const auditCostYr   = auditHoursYr * 150;
 
@@ -968,7 +968,7 @@
         bigCard.style.background  = "#0a1f0f";
         bigVal.style.color        = "var(--accent-green)";
         bigVal.textContent = fmt(totalAnnualValue);
-        bigSub.textContent = `Fine exposure avoided + audit savings vs. $${(fageAnnualCost/1000).toFixed(0)}K/year FAGE cost`;
+        bigSub.textContent = `Fine exposure avoided + audit savings vs. $${(fageAnnualCost/1000).toFixed(0)}K/year CostPilot cost`;
       }
 
       // Ratio
@@ -981,7 +981,7 @@
       } else {
         ratioEl.textContent = ratio + "x";
         ratioEl.style.color = Number(ratio) >= 5 ? "var(--accent-green)" : Number(ratio) >= 2 ? "var(--accent-yellow)" : "var(--accent-red)";
-        ratioSub.textContent = `For every $1 spent on FAGE, $${ratio} of regulatory risk avoided`;
+        ratioSub.textContent = `For every $1 spent on CostPilot, $${ratio} of regulatory risk avoided`;
       }
 
       // Fine breakdown table
@@ -1015,7 +1015,7 @@
             <div class="compliance-breakdown-value" style="color:var(--accent-green);font-size:16px">${fmt(totalAnnualValue)}</div>
           </div>
           <div class="compliance-breakdown-row">
-            <div style="color:var(--text-muted)">FAGE Annual Cost</div>
+            <div style="color:var(--text-muted)">CostPilot Annual Cost</div>
             <div class="compliance-breakdown-value" style="color:var(--text-muted)">${fmt(fageAnnualCost)}</div>
           </div>
           <div class="compliance-breakdown-row">
@@ -1036,15 +1036,15 @@
     function copyToClipboard() {
       const d = window._roiData;
       if (!d) return;
-      const text = `FAGE ROI Summary — Cost Savings
+      const text = `CostPilot ROI Summary — Cost Savings
 Generated: ${new Date().toLocaleDateString()}
 
 Monthly AI Calls: ${d.totalCalls.toLocaleString()}
 Routine / Complex Split: ${(d.routinePct*100).toFixed(0)}% / ${(100-d.routinePct*100).toFixed(0)}%
 Avg Tokens: ${d.inputTok.toLocaleString()} in / ${d.outputTok.toLocaleString()} out
 
-Cost Without FAGE: $${d.costWithout.toFixed(2)}/month
-Cost With FAGE:    $${d.totalCostWith.toFixed(2)}/month (includes $${d.fageFee}/month FAGE fee)
+Cost Without CostPilot: $${d.costWithout.toFixed(2)}/month
+Cost With CostPilot:    $${d.totalCostWith.toFixed(2)}/month (includes $${d.fageFee}/month CostPilot fee)
 Net Monthly Savings: $${d.monthlySavings.toFixed(2)}
 Net Annual Savings:  $${d.annualSavings.toFixed(2)}
 Cost Reduction:      ${d.savingsPct.toFixed(1)}%
@@ -1062,7 +1062,7 @@ Risk value not included: HIPAA violations ($50K–$1.9M/incident), audit readine
       const d = window._complianceData;
       if (!d) return;
       const regs = [d.hasHIPAA && "HIPAA", d.hasGDPR && "GDPR", d.hasSOX && "SOX", d.hasPCI && "PCI-DSS"].filter(Boolean).join(", ") || "None selected";
-      const text = `FAGE ROI Summary — Compliance Risk
+      const text = `CostPilot ROI Summary — Compliance Risk
 Generated: ${new Date().toLocaleDateString()}
 
 Regulatory Frameworks: ${regs}
@@ -1072,9 +1072,9 @@ Audit Hours Saved/Year: ${d.auditHoursYr.toLocaleString()} hrs ($${d.auditCostYr
 
 Regulatory Fine Exposure Avoided: $${d.totalFineExposure.toFixed(0)}/year
 Total Annual Compliance Value: $${d.totalAnnualValue.toFixed(0)}
-FAGE Annual Cost: $${d.fageAnnualCost.toFixed(0)}
+CostPilot Annual Cost: $${d.fageAnnualCost.toFixed(0)}
 Net Compliance Value: $${(d.totalAnnualValue - d.fageAnnualCost).toFixed(0)}
-Return Ratio: ${d.ratio}x — for every $1 spent on FAGE, $${d.ratio} of risk avoided`;
+Return Ratio: ${d.ratio}x — for every $1 spent on CostPilot, $${d.ratio} of risk avoided`;
       navigator.clipboard.writeText(text).then(() => {
         const btn = event.target;
         btn.textContent = "✓ Copied!";

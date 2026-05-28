@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Live Operations Center</title>
+  <title>CostPilot — Live Operations Center</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
@@ -132,8 +132,8 @@
   <div class="header-brand">
     <span class="header-logo">◈</span>
     <div>
-      <div class="header-title">FAGE</div>
-      <div class="header-sub">FinOps Agentlake &amp; Governance Engine — Enterprise Demo</div>
+      <div class="header-title">CostPilot</div>
+      <div class="header-sub">Navigate AI Spend with Precision — Enterprise Demo</div>
     </div>
   </div>
   <div class="live-indicator">
@@ -160,7 +160,7 @@
     <div class="dkpi-sub" id="lKpiSpendSub">across all departments</div>
   </div>
   <div class="dkpi-card savings">
-    <div class="dkpi-label">Est. Cost Saved by FAGE</div>
+    <div class="dkpi-label">Est. Cost Saved by CostPilot</div>
     <div class="dkpi-value" style="color:var(--accent-green)" id="lKpiSaved">—</div>
     <div class="dkpi-sub" id="lKpiSavedSub">tier routing + pruning</div>
   </div>
@@ -467,17 +467,17 @@ let _streamEvtCounter = 0; // guarantees unique IDs even within the same ms
 function genRationale(type, tier, dept, cost, saved, stripped) {
   switch (type) {
     case "routine":
-      return `FAGE Scout tier assigned for routine request from ${dept} department. Low complexity classification — no sensitive keywords matched, budget within threshold. Tier routing saved $${saved.toFixed(6)} vs Advisor baseline ($3.00/1M input).`;
+      return `CostPilot Scout tier assigned for routine request from ${dept} department. Low complexity classification — no sensitive keywords matched, budget within threshold. Tier routing saved $${saved.toFixed(6)} vs Advisor baseline ($3.00/1M input).`;
     case "complex":
-      return `FAGE escalated to ${tier} model for ${dept} department. High-complexity indicators detected: legal, compliance, or financial context. Cost: $${cost.toFixed(6)}. No cheaper tier appropriate for this payload — downgrading would risk inadequate analysis.`;
+      return `CostPilot escalated to ${tier} model for ${dept} department. High-complexity indicators detected: legal, compliance, or financial context. Cost: $${cost.toFixed(6)}. No cheaper tier appropriate for this payload — downgrading would risk inadequate analysis.`;
     case "blocked":
-      return `FAGE PII Guard intercepted payload before reaching any AI model. Sensitive data matched FAGE keyword policy. Request terminated — zero tokens sent to AI. Compliance action logged. Cost avoided: $${saved.toFixed(6)}.`;
+      return `CostPilot PII Guard intercepted payload before reaching any AI model. Sensitive data matched CostPilot keyword policy. Request terminated — zero tokens sent to AI. Compliance action logged. Cost avoided: $${saved.toFixed(6)}.`;
     case "throttled":
-      return `${dept} department reached budget cap. FAGE Traffic Cop downgraded agent from Advisor to Scout tier to enforce spend controls. Tier routing saved $${saved.toFixed(6)}.`;
+      return `${dept} department reached budget cap. CostPilot Traffic Cop downgraded agent from Advisor to Scout tier to enforce spend controls. Tier routing saved $${saved.toFixed(6)}.`;
     case "pruning":
-      return `FAGE Context Pruner applied before Scout invocation. ${stripped ? stripped.toLocaleString() : "—"} redundant tokens removed from payload history. Pruning savings: $${saved.toFixed(6)} at Advisor rate. Payload quality preserved — only stale context removed.`;
+      return `CostPilot Context Pruner applied before Scout invocation. ${stripped ? stripped.toLocaleString() : "—"} redundant tokens removed from payload history. Pruning savings: $${saved.toFixed(6)} at Advisor rate. Payload quality preserved — only stale context removed.`;
     case "collision":
-      return `FAGE Traffic Cop detected concurrent record access conflict. Two agents targeted the same resource simultaneously. Both agents locked — supervisor action required to unlock and prevent conflicting AI outputs or data corruption.`;
+      return `CostPilot Traffic Cop detected concurrent record access conflict. Two agents targeted the same resource simultaneously. Both agents locked — supervisor action required to unlock and prevent conflicting AI outputs or data corruption.`;
     default:
       return "—";
   }
@@ -668,7 +668,7 @@ function toggleLiveRationale(eventId) {
       <div class="rationale-label">Context Snapshot</div>
       <div class="rationale-text" style="font-family:var(--font-mono);font-size:11px">
         ${budgetLine}<br>
-        Cost: ${costStr} &nbsp;|&nbsp; FAGE Saving: ${savedStr}
+        Cost: ${costStr} &nbsp;|&nbsp; CostPilot Saving: ${savedStr}
       </div>
     </div>
     <div class="rationale-section">
@@ -930,7 +930,7 @@ function toggleLiveEvent(eventId) {
     <div class="gov-detail-label">Budget Context</div>
     <div class="gov-detail-mono">${budgetLine}</div>
     <div class="gov-detail-label">Cost / Saved</div>
-    <div class="gov-detail-mono">Cost: ${costStr} &nbsp;|&nbsp; FAGE Saving: ${savedStr}</div>
+    <div class="gov-detail-mono">Cost: ${costStr} &nbsp;|&nbsp; CostPilot Saving: ${savedStr}</div>
     <div class="gov-detail-label">Matched Keywords</div>
     <div class="gov-detail-mono">${keywords}</div>
     <div class="gov-detail-label">Prompt Payload (first 400 chars)</div>
@@ -1012,7 +1012,7 @@ function tick() {
     addRoutingRow(eventId, agent.name, agent.dept, "BLOCKED", `${b.term} detected`, 0, true);
     addAuditRow(eventId, "blocked", agent.dept, "—", "critical", "Blocked", 0, saved);
     addStreamEvent("blocked", "🛡 REQUEST BLOCKED",
-      `${b.description} — content redacted by FAGE PII Guard`,
+      `${b.description} — content redacted by CostPilot PII Guard`,
       `Term: "${b.term}" · Category: ${b.category} · Cost avoided: $${saved.toFixed(6)}`,
       { dept: agent.dept, tier: "—", agent: agent.name, payload: `[${agent.dept}] ${b.description}. Request intercepted before reaching AI.`, keywords: [b.term], cost: 0, saved });
 
@@ -1279,9 +1279,9 @@ function init() {
     { dept:"Marketing", tier:"Scout", agent:"SF-MarketMailer", payload:"[Scout] Campaign targeting update — Q3 holiday push. Downgraded from Advisor due to Marketing budget cap enforcement.", keywords:[], cost:0.001040, saved:0.001680 });
 
   addStreamEvent("routine",   "◈ SYSTEM ONLINE",
-    "FAGE Enterprise Demo initialized — all agents registered",
+    "CostPilot Enterprise Demo initialized — all agents registered",
     "Real pricing: Scout $1/$5 · Advisor $3/$15 · Strategist $5/$25 per 1M tokens",
-    { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"FAGE Enterprise Demo initialized. All 12 Agentlake agents registered across Support, Sales, Marketing, Operations. Real pricing active.", keywords:[], cost:0, saved:0 });
+    { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"CostPilot Enterprise Demo initialized. All 12 Agentlake agents registered across Support, Sales, Marketing, Operations. Real pricing active.", keywords:[], cost:0, saved:0 });
 
   setInterval(tick, 2500);
   setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
@@ -1428,13 +1428,13 @@ document.querySelector('[data-panel-id="l-budget-controls"] .dash-sec-head').add
 <script>
 window.PAGE_TOUR_STEPS = [
   { target:"lKpiSpend",       title:"Live Spend",              body:"Total AI spend today across all departments, updating every 2.5 seconds as agents process requests.",                                        position:"bottom" },
-  { target:"lKpiSaved",       title:"FAGE Savings",            body:"Combined savings from tier routing and context pruning — accumulates live with every tick.",                                                 position:"bottom" },
+  { target:"lKpiSaved",       title:"CostPilot Savings",            body:"Combined savings from tier routing and context pruning — accumulates live with every tick.",                                                 position:"bottom" },
   { target:"lKpiBlocked",     title:"Blocked Requests",        body:"Requests stopped before reaching any AI model. Zero tokens consumed, full audit record created.",                                           position:"bottom" },
-  { target:"lKpiThrottled",   title:"Throttled Departments",   body:"Departments at or over their monthly budget cap. FAGE downgrades them to Scout — work continues, budget stays controlled.",                 position:"bottom" },
+  { target:"lKpiThrottled",   title:"Throttled Departments",   body:"Departments at or over their monthly budget cap. CostPilot downgrades them to Scout — work continues, budget stays controlled.",                 position:"bottom" },
   { target:"lStatScout",      title:"Model Tier Bar",          body:"Real-time call breakdown by tier. Scout handles routine volume cheaply. Advisor and Strategist activate only when complexity or compliance requires it.", position:"bottom" },
   { target:"lAgentGrid",      title:"Agent Status",            body:"Live status of every agent — idle, active, or locked. Cards pulse green when active, yellow when locked by a concurrency collision.",        position:"bottom" },
   { target:"lBudgetRows",     title:"Department Budgets",      body:"Budget bars fill as departments spend. Red = at or over cap, yellow = approaching limit. Marketing is currently throttled.",                  position:"bottom" },
-  { target:"lRoutingBody",    title:"Routing Decision Feed",   body:"Every AI call logged as it happens. Click any row to jump to its matching audit log entry — FAGE scrolls, highlights, and opens the rationale.", position:"top" },
+  { target:"lRoutingBody",    title:"Routing Decision Feed",   body:"Every AI call logged as it happens. Click any row to jump to its matching audit log entry — CostPilot scrolls, highlights, and opens the rationale.", position:"top" },
   { target:"lAuditTableBody", title:"AI Decision Audit Log",   body:"Every routing decision written here permanently. Click a row to expand the full rationale, payload, budget snapshot, and matched keywords.",  position:"top" },
   { target:"lEventStream",    title:"Governance Event Stream", body:"Real-time feed of governance events — blocked PII, collision locks, budget throttles, complex escalations. Click any event to expand detail.", position:"left", last:true },
 ];

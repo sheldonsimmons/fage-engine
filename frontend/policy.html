@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAGE — Policy &amp; Rules</title>
+  <title>CostPilot — Policy &amp; Rules</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
@@ -62,7 +62,7 @@
 <header class="header">
   <div class="header-brand">
     <span class="header-logo">◈</span>
-    <span class="header-title">FAGE</span>
+    <span class="header-title">CostPilot</span>
     <span class="header-sub">Policy &amp; Rules</span>
   </div>
   <div class="header-nav">
@@ -211,9 +211,9 @@
 <script src="js/help.js"></script>
 <script>
 window.PAGE_TOUR_STEPS = [
-  { target:"rrThresholdSlider", title:"Complexity Threshold",   body:"This slider sets the token count at which FAGE considers a payload 'complex' and routes it to a flagship model. Raise it to escalate less, lower it to escalate more.",          position:"bottom" },
+  { target:"rrThresholdSlider", title:"Complexity Threshold",   body:"This slider sets the token count at which CostPilot considers a payload 'complex' and routes it to a flagship model. Raise it to escalate less, lower it to escalate more.",          position:"bottom" },
   { target:"rrKeywordList",     title:"Complexity Keywords",     body:"Any payload containing these words is automatically escalated to the flagship model tier, regardless of token count. Add legal, compliance, or domain-specific trigger words.",   position:"bottom" },
-  { target:"kwTerm",            title:"Add Sensitive Term",      body:"Add a word or phrase your company flags as sensitive. When FAGE detects it in a payload, the action you choose — escalate or block — is enforced on every matching request.",    position:"bottom" },
+  { target:"kwTerm",            title:"Add Sensitive Term",      body:"Add a word or phrase your company flags as sensitive. When CostPilot detects it in a payload, the action you choose — escalate or block — is enforced on every matching request.",    position:"bottom" },
   { target:"kwAction",          title:"Escalate vs. Block",      body:"Escalate routes the request to a flagship model and flags it in the audit log. Block rejects it entirely — zero tokens consumed, full audit record created.",                    position:"bottom" },
   { target:"kwTable",           title:"Sensitive Term Library",  body:"Your full active term library. Every term here is checked against every incoming payload in real time. Edit or remove terms at any time — changes take effect immediately.", position:"top", last:true },
 ];

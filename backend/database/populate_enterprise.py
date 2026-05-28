@@ -1,5 +1,5 @@
 """
-populate_enterprise.py — Load the FAGE dashboard with 1-year enterprise-scale demo data.
+populate_enterprise.py — Load the CostPilot dashboard with 1-year enterprise-scale demo data.
 
 Simulates: Meridian Financial Group
   - Realistic AI adoption curve over 365 days
@@ -276,7 +276,7 @@ def populate_enterprise():
         models.AuditEvent(
             event_type="ROUTING", department="Support", agent_id=sa.id,
             model_tier="flagship", context_snapshot=snap("Support", 355),
-            prompt_payload="Initial deployment — first enterprise support case routed through FAGE. Testing NDA review workflow.",
+            prompt_payload="Initial deployment — first enterprise support case routed through CostPilot. Testing NDA review workflow.",
             rationale="FLAGSHIP MODEL INVOKED. Term 'NDA' matched escalation policy. First routing decision recorded in immutable audit log.",
             decision_outcome="flagship model used — $0.022400",
             risk_level="high", timestamp=now - timedelta(days=355, hours=10),
