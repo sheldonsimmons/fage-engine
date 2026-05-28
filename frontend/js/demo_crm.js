@@ -1014,6 +1014,7 @@ async function submitCase() {
         agent_name:            agent,
         source_platform:       selectedPlatform,
         voice_guard_processed: voiceGuardProcessed,
+        is_test:               true,   // sandbox — real pipeline, no DB writes
       });
     } catch (err) {
       // HTTP 451 = blocked
