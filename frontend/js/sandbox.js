@@ -199,6 +199,33 @@ async function sbRunPruner() {
   }
 }
 
+function sbLoadCodeExample() {
+  // Switch to code lane automatically
+  const sel = document.getElementById("sb-router-payload-type");
+  if (sel) { sel.value = "code"; sbPayloadTypeChanged(); }
+  document.getElementById("sb-router-input").value =
+`def process_refund(order_id: str, amount: float) -> dict:
+    """Process a customer refund and update the ledger."""
+    import psycopg2
+    conn = psycopg2.connect(
+        host="prod-db.internal.company.com",
+        database="orders",
+        user="svc_refunds",
+        password="Sup3rS3cr3t!",
+        port=5432
+    )
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE orders SET refunded=true, refund_amount=%s WHERE id=%s",
+        (amount, order_id)
+    )
+    conn.commit()
+    # TODO: remove hardcoded API key before prod deploy
+    stripe_key = "sk_live_XXXX_THIS_WOULD_BE_BLOCKED_BY_COSTPILOT"
+    return {"status": "refunded", "order_id": order_id, "amount": amount}`;
+  document.getElementById("sb-router-dept").value = "Engineering";
+}
+
 function sbSendPrunedToRouter() {
   if (!_sbPrunedText) {
     document.getElementById("sb-pruner-status").textContent = "Run the sweeper first.";
@@ -219,12 +246,32 @@ const TIER_CLASSES = {
   micro: "tier-Scout", flagship: "tier-Advisor",
 };
 
+function sbPayloadTypeChanged() {
+  const type      = document.getElementById("sb-router-payload-type").value;
+  const notice    = document.getElementById("sb-code-notice");
+  const pruneWrap = document.getElementById("sb-auto-prune-wrap");
+  const pruneBox  = document.getElementById("sb-router-prune");
+
+  if (type === "code") {
+    notice.style.display    = "block";
+    pruneWrap.style.opacity = "0.35";
+    pruneBox.checked        = false;
+    pruneBox.disabled       = true;
+  } else {
+    notice.style.display    = "none";
+    pruneWrap.style.opacity = "1";
+    pruneBox.disabled       = false;
+    if (type === "text") pruneBox.checked = true;
+  }
+}
+
 async function sbRunRouter() {
-  const text   = document.getElementById("sb-router-input").value.trim();
-  const dept   = document.getElementById("sb-router-dept").value;
-  const prune  = document.getElementById("sb-router-prune").checked;
-  const status = document.getElementById("sb-router-status");
-  const result = document.getElementById("sb-router-result");
+  const text        = document.getElementById("sb-router-input").value.trim();
+  const dept        = document.getElementById("sb-router-dept").value;
+  const prune       = document.getElementById("sb-router-prune").checked;
+  const payloadType = document.getElementById("sb-router-payload-type").value;
+  const status      = document.getElementById("sb-router-status");
+  const result      = document.getElementById("sb-router-result");
 
   if (!text) { status.textContent = "Paste a payload first."; return; }
 
@@ -234,9 +281,10 @@ async function sbRunRouter() {
   try {
     const data = await apiPost("/api/route", {
       text,
-      department:  dept,
-      auto_prune:  prune,
-      is_test:     true,   // ← sandbox flag — no DB writes
+      department:   dept,
+      auto_prune:   prune,
+      payload_type: payloadType,
+      is_test:      true,   // ← sandbox flag — no DB writes
     });
 
     // Tier badge

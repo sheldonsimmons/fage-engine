@@ -32,6 +32,7 @@ class RouteRequest(BaseModel):
     voice_guard_processed:  bool = False           # True = Voice Guard already redacted PII numbers, skip PII keyword block
     min_tokens:             int  = 3               # Skip routing if pruned payload is below this token count (catches truly empty Salesforce on-create fires)
     is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
+    payload_type:           str  = "text"          # "text" = full pruning pipeline | "code" = skip pruner, secrets detection only | "transcript" = voice guard path
 
 
 class RouteResponse(BaseModel):
@@ -69,11 +70,19 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       5. Simulate model call + calculate real cost
       6. Record transaction and update department spend in the DB
     """
+    # ── payload_type gate — code payloads skip the pruner entirely ───────────
+    # Code payloads (Python, JS, SQL, configs) must never be pruned:
+    # collapse_whitespace destroys indentation; strip_signatures can mangle
+    # function signatures. The pruner was built for prose (emails, tickets).
+    # Code lane: pass through raw → secrets detection → routing → audit.
+    _is_code = req.payload_type == "code"
+    _effective_auto_prune = req.auto_prune and not _is_code
+
     # ── Minimum payload check ─────────────────────────────────────────────────
     # Salesforce Flows often fire on record create before the description is filled in.
     # Prune first to get an accurate token count, then skip if it's too short.
     from core.pruner import prune as _prune, estimate_tokens as _est
-    _quick_text = _prune(req.text)["cleaned_text"] if req.auto_prune else req.text
+    _quick_text = _prune(req.text)["cleaned_text"] if _effective_auto_prune else req.text
     if _est(_quick_text) < req.min_tokens:
         return RouteResponse(
             department               = req.department,
@@ -169,7 +178,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     _raw_text_for_logging = req.text
 
     # Run the routing pipeline
-    result = route(req.text, req.department, db=db, auto_prune=req.auto_prune, is_throttled=is_throttled, throttle_tier=throttle_tier, force_complex=force_complex)
+    result = route(req.text, req.department, db=db, auto_prune=_effective_auto_prune, is_throttled=is_throttled, throttle_tier=throttle_tier, force_complex=force_complex)
 
     # ── Apply agent tier bounds (clamp result to agent's min/max tier) ────────
     TIER_NUM  = {"Scout": 1, "Analyst": 2, "Advisor": 3, "Strategist": 4,
@@ -252,6 +261,10 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 department       = req.department,
                 routing_decision = result["routing_decision"],
                 routing_reason   = (
+                    f"[CODE LANE — pruner bypassed] "
+                    + (f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] " if term_result["triggered"] else "")
+                    + result["routing_reason"]
+                ) if _is_code else (
                     f"[SENSITIVE TERM: {term_result['top_match']['term']} → {term_result['action']}] "
                     + result["routing_reason"]
                 ) if term_result["triggered"] else result["routing_reason"],

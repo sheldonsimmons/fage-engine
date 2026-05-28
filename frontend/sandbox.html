@@ -287,7 +287,7 @@
         <div>
           <label class="sb-label">Payload to Route</label>
           <textarea id="sb-router-input" class="sb-textarea" rows="5"
-            placeholder="Paste payload, or click '→ Send to Router' from the Pruner. Use [ANALYST], [ADVISOR], or [STRATEGIST] prefix to force a tier."></textarea>
+            placeholder="Paste payload, or click '→ Send to Router' from the Pruner. Use [ANALYST], [ADVISOR], or [STRATEGIST] prefix to force a tier. For code lane: select 'Code' above then paste any code file, stack trace, or config."></textarea>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div>
@@ -297,15 +297,32 @@
               <option>Sales</option>
               <option>Marketing</option>
               <option>Operations</option>
+              <option>Engineering</option>
               <option>Trips Team</option>
             </select>
           </div>
-          <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:16px">
+          <div>
+            <label class="sb-label" style="margin-bottom:4px">Payload Type</label>
+            <select id="sb-router-payload-type" class="sb-select" style="width:auto;min-width:130px"
+                    onchange="sbPayloadTypeChanged()">
+              <option value="text">Text / Email / Ticket</option>
+              <option value="code">Code — pruner bypassed</option>
+              <option value="transcript">Transcript (Voice Guard)</option>
+            </select>
+          </div>
+          <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:16px"
+                 id="sb-auto-prune-wrap">
             <input type="checkbox" id="sb-router-prune" checked /> Auto-prune
           </label>
         </div>
-        <div style="display:flex;gap:8px">
+        <div id="sb-code-notice" style="display:none;font-size:11px;padding:8px 12px;border-radius:6px;
+          background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.25);color:var(--accent);line-height:1.5">
+          <strong>Code lane active</strong> — pruner is bypassed. Your code arrives at the model byte-for-byte identical.
+          Secrets detection still runs — API keys, private keys, and credentials will be blocked before reaching any model.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="sb-btn-primary" onclick="sbRunRouter()">▶ Route Payload</button>
+          <button class="sb-btn-secondary" onclick="sbLoadCodeExample()">Load Code Example</button>
           <span id="sb-router-status" style="font-size:11px;color:var(--text-muted);align-self:center"></span>
         </div>
 
