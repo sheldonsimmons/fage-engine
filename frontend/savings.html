@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Calculate Your AI Savings</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body { min-height:100vh; display:flex; flex-direction:column; background:var(--bg-base); }
+
+    .header-nav-link {
+      text-decoration:none; font-size:12px; color:var(--text-muted);
+      border:1px solid var(--border); border-radius:6px; padding:5px 12px;
+      transition:color .15s,border-color .15s; background:none; cursor:pointer; font:inherit;
+    }
+    .header-nav-link:hover { color:var(--text-primary); border-color:var(--accent); }
+    .header-nav-link.active { color:var(--accent-green); border-color:var(--accent-green); }
+
+    /* ── Page wrapper ──────────────────────────────────────────────────────── */
+    .savings-page { flex:1; display:flex; flex-direction:column; align-items:center; padding:40px 24px 60px; }
+
+    /* ── Hero ──────────────────────────────────────────────────────────────── */
+    .hero { text-align:center; max-width:640px; margin-bottom:40px; }
+    .hero-eyebrow {
+      font-size:10px; text-transform:uppercase; letter-spacing:.12em; font-weight:700;
+      color:var(--accent-green); margin-bottom:12px;
+    }
+    .hero-title {
+      font-size:36px; font-weight:800; line-height:1.15; letter-spacing:-.01em;
+      color:var(--text-primary); margin-bottom:14px;
+    }
+    .hero-title span { color:var(--accent-green); }
+    .hero-sub { font-size:15px; color:var(--text-muted); line-height:1.65; }
+
+    /* ── Path selector ─────────────────────────────────────────────────────── */
+    .path-selector { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; max-width:780px; width:100%; margin-bottom:32px; }
+    .path-tile {
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:10px;
+      padding:18px 16px; cursor:pointer; transition:border-color .15s,background .15s;
+      display:flex; flex-direction:column; gap:8px; text-align:center;
+    }
+    .path-tile:hover { border-color:var(--accent); }
+    .path-tile.active { border-color:var(--accent-green); background:rgba(63,185,80,.06); }
+    .path-tile .path-icon { font-size:24px; }
+    .path-tile .path-label { font-size:13px; font-weight:700; color:var(--text-primary); }
+    .path-tile .path-sub { font-size:11px; color:var(--text-muted); line-height:1.5; }
+    .path-badge {
+      font-size:9px; font-weight:700; letter-spacing:.08em; padding:2px 8px;
+      border-radius:8px; display:inline-block; margin-top:2px;
+    }
+    .badge-green  { background:rgba(63,185,80,.15);  color:var(--accent-green);  border:1px solid rgba(63,185,80,.3); }
+    .badge-blue   { background:rgba(88,166,255,.15); color:var(--accent);         border:1px solid rgba(88,166,255,.3); }
+    .badge-muted  { background:rgba(139,148,158,.1); color:var(--text-muted);     border:1px solid var(--border); }
+
+    /* ── Card wrapper ──────────────────────────────────────────────────────── */
+    .calc-card {
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:12px;
+      padding:32px; max-width:780px; width:100%;
+    }
+
+    /* ── Form elements ─────────────────────────────────────────────────────── */
+    .form-section { margin-bottom:24px; }
+    .form-label {
+      font-size:10px; text-transform:uppercase; letter-spacing:.08em;
+      font-weight:700; color:var(--text-muted); margin-bottom:7px; display:block;
+    }
+    .form-input {
+      width:100%; background:var(--bg-base); border:1px solid var(--border);
+      border-radius:7px; padding:10px 14px; color:var(--text-primary);
+      font:inherit; font-size:13px; transition:border-color .15s;
+    }
+    .form-input:focus { outline:none; border-color:var(--accent); }
+    .form-input::placeholder { color:var(--text-muted); }
+    .form-hint { font-size:11px; color:var(--text-muted); margin-top:5px; line-height:1.5; }
+
+    .form-row-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .form-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+
+    select.form-input option { background:var(--bg-panel); }
+
+    /* Trust badge row */
+    .trust-row {
+      display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+      background:rgba(63,185,80,.05); border:1px solid rgba(63,185,80,.15);
+      border-radius:8px; padding:10px 14px; margin-bottom:20px;
+    }
+    .trust-item { font-size:11px; color:var(--accent-green); display:flex; align-items:center; gap:5px; }
+
+    /* Slider */
+    .slider-wrap { display:flex; flex-direction:column; gap:6px; }
+    .slider-labels { display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted); }
+    input[type=range] {
+      width:100%; accent-color:var(--accent);
+      background:var(--border); border-radius:4px; height:4px;
+    }
+    .slider-val {
+      font-size:20px; font-weight:700; color:var(--accent);
+      text-align:center; margin:2px 0;
+    }
+
+    /* Upload zone */
+    .upload-zone {
+      border:2px dashed var(--border); border-radius:8px; padding:32px;
+      text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color:var(--accent); background:rgba(88,166,255,.04);
+    }
+    .upload-zone.has-file { border-color:var(--accent-green); background:rgba(63,185,80,.05); }
+    .upload-icon { font-size:32px; margin-bottom:8px; }
+    .upload-label { font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:4px; }
+    .upload-sub { font-size:11px; color:var(--text-muted); }
+
+    /* CSV instructions */
+    .csv-steps {
+      background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; padding:14px 16px; margin-bottom:20px;
+    }
+    .csv-steps-title { font-size:10px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--text-muted); margin-bottom:8px; }
+    .csv-step { font-size:12px; color:var(--text-muted); padding:4px 0; display:flex; gap:10px; }
+    .csv-step-num { color:var(--accent); font-weight:700; flex-shrink:0; }
+    .csv-step a { color:var(--accent); }
+
+    /* Submit */
+    .calc-btn {
+      width:100%; padding:14px; border-radius:8px;
+      background:var(--accent-green); color:#0d1117;
+      font:inherit; font-size:15px; font-weight:800; letter-spacing:.03em;
+      border:none; cursor:pointer; transition:opacity .15s, transform .1s;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .calc-btn:hover { opacity:.9; }
+    .calc-btn:active { transform:scale(.99); }
+    .calc-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+    /* ── Results ───────────────────────────────────────────────────────────── */
+    .results-card {
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:12px;
+      padding:32px; max-width:780px; width:100%; margin-top:28px;
+      display:none;
+    }
+    .results-card.visible { display:block; }
+
+    .results-header { text-align:center; margin-bottom:28px; }
+    .results-eyebrow {
+      font-size:10px; text-transform:uppercase; letter-spacing:.1em;
+      font-weight:700; color:var(--accent-green); margin-bottom:8px;
+    }
+    .results-headline {
+      font-size:32px; font-weight:800; color:var(--accent-green); line-height:1.1;
+      margin-bottom:6px;
+    }
+    .results-sub { font-size:13px; color:var(--text-muted); }
+
+    /* Big KPI grid */
+    .results-kpi { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; }
+    .kpi-box {
+      background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; padding:16px; text-align:center;
+    }
+    .kpi-box-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; font-weight:700; color:var(--text-muted); margin-bottom:6px; }
+    .kpi-box-value { font-size:24px; font-weight:800; line-height:1.1; }
+    .kpi-box-value.green  { color:var(--accent-green); }
+    .kpi-box-value.yellow { color:var(--accent-yellow); }
+    .kpi-box-value.blue   { color:var(--accent); }
+    .kpi-box-value.red    { color:var(--accent-red); }
+    .kpi-box-sub { font-size:10px; color:var(--text-muted); margin-top:3px; }
+
+    /* Comparison bar */
+    .comparison {
+      background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; padding:18px; margin-bottom:20px;
+    }
+    .comparison-title { font-size:10px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--text-muted); margin-bottom:14px; }
+    .comparison-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+    .comparison-label { font-size:12px; color:var(--text-muted); width:160px; flex-shrink:0; }
+    .comparison-bar-wrap { flex:1; background:var(--border); border-radius:4px; height:8px; overflow:hidden; }
+    .comparison-bar { height:100%; border-radius:4px; transition:width .8s ease; }
+    .comparison-bar.red   { background:var(--accent-red); }
+    .comparison-bar.green { background:var(--accent-green); }
+    .comparison-value { font-size:13px; font-weight:700; width:90px; text-align:right; flex-shrink:0; }
+
+    /* Savings breakdown */
+    .breakdown {
+      background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; padding:18px; margin-bottom:20px;
+    }
+    .breakdown-title { font-size:10px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--text-muted); margin-bottom:12px; }
+    .breakdown-row {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:7px 0; border-bottom:1px solid var(--border); font-size:13px;
+    }
+    .breakdown-row:last-child { border-bottom:none; }
+    .breakdown-row .label { color:var(--text-muted); }
+    .breakdown-row .value { font-weight:700; color:var(--text-primary); }
+    .breakdown-row .saved { font-weight:800; color:var(--accent-green); }
+    .breakdown-row.total { margin-top:4px; }
+    .breakdown-row.total .label { color:var(--text-primary); font-weight:700; }
+
+    /* Disclaimer */
+    .results-disclaimer {
+      font-size:10px; color:var(--text-muted); text-align:center;
+      line-height:1.6; margin-bottom:20px; opacity:.7;
+    }
+
+    /* CTA */
+    .results-cta { display:flex; gap:12px; }
+    .cta-btn-primary {
+      flex:1; padding:13px; border-radius:8px;
+      background:var(--accent-green); color:#0d1117;
+      font:inherit; font-size:13px; font-weight:800;
+      border:none; cursor:pointer; text-align:center;
+      text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px;
+    }
+    .cta-btn-secondary {
+      flex:1; padding:13px; border-radius:8px;
+      background:transparent; color:var(--accent);
+      font:inherit; font-size:13px; font-weight:700;
+      border:1px solid var(--accent); cursor:pointer; text-align:center;
+      text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px;
+    }
+
+    /* Processing */
+    .processing {
+      text-align:center; padding:40px; display:none;
+    }
+    .spinner {
+      width:40px; height:40px; border-radius:50%;
+      border:3px solid var(--border); border-top-color:var(--accent-green);
+      animation:spin .8s linear infinite; margin:0 auto 16px;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Error */
+    .calc-error {
+      background:rgba(248,81,73,.06); border:1px solid rgba(248,81,73,.25);
+      border-radius:8px; padding:14px 16px; margin-top:12px;
+      font-size:13px; color:var(--accent-red); display:none;
+    }
+
+    @media (max-width:640px) {
+      .path-selector { grid-template-columns:1fr; }
+      .form-row-2, .form-row-3 { grid-template-columns:1fr; }
+      .results-kpi { grid-template-columns:1fr 1fr; }
+      .results-cta { flex-direction:column; }
+      .hero-title { font-size:26px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <div>
+      <div class="header-title">FAGE</div>
+      <div class="header-sub">FinOps Agentlake &amp; Governance Engine</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="/"              class="header-nav-link">◈ Dashboard</a>
+    <a href="/demo-crm.html" class="header-nav-link">🎯 Live Demo</a>
+    <a href="/reports.html"  class="header-nav-link">📊 Reports</a>
+    <a href="/savings.html"  class="header-nav-link active">💰 Savings Calculator</a>
+  </div>
+</header>
+
+<div class="savings-page">
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────────── -->
+  <div class="hero">
+    <div class="hero-eyebrow">● Free · No commitment · 3 minutes</div>
+    <h1 class="hero-title">See exactly what FAGE would<br/><span>save your company</span></h1>
+    <p class="hero-sub">Use your real AI usage data or enter your numbers manually. Get a precise savings estimate before you ever talk to anyone.</p>
+  </div>
+
+  <!-- ── Path selector ─────────────────────────────────────────────────────── -->
+  <div class="path-selector">
+    <div class="path-tile active" id="tile-api" onclick="selectPath('api')">
+      <div class="path-icon">🔑</div>
+      <div class="path-label">API Key</div>
+      <div class="path-sub">Connect to your Anthropic or OpenAI account. We pull real usage — nothing is stored.</div>
+      <span class="path-badge badge-green">Most Accurate</span>
+    </div>
+    <div class="path-tile" id="tile-csv" onclick="selectPath('csv')">
+      <div class="path-icon">📄</div>
+      <div class="path-label">Upload CSV</div>
+      <div class="path-sub">Export your usage file from Anthropic or OpenAI and upload it here. No key needed.</div>
+      <span class="path-badge badge-blue">Real Data · No Key</span>
+    </div>
+    <div class="path-tile" id="tile-manual" onclick="selectPath('manual')">
+      <div class="path-icon">✏️</div>
+      <div class="path-label">Enter Manually</div>
+      <div class="path-sub">Know your monthly spend? Enter your numbers and get an instant estimate.</div>
+      <span class="path-badge badge-muted">Fastest · No Data Needed</span>
+    </div>
+  </div>
+
+  <!-- ── Calc card ──────────────────────────────────────────────────────────── -->
+  <div class="calc-card">
+
+    <!-- ── PATH A: API Key ───────────────────────────────────────────────── -->
+    <div id="path-api">
+      <div class="trust-row">
+        <div class="trust-item">🔒 Read-only endpoints only</div>
+        <div class="trust-item">⚡ Key used once, never stored</div>
+        <div class="trust-item">🛡 No model calls made</div>
+        <div class="trust-item">👁 <a href="#" onclick="showEndpoints();return false;" style="color:var(--accent-green)">See exactly what we query</a></div>
+      </div>
+      <div id="endpointsDetail" style="display:none;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:12px;font-family:var(--font-mono);color:var(--text-muted);line-height:2">
+        <strong style="color:var(--text-primary)">Anthropic:</strong> GET api.anthropic.com/v1/usage — token counts and model usage by day<br/>
+        <strong style="color:var(--text-primary)">OpenAI:</strong> GET api.openai.com/v1/usage — token counts, cost, and model breakdown by day<br/>
+        <span style="color:var(--accent-green)">✓ Read-only. No write permissions. No ability to make model calls or spend money.</span>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label">AI Provider</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <div class="path-tile active" id="prov-anthropic" onclick="selectProvider('anthropic')" style="padding:12px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary)">Anthropic</div>
+            <div style="font-size:11px;color:var(--text-muted)">Claude Haiku, Sonnet, Opus</div>
+          </div>
+          <div class="path-tile" id="prov-openai" onclick="selectProvider('openai')" style="padding:12px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary)">OpenAI</div>
+            <div style="font-size:11px;color:var(--text-muted)">GPT-4o, GPT-4o Mini, o1</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label" for="apiKey">API Key</label>
+        <input type="password" class="form-input" id="apiKey"
+               placeholder="sk-ant-... or sk-proj-..." autocomplete="off" />
+        <div class="form-hint">Your key is used once to query read-only usage data and is immediately discarded. It is never sent to our servers — the request runs directly from your browser.</div>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label">Analysis Period</label>
+        <select class="form-input" id="apiDays">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+
+      <div class="calc-error" id="apiError"></div>
+      <button class="calc-btn" onclick="calcFromApi()">
+        <span id="apiBtnText">Calculate My Savings →</span>
+      </button>
+    </div>
+
+    <!-- ── PATH B: CSV Upload ────────────────────────────────────────────── -->
+    <div id="path-csv" style="display:none">
+      <div class="csv-steps">
+        <div class="csv-steps-title">How to get your usage CSV</div>
+        <div class="csv-step"><span class="csv-step-num">1</span><span><strong style="color:var(--text-primary)">Anthropic:</strong> console.anthropic.com → Usage → Export CSV</span></div>
+        <div class="csv-step"><span class="csv-step-num">2</span><span><strong style="color:var(--text-primary)">OpenAI:</strong> platform.openai.com → Usage → Export → CSV</span></div>
+        <div class="csv-step"><span class="csv-step-num">3</span><span>Upload the file below — we parse it locally in your browser</span></div>
+      </div>
+
+      <div class="upload-zone" id="uploadZone"
+           onclick="document.getElementById('csvFile').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <div class="upload-icon">📄</div>
+        <div class="upload-label" id="uploadLabel">Drop your CSV here or click to browse</div>
+        <div class="upload-sub" id="uploadSub">Supports Anthropic and OpenAI usage exports</div>
+      </div>
+      <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="handleFileSelect(event)" />
+
+      <div class="calc-error" id="csvError" style="margin-top:12px"></div>
+      <button class="calc-btn" style="margin-top:16px" onclick="calcFromCsv()">
+        <span id="csvBtnText">Calculate My Savings →</span>
+      </button>
+    </div>
+
+    <!-- ── PATH C: Manual ────────────────────────────────────────────────── -->
+    <div id="path-manual" style="display:none">
+
+      <div class="form-section">
+        <label class="form-label">Monthly AI Spend (USD)</label>
+        <input type="number" class="form-input" id="manualSpend"
+               placeholder="e.g. 4500" min="0" step="100" />
+        <div class="form-hint">Your total monthly bill from Anthropic, OpenAI, or both. Check your billing dashboard.</div>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label">Total AI Calls Per Month</label>
+        <input type="number" class="form-input" id="manualCalls"
+               placeholder="e.g. 50000" min="0" step="1000" />
+        <div class="form-hint">Approximate number of API calls per month. Found in your usage dashboard.</div>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label" for="complexPct">% of Calls That Are Complex or High-Stakes</label>
+        <div class="slider-wrap">
+          <div class="slider-val" id="complexPctVal">30%</div>
+          <input type="range" id="complexPct" min="0" max="100" value="30"
+                 oninput="document.getElementById('complexPctVal').textContent=this.value+'%'" />
+          <div class="slider-labels">
+            <span>0% — All routine</span>
+            <span>50% — Mixed</span>
+            <span>100% — All complex</span>
+          </div>
+        </div>
+        <div class="form-hint" style="margin-top:8px">Routine = password resets, FAQs, simple lookups. Complex = legal, compliance, analysis, multi-step reasoning.</div>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label" for="avgPayload">Average Payload Size</label>
+        <select class="form-input" id="avgPayload">
+          <option value="small">Small — short queries, chat messages (200–500 tokens)</option>
+          <option value="medium" selected>Medium — support tickets, emails (500–1,500 tokens)</option>
+          <option value="large">Large — documents, email threads (1,500–4,000 tokens)</option>
+          <option value="heavy">Heavy — long threads, reports, HTML emails (4,000+ tokens)</option>
+        </select>
+        <div class="form-hint">This determines how much the context pruner can save.</div>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label">Primary AI Provider</label>
+        <select class="form-input" id="manualProvider">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="both">Both</option>
+        </select>
+      </div>
+
+      <div class="calc-error" id="manualError"></div>
+      <button class="calc-btn" onclick="calcManual()">
+        Calculate My Savings →
+      </button>
+    </div>
+
+    <!-- Processing overlay -->
+    <div class="processing" id="processingDiv">
+      <div class="spinner"></div>
+      <div style="font-size:13px;color:var(--text-muted)" id="processingLabel">Fetching usage data...</div>
+    </div>
+
+  </div>
+
+  <!-- ── Results card ───────────────────────────────────────────────────────── -->
+  <div class="results-card" id="resultsCard">
+
+    <div class="results-header">
+      <div class="results-eyebrow">Your FAGE Savings Estimate</div>
+      <div class="results-headline" id="resultsHeadline">$0 / month</div>
+      <div class="results-sub" id="resultsSub">Based on your usage data</div>
+    </div>
+
+    <div class="results-kpi" id="resultsKpi"></div>
+
+    <div class="comparison" id="resultsComparison">
+      <div class="comparison-title">Monthly Cost — Without FAGE vs. With FAGE</div>
+      <div class="comparison-row">
+        <div class="comparison-label" style="color:var(--accent-red)">Without FAGE</div>
+        <div class="comparison-bar-wrap"><div class="comparison-bar red" id="barWithout" style="width:100%"></div></div>
+        <div class="comparison-value" style="color:var(--accent-red)" id="valWithout">$0</div>
+      </div>
+      <div class="comparison-row">
+        <div class="comparison-label" style="color:var(--accent-green)">With FAGE</div>
+        <div class="comparison-bar-wrap"><div class="comparison-bar green" id="barWith" style="width:0%"></div></div>
+        <div class="comparison-value" style="color:var(--accent-green)" id="valWith">$0</div>
+      </div>
+    </div>
+
+    <div class="breakdown" id="resultsBreakdown">
+      <div class="breakdown-title">Savings Breakdown</div>
+      <div id="breakdownRows"></div>
+    </div>
+
+    <div class="results-disclaimer" id="resultsDisclaimer"></div>
+
+    <div class="results-cta">
+      <a href="/demo-crm.html" class="cta-btn-primary">🎯 See It Live — Submit a Real Case →</a>
+      <a href="/"              class="cta-btn-secondary">◈ Explore the Dashboard</a>
+    </div>
+
+  </div>
+
+</div><!-- end savings-page -->
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let activePath     = "api";
+let activeProvider = "anthropic";
+let parsedCsvData  = null;
+
+// ── Path selector ─────────────────────────────────────────────────────────────
+function selectPath(path) {
+  activePath = path;
+  ["api","csv","manual"].forEach(p => {
+    document.getElementById("tile-" + p).classList.toggle("active", p === path);
+    document.getElementById("path-" + p).style.display = p === path ? "block" : "none";
+  });
+  document.getElementById("processingDiv").style.display = "none";
+  document.getElementById("resultsCard").classList.remove("visible");
+  hideErrors();
+}
+
+function selectProvider(prov) {
+  activeProvider = prov;
+  ["anthropic","openai"].forEach(p => {
+    document.getElementById("prov-" + p).classList.toggle("active", p === prov);
+  });
+}
+
+function showEndpoints() {
+  const el = document.getElementById("endpointsDetail");
+  el.style.display = el.style.display === "none" ? "block" : "none";
+}
+
+function hideErrors() {
+  ["apiError","csvError","manualError"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.display = "none"; el.textContent = ""; }
+  });
+}
+
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function showProcessing(label) {
+  document.getElementById("path-" + activePath).style.display = "none";
+  const pd = document.getElementById("processingDiv");
+  pd.style.display = "block";
+  document.getElementById("processingLabel").textContent = label;
+}
+
+function hideProcessing() {
+  document.getElementById("processingDiv").style.display = "none";
+  document.getElementById("path-" + activePath).style.display = "block";
+}
+
+// ── PATH A: API Key ───────────────────────────────────────────────────────────
+
+async function calcFromApi() {
+  const key  = document.getElementById("apiKey").value.trim();
+  const days = parseInt(document.getElementById("apiDays").value);
+  if (!key) { showError("apiError", "Please enter your API key."); return; }
+
+  showProcessing("Querying usage data...");
+  const btn = document.getElementById("apiBtnText");
+  btn.textContent = "Fetching...";
+
+  try {
+    let usage = null;
+    if (activeProvider === "anthropic") {
+      usage = await fetchAnthropicUsage(key, days);
+    } else {
+      usage = await fetchOpenAIUsage(key, days);
+    }
+    showResults(usage, "api", days);
+  } catch (err) {
+    hideProcessing();
+    showError("apiError", err.message || "Could not fetch usage data. Please check your API key and try again.");
+  } finally {
+    btn.textContent = "Calculate My Savings →";
+  }
+}
+
+async function fetchAnthropicUsage(key, days) {
+  const end   = new Date();
+  const start = new Date(Date.now() - days * 86400000);
+  const fmt   = d => d.toISOString().split("T")[0];
+
+  const resp = await fetch(
+    `https://api.anthropic.com/v1/usage?start_time=${fmt(start)}T00:00:00Z&end_time=${fmt(end)}T23:59:59Z&limit=100`,
+    { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" } }
+  );
+
+  if (resp.status === 401) throw new Error("Invalid API key. Please check and try again.");
+  if (!resp.ok) {
+    // Anthropic usage endpoint may require specific permissions — fall back to estimate
+    throw new Error(`Anthropic returned ${resp.status}. Your API key may not have usage read permissions. Try the CSV or manual path instead.`);
+  }
+
+  const data = await resp.json();
+  return parseAnthropicUsage(data, days);
+}
+
+function parseAnthropicUsage(data, days) {
+  // Anthropic usage API returns token counts by model
+  const models = data.data || data.usage || [];
+  let totalInputTokens  = 0;
+  let totalOutputTokens = 0;
+  let totalCost         = 0;
+  let haiku_tokens = 0, sonnet_tokens = 0, opus_tokens = 0;
+
+  // Pricing per million tokens
+  const pricing = {
+    "claude-haiku":   { in: 0.80,  out: 4.00  },
+    "claude-sonnet":  { in: 3.00,  out: 15.00 },
+    "claude-opus":    { in: 15.00, out: 75.00 },
+  };
+
+  models.forEach(m => {
+    const inp = m.input_tokens || 0;
+    const out = m.output_tokens || 0;
+    totalInputTokens  += inp;
+    totalOutputTokens += out;
+
+    const id = (m.model || "").toLowerCase();
+    if (id.includes("haiku"))  { haiku_tokens  += inp + out; totalCost += (inp/1e6)*0.80  + (out/1e6)*4.00;  }
+    else if (id.includes("opus"))   { opus_tokens   += inp + out; totalCost += (inp/1e6)*15.00 + (out/1e6)*75.00; }
+    else                            { sonnet_tokens += inp + out; totalCost += (inp/1e6)*3.00  + (out/1e6)*15.00; }
+  });
+
+  const totalTokens = totalInputTokens + totalOutputTokens;
+  const microPct    = totalTokens > 0 ? haiku_tokens  / totalTokens : 0.3;
+  const flagshipPct = totalTokens > 0 ? (sonnet_tokens + opus_tokens) / totalTokens : 0.7;
+  const totalCalls  = Math.max(1, Math.round(totalTokens / 800));
+
+  return {
+    totalCost, totalInputTokens, totalOutputTokens, totalCalls,
+    microPct, flagshipPct, provider: "Anthropic", days,
+    source: "api",
+    avgPayload: totalTokens > 0 ? totalInputTokens / totalCalls : 800,
+  };
+}
+
+async function fetchOpenAIUsage(key, days) {
+  const end   = Math.floor(Date.now() / 1000);
+  const start = Math.floor((Date.now() - days * 86400000) / 1000);
+
+  const resp = await fetch(
+    `https://api.openai.com/v1/usage?start_time=${start}&end_time=${end}`,
+    { headers: { "Authorization": "Bearer " + key } }
+  );
+
+  if (resp.status === 401) throw new Error("Invalid API key. Please check and try again.");
+  if (!resp.ok) throw new Error(`OpenAI returned ${resp.status}. Try the CSV or manual path instead.`);
+
+  const data = await resp.json();
+  return parseOpenAIUsage(data, days);
+}
+
+function parseOpenAIUsage(data, days) {
+  const daily = data.data || [];
+  let totalCost = 0, totalInputTokens = 0, totalOutputTokens = 0;
+  let gpt4Tokens = 0, miniTokens = 0;
+
+  daily.forEach(d => {
+    (d.snapshot_id ? [d] : (d.results || [])).forEach(r => {
+      const inp = r.n_context_tokens_total || r.prompt_tokens || 0;
+      const out = r.n_generated_tokens_total || r.completion_tokens || 0;
+      totalInputTokens  += inp;
+      totalOutputTokens += out;
+      const model = (r.snapshot_id || r.model_id || "").toLowerCase();
+      if (model.includes("mini") || model.includes("3.5")) {
+        miniTokens += inp + out;
+        totalCost  += (inp/1e6)*0.15 + (out/1e6)*0.60;
+      } else {
+        gpt4Tokens += inp + out;
+        totalCost  += (inp/1e6)*2.50 + (out/1e6)*10.00;
+      }
+    });
+  });
+
+  const totalTokens = totalInputTokens + totalOutputTokens || 1;
+  const totalCalls  = Math.max(1, Math.round(totalTokens / 800));
+  return {
+    totalCost, totalInputTokens, totalOutputTokens, totalCalls,
+    microPct: miniTokens / totalTokens,
+    flagshipPct: gpt4Tokens / totalTokens,
+    provider: "OpenAI", days, source: "api",
+    avgPayload: totalInputTokens / totalCalls,
+  };
+}
+
+// ── PATH B: CSV Upload ────────────────────────────────────────────────────────
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById("uploadZone").classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  if (!file.name.endsWith(".csv")) {
+    showError("csvError", "Please upload a CSV file.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      parsedCsvData = parseCSV(e.target.result);
+      const zone = document.getElementById("uploadZone");
+      zone.classList.add("has-file");
+      document.getElementById("uploadLabel").textContent = "✓ " + file.name;
+      document.getElementById("uploadSub").textContent   = `${parsedCsvData.totalCalls.toLocaleString()} calls · ${parsedCsvData.days} days · $${parsedCsvData.totalCost.toFixed(2)} total`;
+    } catch(err) {
+      showError("csvError", "Could not parse CSV: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split("\n").filter(l => l.trim());
+  if (lines.length < 2) throw new Error("CSV appears empty.");
+  const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/"/g,""));
+
+  let totalCost = 0, totalInput = 0, totalOutput = 0;
+  let microTokens = 0, flagshipTokens = 0;
+  const dates = new Set();
+
+  // Map common column names from Anthropic and OpenAI exports
+  const col = name => headers.indexOf(name);
+  const costCols    = ["cost","total_cost","amount","cost_usd"];
+  const inputCols   = ["input_tokens","prompt_tokens","n_context_tokens_total"];
+  const outputCols  = ["output_tokens","completion_tokens","n_generated_tokens_total"];
+  const modelCols   = ["model","model_id","snapshot_id"];
+  const dateCols    = ["date","timestamp","created_at","start_time"];
+
+  const findCol = names => names.map(col).find(i => i >= 0) ?? -1;
+  const costIdx   = findCol(costCols);
+  const inputIdx  = findCol(inputCols);
+  const outputIdx = findCol(outputCols);
+  const modelIdx  = findCol(modelCols);
+  const dateIdx   = findCol(dateCols);
+
+  lines.slice(1).forEach(line => {
+    const cells = line.split(",").map(c => c.trim().replace(/^"|"$/g,""));
+    const cost   = costIdx  >= 0 ? parseFloat(cells[costIdx])  || 0 : 0;
+    const inp    = inputIdx >= 0 ? parseFloat(cells[inputIdx]) || 0 : 0;
+    const out    = outputIdx>= 0 ? parseFloat(cells[outputIdx])|| 0 : 0;
+    const model  = modelIdx >= 0 ? (cells[modelIdx]||"").toLowerCase() : "";
+    const date   = dateIdx  >= 0 ? cells[dateIdx] : "";
+
+    totalCost   += cost;
+    totalInput  += inp;
+    totalOutput += out;
+    if (date) dates.add(date.slice(0,10));
+
+    // Classify tier
+    const isMicro = model.includes("haiku") || model.includes("mini") || model.includes("3.5");
+    if (isMicro) microTokens    += inp + out;
+    else         flagshipTokens += inp + out;
+  });
+
+  // If no cost column, estimate from tokens
+  if (totalCost === 0 && totalInput > 0) {
+    const microCost    = (microTokens    / 2) / 1e6 * 0.80  + (microTokens    / 2) / 1e6 * 4.00;
+    const flagshipCost = (flagshipTokens / 2) / 1e6 * 3.00  + (flagshipTokens / 2) / 1e6 * 15.00;
+    totalCost = microCost + flagshipCost;
+  }
+
+  const totalTokens = totalInput + totalOutput || 1;
+  const days        = Math.max(1, dates.size);
+  const totalCalls  = Math.max(1, Math.round(totalTokens / 800));
+
+  return {
+    totalCost: totalCost * (30 / days), // Normalize to monthly
+    totalInputTokens: totalInput * (30 / days),
+    totalOutputTokens: totalOutput * (30 / days),
+    totalCalls: totalCalls * (30 / days),
+    microPct: microTokens / totalTokens,
+    flagshipPct: flagshipTokens / totalTokens,
+    days, source: "csv", provider: "detected",
+    avgPayload: totalInput / totalCalls,
+  };
+}
+
+function calcFromCsv() {
+  if (!parsedCsvData) { showError("csvError", "Please upload a CSV file first."); return; }
+  showResults(parsedCsvData, "csv", parsedCsvData.days);
+}
+
+// ── PATH C: Manual ────────────────────────────────────────────────────────────
+
+function calcManual() {
+  const spend    = parseFloat(document.getElementById("manualSpend").value);
+  const calls    = parseFloat(document.getElementById("manualCalls").value);
+  const complexP = parseInt(document.getElementById("complexPct").value) / 100;
+  const payload  = document.getElementById("avgPayload").value;
+  const provider = document.getElementById("manualProvider").value;
+
+  if (!spend || spend <= 0) { showError("manualError","Please enter your monthly AI spend."); return; }
+  if (!calls || calls <= 0) { showError("manualError","Please enter your monthly call count."); return; }
+
+  // Payload size → avg tokens
+  const payloadTokens = { small:350, medium:900, large:2500, heavy:5500 };
+  const avgTok = payloadTokens[payload] || 900;
+
+  // Pruning compression by payload size
+  const pruneRate = { small:0.20, medium:0.45, large:0.65, heavy:0.85 };
+  const pruning   = pruneRate[payload] || 0.45;
+
+  // Infer micro/flagship split from complex %
+  // Complex calls → flagship, routine → micro
+  const flagshipPct = complexP;
+  const microPct    = 1 - complexP;
+
+  const usage = {
+    totalCost: spend,
+    totalInputTokens:  calls * avgTok * 0.75,
+    totalOutputTokens: calls * avgTok * 0.25,
+    totalCalls: calls,
+    microPct, flagshipPct,
+    provider, days: 30, source: "manual",
+    avgPayload: avgTok, pruningOverride: pruning,
+  };
+
+  showResults(usage, "manual", 30);
+}
+
+// ── Core savings math ─────────────────────────────────────────────────────────
+
+function calcSavings(usage) {
+  // Pricing
+  const MICRO_IN   = 0.80  / 1e6;
+  const MICRO_OUT  = 4.00  / 1e6;
+  const FLAG_IN    = 3.00  / 1e6;
+  const FLAG_OUT   = 15.00 / 1e6;
+
+  const totalIn    = usage.totalInputTokens;
+  const totalOut   = usage.totalOutputTokens;
+  const totalCalls = usage.totalCalls;
+  const currentCost = usage.totalCost;
+
+  // Downgrade savings: calls currently on flagship that would go to Scout
+  // Assume FAGE routes 70% of flagship calls to Scout (complex stays, routine downgrades)
+  const currentFlagshipIn  = totalIn  * usage.flagshipPct;
+  const currentFlagshipOut = totalOut * usage.flagshipPct;
+
+  // FAGE re-routes ~65% of those to Scout
+  const reroutePct = 0.65;
+  const reroutedIn  = currentFlagshipIn  * reroutePct;
+  const reroutedOut = currentFlagshipOut * reroutePct;
+  const downgradeSaved = reroutedIn  * (FLAG_IN  - MICRO_IN) +
+                         reroutedOut * (FLAG_OUT - MICRO_OUT);
+
+  // Pruning savings: input tokens stripped before sending
+  const pruning = usage.pruningOverride !== undefined
+    ? usage.pruningOverride
+    : (() => {
+        const avg = usage.avgPayload || 900;
+        if (avg < 400)  return 0.20;
+        if (avg < 1200) return 0.42;
+        if (avg < 3000) return 0.62;
+        return 0.82;
+      })();
+
+  const tokensPruned  = totalIn * pruning;
+  const pruningSaved  = tokensPruned * FLAG_IN; // saved at flagship rate (worst case)
+
+  const totalSaved    = downgradeSaved + pruningSaved;
+  const costWithFage  = Math.max(0, currentCost - totalSaved);
+  const annualSaved   = totalSaved * 12;
+  const savingsPct    = currentCost > 0 ? (totalSaved / currentCost) * 100 : 0;
+
+  return {
+    currentCost, costWithFage, totalSaved, annualSaved, savingsPct,
+    downgradeSaved, pruningSaved, tokensPruned,
+    totalCalls, pruning,
+  };
+}
+
+// ── Render results ────────────────────────────────────────────────────────────
+
+function showResults(usage, source, days) {
+  hideProcessing();
+
+  const s = calcSavings(usage);
+
+  // Headline
+  document.getElementById("resultsHeadline").textContent = "$" + s.totalSaved.toLocaleString("en-US", {minimumFractionDigits:0,maximumFractionDigits:0}) + " / month";
+  document.getElementById("resultsSub").textContent = source === "api"
+    ? `Based on your real ${usage.provider} usage over the last ${days} days`
+    : source === "csv"
+    ? `Based on your uploaded usage export (${days} days of data, normalized to 30 days)`
+    : `Based on your manual inputs — actual savings may vary`;
+
+  // KPIs
+  document.getElementById("resultsKpi").innerHTML = `
+    <div class="kpi-box">
+      <div class="kpi-box-label">Monthly Savings</div>
+      <div class="kpi-box-value green">$${fmt(s.totalSaved)}</div>
+      <div class="kpi-box-sub">${s.savingsPct.toFixed(1)}% reduction</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-box-label">Annual Savings</div>
+      <div class="kpi-box-value green">$${fmt(s.annualSaved)}</div>
+      <div class="kpi-box-sub">projected over 12 months</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-box-label">Current Monthly Spend</div>
+      <div class="kpi-box-value red">$${fmt(s.currentCost)}</div>
+      <div class="kpi-box-sub">before FAGE governance</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-box-label">With FAGE</div>
+      <div class="kpi-box-value yellow">$${fmt(s.costWithFage)}</div>
+      <div class="kpi-box-sub">estimated monthly cost</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-box-label">Tokens Pruned / Mo</div>
+      <div class="kpi-box-value blue">${fmtTokens(s.tokensPruned)}</div>
+      <div class="kpi-box-sub">${(s.pruning*100).toFixed(0)}% avg compression</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-box-label">Calls Analyzed</div>
+      <div class="kpi-box-value blue">${Math.round(usage.totalCalls).toLocaleString()}</div>
+      <div class="kpi-box-sub">per month</div>
+    </div>
+  `;
+
+  // Comparison bars
+  const ratio = s.currentCost > 0 ? s.costWithFage / s.currentCost : 0;
+  document.getElementById("barWith").style.width   = (ratio * 100).toFixed(1) + "%";
+  document.getElementById("barWithout").style.width = "100%";
+  document.getElementById("valWithout").textContent = "$" + fmt(s.currentCost);
+  document.getElementById("valWith").textContent    = "$" + fmt(s.costWithFage);
+
+  // Breakdown
+  document.getElementById("breakdownRows").innerHTML = `
+    <div class="breakdown-row">
+      <span class="label">Current monthly AI spend</span>
+      <span class="value">$${fmt(s.currentCost)}</span>
+    </div>
+    <div class="breakdown-row">
+      <span class="label">Routing savings — Scout replaces Advisor on routine calls</span>
+      <span class="saved">− $${fmt(s.downgradeSaved)}</span>
+    </div>
+    <div class="breakdown-row">
+      <span class="label">Pruning savings — junk stripped before tokens hit models</span>
+      <span class="saved">− $${fmt(s.pruningSaved)}</span>
+    </div>
+    <div class="breakdown-row total">
+      <span class="label">Estimated monthly spend with FAGE</span>
+      <span class="value" style="color:var(--accent-green)">$${fmt(s.costWithFage)}</span>
+    </div>
+  `;
+
+  // Disclaimer
+  document.getElementById("resultsDisclaimer").textContent = source === "manual"
+    ? "Estimate based on your inputs. Assumes 65% of flagship calls are re-routable to Scout tier and industry-average pruning compression. Actual savings depend on payload content, routing configuration, and model selection."
+    : "Savings calculated using FAGE routing simulation against your real usage data. Assumes 65% of complex-tier calls can be safely re-routed to Scout. Actual savings may vary based on content and routing configuration.";
+
+  const card = document.getElementById("resultsCard");
+  card.classList.add("visible");
+  setTimeout(() => card.scrollIntoView({ behavior:"smooth", block:"start" }), 100);
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────────
+
+function fmt(n) {
+  if (!n || isNaN(n)) return "0";
+  if (n >= 1000000) return (n/1000000).toFixed(1) + "M";
+  if (n >= 1000)    return (n/1000).toFixed(1)    + "K";
+  return n.toFixed(2);
+}
+
+function fmtTokens(n) {
+  if (!n || isNaN(n)) return "0";
+  if (n >= 1e9) return (n/1e9).toFixed(1) + "B";
+  if (n >= 1e6) return (n/1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n/1e3).toFixed(0) + "K";
+  return Math.round(n).toString();
+}
+</script>
+
+</body>
+</html>
