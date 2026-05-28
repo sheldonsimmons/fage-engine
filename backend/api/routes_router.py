@@ -168,7 +168,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         agent = db.query(RegisteredAgent).filter_by(name=req.agent_name).first()
 
     # If still not found and we have a name, auto-register the agent
-    if not agent and req.agent_name:
+    # Skip registration in sandbox/test mode — no DB writes allowed
+    if not agent and req.agent_name and not req.is_test:
         from core.agentlake import infer_platform
         agent = RegisteredAgent(
             name             = req.agent_name,
@@ -183,7 +184,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(agent)
 
-    if agent:
+    if agent and not req.is_test:
         agent.status       = "active"
         agent.last_used_at = datetime.utcnow()
         db.commit()
