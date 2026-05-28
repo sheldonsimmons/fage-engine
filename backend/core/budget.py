@@ -89,7 +89,7 @@ def revoke_override(db: Session, department: str) -> dict:
 
 def set_throttle_tier(db: Session, department: str, tier: int) -> dict:
     """
-    Set the minimum model tier a department is allowed to use when throttled.
+    Set the model tier ceiling a department is capped to when throttled.
     1=Scout, 2=Analyst, 3=Advisor, 4=Strategist.
     """
     if tier not in (1, 2, 3, 4):
@@ -98,6 +98,21 @@ def set_throttle_tier(db: Session, department: str, tier: int) -> dict:
     if not b:
         raise ValueError(f"Department '{department}' not found.")
     b.throttle_tier = tier
+    db.commit()
+    return _enrich(b)
+
+
+def set_raw_logging(db: Session, department: str, enabled: bool, retention_days: int) -> dict:
+    """
+    Enable or disable raw payload logging for a department.
+    retention_days: 30 | 90 | 180 | 365 | 0 = indefinite
+    Raw payloads are only stored when pruning actually removed tokens.
+    """
+    b = db.query(DepartmentBudget).filter_by(department=department).first()
+    if not b:
+        raise ValueError(f"Department '{department}' not found.")
+    b.raw_payload_logging_enabled = enabled
+    b.raw_retention_days          = retention_days
     db.commit()
     return _enrich(b)
 
@@ -136,15 +151,17 @@ def _enrich(b: DepartmentBudget) -> dict:
     tier_names    = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
 
     return {
-        "department":        b.department,
-        "monthly_cap_usd":   b.monthly_cap_usd,
-        "current_spend_usd": round(b.current_spend_usd, 4),
-        "remaining_usd":     remaining,
-        "used_pct":          used_pct,
-        "throttled":         b.throttled,
-        "override_granted":  b.override_granted,
-        "period_start":      b.period_start.isoformat() if b.period_start else None,
-        "state":             state,   # healthy | warning | throttled
-        "throttle_tier":     throttle_tier,
-        "throttle_tier_name": tier_names.get(throttle_tier, "Scout"),
+        "department":                  b.department,
+        "monthly_cap_usd":             b.monthly_cap_usd,
+        "current_spend_usd":           round(b.current_spend_usd, 4),
+        "remaining_usd":               remaining,
+        "used_pct":                    used_pct,
+        "throttled":                   b.throttled,
+        "override_granted":            b.override_granted,
+        "period_start":                b.period_start.isoformat() if b.period_start else None,
+        "state":                       state,
+        "throttle_tier":               throttle_tier,
+        "throttle_tier_name":          tier_names.get(throttle_tier, "Scout"),
+        "raw_payload_logging_enabled": getattr(b, "raw_payload_logging_enabled", False) or False,
+        "raw_retention_days":          getattr(b, "raw_retention_days", 30) or 30,
     }

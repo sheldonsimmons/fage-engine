@@ -18,23 +18,26 @@ from database.db import get_db
 from core.budget import (
     get_all_budgets, get_budget, set_cap,
     grant_override, revoke_override, reset_period, set_throttle_tier,
+    set_raw_logging,
 )
 
 router = APIRouter()
 
 
 class BudgetStatus(BaseModel):
-    department:         str
-    monthly_cap_usd:    float
-    current_spend_usd:  float
-    remaining_usd:      float
-    used_pct:           float
-    throttled:          bool
-    override_granted:   bool
-    period_start:       str
-    state:              str   # healthy | warning | throttled
-    throttle_tier:      int
-    throttle_tier_name: str
+    department:                  str
+    monthly_cap_usd:             float
+    current_spend_usd:           float
+    remaining_usd:               float
+    used_pct:                    float
+    throttled:                   bool
+    override_granted:            bool
+    period_start:                str
+    state:                       str   # healthy | warning | throttled
+    throttle_tier:               int
+    throttle_tier_name:          str
+    raw_payload_logging_enabled: bool  = False
+    raw_retention_days:          int   = 30
 
 
 class SetCapRequest(BaseModel):
@@ -43,6 +46,10 @@ class SetCapRequest(BaseModel):
 
 class SetThrottleTierRequest(BaseModel):
     tier: int  # 1=Scout, 2=Analyst, 3=Advisor, 4=Strategist
+
+class SetRawLoggingRequest(BaseModel):
+    enabled:         bool
+    retention_days:  int = 30  # 30 | 90 | 180 | 365 | 0=indefinite
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -102,9 +109,20 @@ def reset_month(department: str, db: Session = Depends(get_db)):
 
 @router.patch("/{department}/throttle-tier", response_model=BudgetStatus)
 def update_throttle_tier(department: str, body: SetThrottleTierRequest, db: Session = Depends(get_db)):
-    """Set the minimum model tier a department is allowed to use when throttled."""
+    """Set the model tier ceiling a department is capped to when throttled."""
     try:
         return set_throttle_tier(db, department, body.tier)
     except ValueError as e:
         status_code = 400 if "must be" in str(e) else 404
         raise HTTPException(status_code=status_code, detail=str(e))
+
+
+@router.patch("/{department}/raw-logging", response_model=BudgetStatus)
+def update_raw_logging(department: str, body: SetRawLoggingRequest, db: Session = Depends(get_db)):
+    """Toggle raw payload logging for a department and set the retention period."""
+    if body.retention_days not in (0, 30, 90, 180, 365):
+        raise HTTPException(status_code=422, detail="retention_days must be 0 (indefinite), 30, 90, 180, or 365.")
+    try:
+        return set_raw_logging(db, department, body.enabled, body.retention_days)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

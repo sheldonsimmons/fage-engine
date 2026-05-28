@@ -49,20 +49,23 @@ def populate_enterprise():
     # ── Department budgets — enterprise scale ──────────────────────────────────
     print("Setting enterprise department budgets...")
     budget_data = [
-        dict(department="Support",    monthly_cap_usd=8000.00,  current_spend_usd=5842.10,  throttled=False, override_granted=False, throttle_tier=2),
-        dict(department="Sales",      monthly_cap_usd=12000.00, current_spend_usd=4218.60,  throttled=False, override_granted=False, throttle_tier=2),
-        dict(department="Marketing",  monthly_cap_usd=6000.00,  current_spend_usd=6104.80,  throttled=True,  override_granted=False, throttle_tier=1),
-        dict(department="Operations", monthly_cap_usd=4000.00,  current_spend_usd=1289.40,  throttled=False, override_granted=False, throttle_tier=1),
+        # Support: raw payload logging ON (30-day retention) — partners can see View Original immediately
+        dict(department="Support",    monthly_cap_usd=8000.00,  current_spend_usd=5842.10,  throttled=False, override_granted=False, throttle_tier=2, raw_payload_logging_enabled=True,  raw_retention_days=30),
+        dict(department="Sales",      monthly_cap_usd=12000.00, current_spend_usd=4218.60,  throttled=False, override_granted=False, throttle_tier=2, raw_payload_logging_enabled=False, raw_retention_days=30),
+        dict(department="Marketing",  monthly_cap_usd=6000.00,  current_spend_usd=6104.80,  throttled=True,  override_granted=False, throttle_tier=1, raw_payload_logging_enabled=False, raw_retention_days=30),
+        dict(department="Operations", monthly_cap_usd=4000.00,  current_spend_usd=1289.40,  throttled=False, override_granted=False, throttle_tier=1, raw_payload_logging_enabled=False, raw_retention_days=30),
     ]
     for bd in budget_data:
         b = db.query(models.DepartmentBudget).filter_by(department=bd["department"]).first()
         if b:
-            b.monthly_cap_usd   = bd["monthly_cap_usd"]
-            b.current_spend_usd = bd["current_spend_usd"]
-            b.throttled         = bd["throttled"]
-            b.override_granted  = bd["override_granted"]
-            b.throttle_tier     = bd["throttle_tier"]
-            b.period_start      = period_start
+            b.monthly_cap_usd              = bd["monthly_cap_usd"]
+            b.current_spend_usd            = bd["current_spend_usd"]
+            b.throttled                    = bd["throttled"]
+            b.override_granted             = bd["override_granted"]
+            b.throttle_tier                = bd["throttle_tier"]
+            b.raw_payload_logging_enabled  = bd["raw_payload_logging_enabled"]
+            b.raw_retention_days           = bd["raw_retention_days"]
+            b.period_start                 = period_start
         else:
             db.add(models.DepartmentBudget(period_start=period_start, **bd))
     db.commit()

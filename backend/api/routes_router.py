@@ -165,6 +165,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         agent.last_used_at = datetime.utcnow()
         db.commit()
 
+    # Capture raw text before routing (for raw payload logging)
+    _raw_text_for_logging = req.text
+
     # Run the routing pipeline
     result = route(req.text, req.department, db=db, auto_prune=req.auto_prune, is_throttled=is_throttled, throttle_tier=throttle_tier, force_complex=force_complex)
 
@@ -235,6 +238,13 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         # past the keyword filter, we have the full payload and can prove
         # exactly what was sent to the model, when, and by which agent.
         all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]
+
+        # Determine if raw payload should be stored for this department
+        _pruning_fired   = result.get("tokens_saved_by_pruning", 0) > 0
+        _raw_logging_on  = getattr(budget, "raw_payload_logging_enabled", False) or False
+        _retention_days  = getattr(budget, "raw_retention_days", 30) or 30
+        _raw_to_store    = _raw_text_for_logging[:5000] if (_pruning_fired and _raw_logging_on) else None
+
         try:
             write_audit_event(
                 db               = db,
@@ -254,6 +264,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 tokens_saved     = result.get("tokens_saved_by_pruning", 0),
                 raw_tokens       = result.get("tokens_saved_by_pruning", 0) + result.get("input_tokens", 0),
                 clean_tokens     = result.get("input_tokens", 0),
+                raw_payload      = _raw_to_store,
             )
         except Exception:
             pass  # Never let audit write failure break the routing response

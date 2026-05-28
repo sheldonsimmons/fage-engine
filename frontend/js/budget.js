@@ -121,6 +121,24 @@ function renderBudgets() {
           </select>
           <span class="budget-throttle-hint">Min tier when over budget</span>
         </div>
+        <div class="budget-throttle-row">
+          <span class="budget-throttle-label">Raw payload log:</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="raw-log-${b.department}"
+                   ${b.raw_payload_logging_enabled ? "checked" : ""}
+                   onchange="doSetRawLogging('${b.department}')">
+            <span class="toggle-slider"></span>
+          </label>
+          <select class="budget-throttle-select" id="raw-retention-${b.department}"
+                  onchange="doSetRawLogging('${b.department}')">
+            <option value="30"  ${(b.raw_retention_days ?? 30) === 30  ? "selected" : ""}>30 days</option>
+            <option value="90"  ${(b.raw_retention_days ?? 30) === 90  ? "selected" : ""}>90 days</option>
+            <option value="180" ${(b.raw_retention_days ?? 30) === 180 ? "selected" : ""}>180 days</option>
+            <option value="365" ${(b.raw_retention_days ?? 30) === 365 ? "selected" : ""}>1 year</option>
+            <option value="0"   ${(b.raw_retention_days ?? 30) === 0   ? "selected" : ""}>Indefinite</option>
+          </select>
+          <span class="budget-throttle-hint">Store pre-prune text in audit log</span>
+        </div>
       </div>
     `;
   }).join("");
@@ -211,7 +229,7 @@ async function doRevoke(department) {
   }
 }
 
-/** Supervisor: set the throttle floor tier for a department */
+/** Supervisor: set the throttle ceiling tier for a department */
 async function doSetThrottleTier(department) {
   const sel  = document.getElementById(`throttle-tier-${department}`);
   const tier = parseInt(sel.value, 10);
@@ -220,6 +238,20 @@ async function doSetThrottleTier(department) {
     await loadBudgets();
   } catch (err) {
     alert(`Failed to set throttle floor: ${err.message}`);
+  }
+}
+
+/** Supervisor: toggle raw payload logging and set retention period */
+async function doSetRawLogging(department) {
+  const checkbox     = document.getElementById(`raw-log-${department}`);
+  const retentionSel = document.getElementById(`raw-retention-${department}`);
+  const enabled        = checkbox.checked;
+  const retention_days = parseInt(retentionSel.value, 10);
+  try {
+    await apiPatch(`/api/budget/${department}/raw-logging`, { enabled, retention_days });
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to update raw logging: ${err.message}`);
   }
 }
 

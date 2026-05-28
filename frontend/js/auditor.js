@@ -6,6 +6,7 @@
  */
 
 let openRationaleId = null;
+const _auditDetailCache = {};  // eventId → full detail object, populated on expand
 
 async function loadAuditLog() {
   try {
@@ -170,7 +171,15 @@ async function fetchRationaleContent(eventId) {
         </div>
       </div>
       <div class="rationale-section">
-        <div class="rationale-label">PROMPT PAYLOAD (first 400 chars)</div>
+        <div class="rationale-label" style="display:flex;align-items:center;gap:10px">
+          PROMPT PAYLOAD (first 400 chars)
+          ${detail.raw_payload ? `<button onclick="showRawPayloadModal(${eventId})" style="
+            background:transparent; border:1px solid var(--accent); color:var(--accent);
+            border-radius:4px; padding:2px 10px; font-size:10px; cursor:pointer;
+            text-transform:uppercase; letter-spacing:0.06em; font-weight:600;">
+            ⊞ View Original
+          </button>` : (detail.has_raw_payload ? `<span style="font-size:10px;color:var(--text-muted);font-style:italic">Raw payload expired</span>` : "")}
+        </div>
         <div class="rationale-text" style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted)">
           ${(detail.prompt_payload || "").slice(0, 400)}${(detail.prompt_payload || "").length > 400 ? "..." : ""}
         </div>
@@ -181,6 +190,8 @@ async function fetchRationaleContent(eventId) {
         </a>
       </div>
     `;
+    // Cache detail for modal use (avoid re-fetch when View Original is clicked)
+    _auditDetailCache[eventId] = detail;
   } catch (err) {
     content.innerHTML = `<span style="color:var(--accent-red)">Failed to load detail: ${err.message}</span>`;
   }
@@ -347,6 +358,109 @@ function exportAuditPdf() {
 // Staggered 1200ms
 setTimeout(loadAuditLog, 1200);
 setInterval(loadAuditLog, 15000);
+
+// ── Raw Payload Modal ─────────────────────────────────────────────────────────
+// Shows a side-by-side view of the original (pre-prune) text vs the cleaned
+// payload that was actually sent to the AI model.
+
+async function showRawPayloadModal(eventId) {
+  // Use cached detail if available; otherwise fetch
+  let detail = _auditDetailCache[eventId];
+  if (!detail) {
+    try {
+      detail = await apiGet(`/api/audit/${eventId}`);
+      _auditDetailCache[eventId] = detail;
+    } catch (err) {
+      alert(`Could not load raw payload: ${err.message}`);
+      return;
+    }
+  }
+
+  let snapshot = {};
+  try { snapshot = JSON.parse(detail.context_snapshot || "{}"); } catch {}
+
+  const rawText   = detail.raw_payload   || "";
+  const cleanText = detail.prompt_payload || "";
+  const rawTokens   = snapshot.raw_tokens      ?? "—";
+  const cleanTokens = snapshot.clean_tokens     ?? "—";
+  const saved       = snapshot.tokens_saved     ?? "—";
+  const pct         = snapshot.compression_pct  ?? "—";
+
+  // Remove existing modal if present
+  const existing = document.getElementById("rawPayloadModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "rawPayloadModal";
+  modal.style.cssText = `
+    position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,0.75); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  `;
+  modal.innerHTML = `
+    <div style="
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:10px;
+      width:100%; max-width:1100px; max-height:90vh; display:flex; flex-direction:column;
+      overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,0.6);
+    ">
+      <!-- Header -->
+      <div style="
+        display:flex; align-items:center; justify-content:space-between;
+        padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0;
+      ">
+        <div style="font-size:13px; font-weight:700; color:var(--text-primary); letter-spacing:0.05em; text-transform:uppercase">
+          ⊞ Raw vs. Clean Payload — Audit #${eventId}
+        </div>
+        <button onclick="document.getElementById('rawPayloadModal').remove()" style="
+          background:transparent; border:1px solid var(--border); color:var(--text-muted);
+          border-radius:4px; padding:4px 12px; font-size:12px; cursor:pointer;">
+          ✕ Close
+        </button>
+      </div>
+      <!-- Column headers -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0; flex-shrink:0;">
+        <div style="padding:10px 20px; border-bottom:1px solid var(--border); border-right:1px solid var(--border);">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--accent-yellow)">
+            Original (Pre-Prune)
+          </div>
+          <div style="font-size:10px; color:var(--text-muted); margin-top:2px">
+            ${rawTokens} tokens · first 5,000 chars stored
+          </div>
+        </div>
+        <div style="padding:10px 20px; border-bottom:1px solid var(--border);">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--accent-green)">
+            Clean (Sent to AI)
+          </div>
+          <div style="font-size:10px; color:var(--text-muted); margin-top:2px">
+            ${cleanTokens} tokens ·
+            <span style="color:var(--accent-green)">&#x25BC; ${saved} tokens removed (${pct}% reduction)</span>
+          </div>
+        </div>
+      </div>
+      <!-- Panels -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0; flex:1; overflow:hidden; min-height:0;">
+        <div style="
+          padding:16px 20px; overflow-y:auto; border-right:1px solid var(--border);
+          font-family:var(--font-mono); font-size:11px; line-height:1.6;
+          color:var(--accent-yellow); white-space:pre-wrap; word-break:break-word;
+        ">${escHtml(rawText) || "<em style='color:var(--text-muted)'>No raw text stored.</em>"}</div>
+        <div style="
+          padding:16px 20px; overflow-y:auto;
+          font-family:var(--font-mono); font-size:11px; line-height:1.6;
+          color:var(--text-primary); white-space:pre-wrap; word-break:break-word;
+        ">${escHtml(cleanText) || "<em style='color:var(--text-muted)'>No clean text stored.</em>"}</div>
+      </div>
+    </div>
+  `;
+
+  // Close on backdrop click
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function escHtml(str) {
+  return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
 
 // ── Jump from Routing Feed → Audit Log ───────────────────────────────────────
 // Called when user clicks a routing feed row. Expands the audit panel,

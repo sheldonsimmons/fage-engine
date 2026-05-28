@@ -61,6 +61,34 @@ def _run_migrations():
             conn.commit()
         except Exception:
             pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE department_budgets ADD COLUMN IF NOT EXISTS raw_payload_logging_enabled BOOLEAN DEFAULT FALSE"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE department_budgets ADD COLUMN IF NOT EXISTS raw_retention_days INTEGER DEFAULT 30"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS raw_payload TEXT"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS raw_logged_at TIMESTAMP"
+            ))
+            conn.commit()
+        except Exception:
+            pass
 
 _run_migrations()
 

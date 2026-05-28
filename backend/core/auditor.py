@@ -198,6 +198,7 @@ def write_audit_event(
     tokens_saved:     int       = 0,
     raw_tokens:       int       = 0,
     clean_tokens:     int       = 0,
+    raw_payload:      str       = None,   # original text before pruning (None = not logged)
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
@@ -224,6 +225,8 @@ def write_audit_event(
         model_tier       = model_tier,
         context_snapshot = json.dumps(context),
         prompt_payload   = prompt_payload[:2000],
+        raw_payload      = raw_payload[:5000] if raw_payload else None,
+        raw_logged_at    = now if raw_payload else None,
         rationale        = rationale,
         decision_outcome = decision_outcome,
         risk_level       = risk_level,
@@ -293,12 +296,30 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "risk_level":       e.risk_level,
         "decision_outcome": e.decision_outcome,
         "timestamp":        e.timestamp.isoformat() if e.timestamp else None,
+        "has_raw_payload":  bool(getattr(e, "raw_payload", None)),
     }
     if full:
+        # Check retention expiry before exposing raw payload
+        raw = getattr(e, "raw_payload", None)
+        raw_logged_at = getattr(e, "raw_logged_at", None)
+        if raw and raw_logged_at:
+            # Pull retention setting from context_snapshot if available
+            retention_days = 30
+            try:
+                ctx = json.loads(e.context_snapshot or "{}")
+                retention_days = ctx.get("raw_retention_days", 30) or 30
+            except Exception:
+                pass
+            if retention_days > 0:
+                age_days = (datetime.utcnow() - raw_logged_at).days
+                if age_days > retention_days:
+                    raw = None  # Expired — return null, payload is treated as purged
         base.update({
             "agent_id":         e.agent_id,
             "rationale":        e.rationale,
             "prompt_payload":   e.prompt_payload,
+            "raw_payload":      raw,
+            "raw_logged_at":    raw_logged_at.isoformat() if raw_logged_at else None,
             "context_snapshot": e.context_snapshot,
         })
     return base

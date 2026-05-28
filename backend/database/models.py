@@ -105,7 +105,9 @@ class DepartmentBudget(Base):
     period_start      = Column(DateTime, default=datetime.utcnow)
     throttled         = Column(Boolean,  default=False)
     override_granted  = Column(Boolean,  default=False)
-    throttle_tier     = Column(Integer,  default=1)   # min tier when throttled (1=Scout … 4=Strategist)
+    throttle_tier              = Column(Integer,  default=1)      # ceiling tier when throttled (1=Scout … 4=Strategist)
+    raw_payload_logging_enabled = Column(Boolean, default=False)  # per-dept raw payload logging toggle
+    raw_retention_days          = Column(Integer, default=30)     # 30 | 90 | 180 | 365 | 0=indefinite
 
 
 class TokenTransaction(Base):
@@ -144,7 +146,9 @@ class AuditEvent(Base):
     department       = Column(String,   nullable=False)
     model_tier       = Column(String,   nullable=True)
     context_snapshot = Column(Text,     nullable=True)    # JSON string — frozen system state
-    prompt_payload   = Column(Text,     nullable=True)    # The exact text sent to the model
+    prompt_payload   = Column(Text,     nullable=True)    # The exact pruned text sent to the model
+    raw_payload      = Column(Text,     nullable=True)    # The original text before pruning (stored only when dept has raw logging enabled and pruning fired)
+    raw_logged_at    = Column(DateTime, nullable=True)    # When raw payload was captured (for retention expiry check)
     rationale        = Column(Text,     nullable=True)    # Plain-English justification
     decision_outcome = Column(String,   nullable=True)
     risk_level       = Column(String,   default="low")    # low | medium | high | critical
