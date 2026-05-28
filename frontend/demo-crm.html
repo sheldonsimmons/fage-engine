@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAGE — Live Demo</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg-base); }
+
+    /* ── Header nav ─────────────────────────────────────────────────────────── */
+    .header-nav-link {
+      text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+      transition: color 0.15s, border-color 0.15s; background: none; cursor: pointer; font: inherit;
+    }
+    .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
+    .header-nav-link.active { color: var(--accent); border-color: var(--accent); }
+
+    /* ── Page layout ─────────────────────────────────────────────────────────── */
+    .demo-page { flex: 1; display: flex; flex-direction: column; }
+
+    .demo-banner {
+      background: linear-gradient(90deg, rgba(88,166,255,0.08) 0%, rgba(63,185,80,0.06) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 32px;
+      display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    }
+    .demo-banner-left { display: flex; flex-direction: column; gap: 3px; }
+    .demo-banner-title {
+      font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .demo-banner-sub { font-size: 12px; color: var(--text-muted); }
+    .demo-banner-right { display: flex; align-items: center; gap: 10px; }
+    .live-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      background: rgba(63,185,80,0.12); color: var(--accent-green);
+      border: 1px solid var(--accent-green); border-radius: 10px; padding: 3px 10px;
+    }
+
+    /* ── Split layout ────────────────────────────────────────────────────────── */
+    .demo-split {
+      flex: 1; display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0; overflow: hidden;
+    }
+
+    /* ── Left — Case Form ────────────────────────────────────────────────────── */
+    .demo-left {
+      border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 28px 32px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    .demo-left::-webkit-scrollbar { width: 3px; }
+    .demo-left::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .form-section-title {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); font-weight: 600; margin-bottom: 10px;
+    }
+
+    /* Platform selector */
+    .platform-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .plat-tile {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 8px; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      transition: border-color 0.15s, background 0.15s;
+      font-size: 11px; color: var(--text-muted); text-align: center; font-weight: 500;
+    }
+    .plat-tile:hover { border-color: var(--accent); color: var(--text-primary); }
+    .plat-tile.selected { border-color: var(--accent); background: rgba(88,166,255,0.08); color: var(--accent); }
+    .plat-tile .plat-icon { font-size: 18px; }
+
+    /* Scenario presets */
+    .scenario-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+    }
+    .scenario-btn {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 4px;
+      cursor: pointer; font: inherit; font-size: 10px; font-weight: 600;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--text-muted); text-align: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .scenario-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+    .scenario-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,0.08); }
+    .scenario-btn.blocked-scen:hover,
+    .scenario-btn.blocked-scen.active { border-color: var(--accent-red); color: var(--accent-red); background: rgba(248,81,73,0.08); }
+    .scenario-btn .scen-icon { font-size: 16px; }
+
+    /* Form fields */
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-field { display: flex; flex-direction: column; gap: 5px; }
+    .form-field.full { grid-column: 1 / -1; }
+    .field-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600;
+    }
+    .field-input {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 12px;
+      color: var(--text-primary); font: inherit; font-size: 13px;
+      transition: border-color 0.15s; width: 100%;
+    }
+    .field-input:focus { outline: none; border-color: var(--accent); }
+    textarea.field-input { resize: vertical; min-height: 120px; }
+    select.field-input option { background: var(--bg-panel); }
+
+    /* Submit */
+    .submit-btn {
+      width: 100%; padding: 14px; border-radius: 8px;
+      background: var(--accent); color: #0d1117;
+      font: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.04em;
+      border: none; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .submit-btn:hover { opacity: 0.9; }
+    .submit-btn:active { transform: scale(0.99); }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Voice guard toggle */
+    .vg-toggle-row {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+    }
+    .vg-toggle-label { font-size: 12px; color: var(--text-muted); flex: 1; }
+    .vg-toggle-label strong { color: var(--text-primary); }
+    .toggle-track {
+      width: 36px; height: 20px; border-radius: 10px;
+      background: var(--border); cursor: pointer; position: relative;
+      transition: background 0.2s; flex-shrink: 0;
+    }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--text-muted); transition: transform 0.2s, background 0.2s;
+    }
+
+    /* ── Right — Result Panel ────────────────────────────────────────────────── */
+    .demo-right {
+      overflow-y: auto; padding: 28px 32px;
+      display: flex; flex-direction: column; gap: 0;
+    }
+    .demo-right::-webkit-scrollbar { width: 3px; }
+    .demo-right::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Waiting state */
+    .result-waiting {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      text-align: center; color: var(--text-muted); min-height: 400px;
+    }
+    .result-waiting-icon { font-size: 48px; opacity: 0.3; }
+    .result-waiting-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .result-waiting-sub { font-size: 12px; line-height: 1.6; max-width: 280px; }
+
+    /* Processing state */
+    .result-processing {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px;
+      text-align: center; min-height: 400px;
+    }
+    .spinner {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Result card */
+    .result-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+
+    /* Result header */
+    .result-header {
+      padding: 16px 20px; display: flex; align-items: center; gap: 12px;
+    }
+    .result-header.routed   { border-bottom: 1px solid var(--border); }
+    .result-header.blocked  { background: rgba(248,81,73,0.06); border-bottom: 1px solid rgba(248,81,73,0.2); }
+    .result-header.escalated { background: rgba(210,153,34,0.06); border-bottom: 1px solid rgba(210,153,34,0.2); }
+    .result-status-icon { font-size: 28px; }
+    .result-status-text { flex: 1; }
+    .result-status-label {
+      font-size: 15px; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .result-status-label.green  { color: var(--accent-green); }
+    .result-status-label.yellow { color: var(--accent-yellow); }
+    .result-status-label.red    { color: var(--accent-red); }
+    .result-latency { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Result body sections */
+    .result-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+
+    .result-section { display: flex; flex-direction: column; gap: 6px; }
+    .result-section-label {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); font-weight: 600;
+    }
+
+    /* Tier badge */
+    .tier-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 6px;
+      font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .tier-badge.scout     { background: var(--tier-scout-bg);      color: var(--tier-scout);      border: 1px solid var(--tier-scout); }
+    .tier-badge.analyst   { background: var(--tier-analyst-bg);    color: var(--tier-analyst);    border: 1px solid var(--tier-analyst); }
+    .tier-badge.advisor   { background: var(--tier-advisor-bg);    color: var(--tier-advisor);    border: 1px solid var(--tier-advisor); }
+    .tier-badge.strategist{ background: var(--tier-strategist-bg); color: var(--tier-strategist); border: 1px solid var(--tier-strategist); }
+    .tier-badge.blocked   { background: rgba(248,81,73,0.12); color: var(--accent-red); border: 1px solid var(--accent-red); }
+
+    /* Stat row */
+    .stat-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .stat-box {
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 12px;
+    }
+    .stat-box-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; }
+    .stat-box-value { font-size: 18px; font-weight: 700; margin-top: 3px; color: var(--text-primary); }
+    .stat-box-value.green  { color: var(--accent-green); }
+    .stat-box-value.yellow { color: var(--accent-yellow); }
+    .stat-box-value.red    { color: var(--accent-red); }
+
+    /* Savings comparison */
+    .savings-bar {
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: 6px; padding: 12px 14px;
+    }
+    .savings-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; padding: 3px 0;
+    }
+    .savings-row .label { color: var(--text-muted); }
+    .savings-row .value { font-weight: 600; color: var(--text-primary); }
+    .savings-row .saved { font-weight: 700; color: var(--accent-green); }
+    .savings-divider { border: none; border-top: 1px solid var(--border); margin: 6px 0; }
+
+    /* Pruning bar */
+    .prune-track {
+      height: 6px; background: var(--border); border-radius: 3px;
+      overflow: hidden; margin-top: 4px;
+    }
+    .prune-fill {
+      height: 100%; background: var(--accent-green);
+      border-radius: 3px; transition: width 0.6s ease;
+    }
+    .prune-labels {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--text-muted); margin-top: 3px;
+    }
+
+    /* Keywords */
+    .keyword-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .keyword-chip {
+      font-size: 10px; font-weight: 600; padding: 3px 8px;
+      border-radius: 4px; letter-spacing: 0.04em;
+    }
+    .keyword-chip.escalate { background: rgba(210,153,34,0.15); color: var(--accent-yellow); border: 1px solid rgba(210,153,34,0.3); }
+    .keyword-chip.block    { background: rgba(248,81,73,0.15);  color: var(--accent-red);    border: 1px solid rgba(248,81,73,0.3); }
+    .keyword-chip.match    { background: rgba(88,166,255,0.12); color: var(--accent);         border: 1px solid rgba(88,166,255,0.2); }
+
+    /* Budget bar */
+    .budget-track {
+      height: 6px; background: var(--border); border-radius: 3px;
+      overflow: hidden; margin: 4px 0;
+    }
+    .budget-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+    .budget-fill.healthy  { background: var(--accent-green); }
+    .budget-fill.warning  { background: var(--accent-yellow); }
+    .budget-fill.throttled { background: var(--accent-red); }
+
+    /* Blocked result */
+    .blocked-card {
+      background: rgba(248,81,73,0.04); border: 1px solid rgba(248,81,73,0.25);
+      border-radius: 10px; padding: 24px 20px;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 12px; text-align: center;
+    }
+    .blocked-icon { font-size: 44px; }
+    .blocked-title { font-size: 16px; font-weight: 700; color: var(--accent-red); }
+    .blocked-detail { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+    .blocked-zero {
+      display: flex; gap: 16px; margin: 4px 0;
+    }
+    .blocked-zero-item {
+      background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.2);
+      border-radius: 6px; padding: 8px 16px; font-size: 11px; font-weight: 600; color: var(--accent-red);
+    }
+
+    /* Action buttons */
+    .result-actions { display: flex; gap: 10px; margin-top: 4px; }
+    .result-action-btn {
+      flex: 1; padding: 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg-base);
+      color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer; text-align: center; transition: border-color 0.15s, color 0.15s;
+      text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 5px;
+    }
+    .result-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .result-action-btn.primary {
+      background: rgba(88,166,255,0.08); border-color: var(--accent); color: var(--accent);
+    }
+
+    /* Voice Guard result overlay */
+    .vg-result {
+      background: rgba(63,185,80,0.05); border: 1px solid rgba(63,185,80,0.2);
+      border-radius: 8px; padding: 14px 16px;
+    }
+    .vg-result-label {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--accent-green); font-weight: 600; margin-bottom: 6px;
+    }
+    .vg-clean-text {
+      font-size: 12px; color: var(--text-primary); line-height: 1.6;
+      font-family: var(--font-mono);
+    }
+
+    /* Routing reason box */
+    .reason-box {
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 12px;
+      font-size: 12px; color: var(--text-muted); line-height: 1.6;
+    }
+    .reason-box strong { color: var(--text-primary); }
+
+    /* Try again btn */
+    .try-again-btn {
+      width: 100%; padding: 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: border-color 0.15s, color 0.15s; margin-top: 8px;
+    }
+    .try-again-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Footer hint */
+    .demo-footer {
+      padding: 10px 32px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11px; color: var(--text-muted); flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <div>
+      <div class="header-title">FAGE</div>
+      <div class="header-sub">FinOps Agentlake &amp; Governance Engine</div>
+    </div>
+  </div>
+  <div class="header-status" id="systemStatus">
+    <span class="status-dot offline"></span>
+    <span id="statusLabel">Connecting...</span>
+    <span class="mode-badge" id="modeBadge" style="display:none"></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="/"              class="header-nav-link">◈ Dashboard</a>
+    <a href="/admin.html"    class="header-nav-link">🛠 Admin</a>
+    <a href="/reports.html"  class="header-nav-link">📊 Reports</a>
+    <a href="/sandbox.html"  class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
+    <a href="/demo-crm.html" class="header-nav-link active">🎯 Live Demo</a>
+  </div>
+</header>
+
+<div class="demo-page">
+
+  <!-- ── Banner ───────────────────────────────────────────────────────────────── -->
+  <div class="demo-banner">
+    <div class="demo-banner-left">
+      <div class="demo-banner-title">🎯 Live Platform Demo</div>
+      <div class="demo-banner-sub">Submit a case as if you're an agent — watch FAGE make a real governance decision in real time</div>
+    </div>
+    <div class="demo-banner-right">
+      <span class="live-badge">● LIVE ENGINE</span>
+      <span style="font-size:11px;color:var(--text-muted)">Every submission hits the real FAGE routing pipeline</span>
+    </div>
+  </div>
+
+  <!-- ── Split ─────────────────────────────────────────────────────────────────── -->
+  <div class="demo-split">
+
+    <!-- ── LEFT — Case Form ──────────────────────────────────────────────────── -->
+    <div class="demo-left">
+
+      <!-- Platform -->
+      <div>
+        <div class="form-section-title">1 · Select Platform</div>
+        <div class="platform-grid">
+          <div class="plat-tile selected" id="plat-salesforce" onclick="selectPlatform('salesforce','SF-CaseBot')">
+            <span class="plat-icon">☁</span>Salesforce
+          </div>
+          <div class="plat-tile" id="plat-servicenow" onclick="selectPlatform('servicenow','SN-IncidentBot')">
+            <span class="plat-icon">🔧</span>ServiceNow
+          </div>
+          <div class="plat-tile" id="plat-hubspot" onclick="selectPlatform('hubspot','HS-TicketBot')">
+            <span class="plat-icon">🧡</span>HubSpot
+          </div>
+          <div class="plat-tile" id="plat-zendesk" onclick="selectPlatform('zendesk','ZD-TicketBot')">
+            <span class="plat-icon">🎫</span>Zendesk
+          </div>
+          <div class="plat-tile" id="plat-dynamics" onclick="selectPlatform('dynamics','D365-CaseBot')">
+            <span class="plat-icon">🔷</span>Dynamics 365
+          </div>
+          <div class="plat-tile" id="plat-custom" onclick="selectPlatform('custom','FAGE-Bot')">
+            <span class="plat-icon">⚡</span>Custom
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario presets -->
+      <div>
+        <div class="form-section-title">2 · Load a Scenario (or write your own)</div>
+        <div class="scenario-grid">
+          <button class="scenario-btn" onclick="loadScenario('routine')">
+            <span class="scen-icon">⚡</span>Routine
+          </button>
+          <button class="scenario-btn" onclick="loadScenario('complex')">
+            <span class="scen-icon">🧠</span>Complex
+          </button>
+          <button class="scenario-btn" onclick="loadScenario('compliance')">
+            <span class="scen-icon">⚖</span>Compliance
+          </button>
+          <button class="scenario-btn blocked-scen" onclick="loadScenario('blocked')">
+            <span class="scen-icon">🛡</span>Blocked
+          </button>
+          <button class="scenario-btn" onclick="loadScenario('voice')">
+            <span class="scen-icon">🎙</span>Voice
+          </button>
+        </div>
+      </div>
+
+      <!-- Voice Guard toggle (only visible when voice scenario active) -->
+      <div id="vgToggleRow" class="vg-toggle-row" style="display:none">
+        <div class="vg-toggle-label">
+          <strong>Voice Guard</strong> — Redact PII from transcript before routing
+        </div>
+        <div class="toggle-track" id="vgTrack" onclick="toggleVoiceGuard()">
+          <div class="toggle-thumb" id="vgThumb"></div>
+        </div>
+      </div>
+
+      <!-- Form fields -->
+      <div>
+        <div class="form-section-title">3 · Case Details</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label">Department</label>
+              <select class="field-input" id="deptSelect">
+                <option value="Support">Support</option>
+                <option value="Sales">Sales</option>
+                <option value="Marketing">Marketing</option>
+                <option value="Operations">Operations</option>
+                <option value="Trips Team">Trips Team</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="field-label">Agent Name</label>
+              <input type="text" class="field-input" id="agentName" value="SF-CaseBot" />
+            </div>
+          </div>
+          <div class="form-field">
+            <label class="field-label">Subject</label>
+            <input type="text" class="field-input" id="caseSubject" placeholder="Case subject or title..." />
+          </div>
+          <div class="form-field">
+            <label class="field-label">Description</label>
+            <textarea class="field-input" id="caseBody" placeholder="Describe the issue, request, or inquiry...&#10;&#10;Try typing something with 'gdpr', 'lawsuit', or 'credit card' and see what happens."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <button class="submit-btn" id="submitBtn" onclick="submitCase()">
+        <span id="submitBtnText">Submit to FAGE →</span>
+      </button>
+
+    </div>
+
+    <!-- ── RIGHT — Result Panel ──────────────────────────────────────────────── -->
+    <div class="demo-right" id="resultPanel">
+
+      <!-- Waiting state (default) -->
+      <div class="result-waiting" id="resultWaiting">
+        <div class="result-waiting-icon">◈</div>
+        <div class="result-waiting-title">Ready for your first case</div>
+        <div class="result-waiting-sub">
+          Fill out the form on the left and hit Submit.<br/>
+          FAGE will make a real routing decision and show you the result here — instantly.
+        </div>
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%;max-width:280px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);font-weight:600;margin-bottom:4px">What to try</div>
+          <div style="font-size:12px;color:var(--text-muted)">⚡ Load <strong style="color:var(--text-primary)">Routine</strong> — cheap Scout routing</div>
+          <div style="font-size:12px;color:var(--text-muted)">🧠 Load <strong style="color:var(--text-primary)">Complex</strong> — escalates to Advisor</div>
+          <div style="font-size:12px;color:var(--text-muted)">🛡 Load <strong style="color:var(--text-primary)">Blocked</strong> — PII stops it cold</div>
+          <div style="font-size:12px;color:var(--text-muted)">🎙 Load <strong style="color:var(--text-primary)">Voice</strong> — PII redacted first</div>
+        </div>
+      </div>
+
+      <!-- Processing state (shown while fetching) -->
+      <div class="result-processing" id="resultProcessing" style="display:none">
+        <div class="spinner"></div>
+        <div style="font-size:13px;color:var(--text-muted)" id="processingLabel">Running FAGE pipeline...</div>
+      </div>
+
+      <!-- Result content (filled by JS) -->
+      <div id="resultContent" style="display:none"></div>
+
+    </div>
+  </div>
+
+  <!-- ── Footer ────────────────────────────────────────────────────────────────── -->
+  <div class="demo-footer">
+    <span>Every submission hits the real FAGE routing pipeline — transactions, audit events, and budget spend are all live</span>
+    <div style="display:flex;gap:12px">
+      <a href="/" style="color:var(--accent);text-decoration:none;font-weight:600">View Dashboard →</a>
+      <a href="/reports.html" style="color:var(--text-muted);text-decoration:none">Reports</a>
+      <a href="/sandbox.html" style="color:var(--accent-yellow);text-decoration:none">Sandbox</a>
+    </div>
+  </div>
+
+</div><!-- end demo-page -->
+
+<script src="js/api.js"></script>
+<script src="js/demo_crm.js"></script>
+</body>
+</html>
