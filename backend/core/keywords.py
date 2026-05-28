@@ -62,6 +62,33 @@ DEFAULT_TERMS = [
     {"term": "proprietary",     "category": "pii",        "action": "flag"},
     {"term": "do not share",    "category": "pii",        "action": "escalate"},
     {"term": "nda",             "category": "pii",        "action": "escalate"},
+    # Code Security — source code, credentials, secrets
+    {"term": "api key",          "category": "code",       "action": "block"},
+    {"term": "api_key",          "category": "code",       "action": "block"},
+    {"term": "secret key",       "category": "code",       "action": "block"},
+    {"term": "secret_key",       "category": "code",       "action": "block"},
+    {"term": "private key",      "category": "code",       "action": "block"},
+    {"term": "access token",     "category": "code",       "action": "block"},
+    {"term": "access_token",     "category": "code",       "action": "block"},
+    {"term": "client secret",    "category": "code",       "action": "block"},
+    {"term": "client_secret",    "category": "code",       "action": "block"},
+    {"term": "database password","category": "code",       "action": "block"},
+    {"term": "db password",      "category": "code",       "action": "block"},
+    {"term": "db_password",      "category": "code",       "action": "block"},
+    {"term": "connection string","category": "code",       "action": "block"},
+    {"term": "github token",     "category": "code",       "action": "block"},
+    {"term": "webhook secret",   "category": "code",       "action": "block"},
+    {"term": "stripe secret",    "category": "code",       "action": "block"},
+    {"term": "openai key",       "category": "code",       "action": "block"},
+    {"term": "anthropic key",    "category": "code",       "action": "block"},
+    {"term": "bearer token",     "category": "code",       "action": "escalate"},
+    {"term": "hardcoded",        "category": "code",       "action": "flag"},
+    {"term": "credentials",      "category": "code",       "action": "escalate"},
+    {"term": "env file",         "category": "code",       "action": "escalate"},
+    {"term": ".env",             "category": "code",       "action": "escalate"},
+    {"term": "password=",        "category": "code",       "action": "block"},
+    {"term": "passwd=",          "category": "code",       "action": "block"},
+    {"term": "pwd=",             "category": "code",       "action": "block"},
 ]
 
 # ── PII regex patterns (detect actual numbers, not just keywords) ─────────────
@@ -100,14 +127,62 @@ PII_PATTERNS = [
         "action":   "flag",
         "pattern":  re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"),
     },
+    # Code / Secrets patterns
+    {
+        "name":     "AWS Access Key ID",
+        "category": "code",
+        "action":   "block",
+        "pattern":  re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    },
+    {
+        "name":     "OpenAI API Key",
+        "category": "code",
+        "action":   "block",
+        "pattern":  re.compile(r"\bsk-[a-zA-Z0-9]{20,}\b"),
+    },
+    {
+        "name":     "Anthropic API Key",
+        "category": "code",
+        "action":   "block",
+        "pattern":  re.compile(r"\bsk-ant-[a-zA-Z0-9_\-]{30,}\b"),
+    },
+    {
+        "name":     "GitHub Personal Access Token",
+        "category": "code",
+        "action":   "block",
+        "pattern":  re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36}\b"),
+    },
+    {
+        "name":     "PEM Private Key",
+        "category": "code",
+        "action":   "block",
+        "pattern":  re.compile(r"-----BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE\s+KEY-----"),
+    },
+    {
+        "name":     "Stripe Secret Key",
+        "category": "code",
+        "action":   "block",
+        "pattern":  re.compile(r"\bsk_(?:live|test)_[a-zA-Z0-9]{24,}\b"),
+    },
+    {
+        "name":     "JWT Token",
+        "category": "code",
+        "action":   "escalate",
+        "pattern":  re.compile(r"\beyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\b"),
+    },
 ]
 
 
 def seed_defaults(db: Session):
-    """Seed default terms if the table is empty."""
-    if db.query(SensitiveTerm).count() == 0:
-        for t in DEFAULT_TERMS:
+    """Upsert default terms — adds any new terms not yet in the table.
+    Safe to call on existing deployments; never removes custom terms."""
+    existing = {t.term for t in db.query(SensitiveTerm).all()}
+    added = False
+    for t in DEFAULT_TERMS:
+        if t["term"] not in existing:
             db.add(SensitiveTerm(**t))
+            added = True
+    if added:
         db.commit()
 
 

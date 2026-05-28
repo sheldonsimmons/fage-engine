@@ -30,7 +30,7 @@
     <span class="header-logo">◈</span>
     <div>
       <div class="header-title">CostPilot</div>
-      <div class="header-sub">Navigate AI Spend with Precision</div>
+      <div class="header-sub">AI Cost Control · CRM &nbsp;·&nbsp; Support &nbsp;·&nbsp; Engineering &nbsp;·&nbsp; Finance</div>
     </div>
   </div>
   <div class="header-status" id="systemStatus">
@@ -53,9 +53,9 @@
 
 <!-- ── Page heading ────────────────────────────────────────────────────────── -->
 <div style="padding:16px 24px 0;border-bottom:1px solid var(--border);background:var(--bg-panel)">
-  <h1 style="font-size:16px;font-weight:700;margin:0 0 4px">Budget Controls &amp; Agent Management</h1>
+  <h1 style="font-size:16px;font-weight:700;margin:0 0 4px">Budget Controls &amp; Agent Spend Intelligence</h1>
   <p style="font-size:11px;color:var(--text-muted);margin:0 0 12px">
-    Set department budget caps, configure throttle floors, manage agents, and register new bots.
+    Set department budget caps, configure throttle ceilings, manage agents, and see exactly what every agent — and every engineer's AI tooling — is spending.
   </p>
 </div>
 
@@ -180,6 +180,43 @@
     </div><!-- end agentPanel -->
 
   </div><!-- end admin-grid -->
+
+  <!-- ── Agent Spend Intelligence ──────────────────────────────────────────── -->
+  <div class="panel" id="agentSpendPanel" style="margin-top:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h2 class="panel-title" style="margin:0">
+        ⚡ Agent Spend Intelligence
+        <span style="font-size:10px;font-weight:400;color:var(--text-muted);margin-left:8px;text-transform:none;letter-spacing:0">
+          Per-agent cost breakdown — all time
+        </span>
+      </h2>
+      <button onclick="loadAgentSpend()" style="
+        background:transparent;border:1px solid var(--border);color:var(--text-muted);
+        border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;">
+        ↺ Refresh
+      </button>
+    </div>
+    <table class="agent-table" id="agentSpendTable">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Department</th>
+          <th>Platform</th>
+          <th>Calls</th>
+          <th>Top Tier</th>
+          <th>Input Tokens</th>
+          <th>Output Tokens</th>
+          <th>Tokens Saved</th>
+          <th style="color:var(--accent)">Total Cost</th>
+          <th>Last Active</th>
+        </tr>
+      </thead>
+      <tbody id="agentSpendBody">
+        <tr><td colspan="10" class="placeholder">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
 </div><!-- end admin-body -->
 
 <script src="js/api.js"></script>
@@ -204,11 +241,78 @@ async function checkStatus() {
   }
 }
 
+// ── Agent Spend Intelligence ──────────────────────────────────────────────────
+async function loadAgentSpend() {
+  const tbody = document.getElementById("agentSpendBody");
+  try {
+    const data = await apiGet("/api/agents/spend");
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="placeholder">No agent transactions recorded yet — route a payload with an agent_id to start tracking.</td></tr>';
+      return;
+    }
+
+    const TIER_BADGE = {
+      "Scout":      "badge-scout",
+      "Analyst":    "badge-analyst",
+      "Advisor":    "badge-advisor",
+      "Strategist": "badge-strategist",
+      "micro":      "badge-scout",
+      "flagship":   "badge-advisor",
+    };
+
+    const fmtTs = iso => iso
+      ? new Date(iso + "Z").toLocaleString("en-US", {
+          month: "numeric", day: "numeric",
+          hour: "numeric", minute: "2-digit", hour12: true,
+        })
+      : "—";
+
+    const fmtNum = n => n >= 1000000
+      ? (n / 1000000).toFixed(1) + "M"
+      : n >= 1000
+        ? (n / 1000).toFixed(1) + "K"
+        : n.toString();
+
+    const topCost = data[0]?.total_cost_usd || 0;
+
+    tbody.innerHTML = data.map(a => {
+      const tierCls  = TIER_BADGE[a.top_tier] || "badge-scout";
+      const barWidth = topCost > 0 ? Math.round((a.total_cost_usd / topCost) * 100) : 0;
+      const costFmt  = a.total_cost_usd === 0 ? "$0.00"
+                     : a.total_cost_usd < 0.01 ? "$" + a.total_cost_usd.toFixed(6)
+                     : "$" + a.total_cost_usd.toFixed(4);
+      return `
+        <tr class="audit-row">
+          <td style="font-weight:600;color:var(--accent)">${a.agent_name}</td>
+          <td style="color:var(--text-muted);font-size:11px">${a.department || "—"}</td>
+          <td style="color:var(--text-muted);font-size:11px">${a.source_platform || "—"}</td>
+          <td style="font-family:var(--font-mono);font-size:11px">${a.call_count.toLocaleString()}</td>
+          <td><span class="badge ${tierCls}">${a.top_tier === "micro" ? "Scout" : a.top_tier || "—"}</span></td>
+          <td style="font-family:var(--font-mono);font-size:11px">${fmtNum(a.total_input_tokens)}</td>
+          <td style="font-family:var(--font-mono);font-size:11px">${fmtNum(a.total_output_tokens)}</td>
+          <td style="font-family:var(--font-mono);font-size:11px;color:var(--accent-green)">${fmtNum(a.tokens_saved)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent);min-width:60px">${costFmt}</span>
+              <div style="flex:1;background:var(--border);border-radius:2px;height:4px;min-width:60px">
+                <div style="width:${barWidth}%;background:var(--accent);height:4px;border-radius:2px"></div>
+              </div>
+            </div>
+          </td>
+          <td style="color:var(--text-muted);font-size:11px">${fmtTs(a.last_used_at)}</td>
+        </tr>`;
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="10" class="placeholder" style="color:var(--accent-red)">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
 // Init
 window.addEventListener("DOMContentLoaded", () => {
   checkStatus();
   loadBudgets();
   loadAgents();
+  loadAgentSpend();
 });
 
 window.PAGE_TOUR_STEPS = [

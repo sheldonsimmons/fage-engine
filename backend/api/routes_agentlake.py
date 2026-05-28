@@ -11,9 +11,11 @@ POST /api/agents/{id}/release       — supervisor releases a locked agent
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
+from database.models import TokenTransaction
 from core.agentlake import (
     list_agents, get_agent, claim_record,
     release_lock, simulate_collision,
@@ -86,6 +88,60 @@ def deregister(agent_id: int, db: Session = Depends(get_db)):
         return deregister_agent(db, agent_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/spend")
+def agent_spend_summary(db: Session = Depends(get_db)):
+    """
+    Per-agent spend summary — aggregates TokenTransaction by agent_id.
+    Returns every registered agent with their total cost, token counts,
+    call volume, and top model tier used. Ordered by total cost descending.
+    """
+    from database.models import RegisteredAgent
+
+    TIER_ORDER = {"Strategist": 4, "Advisor": 3, "flagship": 3,
+                  "Analyst": 2, "Scout": 1, "micro": 1}
+
+    agents = db.query(RegisteredAgent).filter(
+        RegisteredAgent.archived.isnot(True)
+    ).all()
+
+    results = []
+    for agent in agents:
+        txns = db.query(TokenTransaction).filter(
+            TokenTransaction.agent_id == agent.id
+        ).all()
+
+        total_cost     = round(sum(t.cost_usd or 0       for t in txns), 6)
+        total_input    = sum(t.input_tokens or 0  for t in txns)
+        total_output   = sum(t.output_tokens or 0 for t in txns)
+        total_saved    = sum(t.tokens_saved or 0  for t in txns)
+        call_count     = len(txns)
+
+        # Most-used tier
+        tier_counts: dict = {}
+        for t in txns:
+            tier = t.model_tier or "Scout"
+            tier_counts[tier] = tier_counts.get(tier, 0) + 1
+        top_tier = max(tier_counts, key=tier_counts.get) if tier_counts else "—"
+
+        results.append({
+            "agent_id":        agent.id,
+            "agent_name":      agent.name,
+            "department":      agent.department,
+            "source_platform": agent.source_platform,
+            "status":          agent.status,
+            "last_used_at":    agent.last_used_at.isoformat() if agent.last_used_at else None,
+            "call_count":      call_count,
+            "total_cost_usd":  total_cost,
+            "total_input_tokens":  total_input,
+            "total_output_tokens": total_output,
+            "tokens_saved":    total_saved,
+            "top_tier":        top_tier,
+        })
+
+    results.sort(key=lambda r: r["total_cost_usd"], reverse=True)
+    return results
 
 
 @router.get("", response_model=List[AgentStatus])
