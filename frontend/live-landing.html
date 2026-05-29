@@ -198,14 +198,14 @@
 
     <div class="hero-card green">
       <div class="hero-eyebrow">Projected Annual Savings · At Current Routing Efficiency</div>
-      <div class="hero-number">$17.7K</div>
+      <div class="hero-number" id="llAnnualSavings">—</div>
       <div class="hero-sub">
-        On track to avoid <strong>$1,471.87</strong> this month vs. routing everything to
-        Claude Opus 4. CostPilot is directing <strong>68%</strong> of AI calls to
-        economy tiers and has governed <strong>128.4K</strong> requests across this deployment.
+        On track to avoid <strong id="llMonthSaved">—</strong> this month vs. routing everything to
+        Claude Opus 4. CostPilot is directing <strong id="llRoutingPct">—</strong> of AI calls to
+        economy tiers and has governed <strong id="llTotalCalls">—</strong> requests across this deployment.
       </div>
-      <div class="hero-badge">
-        ↑ 76% less spend vs. all-Opus-4 routing
+      <div class="hero-badge" id="llWasteBadge">
+        ↑ — less spend vs. all-Opus-4 routing
       </div>
     </div>
 
@@ -237,27 +237,27 @@
 
     <div class="metric-card">
       <div class="metric-label">Monthly spend (current)</div>
-      <div class="metric-value">$317<span class="metric-unit" style="font-size:18px">.93</span></div>
+      <div class="metric-value" id="llMonthSpend">—</div>
       <div class="metric-tag green">UNDER CAP</div>
-      <div class="metric-sub">of $1,650 total budget · 19.3% utilized</div>
-      <div class="metric-bar-track"><div class="metric-bar-fill" style="width:19.3%"></div></div>
+      <div class="metric-sub" id="llBudgetSub">of — total budget</div>
+      <div class="metric-bar-track"><div class="metric-bar-fill" id="llBudgetBar" style="width:0%"></div></div>
     </div>
 
     <div class="metric-card">
       <div class="metric-label">Routing efficiency</div>
       <div class="metric-value">
-        <span>68</span><span class="metric-unit" style="color:var(--text-muted)">%</span>
+        <span id="llRoutingPctMetric">—</span><span class="metric-unit" style="color:var(--text-muted)">%</span>
       </div>
       <div class="metric-tag blue">ECONOMY TIER</div>
-      <div class="metric-sub">of calls routed to Haiku or Sonnet</div>
-      <div class="metric-bar-track"><div class="metric-bar-fill" style="width:68%;background:var(--accent)"></div></div>
+      <div class="metric-sub">of calls routed to lower-cost tiers</div>
+      <div class="metric-bar-track"><div class="metric-bar-fill" id="llRoutingBar" style="width:0%;background:var(--accent)"></div></div>
     </div>
 
     <div class="metric-card">
       <div class="metric-label">Requests governed</div>
-      <div class="metric-value">128<span class="metric-unit">.4K</span></div>
-      <div class="metric-tag green">0 INCIDENTS</div>
-      <div class="metric-sub">across 12-month deployment · 47 audited</div>
+      <div class="metric-value" id="llTotalCallsMetric">—</div>
+      <div class="metric-tag green" id="llIncidentTag">— INCIDENTS</div>
+      <div class="metric-sub" id="llAuditSub">this deployment</div>
       <div class="metric-bar-track"><div class="metric-bar-fill" style="width:100%"></div></div>
     </div>
 
@@ -266,38 +266,38 @@
   <!-- Where savings came from -->
   <div class="breakdown-card">
     <div class="breakdown-title">Where the savings came from</div>
-    <div class="breakdown-sub">$1,471.87 avoided this month — $17,662.44 annualized at current run rate · Priced against claude-opus-4 baseline ($15/$75 per MTok)</div>
+    <div class="breakdown-sub" id="llBreakdownSub">— avoided this month · Priced against claude-opus-4 baseline ($15/$75 per MTok)</div>
     <div class="breakdown-grid">
 
       <div>
         <div class="breakdown-item-label">Economy routing · Haiku &amp; Sonnet vs Opus</div>
-        <div class="breakdown-item-value">$1,032.07</div>
+        <div class="breakdown-item-value" id="llRoutingSaved">—</div>
         <div class="breakdown-bar-track">
-          <div class="breakdown-bar-fill" style="width:100%;background:var(--accent-green)"></div>
+          <div class="breakdown-bar-fill" id="llRoutingBar2" style="width:100%;background:var(--accent-green)"></div>
         </div>
       </div>
 
       <div>
         <div class="breakdown-item-label">Context pruning · tokens stripped before billing</div>
-        <div class="breakdown-item-value">$142.80</div>
+        <div class="breakdown-item-value" id="llPruningSaved">—</div>
         <div class="breakdown-bar-track">
-          <div class="breakdown-bar-fill" style="width:13.8%;background:var(--accent-green)"></div>
+          <div class="breakdown-bar-fill" id="llPruningBar" style="width:0%;background:var(--accent-green)"></div>
         </div>
       </div>
 
       <div>
-        <div class="breakdown-item-label">Budget caps &amp; throttling · Marketing dept</div>
-        <div class="breakdown-item-value">$243.00</div>
+        <div class="breakdown-item-label">Budget caps &amp; throttling</div>
+        <div class="breakdown-item-value" id="llThrottleSaved">—</div>
         <div class="breakdown-bar-track">
-          <div class="breakdown-bar-fill" style="width:23.5%;background:var(--accent-yellow)"></div>
+          <div class="breakdown-bar-fill" id="llThrottleBar" style="width:0%;background:var(--accent-yellow)"></div>
         </div>
       </div>
 
       <div>
         <div class="breakdown-item-label">Blocked requests · PII · secrets · compliance</div>
-        <div class="breakdown-item-value">$54.00</div>
+        <div class="breakdown-item-value" id="llBlockedSaved">—</div>
         <div class="breakdown-bar-track">
-          <div class="breakdown-bar-fill" style="width:5.2%;background:#cb2431"></div>
+          <div class="breakdown-bar-fill" id="llBlockedBar" style="width:0%;background:#cb2431"></div>
         </div>
       </div>
 
@@ -310,19 +310,19 @@
 <div class="exec-footer">
   <div class="footer-stats">
     <div class="footer-stat">
-      <div class="footer-stat-value">16</div>
+      <div class="footer-stat-value" id="llAgentsTotal">—</div>
       <div class="footer-stat-label">active agents</div>
     </div>
     <div class="footer-stat">
-      <div class="footer-stat-value">5</div>
+      <div class="footer-stat-value" id="llDepts">—</div>
       <div class="footer-stat-label">departments</div>
     </div>
     <div class="footer-stat">
-      <div class="footer-stat-value">0</div>
+      <div class="footer-stat-value" id="llLocked">—</div>
       <div class="footer-stat-label">collision locked</div>
     </div>
     <div class="footer-stat">
-      <div class="footer-stat-value">47</div>
+      <div class="footer-stat-value" id="llAuditEvents">—</div>
       <div class="footer-stat-label">audit events logged</div>
     </div>
   </div>
@@ -333,6 +333,78 @@
 </div>
 
 <script>
+// ── Load live data from API ────────────────────────────────────────────────────
+async function loadLandingData() {
+  try {
+    const d = await fetch("/api/dashboard").then(r => r.json());
+
+    const totalCalls   = (d.scout_calls||0) + (d.analyst_calls||0) + (d.advisor_calls||0) + (d.strategist_calls||0);
+    const economyCalls = (d.scout_calls||0) + (d.analyst_calls||0);
+    const routingPct   = totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0;
+
+    const FLAGSHIP_AVG = 0.030;
+    const fullCost     = totalCalls * FLAGSHIP_AVG;
+    const actualCost   = d.spend_month_usd || 0;
+    const routingSaved = Math.max(0, fullCost - actualCost);
+    const pruningSaved = d.pruning_savings_usd || 0;
+    const totalSaved   = routingSaved + pruningSaved;
+    const annualSavings = totalSaved * 12;
+    const wasteBlocked  = fullCost > 0 ? Math.round((routingSaved / fullCost) * 100) : 0;
+
+    function fmt(v) {
+      if (v >= 1000000) return "$" + (v/1000000).toFixed(2) + "M";
+      if (v >= 1000)    return "$" + (v/1000).toFixed(1) + "K";
+      return "$" + v.toFixed(2);
+    }
+    function fmtCalls(n) {
+      if (n >= 1000000) return (n/1000000).toFixed(1) + "M";
+      if (n >= 1000)    return (n/1000).toFixed(1) + "K";
+      return n.toLocaleString();
+    }
+
+    // Hero
+    document.getElementById("llAnnualSavings").textContent = fmt(annualSavings);
+    document.getElementById("llMonthSaved").textContent    = fmt(totalSaved);
+    document.getElementById("llRoutingPct").textContent    = routingPct + "%";
+    document.getElementById("llTotalCalls").textContent    = fmtCalls(totalCalls);
+    document.getElementById("llWasteBadge").textContent    = "↑ " + wasteBlocked + "% less spend vs. all-Opus-4 routing";
+
+    // Metrics
+    document.getElementById("llMonthSpend").textContent       = "$" + actualCost.toFixed(2);
+    document.getElementById("llRoutingPctMetric").textContent = routingPct;
+    document.getElementById("llRoutingBar").style.width       = routingPct + "%";
+    document.getElementById("llTotalCallsMetric").textContent = fmtCalls(totalCalls);
+    document.getElementById("llIncidentTag").textContent      = (d.flagged_count || 0) + " INCIDENTS";
+    document.getElementById("llAuditSub").textContent         = (d.flagged_count || 0) + " audited events";
+
+    const totalCap = d.budget_summaries ? d.budget_summaries.reduce((s,b) => s + b.monthly_cap_usd, 0) : 0;
+    const budgetPct = totalCap > 0 ? Math.round((actualCost / totalCap) * 100) : 0;
+    document.getElementById("llBudgetSub").textContent  = "of $" + totalCap.toFixed(0) + " total budget · " + budgetPct + "% utilized";
+    document.getElementById("llBudgetBar").style.width  = Math.min(budgetPct, 100) + "%";
+
+    // Breakdown
+    document.getElementById("llBreakdownSub").textContent = fmt(totalSaved) + " avoided this month — " + fmt(annualSavings) + " annualized · Priced against claude-opus-4 baseline ($15/$75 per MTok)";
+    document.getElementById("llRoutingSaved").textContent = fmt(routingSaved);
+    document.getElementById("llPruningSaved").textContent = fmt(pruningSaved);
+    document.getElementById("llThrottleSaved").textContent = "$0.00";
+    document.getElementById("llBlockedSaved").textContent  = "$0.00";
+    const pruningPct = routingSaved > 0 ? Math.round((pruningSaved / routingSaved) * 100) : 0;
+    document.getElementById("llPruningBar").style.width = Math.min(pruningPct, 100) + "%";
+
+    // Footer
+    document.getElementById("llAgentsTotal").textContent  = d.agents_total || "—";
+    document.getElementById("llDepts").textContent        = d.budget_summaries ? d.budget_summaries.length : "—";
+    document.getElementById("llLocked").textContent       = d.agents_locked || 0;
+    document.getElementById("llAuditEvents").textContent  = d.flagged_count || 0;
+
+  } catch(e) {
+    console.warn("Landing data load failed:", e.message);
+  }
+}
+
+loadLandingData();
+setInterval(loadLandingData, 30000);
+
 // ── Deterministic LCG — same chart every load ──────────────────────────────────
 function seededRng(seed) {
   let s = seed >>> 0;
