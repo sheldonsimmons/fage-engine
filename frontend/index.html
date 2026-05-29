@@ -151,6 +151,79 @@
   </div>
 </div>
 
+<!-- ── CEO Savings Banner ───────────────────────────────────────────────────── -->
+<div id="ceoSavingsBanner" style="
+  display:flex; align-items:stretch; gap:0;
+  background:linear-gradient(135deg,rgba(46,160,67,0.12) 0%,rgba(33,139,57,0.06) 50%,rgba(26,115,46,0.10) 100%);
+  border-bottom:1px solid rgba(46,160,67,0.25);
+  border-top:1px solid rgba(46,160,67,0.15);
+  flex-shrink:0; overflow:hidden; position:relative;">
+
+  <!-- Ambient glow -->
+  <div style="position:absolute;top:-40px;left:120px;width:220px;height:120px;
+    background:radial-gradient(ellipse,rgba(46,160,67,0.18) 0%,transparent 70%);
+    pointer-events:none"></div>
+
+  <!-- MAIN: Total Saved -->
+  <div style="flex:0 0 auto;padding:14px 32px 14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:220px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:rgba(46,160,67,0.8);font-weight:700;margin-bottom:2px">Total AI Spend Avoided</div>
+    <div id="ceoTotalSaved" style="font-size:32px;font-weight:800;
+      color:#3fb950;letter-spacing:-0.5px;line-height:1;font-family:var(--font-mono)">—</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">vs. all-flagship baseline</div>
+  </div>
+
+  <!-- STAT: Routing Efficiency -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Economy Routing</div>
+    <div id="ceoRoutingPct" style="font-size:28px;font-weight:800;
+      color:var(--accent-green);line-height:1;font-family:var(--font-mono)">—</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">of calls at lower cost tier</div>
+  </div>
+
+  <!-- STAT: Requests Processed -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Requests Governed</div>
+    <div id="ceoTotalCalls" style="font-size:28px;font-weight:800;
+      color:var(--text-primary);line-height:1;font-family:var(--font-mono)">—</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">total AI calls managed</div>
+  </div>
+
+  <!-- STAT: Pruning Savings -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Context Pruning Saved</div>
+    <div id="ceoPruningSaved" style="font-size:28px;font-weight:800;
+      color:var(--accent-green);line-height:1;font-family:var(--font-mono)">—</div>
+    <div id="ceoPruningTokens" style="font-size:10px;color:var(--text-muted);margin-top:3px">tokens stripped</div>
+  </div>
+
+  <!-- RIGHT: Projected Annual + tagline -->
+  <div style="flex:1;padding:14px 28px;display:flex;flex-direction:column;justify-content:center;">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:4px">Projected Annual Savings</div>
+    <div id="ceoAnnualSavings" style="font-size:22px;font-weight:800;
+      color:#3fb950;line-height:1;font-family:var(--font-mono);margin-bottom:6px">—</div>
+    <div style="font-size:10px;color:var(--text-muted);line-height:1.5;max-width:280px">
+      At current routing efficiency, CostPilot prevents
+      <span id="ceoWastePercent" style="color:var(--accent-green);font-weight:700">—</span>
+      of AI spend from going to premium models unnecessarily.
+    </div>
+  </div>
+
+  <!-- Badge -->
+  <div style="position:absolute;top:10px;right:16px;
+    font-size:9px;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;
+    color:rgba(46,160,67,0.6);border:1px solid rgba(46,160,67,0.25);
+    border-radius:4px;padding:2px 8px">LIVE SAVINGS</div>
+</div>
+
 <!-- ── Stat Bar ────────────────────────────────────────────────────────────── -->
 <div class="dash-stat stat-bar stat-bar-compact" id="statBar">
   <div class="stat-item">

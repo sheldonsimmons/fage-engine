@@ -36,6 +36,7 @@ async function loadDashboard() {
     const d = await apiGet("/api/dashboard");
     renderKpis(d);
     renderStatBar(d);
+    renderCeoBanner(d);
   } catch (err) {
     console.warn("Dashboard load failed:", err.message);
   }
@@ -78,6 +79,38 @@ function renderStatBar(d) {
   document.getElementById("statBudgetPct").textContent       = d.overall_budget_pct + "%";
   document.getElementById("statPruningSaved").textContent    = "$" + d.pruning_savings_usd.toFixed(4);
   document.getElementById("statMonthSpend").textContent      = "$" + d.spend_month_usd.toFixed(2);
+}
+
+function renderCeoBanner(d) {
+  // Total saved = routing savings (vs all-flagship) + pruning savings
+  const totalCalls     = (d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0);
+  const economyCalls   = (d.scout_calls || 0) + (d.analyst_calls || 0);
+  const routingPct     = totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0;
+
+  // Cost avoided: what it would've cost at all-flagship vs what was actually spent
+  const FLAGSHIP_AVG   = 0.030;
+  const fullCost       = totalCalls * FLAGSHIP_AVG;
+  const actualCost     = d.spend_month_usd || 0;
+  const routingSaved   = Math.max(0, fullCost - actualCost);
+  const pruningSaved   = d.pruning_savings_usd || 0;
+  const totalSaved     = routingSaved + pruningSaved;
+  const annualSavings  = totalSaved * 12;
+  const wasteBlocked   = fullCost > 0 ? Math.round((routingSaved / fullCost) * 100) : 0;
+
+  function fmtBig(v) {
+    if (v >= 1000000) return "$" + (v / 1000000).toFixed(2) + "M";
+    if (v >= 1000)    return "$" + (v / 1000).toFixed(1) + "K";
+    return "$" + v.toFixed(2);
+  }
+
+  document.getElementById("ceoTotalSaved").textContent    = fmtBig(totalSaved);
+  document.getElementById("ceoRoutingPct").textContent    = routingPct + "%";
+  document.getElementById("ceoTotalCalls").textContent    = totalCalls >= 1000
+    ? (totalCalls / 1000).toFixed(1) + "K" : totalCalls.toLocaleString();
+  document.getElementById("ceoPruningSaved").textContent  = fmtBig(pruningSaved);
+  document.getElementById("ceoPruningTokens").textContent = (d.tokens_saved_total || 0).toLocaleString() + " tokens stripped";
+  document.getElementById("ceoAnnualSavings").textContent = fmtBig(annualSavings);
+  document.getElementById("ceoWastePercent").textContent  = wasteBlocked + "%";
 }
 
 // ── Enterprise Demo loader ────────────────────────────────────────────────────
