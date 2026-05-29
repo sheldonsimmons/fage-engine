@@ -271,9 +271,18 @@ async function runCollisionSim() {
   }
 }
 
-// Load on page ready, refresh every 10 seconds (staggered 400ms)
+// Load on page ready, then use adaptive polling:
+// 1s while any agent is active/locked, 5s when all idle
 setTimeout(loadAgents, 400);
-setInterval(loadAgents, 10000);
+
+let _agentPollTimer = null;
+function scheduleAgentPoll(agents) {
+  clearTimeout(_agentPollTimer);
+  const hasLive = agents && agents.some(a => a.status === "active" || a.status === "locked" || a.status === "queued");
+  _agentPollTimer = setTimeout(async () => {
+    await loadAgents();
+  }, hasLive ? 1000 : 5000);
+}
 
 // ── Dashboard Agentlake Filters ───────────────────────────────────────────────
 
@@ -300,9 +309,11 @@ async function loadAgents() {
     renderAgentTable(agents);
     updateKpiAgents(agents.filter(a => !a.archived));
     populateDeptFilter(agents);
+    scheduleAgentPoll(agents);
   } catch (err) {
     document.getElementById("agentTableBody").innerHTML =
       `<tr><td colspan="8" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
+    scheduleAgentPoll([]);
   }
 }
 
