@@ -7,7 +7,7 @@ POST /api/savings/analyze
   The key is NEVER logged or persisted — used once and discarded.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import httpx
@@ -85,7 +85,13 @@ async def fetch_anthropic(api_key: str, days: int) -> UsageSummary:
     if resp.status_code == 401:
         raise ValueError("Invalid Anthropic API key.")
     if resp.status_code == 403:
-        raise ValueError("This API key doesn't have usage read permissions. Try adding usage:read scope or use CSV export instead.")
+        raise ValueError("This API key doesn't have usage read permissions. Use CSV export instead.")
+    if resp.status_code == 404:
+        raise ValueError(
+            "Anthropic's usage API requires an Organization Admin key, not a standard API key. "
+            "To get usage data, export a CSV from console.anthropic.com → Usage → Export, "
+            "then use the CSV path."
+        )
     if not resp.is_success:
         raise ValueError(f"Anthropic API returned {resp.status_code}. Try the CSV path instead.")
 
@@ -209,9 +215,12 @@ async def analyze_usage(req: AnalyzeRequest):
     Proxy usage data fetch to avoid browser CORS restrictions.
     API key is used once and never stored or logged.
     """
-    if req.provider == "anthropic":
-        return await fetch_anthropic(req.api_key, req.days)
-    elif req.provider == "openai":
-        return await fetch_openai(req.api_key, req.days)
-    else:
-        raise ValueError(f"Unknown provider: {req.provider}")
+    try:
+        if req.provider == "anthropic":
+            return await fetch_anthropic(req.api_key, req.days)
+        elif req.provider == "openai":
+            return await fetch_openai(req.api_key, req.days)
+        else:
+            raise ValueError(f"Unknown provider: {req.provider}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
