@@ -88,9 +88,8 @@ async def fetch_anthropic(api_key: str, days: int) -> UsageSummary:
         raise ValueError("This API key doesn't have usage read permissions. Use CSV export instead.")
     if resp.status_code == 404:
         raise ValueError(
-            "Anthropic's usage API requires an Organization Admin key, not a standard API key. "
-            "To get usage data, export a CSV from console.anthropic.com → Usage → Export, "
-            "then use the CSV path."
+            "Anthropic's usage API requires an Organization Admin key — standard API keys don't have access. "
+            "Export a CSV from console.anthropic.com → Usage → Export and use the CSV path instead."
         )
     if not resp.is_success:
         raise ValueError(f"Anthropic API returned {resp.status_code}. Try the CSV path instead.")

@@ -580,7 +580,15 @@ async function calcFromApi() {
     showResults(usage, "api", days);
   } catch (err) {
     hideProcessing();
-    showError("apiError", err.message || "Could not fetch usage data. Check your API key and try again.");
+    const msg = err.message || "Could not fetch usage data. Check your API key and try again.";
+    // Anthropic org-key error → show message + one-click CSV switch
+    if (msg.includes("Organization Admin key") || msg.includes("CSV")) {
+      const el = document.getElementById("apiError");
+      el.innerHTML = msg + `<br/><br/><button onclick="selectPath('csv')" style="background:var(--accent);color:#0d1117;border:none;border-radius:6px;padding:7px 16px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;margin-top:2px;">Switch to CSV Export →</button>`;
+      el.style.display = "block";
+    } else {
+      showError("apiError", msg);
+    }
   } finally {
     btn.textContent = "Calculate My Savings →";
   }
