@@ -82,19 +82,17 @@ function renderStatBar(d) {
 }
 
 function renderCeoBanner(d) {
-  // Total saved = routing savings (vs all-flagship) + pruning savings
+  // Use backend pre-computed values so all pages show the same numbers
   const totalCalls     = (d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0);
   const economyCalls   = (d.scout_calls || 0) + (d.analyst_calls || 0);
-  const routingPct     = totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0;
+  const routingPct     = d.routing_efficiency_pct != null ? Math.round(d.routing_efficiency_pct) : (totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0);
 
-  // Cost avoided: what it would've cost at all-flagship vs what was actually spent
+  const routingSaved   = d.routing_savings_usd  != null ? d.routing_savings_usd  : 0;
+  const pruningSaved   = d.pruning_savings_usd   || 0;
+  const totalSaved     = d.total_savings_usd     != null ? d.total_savings_usd    : (routingSaved + pruningSaved);
+  const annualSavings  = d.projected_annual_savings != null ? d.projected_annual_savings : totalSaved * 12;
   const FLAGSHIP_AVG   = 0.030;
   const fullCost       = totalCalls * FLAGSHIP_AVG;
-  const actualCost     = d.spend_month_usd || 0;
-  const routingSaved   = Math.max(0, fullCost - actualCost);
-  const pruningSaved   = d.pruning_savings_usd || 0;
-  const totalSaved     = routingSaved + pruningSaved;
-  const annualSavings  = totalSaved * 12;
   const wasteBlocked   = fullCost > 0 ? Math.round((routingSaved / fullCost) * 100) : 0;
 
   function fmtBig(v) {

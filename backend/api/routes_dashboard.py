@@ -130,19 +130,20 @@ def get_dashboard(db: Session = Depends(get_db)):
     collision_count    = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "LOCK").scalar()       or 0
 
     # ── Executive Summary ROI ─────────────────────────────────────────────────
-    projected_annual_savings = round(pruning_savings_usd * 12, 2)
-    # Cost reduction via smart routing: % savings from sending micro calls to micro
-    # instead of sending everything to flagship (which would cost ~30x more per call)
-    FLAGSHIP_AVG = 0.030   # avg cost per flagship call
-    MICRO_AVG    = 0.000465  # avg cost per micro call
-    if total_calls > 0:
-        full_flagship_cost = total_calls * FLAGSHIP_AVG
-        cost_reduction_pct = round(
-            ((full_flagship_cost - (spend_month or 0)) / full_flagship_cost) * 100, 1
-        ) if full_flagship_cost > 0 else 0
+    FLAGSHIP_AVG = 0.030   # avg cost per flagship call ($0.03 at Opus 4 rates)
+    full_flagship_cost = total_calls * FLAGSHIP_AVG
+    routing_savings_usd = max(0.0, full_flagship_cost - (spend_month or 0.0))
+    total_savings_usd   = routing_savings_usd + pruning_savings_usd
+    projected_annual_savings = round(total_savings_usd * 12, 2)
+
+    if full_flagship_cost > 0:
+        cost_reduction_pct = round((routing_savings_usd / full_flagship_cost) * 100, 1)
         cost_reduction_pct = max(0, min(99, cost_reduction_pct))
     else:
         cost_reduction_pct = 0
+
+    economy_calls = scout_calls + analyst_calls
+    routing_efficiency_pct = round((economy_calls / total_calls) * 100, 1) if total_calls > 0 else 0
 
     # ── Recent audit events (last 5 for the KPI strip) ─────────────────────────
     recent_audits = db.query(AuditEvent).order_by(
@@ -242,6 +243,9 @@ def get_dashboard(db: Session = Depends(get_db)):
 
         # ── Executive Summary ROI ──────────────────────────────────────────────
         "projected_annual_savings": projected_annual_savings,
+        "routing_savings_usd":   round(routing_savings_usd, 6),
+        "total_savings_usd":     round(total_savings_usd, 6),
+        "routing_efficiency_pct": routing_efficiency_pct,
         "cost_reduction_pct":    cost_reduction_pct,
         "compliance_events_total": flagged_count,
 
