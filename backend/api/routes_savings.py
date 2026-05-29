@@ -166,6 +166,9 @@ async def fetch_openai(api_key: str, days: int) -> UsageSummary:
             f"?start_date={start_dt.strftime('%Y-%m-%d')}&end_date={end_dt.strftime('%Y-%m-%d')}",
             headers=headers,
         )
+        import logging
+        logging.warning(f"[savings] billing status={billing_resp.status_code} body={billing_resp.text[:300]}")
+        logging.warning(f"[savings] probe status={probe.status_code} data_len={len(probe.json().get('data') or [])}")
 
         # Fetch remaining days concurrently for token breakdown
         sem = asyncio.Semaphore(10)
