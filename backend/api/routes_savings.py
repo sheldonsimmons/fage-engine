@@ -203,7 +203,7 @@ async def fetch_openai(api_key: str, days: int) -> UsageSummary:
 
 # ── Route ─────────────────────────────────────────────────────────────────────
 
-@router.post("", response_model=UsageSummary)
+@router.post("/analyze", response_model=UsageSummary)
 async def analyze_usage(req: AnalyzeRequest):
     """
     Proxy usage data fetch to avoid browser CORS restrictions.
