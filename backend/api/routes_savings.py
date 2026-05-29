@@ -144,52 +144,67 @@ async def fetch_anthropic(api_key: str, days: int) -> UsageSummary:
 # ── OpenAI usage proxy ────────────────────────────────────────────────────────
 
 async def fetch_openai(api_key: str, days: int) -> UsageSummary:
-    import time
-    end_ts   = int(time.time())
-    start_ts = int(time.time() - days * 86400)
-
-    url = f"https://api.openai.com/v1/usage?start_time={start_ts}&end_time={end_ts}"
+    import asyncio
+    headers = {"Authorization": f"Bearer {api_key}"}
+    dates = [
+        (datetime.utcnow() - timedelta(days=i)).strftime('%Y-%m-%d')
+        for i in range(days)
+    ]
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+        # Probe first day to validate key before firing all requests
+        probe = await client.get(
+            f"https://api.openai.com/v1/usage?date={dates[0]}",
+            headers=headers,
+        )
+        if probe.status_code == 401:
+            raise ValueError("Invalid OpenAI API key.")
+        if not probe.is_success:
+            raise ValueError(f"OpenAI API returned {probe.status_code}. Try the CSV path instead.")
 
-    if resp.status_code == 401:
-        raise ValueError("Invalid OpenAI API key.")
-    if not resp.is_success:
-        raise ValueError(f"OpenAI API returned {resp.status_code}. Try the CSV path instead.")
+        # Fetch remaining days concurrently (max 10 in-flight at once)
+        sem = asyncio.Semaphore(10)
 
-    data  = resp.json()
-    daily = data.get("data") or []
+        async def one_day(date_str: str):
+            async with sem:
+                r = await client.get(
+                    f"https://api.openai.com/v1/usage?date={date_str}",
+                    headers=headers,
+                )
+                return r.json().get("data") or [] if r.is_success else []
+
+        rest = await asyncio.gather(*[one_day(d) for d in dates[1:]])
+
+    all_rows = (probe.json().get("data") or []) + [row for day in rest for row in day]
 
     total_in = total_out = total_cost = 0
     micro_tok = flagship_tok = 0
     model_map: dict = {}
 
-    for day in daily:
-        for r in (day.get("results") or [day]):
-            inp   = int(r.get("n_context_tokens_total")    or r.get("prompt_tokens")     or 0)
-            out   = int(r.get("n_generated_tokens_total")  or r.get("completion_tokens") or 0)
-            mid   = (r.get("snapshot_id") or r.get("model_id") or "gpt-4o").lower()
-            p     = model_cost_per_token(mid)
-            cost  = inp * p["in"] + out * p["out"]
+    for r in all_rows:
+        inp   = int(r.get("n_context_tokens_total")   or r.get("prompt_tokens")    or 0)
+        out   = int(r.get("n_generated_tokens_total") or r.get("completion_tokens") or 0)
+        mid   = (r.get("snapshot_id") or r.get("model_id") or "gpt-4o").lower()
+        p     = model_cost_per_token(mid)
+        cost  = inp * p["in"] + out * p["out"]
 
-            total_in   += inp
-            total_out  += out
-            total_cost += cost
+        total_in   += inp
+        total_out  += out
+        total_cost += cost
 
-            tier = model_tier(mid)
-            if tier == "micro":    micro_tok    += inp + out
-            elif tier == "flagship": flagship_tok += inp + out
+        tier = model_tier(mid)
+        if tier == "micro":      micro_tok    += inp + out
+        elif tier == "flagship": flagship_tok += inp + out
 
-            if mid not in model_map:
-                model_map[mid] = {"model": mid, "calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
-            model_map[mid]["calls"]         += r.get("n_requests") or 1
-            model_map[mid]["input_tokens"]  += inp
-            model_map[mid]["output_tokens"] += out
-            model_map[mid]["cost_usd"]      += cost
+        if mid not in model_map:
+            model_map[mid] = {"model": mid, "calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+        model_map[mid]["calls"]         += r.get("n_requests") or 1
+        model_map[mid]["input_tokens"]  += inp
+        model_map[mid]["output_tokens"] += out
+        model_map[mid]["cost_usd"]      += cost
 
     total_tok   = max(1, total_in + total_out)
-    total_calls = max(1, round(total_tok / 1000))
+    total_calls = sum(m["calls"] for m in model_map.values()) or max(1, round(total_tok / 1000))
 
     return UsageSummary(
         provider="OpenAI",
