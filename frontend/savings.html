@@ -33,7 +33,7 @@
     .hero-sub { font-size:15px; color:var(--text-muted); line-height:1.65; }
 
     /* ── Path selector ─────────────────────────────────────────────────────── */
-    .path-selector { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; max-width:780px; width:100%; margin-bottom:32px; }
+    .path-selector { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; max-width:780px; width:100%; margin-bottom:32px; }
     .path-tile {
       background:var(--bg-panel); border:1px solid var(--border); border-radius:10px;
       padding:18px 16px; cursor:pointer; transition:border-color .15s,background .15s;
@@ -314,12 +314,6 @@
       <div class="path-sub">Export your usage file from Anthropic or OpenAI and upload it here. No key needed.</div>
       <span class="path-badge badge-blue">Full Breakdown · No Key</span>
     </div>
-    <div class="path-tile" id="tile-api" onclick="selectPath('api')">
-      <div class="path-icon">🔑</div>
-      <div class="path-label">API Key</div>
-      <div class="path-sub">Connect directly. Requires an org admin key for Anthropic; standard key for OpenAI.</div>
-      <span class="path-badge badge-muted">Admin Key Required</span>
-    </div>
   </div>
 
   <!-- ── Calc card ──────────────────────────────────────────────────────────── -->
@@ -500,7 +494,6 @@
 
     <div class="results-cta">
       <a href="/demo-crm.html" class="cta-btn-primary">🎯 See It Live — Submit a Real Case →</a>
-      <a href="/"              class="cta-btn-secondary">◈ Explore the Dashboard</a>
     </div>
 
   </div>
