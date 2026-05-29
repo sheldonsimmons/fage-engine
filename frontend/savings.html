@@ -608,7 +608,7 @@ function parseAnthropicUsage(data, days) {
     totalOutputTokens += out;
 
     const id = (m.model || "").toLowerCase();
-    if (id.includes("haiku"))  { haiku_tokens  += inp + out; totalCost += (inp/1e6)*0.80  + (out/1e6)*4.00;  }
+    if (id.includes("haiku"))       { haiku_tokens  += inp + out; totalCost += (inp/1e6)*0.25  + (out/1e6)*1.25;  }
     else if (id.includes("opus"))   { opus_tokens   += inp + out; totalCost += (inp/1e6)*15.00 + (out/1e6)*75.00; }
     else                            { sonnet_tokens += inp + out; totalCost += (inp/1e6)*3.00  + (out/1e6)*15.00; }
   });
@@ -821,11 +821,11 @@ function calcManual() {
 // ── Core savings math ─────────────────────────────────────────────────────────
 
 function calcSavings(usage) {
-  // Pricing
-  const MICRO_IN   = 0.80  / 1e6;
-  const MICRO_OUT  = 4.00  / 1e6;
-  const FLAG_IN    = 3.00  / 1e6;
-  const FLAG_OUT   = 15.00 / 1e6;
+  // Real Anthropic pricing (published rates)
+  const MICRO_IN   = 0.25  / 1e6;  // claude-haiku-3 input
+  const MICRO_OUT  = 1.25  / 1e6;  // claude-haiku-3 output
+  const FLAG_IN    = 15.00 / 1e6;  // claude-opus-4 input  (flagship baseline)
+  const FLAG_OUT   = 75.00 / 1e6;  // claude-opus-4 output
 
   const totalIn    = usage.totalInputTokens;
   const totalOut   = usage.totalOutputTokens;
@@ -948,8 +948,8 @@ function showResults(usage, source, days) {
 
   // Disclaimer
   document.getElementById("resultsDisclaimer").textContent = source === "manual"
-    ? "Estimate based on your inputs. Assumes 65% of flagship calls are re-routable to Scout tier and industry-average pruning compression. Actual savings depend on payload content, routing configuration, and model selection."
-    : "Savings calculated using CostPilot routing simulation against your real usage data. Assumes 65% of complex-tier calls can be safely re-routed to Scout. Actual savings may vary based on content and routing configuration.";
+    ? "Estimate based on your inputs. Baseline = claude-opus-4 ($15/$75 per MTok). Scout tier = claude-haiku-3 ($0.25/$1.25 per MTok). Assumes 65% of flagship calls are re-routable to Scout. Actual savings depend on payload content and routing configuration."
+    : "Savings calculated against real usage data. Baseline = claude-opus-4 ($15/$75 per MTok). Assumes 65% of complex-tier calls can be safely re-routed to Scout (claude-haiku-3 at $0.25/$1.25). Actual savings may vary.";
 
   const card = document.getElementById("resultsCard");
   card.classList.add("visible");
