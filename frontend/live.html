@@ -260,12 +260,12 @@
 <!-- ── Tier Stat Bar ──────────────────────────────────────────────────────────── -->
 <div class="dash-stat stat-bar stat-bar-compact">
   <div class="stat-item">
-    <span class="stat-label">Scout T1 — $1/$5/1M</span>
+    <span class="stat-label">Scout T1 — $0.25/$1.25/1M</span>
     <span class="stat-val" style="color:var(--tier-scout)" id="lStatScout">—</span>
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
-    <span class="stat-label">Analyst T2 — $1/$5/1M</span>
+    <span class="stat-label">Analyst T2 — $0.25/$1.25/1M</span>
     <span class="stat-val" style="color:var(--tier-analyst)" id="lStatAnalyst">—</span>
   </div>
   <div class="stat-divider"></div>
@@ -275,7 +275,7 @@
   </div>
   <div class="stat-divider"></div>
   <div class="stat-item">
-    <span class="stat-label">Strategist T4 — $5/$25/1M</span>
+    <span class="stat-label">Strategist T4 — $15/$75/1M</span>
     <span class="stat-val" style="color:var(--tier-strategist)" id="lStatStrategist">—</span>
   </div>
   <div class="stat-divider"></div>
@@ -413,16 +413,17 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
 
-// ── Real pricing (per token) ───────────────────────────────────────────────────
+// ── Real pricing (per token) — Anthropic published prices ─────────────────────
 const RATES = {
-  Scout:      { input: 1.00 / 1e6,  output: 5.00  / 1e6 }, // Haiku 4.5
-  Analyst:    { input: 1.00 / 1e6,  output: 5.00  / 1e6 }, // Haiku 4.5
-  Advisor:    { input: 3.00 / 1e6,  output: 15.00 / 1e6 }, // Sonnet 4.6
-  Strategist: { input: 5.00 / 1e6,  output: 25.00 / 1e6 }, // Opus 4.6
+  Scout:      { input:  0.25 / 1e6, output:  1.25 / 1e6 }, // claude-haiku-3
+  Analyst:    { input:  0.25 / 1e6, output:  1.25 / 1e6 }, // claude-haiku-3
+  Advisor:    { input:  3.00 / 1e6, output: 15.00 / 1e6 }, // claude-sonnet-3.5/4
+  Strategist: { input: 15.00 / 1e6, output: 75.00 / 1e6 }, // claude-opus-4
 };
 
-const TIER_SAVING_INPUT  = RATES.Advisor.input  - RATES.Scout.input;  // $2.00/1M
-const TIER_SAVING_OUTPUT = RATES.Advisor.output - RATES.Scout.output; // $10.00/1M
+// Tier saving = vs all-flagship (Opus 4) baseline
+const TIER_SAVING_INPUT  = RATES.Strategist.input  - RATES.Scout.input;  // $14.75/1M
+const TIER_SAVING_OUTPUT = RATES.Strategist.output - RATES.Scout.output; // $73.75/1M
 
 function calcCost(tier, inputTokens, outputTokens) {
   const r = RATES[tier] || RATES.Scout;
@@ -434,7 +435,7 @@ function calcTierSaving(inputTokens, outputTokens) {
 }
 
 function calcPruningSaving(strippedTokens) {
-  return strippedTokens * RATES.Advisor.input;
+  return strippedTokens * RATES.Strategist.input; // priced at Opus 4 rate — tokens sent to flagship
 }
 
 // ── Panel toggle + drag ───────────────────────────────────────────────────────
@@ -475,11 +476,11 @@ const AGENTS = [
 ];
 
 const BUDGETS = [
-  { dept: "Support",     cap: 8000,  spend: 5842.10, throttled: false },
-  { dept: "Sales",       cap: 12000, spend: 4218.60, throttled: false },
-  { dept: "Marketing",   cap: 6000,  spend: 6104.80, throttled: true  },
-  { dept: "Operations",  cap: 4000,  spend: 1289.40, throttled: false },
-  { dept: "Engineering", cap: 200,   spend: 171.40,  throttled: false },
+  { dept: "Support",     cap: 500,  spend: 418.40, throttled: false },
+  { dept: "Sales",       cap: 400,  spend: 306.20, throttled: false },
+  { dept: "Marketing",   cap: 250,  spend: 258.80, throttled: true  },
+  { dept: "Operations",  cap: 300,  spend: 189.60, throttled: false },
+  { dept: "Engineering", cap: 200,  spend: 155.20, throttled: false },
 ];
 
 const ROUTINE_PAYLOADS = [
@@ -536,18 +537,18 @@ const CODE_BLOCKED_PAYLOADS = [
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let state = {
-  calls:           42000,
+  calls:           17516,   // ~12-month accumulation at Phase 3 (500/day)
   callsToday:      847,
-  tokens:          53853729,
-  spend:           2184.60,
-  spendMonth:      17454.90,
+  tokens:          9520000, // stripped tokens priced at Opus 4 = $142.80 saved
+  spend:           64.41,   // today: 847 calls at real price mix
+  spendMonth:      1328.20, // month: $418+$306+$259+$190+$155 across depts
   blocked:         47,
-  scoutCalls:      27844,
-  analystCalls:    9240,
-  advisorCalls:    3890,
-  strategistCalls: 1026,
-  tierSavings:     133.50,
-  pruningSavings:  15.33,
+  scoutCalls:      5780,    // 33%
+  analystCalls:    5255,    // 30%
+  advisorCalls:    4379,    // 25%
+  strategistCalls: 2102,    // 12%
+  tierSavings:     2168.69, // Opus 4 baseline - actual spend
+  pruningSavings:  142.80,  // 9.52M tokens × $15/1M (Opus 4 rate)
   agentStatuses: AGENTS.map(() => "idle"),
   budgets: BUDGETS.map(b => ({ ...b })),
 };
@@ -662,14 +663,19 @@ function updateKPIs() {
   document.getElementById("lStatPruningSaved").textContent= `$${state.pruningSavings.toFixed(2)}`;
 
   // ── CEO Savings Banner ─────────────────────────────────────────────────────
-  const economyCalls  = state.scoutCalls + state.analystCalls;
-  const routingPct    = total > 1 ? Math.round((economyCalls / total) * 100) : 0;
-  const FLAGSHIP_AVG  = 0.030;
-  const fullCost      = total * FLAGSHIP_AVG;
-  const routingSaved  = Math.max(0, fullCost - state.spendMonth);
-  const grandTotal    = routingSaved + state.pruningSavings;
-  const annualSavings = grandTotal * 12;
-  const wasteBlocked  = fullCost > 0 ? Math.round((routingSaved / fullCost) * 100) : 0;
+  // Flagship cost = what each call would cost at Opus 4 (same token counts as actual)
+  // Routine calls (Scout/Analyst) avg: 1800 in + 400 out tokens
+  // Complex calls (Advisor/Strategist) avg: 12000 in + 3500 out tokens
+  const economyCalls   = state.scoutCalls + state.analystCalls;
+  const routingPct     = total > 1 ? Math.round((economyCalls / total) * 100) : 0;
+  const flagship_routine = (1800 * RATES.Strategist.input) + (400  * RATES.Strategist.output);
+  const flagship_complex = (12000 * RATES.Strategist.input) + (3500 * RATES.Strategist.output);
+  const n_premium      = state.advisorCalls + state.strategistCalls;
+  const fullCost       = (economyCalls * flagship_routine) + (n_premium * flagship_complex);
+  const routingSaved   = Math.max(0, fullCost - state.spendMonth);
+  const grandTotal     = routingSaved + state.pruningSavings;
+  const annualSavings  = grandTotal * 12;
+  const wasteBlocked   = fullCost > 0 ? Math.round((routingSaved / fullCost) * 100) : 0;
 
   function fmtBig(v) {
     if (v >= 1000000) return "$" + (v / 1000000).toFixed(2) + "M";
@@ -1445,18 +1451,18 @@ function init() {
 
   addStreamEvent("complex",   "◈ STRATEGIST INVOKED",
     "HIPAA compliance audit — health data migration review required",
-    "SF-ComplianceBot · Operations · 10,200 in · 3,100 out · $0.392500",
-    { dept:"Operations", tier:"Strategist", agent:"SF-ComplianceBot", payload:"[Strategist] HIPAA compliance audit — health data migration review required. Involves sensitive patient records across 3 hospital systems. Requires comprehensive legal and compliance analysis.", keywords:[], cost:0.3925, saved:0 });
+    "SF-ComplianceBot · Operations · 10,200 in · 3,100 out · $0.385500",
+    { dept:"Operations", tier:"Strategist", agent:"SF-ComplianceBot", payload:"[Strategist] HIPAA compliance audit — health data migration review required. Involves sensitive patient records across 3 hospital systems. Requires comprehensive legal and compliance analysis.", keywords:[], cost:0.3855, saved:0 });
 
   addStreamEvent("throttled", "⚠ BUDGET THROTTLE",
-    "Marketing at 101.7% of cap — all agents downgraded to Scout",
-    "Routing saving $0.001680 vs Advisor baseline",
-    { dept:"Marketing", tier:"Scout", agent:"SF-MarketMailer", payload:"[Scout] Campaign targeting update — Q3 holiday push. Downgraded from Advisor due to Marketing budget cap enforcement.", keywords:[], cost:0.001040, saved:0.001680 });
+    "Marketing at 103.5% of cap — all agents downgraded to Scout",
+    "Routing saving $0.026550 vs Opus 4 baseline",
+    { dept:"Marketing", tier:"Scout", agent:"SF-MarketMailer", payload:"[Scout] Campaign targeting update — Q3 holiday push. Downgraded from Advisor due to Marketing budget cap enforcement.", keywords:[], cost:0.000300, saved:0.026550 });
 
   addStreamEvent("routine",   "◈ SYSTEM ONLINE",
     "CostPilot Enterprise Demo initialized — all agents registered",
-    "Real pricing: Scout $1/$5 · Advisor $3/$15 · Strategist $5/$25 per 1M tokens",
-    { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"CostPilot Enterprise Demo initialized. All 16 Agentlake agents registered across Support, Sales, Marketing, Operations, Engineering. Real pricing active. Engineering code lane enabled — pruner bypassed for code payloads.", keywords:[], cost:0, saved:0 });
+    "Real pricing: Scout $0.25/$1.25 · Advisor $3/$15 · Strategist $15/$75 per 1M tokens",
+    { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"CostPilot Enterprise Demo initialized. All 16 Agentlake agents registered across Support, Sales, Marketing, Operations, Engineering. Real Anthropic pricing active. Engineering code lane enabled — pruner bypassed for code payloads.", keywords:[], cost:0, saved:0 });
 
   setInterval(tick, 2500);
   setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
