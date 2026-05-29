@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Operate</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/demo.css" />
+  <style>
+    /* ── Live-style layout override ──────────────────────────────────────────── */
+    body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Header nav */
+    .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+      transition: color 0.15s, border-color 0.15s; background: none; cursor: pointer; font: inherit; }
+    .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
+
+    /* KPI strip — 6 cols */
+    .dash-kpi { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px;
+      padding: 10px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .dkpi-card { background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; }
+    .dkpi-card.alert { border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.04); }
+    .dkpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+    .dkpi-value { font-size: 20px; font-weight: 700; line-height: 1.25; margin: 3px 0 1px; }
+    .dkpi-sub   { font-size: 10px; color: var(--text-muted); }
+
+    /* Secondary stat bar */
+    .dash-stat { display: flex; align-items: center; padding: 5px 24px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+      background: var(--bg-base); gap: 0; }
+
+    /* Two-column main layout */
+    .dash-content { display: grid; grid-template-columns: 1fr 340px;
+      flex: 1; overflow: hidden; }
+    .dash-left  { overflow-y: auto; border-right: 1px solid var(--border); }
+    .dash-left::-webkit-scrollbar { width: 3px; }
+    .dash-left::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .dash-right { display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg-panel); }
+
+    /* Section wrapper */
+    .dash-section { border-bottom: 1px solid var(--border); }
+
+    /* Section header — live style with collapse + drag */
+    .dash-sec-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 20px 8px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); font-weight: 600;
+      cursor: pointer; user-select: none;
+    }
+    .dash-sec-head:hover { color: var(--text-primary); }
+    .dash-sec-head .drag-handle { color: var(--border); cursor: grab; font-size: 13px;
+      line-height: 1; flex-shrink: 0; }
+    .dash-sec-head .sec-chev { flex-shrink: 0; font-size: 11px; }
+    .dash-sec-head .sec-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+    /* Section body */
+    .dash-sec-body { padding: 0 20px 16px; }
+
+    /* Sub-label (▸ style within a section) */
+    .sec-sub-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600; margin-bottom: 10px; }
+
+    /* Right column — event stream */
+    .stream-head { padding: 10px 16px 8px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; }
+    .stream-head-row { display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 6px; }
+    .stream-head-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); font-weight: 600; }
+    .stream-filters { display: flex; gap: 5px; flex-wrap: wrap; }
+    .stream-scroll { flex: 1; overflow-y: auto; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 6px; }
+    .stream-scroll::-webkit-scrollbar { width: 3px; }
+    .stream-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Neaten the management nested section */
+    .mgmt-toggle-btn { width: 100%; background: none; border: none; cursor: pointer;
+      padding: 6px 0; font: inherit; color: inherit; display: flex; align-items: center;
+      gap: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); font-weight: 600; }
+    .mgmt-toggle-btn:hover { color: var(--text-primary); }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <div>
+      <div class="header-title">CostPilot</div>
+      <div class="header-sub">AI Cost Control · CRM &nbsp;·&nbsp; Support &nbsp;·&nbsp; Engineering &nbsp;·&nbsp; Finance</div>
+    </div>
+  </div>
+  <div class="header-status" id="systemStatus">
+    <span class="status-dot offline"></span>
+    <span id="statusLabel">Connecting...</span>
+    <span class="mode-badge" id="modeBadge" style="display:none"></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="/index.html"      class="header-nav-link" style="color:var(--accent-green)">◈ Executive Summary</a>
+    <a href="/onboarding.html" class="header-nav-link">⚙ Connect &amp; Setup</a>
+    <a href="/policy.html"     class="header-nav-link">⚖ Policy &amp; Rules</a>
+    <a href="/reports.html"    class="header-nav-link">📊 Reports</a>
+    <a href="/models.html"     class="header-nav-link">🤖 Models</a>
+    <a href="/admin.html"      class="header-nav-link">🛠 Admin</a>
+    <a href="/sandbox.html"    class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
+    <a href="/savings.html"    class="header-nav-link" style="color:var(--accent-green)">💰 Savings Calc</a>
+    <a href="/demo-crm.html"   class="header-nav-link" style="color:var(--accent-purple)">🎯 Live Demo</a>
+    <a href="/live.html"       class="header-nav-link" style="color:var(--accent-green)">● LIVE</a>
+    <button onclick="resetDemoData()" class="header-nav-link">↺ Reset</button>
+    <button class="tour-btn"   onclick="startTour()">? Guide</button>
+  </div>
+</header>
+
+<!-- ── KPI Strip (6 cols) ──────────────────────────────────────────────────── -->
+<div class="dash-kpi">
+  <div class="dkpi-card" id="kpiSpendCard">
+    <div class="dkpi-label">Total Spend Today <span class="help-icon" data-help="kpiSpend" onclick="showHelp('kpiSpend')">?</span></div>
+    <div class="dkpi-value" style="color:var(--accent-yellow)" id="kpiSpend">—</div>
+    <div class="dkpi-sub" id="kpiSpendSub">across all departments</div>
+  </div>
+  <div class="dkpi-card" id="kpiTokensSavedCard">
+    <div class="dkpi-label">Tokens Saved (Pruning) <span class="help-icon" data-help="kpiTokensSaved" onclick="showHelp('kpiTokensSaved')">?</span></div>
+    <div class="dkpi-value" style="color:var(--accent-green)" id="kpiTokensSaved">—</div>
+    <div class="dkpi-sub" id="kpiTokensSub">via context sweeper</div>
+  </div>
+  <div class="dkpi-card">
+    <div class="dkpi-label">Month Spend</div>
+    <div class="dkpi-value" id="statMonthSpend">—</div>
+    <div class="dkpi-sub">this billing period</div>
+  </div>
+  <div class="dkpi-card" id="kpiAgentsCard">
+    <div class="dkpi-label">Active Agents <span class="help-icon" data-help="kpiAgents" onclick="showHelp('kpiAgents')">?</span></div>
+    <div class="dkpi-value" style="color:var(--accent)" id="kpiAgents">—</div>
+    <div class="dkpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
+  </div>
+  <div class="dkpi-card alert" id="kpiThrottleCard">
+    <div class="dkpi-label">Throttled Depts <span class="help-icon" data-help="kpiThrottled" onclick="showHelp('kpiThrottled')">?</span></div>
+    <div class="dkpi-value" id="kpiThrottled">—</div>
+    <div class="dkpi-sub" id="kpiThrottleSub">at or over budget cap</div>
+  </div>
+  <div class="dkpi-card alert" id="kpiBlockedCard">
+    <div class="dkpi-label">Blocked Requests</div>
+    <div class="dkpi-value" id="kpiBlockedRequests">—</div>
+    <div class="dkpi-sub">PII / sensitive terms</div>
+  </div>
+</div>
+
+<!-- ── CEO Savings Banner ───────────────────────────────────────────────────── -->
+<div id="ceoSavingsBanner" style="
+  display:flex; align-items:stretch; gap:0;
+  background:linear-gradient(135deg,rgba(46,160,67,0.12) 0%,rgba(33,139,57,0.06) 50%,rgba(26,115,46,0.10) 100%);
+  border-bottom:1px solid rgba(46,160,67,0.25);
+  border-top:1px solid rgba(46,160,67,0.15);
+  flex-shrink:0; overflow:hidden; position:relative;">
+
+  <!-- Ambient glow -->
+  <div style="position:absolute;top:-40px;left:120px;width:220px;height:120px;
+    background:radial-gradient(ellipse,rgba(46,160,67,0.18) 0%,transparent 70%);
+    pointer-events:none"></div>
+
+  <!-- MAIN: Total Saved -->
+  <div style="flex:0 0 auto;padding:14px 32px 14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:220px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:rgba(46,160,67,0.8);font-weight:700;margin-bottom:2px">Total AI Spend Avoided</div>
+    <div id="ceoTotalSaved" style="font-size:32px;font-weight:800;
+      color:#3fb950;letter-spacing:-0.5px;line-height:1;font-family:var(--font-mono)">—</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">vs. all-flagship baseline</div>
+  </div>
+
+  <!-- STAT: Routing Efficiency -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Economy Routing</div>
+    <div id="ceoRoutingPct" style="font-size:28px;font-weight:800;
+      color:var(--accent-green);line-height:1;font-family:var(--font-mono)">—</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">of calls at lower cost tier</div>
+  </div>
+
+  <!-- STAT: Requests Processed -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Requests Governed</div>
+    <div id="ceoTotalCalls" style="font-size:28px;font-weight:800;
+      color:var(--text-primary);line-height:1;font-family:var(--font-mono)">—</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">total AI calls managed</div>
+  </div>
+
+  <!-- STAT: Pruning Savings -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Context Pruning Saved</div>
+    <div id="ceoPruningSaved" style="font-size:28px;font-weight:800;
+      color:var(--accent-green);line-height:1;font-family:var(--font-mono)">—</div>
+    <div id="ceoPruningTokens" style="font-size:10px;color:var(--text-muted);margin-top:3px">tokens stripped</div>
+  </div>
+
+  <!-- RIGHT: Projected Annual + tagline -->
+  <div style="flex:1;padding:14px 28px;display:flex;flex-direction:column;justify-content:center;">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:4px">Projected Annual Savings</div>
+    <div id="ceoAnnualSavings" style="font-size:22px;font-weight:800;
+      color:#3fb950;line-height:1;font-family:var(--font-mono);margin-bottom:6px">—</div>
+    <div style="font-size:10px;color:var(--text-muted);line-height:1.5;max-width:280px">
+      At current routing efficiency, CostPilot prevents
+      <span id="ceoWastePercent" style="color:var(--accent-green);font-weight:700">—</span>
+      of AI spend from going to premium models unnecessarily.
+    </div>
+  </div>
+
+  <!-- Badge -->
+  <div style="position:absolute;top:10px;right:16px;
+    font-size:9px;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;
+    color:rgba(46,160,67,0.6);border:1px solid rgba(46,160,67,0.25);
+    border-radius:4px;padding:2px 8px">LIVE SAVINGS</div>
+</div>
+
+<!-- ── Stat Bar ────────────────────────────────────────────────────────────── -->
+<div class="dash-stat stat-bar stat-bar-compact" id="statBar">
+  <div class="stat-item">
+    <span class="stat-label">Scout (T1)</span>
+    <span class="stat-val micro" id="statScoutCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Analyst (T2)</span>
+    <span class="stat-val" style="color:var(--accent-green)" id="statAnalystCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Advisor (T3)</span>
+    <span class="stat-val flagship" id="statAdvisorCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Strategist (T4)</span>
+    <span class="stat-val" style="color:var(--accent-yellow)" id="statStrategistCalls">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Overall Budget Used</span>
+    <span class="stat-val" id="statBudgetPct">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-label">Pruning Saved (est.)</span>
+    <span class="stat-val green" id="statPruningSaved">—</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <button onclick="loadDashboard()" title="Refresh KPIs"
+      style="background:transparent;color:var(--accent);border:1px solid var(--border);
+             border-radius:5px;padding:3px 12px;font-size:11px;font-weight:600;
+             cursor:pointer;letter-spacing:0.04em">↺ Refresh</button>
+  </div>
+</div>
+
+<!-- ── Main Content ────────────────────────────────────────────────────────── -->
+<div class="dash-content">
+
+  <!-- Left column — all panels, scrollable, draggable -->
+  <div class="dash-left">
+    <div id="draggable-panels">
+
+      <!-- ── Agentlake & Budget ───────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="budgets-agents" id="budgetsAgentsSection">
+        <div class="dash-sec-head" onclick="togglePanel('agentBudgetBody','agentBudgetChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Agentlake Registry &amp; Budget
+            <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation();showHelp('budgetPanel')">?</span>
+          </span>
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="midRowSummary"></span>
+          <span class="sec-right"><span class="sec-chev" id="agentBudgetChevron">▾</span></span>
+        </div>
+        <div id="agentBudgetBody" class="dash-sec-body">
+
+          <div class="sec-sub-label">Agentlake Registry — Live Status</div>
+          <div id="agentCardGrid" class="agent-card-grid-6" style="margin-bottom:20px"></div>
+
+          <div class="sec-sub-label">Department Budget Utilization</div>
+          <div id="liveBudgetBars" style="margin-bottom:16px"></div>
+
+          <!-- Budget Controls & Agent Management moved to Admin page -->
+          <div style="padding-top:12px;border-top:1px solid var(--border)">
+            <a href="/admin.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);text-decoration:none;padding:6px 12px;border:1px solid var(--border);border-radius:5px;transition:color 0.15s,border-color 0.15s" onmouseover="this.style.color='var(--text-primary)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border)'">
+              🛠 Manage budgets &amp; agents → Admin
+            </a>
+          </div>
+
+          <div style="display:none">
+            <section class="mid-row">
+
+                <div class="panel" id="budgetPanel">
+                  <h2 class="panel-title">Department Budgets <span class="help-icon" data-help="budgetPanel" onclick="showHelp('budgetPanel')">?</span></h2>
+                  <div id="budgetList"><p class="placeholder">Loading...</p></div>
+                </div>
+
+                <div class="panel" id="agentPanel">
+                  <div class="agent-panel-header">
+                    <h2 class="panel-title">Agentlake Registry <span class="help-icon" data-help="agentPanel" onclick="showHelp('agentPanel')">?</span></h2>
+                    <div class="agent-filters">
+                      <select class="agent-filter-select" id="filterPlatform" onchange="applyAgentFilters()">
+                        <option value="">All Platforms</option>
+                        <option>Salesforce</option><option>ServiceNow</option>
+                        <option>HubSpot</option><option>Dynamics365</option>
+                        <option>Zendesk</option><option>Custom</option>
+                      </select>
+                      <select class="agent-filter-select" id="filterStatus" onchange="applyAgentFilters()">
+                        <option value="">All Statuses</option>
+                        <option value="idle">Idle</option><option value="active">Active</option>
+                        <option value="locked">Locked</option><option value="queued">Queued</option>
+                      </select>
+                      <select class="agent-filter-select" id="filterDept" onchange="applyAgentFilters()">
+                        <option value="">All Departments</option>
+                      </select>
+                      <input type="text" class="agent-filter-search" id="filterSearch"
+                             placeholder="Search agents..." oninput="applyAgentFilters()" />
+                    </div>
+                  </div>
+                  <table class="agent-table">
+                    <thead>
+                      <tr>
+                        <th>Agent</th><th>Department</th><th>Platform</th><th>Target</th>
+                        <th>Policy</th><th>Status</th><th>Last Active</th><th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="agentTableBody">
+                      <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="agent-controls">
+                    <button class="btn-collision" onclick="runCollisionSim()">&#9888; Simulate Collision</button>
+                    <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
+                    <button id="toggleArchivedBtn" class="btn-deregister" style="margin-left:auto" onclick="toggleArchivedAgents()">Show Archived</button>
+                  </div>
+                  <div id="collisionAlert" class="collision-alert" style="display:none"></div>
+                  <div class="register-agent-form">
+                    <h3 class="register-title">Register New Agent</h3>
+                    <div class="register-grid">
+                      <div class="register-field">
+                        <label class="field-label">Agent Name</label>
+                        <input type="text" id="regName" class="reg-input" placeholder="e.g. SF-CaseBot" />
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Source Platform</label>
+                        <select id="regPlatform" class="reg-input">
+                          <option value="">— Infer from name prefix —</option>
+                          <option value="Salesforce">Salesforce</option>
+                          <option value="ServiceNow">ServiceNow</option>
+                          <option value="HubSpot">HubSpot</option>
+                          <option value="Microsoft">Microsoft</option>
+                          <option value="Zendesk">Zendesk</option>
+                          <option value="SAP">SAP</option>
+                          <option value="Custom">Custom</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Department</label>
+                        <select id="regDept" class="reg-input">
+                          <option>Support</option><option>Sales</option>
+                          <option>Marketing</option><option>Operations</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Target Table</label>
+                        <select id="regTable" class="reg-input">
+                          <option value="tickets">tickets</option>
+                          <option value="crm_records">crm_records</option>
+                          <option value="customers">customers</option>
+                          <option value="token_transactions">token_transactions</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Permissions</label>
+                        <select id="regPerms" class="reg-input">
+                          <option value="read">read</option>
+                          <option value="read,write" selected>read, write</option>
+                          <option value="read,write,delete">read, write, delete</option>
+                        </select>
+                      </div>
+                      <div class="register-field">
+                        <label class="field-label">Collision Policy</label>
+                        <select id="regPolicy" class="reg-input">
+                          <option value="lock" selected>Lock — require supervisor</option>
+                          <option value="queue">Queue — auto-retry when free</option>
+                          <option value="skip">Skip — abandon silently</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="register-actions">
+                      <button class="btn-primary" onclick="registerAgent()">+ Register Agent</button>
+                      <span id="registerStatus" class="register-status"></span>
+                    </div>
+                  </div>
+                </div><!-- end agentPanel -->
+
+              </section>
+          </div><!-- end hidden mgmt -->
+
+        </div><!-- end agentBudgetBody -->
+      </div><!-- end budgets-agents -->
+
+      <!-- ── 30-Day Trends ──────────────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="timeseries">
+        <div class="dash-sec-head" onclick="togglePanel('timeseriesBody','timeseriesChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ 30-Day Spend &amp; Activity Trends</span>
+          <span class="sec-right"><span class="sec-chev" id="timeseriesChevron">▸</span></span>
+        </div>
+        <div id="timeseriesBody" class="dash-sec-body" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+            <div>
+              <div class="field-label" style="margin-bottom:10px">Daily Spend (USD) by Department</div>
+              <div style="position:relative;height:200px"><canvas id="tsSpendCanvas"></canvas></div>
+            </div>
+            <div>
+              <div class="field-label" style="margin-bottom:10px">Daily AI Calls by Model Tier</div>
+              <div style="position:relative;height:200px"><canvas id="tsCallsCanvas"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Routing Decision Feed ──────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="routing-feed" id="routingFeedSection">
+        <div class="dash-sec-head" onclick="togglePanel('routingFeedBody','routingFeedChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Routing Decision Feed</span>
+          <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:8px">● LIVE</span>
+          <span class="sec-right" onclick="event.stopPropagation()">
+            <select class="agent-filter-select" id="routingFilterRisk" onchange="applyRoutingFilters()">
+              <option value="">All Risk</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <select class="agent-filter-select" id="routingFilterTier" onchange="applyRoutingFilters()">
+              <option value="">All Tiers</option>
+              <option value="scout">Scout</option>
+              <option value="advisor">Advisor</option>
+              <option value="strategist">Strategist</option>
+            </select>
+            <button class="agent-filter-select" id="routingBlockedBtn" onclick="toggleRoutingBlocked()"
+              style="cursor:pointer;font-weight:600">🛡 Blocked</button>
+            <button onclick="loadEventStream();loadLiveRoutingFeed()"
+              style="background:transparent;color:var(--accent);border:1px solid var(--border);
+                     border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">↺</button>
+            <span class="sec-chev" id="routingFeedChevron">▾</span>
+          </span>
+        </div>
+        <div id="routingFeedBody" class="dash-sec-body">
+          <table class="audit-table" id="liveRoutingTable">
+            <thead>
+              <tr>
+                <th>Time</th><th>Agent</th><th>Dept</th>
+                <th>Model Tier</th><th>Risk</th><th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="liveRoutingBody">
+              <tr><td colspan="6" class="placeholder">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── AI Decision Audit Log ──────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="audit" id="auditSection">
+        <div id="blockedAlertBanner" style="display:none">
+          <div class="blocked-banner-inner">
+            <span class="blocked-banner-icon">🛡</span>
+            <div class="blocked-banner-text">
+              <strong id="blockedBannerCount"></strong>
+              <span id="blockedBannerSub"></span>
+            </div>
+            <button class="blocked-banner-btn" onclick="toggleBlockedFilter()">Review Blocked Events ↓</button>
+          </div>
+        </div>
+        <div class="dash-sec-head" onclick="togglePanel('auditBody','auditChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ AI Decision Audit Log
+            <span class="help-icon" data-help="auditPanel" onclick="event.stopPropagation();showHelp('auditPanel')">?</span>
+            <span id="auditFilterIndicator"
+              style="display:none;font-size:10px;font-weight:600;letter-spacing:0.06em;
+                     background:#2d0505;color:var(--accent-red);border:1px solid var(--accent-red);
+                     border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle">BLOCKED ONLY</span>
+          </span>
+          <span class="sec-right" onclick="event.stopPropagation()">
+            <button class="export-btn" onclick="exportAuditCsv()">⬇ CSV</button>
+            <button class="export-btn" onclick="exportAuditPdf()">🖨 PDF</button>
+            <span class="sec-chev" id="auditChevron">▸</span>
+          </span>
+        </div>
+        <div id="auditBody" class="dash-sec-body" style="display:none">
+          <div class="agent-filters" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+            <select class="agent-filter-select" id="auditFilterDept" onchange="applyAuditFilters()">
+              <option value="">All Depts</option>
+            </select>
+            <select class="agent-filter-select" id="auditFilterRisk" onchange="applyAuditFilters()">
+              <option value="">All Risk</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <select class="agent-filter-select" id="auditFilterWindow" onchange="applyAuditFilters()">
+              <option value="">All Time</option>
+              <option value="1">Last 24h</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+            <button class="agent-filter-select" id="auditBlockedOnlyBtn"
+              onclick="toggleAuditBlockedOnly()" style="cursor:pointer;font-weight:600">🛡 Blocked Only</button>
+            <button class="agent-filter-select" onclick="clearAuditFilters()"
+              style="cursor:pointer;color:var(--text-muted)">✕ Clear</button>
+          </div>
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th><th>Event Type</th><th>Department</th>
+                <th>Model Tier</th><th>Risk Level</th><th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="6" class="placeholder">Audit events will appear here as you use the system.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- end draggable-panels -->
+  </div><!-- end dash-left -->
+
+  <!-- ── Right column — Governance Event Stream (always visible) ──────────── -->
+  <div class="dash-right" id="eventStreamSection">
+    <div class="stream-head">
+      <div class="stream-head-row">
+        <div class="stream-head-label">▸ Governance Event Stream</div>
+        <span style="font-size:10px;color:var(--accent-green);font-weight:700">● LIVE</span>
+      </div>
+      <div class="stream-filters">
+        <select class="agent-filter-select" id="streamFilterType" onchange="applyStreamFilters()">
+          <option value="">All Types</option>
+          <option value="blocked">Blocked</option>
+          <option value="throttled">Throttled</option>
+          <option value="complex">Complex</option>
+          <option value="pruning">Pruning</option>
+          <option value="routine">Routine</option>
+        </select>
+        <select class="agent-filter-select" id="streamFilterDept" onchange="applyStreamFilters()">
+          <option value="">All Depts</option>
+        </select>
+        <input type="text" class="agent-filter-select" id="streamFilterSearch"
+               placeholder="Search..." oninput="applyStreamFilters()" style="width:80px" />
+        <button onclick="loadEventStream();loadLiveRoutingFeed()"
+          style="background:transparent;color:var(--accent);border:1px solid var(--border);
+                 border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">↺</button>
+      </div>
+    </div>
+    <div class="stream-scroll event-stream-list" id="eventStreamList">
+      <p class="placeholder">Loading events...</p>
+    </div>
+  </div>
+
+</div><!-- end dash-content -->
+
+<footer class="footer">
+  CostPilot v0.1.0 &nbsp;|&nbsp; <a href="/onboarding.html">⚙ Connect your platform</a>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/budget.js"></script>
+<script src="js/agentlake.js"></script>
+<script src="js/timeseries.js"></script>
+<script src="js/auditor.js"></script>
+<script src="js/event_stream.js"></script>
+<script src="js/help.js"></script>
+
+</body>
+</html>

@@ -250,6 +250,8 @@ def health_check():
     """Confirms the CostPilot backend is live."""
     from core.model_client import get_mode_info
     mode = get_mode_info()
+    import os
+    demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
     return {
         "status":    "ok",
         "system":    "CostPilot — FinOps Agentlake & Governance Engine",
@@ -259,6 +261,7 @@ def health_check():
         "step":      "Step 8 — Live API hooks complete",
         "model_mode": mode["mode"],
         "provider":   mode["provider"],
+        "demo_mode":  demo_mode,
     }
 
 @app.get("/api/config", tags=["System"])
