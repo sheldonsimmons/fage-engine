@@ -186,6 +186,77 @@
   </div>
 </div>
 
+<!-- ── CEO Savings Banner ───────────────────────────────────────────────────── -->
+<div id="liveCeoBanner" style="
+  display:flex; align-items:stretch; gap:0;
+  background:linear-gradient(135deg,rgba(46,160,67,0.12) 0%,rgba(33,139,57,0.06) 50%,rgba(26,115,46,0.10) 100%);
+  border-bottom:1px solid rgba(46,160,67,0.25);
+  border-top:1px solid rgba(46,160,67,0.15);
+  flex-shrink:0; overflow:hidden; position:relative;">
+
+  <div style="position:absolute;top:-40px;left:120px;width:220px;height:120px;
+    background:radial-gradient(ellipse,rgba(46,160,67,0.18) 0%,transparent 70%);
+    pointer-events:none"></div>
+
+  <!-- Total Saved -->
+  <div style="flex:0 0 auto;padding:14px 32px 14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:220px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:rgba(46,160,67,0.8);font-weight:700;margin-bottom:2px">Total AI Spend Avoided</div>
+    <div id="liveCeoTotalSaved" style="font-size:32px;font-weight:800;
+      color:#3fb950;letter-spacing:-0.5px;line-height:1;font-family:var(--font-mono)">$0.00</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">vs. all-flagship baseline</div>
+  </div>
+
+  <!-- Economy Routing % -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Economy Routing</div>
+    <div id="liveCeoRoutingPct" style="font-size:28px;font-weight:800;
+      color:var(--accent-green);line-height:1;font-family:var(--font-mono)">—%</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">of calls at lower cost tier</div>
+  </div>
+
+  <!-- Requests Governed -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Requests Governed</div>
+    <div id="liveCeoTotalCalls" style="font-size:28px;font-weight:800;
+      color:var(--text-primary);line-height:1;font-family:var(--font-mono)">0</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:3px">total AI calls managed</div>
+  </div>
+
+  <!-- Pruning Saved -->
+  <div style="flex:0 0 auto;padding:14px 28px;border-right:1px solid rgba(46,160,67,0.2);
+    display:flex;flex-direction:column;justify-content:center;min-width:160px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:2px">Context Pruning Saved</div>
+    <div id="liveCeoPruningSaved" style="font-size:28px;font-weight:800;
+      color:var(--accent-green);line-height:1;font-family:var(--font-mono)">$0.00</div>
+    <div id="liveCeoPruningTokens" style="font-size:10px;color:var(--text-muted);margin-top:3px">0 tokens stripped</div>
+  </div>
+
+  <!-- Projected Annual + tagline -->
+  <div style="flex:1;padding:14px 28px;display:flex;flex-direction:column;justify-content:center;">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;
+      color:var(--text-muted);font-weight:700;margin-bottom:4px">Projected Annual Savings</div>
+    <div id="liveCeoAnnualSavings" style="font-size:22px;font-weight:800;
+      color:#3fb950;line-height:1;font-family:var(--font-mono);margin-bottom:6px">$0.00</div>
+    <div style="font-size:10px;color:var(--text-muted);line-height:1.5;max-width:280px">
+      At current routing efficiency, CostPilot prevents
+      <span id="liveCeoWastePercent" style="color:var(--accent-green);font-weight:700">—%</span>
+      of AI spend from going to premium models unnecessarily.
+    </div>
+  </div>
+
+  <div style="position:absolute;top:10px;right:16px;
+    font-size:9px;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;
+    color:rgba(46,160,67,0.6);border:1px solid rgba(46,160,67,0.25);
+    border-radius:4px;padding:2px 8px">LIVE SAVINGS</div>
+</div>
+
 <!-- ── Tier Stat Bar ──────────────────────────────────────────────────────────── -->
 <div class="dash-stat stat-bar stat-bar-compact">
   <div class="stat-item">
@@ -589,6 +660,31 @@ function updateKPIs() {
   document.getElementById("lStatBudget").textContent      = `${((tbu/tbc)*100).toFixed(1)}%`;
   document.getElementById("lStatTierSaved").textContent   = `$${state.tierSavings.toFixed(2)}`;
   document.getElementById("lStatPruningSaved").textContent= `$${state.pruningSavings.toFixed(2)}`;
+
+  // ── CEO Savings Banner ─────────────────────────────────────────────────────
+  const economyCalls  = state.scoutCalls + state.analystCalls;
+  const routingPct    = total > 1 ? Math.round((economyCalls / total) * 100) : 0;
+  const FLAGSHIP_AVG  = 0.030;
+  const fullCost      = total * FLAGSHIP_AVG;
+  const routingSaved  = Math.max(0, fullCost - state.spendMonth);
+  const grandTotal    = routingSaved + state.pruningSavings;
+  const annualSavings = grandTotal * 12;
+  const wasteBlocked  = fullCost > 0 ? Math.round((routingSaved / fullCost) * 100) : 0;
+
+  function fmtBig(v) {
+    if (v >= 1000000) return "$" + (v / 1000000).toFixed(2) + "M";
+    if (v >= 1000)    return "$" + (v / 1000).toFixed(1) + "K";
+    return "$" + v.toFixed(2);
+  }
+
+  document.getElementById("liveCeoTotalSaved").textContent    = fmtBig(grandTotal);
+  document.getElementById("liveCeoRoutingPct").textContent    = routingPct + "%";
+  document.getElementById("liveCeoTotalCalls").textContent    = total >= 1000
+    ? (total / 1000).toFixed(1) + "K" : total.toLocaleString();
+  document.getElementById("liveCeoPruningSaved").textContent  = fmtBig(state.pruningSavings);
+  document.getElementById("liveCeoPruningTokens").textContent = state.tokens.toLocaleString() + " tokens stripped";
+  document.getElementById("liveCeoAnnualSavings").textContent = fmtBig(annualSavings);
+  document.getElementById("liveCeoWastePercent").textContent  = wasteBlocked + "%";
 }
 
 // ── Routing Feed ──────────────────────────────────────────────────────────────
