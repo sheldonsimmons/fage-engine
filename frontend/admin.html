@@ -12,7 +12,22 @@
     .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
       border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
       transition: color 0.15s, border-color 0.15s; background: none; cursor: pointer; font: inherit; }
-    .header-nav-link:hover,
+    .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
+    .nav-dropdown { position: relative; display: inline-block; }
+    .nav-dropdown-menu {
+      position: absolute; top: calc(100% + 6px); right: 0;
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 5px; min-width: 160px;
+      display: none; z-index: 200; flex-direction: column; gap: 2px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    }
+    .nav-dropdown.open .nav-dropdown-menu { display: flex; }
+    .nav-dropdown-item {
+      text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border-radius: 5px; padding: 7px 12px;
+      transition: background .1s, color .1s; display: block;
+    }
+    .nav-dropdown-item:hover { background: rgba(88,166,255,.08); color: var(--text-primary); }
     .header-nav-link.active { color: var(--text-primary); border-color: var(--accent); }
 
     .admin-body { flex: 1; overflow-y: auto; padding: 24px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
@@ -45,7 +60,14 @@
     <a href="/reports.html"   class="header-nav-link">📊 Reports</a>
     <a href="/models.html"    class="header-nav-link">🤖 Models</a>
     <a href="/admin.html"     class="header-nav-link active">🛠 Admin</a>
-    <a href="/sandbox.html"   class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
+    <div class="nav-dropdown" id="toolsDropdown">
+      <button class="header-nav-link" onclick="toggleToolsMenu(event)">⚙ Tools ▾</button>
+      <div class="nav-dropdown-menu">
+        <a href="/sandbox.html"  class="nav-dropdown-item" style="color:var(--accent-yellow)">⚗ Sandbox</a>
+        <a href="/savings.html"  class="nav-dropdown-item" style="color:var(--accent-green)">💰 Savings Calc</a>
+        <a href="/demo-crm.html" class="nav-dropdown-item" style="color:var(--accent-purple)">🎯 Live Demo</a>
+      </div>
+    </div>
     <a href="/live-landing.html" class="header-nav-link" style="color:var(--accent-green)">● LIVE</a>
     <button class="tour-btn"  onclick="startTour()">? Guide</button>
   </div>
@@ -217,13 +239,32 @@
     </table>
   </div>
 
+  <!-- ── Demo Reset ────────────────────────────────────────────────────────── -->
+  <div style="padding:20px 24px;border-top:1px solid var(--border);margin-top:8px">
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:10px">Demo Controls</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button onclick="resetDemoData()" style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);color:var(--accent-red);border-radius:7px;padding:8px 18px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">↺ Reset Demo Data</button>
+      <span style="font-size:11px;color:var(--text-muted)">Clears all transactions, audit events, and agents. Resets department spend to $0. Budget caps and sensitive terms are preserved.</span>
+    </div>
+  </div>
+
 </div><!-- end admin-body -->
 
 <script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
 <script src="js/budget.js"></script>
 <script src="js/agentlake.js"></script>
 <script src="js/help.js"></script>
 <script>
+function toggleToolsMenu(e) {
+  e.stopPropagation();
+  document.getElementById("toolsDropdown").classList.toggle("open");
+}
+document.addEventListener("click", function() {
+  const dd = document.getElementById("toolsDropdown");
+  if (dd) dd.classList.remove("open");
+});
+
 // Status check
 async function checkStatus() {
   try {
