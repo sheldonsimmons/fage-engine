@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    // Always enter through the landing page; live.html is accessible via nav from there
+    if (!document.referrer.includes('/live-landing.html') && !document.referrer.includes('/live.html')) {
+      window.location.replace('/live-landing.html');
+    }
+  </script>
   <title>CostPilot — Live Operations Center</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
