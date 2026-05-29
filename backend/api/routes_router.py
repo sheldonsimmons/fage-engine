@@ -251,9 +251,24 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 budget.throttled = True
 
         # ── Set agent back to idle after routing ──────────────────────────────
+        # Keep "active" visible for 4s so the frontend polling can catch it
         if agent:
-            agent.status = "idle"
+            import threading
             db.commit()
+            def _reset_agent_status(agent_id):
+                import time
+                time.sleep(4)
+                from database.db import SessionLocal
+                from database.models import RegisteredAgent
+                _db = SessionLocal()
+                try:
+                    _a = _db.query(RegisteredAgent).filter_by(id=agent_id).first()
+                    if _a and _a.status == "active":
+                        _a.status = "idle"
+                        _db.commit()
+                finally:
+                    _db.close()
+            threading.Thread(target=_reset_agent_status, args=(agent.id,), daemon=True).start()
         else:
             db.commit()
 
