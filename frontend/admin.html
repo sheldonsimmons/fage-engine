@@ -81,6 +81,15 @@
   </p>
 </div>
 
+<!-- ── Demo Reset ────────────────────────────────────────────────────────── -->
+<div style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--bg-panel)">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted)">Demo Controls</span>
+    <button onclick="resetDemoData()" style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);color:var(--accent-red);border-radius:7px;padding:6px 14px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">↺ Reset Demo Data</button>
+    <span style="font-size:11px;color:var(--text-muted)">Clears all transactions, audit events, and agents. Resets department spend to $0. Budget caps and sensitive terms are preserved.</span>
+  </div>
+</div>
+
 <!-- ── Main ────────────────────────────────────────────────────────────────── -->
 <div class="admin-body">
   <div class="admin-grid">
@@ -239,14 +248,6 @@
     </table>
   </div>
 
-  <!-- ── Demo Reset ────────────────────────────────────────────────────────── -->
-  <div style="padding:20px 24px;border-top:1px solid var(--border);margin-top:8px">
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:10px">Demo Controls</div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <button onclick="resetDemoData()" style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);color:var(--accent-red);border-radius:7px;padding:8px 18px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">↺ Reset Demo Data</button>
-      <span style="font-size:11px;color:var(--text-muted)">Clears all transactions, audit events, and agents. Resets department spend to $0. Budget caps and sensitive terms are preserved.</span>
-    </div>
-  </div>
 
 </div><!-- end admin-body -->
 

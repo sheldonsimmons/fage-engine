@@ -372,32 +372,51 @@
 
     <!-- ── PATH B: CSV Upload ────────────────────────────────────────────── -->
     <div id="path-csv" style="display:none">
-      <div class="csv-steps">
-        <div class="csv-steps-title">How to get your usage CSV</div>
-        <div class="csv-step"><span class="csv-step-num">1</span><span><strong style="color:var(--text-primary)">Anthropic:</strong> console.anthropic.com → Usage → Export CSV</span></div>
-        <div class="csv-step"><span class="csv-step-num">2</span><span><strong style="color:var(--text-primary)">OpenAI:</strong> platform.openai.com → Usage → Export → CSV</span></div>
-        <div class="csv-step"><span class="csv-step-num">3</span><span>Upload the file below — we parse it locally in your browser</span></div>
+
+      <!-- Step 1: Provider -->
+      <div class="form-section">
+        <label class="form-label">Step 1 — Your AI Provider</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="path-tile active" id="csv-anthropic" onclick="selectCsvProvider('anthropic')" style="padding:12px;text-align:left">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary)">Anthropic</div>
+            <div style="font-size:11px;color:var(--text-muted)">Claude Haiku, Sonnet, Opus</div>
+          </div>
+          <div class="path-tile" id="csv-openai" onclick="selectCsvProvider('openai')" style="padding:12px;text-align:left">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary)">OpenAI</div>
+            <div style="font-size:11px;color:var(--text-muted)">GPT-4o, GPT-4o Mini, o1</div>
+          </div>
+        </div>
       </div>
 
-      <div class="upload-zone" id="uploadZone"
-           onclick="document.getElementById('csvFile').click()"
-           ondragover="event.preventDefault();this.classList.add('drag-over')"
-           ondragleave="this.classList.remove('drag-over')"
-           ondrop="handleDrop(event)">
-        <div class="upload-icon">📄</div>
-        <div class="upload-label" id="uploadLabel">Drop your CSV here or click to browse</div>
-        <div class="upload-sub" id="uploadSub">Supports Anthropic and OpenAI usage exports</div>
+      <!-- Step 2: Export guide -->
+      <div class="form-section">
+        <label class="form-label">Step 2 — Export Your Usage CSV</label>
+        <div id="csvGuide"></div>
       </div>
-      <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="handleFileSelect(event)" />
+
+      <!-- Step 3: Upload -->
+      <div class="form-section">
+        <label class="form-label">Step 3 — Upload the File</label>
+        <div class="upload-zone" id="uploadZone"
+             onclick="document.getElementById('csvFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event)">
+          <div class="upload-icon">📄</div>
+          <div class="upload-label" id="uploadLabel">Drop your CSV here or click to browse</div>
+          <div class="upload-sub" id="uploadSub">Parsed locally in your browser — your data never leaves your machine</div>
+        </div>
+        <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="handleFileSelect(event)" />
+      </div>
 
       <div class="calc-error" id="csvError" style="margin-top:12px"></div>
-      <button class="calc-btn" style="margin-top:16px" onclick="calcFromCsv()">
+      <button class="calc-btn" style="margin-top:4px" onclick="calcFromCsv()">
         <span id="csvBtnText">Calculate My Savings →</span>
       </button>
     </div>
 
     <!-- ── PATH C: Your Numbers (guided console lookup) ─────────────────── -->
-    <div id="path-manual">
+    <div id="path-manual" style="display:none">
 
       <!-- Step 1: Provider -->
       <div class="form-section">
@@ -586,12 +605,79 @@ function renderConsoleGuide() {
     `<a href="${g.link}" target="_blank" class="console-open-link">↗ Open ${g.url}</a>` + g.html;
 }
 
+// ── CSV export guides ─────────────────────────────────────────────────────────
+const CSV_GUIDES = {
+  anthropic: {
+    link: "https://console.anthropic.com/settings/usage",
+    url:  "console.anthropic.com → Settings → Usage",
+    html: `<div class="console-mockup">
+      <div class="console-bar">
+        <span class="console-dot" style="background:#ff5f57"></span>
+        <span class="console-dot" style="background:#febc2e"></span>
+        <span class="console-dot" style="background:#28c840"></span>
+        <span class="console-url">console.anthropic.com/settings/usage</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-primary);font-weight:700;margin-bottom:10px">Usage &nbsp;&nbsp; Period: [This month ▾]</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:rgba(63,185,80,.06);border:1px dashed rgba(63,185,80,.3);border-radius:6px">
+        <span style="font-size:13px">📥</span>
+        <span style="font-size:12px;color:var(--text-muted)">Top right corner → click</span>
+        <span class="console-highlight">Export CSV</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.6">
+        The export includes model, tokens, and cost per day.<br/>
+        <span style="color:var(--accent)">Tip:</span> Select "All time" or your desired date range before exporting.
+      </div>
+    </div>`,
+  },
+  openai: {
+    link: "https://platform.openai.com/usage",
+    url:  "platform.openai.com → Usage",
+    html: `<div class="console-mockup">
+      <div class="console-bar">
+        <span class="console-dot" style="background:#ff5f57"></span>
+        <span class="console-dot" style="background:#febc2e"></span>
+        <span class="console-dot" style="background:#28c840"></span>
+        <span class="console-url">platform.openai.com/usage</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:rgba(63,185,80,.06);border:1px dashed rgba(63,185,80,.3);border-radius:6px">
+        <span style="font-size:13px">📥</span>
+        <span style="font-size:12px;color:var(--text-muted)">Top right → click</span>
+        <span class="console-highlight">Export</span>
+        <span style="font-size:12px;color:var(--text-muted)">→ select</span>
+        <span class="console-highlight">CSV</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.6">
+        Exports a per-day breakdown of tokens and cost by model.<br/>
+        <span style="color:var(--accent)">Tip:</span> Set the date range to "Last 30 days" or longer for a meaningful estimate.
+      </div>
+    </div>`,
+  },
+};
+
+let csvProvider = "anthropic";
+
+function selectCsvProvider(prov) {
+  csvProvider = prov;
+  ["anthropic","openai"].forEach(p =>
+    document.getElementById("csv-" + p).classList.toggle("active", p === prov)
+  );
+  renderCsvGuide();
+}
+
+function renderCsvGuide() {
+  const g = CSV_GUIDES[csvProvider];
+  document.getElementById("csvGuide").innerHTML =
+    `<a href="${g.link}" target="_blank" class="console-open-link">↗ Open ${g.url}</a>` + g.html;
+}
+
 // ── Path selector ─────────────────────────────────────────────────────────────
 function selectPath(path) {
   activePath = path;
   ["api","csv","manual"].forEach(p => {
-    document.getElementById("tile-" + p).classList.toggle("active", p === path);
-    document.getElementById("path-" + p).style.display = p === path ? "block" : "none";
+    const tile = document.getElementById("tile-" + p);
+    const pane = document.getElementById("path-" + p);
+    if (tile) tile.classList.toggle("active", p === path);
+    if (pane) pane.style.display = p === path ? "block" : "none";
   });
   document.getElementById("processingDiv").style.display = "none";
   document.getElementById("resultsCard").classList.remove("visible");
@@ -998,6 +1084,8 @@ function fmtTokens(n) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 renderConsoleGuide();
+renderCsvGuide();
+selectPath('manual');
 </script>
 
 </body>
