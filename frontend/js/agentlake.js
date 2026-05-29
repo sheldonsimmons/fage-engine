@@ -107,8 +107,12 @@ function renderAgentTable(agents) {
     const minVal = a.min_tier || 1;
     const maxVal = a.max_tier || 4;
 
+    const rowClass = a.status === "locked" ? "row-locked"
+                   : a.status === "active" ? "row-active"
+                   : "";
+
     return `
-      <tr id="agent-row-${a.id}" ${a.status === "locked" ? 'class="row-locked"' : ""}>
+      <tr id="agent-row-${a.id}" ${rowClass ? `class="${rowClass}"` : ""}>
         <td ${lockTip}>${a.name}</td>
         <td>${a.department}</td>
         <td style="font-size:11px; font-weight:600; color:${platformColor}">${platform}</td>
