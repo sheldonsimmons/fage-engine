@@ -794,3 +794,56 @@ body {
   color: var(--accent);
   margin-left: 4px;
 }
+
+/* ── Mobile guard overlay ────────────────────────────────────────────────────
+   Applied to dashboard pages only (not savings/landing).
+   Hidden on desktop; visible on phones and portrait tablets.
+──────────────────────────────────────────────────────────────────────────── */
+#mobile-guard {
+  display: none;
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg-base);
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 24px; text-align: center;
+}
+#mobile-guard .mg-logo {
+  font-size: 28px; font-weight: 800; color: var(--text-primary);
+  letter-spacing: -0.5px; margin-bottom: 24px;
+}
+#mobile-guard .mg-logo span { color: var(--accent); }
+#mobile-guard .mg-icon { font-size: 40px; margin-bottom: 16px; }
+#mobile-guard .mg-title {
+  font-size: 20px; font-weight: 800; color: var(--text-primary);
+  margin-bottom: 10px; line-height: 1.2;
+}
+#mobile-guard .mg-sub {
+  font-size: 14px; color: var(--text-muted); line-height: 1.65;
+  max-width: 320px; margin-bottom: 28px;
+}
+#mobile-guard .mg-links { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px; }
+#mobile-guard .mg-btn-primary {
+  display: block; padding: 13px; border-radius: 8px;
+  background: var(--accent-green); color: #0d1117;
+  font-size: 14px; font-weight: 800; text-decoration: none;
+}
+#mobile-guard .mg-btn-secondary {
+  display: block; padding: 12px; border-radius: 8px;
+  border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 13px; font-weight: 600; text-decoration: none;
+}
+#mobile-guard .mg-rotate {
+  margin-top: 20px; font-size: 11px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* Show on phones (hard block) */
+@media (max-width: 767px) {
+  #mobile-guard { display: flex; }
+}
+
+/* Show on portrait tablets with soft rotate nudge */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  #mobile-guard { display: flex; }
+  #mobile-guard .mg-title::before { content: "Rotate for best experience — "; }
+  #mobile-guard .mg-rotate { display: flex; }
+}
