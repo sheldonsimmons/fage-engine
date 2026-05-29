@@ -107,6 +107,19 @@ function renderAgentTable(agents) {
     const minVal = a.min_tier || 1;
     const maxVal = a.max_tier || 4;
 
+    const pruningOn = a.pruning_enabled !== false;
+    const pruneBtn = `
+      <button
+        id="prune-btn-${a.id}"
+        onclick="toggleAgentPruning(${a.id}, ${pruningOn})"
+        title="${pruningOn ? "Pruning ON — click to disable" : "Pruning OFF — click to enable"}"
+        style="font-size:10px;padding:2px 7px;border-radius:3px;cursor:pointer;font-weight:600;
+               border:1px solid ${pruningOn ? "var(--accent-green)" : "var(--border)"};
+               color:${pruningOn ? "var(--accent-green)" : "var(--text-muted)"};
+               background:transparent">
+        ${pruningOn ? "PRUNE ON" : "PRUNE OFF"}
+      </button>`;
+
     const rowClass = a.status === "locked" ? "row-locked"
                    : a.status === "active" ? "row-active"
                    : "";
@@ -126,6 +139,7 @@ function renderAgentTable(agents) {
             ${tierSelect(`max-tier-${a.id}`, "Max", maxVal)}
           </div>
         </td>
+        <td style="text-align:center">${pruneBtn}</td>
         <td>${actionBtn}</td>
       </tr>
     `;
@@ -212,6 +226,29 @@ async function registerAgent() {
   } catch (err) {
     status.textContent = "Error: " + err.message;
     status.style.color = "var(--accent-red)";
+  }
+}
+
+/** Toggle context pruning on/off for an agent */
+async function toggleAgentPruning(agentId, currentlyOn) {
+  const newState = !currentlyOn;
+  try {
+    await apiPatch(`/api/agents/${agentId}/pruning`, { enabled: newState });
+    const btn = document.getElementById(`prune-btn-${agentId}`);
+    if (btn) {
+      btn.textContent = newState ? "PRUNE ON" : "PRUNE OFF";
+      btn.title       = newState ? "Pruning ON — click to disable" : "Pruning OFF — click to enable";
+      btn.style.borderColor = newState ? "var(--accent-green)" : "var(--border)";
+      btn.style.color       = newState ? "var(--accent-green)" : "var(--text-muted)";
+      btn.setAttribute("onclick", `toggleAgentPruning(${agentId}, ${newState})`);
+    }
+    const row = document.getElementById(`agent-row-${agentId}`);
+    if (row) {
+      row.style.outline = `1px solid ${newState ? "var(--accent-green)" : "var(--border)"}`;
+      setTimeout(() => { row.style.outline = ""; }, 800);
+    }
+  } catch (err) {
+    alert("Failed to update pruning setting: " + err.message);
   }
 }
 

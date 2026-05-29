@@ -70,31 +70,55 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       5. Simulate model call + calculate real cost
       6. Record transaction and update department spend in the DB
     """
+    # ── Resolve or auto-register agent FIRST ─────────────────────────────────
+    # Agent resolution runs before pruning so the agent's pruning_enabled
+    # setting can override the pruning decision.
+    agent = None
+    if req.agent_id:
+        agent = db.query(RegisteredAgent).filter_by(id=req.agent_id).first()
+
+    if not agent and req.agent_name:
+        agent = db.query(RegisteredAgent).filter_by(name=req.agent_name).first()
+
+    if not agent and req.agent_name and not req.is_test:
+        from core.agentlake import infer_platform
+        agent = RegisteredAgent(
+            name             = req.agent_name,
+            department       = req.department,
+            source_platform  = infer_platform(req.agent_name, req.source_platform),
+            permissions      = "read,write",
+            target_table     = "tickets",
+            collision_policy = "lock",
+            status           = "idle",
+        )
+        db.add(agent)
+        db.commit()
+        db.refresh(agent)
+
+    if agent and not req.is_test:
+        agent.status       = "active"
+        agent.last_used_at = datetime.utcnow()
+        db.commit()
+
     # ── payload_type gate — code payloads skip the pruner entirely ───────────
-    # Code payloads (Python, JS, SQL, configs) must never be pruned:
-    # collapse_whitespace destroys indentation; strip_signatures can mangle
-    # function signatures. The pruner was built for prose (emails, tickets).
-    # Code lane: pass through raw → secrets detection → routing → audit.
+    # Agent pruning_enabled=False overrides everything — "off means off".
+    # Otherwise: code payloads (Python, JS, SQL, configs) are never pruned.
     from core.pruner import detect_payload_type as _detect_type
 
-    _explicit_code       = req.payload_type == "code"
+    _agent_pruning_off = agent is not None and agent.pruning_enabled is False
+    _explicit_code     = req.payload_type == "code"
     _auto_detected_type  = None
     _auto_detect_reason  = None
 
-    # Only run auto-detection when caller did NOT explicitly say "code".
-    # If they said "text" or left it blank (defaults to "text"), check the payload.
-    if not _explicit_code:
+    if not _agent_pruning_off and not _explicit_code:
         _auto_detected_type, _auto_detect_reason = _detect_type(req.text)
         if _auto_detected_type == "code":
-            # Override to code lane — log that this was inferred, not declared
             _explicit_code = True
 
     _is_code              = _explicit_code
-    _effective_auto_prune = req.auto_prune and not _is_code
+    _effective_auto_prune = req.auto_prune and not _is_code and not _agent_pruning_off
 
     # ── Minimum payload check ─────────────────────────────────────────────────
-    # Salesforce Flows often fire on record create before the description is filled in.
-    # Prune first to get an accurate token count, then skip if it's too short.
     from core.pruner import prune as _prune, estimate_tokens as _est
     _quick_text = _prune(req.text)["cleaned_text"] if _effective_auto_prune else req.text
     if _est(_quick_text) < req.min_tokens:
@@ -125,12 +149,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     throttle_tier  = getattr(budget, "throttle_tier", 1) or 1  if budget else 1
 
     # ── Sensitive term check ───────────────────────────────────────────────────
-    # If Voice Guard already processed this transcript, skip PII category terms —
-    # the actual numbers are already redacted; only context words remain.
     term_result = check_terms(db, req.text, req.department,
                               skip_pii=req.voice_guard_processed)
     if term_result["triggered"] and term_result["action"] == "block":
-        # Write audit event and reject immediately
         write_audit_event(
             db               = db,
             event_type       = "DECISION",
@@ -155,39 +176,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             }
         )
 
-    # If escalate: force COMPLEX routing regardless of content score
     force_complex = term_result["triggered"] and term_result["action"] == "escalate"
-
-    # ── Resolve or auto-register agent ────────────────────────────────────────
-    agent = None
-    if req.agent_id:
-        agent = db.query(RegisteredAgent).filter_by(id=req.agent_id).first()
-
-    # If agent_id not found but agent_name provided, look up by name
-    if not agent and req.agent_name:
-        agent = db.query(RegisteredAgent).filter_by(name=req.agent_name).first()
-
-    # If still not found and we have a name, auto-register the agent
-    # Skip registration in sandbox/test mode — no DB writes allowed
-    if not agent and req.agent_name and not req.is_test:
-        from core.agentlake import infer_platform
-        agent = RegisteredAgent(
-            name             = req.agent_name,
-            department       = req.department,
-            source_platform  = infer_platform(req.agent_name, req.source_platform),
-            permissions      = "read,write",
-            target_table     = "tickets",
-            collision_policy = "lock",
-            status           = "idle",
-        )
-        db.add(agent)
-        db.commit()
-        db.refresh(agent)
-
-    if agent and not req.is_test:
-        agent.status       = "active"
-        agent.last_used_at = datetime.utcnow()
-        db.commit()
 
     # Capture raw text before routing (for raw payload logging)
     _raw_text_for_logging = req.text

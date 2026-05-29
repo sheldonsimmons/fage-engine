@@ -86,6 +86,7 @@ class RegisteredAgent(Base):
     archived         = Column(Boolean,  nullable=True, default=False)  # soft-delete: hides from live grid, keeps history
     min_tier         = Column(Integer,  nullable=True, default=1)      # floor tier: routing never goes below this (1=Scout)
     max_tier         = Column(Integer,  nullable=True, default=4)      # ceiling tier: routing never goes above this (4=Strategist)
+    pruning_enabled  = Column(Boolean,  nullable=True, default=True)   # False = skip context pruner entirely for this agent
 
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")

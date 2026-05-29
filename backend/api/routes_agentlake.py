@@ -41,11 +41,16 @@ class AgentStatus(BaseModel):
     archived:         Optional[bool] = False
     min_tier:         Optional[int]  = 1
     max_tier:         Optional[int]  = 4
+    pruning_enabled:  Optional[bool] = True
 
 
 class TierBoundsRequest(BaseModel):
     min_tier: int  # 1–4
     max_tier: int  # 1–4
+
+
+class PruningToggleRequest(BaseModel):
+    enabled: bool
 
 
 class RegisterRequest(BaseModel):
@@ -213,6 +218,20 @@ def set_tier_bounds(agent_id: int, req: TierBoundsRequest, db: Session = Depends
     db.commit()
     db.refresh(agent)
     return agent
+
+
+@router.patch("/{agent_id}/pruning")
+def toggle_pruning(agent_id: int, req: PruningToggleRequest, db: Session = Depends(get_db)):
+    """Enable or disable context pruning for a specific agent."""
+    from database.models import RegisteredAgent
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent.pruning_enabled = req.enabled
+    db.commit()
+    db.refresh(agent)
+    from core.agentlake import _serialize
+    return _serialize(agent)
 
 
 @router.post("/{agent_id}/archive")
