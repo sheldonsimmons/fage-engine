@@ -326,8 +326,9 @@
       <div class="footer-stat-label">audit events logged</div>
     </div>
   </div>
-  <div style="display:flex;align-items:center;gap:16px">
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <span class="price-note">Pricing: claude-opus-4 $15/$75 · claude-sonnet $3/$15 · claude-haiku $0.25/$1.25 per MTok</span>
+    <span id="llLastUpdated" style="font-size:10px;color:var(--text-muted);opacity:0.6"></span>
     <a href="/live.html" class="btn-operate">Open Operate →</a>
   </div>
 </div>
@@ -398,13 +399,17 @@ async function loadLandingData() {
     document.getElementById("llLocked").textContent       = d.agents_locked || 0;
     document.getElementById("llAuditEvents").textContent  = d.flagged_count || 0;
 
+    // Last updated timestamp
+    const tsEl = document.getElementById("llLastUpdated");
+    if (tsEl) tsEl.textContent = "Updated " + new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
   } catch(e) {
     console.warn("Landing data load failed:", e.message);
   }
 }
 
 loadLandingData();
-setInterval(loadLandingData, 30000);
+setInterval(loadLandingData, 15000);
 
 // ── Deterministic LCG — same chart every load ──────────────────────────────────
 function seededRng(seed) {
