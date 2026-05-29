@@ -325,6 +325,10 @@ app.include_router(routes_routing_config.router, prefix="/api/routing-config", t
 from api import routes_timeseries
 app.include_router(routes_timeseries.router, prefix="/api/timeseries", tags=["Timeseries"])
 
+# Savings Calculator — server-side proxy for Anthropic/OpenAI usage APIs (avoids CORS)
+from api import routes_savings
+app.include_router(routes_savings.router, prefix="/api/savings", tags=["Savings"])
+
 # Platform Context Enrichment — CostPilot fetches full case context directly from CRM APIs
 from api import routes_enrich
 app.include_router(routes_enrich.router, prefix="/api/enrich", tags=["Enrichment"])

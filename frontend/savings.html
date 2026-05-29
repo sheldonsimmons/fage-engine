@@ -304,14 +304,15 @@
     <div id="path-api">
       <div class="trust-row">
         <div class="trust-item">🔒 Read-only endpoints only</div>
-        <div class="trust-item">⚡ Key used once, never stored</div>
+        <div class="trust-item">⚡ Proxied server-side, never stored</div>
         <div class="trust-item">🛡 No model calls made</div>
         <div class="trust-item">👁 <a href="#" onclick="showEndpoints();return false;" style="color:var(--accent-green)">See exactly what we query</a></div>
       </div>
       <div id="endpointsDetail" style="display:none;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:12px;font-family:var(--font-mono);color:var(--text-muted);line-height:2">
+        Your key is sent over HTTPS to our backend, which proxies the request server-side to avoid browser CORS restrictions.<br/>
         <strong style="color:var(--text-primary)">Anthropic:</strong> GET api.anthropic.com/v1/usage — token counts and model usage by day<br/>
         <strong style="color:var(--text-primary)">OpenAI:</strong> GET api.openai.com/v1/usage — token counts, cost, and model breakdown by day<br/>
-        <span style="color:var(--accent-green)">✓ Read-only. No write permissions. No ability to make model calls or spend money.</span>
+        <span style="color:var(--accent-green)">✓ Read-only. Key is never written to disk, logs, or database. Used once and discarded.</span>
       </div>
 
       <div class="form-section">
@@ -332,7 +333,7 @@
         <label class="form-label" for="apiKey">API Key</label>
         <input type="password" class="form-input" id="apiKey"
                placeholder="sk-ant-... or sk-proj-..." autocomplete="off" />
-        <div class="form-hint">Your key is used once to query read-only usage data and is immediately discarded. It is never sent to our servers — the request runs directly from your browser.</div>
+        <div class="form-hint">Your key is proxied securely through our backend to bypass browser CORS restrictions. It is used once, never stored or logged.</div>
       </div>
 
       <div class="form-section">
@@ -546,133 +547,43 @@ async function calcFromApi() {
   const days = parseInt(document.getElementById("apiDays").value);
   if (!key) { showError("apiError", "Please enter your API key."); return; }
 
-  showProcessing("Querying usage data...");
+  showProcessing("Analyzing your usage data...");
   const btn = document.getElementById("apiBtnText");
   btn.textContent = "Fetching...";
 
   try {
-    let usage = null;
-    if (activeProvider === "anthropic") {
-      usage = await fetchAnthropicUsage(key, days);
-    } else {
-      usage = await fetchOpenAIUsage(key, days);
+    const resp = await fetch("/api/savings/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: activeProvider, api_key: key, days }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Server returned ${resp.status}. Try the CSV or manual path instead.`);
     }
+
+    const result = await resp.json();
+    // Map backend UsageSummary → shape expected by showResults/calcSavings
+    const usage = {
+      totalCost:         result.total_cost_usd,
+      totalInputTokens:  result.total_input_tokens,
+      totalOutputTokens: result.total_output_tokens,
+      totalCalls:        result.total_calls,
+      microPct:          result.micro_pct,
+      flagshipPct:       result.flagship_pct,
+      avgPayload:        result.avg_payload_tokens,
+      provider:          result.provider,
+      days,
+      source:            "api",
+    };
     showResults(usage, "api", days);
   } catch (err) {
     hideProcessing();
-    showError("apiError", err.message || "Could not fetch usage data. Please check your API key and try again.");
+    showError("apiError", err.message || "Could not fetch usage data. Check your API key and try again.");
   } finally {
     btn.textContent = "Calculate My Savings →";
   }
-}
-
-async function fetchAnthropicUsage(key, days) {
-  const end   = new Date();
-  const start = new Date(Date.now() - days * 86400000);
-  const fmt   = d => d.toISOString().split("T")[0];
-
-  const resp = await fetch(
-    `https://api.anthropic.com/v1/usage?start_time=${fmt(start)}T00:00:00Z&end_time=${fmt(end)}T23:59:59Z&limit=100`,
-    { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" } }
-  );
-
-  if (resp.status === 401) throw new Error("Invalid API key. Please check and try again.");
-  if (!resp.ok) {
-    // Anthropic usage endpoint may require specific permissions — fall back to estimate
-    throw new Error(`Anthropic returned ${resp.status}. Your API key may not have usage read permissions. Try the CSV or manual path instead.`);
-  }
-
-  const data = await resp.json();
-  return parseAnthropicUsage(data, days);
-}
-
-function parseAnthropicUsage(data, days) {
-  // Anthropic usage API returns token counts by model
-  const models = data.data || data.usage || [];
-  let totalInputTokens  = 0;
-  let totalOutputTokens = 0;
-  let totalCost         = 0;
-  let haiku_tokens = 0, sonnet_tokens = 0, opus_tokens = 0;
-
-  // Pricing per million tokens
-  const pricing = {
-    "claude-haiku":   { in: 0.80,  out: 4.00  },
-    "claude-sonnet":  { in: 3.00,  out: 15.00 },
-    "claude-opus":    { in: 15.00, out: 75.00 },
-  };
-
-  models.forEach(m => {
-    const inp = m.input_tokens || 0;
-    const out = m.output_tokens || 0;
-    totalInputTokens  += inp;
-    totalOutputTokens += out;
-
-    const id = (m.model || "").toLowerCase();
-    if (id.includes("haiku"))       { haiku_tokens  += inp + out; totalCost += (inp/1e6)*0.25  + (out/1e6)*1.25;  }
-    else if (id.includes("opus"))   { opus_tokens   += inp + out; totalCost += (inp/1e6)*15.00 + (out/1e6)*75.00; }
-    else                            { sonnet_tokens += inp + out; totalCost += (inp/1e6)*3.00  + (out/1e6)*15.00; }
-  });
-
-  const totalTokens = totalInputTokens + totalOutputTokens;
-  const microPct    = totalTokens > 0 ? haiku_tokens  / totalTokens : 0.3;
-  const flagshipPct = totalTokens > 0 ? (sonnet_tokens + opus_tokens) / totalTokens : 0.7;
-  const totalCalls  = Math.max(1, Math.round(totalTokens / 800));
-
-  return {
-    totalCost, totalInputTokens, totalOutputTokens, totalCalls,
-    microPct, flagshipPct, provider: "Anthropic", days,
-    source: "api",
-    avgPayload: totalTokens > 0 ? totalInputTokens / totalCalls : 800,
-  };
-}
-
-async function fetchOpenAIUsage(key, days) {
-  const end   = Math.floor(Date.now() / 1000);
-  const start = Math.floor((Date.now() - days * 86400000) / 1000);
-
-  const resp = await fetch(
-    `https://api.openai.com/v1/usage?start_time=${start}&end_time=${end}`,
-    { headers: { "Authorization": "Bearer " + key } }
-  );
-
-  if (resp.status === 401) throw new Error("Invalid API key. Please check and try again.");
-  if (!resp.ok) throw new Error(`OpenAI returned ${resp.status}. Try the CSV or manual path instead.`);
-
-  const data = await resp.json();
-  return parseOpenAIUsage(data, days);
-}
-
-function parseOpenAIUsage(data, days) {
-  const daily = data.data || [];
-  let totalCost = 0, totalInputTokens = 0, totalOutputTokens = 0;
-  let gpt4Tokens = 0, miniTokens = 0;
-
-  daily.forEach(d => {
-    (d.snapshot_id ? [d] : (d.results || [])).forEach(r => {
-      const inp = r.n_context_tokens_total || r.prompt_tokens || 0;
-      const out = r.n_generated_tokens_total || r.completion_tokens || 0;
-      totalInputTokens  += inp;
-      totalOutputTokens += out;
-      const model = (r.snapshot_id || r.model_id || "").toLowerCase();
-      if (model.includes("mini") || model.includes("3.5")) {
-        miniTokens += inp + out;
-        totalCost  += (inp/1e6)*0.15 + (out/1e6)*0.60;
-      } else {
-        gpt4Tokens += inp + out;
-        totalCost  += (inp/1e6)*2.50 + (out/1e6)*10.00;
-      }
-    });
-  });
-
-  const totalTokens = totalInputTokens + totalOutputTokens || 1;
-  const totalCalls  = Math.max(1, Math.round(totalTokens / 800));
-  return {
-    totalCost, totalInputTokens, totalOutputTokens, totalCalls,
-    microPct: miniTokens / totalTokens,
-    flagshipPct: gpt4Tokens / totalTokens,
-    provider: "OpenAI", days, source: "api",
-    avgPayload: totalInputTokens / totalCalls,
-  };
 }
 
 // ── PATH B: CSV Upload ────────────────────────────────────────────────────────
