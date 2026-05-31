@@ -89,12 +89,7 @@ function renderAgentTable(agents) {
       : platform === "HubSpot"    ? "var(--accent-yellow)"
       : "var(--text-muted)";
 
-    const TIER_OPTS = [
-      [1, "Scout",      "var(--tier-scout)"],
-      [2, "Analyst",    "var(--tier-analyst)"],
-      [3, "Advisor",    "var(--tier-advisor)"],
-      [4, "Strategist", "var(--tier-strategist)"],
-    ];
+    const TIER_OPTS = [1, 2, 3, 4].map(v => [v, getTierName(v), getTierCssVar(v)]);
     const tierSelect = (id, label, current) =>
       `<select id="${id}" onchange="saveTierBounds(${a.id})"
          style="background:var(--panel-bg);border:1px solid var(--border);color:var(--text-muted);

@@ -73,7 +73,6 @@ async function loadKnownModelsTable() {
       tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; text-align:center; color:var(--text-muted);">No known models yet. Add one above.</td></tr>';
       return;
     }
-    const TIER_LABELS = { 1: "⚡ Scout", 2: "🔍 Analyst", 3: "💡 Advisor", 4: "🎯 Strategist" };
     tbody.innerHTML = models.map(m => `
       <tr style="border-bottom:1px solid var(--border); opacity:${m.is_active ? 1 : 0.45};">
         <td style="padding:10px; color:var(--text-primary); font-weight:500;">
@@ -82,7 +81,7 @@ async function loadKnownModelsTable() {
         </td>
         <td style="padding:10px;"><code style="font-size:11px; color:var(--accent); background:var(--bg-base); padding:2px 6px; border-radius:3px;">${m.model_id}</code></td>
         <td style="padding:10px; color:var(--text-muted); font-size:11px;">${m.provider_group}</td>
-        <td style="padding:10px; color:var(--text-muted); font-size:11px;">${TIER_LABELS[m.tier] || m.tier}</td>
+        <td style="padding:10px; color:var(--text-muted); font-size:11px;">${getTierIcon(m.tier)} ${getTierName(m.tier)}</td>
         <td style="padding:10px; color:var(--text-muted); font-size:11px;">
           $${m.cost_input_per_1m.toFixed(2)} / $${m.cost_output_per_1m.toFixed(2)}
           ${(() => {
@@ -236,11 +235,13 @@ async function deleteKnownModel(id, name, e) {
   }
 }
 
+// TIERS — static metadata (tagline, best_for, examples, color stay fixed).
+// The .name field is overridden at render time by getTierName() from tier-utils.js.
 const TIERS = {
-  1: { name: "Scout",      icon: "⚡", tagline: "Fast, affordable, handles routine tasks",              best_for: "FAQs, status lookups, simple summaries",           examples: "GPT-4o mini, Claude Haiku", color: "#3fb950" },
-  2: { name: "Analyst",    icon: "🔍", tagline: "Balanced reasoning for most business tasks",           best_for: "Customer emails, data summarization, drafting",     examples: "GPT-4o, Claude Sonnet",     color: "#58a6ff" },
-  3: { name: "Advisor",    icon: "💡", tagline: "Deep reasoning for complex or sensitive work",         best_for: "Contract review, escalations, multi-step analysis", examples: "GPT-4 Turbo, Claude Opus",  color: "#d29922" },
-  4: { name: "Strategist", icon: "🎯", tagline: "Highest capability for mission-critical decisions",    best_for: "Legal, financial, compliance-heavy tasks",          examples: "o3, Claude Opus Max",       color: "#f85149" },
+  1: { icon: "⚡", tagline: "Fast, affordable, handles routine tasks",              best_for: "FAQs, status lookups, simple summaries",           examples: "GPT-4o mini, Claude Haiku", color: "#3fb950" },
+  2: { icon: "🔍", tagline: "Balanced reasoning for most business tasks",           best_for: "Customer emails, data summarization, drafting",     examples: "GPT-4o, Claude Sonnet",     color: "#58a6ff" },
+  3: { icon: "💡", tagline: "Deep reasoning for complex or sensitive work",         best_for: "Contract review, escalations, multi-step analysis", examples: "GPT-4 Turbo, Claude Opus",  color: "#d29922" },
+  4: { icon: "🎯", tagline: "Highest capability for mission-critical decisions",    best_for: "Legal, financial, compliance-heavy tasks",          examples: "o3, Claude Opus Max",       color: "#f85149" },
 };
 
 let _editingId  = null;
@@ -249,9 +250,11 @@ let _selectedTier = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 // Scripts are at bottom of <body> so DOM is ready — call directly.
-
-renderTierCards();
-renderTierOptions();
+// Load custom tier names first, then render so cards show the right labels.
+loadTierNames().then(() => {
+  renderTierCards();
+  renderTierOptions();
+});
 renderPresetOptions();
 loadModels();
 
@@ -264,7 +267,7 @@ function renderTierCards() {
     return (
       '<div class="mdl-tier-card" style="--tier-color:' + t.color + '">' +
         '<div class="mdl-tier-icon">' + t.icon + '</div>' +
-        '<div class="mdl-tier-name" style="color:' + t.color + '">' + t.name + '</div>' +
+        '<div class="mdl-tier-name" style="color:' + t.color + '">' + getTierName(parseInt(tier)) + '</div>' +
         '<div class="mdl-tier-tagline">' + t.tagline + '</div>' +
         '<div class="mdl-tier-meta"><strong>Best for:</strong> ' + t.best_for + '</div>' +
         '<div class="mdl-tier-meta"><strong>Examples:</strong> ' + t.examples + '</div>' +
@@ -295,7 +298,7 @@ function renderTierOptions() {
         '<div class="mdl-tier-opt-left">' +
           '<div class="mdl-tier-opt-icon" style="color:' + t.color + '">' + t.icon + '</div>' +
           '<div>' +
-            '<div class="mdl-tier-opt-name" style="color:' + t.color + '">' + t.name + '</div>' +
+            '<div class="mdl-tier-opt-name" style="color:' + t.color + '">' + getTierName(parseInt(tier)) + '</div>' +
             '<div class="mdl-tier-opt-desc">' + t.tagline + '</div>' +
           '</div>' +
         '</div>' +

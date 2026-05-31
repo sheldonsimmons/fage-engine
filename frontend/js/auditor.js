@@ -104,14 +104,8 @@ function renderAuditTable(events) {
     const blockedIcon = isBlocked ? "🛡 " : "";
 
     // Normalize tier display name
-    const tierLabel = e.model_tier || "—";
-    const tierBadgeClass = tierLabel === "Scout"      ? "badge-scout"
-                         : tierLabel === "Analyst"    ? "badge-analyst"
-                         : tierLabel === "Advisor"    ? "badge-advisor"
-                         : tierLabel === "Strategist" ? "badge-strategist"
-                         : tierLabel === "micro"      ? "badge-scout"
-                         : tierLabel === "flagship"   ? "badge-advisor"
-                         : "badge-scout";
+    const tierLabel = e.model_tier ? normaliseTierName(e.model_tier) : "—";
+    const tierBadgeClass = getTierBadgeClassByName(e.model_tier || "");
 
     return `
       <tr class="${rowClass}" id="audit-entry-${e.id}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale & payload">
@@ -230,19 +224,13 @@ function _renderRoutingRows(events) {
         })
       : "—";
     const isBlocked = (e.decision_outcome || "").toLowerCase().includes("blocked");
-    const tierLabel = e.model_tier || "—";
-    const _tierBadgeCls = tierLabel === "Scout"      ? "badge-scout"
-                         : tierLabel === "Analyst"    ? "badge-analyst"
-                         : tierLabel === "Advisor"    ? "badge-advisor"
-                         : tierLabel === "Strategist" ? "badge-strategist"
-                         : tierLabel === "micro"      ? "badge-scout"
-                         : tierLabel === "flagship"   ? "badge-advisor"
-                         : "badge-scout";
+    const tierLabel = e.model_tier ? normaliseTierName(e.model_tier) : "—";
+    const _tierBadgeCls = getTierBadgeClassByName(e.model_tier || "");
     const tierBadge = isBlocked
       ? `<span class="badge badge-critical">🛡 BLOCKED</span>`
       : tierLabel === "—"
       ? `<span style="color:var(--text-muted)">—</span>`
-      : `<span class="badge ${_tierBadgeCls}">${tierLabel === "micro" ? "Scout" : tierLabel}</span>`;
+      : `<span class="badge ${_tierBadgeCls}">${tierLabel}</span>`;
     const riskClass = `badge-${e.risk_level || "low"}`;
     const rowClass  = isBlocked ? "audit-row row-blocked" : "audit-row";
     return `

@@ -598,8 +598,7 @@ function getBudgetSnap(dept) {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-const TIER_LABELS = { 1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist" };
-const TIER_CSS    = { 1: "var(--tier-scout)", 2: "var(--tier-analyst)", 3: "var(--tier-advisor)", 4: "var(--tier-strategist)" };
+// TIER_LABELS and TIER_CSS resolved via tier-utils.js (getTierName / getTierCssVar)
 
 function renderAgents() {
   document.getElementById("lAgentGrid").innerHTML = AGENTS.map((a, i) => {
@@ -607,10 +606,10 @@ function renderAgents() {
     const bc  = st === "active" ? "badge-active" : st === "locked" ? "badge-locked" : "badge-idle";
     const min = a.min_tier || 1;
     const max = a.max_tier || 4;
-    const minLabel = TIER_LABELS[min];
-    const maxLabel = TIER_LABELS[max];
-    const minColor = TIER_CSS[min];
-    const maxColor = TIER_CSS[max];
+    const minLabel = getTierName(min);
+    const maxLabel = getTierName(max);
+    const minColor = getTierCssVar(min);
+    const maxColor = getTierCssVar(max);
     const boundsLine = (min === 1 && max === 4)
       ? `<span style="font-size:9px;color:var(--text-muted)">Unrestricted</span>`
       : `<span style="font-size:9px;color:${minColor};font-weight:600">${minLabel}</span>
@@ -705,12 +704,9 @@ function updateKPIs() {
 function addRoutingRow(eventId, agent, dept, tier, detail, cost, isBlocked) {
   const feed = document.getElementById("lRoutingBody");
   const tierBadge =
-    tier === "Scout"     ? `<span class="badge badge-scout">Scout</span>` :
-    tier === "Analyst"   ? `<span class="badge badge-analyst">Analyst</span>` :
-    tier === "Advisor"   ? `<span class="badge badge-advisor">Advisor</span>` :
     tier === "BLOCKED"   ? `<span class="badge badge-critical">🛡 BLOCKED</span>` :
     tier === "THROTTLED" ? `<span class="badge badge-locked" style="background:#2d1a0d;color:var(--accent-yellow)">THROTTLED</span>` :
-                           `<span class="badge badge-strategist">${tier}</span>`;
+                           `<span class="badge ${getTierBadgeClassByName(tier)}">${normaliseTierName(tier)}</span>`;
   const costCell = isBlocked ? `<span style="color:var(--accent-green);font-family:var(--font-mono);font-size:11px">$0.00</span>`
     : `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">$${cost.toFixed(6)}</span>`;
 
@@ -833,7 +829,7 @@ const _TYPE_LABEL = {
 function addAuditRow(eventId, eventType, dept, tier, risk, outcome, cost, saved) {
   const tbody = document.getElementById("lAuditTableBody");
   const tierCell = (tier && tier !== "—" && tier !== "BLOCKED" && tier !== "THROTTLED")
-    ? `<span class="badge badge-${tier === "Scout" || tier === "Analyst" ? "micro" : "flagship"}">${tier}</span>`
+    ? `<span class="badge ${getTierBadgeClassByName(tier)}">${normaliseTierName(tier)}</span>`
     : "—";
   const costStr  = cost  > 0 ? `$${cost.toFixed(6)}`  : `<span style="color:var(--accent-green)">$0.00</span>`;
   const savedStr = saved > 0 ? `<span style="color:var(--accent-green);font-weight:600">$${saved.toFixed(6)}</span>` : "—";
@@ -928,7 +924,7 @@ function seedAuditLog() {
       : (type === "blocked") ? calcCost("Advisor", 1500, 0)
       : 0;
     const tierCell = tierName
-      ? `<span class="badge badge-${tierName === "Scout" ? "scout" : tierName === "Analyst" ? "analyst" : tierName === "Advisor" ? "advisor" : "strategist"}">${tierName}</span>` : "—";
+      ? `<span class="badge ${getTierBadgeClassByName(tierName)}">${normaliseTierName(tierName)}</span>` : "—";
     const costStr  = cost  > 0 ? `$${cost.toFixed(6)}`  : `<span style="color:var(--accent-green)">$0.00</span>`;
     const savedStr = saved > 0 ? `<span style="color:var(--accent-green);font-weight:600">$${saved.toFixed(6)}</span>` : "—";
     const seedId   = `seed-${i}`;
@@ -991,9 +987,7 @@ function addStreamEvent(type, title, body, meta, ctx) {
 
   // Resolve tier-specific type for color + border-left
   const tier = (ctx && ctx.tier) || "";
-  const tierType = tier === "Strategist" ? "strategist"
-                 : tier === "Advisor"    ? "advisor"
-                 : tier === "Analyst"    ? "analyst"
+  const tierType = tier ? getTierCssKey(tier)
                  : (type === "routine" || type === "complex") ? "scout"
                  : type;
 
@@ -1475,6 +1469,8 @@ function init() {
   setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
 }
 
+// Load custom tier names then re-render so agent tier bounds show correct labels
+loadTierNames().then(() => renderAgents());
 init();
 </script>
 <script>
@@ -1485,13 +1481,12 @@ async function lLoadBudgetControls() {
     const res  = await fetch("/api/budget/all");
     const data = await res.json();
     const budgets = data.budgets || data;
-    const tierNames = { 1:"Scout — T1", 2:"Analyst — T2", 3:"Advisor — T3", 4:"Strategist — T4" };
     document.getElementById("lBudgetControls").innerHTML = budgets.map(b => {
       const pct = Math.min((b.current_spend_usd / b.monthly_cap_usd) * 100, 100);
       const fc  = pct >= 100 ? "critical" : pct >= 80 ? "warn" : "";
       const throttleTag = b.throttled ? `<span class="budget-tag" style="margin-left:6px">THROTTLED</span>` : "";
       const tierOpts = [1,2,3,4].map(v =>
-        `<option value="${v}" ${v === (b.throttle_tier || 1) ? "selected" : ""}>${tierNames[v]}</option>`
+        `<option value="${v}" ${v === (b.throttle_tier || 1) ? "selected" : ""}>${getTierName(v)} — T${v}</option>`
       ).join("");
       return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1612,6 +1607,7 @@ document.querySelector('[data-panel-id="l-budget-controls"] .dash-sec-head').add
   }, 50);
 });
 </script>
+<script src="js/tier-utils.js"></script>
 <script src="js/help.js"></script>
 <script>
 window.PAGE_TOUR_STEPS = [

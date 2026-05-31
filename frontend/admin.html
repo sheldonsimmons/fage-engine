@@ -250,9 +250,49 @@
   </div>
 
 
+  <!-- ── Tier Names ───────────────────────────────────────────────────────── -->
+  <div class="panel" id="tierNamesPanel" style="margin-top:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h2 class="panel-title" style="margin:0">🏷 Tier Names</h2>
+        <p style="margin:4px 0 0;font-size:12px;color:var(--text-muted)">
+          Rename tiers to match your company's language. Changes show everywhere — dashboards, audit logs, model registry, reports.
+        </p>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px" id="tierNameInputs">
+      <div style="background:var(--bg-card);border:1px solid var(--tier-scout);border-radius:8px;padding:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--tier-scout);margin-bottom:6px">⚡ Tier 1</div>
+        <input id="tn1" class="reg-input" placeholder="Scout" maxlength="30"
+               style="width:100%;box-sizing:border-box;border-color:var(--tier-scout)" />
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--tier-analyst);border-radius:8px;padding:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--tier-analyst);margin-bottom:6px">🔍 Tier 2</div>
+        <input id="tn2" class="reg-input" placeholder="Analyst" maxlength="30"
+               style="width:100%;box-sizing:border-box;border-color:var(--tier-analyst)" />
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--tier-advisor);border-radius:8px;padding:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--tier-advisor);margin-bottom:6px">💡 Tier 3</div>
+        <input id="tn3" class="reg-input" placeholder="Advisor" maxlength="30"
+               style="width:100%;box-sizing:border-box;border-color:var(--tier-advisor)" />
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--tier-strategist);border-radius:8px;padding:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--tier-strategist);margin-bottom:6px">🎯 Tier 4</div>
+        <input id="tn4" class="reg-input" placeholder="Strategist" maxlength="30"
+               style="width:100%;box-sizing:border-box;border-color:var(--tier-strategist)" />
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="btn-primary" onclick="saveTierNames()">Save Tier Names</button>
+      <button onclick="resetTierNames()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;padding:5px 14px;font-size:12px;cursor:pointer;">Reset to Defaults</button>
+      <span id="tierNameStatus" style="font-size:12px;color:var(--accent-green);display:none"></span>
+    </div>
+  </div>
+
 </div><!-- end admin-body -->
 
 <script src="js/api.js"></script>
+<script src="js/tier-utils.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/budget.js"></script>
 <script src="js/agentlake.js"></script>
@@ -294,14 +334,7 @@ async function loadAgentSpend() {
       return;
     }
 
-    const TIER_BADGE = {
-      "Scout":      "badge-scout",
-      "Analyst":    "badge-analyst",
-      "Advisor":    "badge-advisor",
-      "Strategist": "badge-strategist",
-      "micro":      "badge-scout",
-      "flagship":   "badge-advisor",
-    };
+    // Tier badge classes resolved via tier-utils.js (supports custom names)
 
     const fmtTs = iso => iso
       ? new Date(iso + "Z").toLocaleString("en-US", {
@@ -319,7 +352,7 @@ async function loadAgentSpend() {
     const topCost = data[0]?.total_cost_usd || 0;
 
     tbody.innerHTML = data.map(a => {
-      const tierCls  = TIER_BADGE[a.top_tier] || "badge-scout";
+      const tierCls  = getTierBadgeClassByName(a.top_tier || "");
       const barWidth = topCost > 0 ? Math.round((a.total_cost_usd / topCost) * 100) : 0;
       const costFmt  = a.total_cost_usd === 0 ? "$0.00"
                      : a.total_cost_usd < 0.01 ? "$" + a.total_cost_usd.toFixed(6)
@@ -330,7 +363,7 @@ async function loadAgentSpend() {
           <td style="color:var(--text-muted);font-size:11px">${a.department || "—"}</td>
           <td style="color:var(--text-muted);font-size:11px">${a.source_platform || "—"}</td>
           <td style="font-family:var(--font-mono);font-size:11px">${a.call_count.toLocaleString()}</td>
-          <td><span class="badge ${tierCls}">${a.top_tier === "micro" ? "Scout" : a.top_tier || "—"}</span></td>
+          <td><span class="badge ${tierCls}">${a.top_tier ? normaliseTierName(a.top_tier) : "—"}</span></td>
           <td style="font-family:var(--font-mono);font-size:11px">${fmtNum(a.total_input_tokens)}</td>
           <td style="font-family:var(--font-mono);font-size:11px">${fmtNum(a.total_output_tokens)}</td>
           <td style="font-family:var(--font-mono);font-size:11px;color:var(--accent-green)">${fmtNum(a.tokens_saved)}</td>
@@ -385,6 +418,55 @@ window.PAGE_TOUR_STEPS = [
     last:     true
   },
 ];
+</script>
+<script>
+// ── Tier Names Panel ──────────────────────────────────────────────────────────
+
+async function loadTierNameInputs() {
+  await loadTierNames();
+  document.getElementById("tn1").value = window.TIER_NAMES[1] || "";
+  document.getElementById("tn2").value = window.TIER_NAMES[2] || "";
+  document.getElementById("tn3").value = window.TIER_NAMES[3] || "";
+  document.getElementById("tn4").value = window.TIER_NAMES[4] || "";
+}
+
+async function saveTierNames() {
+  const btn    = document.querySelector("#tierNamesPanel .btn-primary");
+  const status = document.getElementById("tierNameStatus");
+  const body = {
+    tier_1: document.getElementById("tn1").value.trim() || undefined,
+    tier_2: document.getElementById("tn2").value.trim() || undefined,
+    tier_3: document.getElementById("tn3").value.trim() || undefined,
+    tier_4: document.getElementById("tn4").value.trim() || undefined,
+  };
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+  try {
+    await apiPatch("/api/routing-config/tier-names", body);
+    await loadTierNames(); // Refresh global window.TIER_NAMES
+    status.textContent = "✓ Saved";
+    status.style.display = "inline";
+    setTimeout(() => { status.style.display = "none"; }, 3000);
+  } catch(e) {
+    status.textContent = "✗ " + (e.message || "Save failed");
+    status.style.color = "var(--accent-red)";
+    status.style.display = "inline";
+    setTimeout(() => { status.style.display = "none"; status.style.color = "var(--accent-green)"; }, 4000);
+  }
+  btn.disabled = false;
+  btn.textContent = "Save Tier Names";
+}
+
+async function resetTierNames() {
+  document.getElementById("tn1").value = "Scout";
+  document.getElementById("tn2").value = "Analyst";
+  document.getElementById("tn3").value = "Advisor";
+  document.getElementById("tn4").value = "Strategist";
+  await saveTierNames();
+}
+
+// Boot: populate inputs with current names
+loadTierNameInputs();
 </script>
 <script src="/js/mobile-guard.js"></script>
 </body>

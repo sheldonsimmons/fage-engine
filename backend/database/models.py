@@ -250,6 +250,7 @@ class RoutingConfig(Base):
     id                         = Column(Integer,  primary_key=True, index=True)
     complexity_token_threshold = Column(Integer,  nullable=False, default=500)
     complexity_keywords_json   = Column(Text,     nullable=False, default="[]")
+    tier_names_json            = Column(Text,     nullable=True)   # JSON: {"1":"Scout","2":"Analyst",...} — null = use defaults
     updated_at                 = Column(DateTime, default=datetime.utcnow)
 
     @property
@@ -264,3 +265,24 @@ class RoutingConfig(Base):
     def complexity_keywords(self, value: list):
         import json
         self.complexity_keywords_json = json.dumps(value)
+
+    _DEFAULT_TIER_NAMES = {"1": "Scout", "2": "Analyst", "3": "Advisor", "4": "Strategist"}
+
+    @property
+    def tier_names(self) -> dict:
+        import json
+        if not self.tier_names_json:
+            return dict(self._DEFAULT_TIER_NAMES)
+        try:
+            stored = json.loads(self.tier_names_json)
+            # Merge with defaults so missing keys always have a value
+            merged = dict(self._DEFAULT_TIER_NAMES)
+            merged.update({str(k): str(v) for k, v in stored.items() if str(v).strip()})
+            return merged
+        except Exception:
+            return dict(self._DEFAULT_TIER_NAMES)
+
+    @tier_names.setter
+    def tier_names(self, value: dict):
+        import json
+        self.tier_names_json = json.dumps({str(k): str(v) for k, v in value.items()})

@@ -439,10 +439,10 @@
           <label class="act-filter-label">Tier</label>
           <select id="actModel" class="act-filter-select" onchange="loadAgentActivity()">
             <option value="">All Tiers</option>
-            <option value="Scout">⚡ Scout</option>
-            <option value="Analyst">🔍 Analyst</option>
-            <option value="Advisor">💡 Advisor</option>
-            <option value="Strategist">🎯 Strategist</option>
+            <option value="Scout"      id="tierOpt1">⚡ Scout</option>
+            <option value="Analyst"    id="tierOpt2">🔍 Analyst</option>
+            <option value="Advisor"    id="tierOpt3">💡 Advisor</option>
+            <option value="Strategist" id="tierOpt4">🎯 Strategist</option>
             <option value="micro">Turbo (legacy)</option>
             <option value="flagship">Flagship (legacy)</option>
           </select>
@@ -636,6 +636,7 @@
   </footer>
 
   <script src="js/api.js"></script>
+  <script src="js/tier-utils.js"></script>
   <script src="js/reports.js"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
@@ -735,16 +736,15 @@
         paybackSub.textContent = `After that, every month is ${fmt(monthlySaved)} back in your budget.`;
       }
 
-      const tierLabels = { scout:"Scout", analyst:"Analyst", advisor:"Advisor", strategist:"Strategist" };
       document.getElementById("roi-breakdown").innerHTML = `
         <tr>
-          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">Scout <span style="font-size:11px;color:var(--text-muted)">routine</span></td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${getTierName(1)} <span style="font-size:11px;color:var(--text-muted)">routine</span></td>
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${routineCalls.toLocaleString()} (${(routinePct*100).toFixed(0)}%)</td>
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc("scout").toFixed(5)}</td>
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono);color:var(--accent-green)">${fmt(routineCost)}</td>
         </tr>
         <tr>
-          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${tierLabels[tier]} <span style="font-size:11px;color:var(--text-muted)">complex</span></td>
+          <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${getTierName(["scout","analyst","advisor","strategist"].indexOf(tier)+1)||tier} <span style="font-size:11px;color:var(--text-muted)">complex</span></td>
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${complexCalls.toLocaleString()} (${((1-routinePct)*100).toFixed(0)}%)</td>
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc(tier).toFixed(5)}</td>
           <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">${fmt(complexCost)}</td>
@@ -777,6 +777,16 @@
     }
   </script>
   <script src="js/help.js"></script>
+  <script>
+  // Update tier filter dropdown labels once custom names are loaded
+  loadTierNames().then(() => {
+    const map = { tierOpt1: 1, tierOpt2: 2, tierOpt3: 3, tierOpt4: 4 };
+    Object.entries(map).forEach(([id, t]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = getTierIcon(t) + " " + getTierName(t);
+    });
+  });
+  </script>
   <script>
   window.PAGE_TOUR_STEPS = [
     { target:"rptDatePreset",    title:"Time Range",              body:"Change the reporting period — every chart and KPI updates instantly. Choose from presets or set a custom date range.",                                                           position:"bottom" },

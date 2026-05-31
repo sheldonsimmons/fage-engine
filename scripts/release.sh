@@ -20,6 +20,10 @@ with engine.connect() as conn:
         ALTER TABLE registered_agents
         ADD COLUMN IF NOT EXISTS pruning_enabled BOOLEAN DEFAULT TRUE
     '''))
+    conn.execute(text('''
+        ALTER TABLE routing_configs
+        ADD COLUMN IF NOT EXISTS tier_names_json TEXT
+    '''))
     conn.commit()
 print('   Column migrations applied')
 

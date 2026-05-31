@@ -53,12 +53,7 @@ async function runRouter() {
     // ── Model tier badge ──────────────────────────────────────────────────────
     const modelBadge = document.getElementById("routerModelBadge");
     modelBadge.textContent = data.model_name;
-    const _tierCls = data.model_tier === "Strategist" ? "badge-strategist"
-                   : data.model_tier === "Advisor"    ? "badge-advisor"
-                   : data.model_tier === "Analyst"    ? "badge-analyst"
-                   : data.model_tier === "flagship"   ? "badge-advisor"
-                   : "badge-scout";
-    modelBadge.className   = "badge " + _tierCls;
+    modelBadge.className   = "badge " + getTierBadgeClassByName(data.model_tier || "");
 
     // ── Throttle badge (only shown when throttled) ────────────────────────────
     const throttleBadge = document.getElementById("routerThrottleBadge");

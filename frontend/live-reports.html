@@ -434,10 +434,10 @@
           <label class="act-filter-label">Tier</label>
           <select id="actModel" class="act-filter-select" onchange="loadAgentActivity()">
             <option value="">All Tiers</option>
-            <option value="Scout">⚡ Scout</option>
-            <option value="Analyst">🔍 Analyst</option>
-            <option value="Advisor">💡 Advisor</option>
-            <option value="Strategist">🎯 Strategist</option>
+            <option value="Scout"      id="lrTierOpt1">⚡ Scout</option>
+            <option value="Analyst"    id="lrTierOpt2">🔍 Analyst</option>
+            <option value="Advisor"    id="lrTierOpt3">💡 Advisor</option>
+            <option value="Strategist" id="lrTierOpt4">🎯 Strategist</option>
             <option value="micro">Turbo (legacy)</option>
             <option value="flagship">Flagship (legacy)</option>
           </select>
@@ -1460,10 +1460,10 @@
   function mockTransactions(agent) {
     const now = new Date("2026-05-26T14:30:00");
     const tierColorMap = {
-      "Scout":      "var(--accent-green)",
-      "Analyst":    "var(--accent)",
-      "Advisor":    "var(--accent-purple)",
-      "Strategist": "var(--accent-yellow)",
+      "Scout":      getTierCssVar(1),
+      "Analyst":    getTierCssVar(2),
+      "Advisor":    getTierCssVar(3),
+      "Strategist": getTierCssVar(4),
     };
     const tiers = ["Scout","Scout","Scout","Advisor","Advisor"];
     const routings = ["ROUTINE","ROUTINE","PRUNING","COMPLEX","COMPLEX"];
@@ -1708,16 +1708,15 @@
       paybackSub.textContent      = `After that, every month is ${fmt(monthlySaved)} back in your budget.`;
     }
 
-    const tierLabels = { scout:"Scout", analyst:"Analyst", advisor:"Advisor", strategist:"Strategist" };
     document.getElementById("roi-breakdown").innerHTML = `
       <tr>
-        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">Scout <span style="font-size:11px;color:var(--text-muted)">routine</span></td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${getTierName(1)} <span style="font-size:11px;color:var(--text-muted)">routine</span></td>
         <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${routineCalls.toLocaleString()} (${(routinePct * 100).toFixed(0)}%)</td>
         <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc("scout").toFixed(5)}</td>
         <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono);color:var(--accent-green)">${fmt(routineCost)}</td>
       </tr>
       <tr>
-        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${tierLabels[tier] || tier} <span style="font-size:11px;color:var(--text-muted)">complex</span></td>
+        <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${getTierName(["scout","analyst","advisor","strategist"].indexOf(tier)+1)||tier} <span style="font-size:11px;color:var(--text-muted)">complex</span></td>
         <td style="padding:9px 10px;border-bottom:1px solid #1c2128">${complexCalls.toLocaleString()} (${((1 - routinePct) * 100).toFixed(0)}%)</td>
         <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">$${cpc(tier).toFixed(5)}</td>
         <td style="padding:9px 10px;border-bottom:1px solid #1c2128;font-family:var(--font-mono)">${fmt(complexCost)}</td>
@@ -1768,7 +1767,17 @@
   });
 
   </script>
+  <script src="js/tier-utils.js"></script>
   <script src="js/help.js"></script>
+  <script>
+  loadTierNames().then(() => {
+    const map = { lrTierOpt1: 1, lrTierOpt2: 2, lrTierOpt3: 3, lrTierOpt4: 4 };
+    Object.entries(map).forEach(([id, t]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = getTierIcon(t) + " " + getTierName(t);
+    });
+  });
+  </script>
   <script>
   window.PAGE_TOUR_STEPS = [
     { target:"rptDatePreset",   title:"Time Range",              body:"Change the reporting period — every chart and KPI updates instantly. Choose from presets like Last 30 Days or set a custom range.",                                               position:"bottom" },
