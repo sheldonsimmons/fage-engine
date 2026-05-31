@@ -35,6 +35,21 @@
 
     .admin-grid { display: grid; grid-template-columns: 400px 1fr; gap: 24px; align-items: start; }
 
+    .section-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+      font-weight: 700; color: var(--text-muted);
+      margin: 24px 0 10px; padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tier-name-input {
+      width: 90px; background: var(--bg-base); border-radius: 5px;
+      color: var(--text-primary); font-size: 12px; padding: 4px 8px;
+      font: inherit; outline: none;
+      transition: border-color .15s;
+    }
+    .tier-name-input:focus { border-color: var(--accent) !important; }
+
     @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -75,24 +90,68 @@
 </header>
 
 <!-- ── Page heading ────────────────────────────────────────────────────────── -->
-<div style="padding:16px 24px 0;border-bottom:1px solid var(--border);background:var(--bg-panel)">
-  <h1 style="font-size:16px;font-weight:700;margin:0 0 4px">Budget Controls &amp; Agent Spend Intelligence</h1>
-  <p style="font-size:11px;color:var(--text-muted);margin:0 0 12px">
-    Set department budget caps, configure throttle ceilings, manage agents, and see exactly what every agent — and every engineer's AI tooling — is spending.
+<div style="padding:14px 24px 12px;border-bottom:1px solid var(--border);background:var(--bg-panel)">
+  <h1 style="font-size:16px;font-weight:700;margin:0 0 2px">Admin</h1>
+  <p style="font-size:11px;color:var(--text-muted);margin:0">
+    Budgets · Agents · Spend Intelligence · Tier Configuration
   </p>
 </div>
 
-<!-- ── Demo Reset ────────────────────────────────────────────────────────── -->
-<div style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--bg-panel)">
+<!-- ── Tier Names compact bar ──────────────────────────────────────────────── -->
+<div id="tierNamesBar" style="padding:10px 24px;border-bottom:1px solid var(--border);background:var(--bg-panel)">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);white-space:nowrap;margin-right:4px">
+      🏷 Tier Names
+    </span>
+    <div style="display:flex;align-items:center;gap:5px">
+      <span style="font-size:13px">⚡</span>
+      <input id="tn1" class="tier-name-input" maxlength="30" placeholder="Scout"
+             style="border:1px solid var(--tier-scout)" />
+    </div>
+    <div style="display:flex;align-items:center;gap:5px">
+      <span style="font-size:13px">🔍</span>
+      <input id="tn2" class="tier-name-input" maxlength="30" placeholder="Analyst"
+             style="border:1px solid var(--tier-analyst)" />
+    </div>
+    <div style="display:flex;align-items:center;gap:5px">
+      <span style="font-size:13px">💡</span>
+      <input id="tn3" class="tier-name-input" maxlength="30" placeholder="Advisor"
+             style="border:1px solid var(--tier-advisor)" />
+    </div>
+    <div style="display:flex;align-items:center;gap:5px">
+      <span style="font-size:13px">🎯</span>
+      <input id="tn4" class="tier-name-input" maxlength="30" placeholder="Strategist"
+             style="border:1px solid var(--tier-strategist)" />
+    </div>
+    <button id="tierSaveBtn" onclick="saveTierNames()"
+            style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font:inherit">
+      Save
+    </button>
+    <button onclick="resetTierNames()"
+            style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:5px;padding:5px 10px;font-size:11px;cursor:pointer;font:inherit">
+      Reset
+    </button>
+    <span id="tierNameStatus" style="font-size:11px;color:var(--accent-green);display:none"></span>
+    <span style="font-size:11px;color:var(--text-muted);margin-left:4px">
+      Rename tiers to match your company's language — changes appear everywhere.
+    </span>
+  </div>
+</div>
+
+<!-- ── Demo Controls ────────────────────────────────────────────────────────── -->
+<div style="padding:8px 24px;border-bottom:1px solid var(--border);background:var(--bg-panel)">
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <span style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted)">Demo Controls</span>
-    <button onclick="resetDemoData()" style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);color:var(--accent-red);border-radius:7px;padding:6px 14px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">↺ Reset Demo Data</button>
-    <span style="font-size:11px;color:var(--text-muted)">Clears all transactions, audit events, and agents. Resets department spend to $0. Budget caps and sensitive terms are preserved.</span>
+    <button onclick="resetDemoData()" style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);color:var(--accent-red);border-radius:7px;padding:5px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">↺ Reset Demo Data</button>
+    <span style="font-size:11px;color:var(--text-muted)">Clears transactions, audit events, and agents. Budget caps and sensitive terms are preserved.</span>
   </div>
 </div>
 
 <!-- ── Main ────────────────────────────────────────────────────────────────── -->
 <div class="admin-body">
+
+  <div class="section-label">Configuration</div>
+
   <div class="admin-grid">
 
     <!-- ── Left: Department Budgets ────────────────────────────────────────── -->
@@ -146,12 +205,16 @@
       <div class="agent-controls">
         <button class="btn-collision" onclick="runCollisionSim()">&#9888; Simulate Collision</button>
         <span class="collision-note">Forces SupportBot-Alpha &amp; Beta to collide on ticket #3</span>
-        <button id="toggleArchivedBtn" class="btn-deregister" style="margin-left:auto" onclick="toggleArchivedAgents()">Show Archived</button>
+        <button id="toggleArchivedBtn" class="btn-deregister" onclick="toggleArchivedAgents()">Show Archived</button>
+        <button id="toggleRegisterBtn" onclick="toggleRegisterPanel()"
+                style="margin-left:8px;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font:inherit">
+          + Register Agent
+        </button>
       </div>
       <div id="collisionAlert" class="collision-alert" style="display:none"></div>
 
-      <!-- Register New Agent -->
-      <div class="register-agent-form" id="registerPanel">
+      <!-- Register New Agent — collapsed by default -->
+      <div class="register-agent-form" id="registerPanel" style="display:none">
         <h3 class="register-title">Register New Agent</h3>
         <div class="register-grid">
           <div class="register-field">
@@ -213,8 +276,10 @@
 
   </div><!-- end admin-grid -->
 
+  <div class="section-label">Intelligence</div>
+
   <!-- ── Agent Spend Intelligence ──────────────────────────────────────────── -->
-  <div class="panel" id="agentSpendPanel" style="margin-top:24px">
+  <div class="panel" id="agentSpendPanel">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <h2 class="panel-title" style="margin:0">
         ⚡ Agent Spend Intelligence
@@ -249,46 +314,6 @@
     </table>
   </div>
 
-
-  <!-- ── Tier Names ───────────────────────────────────────────────────────── -->
-  <div class="panel" id="tierNamesPanel" style="margin-top:24px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div>
-        <h2 class="panel-title" style="margin:0">🏷 Tier Names</h2>
-        <p style="margin:4px 0 0;font-size:12px;color:var(--text-muted)">
-          Rename tiers to match your company's language. Changes show everywhere — dashboards, audit logs, model registry, reports.
-        </p>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px" id="tierNameInputs">
-      <div style="background:var(--bg-card);border:1px solid var(--tier-scout);border-radius:8px;padding:12px">
-        <div style="font-size:11px;font-weight:600;color:var(--tier-scout);margin-bottom:6px">⚡ Tier 1</div>
-        <input id="tn1" class="reg-input" placeholder="Scout" maxlength="30"
-               style="width:100%;box-sizing:border-box;border-color:var(--tier-scout)" />
-      </div>
-      <div style="background:var(--bg-card);border:1px solid var(--tier-analyst);border-radius:8px;padding:12px">
-        <div style="font-size:11px;font-weight:600;color:var(--tier-analyst);margin-bottom:6px">🔍 Tier 2</div>
-        <input id="tn2" class="reg-input" placeholder="Analyst" maxlength="30"
-               style="width:100%;box-sizing:border-box;border-color:var(--tier-analyst)" />
-      </div>
-      <div style="background:var(--bg-card);border:1px solid var(--tier-advisor);border-radius:8px;padding:12px">
-        <div style="font-size:11px;font-weight:600;color:var(--tier-advisor);margin-bottom:6px">💡 Tier 3</div>
-        <input id="tn3" class="reg-input" placeholder="Advisor" maxlength="30"
-               style="width:100%;box-sizing:border-box;border-color:var(--tier-advisor)" />
-      </div>
-      <div style="background:var(--bg-card);border:1px solid var(--tier-strategist);border-radius:8px;padding:12px">
-        <div style="font-size:11px;font-weight:600;color:var(--tier-strategist);margin-bottom:6px">🎯 Tier 4</div>
-        <input id="tn4" class="reg-input" placeholder="Strategist" maxlength="30"
-               style="width:100%;box-sizing:border-box;border-color:var(--tier-strategist)" />
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px">
-      <button class="btn-primary" onclick="saveTierNames()">Save Tier Names</button>
-      <button onclick="resetTierNames()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;padding:5px 14px;font-size:12px;cursor:pointer;">Reset to Defaults</button>
-      <span id="tierNameStatus" style="font-size:12px;color:var(--accent-green);display:none"></span>
-    </div>
-  </div>
-
 </div><!-- end admin-body -->
 
 <script src="js/api.js"></script>
@@ -307,7 +332,27 @@ document.addEventListener("click", function() {
   if (dd) dd.classList.remove("open");
 });
 
-// Status check
+// ── Register Agent toggle ─────────────────────────────────────────────────────
+function toggleRegisterPanel() {
+  const panel = document.getElementById("registerPanel");
+  const btn   = document.getElementById("toggleRegisterBtn");
+  const open  = panel.style.display === "none";
+  panel.style.display = open ? "block" : "none";
+  btn.textContent     = open ? "✕ Cancel" : "+ Register Agent";
+  btn.style.background = open ? "var(--accent-red)" : "var(--accent)";
+  if (open) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// Called by agentlake.js after successful registration to collapse the form
+window.onAgentRegistered = function() {
+  const panel = document.getElementById("registerPanel");
+  const btn   = document.getElementById("toggleRegisterBtn");
+  panel.style.display  = "none";
+  btn.textContent      = "+ Register Agent";
+  btn.style.background = "var(--accent)";
+};
+
+// ── Status check ──────────────────────────────────────────────────────────────
 async function checkStatus() {
   try {
     const r = await fetch("/health");
@@ -333,8 +378,6 @@ async function loadAgentSpend() {
       tbody.innerHTML = '<tr><td colspan="10" class="placeholder">No agent transactions recorded yet — route a payload with an agent_id to start tracking.</td></tr>';
       return;
     }
-
-    // Tier badge classes resolved via tier-utils.js (supports custom names)
 
     const fmtTs = iso => iso
       ? new Date(iso + "Z").toLocaleString("en-US", {
@@ -383,7 +426,7 @@ async function loadAgentSpend() {
   }
 }
 
-// Init
+// ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
   checkStatus();
   loadBudgets();
@@ -407,20 +450,20 @@ window.PAGE_TOUR_STEPS = [
   {
     target:   "agentTableBody",
     title:    "Tier Bounds — Per-Agent Routing Control",
-    body:     "The Min and Max dropdowns in the Tier Bounds column control what model tier this agent is allowed to use. Min is the floor — the agent will never route cheaper than this even on a short payload. Max is the ceiling — it can never escalate above this even if a keyword triggers it. Set Min=Analyst on a Legal agent so a 5-word subject line never hits the cheap Scout model.",
+    body:     "The Min and Max dropdowns in the Tier Bounds column control what model tier this agent is allowed to use. Min is the floor — the agent will never route cheaper than this even on a short payload. Max is the ceiling — it can never escalate above this even if a keyword triggers it.",
     position: "left"
   },
   {
-    target:   "registerPanel",
+    target:   "toggleRegisterBtn",
     title:    "Register a New Agent",
-    body:     "When a new AI worker comes online — from Salesforce, ServiceNow, or a custom integration — register it here. Give it a name, assign it to a department, and set its collision policy. Once registered, it appears in the registry and CostPilot starts tracking its routing decisions and spend.",
+    body:     "When a new AI worker comes online — from Salesforce, ServiceNow, or a custom integration — click here to register it. Give it a name, assign it to a department, and set its collision policy.",
     position: "left",
     last:     true
   },
 ];
 </script>
 <script>
-// ── Tier Names Panel ──────────────────────────────────────────────────────────
+// ── Tier Names ────────────────────────────────────────────────────────────────
 
 async function loadTierNameInputs() {
   await loadTierNames();
@@ -431,30 +474,31 @@ async function loadTierNameInputs() {
 }
 
 async function saveTierNames() {
-  const btn    = document.querySelector("#tierNamesPanel .btn-primary");
+  const btn    = document.getElementById("tierSaveBtn");
   const status = document.getElementById("tierNameStatus");
-  const body = {
+  const body   = {
     tier_1: document.getElementById("tn1").value.trim() || undefined,
     tier_2: document.getElementById("tn2").value.trim() || undefined,
     tier_3: document.getElementById("tn3").value.trim() || undefined,
     tier_4: document.getElementById("tn4").value.trim() || undefined,
   };
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = "Saving...";
   try {
     await apiPatch("/api/routing-config/tier-names", body);
-    await loadTierNames(); // Refresh global window.TIER_NAMES
+    await loadTierNames();
     status.textContent = "✓ Saved";
+    status.style.color = "var(--accent-green)";
     status.style.display = "inline";
     setTimeout(() => { status.style.display = "none"; }, 3000);
   } catch(e) {
-    status.textContent = "✗ " + (e.message || "Save failed");
-    status.style.color = "var(--accent-red)";
+    status.textContent   = "✗ " + (e.message || "Save failed");
+    status.style.color   = "var(--accent-red)";
     status.style.display = "inline";
-    setTimeout(() => { status.style.display = "none"; status.style.color = "var(--accent-green)"; }, 4000);
+    setTimeout(() => { status.style.display = "none"; }, 4000);
   }
-  btn.disabled = false;
-  btn.textContent = "Save Tier Names";
+  btn.disabled    = false;
+  btn.textContent = "Save";
 }
 
 async function resetTierNames() {
@@ -465,7 +509,6 @@ async function resetTierNames() {
   await saveTierNames();
 }
 
-// Boot: populate inputs with current names
 loadTierNameInputs();
 </script>
 <script src="/js/mobile-guard.js"></script>
