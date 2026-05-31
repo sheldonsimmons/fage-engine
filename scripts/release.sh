@@ -1,6 +1,6 @@
 #!/bin/bash
 # release.sh — runs on every Heroku deploy (release phase)
-# Always: apply DB migrations
+# Always: apply DB migrations + seed known_models if empty
 # Demo only: auto-populate enterprise demo data
 
 set -e
