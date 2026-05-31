@@ -128,7 +128,10 @@
 
       <!-- Add new model form -->
       <div style="background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:24px;">
-        <div style="font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:16px;">+ Add a New Model to the Dropdown</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+          <div id="km_form_title" style="font-size:13px; font-weight:600; color:var(--text-primary);">+ Add a New Model to the Dropdown</div>
+          <button id="km_cancel_edit" onclick="cancelKnownModelEdit()" style="display:none; font-size:11px; padding:3px 10px; border-radius:4px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent;">✕ Cancel Edit</button>
+        </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
           <div>
@@ -140,6 +143,7 @@
             <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">API Model ID <span style="color:var(--accent-red)">*</span></label>
             <input id="km_model_id" class="mdl-input" placeholder="e.g. claude-opus-4-8" />
             <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">The exact ID from the provider's docs — this is what gets sent to the API</div>
+            <div id="km_model_id_warning" style="display:none; margin-top:4px; font-size:10px; color:var(--accent-yellow);">⚠ Changing the API Model ID will affect any active registry models using this preset.</div>
           </div>
         </div>
 

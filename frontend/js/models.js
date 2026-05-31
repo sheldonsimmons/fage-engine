@@ -93,7 +93,12 @@ async function loadKnownModelsTable() {
             ${m.is_active ? "Visible" : "Hidden"}
           </button>
         </td>
-        <td style="padding:10px;">
+        <td style="padding:10px; display:flex; gap:6px;">
+          <button onclick="editKnownModel(${m.id})"
+            style="font-size:11px; padding:3px 10px; border-radius:4px; cursor:pointer;
+                   border:1px solid var(--accent); color:var(--accent); background:transparent;">
+            Edit
+          </button>
           <button onclick="deleteKnownModel(${m.id}, '${m.display_name.replace(/'/g,"\\'")}', event)"
             style="font-size:11px; padding:3px 10px; border-radius:4px; cursor:pointer;
                    border:1px solid var(--accent-red); color:var(--accent-red); background:transparent;">
@@ -105,6 +110,58 @@ async function loadKnownModelsTable() {
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" style="padding:20px; text-align:center; color:var(--accent-red);">Error loading: ${e.message}</td></tr>`;
   }
+}
+
+let _editingKnownModelId = null;
+
+async function editKnownModel(id) {
+  try {
+    const models = await apiGet("/api/models/known/all");
+    const m = models.find(m => m.id === id);
+    if (!m) return;
+
+    _editingKnownModelId = id;
+
+    // Pre-fill the form
+    document.getElementById("km_display_name").value   = m.display_name;
+    document.getElementById("km_model_id").value       = m.model_id;
+    document.getElementById("km_provider").value       = m.provider;
+    document.getElementById("km_provider_group").value = m.provider_group;
+    document.getElementById("km_tier").value           = m.tier;
+    document.getElementById("km_cost_in").value        = m.cost_input_per_1m.toFixed(2);
+    document.getElementById("km_cost_out").value       = m.cost_output_per_1m.toFixed(2);
+    document.getElementById("km_notes").value          = m.notes || "";
+
+    // Switch form into edit mode
+    document.getElementById("km_form_title").textContent   = "✏️ Edit Model";
+    document.getElementById("km_save_btn").textContent     = "Save Changes";
+    document.getElementById("km_save_btn").style.background = "var(--accent)";
+    document.getElementById("km_cancel_edit").style.display = "inline";
+
+    // Show model ID warning
+    document.getElementById("km_model_id_warning").style.display = "block";
+
+    // Scroll form into view
+    document.getElementById("km_display_name").scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById("km_display_name").focus();
+
+  } catch (e) {
+    alert("Could not load model for editing: " + e.message);
+  }
+}
+
+function cancelKnownModelEdit() {
+  _editingKnownModelId = null;
+  ["km_display_name","km_model_id","km_provider_group","km_cost_in","km_cost_out","km_notes"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("km_provider").value = "";
+  document.getElementById("km_tier").value     = "";
+  document.getElementById("km_form_title").textContent    = "+ Add a New Model to the Dropdown";
+  document.getElementById("km_save_btn").textContent      = "+ Add to Dropdown";
+  document.getElementById("km_save_btn").style.background = "var(--accent-green)";
+  document.getElementById("km_cancel_edit").style.display = "none";
+  document.getElementById("km_model_id_warning").style.display = "none";
+  document.getElementById("km_error").style.display   = "none";
+  document.getElementById("km_success").style.display = "none";
 }
 
 async function saveKnownModel() {
@@ -129,15 +186,19 @@ async function saveKnownModel() {
   if (!provider_group) { errEl.textContent = "Group Label is required.";    errEl.style.display = "inline"; return; }
   if (!tier)           { errEl.textContent = "Please select a tier.";       errEl.style.display = "inline"; return; }
 
+  const payload = { display_name, model_id, provider, provider_group, tier, cost_input_per_1m: cost_in, cost_output_per_1m: cost_out, notes: notes || null };
+
   btn.disabled = true; btn.textContent = "Saving...";
   try {
-    await apiPost("/api/models/known", { display_name, model_id, provider, provider_group, tier, cost_input_per_1m: cost_in, cost_output_per_1m: cost_out, notes: notes || null });
-    okEl.textContent = `✓ "${display_name}" added to the dropdown.`;
+    if (_editingKnownModelId) {
+      await apiPut(`/api/models/known/${_editingKnownModelId}`, payload);
+      okEl.textContent = `✓ "${display_name}" updated.`;
+    } else {
+      await apiPost("/api/models/known", payload);
+      okEl.textContent = `✓ "${display_name}" added to the dropdown.`;
+    }
     okEl.style.display = "inline";
-    // Clear form
-    ["km_display_name","km_model_id","km_provider_group","km_cost_in","km_cost_out","km_notes"].forEach(id => document.getElementById(id).value = "");
-    document.getElementById("km_provider").value = "";
-    document.getElementById("km_tier").value = "";
+    cancelKnownModelEdit();
     loadKnownModelsTable();
   } catch (e) {
     errEl.textContent = e.message || "Save failed.";
