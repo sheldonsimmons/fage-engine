@@ -233,14 +233,21 @@ CostPilot replaces that default with a decision engine that evaluates each reque
 
 ### The Four Tiers
 
-| Tier | Name | Maps To | Typical Use |
-|------|------|---------|-------------|
+| Tier | Default Name | Maps To | Typical Use |
+|------|-------------|---------|-------------|
 | **1** | Scout | Claude Haiku / GPT-3.5-equivalent | Simple lookups, single-question answers, status checks |
 | **2** | Analyst | Claude Sonnet (mid) | Moderate complexity — one keyword or longer payload |
 | **3** | Advisor | Claude Sonnet | Full complexity — keyword AND volume signal both triggered |
 | **4** | Strategist | Claude Opus | Escalated by sensitive term policy or explicit override |
 
 Tiers 1 and 2 are **economy**. Tiers 3 and 4 are **premium**. The routing engine's goal is to serve the request at the cheapest tier that can do the job correctly.
+
+**Tier names are configurable.** The labels Scout / Analyst / Advisor / Strategist are defaults — your team can rename all four to match your own terminology (e.g. "Micro / Standard / Pro / Enterprise") from the Admin Panel. The underlying tier integers and all routing logic are unchanged; only the display labels update. Changes are reflected immediately across all dashboards, audit logs, and reports.
+
+```http
+PATCH /api/routing-config/tier-names
+{ "tier_1": "Micro", "tier_2": "Standard", "tier_3": "Pro", "tier_4": "Enterprise" }
+```
 
 ### How the Routing Decision Is Made
 
@@ -668,6 +675,14 @@ Environment variable defaults (used when no registry entry exists for a tier):
 | `ANTHROPIC_FLAGSHIP_MODEL` | `claude-sonnet-4-6` |
 | `OPENAI_MICRO_MODEL` | `gpt-3.5-turbo` |
 | `OPENAI_FLAGSHIP_MODEL` | `gpt-4o` |
+
+### Model Presets
+
+CostPilot ships with a library of 19 known models pre-loaded in a `known_models` reference table — covering current Anthropic and OpenAI models with their published input/output token rates. From the Models page, admins can select any preset from a dropdown to pre-fill the model ID, provider, and pricing fields. No need to look up API identifiers or pricing pages manually.
+
+```http
+GET /api/models/known   // returns the preset library
+```
 
 ### Managing Models
 

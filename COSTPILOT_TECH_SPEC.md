@@ -1,7 +1,7 @@
 # CostPilot — Technical Specification
 ## For Technical Co-Founder Review
 
-**Version 0.1.0 — Confidential**
+**Version 0.2.0 — Confidential**
 
 ---
 
@@ -96,6 +96,7 @@ fage/
         ├── help.js              # Guided tour + contextual tooltips
         ├── demo_crm.js          # Live demo case library (68 cases)
         ├── onboarding.js        # Setup wizard + code generators
+        ├── tier-utils.js        # Centralised tier name resolution — all pages call getTierName() instead of hardcoded strings
         └── [feature modules]
 ```
 
@@ -207,7 +208,8 @@ Every Voice Guard transcript processing run.
 
 ### Additional Tables
 - `sensitive_terms` — term, category (legal/hipaa/financial/hr/custom), action (flag/escalate/block), optional department scope
-- `routing_configs` — single-row table (id=1), stores complexity_token_threshold and complexity_keywords_json; seeded from config.py, updated via UI
+- `routing_configs` — single-row table (id=1), stores `complexity_token_threshold`, `complexity_keywords_json`, and `tier_names_json`; seeded from config.py, updated via UI. The `tier_names_json` column stores a JSON object like `{"1":"Scout","2":"Analyst","3":"Advisor","4":"Strategist"}` — null means use defaults. Admins can rename all four tiers from the Admin Panel without any code changes.
+- `known_models` — pre-populated reference table of 19 well-known Anthropic and OpenAI models with their current published pricing. Used to populate the "Add from preset" dropdown on the Models page so admins don't need to look up model IDs and rates manually.
 - `customers` — mock CRM contacts with name, email, tier, department
 - `tickets` — support tickets linked to customers, used as payload source in demo
 - `crm_records` — key/value fields on customer profiles (the records agents compete over)
@@ -627,6 +629,30 @@ The Connect & Setup wizard generates working integration code for 6 platforms au
 
 Generated code includes the actual Heroku endpoint URL and correct field mapping for each platform's native data structure.
 
+### 6.16 Custom Tier Names
+
+Tier names — Scout, Analyst, Advisor, Strategist — are admin-configurable display labels. The underlying tier integers (1–4) and all routing logic remain fixed; only what gets shown to end users changes.
+
+**Storage:** `tier_names_json TEXT` column on the `routing_configs` row. A null value means all four defaults are in effect. A partial JSON object merges stored values with defaults — if only tier 1 is customized, tiers 2–4 fall back to defaults.
+
+**API:**
+```http
+PATCH /api/routing-config/tier-names
+{
+  "tier_1": "Micro",
+  "tier_2": "Standard",
+  "tier_3": "Pro",
+  "tier_4": "Enterprise"
+}
+```
+Validation: each label must be non-empty and under 30 characters. Returns the merged result including any tiers that were not overridden.
+
+**Reset to defaults:** send the endpoint with all four tiers omitted, or send empty strings — the stored JSON is cleared and defaults resume.
+
+**Frontend:** `frontend/js/tier-utils.js` is the single source of truth for tier name resolution across all pages. It calls `GET /api/routing-config` on every page boot and writes to `window.TIER_NAMES`. All page scripts call `getTierName(tier)` — no page has hardcoded tier label strings. CSS badge classes (`.badge-scout`, `.badge-analyst`, etc.) are fixed color hooks that never change; only the text labels update.
+
+**Admin Panel:** The compact Tier Names bar at the top of `admin.html` shows four color-coded inputs (one per tier, each bordered in that tier's color) with Save and Reset buttons. Changes are reflected across all pages on the next load.
+
 ---
 
 ## 7. How the Governance Layer Works — No AI Involved
@@ -751,8 +777,9 @@ Full OpenAPI docs auto-generated at `/docs` (Swagger UI).
 | GET | `/api/reports/bot-efficiency` | Per-agent efficiency metrics |
 | GET | `/api/reports/agent-activity` | Agent activity timeline |
 | POST | `/api/voice/transcript` | Voice Guard PII redaction |
-| GET | `/api/routing-config` | Current routing rules |
+| GET | `/api/routing-config` | Current routing rules and tier names |
 | PUT | `/api/routing-config` | Update threshold and keywords |
+| PATCH | `/api/routing-config/tier-names` | Update custom tier display names (tier_1 through tier_4) |
 | GET | `/api/timeseries/daily` | 30-day daily spend time series |
 | POST | `/api/enrich` | CRM context enrichment |
 | POST | `/api/admin/populate-demo` | Load demo data |
@@ -893,6 +920,7 @@ The stack has no cloud-only dependencies. Replacing Heroku Postgres with any Pos
 20. Savings Calculator — all 3 input paths, full savings math formula with rates
 21. Live Demo Environment — 68-case library, Fisher-Yates shuffle, result states, HTTP 451 handling
 22. Platform Integration & Code Generation — all 6 platforms, languages, generated code structure
+22a. Custom Tier Names — configurable display labels, storage format, API, frontend resolution via tier-utils.js
 23. How the Governance Layer Works — No AI Used — every decision mapped to its actual technology
 24. Latency — CostPilot overhead breakdown, model call latency ranges, honest single-dyno caveat
 25. All API Endpoints — all 35 endpoints with method, path, and description
@@ -902,5 +930,5 @@ The stack has no cloud-only dependencies. Replacing Heroku Postgres with any Pos
 
 ---
 
-**CostPilot v0.1.0 — Navigate AI Spend with Precision**
+**CostPilot v0.2.0 — Navigate AI Spend with Precision**
 *Actively in development. Core governance pipeline fully operational.*
