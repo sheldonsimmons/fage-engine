@@ -140,9 +140,24 @@
       </div>
 
       <div class="mdl-form-group">
+        <label class="mdl-label">Quick Select a Known Model</label>
+        <select id="fPreset" class="mdl-select" onchange="applyPreset()">
+          <option value="">— or choose a preset to auto-fill —</option>
+        </select>
+        <div class="mdl-hint">Fills in model ID, provider, tier, and pricing automatically. You can edit any field after.</div>
+      </div>
+
+      <div class="mdl-form-group">
         <label class="mdl-label">API Model ID <span class="mdl-required">*</span></label>
         <input id="fModelId" class="mdl-input" placeholder="e.g. gpt-4o-mini" />
-        <div class="mdl-hint">The exact identifier passed to the API — must match your provider's model name</div>
+        <div class="mdl-hint">
+          The exact identifier passed to the API — must match your provider's model name exactly.
+          Find it in your provider's docs:
+          <a id="providerDocsLink" href="https://docs.anthropic.com/en/docs/about-claude/models" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Anthropic</a> ·
+          <a href="https://platform.openai.com/docs/models" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">OpenAI</a> ·
+          <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Google</a> ·
+          <a href="https://docs.mistral.ai/getting-started/models/models_overview/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Mistral</a>
+        </div>
       </div>
 
       <div class="mdl-form-group">

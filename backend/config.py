@@ -45,6 +45,8 @@ COMPLEXITY_KEYWORDS = [
     "risk assessment", "incident", "escalate", "escalation",
     "investigate", "investigation", "troubleshoot", "diagnose",
     "recommendation", "summarize", "compare", "benchmark",
+    # Output demand — task complexity signals
+    "calculate", "draft", "generate", "explain", "predict", "prioritize",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
