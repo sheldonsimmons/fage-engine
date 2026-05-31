@@ -218,6 +218,28 @@ class SensitiveTerm(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class KnownModel(Base):
+    """
+    Provider-maintained list of known AI models available for selection.
+    Admins can add/remove entries without any code deployment.
+    Used to populate the 'Quick Select' preset dropdown in the Model Registry.
+    """
+    __tablename__ = "known_models"
+
+    id                 = Column(Integer,  primary_key=True, index=True)
+    display_name       = Column(String,   nullable=False)          # "Claude Opus 4.8"
+    model_id           = Column(String,   nullable=False, unique=True)  # "claude-opus-4-8"
+    provider           = Column(String,   nullable=False)          # Anthropic | OpenAI | Google | Mistral | Azure OpenAI
+    provider_group     = Column(String,   nullable=False)          # "Anthropic — Claude 4.x" (shown as dropdown group label)
+    tier               = Column(Integer,  nullable=False)          # 1=Scout 2=Analyst 3=Advisor 4=Strategist
+    cost_input_per_1m  = Column(Float,    default=0.0)             # $ per 1M input tokens
+    cost_output_per_1m = Column(Float,    default=0.0)             # $ per 1M output tokens
+    is_active          = Column(Boolean,  default=True)            # False = hidden from dropdown but kept for history
+    notes              = Column(String,   nullable=True)           # Optional admin note e.g. "deprecated - use 4.8"
+    created_at         = Column(DateTime, default=datetime.utcnow)
+    updated_at         = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class RoutingConfig(Base):
     """
     Persisted routing rule configuration — always exactly one row (id=1).

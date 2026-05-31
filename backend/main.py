@@ -350,6 +350,9 @@ app.include_router(routes_savings.router, prefix="/api/savings", tags=["Savings"
 from api import routes_enrich
 app.include_router(routes_enrich.router, prefix="/api/enrich", tags=["Enrichment"])
 
+from api import routes_known_models
+app.include_router(routes_known_models.router, prefix="/api/models/known", tags=["Known Models"])
+
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])
 def populate_demo_data():

@@ -39,7 +39,10 @@
         <h1 class="mdl-title">Model Registry</h1>
         <p class="mdl-subtitle">Register and manage the AI models your company uses. CostPilot routes every request to the right model based on tier, complexity, and budget.</p>
       </div>
-      <button class="mdl-add-btn" onclick="openAddModal()">+ Add Model</button>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button onclick="openKnownModelsPanel()" style="background:none; border:1px solid var(--border); color:var(--text-muted); border-radius:7px; padding:8px 16px; font-size:12px; cursor:pointer;">⚙ Manage Quick Select List</button>
+        <button class="mdl-add-btn" onclick="openAddModal()">+ Add Model</button>
+      </div>
     </div>
 
     <!-- ── Tier reference cards ────────────────────────────────────────── -->
@@ -106,6 +109,127 @@
     </div>
 
   </main>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       KNOWN MODELS ADMIN PANEL
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div id="knownModelsPanel" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.7); overflow-y:auto; padding:40px 20px;">
+    <div style="max-width:900px; margin:0 auto; background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; padding:32px;">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <div>
+          <div style="font-size:17px; font-weight:700; color:var(--text-primary)">📋 Manage Quick Select Presets</div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+            These are the models that appear in the "Quick Select a Known Model" dropdown when someone adds a model.
+            Add new models here as providers release them — no code change or deployment needed.
+          </div>
+        </div>
+        <button onclick="closeKnownModelsPanel()" style="background:none; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px;">✕ Close</button>
+      </div>
+
+      <hr style="border:none; border-top:1px solid var(--border); margin:20px 0;" />
+
+      <!-- Add new model form -->
+      <div style="background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:24px;">
+        <div style="font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:16px;">+ Add a New Model to the Dropdown</div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">Display Name <span style="color:var(--accent-red)">*</span></label>
+            <input id="km_display_name" class="mdl-input" placeholder="e.g. Claude Opus 4.8" />
+            <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">The friendly name users see in the dropdown</div>
+          </div>
+          <div>
+            <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">API Model ID <span style="color:var(--accent-red)">*</span></label>
+            <input id="km_model_id" class="mdl-input" placeholder="e.g. claude-opus-4-8" />
+            <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">The exact ID from the provider's docs — this is what gets sent to the API</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">Provider <span style="color:var(--accent-red)">*</span></label>
+            <select id="km_provider" class="mdl-select" onchange="km_syncGroup()">
+              <option value="">Select provider...</option>
+              <option>Anthropic</option>
+              <option>OpenAI</option>
+              <option>Google</option>
+              <option>Mistral</option>
+              <option>Azure OpenAI</option>
+              <option>Custom</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">Group Label <span style="color:var(--accent-red)">*</span></label>
+            <input id="km_provider_group" class="mdl-input" placeholder="e.g. Anthropic — Claude 4.x" />
+            <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">Used to group models in the dropdown (e.g. by version family)</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+          <div>
+            <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">Tier <span style="color:var(--accent-red)">*</span></label>
+            <select id="km_tier" class="mdl-select">
+              <option value="">Select tier...</option>
+              <option value="1">⚡ Scout — Routine, cheap</option>
+              <option value="2">🔍 Analyst — Balanced</option>
+              <option value="3">💡 Advisor — Complex work</option>
+              <option value="4">🎯 Strategist — Mission-critical</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">Input Cost / 1M tokens</label>
+            <div style="display:flex; align-items:center; gap:4px;">
+              <span style="color:var(--text-muted); font-size:13px;">$</span>
+              <input id="km_cost_in" class="mdl-input" type="number" step="0.01" min="0" placeholder="0.00" />
+            </div>
+          </div>
+          <div>
+            <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">Output Cost / 1M tokens</label>
+            <div style="display:flex; align-items:center; gap:4px;">
+              <span style="color:var(--text-muted); font-size:13px;">$</span>
+              <input id="km_cost_out" class="mdl-input" type="number" step="0.01" min="0" placeholder="0.00" />
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:10px; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:4px;">Notes (optional)</label>
+          <input id="km_notes" class="mdl-input" placeholder="e.g. Released May 2026 — replaces Opus 4.6 as T4 default" />
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button id="km_save_btn" onclick="saveKnownModel()" style="background:var(--accent-green); color:#fff; border:none; border-radius:6px; padding:8px 20px; font-size:13px; font-weight:600; cursor:pointer;">+ Add to Dropdown</button>
+          <div id="km_error" style="color:var(--accent-red); font-size:12px; display:none;"></div>
+          <div id="km_success" style="color:var(--accent-green); font-size:12px; display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Existing known models table -->
+      <div style="font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:12px;">Current Dropdown Models</div>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">
+        Toggle the switch to hide a model from the dropdown without deleting it — useful when a model is deprecated but you want to keep the record.
+      </div>
+
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:10px;">Model</th>
+            <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:10px;">API Model ID</th>
+            <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:10px;">Group</th>
+            <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:10px;">Tier</th>
+            <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:10px;">Pricing</th>
+            <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:10px;">In Dropdown</th>
+            <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:10px;"></th>
+          </tr>
+        </thead>
+        <tbody id="knownModelsTableBody">
+          <tr><td colspan="7" style="padding:20px; text-align:center; color:var(--text-muted);">Loading...</td></tr>
+        </tbody>
+      </table>
+
+    </div>
+  </div>
 
   <!-- ══════════════════════════════════════════════════════════════════════
        ADD / EDIT MODAL

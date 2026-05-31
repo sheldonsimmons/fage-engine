@@ -4,67 +4,167 @@
  * Renders tier reference cards, model table, and add/edit modal.
  */
 
-// ── Known model presets ───────────────────────────────────────────────────────
-const MODEL_PRESETS = [
-  // Anthropic
-  { group: "Anthropic — Claude 4.x",   display_name: "Claude Opus 4.8",       model_id: "claude-opus-4-8",             provider: "Anthropic", tier: 4, cost_in: 15.00, cost_out: 75.00 },
-  { group: "Anthropic — Claude 4.x",   display_name: "Claude Opus 4.6",       model_id: "claude-opus-4-6",             provider: "Anthropic", tier: 4, cost_in: 15.00, cost_out: 75.00 },
-  { group: "Anthropic — Claude 4.x",   display_name: "Claude Sonnet 4.6",     model_id: "claude-sonnet-4-6",           provider: "Anthropic", tier: 2, cost_in:  3.00, cost_out: 15.00 },
-  { group: "Anthropic — Claude 4.x",   display_name: "Claude Haiku 4.5",      model_id: "claude-haiku-4-5-20251001",   provider: "Anthropic", tier: 1, cost_in:  0.25, cost_out:  1.25 },
-  // OpenAI
-  { group: "OpenAI — GPT-4o",          display_name: "GPT-4o",                model_id: "gpt-4o",                      provider: "OpenAI",    tier: 3, cost_in:  5.00, cost_out: 15.00 },
-  { group: "OpenAI — GPT-4o",          display_name: "GPT-4o mini",           model_id: "gpt-4o-mini",                 provider: "OpenAI",    tier: 1, cost_in:  0.15, cost_out:  0.60 },
-  { group: "OpenAI — o-series",        display_name: "o3",                    model_id: "o3",                          provider: "OpenAI",    tier: 4, cost_in: 10.00, cost_out: 40.00 },
-  { group: "OpenAI — o-series",        display_name: "o3 mini",               model_id: "o3-mini",                     provider: "OpenAI",    tier: 2, cost_in:  1.10, cost_out:  4.40 },
-  { group: "OpenAI — o-series",        display_name: "o4 mini",               model_id: "o4-mini",                     provider: "OpenAI",    tier: 2, cost_in:  1.10, cost_out:  4.40 },
-  { group: "OpenAI — GPT-4.1",         display_name: "GPT-4.1",               model_id: "gpt-4.1",                     provider: "OpenAI",    tier: 3, cost_in:  2.00, cost_out:  8.00 },
-  { group: "OpenAI — GPT-4.1",         display_name: "GPT-4.1 mini",          model_id: "gpt-4.1-mini",                provider: "OpenAI",    tier: 1, cost_in:  0.40, cost_out:  1.60 },
-  // Google
-  { group: "Google — Gemini 2.x",      display_name: "Gemini 2.5 Pro",        model_id: "gemini-2.5-pro",              provider: "Google",    tier: 4, cost_in:  1.25, cost_out: 10.00 },
-  { group: "Google — Gemini 2.x",      display_name: "Gemini 2.5 Flash",      model_id: "gemini-2.5-flash",            provider: "Google",    tier: 2, cost_in:  0.15, cost_out:  0.60 },
-  { group: "Google — Gemini 2.x",      display_name: "Gemini 2.0 Flash",      model_id: "gemini-2.0-flash",            provider: "Google",    tier: 1, cost_in:  0.10, cost_out:  0.40 },
-  // Mistral
-  { group: "Mistral",                  display_name: "Mistral Large",         model_id: "mistral-large-latest",        provider: "Mistral",   tier: 3, cost_in:  2.00, cost_out:  6.00 },
-  { group: "Mistral",                  display_name: "Mistral Small",         model_id: "mistral-small-latest",        provider: "Mistral",   tier: 1, cost_in:  0.10, cost_out:  0.30 },
-  { group: "Mistral",                  display_name: "Codestral",             model_id: "codestral-latest",            provider: "Mistral",   tier: 2, cost_in:  0.30, cost_out:  0.90 },
-  // Azure OpenAI
-  { group: "Azure OpenAI",             display_name: "Azure GPT-4o",          model_id: "gpt-4o",                      provider: "Azure OpenAI", tier: 3, cost_in: 5.00, cost_out: 15.00 },
-  { group: "Azure OpenAI",             display_name: "Azure GPT-4o mini",     model_id: "gpt-4o-mini",                 provider: "Azure OpenAI", tier: 1, cost_in: 0.15, cost_out:  0.60 },
-];
+// ── Known model presets (loaded from API) ─────────────────────────────────────
 
-function renderPresetOptions() {
+async function renderPresetOptions() {
   const sel = document.getElementById("fPreset");
   if (!sel) return;
-  // Group by provider group
-  const groups = {};
-  MODEL_PRESETS.forEach(p => {
-    if (!groups[p.group]) groups[p.group] = [];
-    groups[p.group].push(p);
-  });
-  let html = '<option value="">— or choose a preset to auto-fill —</option>';
-  Object.entries(groups).forEach(([groupName, presets]) => {
-    html += `<optgroup label="${groupName}">`;
-    presets.forEach((p, i) => {
-      const idx = MODEL_PRESETS.indexOf(p);
-      html += `<option value="${idx}">${p.display_name} — ${p.model_id}</option>`;
+  try {
+    const data = await apiGet("/api/models/known");
+    let html = '<option value="">— or choose a preset to auto-fill —</option>';
+    (data.groups || []).forEach(group => {
+      html += `<optgroup label="${group.label}">`;
+      group.models.forEach(m => {
+        html += `<option value="${m.id}">${m.display_name} — ${m.model_id}</option>`;
+      });
+      html += `</optgroup>`;
     });
-    html += `</optgroup>`;
-  });
-  sel.innerHTML = html;
+    sel.innerHTML = html;
+  } catch (e) {
+    sel.innerHTML = '<option value="">— presets unavailable —</option>';
+  }
 }
 
 function applyPreset() {
-  const sel = document.getElementById("fPreset");
-  const idx = parseInt(sel.value);
-  if (isNaN(idx)) return;
-  const p = MODEL_PRESETS[idx];
-  if (!p) return;
-  document.getElementById("fDisplayName").value = p.display_name;
-  document.getElementById("fProvider").value    = p.provider;
-  document.getElementById("fModelId").value     = p.model_id;
-  document.getElementById("fCostIn").value      = p.cost_in.toFixed(2);
-  document.getElementById("fCostOut").value     = p.cost_out.toFixed(2);
-  selectTier(p.tier);
+  const sel   = document.getElementById("fPreset");
+  const id    = sel.value;
+  if (!id) return;
+  // Find the selected model from the optgroup options
+  const opt   = sel.querySelector(`option[value="${id}"]`);
+  if (!opt) return;
+  // Re-fetch to get full data for this id
+  apiGet("/api/models/known/all").then(models => {
+    const p = models.find(m => String(m.id) === String(id));
+    if (!p) return;
+    document.getElementById("fDisplayName").value = p.display_name;
+    document.getElementById("fProvider").value    = p.provider;
+    document.getElementById("fModelId").value     = p.model_id;
+    document.getElementById("fCostIn").value      = p.cost_input_per_1m.toFixed(2);
+    document.getElementById("fCostOut").value     = p.cost_output_per_1m.toFixed(2);
+    selectTier(p.tier);
+  }).catch(() => {});
+}
+
+// ── Known Models Admin Panel ──────────────────────────────────────────────────
+
+function openKnownModelsPanel() {
+  document.getElementById("knownModelsPanel").style.display = "block";
+  loadKnownModelsTable();
+}
+
+function closeKnownModelsPanel() {
+  document.getElementById("knownModelsPanel").style.display = "none";
+  // Refresh preset dropdown in case admin made changes
+  renderPresetOptions();
+}
+
+function km_syncGroup() {
+  const provider = document.getElementById("km_provider").value;
+  const groupEl  = document.getElementById("km_provider_group");
+  if (!groupEl.value && provider) groupEl.value = provider;
+}
+
+async function loadKnownModelsTable() {
+  const tbody = document.getElementById("knownModelsTableBody");
+  tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; text-align:center; color:var(--text-muted);">Loading...</td></tr>';
+  try {
+    const models = await apiGet("/api/models/known/all");
+    if (!models.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; text-align:center; color:var(--text-muted);">No known models yet. Add one above.</td></tr>';
+      return;
+    }
+    const TIER_LABELS = { 1: "⚡ Scout", 2: "🔍 Analyst", 3: "💡 Advisor", 4: "🎯 Strategist" };
+    tbody.innerHTML = models.map(m => `
+      <tr style="border-bottom:1px solid var(--border); opacity:${m.is_active ? 1 : 0.45};">
+        <td style="padding:10px; color:var(--text-primary); font-weight:500;">
+          ${m.display_name}
+          ${m.notes ? `<div style="font-size:10px; color:var(--text-muted); margin-top:2px;">${m.notes}</div>` : ""}
+        </td>
+        <td style="padding:10px;"><code style="font-size:11px; color:var(--accent); background:var(--bg-base); padding:2px 6px; border-radius:3px;">${m.model_id}</code></td>
+        <td style="padding:10px; color:var(--text-muted); font-size:11px;">${m.provider_group}</td>
+        <td style="padding:10px; color:var(--text-muted); font-size:11px;">${TIER_LABELS[m.tier] || m.tier}</td>
+        <td style="padding:10px; color:var(--text-muted); font-size:11px;">$${m.cost_input_per_1m.toFixed(2)} / $${m.cost_output_per_1m.toFixed(2)}</td>
+        <td style="padding:10px;">
+          <button onclick="toggleKnownModel(${m.id})"
+            style="font-size:11px; padding:3px 10px; border-radius:4px; cursor:pointer; font-weight:600;
+                   border:1px solid ${m.is_active ? "var(--accent-green)" : "var(--border)"};
+                   color:${m.is_active ? "var(--accent-green)" : "var(--text-muted)"};
+                   background:transparent;">
+            ${m.is_active ? "Visible" : "Hidden"}
+          </button>
+        </td>
+        <td style="padding:10px;">
+          <button onclick="deleteKnownModel(${m.id}, '${m.display_name.replace(/'/g,"\\'")}', event)"
+            style="font-size:11px; padding:3px 10px; border-radius:4px; cursor:pointer;
+                   border:1px solid var(--accent-red); color:var(--accent-red); background:transparent;">
+            Delete
+          </button>
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="padding:20px; text-align:center; color:var(--accent-red);">Error loading: ${e.message}</td></tr>`;
+  }
+}
+
+async function saveKnownModel() {
+  const errEl  = document.getElementById("km_error");
+  const okEl   = document.getElementById("km_success");
+  const btn    = document.getElementById("km_save_btn");
+  errEl.style.display = "none";
+  okEl.style.display  = "none";
+
+  const display_name   = document.getElementById("km_display_name").value.trim();
+  const model_id       = document.getElementById("km_model_id").value.trim();
+  const provider       = document.getElementById("km_provider").value;
+  const provider_group = document.getElementById("km_provider_group").value.trim();
+  const tier           = parseInt(document.getElementById("km_tier").value);
+  const cost_in        = parseFloat(document.getElementById("km_cost_in").value) || 0;
+  const cost_out       = parseFloat(document.getElementById("km_cost_out").value) || 0;
+  const notes          = document.getElementById("km_notes").value.trim();
+
+  if (!display_name)   { errEl.textContent = "Display Name is required.";   errEl.style.display = "inline"; return; }
+  if (!model_id)       { errEl.textContent = "API Model ID is required.";   errEl.style.display = "inline"; return; }
+  if (!provider)       { errEl.textContent = "Please select a provider.";   errEl.style.display = "inline"; return; }
+  if (!provider_group) { errEl.textContent = "Group Label is required.";    errEl.style.display = "inline"; return; }
+  if (!tier)           { errEl.textContent = "Please select a tier.";       errEl.style.display = "inline"; return; }
+
+  btn.disabled = true; btn.textContent = "Saving...";
+  try {
+    await apiPost("/api/models/known", { display_name, model_id, provider, provider_group, tier, cost_input_per_1m: cost_in, cost_output_per_1m: cost_out, notes: notes || null });
+    okEl.textContent = `✓ "${display_name}" added to the dropdown.`;
+    okEl.style.display = "inline";
+    // Clear form
+    ["km_display_name","km_model_id","km_provider_group","km_cost_in","km_cost_out","km_notes"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("km_provider").value = "";
+    document.getElementById("km_tier").value = "";
+    loadKnownModelsTable();
+  } catch (e) {
+    errEl.textContent = e.message || "Save failed.";
+    errEl.style.display = "inline";
+  } finally {
+    btn.disabled = false; btn.textContent = "+ Add to Dropdown";
+  }
+}
+
+async function toggleKnownModel(id) {
+  try {
+    await apiPatch(`/api/models/known/${id}/toggle`, null);
+    loadKnownModelsTable();
+  } catch (e) {
+    alert("Toggle failed: " + e.message);
+  }
+}
+
+async function deleteKnownModel(id, name, e) {
+  e.stopPropagation();
+  if (!confirm(`Remove "${name}" from the Quick Select dropdown? This cannot be undone.`)) return;
+  try {
+    await apiDelete(`/api/models/known/${id}`);
+    loadKnownModelsTable();
+  } catch (e) {
+    alert("Delete failed: " + e.message);
+  }
 }
 
 const TIERS = {
