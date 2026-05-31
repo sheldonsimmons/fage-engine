@@ -39,10 +39,7 @@
         <h1 class="mdl-title">Model Registry</h1>
         <p class="mdl-subtitle">Register and manage the AI models your company uses. CostPilot routes every request to the right model based on tier, complexity, and budget.</p>
       </div>
-      <div style="display:flex; gap:10px; align-items:center;">
-        <button onclick="openKnownModelsPanel()" style="background:none; border:1px solid var(--border); color:var(--text-muted); border-radius:7px; padding:8px 16px; font-size:12px; cursor:pointer;">⚙ Manage Quick Select List</button>
-        <button class="mdl-add-btn" onclick="openAddModal()">+ Add Model</button>
-      </div>
+      <button class="mdl-add-btn" onclick="openAddModal()">+ Add Model</button>
     </div>
 
     <!-- ── Tier reference cards ────────────────────────────────────────── -->
@@ -269,7 +266,10 @@
         <select id="fPreset" class="mdl-select" onchange="applyPreset()">
           <option value="">— or choose a preset to auto-fill —</option>
         </select>
-        <div class="mdl-hint">Fills in model ID, provider, tier, and pricing automatically. You can edit any field after.</div>
+        <div class="mdl-hint">
+          Fills in model ID, provider, tier, and pricing automatically. You can edit any field after. &nbsp;
+          <a href="#" onclick="openKnownModelsPanel(); return false;" style="color:var(--accent); text-decoration:underline;">Don't see your model? Add it to this list →</a>
+        </div>
       </div>
 
       <div class="mdl-form-group">
