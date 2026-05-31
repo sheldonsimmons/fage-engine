@@ -83,7 +83,15 @@ async function loadKnownModelsTable() {
         <td style="padding:10px;"><code style="font-size:11px; color:var(--accent); background:var(--bg-base); padding:2px 6px; border-radius:3px;">${m.model_id}</code></td>
         <td style="padding:10px; color:var(--text-muted); font-size:11px;">${m.provider_group}</td>
         <td style="padding:10px; color:var(--text-muted); font-size:11px;">${TIER_LABELS[m.tier] || m.tier}</td>
-        <td style="padding:10px; color:var(--text-muted); font-size:11px;">$${m.cost_input_per_1m.toFixed(2)} / $${m.cost_output_per_1m.toFixed(2)}</td>
+        <td style="padding:10px; color:var(--text-muted); font-size:11px;">
+          $${m.cost_input_per_1m.toFixed(2)} / $${m.cost_output_per_1m.toFixed(2)}
+          ${(() => {
+            if (!m.updated_at) return "";
+            const days = Math.floor((Date.now() - new Date(m.updated_at)) / 86400000);
+            if (days >= 30) return `<div style="margin-top:3px;"><span title="Pricing last updated ${days} days ago — verify with your provider" style="font-size:10px; color:var(--accent-yellow); border:1px solid var(--accent-yellow); border-radius:3px; padding:1px 5px; cursor:default;">⚠ ${days}d old — verify pricing</span></div>`;
+            return "";
+          })()}
+        </td>
         <td style="padding:10px;">
           <button onclick="toggleKnownModel(${m.id})"
             style="font-size:11px; padding:3px 10px; border-radius:4px; cursor:pointer; font-weight:600;
