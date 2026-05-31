@@ -14,6 +14,8 @@ import os
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from database.db import engine, SessionLocal
 from database import models
@@ -242,6 +244,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "font-src 'self' data:;"
+        )
+        return response
+
+app.add_middleware(CSPMiddleware)
 
 # ── API Routes (registered BEFORE static mount so they take priority) ──────────
 
