@@ -179,6 +179,7 @@
   grid-template-columns: 2fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
+  align-items: start;
 }
 /* Inside draggable column, gap is handled by rpt-draggable-col — suppress double margin */
 .rpt-draggable-col .rpt-charts-row { margin-bottom: 0; }
@@ -187,12 +188,12 @@
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 18px 20px 14px;
+  padding: 14px 16px;
   position: relative;
 }
 .rpt-chart-card canvas {
   display: block;
-  height: 180px !important;
+  height: 160px !important;
   width: 100% !important;
 }
 .rpt-chart-wide { grid-column: auto; }
