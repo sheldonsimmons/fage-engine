@@ -1597,16 +1597,18 @@ async function lRegisterAgent() {
 }
 
 // Load on open
-document.querySelector('[data-panel-id="l-budget-controls"] .dash-sec-head').addEventListener("click", function() {
-  const body = document.getElementById("lBudgetControlBody");
-  // After toggle, if now visible, load data
-  setTimeout(() => {
-    if (body.style.display !== "none") {
-      lLoadBudgetControls();
-      lLoadAgentControls();
-    }
-  }, 50);
-});
+const _lBudgetPanelHead = document.querySelector('[data-panel-id="l-budget-controls"] .dash-sec-head');
+if (_lBudgetPanelHead) {
+  _lBudgetPanelHead.addEventListener("click", function() {
+    const body = document.getElementById("lBudgetControlBody");
+    setTimeout(() => {
+      if (body && body.style.display !== "none") {
+        lLoadBudgetControls();
+        lLoadAgentControls();
+      }
+    }, 50);
+  });
+}
 </script>
 <script src="js/help.js"></script>
 <script>
