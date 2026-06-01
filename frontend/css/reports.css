@@ -192,7 +192,7 @@
 }
 .rpt-chart-card canvas {
   display: block;
-  height: 240px !important;
+  height: 180px !important;
   width: 100% !important;
 }
 .rpt-chart-wide { grid-column: auto; }
