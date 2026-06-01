@@ -420,6 +420,16 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="js/tier-utils.js"></script>
 <script>
+window.onerror = function(msg, src, line, col, err) {
+  document.body.insertAdjacentHTML("afterbegin",
+    `<div style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#f85149;color:#fff;padding:12px 20px;font-family:monospace;font-size:13px;word-break:break-all">
+      <strong>GLOBAL JS ERROR:</strong> ${msg}<br>
+      <small>${src} line ${line}:${col}</small><br>
+      <pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap">${err && err.stack || ''}</pre>
+    </div>`);
+};
+</script>
+<script>
 
 // ── Real pricing (per token) — Anthropic published prices ─────────────────────
 const RATES = {
