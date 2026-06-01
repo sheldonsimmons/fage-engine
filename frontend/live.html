@@ -1472,7 +1472,15 @@ function init() {
 
 // Load custom tier names then re-render so agent tier bounds show correct labels
 loadTierNames().then(() => renderAgents());
-init();
+try {
+  init();
+} catch(e) {
+  document.body.insertAdjacentHTML("afterbegin",
+    `<div style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#f85149;color:#fff;padding:12px 20px;font-family:monospace;font-size:13px">
+      <strong>JS ERROR in init():</strong> ${e.message}<br><pre style="margin:4px 0 0;font-size:11px">${e.stack}</pre>
+    </div>`);
+  console.error("init() failed:", e);
+}
 </script>
 <script>
 // Budget Controls moved to /admin.html
