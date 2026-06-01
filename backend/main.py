@@ -250,12 +250,17 @@ class CSPMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; "
             "connect-src 'self'; "
-            "font-src 'self' data:;"
+            "font-src 'self' data: https://cdn.jsdelivr.net;"
         )
+        # Prevent HTML files from being cached so updates are picked up immediately
+        content_type = response.headers.get("content-type", "")
+        if "text/html" in content_type:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
         return response
 
 app.add_middleware(CSPMiddleware)
@@ -442,5 +447,18 @@ def debug_tag(body: dict):
     }
 
 # ── Serve frontend as static files (MUST be last — catches everything else) ────
-frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+frontend_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend"))
+
+# Explicit routes for HTML pages so they're always read fresh from disk and
+# bypass any StaticFiles path-resolution ambiguity.
+from fastapi.responses import FileResponse as _FileResponse
+
+@app.get("/reports.html")
+def serve_reports_html():
+    return _FileResponse(os.path.join(frontend_path, "reports.html"), media_type="text/html")
+
+@app.get("/live-reports.html")
+def serve_live_reports_html():
+    return _FileResponse(os.path.join(frontend_path, "live-reports.html"), media_type="text/html")
+
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")

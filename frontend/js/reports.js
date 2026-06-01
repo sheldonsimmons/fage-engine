@@ -237,76 +237,100 @@ async function loadSavings() {
   setKpi("sv-calls",       fmtNum(data.total_calls));
   setKpi("sv-call-split",  fmtNum(data.micro_calls) + " micro / " + fmtNum(data.flagship_calls) + " flagship");
 
-  const labels = data.timeline.map(d => d.date);
+  const labels = (data.timeline || []).map(d => d.date);
 
-  // Daily spend line chart
-  destroyChart("dailySpend");
-  charts["dailySpend"] = new Chart(
-    document.getElementById("chartDailySpend").getContext("2d"),
-    {
-      type: "line",
-      data: {
-        labels,
-        datasets: [{
-          label: "Daily Spend ($)",
-          data: data.timeline.map(d => d.cost),
-          borderColor: COLORS.micro,
-          backgroundColor: "rgba(88,166,255,0.08)",
-          fill: true, tension: 0.3, pointRadius: 2,
-        }],
-      },
-      options: { ...chartDefaults(), plugins: { legend: { display: false } } },
-    }
-  );
+  try {
+    // Daily spend line chart
+    destroyChart("dailySpend");
+    charts["dailySpend"] = new Chart(
+      document.getElementById("chartDailySpend").getContext("2d"),
+      {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Daily Spend ($)",
+            data: (data.timeline || []).map(d => d.cost),
+            borderColor: COLORS.micro,
+            backgroundColor: "rgba(88,166,255,0.08)",
+            fill: true, tension: 0.3, pointRadius: 2,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          ...chartDefaults(),
+          plugins: { legend: { display: false } },
+        },
+      }
+    );
 
-  // Model tier doughnut
-  destroyChart("modelSplit");
-  charts["modelSplit"] = new Chart(
-    document.getElementById("chartModelSplit").getContext("2d"),
-    {
-      type: "doughnut",
-      data: {
-        labels: ["Micro", "Flagship"],
-        datasets: [{ data: [data.micro_calls, data.flagship_calls],
-          backgroundColor: [COLORS.micro, COLORS.flagship], borderWidth: 0 }],
-      },
-      options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "65%" },
-    }
-  );
+    // Model tier doughnut
+    destroyChart("modelSplit");
+    charts["modelSplit"] = new Chart(
+      document.getElementById("chartModelSplit").getContext("2d"),
+      {
+        type: "doughnut",
+        data: {
+          labels: ["Micro", "Flagship"],
+          datasets: [{ data: [data.micro_calls, data.flagship_calls],
+            backgroundColor: [COLORS.micro, COLORS.flagship], borderWidth: 0 }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: COLORS.muted } } },
+          cutout: "65%",
+        },
+      }
+    );
 
-  // Daily tokens pruned bar
-  destroyChart("tokensPruned");
-  charts["tokensPruned"] = new Chart(
-    document.getElementById("chartTokensPruned").getContext("2d"),
-    {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          label: "Tokens Pruned",
-          data: data.timeline.map(d => d.tokens_saved),
-          backgroundColor: "rgba(63,185,80,0.5)",
-          borderColor: COLORS.green, borderWidth: 1,
-        }],
-      },
-      options: { ...chartDefaults(), plugins: { legend: { display: false } } },
-    }
-  );
+    // Daily tokens pruned bar
+    destroyChart("tokensPruned");
+    charts["tokensPruned"] = new Chart(
+      document.getElementById("chartTokensPruned").getContext("2d"),
+      {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Tokens Pruned",
+            data: (data.timeline || []).map(d => d.tokens_saved),
+            backgroundColor: "rgba(63,185,80,0.5)",
+            borderColor: COLORS.green, borderWidth: 1,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          ...chartDefaults(),
+          plugins: { legend: { display: false } },
+        },
+      }
+    );
 
-  // Savings breakdown doughnut
-  destroyChart("savingsBreakdown");
-  charts["savingsBreakdown"] = new Chart(
-    document.getElementById("chartSavingsBreakdown").getContext("2d"),
-    {
-      type: "doughnut",
-      data: {
-        labels: ["Pruning Savings", "Downgrade Savings", "Actual Cost"],
-        datasets: [{ data: [data.pruning_saved_usd, data.downgrade_saved_usd, data.total_cost_usd],
-          backgroundColor: [COLORS.green, COLORS.micro, COLORS.muted], borderWidth: 0 }],
-      },
-      options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "60%" },
-    }
-  );
+    // Savings breakdown doughnut
+    destroyChart("savingsBreakdown");
+    charts["savingsBreakdown"] = new Chart(
+      document.getElementById("chartSavingsBreakdown").getContext("2d"),
+      {
+        type: "doughnut",
+        data: {
+          labels: ["Pruning Savings", "Downgrade Savings", "Actual Cost"],
+          datasets: [{ data: [data.pruning_saved_usd, data.downgrade_saved_usd, data.total_cost_usd],
+            backgroundColor: [COLORS.green, COLORS.micro, COLORS.muted], borderWidth: 0 }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: COLORS.muted } } },
+          cutout: "60%",
+        },
+      }
+    );
+  } catch (err) {
+    console.error("[CostPilot] Chart render error in loadSavings:", err);
+  }
 }
 
 // ── TAB 2: RISK ───────────────────────────────────────────────────────────────

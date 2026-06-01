@@ -83,7 +83,7 @@ def score_complexity(text: str, threshold: int = None, keywords: list = None) ->
 # Model Registry lookup
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _get_model_from_registry(tier_num: int, db, department: str = None) -> dict | None:
+def _get_model_from_registry(tier_num: int, db, department: str = None):
     """
     Look up the default enabled model for a given tier from ModelRegistry.
 
