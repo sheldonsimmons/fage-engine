@@ -138,20 +138,11 @@ async def connect_openai(req: ConnectOpenAIRequest):
 
     headers = {"Authorization": f"Bearer {key}"}
 
-    # Validate key against OpenAI
-    async with httpx.AsyncClient(timeout=10) as client:
-        check = await client.get("https://api.openai.com/v1/models", headers=headers)
-        if check.status_code == 401:
-            raise HTTPException(status_code=401,
-                detail="OpenAI rejected this key. Make sure you copied the full key — it should be ~50 characters starting with 'sk-'.")
-        if check.status_code == 429:
-            raise HTTPException(status_code=429,
-                detail="OpenAI rate limit hit. Please wait a moment and try again.")
-        if check.status_code != 200:
-            raise HTTPException(status_code=502, detail="Could not reach OpenAI to validate key.")
-
-    # Pull usage day by day
+    # Pull usage day by day — the usage endpoint itself tells us if the key is valid.
+    # We avoid GET /v1/models because project-scoped keys often block it even when valid.
     usage_rows = []
+    key_confirmed_valid = False
+
     async with httpx.AsyncClient(timeout=15) as client:
         for i in range(req.days):
             date_str = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -159,11 +150,32 @@ async def connect_openai(req: ConnectOpenAIRequest):
                 f"https://api.openai.com/v1/usage?date={date_str}",
                 headers=headers
             )
+            if resp.status_code == 401:
+                raise HTTPException(status_code=401,
+                    detail="OpenAI rejected this key. Double-check you copied the full key from platform.openai.com → API Keys. Project keys (sk-proj-...) and legacy keys (sk-...) both work.")
+            if resp.status_code == 429:
+                raise HTTPException(status_code=429,
+                    detail="OpenAI rate limit hit. Please wait a moment and try again.")
             if resp.status_code == 200:
+                key_confirmed_valid = True
                 data = resp.json()
                 for row in data.get("data", []):
                     row["date"] = date_str
                     usage_rows.append(row)
+            # 403 or other = key valid but no usage permission — keep going
+
+    # If we never got a 200 but also no 401, key might be valid but usage API is restricted
+    if not key_confirmed_valid and not usage_rows:
+        # Fall back: make a cheap validation call
+        async with httpx.AsyncClient(timeout=10) as client:
+            check = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={**headers, "content-type": "application/json"},
+                json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
+            )
+            if check.status_code == 401:
+                raise HTTPException(status_code=401,
+                    detail="OpenAI rejected this key. Double-check you copied the full key from platform.openai.com → API Keys.")
 
     if not usage_rows:
         # Key valid but no usage found — return zero baseline
