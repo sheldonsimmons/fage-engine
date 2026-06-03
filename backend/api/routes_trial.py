@@ -219,18 +219,28 @@ class RegisterTrialRequest(BaseModel):
 
 @router.post("/register")
 def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
+    import secrets as _secrets
+    from base64 import b64encode
+
     # One trial per email
     existing = db.query(TrialAccount).filter_by(email=req.email).first()
     if existing:
+        # Backfill secret_key if the record pre-dates this column
+        if not existing.secret_key:
+            existing.secret_key = "sk-cp-" + _secrets.token_urlsafe(32)
+            db.commit()
+        # Update API key if they're re-registering with a new one
+        if req.api_key:
+            existing.api_key_enc = b64encode(req.api_key.encode()).decode()
+            db.commit()
         return {
-            "workspace_id": existing.workspace_id,
-            "trial_end":    existing.trial_end.isoformat(),
+            "workspace_id":   existing.workspace_id,
+            "secret_key":     existing.secret_key,
+            "trial_end":      existing.trial_end.isoformat(),
+            "days_remaining": max(0, (existing.trial_end - __import__("datetime").datetime.utcnow()).days),
+            "proxy_base_url": f"https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-{existing.workspace_id}",
             "already_exists": True,
-            "message": "A trial for this email already exists.",
         }
-
-    import secrets as _secrets
-    from base64 import b64encode
 
     workspace_id = str(uuid.uuid4()).replace("-", "")[:16].upper()
     secret_key   = "sk-cp-" + _secrets.token_urlsafe(32)
