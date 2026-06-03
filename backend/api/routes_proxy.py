@@ -17,7 +17,7 @@ import json
 from base64 import b64decode
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 from database.db import SessionLocal
 from database.models import TrialAccount, TokenTransaction
@@ -107,6 +107,79 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     )
     db.add(txn)
     db.commit()
+
+
+# ── Workspace status page (GET) ──────────────────────────────────────────────
+
+@router.get("/ws-{workspace_id}", response_class=HTMLResponse)
+def workspace_status(workspace_id: str):
+    db = SessionLocal()
+    try:
+        account = db.query(TrialAccount).filter_by(workspace_id=workspace_id).first()
+        if not account:
+            return HTMLResponse(content="""
+                <html><body style="font-family:sans-serif;max-width:500px;margin:60px auto;color:#333">
+                <h2>❌ Workspace not found</h2>
+                <p>No workspace with this ID exists. Check your Getting Started page for the correct URL.</p>
+                </body></html>""", status_code=404)
+
+        from datetime import datetime
+        days_left = max(0, (account.trial_end - datetime.utcnow()).days)
+        status_color = "#22c55e" if days_left > 7 else "#f59e0b" if days_left > 0 else "#ef4444"
+        status_text  = f"{days_left} days remaining" if days_left > 0 else "Trial expired"
+
+        return HTMLResponse(content=f"""
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CostPilot — Workspace {workspace_id}</title>
+<style>
+  body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e6edf3;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}}
+  .card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:40px;max-width:480px;width:100%;text-align:center}}
+  .logo{{font-size:32px;margin-bottom:8px}}
+  h1{{font-size:22px;font-weight:800;margin:0 0 4px;color:#fff}}
+  .sub{{font-size:13px;color:#8b949e;margin-bottom:28px}}
+  .badge{{display:inline-block;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;background:{status_color}22;color:{status_color};border:1px solid {status_color}44;margin-bottom:24px}}
+  .row{{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#0d1117;border-radius:8px;margin-bottom:8px;text-align:left}}
+  .row-label{{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#8b949e;font-weight:700}}
+  .row-value{{font-family:monospace;font-size:13px;color:#58a6ff}}
+  .endpoints{{background:#0d1117;border-radius:8px;padding:14px;margin:16px 0;text-align:left}}
+  .endpoint{{font-family:monospace;font-size:11px;color:#3fb950;padding:3px 0}}
+  .method{{color:#d29922;margin-right:8px}}
+  a{{color:#58a6ff;text-decoration:none;font-size:13px}}
+</style>
+</head><body>
+<div class="card">
+  <div class="logo">◈</div>
+  <h1>CostPilot Proxy</h1>
+  <div class="sub">Your workspace is active and ready to route API calls</div>
+  <div class="badge">{status_text}</div>
+  <div class="row">
+    <div class="row-label">Workspace ID</div>
+    <div class="row-value">{workspace_id}</div>
+  </div>
+  <div class="row">
+    <div class="row-label">Account</div>
+    <div class="row-value" style="font-family:sans-serif;font-size:13px;color:#e6edf3">{account.name}</div>
+  </div>
+  <div class="row">
+    <div class="row-label">Provider</div>
+    <div class="row-value" style="font-family:sans-serif">{account.provider.capitalize()}</div>
+  </div>
+  <div class="endpoints">
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#8b949e;font-weight:700;margin-bottom:8px">Proxy endpoints</div>
+    <div class="endpoint"><span class="method">POST</span>/v1/ws-{workspace_id}/chat/completions</div>
+    <div class="endpoint"><span class="method">POST</span>/v1/ws-{workspace_id}/messages</div>
+  </div>
+  <p style="font-size:12px;color:#8b949e;line-height:1.6">
+    This URL is your proxy base. API calls go to the endpoints above — this page confirms your workspace is live.
+  </p>
+  <a href="/getting-started.html">← Back to Getting Started</a>
+</div>
+</body></html>""")
+    finally:
+        db.close()
 
 
 # ── OpenAI-compatible proxy ───────────────────────────────────────────────────
