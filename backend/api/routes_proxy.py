@@ -134,7 +134,7 @@ async def proxy_openai(workspace_id: str, request: Request):
         routed_model    = requested_model if complex_ else SCOUT_OPENAI
         routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
 
-        # Forward to OpenAI
+        # Forward to OpenAI using the customer's stored key — no key needed in their code
         forward_body = {**body, "model": routed_model}
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(

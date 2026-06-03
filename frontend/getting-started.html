@@ -554,16 +554,13 @@ function renderIntegrationCode() {
     ? `'{"model":"gpt-4o","messages":[{"role":"user","content":"Hello from CostPilot!"}]}'`
     : `'{"model":"claude-haiku-4-5-20251001","max_tokens":10,"messages":[{"role":"user","content":"Hello!"}]}'`;
   const curlEndpoint = provider === "openai" ? "chat/completions" : "messages";
-  const authHeader   = provider === "openai"
-    ? `-H "Authorization: Bearer YOUR_${provider.toUpperCase()}_KEY"`
-    : `-H "x-api-key: YOUR_ANTHROPIC_KEY" -H "anthropic-version: 2023-06-01"`;
 
+  // No provider API key needed in the curl — CostPilot uses the stored key
   document.getElementById("testCmd").textContent =
 `curl -X POST ${PROXY}/${curlEndpoint} \\
   -H "Content-Type: application/json" \\
   -H "X-CostPilot-Key: ${SK}" \\
   -H "X-Department: Engineering" \\
-  ${authHeader} \\
   -d ${curlBody}`;
 }
 
@@ -585,11 +582,6 @@ function getSnippets() {
     <span class="code-kw">private static final</span> String CP_KEY =
         <span class="code-str">'${SK}'</span>;
 
-    <span class="code-cmt">// Paste your OpenAI key here, or use a Custom Label:
-    // Label.OpenAI_API_Key (recommended for production)</span>
-    <span class="code-kw">private static final</span> String OPENAI_KEY =
-        <span class="code-str">'YOUR_OPENAI_KEY_HERE'</span>;
-
     <span class="code-kw">public static</span> String route(String prompt, String department) {
         HttpRequest req = <span class="code-kw">new</span> HttpRequest();
         req.setEndpoint(ENDPOINT);
@@ -597,7 +589,7 @@ function getSnippets() {
         req.setHeader(<span class="code-str">'Content-Type'</span>, <span class="code-str">'application/json'</span>);
         req.setHeader(<span class="code-str">'X-CostPilot-Key'</span>, CP_KEY);
         req.setHeader(<span class="code-str">'X-Department'</span>, department);
-        req.setHeader(<span class="code-str">'Authorization'</span>, <span class="code-str">'Bearer '</span> + OPENAI_KEY);
+        <span class="code-cmt">// No API key needed — CostPilot uses your stored key automatically</span>
 
         Map&lt;String,Object&gt; body = <span class="code-kw">new</span> Map&lt;String,Object&gt;{
             <span class="code-str">'model'</span> => <span class="code-str">'gpt-4o'</span>,
@@ -632,7 +624,7 @@ CostPilotService.prototype = {
         r.setRequestHeader(<span class="code-str">'Content-Type'</span>, <span class="code-str">'application/json'</span>);
         r.setRequestHeader(<span class="code-str">'X-CostPilot-Key'</span>, <span class="code-str">'${SK}'</span>);
         r.setRequestHeader(<span class="code-str">'X-Department'</span>, department);
-        r.setRequestHeader(<span class="code-str">'Authorization'</span>, <span class="code-str">'Bearer '</span> + YOUR_AI_KEY);
+        <span class="code-cmt">// No API key needed — CostPilot uses your stored key automatically</span>
         r.setRequestBody(JSON.stringify({
             model: <span class="code-str">'gpt-4o'</span>,
             messages: [{ role: <span class="code-str">'user'</span>, content: prompt }]
@@ -655,12 +647,12 @@ CostPilotService.prototype = {
 <span class="code-key">COSTPILOT_KEY</span> = <span class="code-str">"${SK}"</span>
 
 <span class="code-kw">def</span> <span class="code-val">route_ai_call</span>(prompt: str, department: str = <span class="code-str">"Marketing"</span>) -> str:
+    <span class="code-cmt"># No API key needed — CostPilot uses your stored key automatically</span>
     response = requests.post(
         COSTPILOT_URL,
         headers={
             <span class="code-str">"X-CostPilot-Key"</span>: COSTPILOT_KEY,
             <span class="code-str">"X-Department"</span>: department,
-            <span class="code-str">"Authorization"</span>: <span class="code-str">f"Bearer {YOUR_OPENAI_KEY}"</span>,
         },
         json={
             <span class="code-str">"model"</span>: <span class="code-str">"gpt-4o"</span>,
@@ -678,10 +670,10 @@ CostPilotService.prototype = {
         code: isOAI
           ? `<span class="code-kw">from</span> openai <span class="code-kw">import</span> OpenAI
 
-<span class="code-cmt">${apiNote}</span>
+<span class="code-cmt"># No API key needed here — CostPilot uses your stored key automatically</span>
 client = OpenAI(
     base_url=<span class="code-str">"${PROXY}"</span>,
-    api_key=YOUR_OPENAI_KEY,
+    api_key=<span class="code-str">"placeholder"</span>,  <span class="code-cmt"># required by SDK but unused — CostPilot handles auth</span>
     default_headers={
         <span class="code-str">"X-CostPilot-Key"</span>: <span class="code-str">"${SK}"</span>,
         <span class="code-str">"X-Department"</span>: <span class="code-str">"Engineering"</span>,  <span class="code-cmt"># change per team</span>
@@ -695,10 +687,10 @@ response = client.chat.completions.create(
 )`
           : `<span class="code-kw">import</span> anthropic
 
-<span class="code-cmt">${apiNote}</span>
+<span class="code-cmt"># No API key needed here — CostPilot uses your stored key automatically</span>
 client = anthropic.Anthropic(
     base_url=<span class="code-str">"${PROXY}"</span>,
-    api_key=YOUR_ANTHROPIC_KEY,
+    api_key=<span class="code-str">"placeholder"</span>,  <span class="code-cmt"># required by SDK but unused — CostPilot handles auth</span>
     default_headers={
         <span class="code-str">"X-CostPilot-Key"</span>: <span class="code-str">"${SK}"</span>,
         <span class="code-str">"X-Department"</span>: <span class="code-str">"Engineering"</span>,
@@ -713,10 +705,10 @@ client = anthropic.Anthropic(
         label: "OpenAI SDK — Node.js / TypeScript",
         code: `<span class="code-kw">import</span> OpenAI <span class="code-kw">from</span> <span class="code-str">'openai'</span>;
 
-<span class="code-cmt">// Your OpenAI key — passed through, never stored by CostPilot</span>
+<span class="code-cmt">// No API key needed — CostPilot uses your stored key automatically</span>
 <span class="code-kw">const</span> client = <span class="code-kw">new</span> OpenAI({
     baseURL: <span class="code-str">'${PROXY}'</span>,
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey:  <span class="code-str">'placeholder'</span>,  <span class="code-cmt">// required by SDK but unused</span>
     defaultHeaders: {
         <span class="code-str">'X-CostPilot-Key'</span>: <span class="code-str">'${SK}'</span>,
         <span class="code-str">'X-Department'</span>:    <span class="code-str">'Engineering'</span>,
@@ -744,17 +736,16 @@ client = anthropic.Anthropic(
     <span class="code-kw">private static final</span> String CP_KEY =
         <span class="code-str">"${SK}"</span>;
 
-    <span class="code-kw">public static</span> String route(String prompt, String department,
-                                   String openAiKey) <span class="code-kw">throws</span> Exception {
+    <span class="code-kw">public static</span> String route(String prompt, String department) <span class="code-kw">throws</span> Exception {
         String body = <span class="code-str">"""
             {"model":"gpt-4o","messages":[{"role":"user","content":"%s"}]}
             """</span>.formatted(prompt);
 
+        <span class="code-cmt">// No API key needed — CostPilot uses your stored key automatically</span>
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(ENDPOINT))
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .header(<span class="code-str">"Content-Type"</span>,    <span class="code-str">"application/json"</span>)
-            .header(<span class="code-str">"Authorization"</span>,    <span class="code-str">"Bearer "</span> + openAiKey)
             .header(<span class="code-str">"X-CostPilot-Key"</span>, CP_KEY)
             .header(<span class="code-str">"X-Department"</span>,     department)
             .build();
@@ -774,9 +765,9 @@ client = anthropic.Anthropic(
         label: "Ruby — openai gem",
         code: `<span class="code-kw">require</span> <span class="code-str">"openai"</span>
 
-<span class="code-cmt"># Your OpenAI key — passed through, never stored by CostPilot</span>
+<span class="code-cmt"># No API key needed — CostPilot uses your stored key automatically</span>
 client = OpenAI::Client.new(
-    access_token: YOUR_OPENAI_KEY,
+    access_token: <span class="code-str">"placeholder"</span>,  <span class="code-cmt"># required by gem but unused</span>
     uri_base: <span class="code-str">"${PROXY}"</span>,
     request_timeout: 120,
     extra_headers: {
@@ -810,7 +801,8 @@ response = client.chat(
 <span class="code-key">Required headers on every request:</span>
   X-CostPilot-Key: ${SK}
   X-Department:    &lt;your team name&gt;
-  Authorization:   Bearer &lt;your AI provider key&gt;`
+
+<span class="code-cmt">  # No Authorization header needed — CostPilot uses your stored key</span>`
         },
         {
           label: "cURL example",
