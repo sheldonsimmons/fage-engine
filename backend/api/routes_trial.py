@@ -1,17 +1,22 @@
 """
-api/routes_trial.py — Free Trial Registration, OpenAI Usage Pull & Status
+api/routes_trial.py — Free Trial Registration, Usage Pull & Status
 
-POST /api/trial/connect-openai   — validate key + pull 30-day OpenAI usage + savings sim
-POST /api/trial/register         — create trial account (email, name, key)
-GET  /api/trial/status           — check trial status by workspace_id
+POST /api/trial/connect-openai        — validate key + pull 30-day OpenAI usage + savings sim
+POST /api/trial/validate-anthropic    — validate Anthropic key (cheap test call)
+POST /api/trial/anthropic-manual      — savings sim from manual usage inputs
+POST /api/trial/anthropic-csv         — savings sim from uploaded Anthropic usage CSV
+POST /api/trial/register              — create trial account (email, name, key)
+GET  /api/trial/status                — check trial status by workspace_id
 """
 
 import os
+import io
+import csv
 import uuid
 import httpx
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -230,6 +235,218 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
         "proxy_endpoint": f"https://fage-engine-21cb49fe4806.herokuapp.com/v1",
         "already_exists": False,
     }
+
+
+# ── Anthropic model cost table ────────────────────────────────────────────────
+
+ANTHROPIC_MODEL_COSTS = {
+    # Claude 4.x
+    "claude-opus-4-8":            {"input": 15.00, "output": 75.00, "tier": "Strategist"},
+    "claude-opus-4-6":            {"input": 15.00, "output": 75.00, "tier": "Strategist"},
+    "claude-sonnet-4-6":          {"input": 3.00,  "output": 15.00, "tier": "Advisor"},
+    "claude-haiku-4-5-20251001":  {"input": 0.80,  "output": 4.00,  "tier": "Scout"},
+    # Claude 3.x
+    "claude-3-opus-20240229":     {"input": 15.00, "output": 75.00, "tier": "Strategist"},
+    "claude-3-5-sonnet-20241022": {"input": 3.00,  "output": 15.00, "tier": "Advisor"},
+    "claude-3-5-sonnet-20240620": {"input": 3.00,  "output": 15.00, "tier": "Advisor"},
+    "claude-3-5-haiku-20241022":  {"input": 0.80,  "output": 4.00,  "tier": "Scout"},
+    "claude-3-haiku-20240307":    {"input": 0.25,  "output": 1.25,  "tier": "Scout"},
+    "claude-3-sonnet-20240229":   {"input": 3.00,  "output": 15.00, "tier": "Advisor"},
+}
+
+ANTHROPIC_SCOUT_INPUT  = 0.25 / 1_000_000   # claude-3-haiku rates (cheapest)
+ANTHROPIC_SCOUT_OUTPUT = 1.25 / 1_000_000
+
+
+def _anthropic_savings_from_rows(rows: list) -> dict:
+    """Shared savings simulation for both manual and CSV paths."""
+    total_actual = 0.0
+    total_cp     = 0.0
+    model_breakdown = {}
+
+    for row in rows:
+        model   = row.get("model", "claude-3-5-sonnet-20241022")
+        n_in    = row.get("input_tokens", 0)
+        n_out   = row.get("output_tokens", 0)
+        meta    = ANTHROPIC_MODEL_COSTS.get(model,
+                    {"input": 3.00, "output": 15.00, "tier": "Advisor"})
+
+        actual = (n_in * meta["input"] + n_out * meta["output"]) / 1_000_000
+        cp     = (
+            (n_in  * 0.70 * ANTHROPIC_SCOUT_INPUT)  +
+            (n_out * 0.70 * ANTHROPIC_SCOUT_OUTPUT) +
+            (n_in  * 0.30 * meta["input"]  / 1_000_000) +
+            (n_out * 0.30 * meta["output"] / 1_000_000)
+        )
+        total_actual += actual
+        total_cp     += cp
+
+        if model not in model_breakdown:
+            model_breakdown[model] = {"requests": 0, "input_tokens": 0,
+                                       "output_tokens": 0, "actual_cost": 0.0,
+                                       "tier": meta["tier"]}
+        model_breakdown[model]["input_tokens"]  += n_in
+        model_breakdown[model]["output_tokens"] += n_out
+        model_breakdown[model]["actual_cost"]   += actual
+
+    saved     = max(0.0, total_actual - total_cp)
+    pct_saved = round(saved / total_actual * 100, 1) if total_actual > 0 else 0
+
+    return {
+        "actual_cost_usd":    round(total_actual, 4),
+        "costpilot_cost_usd": round(total_cp, 4),
+        "saved_usd":          round(saved, 4),
+        "pct_saved":          pct_saved,
+        "annual_savings_usd": round(saved * 12, 2),
+        "model_breakdown":    model_breakdown,
+    }
+
+
+# ── 4. Validate Anthropic Key ─────────────────────────────────────────────────
+
+class ValidateAnthropicRequest(BaseModel):
+    api_key: str
+
+@router.post("/validate-anthropic")
+async def validate_anthropic(req: ValidateAnthropicRequest):
+    key = req.api_key.strip()
+    if not key.startswith("sk-ant-"):
+        raise HTTPException(status_code=400,
+            detail="Anthropic keys start with 'sk-ant-'. Please check you copied the correct key from console.anthropic.com.")
+
+    # Cheapest possible call to verify the key is live
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1,
+                  "messages": [{"role": "user", "content": "hi"}]},
+        )
+
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401,
+            detail="Anthropic rejected this key. Please check you copied the full key from console.anthropic.com → API Keys.")
+    if resp.status_code not in (200, 201):
+        raise HTTPException(status_code=502,
+            detail="Could not reach Anthropic to validate the key. Please try again.")
+
+    return {
+        "valid":    True,
+        "provider": "anthropic",
+        "message":  "Key verified.",
+        "why_no_autopull": (
+            "Anthropic doesn't expose a usage history API — unlike OpenAI, there's no endpoint "
+            "we can query to pull your past spend automatically. Your usage data lives only inside "
+            "the Anthropic Console. To show your real savings we need one extra step: either tell "
+            "us your approximate usage, or upload the CSV export from your Console."
+        ),
+    }
+
+
+# ── 5. Anthropic Savings — Manual Input ───────────────────────────────────────
+
+class AnthropicManualRequest(BaseModel):
+    monthly_spend_usd: float
+    primary_model:     str = "claude-3-5-sonnet-20241022"
+    calls_per_month:   int = 0    # optional — used to show call split
+
+@router.post("/anthropic-manual")
+def anthropic_manual(req: AnthropicManualRequest):
+    meta = ANTHROPIC_MODEL_COSTS.get(req.primary_model,
+               {"input": 3.00, "output": 15.00, "tier": "Advisor"})
+
+    # Reverse-engineer token counts from monthly spend
+    avg_cost_per_call = (meta["input"] * 2000 + meta["output"] * 500) / 1_000_000
+    estimated_calls   = req.calls_per_month or max(1, int(req.monthly_spend_usd / avg_cost_per_call))
+    avg_in_tokens     = 2000
+    avg_out_tokens    = 500
+
+    rows = [{
+        "model":         req.primary_model,
+        "input_tokens":  avg_in_tokens  * estimated_calls,
+        "output_tokens": avg_out_tokens * estimated_calls,
+    }]
+
+    # Scale to match stated spend exactly
+    savings = _anthropic_savings_from_rows(rows)
+    scale   = req.monthly_spend_usd / savings["actual_cost_usd"] if savings["actual_cost_usd"] > 0 else 1.0
+    savings["actual_cost_usd"]    = round(req.monthly_spend_usd, 4)
+    savings["costpilot_cost_usd"] = round(savings["costpilot_cost_usd"] * scale, 4)
+    savings["saved_usd"]          = round(max(0, savings["actual_cost_usd"] - savings["costpilot_cost_usd"]), 4)
+    savings["annual_savings_usd"] = round(savings["saved_usd"] * 12, 2)
+    savings["pct_saved"]          = round(savings["saved_usd"] / savings["actual_cost_usd"] * 100, 1) if savings["actual_cost_usd"] > 0 else 0
+    savings["estimated_calls"]    = estimated_calls
+    savings["data_source"]        = "manual"
+
+    return {"has_usage": True, "savings": savings}
+
+
+# ── 6. Anthropic Savings — CSV Upload ─────────────────────────────────────────
+
+@router.post("/anthropic-csv")
+async def anthropic_csv(file: UploadFile = File(...)):
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Please upload a .csv file.")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")  # handle BOM from Excel exports
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read file. Please upload a UTF-8 CSV.")
+
+    reader  = csv.DictReader(io.StringIO(text))
+    headers = [h.lower().strip() for h in (reader.fieldnames or [])]
+
+    # Flexible column name mapping
+    def find_col(candidates):
+        for c in candidates:
+            for h in (reader.fieldnames or []):
+                if c in h.lower():
+                    return h
+        return None
+
+    col_model  = find_col(["model"])
+    col_in     = find_col(["input token", "input_token", "prompt token"])
+    col_out    = find_col(["output token", "output_token", "completion token", "generated token"])
+    col_cost   = find_col(["total cost", "cost"])
+
+    rows = []
+    total_cost_from_csv = 0.0
+
+    for row in reader:
+        try:
+            model   = row.get(col_model, "claude-3-5-sonnet-20241022").strip() if col_model else "claude-3-5-sonnet-20241022"
+            n_in    = int(str(row.get(col_in,  0) or 0).replace(",", "")) if col_in  else 0
+            n_out   = int(str(row.get(col_out, 0) or 0).replace(",", "")) if col_out else 0
+            cost    = float(str(row.get(col_cost, 0) or 0).replace(",", "").replace("$", "")) if col_cost else 0.0
+            total_cost_from_csv += cost
+            if n_in > 0 or n_out > 0:
+                rows.append({"model": model, "input_tokens": n_in, "output_tokens": n_out})
+        except Exception:
+            continue
+
+    if not rows:
+        raise HTTPException(status_code=400,
+            detail="Could not parse usage data from this CSV. Make sure it's the export from console.anthropic.com → Usage → Export CSV.")
+
+    savings = _anthropic_savings_from_rows(rows)
+
+    # If CSV had cost column, use it as ground truth
+    if total_cost_from_csv > 0:
+        scale = total_cost_from_csv / savings["actual_cost_usd"] if savings["actual_cost_usd"] > 0 else 1.0
+        savings["actual_cost_usd"]    = round(total_cost_from_csv, 4)
+        savings["costpilot_cost_usd"] = round(savings["costpilot_cost_usd"] * scale, 4)
+        savings["saved_usd"]          = round(max(0, savings["actual_cost_usd"] - savings["costpilot_cost_usd"]), 4)
+        savings["annual_savings_usd"] = round(savings["saved_usd"] * 12, 2)
+        savings["pct_saved"]          = round(savings["saved_usd"] / savings["actual_cost_usd"] * 100, 1) if savings["actual_cost_usd"] > 0 else 0
+
+    savings["data_source"] = "csv"
+    savings["rows_parsed"] = len(rows)
+    return {"has_usage": True, "savings": savings}
 
 
 # ── 3. Trial Status ───────────────────────────────────────────────────────────

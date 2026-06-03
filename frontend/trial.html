@@ -8,104 +8,101 @@
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     body { min-height:100vh; display:flex; flex-direction:column; background:var(--bg-base); }
-
-    /* ── Page shell ──────────────────────────────────────────────────────────── */
     .trial-page { flex:1; display:flex; flex-direction:column; align-items:center; padding:48px 24px 80px; }
 
-    /* ── Progress stepper ────────────────────────────────────────────────────── */
-    .stepper {
-      display:flex; align-items:center; gap:0; margin-bottom:40px;
-      width:100%; max-width:560px;
-    }
+    /* ── Stepper ─────────────────────────────────────────────────────────────── */
+    .stepper { display:flex; align-items:center; gap:0; margin-bottom:40px; width:100%; max-width:600px; }
     .step-item { display:flex; flex-direction:column; align-items:center; flex:1; }
-    .step-circle {
-      width:32px; height:32px; border-radius:50%; display:flex; align-items:center;
-      justify-content:center; font-size:12px; font-weight:700;
-      background:var(--bg-panel); border:1px solid var(--border); color:var(--text-muted);
-      transition:all .3s;
-    }
-    .step-circle.active   { background:var(--accent); border-color:var(--accent); color:#fff; }
-    .step-circle.done     { background:var(--accent-green); border-color:var(--accent-green); color:#fff; }
-    .step-label { font-size:10px; font-weight:600; color:var(--text-muted); margin-top:5px; letter-spacing:.06em; text-transform:uppercase; }
+    .step-circle { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; background:var(--bg-panel); border:1px solid var(--border); color:var(--text-muted); transition:all .3s; }
+    .step-circle.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .step-circle.done   { background:var(--accent-green); border-color:var(--accent-green); color:#fff; }
+    .step-label { font-size:10px; font-weight:600; color:var(--text-muted); margin-top:5px; letter-spacing:.06em; text-transform:uppercase; text-align:center; }
     .step-label.active { color:var(--accent); }
     .step-label.done   { color:var(--accent-green); }
-    .step-line { flex:1; height:1px; background:var(--border); margin: 0 -1px; margin-bottom:18px; transition:background .3s; }
+    .step-line { flex:1; height:1px; background:var(--border); margin:0 -1px; margin-bottom:18px; transition:background .3s; }
     .step-line.done { background:var(--accent-green); }
 
     /* ── Card ────────────────────────────────────────────────────────────────── */
-    .trial-card {
-      background:var(--bg-panel); border:1px solid var(--border); border-radius:14px;
-      padding:36px 40px; max-width:580px; width:100%;
-    }
-    .card-eyebrow {
-      font-size:10px; text-transform:uppercase; letter-spacing:.1em;
-      font-weight:700; color:var(--accent-green); margin-bottom:10px;
-    }
+    .trial-card { background:var(--bg-panel); border:1px solid var(--border); border-radius:14px; padding:36px 40px; max-width:600px; width:100%; }
+    .card-eyebrow { font-size:10px; text-transform:uppercase; letter-spacing:.1em; font-weight:700; color:var(--accent-green); margin-bottom:10px; }
     .card-title { font-size:26px; font-weight:800; color:var(--text-primary); margin-bottom:8px; line-height:1.2; }
     .card-title span { color:var(--accent-green); }
-    .card-sub { font-size:13px; color:var(--text-muted); line-height:1.65; margin-bottom:28px; }
+    .card-sub { font-size:13px; color:var(--text-muted); line-height:1.65; margin-bottom:24px; }
+
+    /* ── Provider tiles ──────────────────────────────────────────────────────── */
+    .provider-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px; }
+    .provider-tile { background:var(--bg-base); border:2px solid var(--border); border-radius:10px; padding:18px 16px; cursor:pointer; transition:all .2s; text-align:center; }
+    .provider-tile:hover { border-color:var(--accent); }
+    .provider-tile.selected-openai { border-color:var(--accent-green); background:rgba(63,185,80,.06); }
+    .provider-tile.selected-anthropic { border-color:var(--accent); background:rgba(88,166,255,.06); }
+    .provider-icon { font-size:28px; margin-bottom:8px; }
+    .provider-name { font-size:14px; font-weight:700; color:var(--text-primary); margin-bottom:4px; }
+    .provider-badge { font-size:9px; font-weight:700; padding:2px 8px; border-radius:8px; display:inline-block; text-transform:uppercase; letter-spacing:.07em; margin-top:2px; }
+    .badge-auto  { background:rgba(63,185,80,.15); color:var(--accent-green); border:1px solid rgba(63,185,80,.3); }
+    .badge-steps { background:rgba(88,166,255,.15); color:var(--accent); border:1px solid rgba(88,166,255,.3); }
+
+    /* ── Why notice (Anthropic) ──────────────────────────────────────────────── */
+    .why-notice {
+      background:rgba(88,166,255,.06); border:1px solid rgba(88,166,255,.2);
+      border-radius:10px; padding:16px 18px; margin-bottom:24px;
+    }
+    .why-notice-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+    .why-notice p { font-size:12px; color:var(--text-muted); line-height:1.7; margin:0; }
+
+    /* ── Anthropic path selector ─────────────────────────────────────────────── */
+    .path-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px; }
+    .path-tile { background:var(--bg-base); border:2px solid var(--border); border-radius:10px; padding:18px 16px; cursor:pointer; transition:all .2s; text-align:center; }
+    .path-tile:hover { border-color:var(--accent); }
+    .path-tile.selected { border-color:var(--accent); background:rgba(88,166,255,.06); }
+    .path-icon { font-size:24px; margin-bottom:8px; }
+    .path-label { font-size:13px; font-weight:700; color:var(--text-primary); margin-bottom:4px; }
+    .path-sub { font-size:11px; color:var(--text-muted); line-height:1.5; }
 
     /* ── Form ────────────────────────────────────────────────────────────────── */
-    .field { margin-bottom:20px; }
+    .field { margin-bottom:18px; }
     .field label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:7px; }
-    .field input {
-      width:100%; background:var(--bg-base); border:1px solid var(--border);
-      border-radius:8px; padding:11px 14px; color:var(--text-primary);
-      font:inherit; font-size:13px; box-sizing:border-box; transition:border-color .15s;
-    }
-    .field input:focus { outline:none; border-color:var(--accent); }
+    .field input, .field select { width:100%; background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:11px 14px; color:var(--text-primary); font:inherit; font-size:13px; box-sizing:border-box; transition:border-color .15s; }
+    .field input:focus, .field select:focus { outline:none; border-color:var(--accent); }
     .field input::placeholder { color:var(--text-muted); }
+    .field select option { background:var(--bg-panel); }
     .field-hint { font-size:11px; color:var(--text-muted); margin-top:5px; line-height:1.5; }
-
-    /* ── Key input with toggle ───────────────────────────────────────────────── */
     .key-wrap { position:relative; }
     .key-wrap input { padding-right:44px; font-family:var(--font-mono); }
-    .key-toggle {
-      position:absolute; right:12px; top:50%; transform:translateY(-50%);
-      background:none; border:none; cursor:pointer; color:var(--text-muted);
-      font-size:14px; padding:0;
-    }
-    .key-toggle:hover { color:var(--text-primary); }
+    .key-toggle { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:14px; padding:0; }
+
+    /* ── Upload zone ─────────────────────────────────────────────────────────── */
+    .upload-zone { border:2px dashed var(--border); border-radius:10px; padding:36px; text-align:center; cursor:pointer; transition:all .2s; }
+    .upload-zone:hover, .upload-zone.drag-over { border-color:var(--accent); background:rgba(88,166,255,.04); }
+    .upload-zone.has-file { border-color:var(--accent-green); background:rgba(63,185,80,.05); }
+    .upload-icon { font-size:36px; margin-bottom:10px; }
+    .upload-label { font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:4px; }
+    .upload-sub { font-size:11px; color:var(--text-muted); }
+
+    /* ── CSV instructions ────────────────────────────────────────────────────── */
+    .csv-steps { background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin-bottom:20px; }
+    .csv-steps-title { font-size:10px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--text-muted); margin-bottom:8px; }
+    .csv-step { font-size:12px; color:var(--text-muted); padding:4px 0; display:flex; gap:10px; }
+    .csv-step-num { color:var(--accent); font-weight:700; flex-shrink:0; }
 
     /* ── Trust badges ────────────────────────────────────────────────────────── */
-    .trust-row { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
-    .trust-chip {
-      display:flex; align-items:center; gap:6px;
-      font-size:11px; color:var(--accent-green);
-      background:rgba(63,185,80,.08); border:1px solid rgba(63,185,80,.2);
-      border-radius:20px; padding:4px 12px;
-    }
+    .trust-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:22px; }
+    .trust-chip { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--accent-green); background:rgba(63,185,80,.08); border:1px solid rgba(63,185,80,.2); border-radius:20px; padding:4px 12px; }
 
-    /* ── Primary button ──────────────────────────────────────────────────────── */
-    .btn-primary {
-      width:100%; padding:14px; border-radius:8px;
-      background:var(--accent-green); color:#0d1117;
-      font:inherit; font-size:15px; font-weight:800; letter-spacing:.02em;
-      border:none; cursor:pointer; transition:opacity .15s;
-      display:flex; align-items:center; justify-content:center; gap:8px;
-    }
+    /* ── Buttons ─────────────────────────────────────────────────────────────── */
+    .btn-primary { width:100%; padding:14px; border-radius:8px; background:var(--accent-green); color:#0d1117; font:inherit; font-size:15px; font-weight:800; letter-spacing:.02em; border:none; cursor:pointer; transition:opacity .15s; display:flex; align-items:center; justify-content:center; gap:8px; }
     .btn-primary:hover:not(:disabled) { opacity:.88; }
     .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
-    .btn-secondary {
-      width:100%; padding:13px; border-radius:8px; margin-top:10px;
-      background:transparent; color:var(--text-muted); border:1px solid var(--border);
-      font:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s;
-    }
+    .btn-secondary { width:100%; padding:13px; border-radius:8px; margin-top:10px; background:transparent; color:var(--text-muted); border:1px solid var(--border); font:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
     .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
 
-    /* ── Results panel (step 2) ──────────────────────────────────────────────── */
-    .results-hero {
-      text-align:center; padding:24px 0 20px;
-      border-bottom:1px solid var(--border); margin-bottom:24px;
-    }
+    /* ── Results ─────────────────────────────────────────────────────────────── */
+    .results-hero { text-align:center; padding:24px 0 20px; border-bottom:1px solid var(--border); margin-bottom:24px; }
     .results-saved { font-size:52px; font-weight:900; color:var(--accent-green); line-height:1; margin-bottom:6px; }
     .results-label { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.1em; font-weight:700; }
+    .results-source { font-size:11px; color:var(--text-muted); margin-top:6px; }
 
     .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; }
-    .kpi-box {
-      background:var(--bg-base); border:1px solid var(--border); border-radius:8px;
-      padding:14px 12px; text-align:center;
-    }
+    .kpi-box { background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:14px 12px; text-align:center; }
     .kpi-box-val { font-size:20px; font-weight:800; color:var(--text-primary); }
     .kpi-box-val.green  { color:var(--accent-green); }
     .kpi-box-val.yellow { color:var(--accent-yellow); }
@@ -116,56 +113,30 @@
     .model-table th { text-align:left; padding:6px 10px; color:var(--text-muted); font-size:10px; text-transform:uppercase; letter-spacing:.07em; border-bottom:1px solid var(--border); }
     .model-table td { padding:8px 10px; border-bottom:1px solid rgba(48,54,61,.4); }
     .model-table tr:last-child td { border-bottom:none; }
-    .tier-pill {
-      font-size:9px; font-weight:700; padding:2px 8px; border-radius:8px;
-      display:inline-block; text-transform:uppercase; letter-spacing:.06em;
-    }
-    .tier-scout     { background:rgba(63,185,80,.15);  color:var(--accent-green); }
-    .tier-analyst   { background:rgba(88,166,255,.15); color:var(--accent); }
-    .tier-advisor   { background:rgba(210,153,34,.15); color:var(--accent-yellow); }
-    .tier-strategist{ background:rgba(248,81,73,.15);  color:var(--accent-red); }
+    .tier-pill { font-size:9px; font-weight:700; padding:2px 8px; border-radius:8px; display:inline-block; text-transform:uppercase; letter-spacing:.06em; }
+    .tier-scout      { background:rgba(63,185,80,.15);  color:var(--accent-green); }
+    .tier-analyst    { background:rgba(88,166,255,.15); color:var(--accent); }
+    .tier-advisor    { background:rgba(210,153,34,.15); color:var(--accent-yellow); }
+    .tier-strategist { background:rgba(248,81,73,.15);  color:var(--accent-red); }
 
-    /* ── Step 3: confirmation ────────────────────────────────────────────────── */
+    /* ── Step 4: Go Live ─────────────────────────────────────────────────────── */
     .confirm-icon { font-size:48px; text-align:center; margin-bottom:16px; }
-    .code-block {
-      background:var(--bg-base); border:1px solid var(--border); border-radius:8px;
-      padding:16px 18px; font-family:var(--font-mono); font-size:12px;
-      color:var(--accent-green); line-height:1.8; margin-bottom:16px; position:relative;
-    }
-    .copy-btn {
-      position:absolute; top:10px; right:10px;
-      background:var(--bg-panel); border:1px solid var(--border); border-radius:5px;
-      color:var(--text-muted); font-size:11px; padding:3px 10px; cursor:pointer;
-    }
+    .code-block { background:var(--bg-base); border:1px solid var(--border); border-radius:8px; padding:16px 18px; font-family:var(--font-mono); font-size:12px; color:var(--accent-green); line-height:1.8; margin-bottom:16px; position:relative; white-space:pre; }
+    .copy-btn { position:absolute; top:10px; right:10px; background:var(--bg-panel); border:1px solid var(--border); border-radius:5px; color:var(--text-muted); font-size:11px; padding:3px 10px; cursor:pointer; }
     .copy-btn:hover { color:var(--accent); border-color:var(--accent); }
-    .workspace-badge {
-      display:flex; align-items:center; justify-content:space-between;
-      background:rgba(88,166,255,.07); border:1px solid rgba(88,166,255,.2);
-      border-radius:8px; padding:12px 16px; margin-bottom:20px;
-    }
-    .workspace-badge .label { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); font-weight:700; }
-    .workspace-badge .value { font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--accent); }
-    .trial-countdown {
-      display:flex; align-items:center; justify-content:center; gap:8px;
-      font-size:13px; color:var(--accent-green); margin-bottom:24px;
-      background:rgba(63,185,80,.07); border:1px solid rgba(63,185,80,.2);
-      border-radius:8px; padding:10px;
-    }
+    .workspace-badge { display:flex; align-items:center; justify-content:space-between; background:rgba(88,166,255,.07); border:1px solid rgba(88,166,255,.2); border-radius:8px; padding:12px 16px; margin-bottom:20px; }
+    .workspace-badge .wlabel { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); font-weight:700; }
+    .workspace-badge .wvalue { font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--accent); }
+    .trial-countdown { display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; color:var(--accent-green); margin-bottom:24px; background:rgba(63,185,80,.07); border:1px solid rgba(63,185,80,.2); border-radius:8px; padding:10px; }
 
-    /* ── Error ───────────────────────────────────────────────────────────────── */
-    .error-box {
-      background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.3);
-      border-radius:8px; padding:12px 16px; font-size:13px; color:var(--accent-red);
-      margin-bottom:16px; display:none;
-    }
-
-    /* ── Loading spinner ─────────────────────────────────────────────────────── */
+    /* ── Misc ────────────────────────────────────────────────────────────────── */
+    .error-box { background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.3); border-radius:8px; padding:12px 16px; font-size:13px; color:var(--accent-red); margin-bottom:16px; display:none; line-height:1.6; }
     .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
-
-    /* ── Steps (hide/show) ───────────────────────────────────────────────────── */
-    .step-panel { display:none; }
-    .step-panel.active { display:block; }
+    .panel { display:none; }
+    .panel.active { display:block; }
+    .divider { display:flex; align-items:center; gap:12px; margin:20px 0; color:var(--text-muted); font-size:11px; font-weight:600; }
+    .divider::before, .divider::after { content:""; flex:1; height:1px; background:var(--border); }
   </style>
 </head>
 <body>
@@ -178,7 +149,7 @@
   </div>
   <div class="header-nav">
     <a href="/" class="header-nav-link">Dashboard</a>
-    <a href="/savings.html" class="header-nav-link">💰 Calculate Savings</a>
+    <a href="/savings.html" class="header-nav-link">💰 Savings Calc</a>
     <a href="/reports.html" class="header-nav-link">📊 Reports</a>
   </div>
 </header>
@@ -199,46 +170,170 @@
     <div class="step-line" id="line2"></div>
     <div class="step-item">
       <div class="step-circle" id="sc3">3</div>
-      <div class="step-label" id="sl3">Go Live</div>
+      <div class="step-label" id="sl3">Register</div>
+    </div>
+    <div class="step-line" id="line3"></div>
+    <div class="step-item">
+      <div class="step-circle" id="sc4">4</div>
+      <div class="step-label" id="sl4">Go Live</div>
     </div>
   </div>
 
   <div class="trial-card">
 
-    <!-- ── STEP 1: Connect OpenAI ──────────────────────────────────────────── -->
-    <div class="step-panel active" id="step1">
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 1 — Choose provider + paste key
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel active" id="panel-step1">
       <div class="card-eyebrow">Free 30-Day Trial · No Credit Card</div>
       <h1 class="card-title">See what CostPilot saves <span>your</span> team</h1>
-      <p class="card-sub">Paste your OpenAI API key. We'll pull your last 30 days of real usage and show you exactly how much CostPilot would have saved — before you change a single line of code.</p>
+      <p class="card-sub">Choose your AI provider and paste your API key. We'll show you exactly how much CostPilot would save — before you change a single line of code.</p>
 
-      <div class="trust-row">
-        <span class="trust-chip">✓ Read-only usage query</span>
-        <span class="trust-chip">✓ Key never stored at this step</span>
-        <span class="trust-chip">✓ Takes 30 seconds</span>
+      <div class="provider-grid">
+        <div class="provider-tile" id="tile-openai" onclick="selectProvider('openai')">
+          <div class="provider-icon">🟢</div>
+          <div class="provider-name">OpenAI</div>
+          <span class="provider-badge badge-auto">⚡ Automatic · 30-sec</span>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">We pull your real usage automatically — no extra steps.</div>
+        </div>
+        <div class="provider-tile" id="tile-anthropic" onclick="selectProvider('anthropic')">
+          <div class="provider-icon">🔵</div>
+          <div class="provider-name">Anthropic</div>
+          <span class="provider-badge badge-steps">2 extra steps</span>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Anthropic doesn't expose a usage API — we'll explain why and give you two easy options.</div>
+        </div>
       </div>
 
       <div class="error-box" id="step1Error"></div>
 
-      <div class="field">
-        <label>OpenAI API Key</label>
+      <div class="field" id="keyField" style="display:none">
+        <label id="keyLabel">API Key</label>
         <div class="key-wrap">
-          <input type="password" id="apiKey" placeholder="sk-proj-..." autocomplete="off" />
-          <button class="key-toggle" onclick="toggleKeyVis()" title="Show/hide key">👁</button>
+          <input type="password" id="apiKey" placeholder="" autocomplete="off" />
+          <button class="key-toggle" onclick="toggleKeyVis()">👁</button>
         </div>
-        <div class="field-hint">Found in your <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">OpenAI dashboard → API Keys</a>. We only read usage data — never make calls or spend credits.</div>
+        <div class="field-hint" id="keyHint"></div>
       </div>
 
-      <button class="btn-primary" id="step1Btn" onclick="connectOpenAI()">
-        Analyze My Usage →
+      <div class="trust-row" id="trustRow" style="display:none">
+        <span class="trust-chip">✓ Read-only validation</span>
+        <span class="trust-chip" id="trustChip2">✓ Key never stored at this step</span>
+        <span class="trust-chip">✓ No credits spent</span>
+      </div>
+
+      <button class="btn-primary" id="step1Btn" style="display:none" onclick="submitStep1()">
+        Continue →
       </button>
     </div>
 
-    <!-- ── STEP 2: Show Savings ────────────────────────────────────────────── -->
-    <div class="step-panel" id="step2">
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 1b — Anthropic: explain + choose path
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel" id="panel-anthropic-path">
+      <div class="card-eyebrow">Anthropic · Key Verified ✓</div>
+      <h2 class="card-title">One more step — <span>here's why</span></h2>
+
+      <div class="why-notice">
+        <div class="why-notice-title">ℹ Why Anthropic requires an extra step</div>
+        <p>
+          OpenAI has a public <strong>Usage API</strong> — we can silently pull your last 30 days of real spend with just your key. <strong>Anthropic doesn't have one.</strong> Your usage data lives only inside the Anthropic Console and can't be fetched programmatically.
+          <br><br>
+          This isn't a CostPilot limitation — it's an Anthropic platform gap. We're being upfront about it rather than pretending we can do something we can't.
+        </p>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:12px">Choose how to get your savings estimate:</div>
+
+      <div class="path-grid">
+        <div class="path-tile" id="path-manual" onclick="selectAnthropicPath('manual')">
+          <div class="path-icon">✏️</div>
+          <div class="path-label">Tell us your numbers</div>
+          <div class="path-sub">Takes 60 seconds. Answer 3 quick questions about your usage.</div>
+        </div>
+        <div class="path-tile" id="path-csv" onclick="selectAnthropicPath('csv')">
+          <div class="path-icon">📄</div>
+          <div class="path-label">Upload usage CSV</div>
+          <div class="path-sub">Most accurate. Export from Anthropic Console and upload here.</div>
+        </div>
+      </div>
+
+      <button class="btn-secondary" onclick="goToPanel('panel-step1')">← Change provider</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 1c — Anthropic manual input
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel" id="panel-anthropic-manual">
+      <div class="card-eyebrow">Anthropic · Manual Estimate</div>
+      <h2 class="card-title">Tell us your <span>usage</span></h2>
+      <p class="card-sub">We'll use these numbers to run the same savings simulation we run on real data. Your savings estimate will be based on these inputs.</p>
+
+      <div class="error-box" id="manualError"></div>
+
+      <div class="field">
+        <label>Approximate Monthly Spend on Anthropic ($)</label>
+        <input type="number" id="manualSpend" placeholder="e.g. 500" min="1" />
+        <div class="field-hint">Found in console.anthropic.com → Billing → Usage</div>
+      </div>
+      <div class="field">
+        <label>Primary Model You Use</label>
+        <select id="manualModel">
+          <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet — $3/$15 per 1M tokens</option>
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — $3/$15 per 1M tokens</option>
+          <option value="claude-3-opus-20240229">Claude 3 Opus — $15/$75 per 1M tokens</option>
+          <option value="claude-opus-4-8">Claude Opus 4.8 — $15/$75 per 1M tokens</option>
+          <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku — $0.80/$4 per 1M tokens</option>
+          <option value="claude-3-haiku-20240307">Claude 3 Haiku — $0.25/$1.25 per 1M tokens</option>
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — $0.80/$4 per 1M tokens</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Approximate API Calls per Month <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+        <input type="number" id="manualCalls" placeholder="e.g. 10000" min="0" />
+      </div>
+
+      <button class="btn-primary" id="manualBtn" onclick="submitManual()">Calculate My Savings →</button>
+      <button class="btn-secondary" onclick="goToPanel('panel-anthropic-path')">← Back</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 1d — Anthropic CSV upload
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel" id="panel-anthropic-csv">
+      <div class="card-eyebrow">Anthropic · CSV Upload</div>
+      <h2 class="card-title">Upload your <span>usage export</span></h2>
+      <p class="card-sub">This gives us your real model-by-model usage for the most accurate savings calculation.</p>
+
+      <div class="csv-steps">
+        <div class="csv-steps-title">How to export from Anthropic Console</div>
+        <div class="csv-step"><span class="csv-step-num">1</span> Go to <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a></div>
+        <div class="csv-step"><span class="csv-step-num">2</span> Click <strong style="color:var(--text-primary)">Usage</strong> in the left sidebar</div>
+        <div class="csv-step"><span class="csv-step-num">3</span> Set date range to last 30 days</div>
+        <div class="csv-step"><span class="csv-step-num">4</span> Click <strong style="color:var(--text-primary)">Export CSV</strong> → upload it below</div>
+      </div>
+
+      <div class="error-box" id="csvError"></div>
+
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('csvFile').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="upload-icon">📄</div>
+        <div class="upload-label" id="uploadLabel">Drop CSV here or click to browse</div>
+        <div class="upload-sub" id="uploadSub">anthropic_usage_export.csv</div>
+      </div>
+      <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="onFileSelect(event)" />
+
+      <button class="btn-primary" id="csvBtn" onclick="submitCsv()" style="margin-top:16px" disabled>Upload & Calculate →</button>
+      <button class="btn-secondary" onclick="goToPanel('panel-anthropic-path')">← Back</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 2 — Savings results
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel" id="panel-step2">
       <div class="card-eyebrow">Your 30-Day Results</div>
       <div class="results-hero">
         <div class="results-saved" id="resSaved">—</div>
         <div class="results-label">You would have saved in the last 30 days</div>
+        <div class="results-source" id="resSource"></div>
       </div>
 
       <div class="kpi-grid">
@@ -259,22 +354,22 @@
       <div style="margin-bottom:16px">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:10px">Model Breakdown</div>
         <table class="model-table">
-          <thead><tr><th>Model</th><th>Tier</th><th>Requests</th><th>Actual Cost</th></tr></thead>
+          <thead><tr><th>Model</th><th>Tier</th><th>Actual Cost</th></tr></thead>
           <tbody id="modelBreakdownTable"></tbody>
         </table>
       </div>
 
-      <button class="btn-primary" onclick="goToStep3()">
-        Start My Free 30-Day Trial →
-      </button>
-      <button class="btn-secondary" onclick="goToStep1()">← Use a different key</button>
+      <button class="btn-primary" onclick="goToPanel('panel-step3')">Start My Free 30-Day Trial →</button>
+      <button class="btn-secondary" onclick="goToPanel('panel-step1')">← Use a different key</button>
     </div>
 
-    <!-- ── STEP 3: Register + Go Live ─────────────────────────────────────── -->
-    <div class="step-panel" id="step3">
-      <div class="card-eyebrow">One Last Step</div>
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 3 — Register
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel" id="panel-step3">
+      <div class="card-eyebrow">Almost there</div>
       <h2 class="card-title">Create your <span>free</span> account</h2>
-      <p class="card-sub">Your trial starts immediately. You'll get a private proxy endpoint — swap it into your code and CostPilot starts routing and saving from your very first call.</p>
+      <p class="card-sub">Your trial starts immediately. You'll get a private proxy endpoint — one URL swap and CostPilot starts routing and saving from your very first call.</p>
 
       <div class="error-box" id="step3Error"></div>
 
@@ -291,13 +386,13 @@
         <input type="text" id="regCompany" placeholder="Acme Corp" />
       </div>
 
-      <button class="btn-primary" id="step3Btn" onclick="registerTrial()">
-        Start Free Trial — 30 Days Free →
-      </button>
+      <button class="btn-primary" id="step3Btn" onclick="registerTrial()">Start Free Trial →</button>
     </div>
 
-    <!-- ── STEP 4: Confirmation + Go Live ─────────────────────────────────── -->
-    <div class="step-panel" id="step4">
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 4 — Go Live
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel" id="panel-step4">
       <div class="confirm-icon">🎉</div>
       <div class="card-eyebrow" style="text-align:center">Trial Active</div>
       <h2 class="card-title" style="text-align:center;margin-bottom:6px">You're in. <span>Start saving now.</span></h2>
@@ -308,28 +403,26 @@
 
       <div class="workspace-badge">
         <div>
-          <div class="label">Your Workspace ID</div>
-          <div class="value" id="workspaceId">—</div>
+          <div class="wlabel">Your Workspace ID</div>
+          <div class="wvalue" id="workspaceId">—</div>
         </div>
-        <button class="copy-btn" onclick="copyWorkspace()">Copy</button>
+        <button class="copy-btn" style="position:static" onclick="copyText(document.getElementById('workspaceId').textContent, this)">Copy</button>
       </div>
 
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:8px">One-line integration</div>
-      <div class="code-block" id="codeBlock">
-        <button class="copy-btn" onclick="copyCode()">Copy</button>
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyText(document.getElementById('codeSnippet').textContent, this)">Copy</button>
         <span id="codeSnippet"></span>
       </div>
 
       <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:24px">
-        That's it. Every API call now routes through CostPilot's intelligence layer — complex calls stay on your best model, routine calls drop to Scout. Savings show up in your dashboard within minutes.
+        That's it. Every API call now routes through CostPilot's intelligence layer — complex calls stay on your best model, routine calls drop to the cheapest tier that handles them. Savings appear in your dashboard within minutes.
       </p>
 
-      <a href="/" class="btn-primary" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px">
-        Open My Dashboard →
-      </a>
+      <a href="/" class="btn-primary" style="text-decoration:none">Open My Dashboard →</a>
     </div>
 
-  </div>
+  </div><!-- /.trial-card -->
 </main>
 
 <footer class="footer">
@@ -338,16 +431,65 @@
 
 <script src="js/api.js"></script>
 <script>
+
+// ── State ──────────────────────────────────────────────────────────────────
+let _provider  = "";
 let _apiKey    = "";
+let _csvFile   = null;
 let _savings   = null;
 let _workspace = "";
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Stepper ────────────────────────────────────────────────────────────────
+const STEP_PANELS = {
+  "panel-step1":           1,
+  "panel-anthropic-path":  1,
+  "panel-anthropic-manual":1,
+  "panel-anthropic-csv":   1,
+  "panel-step2":           2,
+  "panel-step3":           3,
+  "panel-step4":           4,
+};
 
-function fmt(n) {
-  if (n == null) return "—";
-  if (n >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
-  return "$" + n.toFixed(2);
+function goToPanel(id) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  const step = STEP_PANELS[id] || 1;
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById("sc" + i).className = "step-circle" + (i < step ? " done" : i === step ? " active" : "");
+    document.getElementById("sl" + i).className = "step-label"  + (i < step ? " done" : i === step ? " active" : "");
+    if (i < 4) document.getElementById("line" + i).className = "step-line" + (i < step ? " done" : "");
+  }
+}
+
+// ── Provider selection ─────────────────────────────────────────────────────
+function selectProvider(p) {
+  _provider = p;
+  document.getElementById("tile-openai").className    = "provider-tile" + (p === "openai"    ? " selected-openai"    : "");
+  document.getElementById("tile-anthropic").className = "provider-tile" + (p === "anthropic" ? " selected-anthropic" : "");
+
+  const keyField = document.getElementById("keyField");
+  const keyLabel = document.getElementById("keyLabel");
+  const keyInput = document.getElementById("apiKey");
+  const keyHint  = document.getElementById("keyHint");
+  const trustChip2 = document.getElementById("trustChip2");
+
+  keyField.style.display = "block";
+  document.getElementById("trustRow").style.display = "flex";
+  document.getElementById("step1Btn").style.display = "flex";
+
+  if (p === "openai") {
+    keyLabel.textContent    = "OpenAI API Key";
+    keyInput.placeholder    = "sk-proj-...";
+    keyHint.innerHTML       = 'Find it at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">platform.openai.com → API Keys</a>. We pull usage data only — never make calls.';
+    document.getElementById("step1Btn").innerHTML = "Pull My Usage →";
+    trustChip2.textContent = "✓ Key never stored at this step";
+  } else {
+    keyLabel.textContent    = "Anthropic API Key";
+    keyInput.placeholder    = "sk-ant-...";
+    keyHint.innerHTML       = 'Find it at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">console.anthropic.com → API Keys</a>. We make one tiny validation call (~$0.0001).';
+    document.getElementById("step1Btn").innerHTML = "Validate Key →";
+    trustChip2.textContent = "✓ Validation call costs < $0.0001";
+  }
 }
 
 function toggleKeyVis() {
@@ -355,97 +497,165 @@ function toggleKeyVis() {
   inp.type = inp.type === "password" ? "text" : "password";
 }
 
-function showError(id, msg) {
-  const el = document.getElementById(id);
-  el.textContent = msg;
-  el.style.display = "block";
-}
-
-function hideError(id) {
-  document.getElementById(id).style.display = "none";
-}
-
-function setStep(n) {
-  document.querySelectorAll(".step-panel").forEach(p => p.classList.remove("active"));
-  document.getElementById("step" + n).classList.add("active");
-
-  // Update stepper UI
-  for (let i = 1; i <= 3; i++) {
-    const circle = document.getElementById("sc" + i);
-    const label  = document.getElementById("sl" + i);
-    circle.className = "step-circle" + (i < n ? " done" : i === n ? " active" : "");
-    label.className  = "step-label"  + (i < n ? " done" : i === n ? " active" : "");
-    if (i < 3) {
-      const line = document.getElementById("line" + i);
-      line.className = "step-line" + (i < n ? " done" : "");
-    }
-  }
-}
-
-function goToStep1() { setStep(1); }
-function goToStep3()  { setStep(3); }
-
-// ── Step 1: Connect OpenAI ─────────────────────────────────────────────────
-
-async function connectOpenAI() {
+// ── Step 1 submit ──────────────────────────────────────────────────────────
+async function submitStep1() {
   hideError("step1Error");
   const key = document.getElementById("apiKey").value.trim();
-  if (!key || !key.startsWith("sk-")) {
-    showError("step1Error", "Please enter a valid OpenAI API key starting with sk-");
-    return;
-  }
+  if (!key) { showError("step1Error", "Please paste your API key."); return; }
 
   const btn = document.getElementById("step1Btn");
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Pulling your usage data…';
+  const origText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span> ' + (_provider === "openai" ? "Pulling your data…" : "Validating key…");
 
   try {
-    const data = await apiPost("/api/trial/connect-openai", { api_key: key, days: 30 });
-
-    _apiKey  = key;
-    _savings = data.savings;
-
-    if (!data.has_usage) {
-      // Valid key but no usage — still let them proceed
-      document.getElementById("resSaved").textContent  = "$0.00";
-      document.getElementById("resActual").textContent = "$0.00";
-      document.getElementById("resWith").textContent   = "$0.00";
-      document.getElementById("resAnnual").textContent = "$0.00";
-      document.getElementById("modelBreakdownTable").innerHTML =
-        '<tr><td colspan="4" style="color:var(--text-muted);padding:12px 10px">No usage found in the last 30 days — your trial will track savings from your first call.</td></tr>';
+    if (_provider === "openai") {
+      const data = await apiPost("/api/trial/connect-openai", { api_key: key, days: 30 });
+      _apiKey  = key;
+      _savings = data.savings;
+      renderSavings(data, "openai");
+      goToPanel("panel-step2");
     } else {
-      const s = data.savings;
-      document.getElementById("resSaved").textContent  = fmt(s.saved_usd);
-      document.getElementById("resActual").textContent = fmt(s.actual_cost_usd);
-      document.getElementById("resWith").textContent   = fmt(s.costpilot_cost_usd);
-      document.getElementById("resAnnual").textContent = fmt(s.annual_savings_usd);
-
-      const tbody = document.getElementById("modelBreakdownTable");
-      const models = Object.entries(s.model_breakdown)
-        .sort((a, b) => b[1].actual_cost - a[1].actual_cost);
-
-      tbody.innerHTML = models.map(([model, m]) => {
-        const tier = (m.tier || "Advisor").toLowerCase();
-        return `<tr>
-          <td style="font-family:var(--font-mono);font-size:11px">${model}</td>
-          <td><span class="tier-pill tier-${tier}">${m.tier}</span></td>
-          <td>${(m.requests || 0).toLocaleString()}</td>
-          <td>$${(m.actual_cost || 0).toFixed(2)}</td>
-        </tr>`;
-      }).join("");
+      await apiPost("/api/trial/validate-anthropic", { api_key: key });
+      _apiKey = key;
+      goToPanel("panel-anthropic-path");
     }
-
-    setStep(2);
   } catch (e) {
-    showError("step1Error", e.message || "Could not connect to OpenAI. Please check your API key.");
+    showError("step1Error", e.message || "Something went wrong. Please try again.");
   } finally {
     btn.disabled = false;
-    btn.innerHTML = "Analyze My Usage →";
+    btn.innerHTML = origText;
   }
 }
 
-// ── Step 3: Register Trial ─────────────────────────────────────────────────
+// ── Anthropic path selection ───────────────────────────────────────────────
+function selectAnthropicPath(path) {
+  document.getElementById("path-manual").className = "path-tile" + (path === "manual" ? " selected" : "");
+  document.getElementById("path-csv").className    = "path-tile" + (path === "csv"    ? " selected" : "");
+  setTimeout(() => goToPanel("panel-anthropic-" + path), 200);
+}
 
+// ── Anthropic manual ───────────────────────────────────────────────────────
+async function submitManual() {
+  hideError("manualError");
+  const spend = parseFloat(document.getElementById("manualSpend").value);
+  const model = document.getElementById("manualModel").value;
+  const calls = parseInt(document.getElementById("manualCalls").value) || 0;
+  if (!spend || spend <= 0) { showError("manualError", "Please enter your approximate monthly spend."); return; }
+
+  const btn = document.getElementById("manualBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Calculating…';
+
+  try {
+    const data = await apiPost("/api/trial/anthropic-manual", {
+      monthly_spend_usd: spend, primary_model: model, calls_per_month: calls
+    });
+    _savings = data.savings;
+    renderSavings(data, "anthropic-manual");
+    goToPanel("panel-step2");
+  } catch (e) {
+    showError("manualError", e.message || "Calculation failed. Please try again.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Calculate My Savings →";
+  }
+}
+
+// ── Anthropic CSV upload ───────────────────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); document.getElementById("uploadZone").classList.add("drag-over"); }
+function onDragLeave()  { document.getElementById("uploadZone").classList.remove("drag-over"); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById("uploadZone").classList.remove("drag-over");
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+}
+function onFileSelect(e) { if (e.target.files[0]) setFile(e.target.files[0]); }
+function setFile(f) {
+  _csvFile = f;
+  document.getElementById("uploadZone").classList.add("has-file");
+  document.getElementById("uploadLabel").textContent = "✓ " + f.name;
+  document.getElementById("uploadSub").textContent   = (f.size / 1024).toFixed(1) + " KB";
+  document.getElementById("csvBtn").disabled = false;
+}
+
+async function submitCsv() {
+  hideError("csvError");
+  if (!_csvFile) { showError("csvError", "Please select a CSV file first."); return; }
+
+  const btn = document.getElementById("csvBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Parsing…';
+
+  try {
+    const form = new FormData();
+    form.append("file", _csvFile);
+    const response = await fetch("/api/trial/anthropic-csv", { method: "POST", body: form });
+    if (!response.ok) {
+      let detail = `Upload failed (${response.status})`;
+      try { const j = await response.json(); detail = j.detail || detail; } catch(_) {}
+      throw new Error(detail);
+    }
+    const data = await response.json();
+    _savings = data.savings;
+    renderSavings(data, "anthropic-csv");
+    goToPanel("panel-step2");
+  } catch (e) {
+    showError("csvError", e.message || "Upload failed. Please try again.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Upload & Calculate →";
+  }
+}
+
+// ── Render savings results ─────────────────────────────────────────────────
+function fmt(n) {
+  if (n == null) return "—";
+  if (n >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
+  return "$" + n.toFixed(2);
+}
+
+function renderSavings(data, source) {
+  if (!data.has_usage || !data.savings) {
+    document.getElementById("resSaved").textContent  = "$0.00";
+    document.getElementById("resActual").textContent = "$0.00";
+    document.getElementById("resWith").textContent   = "$0.00";
+    document.getElementById("resAnnual").textContent = "$0.00";
+    document.getElementById("resSource").textContent = "No usage found — savings will appear from your first call.";
+    document.getElementById("modelBreakdownTable").innerHTML =
+      '<tr><td colspan="3" style="color:var(--text-muted);padding:12px 10px">No usage data found for this period.</td></tr>';
+    return;
+  }
+
+  const s = data.savings;
+  document.getElementById("resSaved").textContent  = fmt(s.saved_usd);
+  document.getElementById("resActual").textContent = fmt(s.actual_cost_usd);
+  document.getElementById("resWith").textContent   = fmt(s.costpilot_cost_usd);
+  document.getElementById("resAnnual").textContent = fmt(s.annual_savings_usd);
+
+  const sourceLabels = {
+    "openai":           "📡 Based on your real OpenAI usage — pulled automatically",
+    "anthropic-manual": "✏️ Based on your estimated usage — projection may vary",
+    "anthropic-csv":    `📄 Based on your Anthropic usage export (${s.rows_parsed || ""} rows parsed)`,
+  };
+  document.getElementById("resSource").textContent = sourceLabels[source] || "";
+
+  const tbody  = document.getElementById("modelBreakdownTable");
+  const models = Object.entries(s.model_breakdown || {})
+    .sort((a, b) => b[1].actual_cost - a[1].actual_cost);
+
+  tbody.innerHTML = models.length ? models.map(([model, m]) => {
+    const tier = (m.tier || "Advisor").toLowerCase();
+    return `<tr>
+      <td style="font-family:var(--font-mono);font-size:11px">${model}</td>
+      <td><span class="tier-pill tier-${tier}">${m.tier}</span></td>
+      <td>$${(m.actual_cost || 0).toFixed(2)}</td>
+    </tr>`;
+  }).join("") : '<tr><td colspan="3" style="color:var(--text-muted);padding:8px 10px">No model breakdown available.</td></tr>';
+}
+
+// ── Step 3: Register ───────────────────────────────────────────────────────
 async function registerTrial() {
   hideError("step3Error");
   const name    = document.getElementById("regName").value.trim();
@@ -453,7 +663,7 @@ async function registerTrial() {
   const company = document.getElementById("regCompany").value.trim();
 
   if (!name)  { showError("step3Error", "Please enter your name."); return; }
-  if (!email || !email.includes("@")) { showError("step3Error", "Please enter a valid email address."); return; }
+  if (!email || !email.includes("@")) { showError("step3Error", "Please enter a valid email."); return; }
 
   const btn = document.getElementById("step3Btn");
   btn.disabled = true;
@@ -461,53 +671,45 @@ async function registerTrial() {
 
   try {
     const data = await apiPost("/api/trial/register", {
-      email, name, company, api_key: _apiKey, provider: "openai"
+      email, name, company, api_key: _apiKey, provider: _provider
     });
 
     _workspace = data.workspace_id;
+    const end  = new Date(data.trial_end);
+    document.getElementById("trialEndDate").textContent = end.toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" });
+    document.getElementById("workspaceId").textContent  = data.workspace_id;
 
-    // Show confirmation
-    const trialEnd = new Date(data.trial_end);
-    document.getElementById("trialEndDate").textContent = trialEnd.toLocaleDateString("en-US", {
-      month: "long", day: "numeric", year: "numeric"
-    });
-    document.getElementById("workspaceId").textContent = data.workspace_id;
-
-    const snippet = `# Before\nclient = OpenAI(base_url="https://api.openai.com/v1")\n\n# After — 1 line change\nclient = OpenAI(base_url="https://fage-engine-21cb49fe4806.herokuapp.com/v1")`;
+    const origin = window.location.origin;
+    const snippet = `# Before\nclient = ${_provider === "openai" ? "OpenAI" : "Anthropic"}(base_url="${_provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}")\n\n# After — 1 line change\nclient = ${_provider === "openai" ? "OpenAI" : "Anthropic"}(base_url="${origin}/v1")`;
     document.getElementById("codeSnippet").textContent = snippet;
 
-    // Persist workspace_id in localStorage for dashboard banner
-    localStorage.setItem("cp_workspace_id",   data.workspace_id);
-    localStorage.setItem("cp_trial_end",       data.trial_end);
-    localStorage.setItem("cp_trial_name",      name);
-    localStorage.setItem("cp_days_remaining",  String(data.days_remaining));
+    localStorage.setItem("cp_workspace_id",  data.workspace_id);
+    localStorage.setItem("cp_trial_end",      data.trial_end);
+    localStorage.setItem("cp_trial_name",     name);
+    localStorage.setItem("cp_days_remaining", String(data.days_remaining));
 
-    setStep(4);
-    // Update stepper to mark all done
-    ["sc1","sc2","sc3"].forEach(id => document.getElementById(id).className = "step-circle done");
-    ["sl1","sl2","sl3"].forEach(id => document.getElementById(id).className = "step-label done");
-    ["line1","line2"].forEach(id => document.getElementById(id).className = "step-line done");
-
+    goToPanel("panel-step4");
   } catch (e) {
     showError("step3Error", e.message || "Registration failed. Please try again.");
   } finally {
     btn.disabled = false;
-    btn.innerHTML = "Start Free Trial — 30 Days Free →";
+    btn.innerHTML = "Start Free Trial →";
   }
 }
 
-// ── Copy helpers ───────────────────────────────────────────────────────────
-
-function copyWorkspace() {
-  navigator.clipboard.writeText(_workspace);
-  event.target.textContent = "✓ Copied";
-  setTimeout(() => event.target.textContent = "Copy", 2000);
+// ── Helpers ────────────────────────────────────────────────────────────────
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = "block";
 }
+function hideError(id) { document.getElementById(id).style.display = "none"; }
 
-function copyCode() {
-  navigator.clipboard.writeText(document.getElementById("codeSnippet").textContent);
-  event.target.textContent = "✓ Copied";
-  setTimeout(() => event.target.textContent = "Copy", 2000);
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied";
+  setTimeout(() => btn.textContent = orig, 2000);
 }
 </script>
 </body>
