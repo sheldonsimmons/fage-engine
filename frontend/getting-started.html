@@ -585,6 +585,11 @@ function getSnippets() {
     <span class="code-kw">private static final</span> String CP_KEY =
         <span class="code-str">'${SK}'</span>;
 
+    <span class="code-cmt">// Paste your OpenAI key here, or use a Custom Label:
+    // Label.OpenAI_API_Key (recommended for production)</span>
+    <span class="code-kw">private static final</span> String OPENAI_KEY =
+        <span class="code-str">'YOUR_OPENAI_KEY_HERE'</span>;
+
     <span class="code-kw">public static</span> String route(String prompt, String department) {
         HttpRequest req = <span class="code-kw">new</span> HttpRequest();
         req.setEndpoint(ENDPOINT);
@@ -592,7 +597,7 @@ function getSnippets() {
         req.setHeader(<span class="code-str">'Content-Type'</span>, <span class="code-str">'application/json'</span>);
         req.setHeader(<span class="code-str">'X-CostPilot-Key'</span>, CP_KEY);
         req.setHeader(<span class="code-str">'X-Department'</span>, department);
-        req.setHeader(<span class="code-str">'Authorization'</span>, <span class="code-str">'Bearer '</span> + YOUR_OPENAI_KEY);
+        req.setHeader(<span class="code-str">'Authorization'</span>, <span class="code-str">'Bearer '</span> + OPENAI_KEY);
 
         Map&lt;String,Object&gt; body = <span class="code-kw">new</span> Map&lt;String,Object&gt;{
             <span class="code-str">'model'</span> => <span class="code-str">'gpt-4o'</span>,
