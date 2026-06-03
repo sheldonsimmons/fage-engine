@@ -231,29 +231,33 @@
     ════════════════════════════════════════════════════════════ -->
     <div class="panel" id="panel-anthropic-path">
       <div class="card-eyebrow">Anthropic · Key Verified ✓</div>
-      <h2 class="card-title">One more step — <span>here's why</span></h2>
+      <h2 class="card-title" style="margin-bottom:12px">One more step — <span>here's why</span></h2>
 
-      <div class="why-notice">
-        <div class="why-notice-title">ℹ Why Anthropic requires an extra step</div>
-        <p>
-          OpenAI has a public <strong>Usage API</strong> — we can silently pull your last 30 days of real spend with just your key. <strong>Anthropic doesn't have one.</strong> Your usage data lives only inside the Anthropic Console and can't be fetched programmatically.
-          <br><br>
-          This isn't a CostPilot limitation — it's an Anthropic platform gap. We're being upfront about it rather than pretending we can do something we can't.
+      <div class="why-notice" style="padding:12px 14px;margin-bottom:20px">
+        <div class="why-notice-title" style="margin-bottom:5px">ℹ Why Anthropic can't auto-pull your usage</div>
+        <p style="font-size:12px">
+          Unlike OpenAI, <strong>Anthropic has no public usage API.</strong> Your spend data lives only inside the Anthropic Console and can't be fetched with just your key. This is an Anthropic platform limitation — not a CostPilot one. Choose one of the two options below to get your savings estimate.
         </p>
       </div>
 
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:12px">Choose how to get your savings estimate:</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">How would you like to provide your usage data?</div>
 
-      <div class="path-grid">
-        <div class="path-tile" id="path-manual" onclick="selectAnthropicPath('manual')">
-          <div class="path-icon">✏️</div>
-          <div class="path-label">Tell us your numbers</div>
-          <div class="path-sub">Takes 60 seconds. Answer 3 quick questions about your usage.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+        <div class="path-tile" id="path-manual" onclick="selectAnthropicPath('manual')" style="display:flex;align-items:center;gap:16px;text-align:left;padding:16px">
+          <div style="font-size:28px;flex-shrink:0">✏️</div>
+          <div>
+            <div class="path-label">Tell us your numbers <span style="font-size:10px;font-weight:600;color:var(--accent-green);margin-left:6px">Fastest</span></div>
+            <div class="path-sub">Answer 3 quick questions — takes 60 seconds. We'll project your savings from your stated monthly spend.</div>
+          </div>
+          <div style="flex-shrink:0;font-size:18px;color:var(--text-muted)">›</div>
         </div>
-        <div class="path-tile" id="path-csv" onclick="selectAnthropicPath('csv')">
-          <div class="path-icon">📄</div>
-          <div class="path-label">Upload usage CSV</div>
-          <div class="path-sub">Most accurate. Export from Anthropic Console and upload here.</div>
+        <div class="path-tile" id="path-csv" onclick="selectAnthropicPath('csv')" style="display:flex;align-items:center;gap:16px;text-align:left;padding:16px">
+          <div style="font-size:28px;flex-shrink:0">📄</div>
+          <div>
+            <div class="path-label">Upload my usage CSV <span style="font-size:10px;font-weight:600;color:var(--accent);margin-left:6px">Most Accurate</span></div>
+            <div class="path-sub">Export from Anthropic Console → Usage → Export CSV. We parse your real model-by-model spend.</div>
+          </div>
+          <div style="flex-shrink:0;font-size:18px;color:var(--text-muted)">›</div>
         </div>
       </div>
 
@@ -459,6 +463,7 @@ function goToPanel(id) {
     document.getElementById("sl" + i).className = "step-label"  + (i < step ? " done" : i === step ? " active" : "");
     if (i < 4) document.getElementById("line" + i).className = "step-line" + (i < step ? " done" : "");
   }
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 // ── Provider selection ─────────────────────────────────────────────────────
