@@ -344,48 +344,72 @@
       <button class="btn-secondary" onclick="goToStep(3)">← Back</button>
     </div>
 
-    <!-- ══ STEP 5: Go Live ═══════════════════════════════════════════════════ -->
+    <!-- ══ STEP 5: You're Done ══════════════════════════════════════════════ -->
     <div class="gs-panel" id="gs5">
-      <div class="gs-eyebrow">Step 5 of 5</div>
-      <h2 class="gs-title">We're watching for your <span>first call</span></h2>
+      <div class="gs-eyebrow">You're all set 🎉</div>
+      <h2 class="gs-title">Add the code. <span>Run your app.</span></h2>
+      <p class="gs-sub">That's it. No terminal commands, no extra setup. The moment your app makes its first API call through CostPilot, your dashboard lights up automatically.</p>
 
-      <div class="live-watch" id="watchingPanel">
-        <div class="pulse-ring">📡</div>
-        <div class="live-text">
-          <strong>Waiting for a call through your CostPilot endpoint...</strong><br>
-          Add the code from Step 4 to your project and make any API call. It will appear here within seconds.
+      <!-- What they did summary -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:28px">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-base);border:1px solid var(--border);border-radius:8px">
+          <span style="color:var(--accent-green);font-size:16px">✓</span>
+          <span style="font-size:13px;color:var(--text-primary)">Workspace created — <span style="font-family:var(--font-mono);color:var(--accent);font-size:12px" id="sum-ws"></span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-base);border:1px solid var(--border);border-radius:8px">
+          <span style="color:var(--accent-green);font-size:16px">✓</span>
+          <span style="font-size:13px;color:var(--text-primary)">Teams configured with budget caps</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-base);border:1px solid var(--border);border-radius:8px">
+          <span style="color:var(--accent-green);font-size:16px">✓</span>
+          <span style="font-size:13px;color:var(--text-primary)" id="sum-platform">Integration code copied</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:8px">
+          <span style="color:var(--accent);font-size:16px">→</span>
+          <span style="font-size:13px;color:var(--text-primary)">Add the two lines to your project and deploy</span>
         </div>
       </div>
 
-      <div id="successPanel" style="display:none">
-        <div class="success-icon">🎉</div>
-        <h2 class="gs-title" style="text-align:center">First call <span>received!</span></h2>
-        <div class="success-kpi">
-          <div class="success-kpi-box">
-            <div class="success-kpi-val" id="sc-tier">—</div>
-            <div class="success-kpi-lbl">Model Tier</div>
+      <!-- What happens next -->
+      <div style="background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:10px;padding:18px 20px;margin-bottom:24px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-green);margin-bottom:10px">What happens when your app runs</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:13px;color:var(--text-muted);display:flex;gap:10px">
+            <span style="color:var(--accent-green);font-weight:700;flex-shrink:0">1</span>
+            <span>Your app calls AI as normal — CostPilot intercepts it</span>
           </div>
-          <div class="success-kpi-box">
-            <div class="success-kpi-val" id="sc-cost">—</div>
-            <div class="success-kpi-lbl">Cost</div>
+          <div style="font-size:13px;color:var(--text-muted);display:flex;gap:10px">
+            <span style="color:var(--accent-green);font-weight:700;flex-shrink:0">2</span>
+            <span>CostPilot scores the call — routine or complex</span>
           </div>
-          <div class="success-kpi-box">
-            <div class="success-kpi-val" id="sc-saved">—</div>
-            <div class="success-kpi-lbl">Saved vs. Flagship</div>
+          <div style="font-size:13px;color:var(--text-muted);display:flex;gap:10px">
+            <span style="color:var(--accent-green);font-weight:700;flex-shrink:0">3</span>
+            <span>Routine calls route to Scout (cheapest capable model), complex stay on your model</span>
+          </div>
+          <div style="font-size:13px;color:var(--text-muted);display:flex;gap:10px">
+            <span style="color:var(--accent-green);font-weight:700;flex-shrink:0">4</span>
+            <span>Every call logs to your dashboard — cost, tier, savings, department</span>
           </div>
         </div>
-        <p style="font-size:13px;color:var(--text-muted);text-align:center;line-height:1.7;margin-bottom:24px">
-          CostPilot routed that call, logged it to your workspace, and calculated your savings. Your dashboard is live with your real data.
-        </p>
-        <a href="/" class="btn-primary" style="text-decoration:none">Open My Dashboard →</a>
       </div>
 
-      <div style="margin-top:20px;padding:14px 16px;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted)">
-        <strong style="color:var(--text-primary);display:block;margin-bottom:6px">Quick test command</strong>
-        <div id="testCmd" style="font-family:var(--font-mono);font-size:11px;color:var(--accent-green);line-height:1.8;overflow-x:auto;white-space:pre"></div>
+      <a href="/" class="btn-primary" style="text-decoration:none;margin-bottom:16px">Open My Dashboard →</a>
+
+      <!-- Developer tools — hidden by default -->
+      <div style="margin-top:8px">
+        <button onclick="toggleDevTools()" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:8px 0;display:flex;align-items:center;gap:6px;font-family:inherit">
+          <span id="devArrow">▸</span> Developer tools — test your connection manually
+        </button>
+        <div id="devToolsPanel" style="display:none;margin-top:10px;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:16px">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">
+            For developers who want to verify the connection directly. Paste this into your terminal — replace <code style="background:var(--bg-panel);padding:1px 6px;border-radius:4px">YOUR_API_KEY</code> with your actual provider key.
+          </div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--accent-green);line-height:1.8;overflow-x:auto;white-space:pre" id="testCmd"></div>
+          <button onclick="copyDevCmd()" style="margin-top:10px;background:var(--bg-panel);border:1px solid var(--border);border-radius:5px;color:var(--text-muted);font-size:11px;padding:5px 14px;cursor:pointer">Copy command</button>
+        </div>
       </div>
 
-      <button class="btn-secondary" style="margin-top:12px" onclick="goToStep(4)">← Back to integration code</button>
+      <button class="btn-secondary" onclick="goToStep(4)">← Back to integration code</button>
     </div>
 
   </div>
@@ -454,8 +478,19 @@ function goToStep(n) {
     lbl.className = "gs-step-lbl" + (i < n ? " done" : i === n ? " active" : "");
   }
   window.scrollTo({ top: 0, behavior: "smooth" });
-  if (n === 5) startPolling();
-  else stopPolling();
+
+  if (n === 5) {
+    // Populate summary
+    const sumWs = document.getElementById("sum-ws");
+    if (sumWs) sumWs.textContent = WS;
+    const sumPlatform = document.getElementById("sum-platform");
+    if (sumPlatform && _platform) {
+      const names = { salesforce:"Salesforce Apex class copied", servicenow:"ServiceNow Script Include copied",
+        hubspot:"HubSpot code copied", python:"Python snippet copied", nodejs:"Node.js snippet copied",
+        java:"Java class copied", ruby:"Ruby snippet copied", other:"REST details copied" };
+      sumPlatform.textContent = names[_platform] || "Integration code copied";
+    }
+  }
 }
 
 // ── Step 2: Departments ────────────────────────────────────────────────────
@@ -871,6 +906,21 @@ function copyBlock(btn) {
   navigator.clipboard.writeText(text);
   btn.textContent = "✓ Copied";
   setTimeout(() => btn.textContent = "Copy", 2000);
+}
+
+function toggleDevTools() {
+  const panel = document.getElementById("devToolsPanel");
+  const arrow = document.getElementById("devArrow");
+  const open  = panel.style.display === "none";
+  panel.style.display = open ? "block" : "none";
+  arrow.textContent   = open ? "▾" : "▸";
+}
+
+function copyDevCmd() {
+  const text = document.getElementById("testCmd").textContent;
+  navigator.clipboard.writeText(text);
+  event.target.textContent = "✓ Copied";
+  setTimeout(() => event.target.textContent = "Copy command", 2000);
 }
 
 window.addEventListener("beforeunload", stopPolling);
