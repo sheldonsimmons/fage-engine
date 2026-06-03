@@ -211,11 +211,11 @@ async def connect_openai(req: ConnectOpenAIRequest):
 # ── 2. Register Trial ─────────────────────────────────────────────────────────
 
 class RegisterTrialRequest(BaseModel):
-    email:      str
-    name:       str
-    company:    str = ""
-    api_key:    str
-    provider:   str = "openai"
+    email:    str
+    name:     str
+    company:  str = ""
+    api_key:  str = ""   # optional — only used for savings estimate, not stored for routing
+    provider: str = "openai"
 
 @router.post("/register")
 def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):

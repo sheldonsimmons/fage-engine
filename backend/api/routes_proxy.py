@@ -89,9 +89,6 @@ def _get_account(workspace_id: str, secret_key: str, db):
     return account
 
 
-def _decode_key(account: TrialAccount) -> str:
-    return b64decode(account.api_key_enc.encode()).decode()
-
 
 def _log_transaction(db, workspace_id: str, department: str, model: str,
                      tier: str, input_tokens: int, output_tokens: int,
@@ -118,28 +115,32 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
 async def proxy_openai(workspace_id: str, request: Request):
     secret_key = request.headers.get("X-CostPilot-Key", "")
     department = request.headers.get("X-Department", "default")
+    # Customer's own API key — stays in their code, forwarded as-is
+    auth_header = request.headers.get("Authorization", "")
+
+    if not auth_header:
+        raise HTTPException(status_code=401,
+            detail="Missing Authorization header. Your OpenAI API key should be in your code as normal — CostPilot just routes it.")
 
     db = SessionLocal()
     try:
         account = _get_account(workspace_id, secret_key, db)
-        api_key = _decode_key(account)
 
         body     = await request.json()
         messages = body.get("messages", [])
         tokens   = _estimate_tokens(messages)
         complex_ = _is_complex(messages, tokens)
 
-        # Route: complex → requested model, routine → Scout
         requested_model = body.get("model", "gpt-4o")
         routed_model    = requested_model if complex_ else SCOUT_OPENAI
         routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
 
-        # Forward to OpenAI using the customer's stored key — no key needed in their code
+        # Forward with the customer's own key — we never store or see it beyond this request
         forward_body = {**body, "model": routed_model}
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}",
+                headers={"Authorization": auth_header,
                          "Content-Type": "application/json"},
                 json=forward_body,
             )
@@ -166,11 +167,16 @@ async def proxy_openai(workspace_id: str, request: Request):
 async def proxy_anthropic(workspace_id: str, request: Request):
     secret_key = request.headers.get("X-CostPilot-Key", "")
     department = request.headers.get("X-Department", "default")
+    # Customer's own Anthropic key — stays in their code, forwarded as-is
+    anthropic_key = request.headers.get("x-api-key", "")
+
+    if not anthropic_key:
+        raise HTTPException(status_code=401,
+            detail="Missing x-api-key header. Your Anthropic API key should be in your code as normal — CostPilot just routes it.")
 
     db = SessionLocal()
     try:
         account = _get_account(workspace_id, secret_key, db)
-        api_key = _decode_key(account)
 
         body     = await request.json()
         messages = body.get("messages", [])
@@ -183,9 +189,9 @@ async def proxy_anthropic(workspace_id: str, request: Request):
 
         forward_body = {**body, "model": routed_model}
         forward_headers = {
-            "x-api-key":          api_key,
-            "anthropic-version":  request.headers.get("anthropic-version", "2023-06-01"),
-            "content-type":       "application/json",
+            "x-api-key":         anthropic_key,
+            "anthropic-version": request.headers.get("anthropic-version", "2023-06-01"),
+            "content-type":      "application/json",
         }
         if "anthropic-beta" in request.headers:
             forward_headers["anthropic-beta"] = request.headers["anthropic-beta"]
