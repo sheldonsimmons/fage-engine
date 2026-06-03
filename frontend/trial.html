@@ -413,6 +413,16 @@
         <button class="copy-btn" style="position:static" onclick="copyText(document.getElementById('workspaceId').textContent, this)">Copy</button>
       </div>
 
+      <div id="anthropicKeySection" style="display:none;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:8px">Add your Anthropic API key to activate routing</div>
+        <div style="display:flex;gap:10px">
+          <input type="password" id="goLiveKey" placeholder="sk-ant-..." style="flex:1;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text-primary);font-family:var(--font-mono);font-size:13px" />
+          <button onclick="saveGoLiveKey()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">Save Key</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Your key is encrypted and only used to route your API calls. Find it at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">console.anthropic.com → API Keys</a>.</div>
+        <div id="goLiveKeyMsg" style="font-size:12px;color:var(--accent-green);margin-top:6px;display:none">✓ Key saved — routing is active.</div>
+      </div>
+
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:8px">One-line integration</div>
       <div class="code-block">
         <button class="copy-btn" onclick="copyText(document.getElementById('codeSnippet').textContent, this)">Copy</button>
@@ -478,22 +488,18 @@ function selectProvider(p) {
   const keyHint  = document.getElementById("keyHint");
   const trustChip2 = document.getElementById("trustChip2");
 
-  keyField.style.display = "block";
-  document.getElementById("trustRow").style.display = "flex";
-  document.getElementById("step1Btn").style.display = "flex";
-
   if (p === "openai") {
+    keyField.style.display = "block";
+    document.getElementById("trustRow").style.display = "flex";
+    document.getElementById("step1Btn").style.display = "flex";
     keyLabel.textContent    = "OpenAI API Key";
     keyInput.placeholder    = "sk-proj-...";
     keyHint.innerHTML       = 'Find it at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">platform.openai.com → API Keys</a>. We pull usage data only — never make calls.';
     document.getElementById("step1Btn").innerHTML = "Pull My Usage →";
     trustChip2.textContent = "✓ Key never stored at this step";
   } else {
-    keyLabel.textContent    = "Anthropic API Key";
-    keyInput.placeholder    = "sk-ant-...";
-    keyHint.innerHTML       = 'Find it at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">console.anthropic.com → API Keys</a>. We make one tiny validation call (~$0.0001).';
-    document.getElementById("step1Btn").innerHTML = "Validate Key →";
-    trustChip2.textContent = "✓ Validation call costs < $0.0001";
+    // Anthropic: no key needed for the savings estimate — skip straight to usage input
+    goToPanel("panel-anthropic-path");
   }
 }
 
@@ -693,6 +699,11 @@ async function registerTrial() {
     localStorage.setItem("cp_trial_name",     name);
     localStorage.setItem("cp_days_remaining", String(data.days_remaining));
 
+    // Show API key field on Go Live screen for Anthropic (not needed for OpenAI — already stored)
+    if (_provider === "anthropic") {
+      document.getElementById("anthropicKeySection").style.display = "block";
+    }
+
     goToPanel("panel-step4");
   } catch (e) {
     showError("step3Error", e.message || "Registration failed. Please try again.");
@@ -715,6 +726,26 @@ function copyText(text, btn) {
   const orig = btn.textContent;
   btn.textContent = "✓ Copied";
   setTimeout(() => btn.textContent = orig, 2000);
+}
+
+async function saveGoLiveKey() {
+  const key = document.getElementById("goLiveKey").value.trim();
+  if (!key) return;
+  try {
+    await apiPost("/api/trial/register", {
+      email:    localStorage.getItem("cp_trial_email") || "",
+      name:     localStorage.getItem("cp_trial_name")  || "",
+      company:  "",
+      api_key:  key,
+      provider: _provider,
+    });
+    document.getElementById("goLiveKeyMsg").style.display = "block";
+    document.getElementById("goLiveKey").value = "";
+  } catch(e) {
+    document.getElementById("goLiveKeyMsg").textContent = e.message;
+    document.getElementById("goLiveKeyMsg").style.color = "var(--accent-red)";
+    document.getElementById("goLiveKeyMsg").style.display = "block";
+  }
 }
 </script>
 </body>
