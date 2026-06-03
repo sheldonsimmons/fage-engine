@@ -118,16 +118,30 @@ class ConnectOpenAIRequest(BaseModel):
 
 @router.post("/connect-openai")
 async def connect_openai(req: ConnectOpenAIRequest):
-    if not req.api_key.startswith("sk-"):
-        raise HTTPException(status_code=400, detail="Invalid OpenAI API key format.")
+    key = req.api_key.strip()
 
-    headers = {"Authorization": f"Bearer {req.api_key}"}
+    # Detect wrong-provider keys
+    if key.startswith("sk-ant-"):
+        raise HTTPException(status_code=400,
+            detail="That looks like an Anthropic key (sk-ant-...). Please paste your OpenAI key instead — find it at platform.openai.com/api-keys.")
+    if key.startswith("AIza") or key.startswith("ya29."):
+        raise HTTPException(status_code=400,
+            detail="That looks like a Google API key. Please paste your OpenAI key instead.")
+    if not key.startswith("sk-"):
+        raise HTTPException(status_code=400,
+            detail="OpenAI API keys start with 'sk-'. Please check you copied the full key from platform.openai.com/api-keys.")
 
-    # Validate key
+    headers = {"Authorization": f"Bearer {key}"}
+
+    # Validate key against OpenAI
     async with httpx.AsyncClient(timeout=10) as client:
         check = await client.get("https://api.openai.com/v1/models", headers=headers)
         if check.status_code == 401:
-            raise HTTPException(status_code=401, detail="Invalid API key — OpenAI rejected it.")
+            raise HTTPException(status_code=401,
+                detail="OpenAI rejected this key. Make sure you copied the full key — it should be ~50 characters starting with 'sk-'.")
+        if check.status_code == 429:
+            raise HTTPException(status_code=429,
+                detail="OpenAI rate limit hit. Please wait a moment and try again.")
         if check.status_code != 200:
             raise HTTPException(status_code=502, detail="Could not reach OpenAI to validate key.")
 
