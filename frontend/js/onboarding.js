@@ -34,7 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const budgetEl  = document.getElementById("totalBudget");
   const trialCompany = localStorage.getItem("cp_trial_company") || (TRIAL_NAME ? TRIAL_NAME + "'s Company" : "My Company");
   if (companyEl) companyEl.value = trialCompany;
-  if (budgetEl && !budgetEl.value) budgetEl.value = "1000";
+  if (budgetEl && !budgetEl.value) budgetEl.value = "550"; // matches trial default dept caps
   if (TRIAL_PRV) selectProvider(TRIAL_PRV);
 
   // Skip Screen 1 — go straight to Departments
@@ -62,14 +62,23 @@ function toggleVoiceGuard() {
 }
 
 const defaultDepartments = [
-  { name: "Support",    cap: 0 },
-  { name: "Sales",      cap: 0 },
-  { name: "Marketing",  cap: 0 },
-  { name: "Operations", cap: 0 },
-  { name: "Trips Team", cap: 0 },
+  { name: "Sales",       cap: 0 },
+  { name: "Support",     cap: 0 },
+  { name: "Engineering", cap: 0 },
+  { name: "Marketing",   cap: 0 },
+  { name: "Operations",  cap: 0 },
 ];
 
-let departments = defaultDepartments.map(d => ({ ...d }));
+// Trial users get curated defaults with sensible caps already filled in
+const trialDefaultDepartments = [
+  { name: "Sales",       cap: 100 },
+  { name: "Support",     cap: 100 },
+  { name: "Engineering", cap: 200 },
+  { name: "Marketing",   cap: 50  },
+  { name: "Operations",  cap: 100 },
+];
+
+let departments = (IS_TRIAL ? trialDefaultDepartments : defaultDepartments).map(d => ({ ...d }));
 
 // ── Provider selection ────────────────────────────────────────────────────────
 
