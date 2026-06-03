@@ -89,16 +89,27 @@ def _simulate_savings(usage_rows: list) -> dict:
         total_costpilot_cost += cp_cost
 
         if model not in model_breakdown:
-            model_breakdown[model] = {"requests": 0, "input_tokens": 0, "output_tokens": 0,
-                                       "actual_cost": 0.0, "tier": meta["tier"]}
-        model_breakdown[model]["requests"]     += n_req
-        model_breakdown[model]["input_tokens"] += n_in
+            model_breakdown[model] = {
+                "requests": 0, "input_tokens": 0, "output_tokens": 0,
+                "actual_cost": 0.0, "costpilot_cost": 0.0,
+                "tier": meta["tier"],
+                "input_rate": meta["input"], "output_rate": meta["output"],
+            }
+        model_breakdown[model]["requests"]      += n_req
+        model_breakdown[model]["input_tokens"]  += n_in
         model_breakdown[model]["output_tokens"] += n_out
-        model_breakdown[model]["actual_cost"]  += actual_cost
+        model_breakdown[model]["actual_cost"]   += actual_cost
+        model_breakdown[model]["costpilot_cost"] += cp_cost
 
         if date not in daily_spend:
             daily_spend[date] = 0.0
         daily_spend[date] += actual_cost
+
+    # Add savings per model
+    for m in model_breakdown.values():
+        m["savings"]    = round(max(0.0, m["actual_cost"] - m["costpilot_cost"]), 4)
+        m["actual_cost"]    = round(m["actual_cost"], 4)
+        m["costpilot_cost"] = round(m["costpilot_cost"], 4)
 
     saved       = max(0.0, total_actual_cost - total_costpilot_cost)
     pct_saved   = round((saved / total_actual_cost * 100), 1) if total_actual_cost > 0 else 0
@@ -110,6 +121,10 @@ def _simulate_savings(usage_rows: list) -> dict:
         "saved_usd":           round(saved, 4),
         "pct_saved":           pct_saved,
         "annual_savings_usd":  annual_proj,
+        "routing_assumption":  {"routine_pct": 70, "complex_pct": 30,
+                                "scout_model": "cheapest available",
+                                "scout_input_per_1m": round(SCOUT_INPUT_COST * 1_000_000, 2),
+                                "scout_output_per_1m": round(SCOUT_OUTPUT_COST * 1_000_000, 2)},
         "model_breakdown":     model_breakdown,
         "daily_spend":         daily_spend,
     }
@@ -294,12 +309,21 @@ def _anthropic_savings_from_rows(rows: list) -> dict:
         total_cp     += cp
 
         if model not in model_breakdown:
-            model_breakdown[model] = {"requests": 0, "input_tokens": 0,
-                                       "output_tokens": 0, "actual_cost": 0.0,
-                                       "tier": meta["tier"]}
-        model_breakdown[model]["input_tokens"]  += n_in
-        model_breakdown[model]["output_tokens"] += n_out
-        model_breakdown[model]["actual_cost"]   += actual
+            model_breakdown[model] = {
+                "requests": 0, "input_tokens": 0, "output_tokens": 0,
+                "actual_cost": 0.0, "costpilot_cost": 0.0,
+                "tier": meta["tier"],
+                "input_rate": meta["input"], "output_rate": meta["output"],
+            }
+        model_breakdown[model]["input_tokens"]   += n_in
+        model_breakdown[model]["output_tokens"]  += n_out
+        model_breakdown[model]["actual_cost"]    += actual
+        model_breakdown[model]["costpilot_cost"] += cp
+
+    for m in model_breakdown.values():
+        m["savings"]        = round(max(0.0, m["actual_cost"] - m["costpilot_cost"]), 4)
+        m["actual_cost"]    = round(m["actual_cost"], 4)
+        m["costpilot_cost"] = round(m["costpilot_cost"], 4)
 
     saved     = max(0.0, total_actual - total_cp)
     pct_saved = round(saved / total_actual * 100, 1) if total_actual > 0 else 0
@@ -310,6 +334,10 @@ def _anthropic_savings_from_rows(rows: list) -> dict:
         "saved_usd":          round(saved, 4),
         "pct_saved":          pct_saved,
         "annual_savings_usd": round(saved * 12, 2),
+        "routing_assumption": {"routine_pct": 70, "complex_pct": 30,
+                               "scout_model": "claude-3-haiku (cheapest)",
+                               "scout_input_per_1m": 0.25,
+                               "scout_output_per_1m": 1.25},
         "model_breakdown":    model_breakdown,
     }
 

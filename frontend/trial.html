@@ -334,19 +334,22 @@
     ════════════════════════════════════════════════════════════ -->
     <div class="panel" id="panel-step2">
       <div class="card-eyebrow">Your 30-Day Results</div>
+
+      <!-- Hero number -->
       <div class="results-hero">
         <div class="results-saved" id="resSaved">—</div>
         <div class="results-label">You would have saved in the last 30 days</div>
         <div class="results-source" id="resSource"></div>
       </div>
 
+      <!-- KPI strip -->
       <div class="kpi-grid">
         <div class="kpi-box">
-          <div class="kpi-box-val red" id="resActual">—</div>
+          <div class="kpi-box-val red"    id="resActual">—</div>
           <div class="kpi-box-lbl">Actual Spend</div>
         </div>
         <div class="kpi-box">
-          <div class="kpi-box-val green" id="resWith">—</div>
+          <div class="kpi-box-val green"  id="resWith">—</div>
           <div class="kpi-box-lbl">With CostPilot</div>
         </div>
         <div class="kpi-box">
@@ -355,12 +358,50 @@
         </div>
       </div>
 
-      <div style="margin-bottom:16px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:10px">Model Breakdown</div>
+      <!-- Biggest opportunity callout -->
+      <div id="topModelCallout" style="display:none;background:rgba(63,185,80,.07);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--text-primary)"></div>
+
+      <!-- Per-model breakdown table -->
+      <div style="margin-bottom:4px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:10px">Where the savings come from</div>
         <table class="model-table">
-          <thead><tr><th>Model</th><th>Tier</th><th>Actual Cost</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Tier</th>
+              <th>You Paid</th>
+              <th>With CostPilot</th>
+              <th style="color:var(--accent-green)">Saved</th>
+            </tr>
+          </thead>
           <tbody id="modelBreakdownTable"></tbody>
         </table>
+      </div>
+
+      <!-- Methodology footnote — collapsible -->
+      <div style="margin-bottom:20px">
+        <button onclick="toggleMethodology()" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:8px 0;display:flex;align-items:center;gap:6px;font-family:inherit">
+          <span id="methodologyArrow">▸</span> How was this calculated?
+        </button>
+        <div id="methodologyPanel" style="display:none;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:16px 18px;font-size:12px;color:var(--text-muted);line-height:1.75">
+          <div style="font-weight:700;color:var(--text-primary);margin-bottom:10px">The routing model</div>
+          <p style="margin:0 0 10px">CostPilot uses a <strong style="color:var(--text-primary)">70/30 routing split</strong> as its baseline assumption:</p>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;padding-left:4px">
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="color:var(--accent-green);font-weight:700;flex-shrink:0">70%</span>
+              <span>Routine calls — FAQs, lookups, summaries, simple tasks — route to <strong style="color:var(--text-primary)">Scout</strong> (the cheapest capable model at $0.25/$1.25 per 1M tokens)</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="color:var(--accent-yellow);font-weight:700;flex-shrink:0">30%</span>
+              <span>Complex calls — reasoning, drafting, analysis — stay on your <strong style="color:var(--text-primary)">current model</strong> at full rate</span>
+            </div>
+          </div>
+          <div style="font-weight:700;color:var(--text-primary);margin-bottom:6px">Pricing</div>
+          <p style="margin:0 0 10px">Model rates are taken from published Anthropic and OpenAI pricing pages. Your CSV token counts (or manual inputs) are multiplied against those rates to calculate your actual spend.</p>
+          <div style="background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:6px;padding:10px 14px;color:var(--text-primary)">
+            💡 <strong>This is a conservative estimate.</strong> CostPilot learns your actual call patterns from day one — if more than 30% of your calls are routine, your real savings will be higher. The dashboard shows live actuals once you're connected.
+          </div>
+        </div>
       </div>
 
       <button class="btn-primary" onclick="goToPanel('panel-step3')">Start My Free 30-Day Trial →</button>
@@ -635,7 +676,8 @@ function renderSavings(data, source) {
     document.getElementById("resAnnual").textContent = "$0.00";
     document.getElementById("resSource").textContent = "No usage found — savings will appear from your first call.";
     document.getElementById("modelBreakdownTable").innerHTML =
-      '<tr><td colspan="3" style="color:var(--text-muted);padding:12px 10px">No usage data found for this period.</td></tr>';
+      '<tr><td colspan="5" style="color:var(--text-muted);padding:12px 10px">No usage data found for this period.</td></tr>';
+    document.getElementById("topModelCallout").style.display = "none";
     return;
   }
 
@@ -652,18 +694,51 @@ function renderSavings(data, source) {
   };
   document.getElementById("resSource").textContent = sourceLabels[source] || "";
 
-  const tbody  = document.getElementById("modelBreakdownTable");
+  // Build model breakdown table
   const models = Object.entries(s.model_breakdown || {})
-    .sort((a, b) => b[1].actual_cost - a[1].actual_cost);
+    .sort((a, b) => b[1].savings - a[1].savings);
 
-  tbody.innerHTML = models.length ? models.map(([model, m]) => {
-    const tier = (m.tier || "Advisor").toLowerCase();
+  const tbody = document.getElementById("modelBreakdownTable");
+  tbody.innerHTML = models.length ? models.map(([model, m], i) => {
+    const tier    = (m.tier || "Advisor").toLowerCase();
+    const savings = m.savings || 0;
+    const savBar  = s.saved_usd > 0 ? Math.round(savings / s.saved_usd * 100) : 0;
     return `<tr>
       <td style="font-family:var(--font-mono);font-size:11px">${model}</td>
       <td><span class="tier-pill tier-${tier}">${m.tier}</span></td>
-      <td>$${(m.actual_cost || 0).toFixed(2)}</td>
+      <td style="color:var(--accent-red)">$${(m.actual_cost || 0).toFixed(2)}</td>
+      <td style="color:var(--accent-green)">$${(m.costpilot_cost || 0).toFixed(2)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:48px;height:4px;background:var(--border);border-radius:2px;flex-shrink:0">
+            <div style="width:${savBar}%;height:100%;background:var(--accent-green);border-radius:2px"></div>
+          </div>
+          <span style="color:var(--accent-green);font-weight:700;font-size:12px">$${savings.toFixed(2)}</span>
+        </div>
+      </td>
     </tr>`;
-  }).join("") : '<tr><td colspan="3" style="color:var(--text-muted);padding:8px 10px">No model breakdown available.</td></tr>';
+  }).join("") : `<tr><td colspan="5" style="color:var(--text-muted);padding:8px 10px">No model breakdown available.</td></tr>`;
+
+  // Top model callout — biggest savings driver
+  if (models.length > 0) {
+    const [topModel, topData] = models[0];
+    const pct = s.saved_usd > 0 ? Math.round(topData.savings / s.saved_usd * 100) : 0;
+    if (topData.savings > 0 && pct >= 30) {
+      const callout = document.getElementById("topModelCallout");
+      callout.style.display = "block";
+      callout.innerHTML = `💡 <strong>${topModel}</strong> is your biggest opportunity — it accounts for <strong style="color:var(--accent-green)">${pct}% of your total savings ($${topData.savings.toFixed(2)})</strong>. It's a <span class="tier-pill tier-${topData.tier.toLowerCase()}" style="vertical-align:middle">${topData.tier}</span> model. CostPilot routes its routine calls to Scout, keeping complex ones on ${topModel}.`;
+    } else {
+      document.getElementById("topModelCallout").style.display = "none";
+    }
+  }
+}
+
+function toggleMethodology() {
+  const panel = document.getElementById("methodologyPanel");
+  const arrow = document.getElementById("methodologyArrow");
+  const open  = panel.style.display === "none";
+  panel.style.display = open ? "block" : "none";
+  arrow.textContent   = open ? "▾" : "▸";
 }
 
 // ── Step 3: Register ───────────────────────────────────────────────────────
