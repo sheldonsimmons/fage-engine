@@ -422,6 +422,13 @@
 <script src="js/api.js"></script>
 <script>
 
+// Trial users use onboarding.html — redirect immediately
+const _trialWs = localStorage.getItem("cp_workspace_id");
+const _trialSk = localStorage.getItem("cp_secret_key");
+if (_trialWs && _trialSk) {
+  window.location.replace("/onboarding.html");
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 const WS       = localStorage.getItem("cp_workspace_id") || "";
 const SK       = localStorage.getItem("cp_secret_key")  || "";
