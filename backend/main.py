@@ -91,6 +91,12 @@ def _run_migrations():
             conn.commit()
         except Exception:
             pass
+        # trial_accounts table is created via create_all — ensure it exists
+        try:
+            from database.models import TrialAccount
+            TrialAccount.__table__.create(bind=engine, checkfirst=True)
+        except Exception:
+            pass
 
 _run_migrations()
 
@@ -357,6 +363,10 @@ app.include_router(routes_enrich.router, prefix="/api/enrich", tags=["Enrichment
 
 from api import routes_known_models
 app.include_router(routes_known_models.router, prefix="/api/models/known", tags=["Known Models"])
+
+# Free Trial — OpenAI usage pull, trial registration, trial status
+from api import routes_trial
+app.include_router(routes_trial.router, prefix="/api/trial", tags=["Trial"])
 
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])

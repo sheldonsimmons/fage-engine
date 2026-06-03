@@ -141,6 +141,19 @@
 </head>
 <body>
 
+<!-- ── Trial Banner (shown only when a trial workspace is active) ─────────────── -->
+<div id="trialBanner" style="display:none;align-items:center;justify-content:space-between;
+  padding:8px 24px;font-size:12px;flex-wrap:wrap;gap:8px;
+  background:#0d1f12;border-bottom:1px solid rgba(63,185,80,.25);">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="color:var(--accent-green);font-weight:700;letter-spacing:.04em">◈ FREE TRIAL</span>
+    <span id="trialBannerMsg" style="color:var(--text-muted)">Loading trial status…</span>
+  </div>
+  <a href="/trial.html" id="trialUpgradeLink" style="font-size:11px;font-weight:700;
+    color:#0d1117;background:var(--accent-green);border-radius:5px;padding:4px 12px;
+    text-decoration:none;white-space:nowrap">Upgrade Plan →</a>
+</div>
+
 <!-- ── Header ─────────────────────────────────────────────────────────────────── -->
 <div class="exec-header">
   <div class="exec-header-left">
@@ -531,5 +544,38 @@ loadExec();
 setInterval(loadExec, 30000);
 </script>
 <script src="/js/mobile-guard.js"></script>
+<script>
+(function() {
+  const wsId    = localStorage.getItem("cp_workspace_id");
+  const trialEnd = localStorage.getItem("cp_trial_end");
+  const name    = localStorage.getItem("cp_trial_name");
+  if (!wsId || !trialEnd) return;
+
+  const now  = new Date();
+  const end  = new Date(trialEnd);
+  const days = Math.max(0, Math.ceil((end - now) / 86400000));
+  const banner = document.getElementById("trialBanner");
+  const msg    = document.getElementById("trialBannerMsg");
+
+  if (days === 0) {
+    banner.style.background    = "#1a0505";
+    banner.style.borderColor   = "rgba(248,81,73,.25)";
+    document.querySelector("#trialBanner span").style.color = "var(--accent-red)";
+    document.querySelector("#trialBanner span").textContent = "◈ TRIAL EXPIRED";
+    msg.textContent = "Your free trial has ended — upgrade to keep saving.";
+    document.getElementById("trialUpgradeLink").textContent = "Upgrade Now →";
+  } else if (days <= 3) {
+    banner.style.background    = "#1a1005";
+    banner.style.borderColor   = "rgba(210,153,34,.25)";
+    document.querySelector("#trialBanner span").style.color = "var(--accent-yellow)";
+    msg.textContent = `${days} day${days === 1 ? "" : "s"} left in your free trial${name ? ", " + name.split(" ")[0] : ""}.`;
+    document.getElementById("trialUpgradeLink").style.background = "var(--accent-yellow)";
+  } else {
+    msg.textContent = `${days} days left in your free trial${name ? ", " + name.split(" ")[0] : ""}. Trial ends ${end.toLocaleDateString("en-US",{month:"short",day:"numeric"})}.`;
+  }
+
+  banner.style.display = "flex";
+})();
+</script>
 </body>
 </html>

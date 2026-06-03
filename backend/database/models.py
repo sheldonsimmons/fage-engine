@@ -286,3 +286,24 @@ class RoutingConfig(Base):
     def tier_names(self, value: dict):
         import json
         self.tier_names_json = json.dumps({str(k): str(v) for k, v in value.items()})
+
+
+class TrialAccount(Base):
+    """
+    A CostPilot free-trial customer.
+    Created when a prospect connects their API key on savings.html.
+    """
+    __tablename__ = "trial_accounts"
+
+    id           = Column(Integer,  primary_key=True, index=True)
+    email        = Column(String,   nullable=False, unique=True)
+    name         = Column(String,   nullable=False)
+    company      = Column(String,   nullable=True)
+    api_key_enc  = Column(Text,     nullable=False)          # base64-encoded key (swap Fernet in prod)
+    provider     = Column(String,   default="openai")        # openai | anthropic | azure
+    workspace_id = Column(String,   nullable=False, unique=True)  # 16-char token used in proxy URL
+    trial_start  = Column(DateTime, default=datetime.utcnow)
+    trial_end    = Column(DateTime, nullable=False)
+    plan         = Column(String,   default="trial")         # trial | starter | growth | business | enterprise
+    is_active    = Column(Boolean,  default=True)
+    created_at   = Column(DateTime, default=datetime.utcnow)

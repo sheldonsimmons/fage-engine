@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Start Free Trial</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body { min-height:100vh; display:flex; flex-direction:column; background:var(--bg-base); }
+
+    /* ── Page shell ──────────────────────────────────────────────────────────── */
+    .trial-page { flex:1; display:flex; flex-direction:column; align-items:center; padding:48px 24px 80px; }
+
+    /* ── Progress stepper ────────────────────────────────────────────────────── */
+    .stepper {
+      display:flex; align-items:center; gap:0; margin-bottom:40px;
+      width:100%; max-width:560px;
+    }
+    .step-item { display:flex; flex-direction:column; align-items:center; flex:1; }
+    .step-circle {
+      width:32px; height:32px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; font-size:12px; font-weight:700;
+      background:var(--bg-panel); border:1px solid var(--border); color:var(--text-muted);
+      transition:all .3s;
+    }
+    .step-circle.active   { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .step-circle.done     { background:var(--accent-green); border-color:var(--accent-green); color:#fff; }
+    .step-label { font-size:10px; font-weight:600; color:var(--text-muted); margin-top:5px; letter-spacing:.06em; text-transform:uppercase; }
+    .step-label.active { color:var(--accent); }
+    .step-label.done   { color:var(--accent-green); }
+    .step-line { flex:1; height:1px; background:var(--border); margin: 0 -1px; margin-bottom:18px; transition:background .3s; }
+    .step-line.done { background:var(--accent-green); }
+
+    /* ── Card ────────────────────────────────────────────────────────────────── */
+    .trial-card {
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:14px;
+      padding:36px 40px; max-width:580px; width:100%;
+    }
+    .card-eyebrow {
+      font-size:10px; text-transform:uppercase; letter-spacing:.1em;
+      font-weight:700; color:var(--accent-green); margin-bottom:10px;
+    }
+    .card-title { font-size:26px; font-weight:800; color:var(--text-primary); margin-bottom:8px; line-height:1.2; }
+    .card-title span { color:var(--accent-green); }
+    .card-sub { font-size:13px; color:var(--text-muted); line-height:1.65; margin-bottom:28px; }
+
+    /* ── Form ────────────────────────────────────────────────────────────────── */
+    .field { margin-bottom:20px; }
+    .field label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:7px; }
+    .field input {
+      width:100%; background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; padding:11px 14px; color:var(--text-primary);
+      font:inherit; font-size:13px; box-sizing:border-box; transition:border-color .15s;
+    }
+    .field input:focus { outline:none; border-color:var(--accent); }
+    .field input::placeholder { color:var(--text-muted); }
+    .field-hint { font-size:11px; color:var(--text-muted); margin-top:5px; line-height:1.5; }
+
+    /* ── Key input with toggle ───────────────────────────────────────────────── */
+    .key-wrap { position:relative; }
+    .key-wrap input { padding-right:44px; font-family:var(--font-mono); }
+    .key-toggle {
+      position:absolute; right:12px; top:50%; transform:translateY(-50%);
+      background:none; border:none; cursor:pointer; color:var(--text-muted);
+      font-size:14px; padding:0;
+    }
+    .key-toggle:hover { color:var(--text-primary); }
+
+    /* ── Trust badges ────────────────────────────────────────────────────────── */
+    .trust-row { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+    .trust-chip {
+      display:flex; align-items:center; gap:6px;
+      font-size:11px; color:var(--accent-green);
+      background:rgba(63,185,80,.08); border:1px solid rgba(63,185,80,.2);
+      border-radius:20px; padding:4px 12px;
+    }
+
+    /* ── Primary button ──────────────────────────────────────────────────────── */
+    .btn-primary {
+      width:100%; padding:14px; border-radius:8px;
+      background:var(--accent-green); color:#0d1117;
+      font:inherit; font-size:15px; font-weight:800; letter-spacing:.02em;
+      border:none; cursor:pointer; transition:opacity .15s;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .btn-primary:hover:not(:disabled) { opacity:.88; }
+    .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-secondary {
+      width:100%; padding:13px; border-radius:8px; margin-top:10px;
+      background:transparent; color:var(--text-muted); border:1px solid var(--border);
+      font:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s;
+    }
+    .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* ── Results panel (step 2) ──────────────────────────────────────────────── */
+    .results-hero {
+      text-align:center; padding:24px 0 20px;
+      border-bottom:1px solid var(--border); margin-bottom:24px;
+    }
+    .results-saved { font-size:52px; font-weight:900; color:var(--accent-green); line-height:1; margin-bottom:6px; }
+    .results-label { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.1em; font-weight:700; }
+
+    .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; }
+    .kpi-box {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:8px;
+      padding:14px 12px; text-align:center;
+    }
+    .kpi-box-val { font-size:20px; font-weight:800; color:var(--text-primary); }
+    .kpi-box-val.green  { color:var(--accent-green); }
+    .kpi-box-val.yellow { color:var(--accent-yellow); }
+    .kpi-box-val.red    { color:var(--accent-red); }
+    .kpi-box-lbl { font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-top:3px; font-weight:700; }
+
+    .model-table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px; }
+    .model-table th { text-align:left; padding:6px 10px; color:var(--text-muted); font-size:10px; text-transform:uppercase; letter-spacing:.07em; border-bottom:1px solid var(--border); }
+    .model-table td { padding:8px 10px; border-bottom:1px solid rgba(48,54,61,.4); }
+    .model-table tr:last-child td { border-bottom:none; }
+    .tier-pill {
+      font-size:9px; font-weight:700; padding:2px 8px; border-radius:8px;
+      display:inline-block; text-transform:uppercase; letter-spacing:.06em;
+    }
+    .tier-scout     { background:rgba(63,185,80,.15);  color:var(--accent-green); }
+    .tier-analyst   { background:rgba(88,166,255,.15); color:var(--accent); }
+    .tier-advisor   { background:rgba(210,153,34,.15); color:var(--accent-yellow); }
+    .tier-strategist{ background:rgba(248,81,73,.15);  color:var(--accent-red); }
+
+    /* ── Step 3: confirmation ────────────────────────────────────────────────── */
+    .confirm-icon { font-size:48px; text-align:center; margin-bottom:16px; }
+    .code-block {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:8px;
+      padding:16px 18px; font-family:var(--font-mono); font-size:12px;
+      color:var(--accent-green); line-height:1.8; margin-bottom:16px; position:relative;
+    }
+    .copy-btn {
+      position:absolute; top:10px; right:10px;
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:5px;
+      color:var(--text-muted); font-size:11px; padding:3px 10px; cursor:pointer;
+    }
+    .copy-btn:hover { color:var(--accent); border-color:var(--accent); }
+    .workspace-badge {
+      display:flex; align-items:center; justify-content:space-between;
+      background:rgba(88,166,255,.07); border:1px solid rgba(88,166,255,.2);
+      border-radius:8px; padding:12px 16px; margin-bottom:20px;
+    }
+    .workspace-badge .label { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); font-weight:700; }
+    .workspace-badge .value { font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--accent); }
+    .trial-countdown {
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      font-size:13px; color:var(--accent-green); margin-bottom:24px;
+      background:rgba(63,185,80,.07); border:1px solid rgba(63,185,80,.2);
+      border-radius:8px; padding:10px;
+    }
+
+    /* ── Error ───────────────────────────────────────────────────────────────── */
+    .error-box {
+      background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.3);
+      border-radius:8px; padding:12px 16px; font-size:13px; color:var(--accent-red);
+      margin-bottom:16px; display:none;
+    }
+
+    /* ── Loading spinner ─────────────────────────────────────────────────────── */
+    .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── Steps (hide/show) ───────────────────────────────────────────────────── */
+    .step-panel { display:none; }
+    .step-panel.active { display:block; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <span class="header-title">CostPilot</span>
+    <span class="header-sub">AI Cost Control · Free Trial</span>
+  </div>
+  <div class="header-nav">
+    <a href="/" class="header-nav-link">Dashboard</a>
+    <a href="/savings.html" class="header-nav-link">💰 Calculate Savings</a>
+    <a href="/reports.html" class="header-nav-link">📊 Reports</a>
+  </div>
+</header>
+
+<main class="trial-page">
+
+  <!-- Stepper -->
+  <div class="stepper">
+    <div class="step-item">
+      <div class="step-circle active" id="sc1">1</div>
+      <div class="step-label active" id="sl1">Connect</div>
+    </div>
+    <div class="step-line" id="line1"></div>
+    <div class="step-item">
+      <div class="step-circle" id="sc2">2</div>
+      <div class="step-label" id="sl2">Your Savings</div>
+    </div>
+    <div class="step-line" id="line2"></div>
+    <div class="step-item">
+      <div class="step-circle" id="sc3">3</div>
+      <div class="step-label" id="sl3">Go Live</div>
+    </div>
+  </div>
+
+  <div class="trial-card">
+
+    <!-- ── STEP 1: Connect OpenAI ──────────────────────────────────────────── -->
+    <div class="step-panel active" id="step1">
+      <div class="card-eyebrow">Free 30-Day Trial · No Credit Card</div>
+      <h1 class="card-title">See what CostPilot saves <span>your</span> team</h1>
+      <p class="card-sub">Paste your OpenAI API key. We'll pull your last 30 days of real usage and show you exactly how much CostPilot would have saved — before you change a single line of code.</p>
+
+      <div class="trust-row">
+        <span class="trust-chip">✓ Read-only usage query</span>
+        <span class="trust-chip">✓ Key never stored at this step</span>
+        <span class="trust-chip">✓ Takes 30 seconds</span>
+      </div>
+
+      <div class="error-box" id="step1Error"></div>
+
+      <div class="field">
+        <label>OpenAI API Key</label>
+        <div class="key-wrap">
+          <input type="password" id="apiKey" placeholder="sk-proj-..." autocomplete="off" />
+          <button class="key-toggle" onclick="toggleKeyVis()" title="Show/hide key">👁</button>
+        </div>
+        <div class="field-hint">Found in your <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">OpenAI dashboard → API Keys</a>. We only read usage data — never make calls or spend credits.</div>
+      </div>
+
+      <button class="btn-primary" id="step1Btn" onclick="connectOpenAI()">
+        Analyze My Usage →
+      </button>
+    </div>
+
+    <!-- ── STEP 2: Show Savings ────────────────────────────────────────────── -->
+    <div class="step-panel" id="step2">
+      <div class="card-eyebrow">Your 30-Day Results</div>
+      <div class="results-hero">
+        <div class="results-saved" id="resSaved">—</div>
+        <div class="results-label">You would have saved in the last 30 days</div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-box">
+          <div class="kpi-box-val red" id="resActual">—</div>
+          <div class="kpi-box-lbl">Actual Spend</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-box-val green" id="resWith">—</div>
+          <div class="kpi-box-lbl">With CostPilot</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-box-val yellow" id="resAnnual">—</div>
+          <div class="kpi-box-lbl">Annual Projection</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:10px">Model Breakdown</div>
+        <table class="model-table">
+          <thead><tr><th>Model</th><th>Tier</th><th>Requests</th><th>Actual Cost</th></tr></thead>
+          <tbody id="modelBreakdownTable"></tbody>
+        </table>
+      </div>
+
+      <button class="btn-primary" onclick="goToStep3()">
+        Start My Free 30-Day Trial →
+      </button>
+      <button class="btn-secondary" onclick="goToStep1()">← Use a different key</button>
+    </div>
+
+    <!-- ── STEP 3: Register + Go Live ─────────────────────────────────────── -->
+    <div class="step-panel" id="step3">
+      <div class="card-eyebrow">One Last Step</div>
+      <h2 class="card-title">Create your <span>free</span> account</h2>
+      <p class="card-sub">Your trial starts immediately. You'll get a private proxy endpoint — swap it into your code and CostPilot starts routing and saving from your very first call.</p>
+
+      <div class="error-box" id="step3Error"></div>
+
+      <div class="field">
+        <label>Full Name</label>
+        <input type="text" id="regName" placeholder="Ada Lovelace" />
+      </div>
+      <div class="field">
+        <label>Work Email</label>
+        <input type="email" id="regEmail" placeholder="ada@company.com" />
+      </div>
+      <div class="field">
+        <label>Company <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+        <input type="text" id="regCompany" placeholder="Acme Corp" />
+      </div>
+
+      <button class="btn-primary" id="step3Btn" onclick="registerTrial()">
+        Start Free Trial — 30 Days Free →
+      </button>
+    </div>
+
+    <!-- ── STEP 4: Confirmation + Go Live ─────────────────────────────────── -->
+    <div class="step-panel" id="step4">
+      <div class="confirm-icon">🎉</div>
+      <div class="card-eyebrow" style="text-align:center">Trial Active</div>
+      <h2 class="card-title" style="text-align:center;margin-bottom:6px">You're in. <span>Start saving now.</span></h2>
+
+      <div class="trial-countdown">
+        ⏱ <strong>30 days free</strong> — trial ends <span id="trialEndDate">—</span>
+      </div>
+
+      <div class="workspace-badge">
+        <div>
+          <div class="label">Your Workspace ID</div>
+          <div class="value" id="workspaceId">—</div>
+        </div>
+        <button class="copy-btn" onclick="copyWorkspace()">Copy</button>
+      </div>
+
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:8px">One-line integration</div>
+      <div class="code-block" id="codeBlock">
+        <button class="copy-btn" onclick="copyCode()">Copy</button>
+        <span id="codeSnippet"></span>
+      </div>
+
+      <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:24px">
+        That's it. Every API call now routes through CostPilot's intelligence layer — complex calls stay on your best model, routine calls drop to Scout. Savings show up in your dashboard within minutes.
+      </p>
+
+      <a href="/" class="btn-primary" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px">
+        Open My Dashboard →
+      </a>
+    </div>
+
+  </div>
+</main>
+
+<footer class="footer">
+  CostPilot · Free 30-Day Trial &nbsp;|&nbsp; <a href="/savings.html">← Calculate Savings</a>
+</footer>
+
+<script src="js/api.js"></script>
+<script>
+let _apiKey    = "";
+let _savings   = null;
+let _workspace = "";
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function fmt(n) {
+  if (n == null) return "—";
+  if (n >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
+  return "$" + n.toFixed(2);
+}
+
+function toggleKeyVis() {
+  const inp = document.getElementById("apiKey");
+  inp.type = inp.type === "password" ? "text" : "password";
+}
+
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function hideError(id) {
+  document.getElementById(id).style.display = "none";
+}
+
+function setStep(n) {
+  document.querySelectorAll(".step-panel").forEach(p => p.classList.remove("active"));
+  document.getElementById("step" + n).classList.add("active");
+
+  // Update stepper UI
+  for (let i = 1; i <= 3; i++) {
+    const circle = document.getElementById("sc" + i);
+    const label  = document.getElementById("sl" + i);
+    circle.className = "step-circle" + (i < n ? " done" : i === n ? " active" : "");
+    label.className  = "step-label"  + (i < n ? " done" : i === n ? " active" : "");
+    if (i < 3) {
+      const line = document.getElementById("line" + i);
+      line.className = "step-line" + (i < n ? " done" : "");
+    }
+  }
+}
+
+function goToStep1() { setStep(1); }
+function goToStep3()  { setStep(3); }
+
+// ── Step 1: Connect OpenAI ─────────────────────────────────────────────────
+
+async function connectOpenAI() {
+  hideError("step1Error");
+  const key = document.getElementById("apiKey").value.trim();
+  if (!key || !key.startsWith("sk-")) {
+    showError("step1Error", "Please enter a valid OpenAI API key starting with sk-");
+    return;
+  }
+
+  const btn = document.getElementById("step1Btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Pulling your usage data…';
+
+  try {
+    const data = await apiPost("/api/trial/connect-openai", { api_key: key, days: 30 });
+
+    _apiKey  = key;
+    _savings = data.savings;
+
+    if (!data.has_usage) {
+      // Valid key but no usage — still let them proceed
+      document.getElementById("resSaved").textContent  = "$0.00";
+      document.getElementById("resActual").textContent = "$0.00";
+      document.getElementById("resWith").textContent   = "$0.00";
+      document.getElementById("resAnnual").textContent = "$0.00";
+      document.getElementById("modelBreakdownTable").innerHTML =
+        '<tr><td colspan="4" style="color:var(--text-muted);padding:12px 10px">No usage found in the last 30 days — your trial will track savings from your first call.</td></tr>';
+    } else {
+      const s = data.savings;
+      document.getElementById("resSaved").textContent  = fmt(s.saved_usd);
+      document.getElementById("resActual").textContent = fmt(s.actual_cost_usd);
+      document.getElementById("resWith").textContent   = fmt(s.costpilot_cost_usd);
+      document.getElementById("resAnnual").textContent = fmt(s.annual_savings_usd);
+
+      const tbody = document.getElementById("modelBreakdownTable");
+      const models = Object.entries(s.model_breakdown)
+        .sort((a, b) => b[1].actual_cost - a[1].actual_cost);
+
+      tbody.innerHTML = models.map(([model, m]) => {
+        const tier = (m.tier || "Advisor").toLowerCase();
+        return `<tr>
+          <td style="font-family:var(--font-mono);font-size:11px">${model}</td>
+          <td><span class="tier-pill tier-${tier}">${m.tier}</span></td>
+          <td>${(m.requests || 0).toLocaleString()}</td>
+          <td>$${(m.actual_cost || 0).toFixed(2)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    setStep(2);
+  } catch (e) {
+    showError("step1Error", e.message || "Could not connect to OpenAI. Please check your API key.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Analyze My Usage →";
+  }
+}
+
+// ── Step 3: Register Trial ─────────────────────────────────────────────────
+
+async function registerTrial() {
+  hideError("step3Error");
+  const name    = document.getElementById("regName").value.trim();
+  const email   = document.getElementById("regEmail").value.trim();
+  const company = document.getElementById("regCompany").value.trim();
+
+  if (!name)  { showError("step3Error", "Please enter your name."); return; }
+  if (!email || !email.includes("@")) { showError("step3Error", "Please enter a valid email address."); return; }
+
+  const btn = document.getElementById("step3Btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creating your trial…';
+
+  try {
+    const data = await apiPost("/api/trial/register", {
+      email, name, company, api_key: _apiKey, provider: "openai"
+    });
+
+    _workspace = data.workspace_id;
+
+    // Show confirmation
+    const trialEnd = new Date(data.trial_end);
+    document.getElementById("trialEndDate").textContent = trialEnd.toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric"
+    });
+    document.getElementById("workspaceId").textContent = data.workspace_id;
+
+    const snippet = `# Before\nclient = OpenAI(base_url="https://api.openai.com/v1")\n\n# After — 1 line change\nclient = OpenAI(base_url="https://fage-engine-21cb49fe4806.herokuapp.com/v1")`;
+    document.getElementById("codeSnippet").textContent = snippet;
+
+    // Persist workspace_id in localStorage for dashboard banner
+    localStorage.setItem("cp_workspace_id",   data.workspace_id);
+    localStorage.setItem("cp_trial_end",       data.trial_end);
+    localStorage.setItem("cp_trial_name",      name);
+    localStorage.setItem("cp_days_remaining",  String(data.days_remaining));
+
+    setStep(4);
+    // Update stepper to mark all done
+    ["sc1","sc2","sc3"].forEach(id => document.getElementById(id).className = "step-circle done");
+    ["sl1","sl2","sl3"].forEach(id => document.getElementById(id).className = "step-label done");
+    ["line1","line2"].forEach(id => document.getElementById(id).className = "step-line done");
+
+  } catch (e) {
+    showError("step3Error", e.message || "Registration failed. Please try again.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Start Free Trial — 30 Days Free →";
+  }
+}
+
+// ── Copy helpers ───────────────────────────────────────────────────────────
+
+function copyWorkspace() {
+  navigator.clipboard.writeText(_workspace);
+  event.target.textContent = "✓ Copied";
+  setTimeout(() => event.target.textContent = "Copy", 2000);
+}
+
+function copyCode() {
+  navigator.clipboard.writeText(document.getElementById("codeSnippet").textContent);
+  event.target.textContent = "✓ Copied";
+  setTimeout(() => event.target.textContent = "Copy", 2000);
+}
+</script>
+</body>
+</html>
