@@ -769,13 +769,14 @@ async function registerTrial() {
     const snippet = `# Before\nclient = ${_provider === "openai" ? "OpenAI" : "Anthropic"}(base_url="${_provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}")\n\n# After — 1 line change\nclient = ${_provider === "openai" ? "OpenAI" : "Anthropic"}(base_url="${origin}/v1")`;
     document.getElementById("codeSnippet").textContent = snippet;
 
-    localStorage.setItem("cp_workspace_id",  data.workspace_id);
-    localStorage.setItem("cp_secret_key",     data.secret_key);
-    localStorage.setItem("cp_trial_end",      data.trial_end);
-    localStorage.setItem("cp_trial_name",     name);
-    localStorage.setItem("cp_trial_email",    email);
-    localStorage.setItem("cp_provider",       _provider);
-    localStorage.setItem("cp_days_remaining", String(data.days_remaining));
+    localStorage.setItem("cp_workspace_id",    data.workspace_id);
+    localStorage.setItem("cp_secret_key",      data.secret_key);
+    localStorage.setItem("cp_trial_end",       data.trial_end);
+    localStorage.setItem("cp_trial_name",      name);
+    localStorage.setItem("cp_trial_email",     email);
+    localStorage.setItem("cp_trial_company",   company || name);
+    localStorage.setItem("cp_provider",        _provider);
+    localStorage.setItem("cp_days_remaining",  String(data.days_remaining));
 
     // Redirect to onboarding wizard
     window.location.href = "/onboarding.html";

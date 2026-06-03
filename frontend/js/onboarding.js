@@ -29,12 +29,16 @@ function goToDashboard() {
 document.addEventListener("DOMContentLoaded", () => {
   if (!IS_TRIAL) return;
 
-  // Pre-fill company name from trial registration
+  // Pre-fill Screen 1 fields so validation passes when Review is rendered
   const companyEl = document.getElementById("companyName");
-  if (companyEl && TRIAL_NAME) companyEl.value = TRIAL_NAME.split(" ")[0] + "'s Company";
-
-  // Pre-select provider
+  const budgetEl  = document.getElementById("totalBudget");
+  const trialCompany = localStorage.getItem("cp_trial_company") || (TRIAL_NAME ? TRIAL_NAME + "'s Company" : "My Company");
+  if (companyEl) companyEl.value = trialCompany;
+  if (budgetEl && !budgetEl.value) budgetEl.value = "1000";
   if (TRIAL_PRV) selectProvider(TRIAL_PRV);
+
+  // Skip Screen 1 — go straight to Departments
+  goToScreen(2);
 });
 
 function toggleVoiceGuard() {
