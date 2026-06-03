@@ -212,10 +212,28 @@
           </div>
         </div>
 
+        <!-- Trial credentials — shown only for trial users -->
+        <div id="trialCredentials" style="display:none;width:100%;margin-top:24px;text-align:left">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-green,#3fb950);margin-bottom:10px">
+            ◈ Your Trial Proxy Credentials
+          </div>
+          <div style="background:var(--bg-base,#0d1117);border:1px solid var(--border,#30363d);border-radius:8px;padding:14px 16px;margin-bottom:8px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted,#8b949e);font-weight:700;margin-bottom:4px">Proxy Base URL</div>
+            <div id="trialProxyUrl" style="font-family:monospace;font-size:12px;color:#58a6ff;word-break:break-all"></div>
+          </div>
+          <div style="background:var(--bg-base,#0d1117);border:1px solid var(--border,#30363d);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted,#8b949e);font-weight:700;margin-bottom:4px">Secret Key</div>
+            <div id="trialSecretKey" style="font-family:monospace;font-size:12px;color:#3fb950"></div>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted,#8b949e);line-height:1.7;margin-bottom:16px">
+            Change one URL and add one header in your existing code — your AI key stays exactly where it is. See the Connect Platform screen for platform-specific snippets.
+          </div>
+        </div>
+
         <button class="ob-btn-primary" id="dashboardBtn" style="display:none;margin-top:16px" onclick="goToPlatformScreen()">
           Connect a Platform →
         </button>
-        <button class="ob-btn-ghost" id="skipConnectBtn" style="display:none; margin-top:10px" onclick="window.location.href='/'">
+        <button class="ob-btn-ghost" id="skipConnectBtn" style="display:none; margin-top:10px" onclick="goToDashboard()">
           Skip — Go to Dashboard
         </button>
       </div>
@@ -364,7 +382,7 @@
 
       <div class="ob-actions" style="margin-top:24px">
         <button class="ob-btn-ghost" onclick="goToScreen(5)">← Back</button>
-        <button class="ob-btn-primary" onclick="window.location.href='/'">Open Dashboard →</button>
+        <button class="ob-btn-primary" onclick="goToDashboard()">Open Dashboard →</button>
       </div>
     </div>
 

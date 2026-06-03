@@ -11,6 +11,32 @@
 let selectedProvider  = "anthropic";
 let voiceGuardEnabled = false;
 
+// ── Trial detection ────────────────────────────────────────────────────────────
+const TRIAL_WS  = localStorage.getItem("cp_workspace_id") || "";
+const TRIAL_SK  = localStorage.getItem("cp_secret_key")   || "";
+const TRIAL_PRV = localStorage.getItem("cp_provider")     || "";
+const TRIAL_NAME= localStorage.getItem("cp_trial_name")   || "";
+const IS_TRIAL  = !!TRIAL_WS && !!TRIAL_SK;
+const TRIAL_PROXY = IS_TRIAL
+  ? `https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-${TRIAL_WS}`
+  : "";
+
+function goToDashboard() {
+  window.location.href = IS_TRIAL ? "/workspace.html" : "/";
+}
+
+// Pre-fill known trial fields on page load
+document.addEventListener("DOMContentLoaded", () => {
+  if (!IS_TRIAL) return;
+
+  // Pre-fill company name from trial registration
+  const companyEl = document.getElementById("companyName");
+  if (companyEl && TRIAL_NAME) companyEl.value = TRIAL_NAME.split(" ")[0] + "'s Company";
+
+  // Pre-select provider
+  if (TRIAL_PRV) selectProvider(TRIAL_PRV);
+});
+
 function toggleVoiceGuard() {
   voiceGuardEnabled = !voiceGuardEnabled;
   const track    = document.getElementById("vgToggleTrack");
@@ -235,11 +261,22 @@ async function launchFage() {
     // Step 2 — Done
     spinner.style.display = "none";
     title.textContent = "CostPilot is ready.";
-    sub.textContent   = "Your AI governance layer is live. Connect a platform or try Voice Guard now.";
+    sub.textContent   = "Your AI governance layer is live. Connect a platform or go to your dashboard.";
     log("Setup complete!", true);
     document.getElementById("launchPlatformPicker").style.display = "";
     doneBtn.style.display      = "inline-block";
     document.getElementById("skipConnectBtn").style.display = "inline-block";
+
+    // Show trial credentials if this is a trial signup
+    if (IS_TRIAL) {
+      const credPanel = document.getElementById("trialCredentials");
+      const proxyEl   = document.getElementById("trialProxyUrl");
+      const keyEl     = document.getElementById("trialSecretKey");
+      if (credPanel) credPanel.style.display = "block";
+      if (proxyEl)   proxyEl.textContent   = TRIAL_PROXY;
+      if (keyEl)     keyEl.textContent     = TRIAL_SK;
+      document.getElementById("skipConnectBtn").textContent = "Open My Dashboard →";
+    }
 
   } catch (err) {
     spinner.style.display = "none";
@@ -357,7 +394,7 @@ function _obActions() {
   return `<div class="ob-actions" style="margin-top:24px">
     <button class="ob-btn-ghost" onclick="generateObCode()">↺ Regenerate</button>
     ${vg}
-    <button class="ob-btn-primary" onclick="window.location.href='/'">Open Dashboard →</button>
+    <button class="ob-btn-primary" onclick="goToDashboard()">Open Dashboard →</button>
   </div>`;
 }
 
