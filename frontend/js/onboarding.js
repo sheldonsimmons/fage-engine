@@ -439,6 +439,75 @@ function generateObCode() {
 // ── Code generators ───────────────────────────────────────────────────────────
 
 function _genSalesforce(obj, dept, agent) {
+
+  // ── Trial version: proxy endpoint, no custom fields required ─────────────
+  if (IS_TRIAL) {
+    const proxyEndpoint = TRIAL_PROXY + "/chat/completions";
+    const apex =
+`public class CostPilotCallout {
+    // Your CostPilot credentials — pre-filled from your workspace
+    private static final String ENDPOINT   = '${proxyEndpoint}';
+    private static final String CP_KEY     = '${TRIAL_SK}';
+    private static final String OPENAI_KEY = 'YOUR_OPENAI_KEY_HERE'; // paste your key
+
+    @InvocableMethod(label='Send to CostPilot')
+    public static void sendToCostPilot(List<CostPilotRequest> requests) {
+        if (System.isFuture() || System.isBatch()) return;
+        CostPilotRequest req = requests[0];
+        sendAsync(req.subject, req.recordText, req.department);
+    }
+
+    @future(callout=true)
+    public static void sendAsync(String subject, String recordText, String department) {
+        String subj    = String.isBlank(subject)    ? '' : subject.trim();
+        String body    = String.isBlank(recordText) ? '' : recordText.trim();
+        String prompt  = String.isBlank(subj) ? body
+                       : (String.isBlank(body) ? subj : subj + '\\n\\n' + body);
+
+        Http http = new Http();
+        HttpRequest httpReq = new HttpRequest();
+        httpReq.setEndpoint(ENDPOINT);
+        httpReq.setMethod('POST');
+        httpReq.setHeader('Content-Type',   'application/json');
+        httpReq.setHeader('Authorization',  'Bearer ' + OPENAI_KEY);
+        httpReq.setHeader('X-CostPilot-Key', CP_KEY);
+        httpReq.setHeader('X-Department',    department);
+        httpReq.setBody(JSON.serialize(new Map<String, Object>{
+            'model'    => 'gpt-4o',
+            'messages' => new List<Object>{
+                new Map<String, Object>{ 'role' => 'user', 'content' => prompt }
+            }
+        }));
+        httpReq.setTimeout(30000);
+        HttpResponse res = http.send(httpReq);
+        System.debug('CostPilot response: ' + res.getBody());
+        // Add your field updates here once custom fields are created in your org
+    }
+
+    public class CostPilotRequest {
+        @InvocableVariable(required=true  label='Subject')            public String subject;
+        @InvocableVariable(required=false label='Description / Body') public String recordText;
+        @InvocableVariable(required=true  label='Department')         public String department;
+    }
+}`;
+
+    const flowHtml = `<div class="ob-flow-steps">
+      <div class="ob-flow-step"><span class="ob-flow-num">1</span>
+        <div><strong>Developer Console → File → New → Apex Class → CostPilotCallout</strong><br/>Paste the class above. Replace <code>YOUR_OPENAI_KEY_HERE</code> with your actual key. Save.</div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">2</span>
+        <div><strong>Setup → Remote Site Settings → New</strong><br/>Name: CostPilot · URL: <code>https://fage-engine-21cb49fe4806.herokuapp.com</code> · Active: ✓</div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">3</span>
+        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or updated<br/>Add Action → Apex → Send to CostPilot<br/>Map: Subject, Description, Department → <strong>${_obEsc(dept)}</strong></div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">4</span>
+        <div><strong>Save &amp; Activate</strong> — your first call routes through CostPilot and appears on your dashboard.</div></div>
+    </div>`;
+
+    return _obCodeSection("Apex Class — paste into Developer Console", "Replace YOUR_OPENAI_KEY_HERE with your key, then save", apex)
+      + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Setup Steps</span></div>${flowHtml}</div>`
+      + _obBanner("salesforce", obj, dept, agent) + _obActions();
+  }
+
+  // ── Full version: internal routing + custom fields ────────────────────────
   const apex =
 `public class CostPilotCallout {
     @InvocableMethod(label='Send to CostPilot')
@@ -451,7 +520,6 @@ function _genSalesforce(obj, dept, agent) {
     @future(callout=true)
     public static void sendAsync(String recordId, String subject,
                                  String recordText, String department, String agentName) {
-        // Always combine Subject + Description so short cases (subject-only) reach CostPilot
         String subj = String.isBlank(subject)     ? '' : subject.trim();
         String body = String.isBlank(recordText)  ? '' : recordText.trim();
         String payload = String.isBlank(subj)
@@ -495,9 +563,9 @@ function _genSalesforce(obj, dept, agent) {
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map these fields:<br/>• Record ID → ${_obEsc(obj)} ID<br/>• <strong>Subject → Subject</strong> (required — short cases like "My email is down" route via Subject)<br/>• Description / Body → Description (optional)<br/>• Department → ${_obEsc(dept)}<br/>• Agent Name → ${_obEsc(agent)}</div></div>
+      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map: Record ID · Subject · Description → ${_obEsc(dept)} · ${_obEsc(agent)}</div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">3</span>
-      <div><strong>Save &amp; Activate</strong> — agents appear in the Agentlake Registry on first use.</div></div>
+      <div><strong>Save &amp; Activate</strong></div></div>
   </div>`;
 
   const fieldHtml = `<div class="ob-field-table">
