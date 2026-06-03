@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — My Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    /* ── Trial banner ────────────────────────────────────────────────────────── */
+    .trial-bar {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 24px; font-size:12px; flex-wrap:wrap; gap:8px;
+      background:#0d1f12; border-bottom:1px solid rgba(63,185,80,.25);
+    }
+    .trial-bar-left  { display:flex; align-items:center; gap:10px; }
+    .trial-bar-right { display:flex; align-items:center; gap:10px; }
+    .trial-pill {
+      font-size:10px; font-weight:800; letter-spacing:.1em; padding:3px 10px;
+      border-radius:20px; background:rgba(63,185,80,.15); color:var(--accent-green);
+      border:1px solid rgba(63,185,80,.3); text-transform:uppercase;
+    }
+
+    /* ── Page layout ─────────────────────────────────────────────────────────── */
+    .ws-page { max-width:1200px; margin:0 auto; padding:28px 24px 60px; }
+
+    /* ── Page header ─────────────────────────────────────────────────────────── */
+    .ws-header { margin-bottom:28px; }
+    .ws-title  { font-size:24px; font-weight:800; color:var(--text-primary); margin-bottom:4px; }
+    .ws-sub    { font-size:13px; color:var(--text-muted); }
+
+    /* ── KPI strip ───────────────────────────────────────────────────────────── */
+    .ws-kpi-row {
+      display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px;
+    }
+    .ws-kpi {
+      background:var(--bg-panel); border:1px solid var(--border);
+      border-radius:10px; padding:18px 20px;
+    }
+    .ws-kpi-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:6px; }
+    .ws-kpi-value { font-size:28px; font-weight:800; color:var(--text-primary); line-height:1.1; }
+    .ws-kpi-value.green  { color:var(--accent-green); }
+    .ws-kpi-value.yellow { color:var(--accent-yellow); }
+    .ws-kpi-sub   { font-size:11px; color:var(--text-muted); margin-top:4px; }
+
+    /* ── Two-col ─────────────────────────────────────────────────────────────── */
+    .ws-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+
+    /* ── Panel ───────────────────────────────────────────────────────────────── */
+    .ws-panel {
+      background:var(--bg-panel); border:1px solid var(--border);
+      border-radius:10px; padding:20px 22px;
+    }
+    .ws-panel-title {
+      font-size:10px; font-weight:700; text-transform:uppercase;
+      letter-spacing:.08em; color:var(--text-muted); margin-bottom:14px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────────────────── */
+    .ws-empty {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      padding:48px 24px; text-align:center;
+    }
+    .ws-empty-icon { font-size:40px; margin-bottom:14px; }
+    .ws-empty-title { font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:8px; }
+    .ws-empty-sub   { font-size:13px; color:var(--text-muted); line-height:1.65; max-width:380px; }
+    .pulse { animation:pulse 1.5s ease-in-out infinite; display:inline-block; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Recent calls table ──────────────────────────────────────────────────── */
+    .ws-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .ws-table th { text-align:left; padding:6px 10px; color:var(--text-muted); font-size:10px; text-transform:uppercase; letter-spacing:.07em; border-bottom:1px solid var(--border); font-weight:700; }
+    .ws-table td { padding:9px 10px; border-bottom:1px solid rgba(48,54,61,.4); vertical-align:middle; }
+    .ws-table tr:last-child td { border-bottom:none; }
+
+    /* ── Tier pills ──────────────────────────────────────────────────────────── */
+    .tier-pill { font-size:9px; font-weight:700; padding:2px 8px; border-radius:8px; display:inline-block; text-transform:uppercase; letter-spacing:.06em; }
+    .tier-scout      { background:rgba(63,185,80,.15);  color:var(--accent-green); }
+    .tier-analyst    { background:rgba(88,166,255,.15); color:var(--accent); }
+    .tier-advisor    { background:rgba(210,153,34,.15); color:var(--accent-yellow); }
+    .tier-strategist { background:rgba(248,81,73,.15);  color:var(--accent-red); }
+
+    /* ── Dept bars ───────────────────────────────────────────────────────────── */
+    .dept-row { margin-bottom:12px; }
+    .dept-row-header { display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px; }
+    .dept-name  { color:var(--text-primary); font-weight:600; }
+    .dept-cost  { color:var(--text-muted); font-family:var(--font-mono); font-size:11px; }
+    .dept-bar-track { background:var(--border); border-radius:4px; height:6px; overflow:hidden; }
+    .dept-bar-fill  { height:100%; border-radius:4px; background:var(--accent-green); }
+
+    /* ── Upgrade card ────────────────────────────────────────────────────────── */
+    .upgrade-card {
+      background:linear-gradient(135deg, rgba(88,166,255,.06), rgba(63,185,80,.06));
+      border:1px solid rgba(88,166,255,.2); border-radius:10px;
+      padding:20px 22px; display:flex; align-items:center;
+      justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px;
+    }
+    .upgrade-card-text { font-size:13px; color:var(--text-muted); line-height:1.6; }
+    .upgrade-card-text strong { color:var(--text-primary); }
+    .btn-upgrade {
+      background:var(--accent-green); color:#0d1117; border:none;
+      border-radius:8px; padding:10px 20px; font:inherit; font-size:13px;
+      font-weight:800; cursor:pointer; white-space:nowrap; text-decoration:none;
+      display:inline-block;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Trial banner -->
+<div class="trial-bar">
+  <div class="trial-bar-left">
+    <span class="trial-pill">Free Trial</span>
+    <span id="trialBannerMsg" style="color:var(--text-muted)">Loading...</span>
+  </div>
+  <div class="trial-bar-right">
+    <a href="/getting-started.html" style="font-size:11px;color:var(--text-muted);text-decoration:none">← Setup Guide</a>
+    <a href="#" class="btn-upgrade" style="font-size:11px;padding:5px 14px">Upgrade Plan →</a>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="header" style="border-top:none">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <span class="header-title">CostPilot</span>
+    <span class="header-sub" id="wsSubtitle">My Workspace</span>
+  </div>
+  <div class="header-nav">
+    <a href="/reports.html"  class="header-nav-link">📊 Reports</a>
+    <a href="/savings.html"  class="header-nav-link">💰 Savings Calc</a>
+  </div>
+</header>
+
+<main class="ws-page">
+
+  <!-- Loading state -->
+  <div id="loadingState" class="ws-empty" style="margin-top:60px">
+    <div class="ws-empty-icon pulse">📡</div>
+    <div class="ws-empty-title">Loading your workspace...</div>
+  </div>
+
+  <!-- No calls yet -->
+  <div id="emptyState" style="display:none">
+    <div class="ws-header">
+      <div class="ws-title" id="emptyTitle">Your Dashboard</div>
+      <div class="ws-sub">Waiting for your first API call through CostPilot</div>
+    </div>
+
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:60px 40px;text-align:center;margin-bottom:20px">
+      <div style="font-size:48px;margin-bottom:16px" class="pulse">📡</div>
+      <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:8px">Watching for your first call...</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.7;max-width:440px;margin:0 auto 24px">
+        Add the two lines from your Getting Started guide to your project and run your app as normal.
+        The moment a call comes through CostPilot, it appears here automatically.
+      </div>
+      <a href="/getting-started.html" style="display:inline-block;background:var(--accent);color:#fff;border-radius:8px;padding:10px 22px;text-decoration:none;font-size:13px;font-weight:700">View Setup Guide →</a>
+    </div>
+
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Your proxy endpoint is active</div>
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--accent-green)" id="emptyProxyUrl"></div>
+    </div>
+  </div>
+
+  <!-- Has data -->
+  <div id="dataState" style="display:none">
+    <div class="ws-header">
+      <div class="ws-title" id="dataTitle">My Dashboard</div>
+      <div class="ws-sub" id="dataSub">Your real AI usage — only your calls, your savings</div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="ws-kpi-row">
+      <div class="ws-kpi">
+        <div class="ws-kpi-label">Total Saved</div>
+        <div class="ws-kpi-value green" id="kpiSaved">—</div>
+        <div class="ws-kpi-sub">vs. all-flagship baseline</div>
+      </div>
+      <div class="ws-kpi">
+        <div class="ws-kpi-label">Actual Spend</div>
+        <div class="ws-kpi-value" id="kpiCost">—</div>
+        <div class="ws-kpi-sub">what you paid</div>
+      </div>
+      <div class="ws-kpi">
+        <div class="ws-kpi-label">Routing Efficiency</div>
+        <div class="ws-kpi-value yellow" id="kpiEconomy">—</div>
+        <div class="ws-kpi-sub">calls routed to economy tier</div>
+      </div>
+      <div class="ws-kpi">
+        <div class="ws-kpi-label">Total Calls</div>
+        <div class="ws-kpi-value" id="kpiCalls">—</div>
+        <div class="ws-kpi-sub">through CostPilot</div>
+      </div>
+    </div>
+
+    <!-- Annual projection banner -->
+    <div style="background:rgba(63,185,80,.07);border:1px solid rgba(63,185,80,.2);border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-green);margin-bottom:4px">Projected Annual Savings — At Current Routing Efficiency</div>
+        <div style="font-size:28px;font-weight:900;color:var(--accent-green)" id="kpiAnnual">—</div>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);max-width:320px;line-height:1.6" id="annualNote"></div>
+    </div>
+
+    <!-- Dept + Recent calls -->
+    <div class="ws-grid">
+      <div class="ws-panel">
+        <div class="ws-panel-title">Spend by Department</div>
+        <div id="deptBars"></div>
+      </div>
+      <div class="ws-panel">
+        <div class="ws-panel-title">Recent Calls</div>
+        <table class="ws-table">
+          <thead><tr><th>Time</th><th>Dept</th><th>Tier</th><th>Cost</th></tr></thead>
+          <tbody id="recentCalls"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Upgrade prompt -->
+    <div class="upgrade-card">
+      <div class="upgrade-card-text">
+        <strong>Unlock the full dashboard</strong> — department scorecards, audit trails, budget enforcement, agent registry, and compliance reporting.
+      </div>
+      <a href="/trial.html" class="btn-upgrade">Upgrade Plan →</a>
+    </div>
+  </div>
+
+</main>
+
+<script src="js/api.js"></script>
+<script>
+const WS    = localStorage.getItem("cp_workspace_id") || "";
+const SK    = localStorage.getItem("cp_secret_key")   || "";
+const PROXY = `https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-${WS}`;
+
+function fmt(n) {
+  if (n == null) return "—";
+  if (n >= 1000) return "$" + (n/1000).toFixed(1) + "K";
+  if (n < 0.001) return "$" + n.toFixed(6);
+  if (n < 0.01)  return "$" + n.toFixed(4);
+  return "$" + n.toFixed(2);
+}
+
+function fmtTs(iso) {
+  if (!iso) return "—";
+  return new Date(iso + (iso.endsWith("Z") ? "" : "Z"))
+    .toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+}
+
+async function load() {
+  if (!WS) {
+    window.location.href = "/trial.html";
+    return;
+  }
+
+  try {
+    const d = await apiGet(`/api/trial/workspace-stats?workspace_id=${WS}`);
+
+    // Trial banner
+    const days = d.days_remaining;
+    const bannerMsg = document.getElementById("trialBannerMsg");
+    bannerMsg.textContent = days > 0
+      ? `${days} day${days===1?"":"s"} left in your free trial, ${d.name.split(" ")[0]}. Trial ends ${new Date(d.trial_end).toLocaleDateString("en-US",{month:"short",day:"numeric"})}.`
+      : "Your trial has expired — upgrade to continue saving.";
+    if (days <= 3) bannerMsg.style.color = "var(--accent-yellow)";
+    if (days === 0) bannerMsg.style.color = "var(--accent-red)";
+
+    // Subtitle
+    document.getElementById("wsSubtitle").textContent =
+      `${d.company || d.name} · Workspace ${WS}`;
+    document.title = `CostPilot — ${d.company || d.name}`;
+
+    document.getElementById("loadingState").style.display = "none";
+
+    if (!d.has_calls) {
+      // Empty state
+      document.getElementById("emptyState").style.display = "block";
+      document.getElementById("emptyTitle").textContent = `${d.company || d.name}'s Dashboard`;
+      document.getElementById("emptyProxyUrl").textContent = PROXY;
+      // Poll every 5s
+      setTimeout(load, 5000);
+      return;
+    }
+
+    // Data state
+    document.getElementById("dataState").style.display = "block";
+    document.getElementById("dataTitle").textContent  = `${d.company || d.name}'s Dashboard`;
+    document.getElementById("dataSub").textContent    = `${d.total_calls.toLocaleString()} calls routed · your real data only`;
+
+    document.getElementById("kpiSaved").textContent   = fmt(d.saved_usd);
+    document.getElementById("kpiCost").textContent    = fmt(d.total_cost_usd);
+    document.getElementById("kpiEconomy").textContent = d.economy_pct + "%";
+    document.getElementById("kpiCalls").textContent   = d.total_calls.toLocaleString();
+    document.getElementById("kpiAnnual").textContent  = fmt(d.annual_savings_usd);
+    document.getElementById("annualNote").textContent =
+      `Based on ${d.total_calls.toLocaleString()} calls at ${d.economy_pct}% economy routing efficiency. Extrapolated to 12 months.`;
+
+    // Dept bars
+    const depts     = Object.entries(d.departments).sort((a,b) => b[1].cost - a[1].cost);
+    const maxCost   = depts[0]?.[1].cost || 1;
+    document.getElementById("deptBars").innerHTML = depts.length
+      ? depts.map(([name, dept]) => `
+          <div class="dept-row">
+            <div class="dept-row-header">
+              <span class="dept-name">${name}</span>
+              <span class="dept-cost">${dept.calls} calls · ${fmt(dept.cost)}</span>
+            </div>
+            <div class="dept-bar-track">
+              <div class="dept-bar-fill" style="width:${Math.round(dept.cost/maxCost*100)}%"></div>
+            </div>
+          </div>`).join("")
+      : `<div style="color:var(--text-muted);font-size:13px">No department data yet.</div>`;
+
+    // Recent calls
+    const tierCls = t => {
+      const m = { Scout:"scout", Analyst:"analyst", Advisor:"advisor", Strategist:"strategist",
+                  micro:"scout", flagship:"advisor" };
+      return m[t] || "analyst";
+    };
+    document.getElementById("recentCalls").innerHTML = d.recent_calls.length
+      ? d.recent_calls.map(c => `
+          <tr>
+            <td style="font-size:11px;color:var(--text-muted)">${fmtTs(c.timestamp)}</td>
+            <td style="font-size:11px">${c.department || "—"}</td>
+            <td><span class="tier-pill tier-${tierCls(c.model_tier)}">${c.model_tier}</span></td>
+            <td style="font-family:var(--font-mono);font-size:11px">$${(c.cost_usd||0).toFixed(5)}</td>
+          </tr>`).join("")
+      : `<tr><td colspan="4" style="color:var(--text-muted);padding:12px 10px">No calls yet.</td></tr>`;
+
+    // Auto-refresh every 15s
+    setTimeout(load, 15000);
+
+  } catch(e) {
+    document.getElementById("loadingState").innerHTML = `
+      <div class="ws-empty">
+        <div class="ws-empty-icon">⚠️</div>
+        <div class="ws-empty-title">Could not load workspace</div>
+        <div class="ws-empty-sub">${e.message}</div>
+        <a href="/getting-started.html" style="margin-top:16px;color:var(--accent)">← Back to Setup</a>
+      </div>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

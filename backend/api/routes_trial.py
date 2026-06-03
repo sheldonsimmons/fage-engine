@@ -572,7 +572,85 @@ async def anthropic_csv(file: UploadFile = File(...)):
     return {"has_usage": True, "savings": savings}
 
 
-# ── 3. Trial Status ───────────────────────────────────────────────────────────
+# ── 3. Workspace Dashboard Stats ──────────────────────────────────────────────
+
+@router.get("/workspace-stats")
+def workspace_stats(workspace_id: str, db: Session = Depends(get_db)):
+    from database.models import TokenTransaction
+    from sqlalchemy import func
+
+    account = db.query(TrialAccount).filter_by(workspace_id=workspace_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+
+    # All transactions tagged to this workspace (department = "WORKSPACE_ID:DeptName")
+    prefix = f"{workspace_id}:"
+    txns = db.query(TokenTransaction).filter(
+        TokenTransaction.department.like(f"{prefix}%")
+    ).order_by(TokenTransaction.timestamp.desc()).all()
+
+    total_calls   = len(txns)
+    total_cost    = round(sum(t.cost_usd for t in txns), 6)
+    tokens_saved  = sum(t.tokens_saved for t in txns if t.was_pruned)
+
+    # Economy vs flagship split
+    economy_tiers = {"Scout", "Analyst", "micro"}
+    economy_calls = sum(1 for t in txns if t.model_tier in economy_tiers)
+    economy_pct   = round(economy_calls / total_calls * 100, 1) if total_calls else 0
+
+    # Savings vs all-flagship baseline
+    FLAGSHIP_INPUT  = 5.00 / 1_000_000
+    FLAGSHIP_OUTPUT = 15.00 / 1_000_000
+    cost_if_flagship = sum(
+        (t.input_tokens * FLAGSHIP_INPUT + t.output_tokens * FLAGSHIP_OUTPUT)
+        for t in txns
+    )
+    saved = round(max(0, cost_if_flagship - total_cost), 6)
+    annual_projection = round(saved * 12, 2)
+
+    # Per-department breakdown
+    dept_data = {}
+    for t in txns:
+        dept = t.department.replace(prefix, "", 1) if t.department.startswith(prefix) else t.department
+        if dept not in dept_data:
+            dept_data[dept] = {"calls": 0, "cost": 0.0}
+        dept_data[dept]["calls"] += 1
+        dept_data[dept]["cost"]  = round(dept_data[dept]["cost"] + t.cost_usd, 6)
+
+    # Recent calls (last 10)
+    recent = [{
+        "timestamp":  t.timestamp.isoformat(),
+        "department": t.department.replace(prefix, "", 1),
+        "model_tier": t.model_tier,
+        "cost_usd":   t.cost_usd,
+        "routing_reason": t.routing_reason or "—",
+    } for t in txns[:10]]
+
+    # Trial info
+    now = datetime.utcnow()
+    days_remaining = max(0, (account.trial_end - now).days)
+
+    return {
+        "workspace_id":       workspace_id,
+        "name":               account.name,
+        "company":            account.company,
+        "provider":           account.provider,
+        "trial_end":          account.trial_end.isoformat(),
+        "days_remaining":     days_remaining,
+        "is_expired":         now > account.trial_end,
+        "has_calls":          total_calls > 0,
+        "total_calls":        total_calls,
+        "total_cost_usd":     total_cost,
+        "saved_usd":          saved,
+        "annual_savings_usd": annual_projection,
+        "economy_pct":        economy_pct,
+        "tokens_saved":       tokens_saved,
+        "departments":        dept_data,
+        "recent_calls":       recent,
+    }
+
+
+# ── 4. Trial Status ───────────────────────────────────────────────────────────
 
 @router.get("/status")
 def trial_status(workspace_id: str, db: Session = Depends(get_db)):
