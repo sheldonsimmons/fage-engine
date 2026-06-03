@@ -770,16 +770,15 @@ async function registerTrial() {
     document.getElementById("codeSnippet").textContent = snippet;
 
     localStorage.setItem("cp_workspace_id",  data.workspace_id);
+    localStorage.setItem("cp_secret_key",     data.secret_key);
     localStorage.setItem("cp_trial_end",      data.trial_end);
     localStorage.setItem("cp_trial_name",     name);
+    localStorage.setItem("cp_trial_email",    email);
+    localStorage.setItem("cp_provider",       _provider);
     localStorage.setItem("cp_days_remaining", String(data.days_remaining));
 
-    // Show API key field on Go Live screen for Anthropic (not needed for OpenAI — already stored)
-    if (_provider === "anthropic") {
-      document.getElementById("anthropicKeySection").style.display = "block";
-    }
-
-    goToPanel("panel-step4");
+    // Redirect to Getting Started wizard
+    window.location.href = "/getting-started.html";
   } catch (e) {
     showError("step3Error", e.message || "Registration failed. Please try again.");
   } finally {

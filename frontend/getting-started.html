@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Getting Started</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body { min-height:100vh; display:flex; flex-direction:column; background:var(--bg-base); }
+    .gs-page { flex:1; display:flex; flex-direction:column; align-items:center; padding:48px 24px 80px; }
+
+    /* ── Progress bar ──────────────────────────────────────────────────────── */
+    .gs-progress {
+      width:100%; max-width:680px; margin-bottom:36px;
+    }
+    .gs-steps-row {
+      display:flex; align-items:center; justify-content:space-between;
+      position:relative; margin-bottom:10px;
+    }
+    .gs-steps-row::before {
+      content:""; position:absolute; top:16px; left:0; right:0; height:2px;
+      background:var(--border); z-index:0;
+    }
+    .gs-step-dot {
+      width:32px; height:32px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; font-size:12px; font-weight:700; position:relative; z-index:1;
+      background:var(--bg-panel); border:2px solid var(--border); color:var(--text-muted);
+      transition:all .3s; flex-shrink:0;
+    }
+    .gs-step-dot.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .gs-step-dot.done   { background:var(--accent-green); border-color:var(--accent-green); color:#fff; }
+    .gs-step-labels { display:flex; justify-content:space-between; }
+    .gs-step-lbl {
+      font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--text-muted); text-align:center; flex:1;
+    }
+    .gs-step-lbl.active { color:var(--accent); }
+    .gs-step-lbl.done   { color:var(--accent-green); }
+
+    /* ── Card ──────────────────────────────────────────────────────────────── */
+    .gs-card {
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:14px;
+      padding:36px 40px; max-width:680px; width:100%;
+    }
+    .gs-eyebrow { font-size:10px; text-transform:uppercase; letter-spacing:.1em; font-weight:700; color:var(--accent-green); margin-bottom:10px; }
+    .gs-title   { font-size:24px; font-weight:800; color:var(--text-primary); margin-bottom:8px; line-height:1.2; }
+    .gs-title span { color:var(--accent-green); }
+    .gs-sub     { font-size:13px; color:var(--text-muted); line-height:1.65; margin-bottom:24px; }
+
+    /* ── Panels ─────────────────────────────────────────────────────────────── */
+    .gs-panel { display:none; }
+    .gs-panel.active { display:block; }
+
+    /* ── Workspace badge ─────────────────────────────────────────────────────── */
+    .ws-badge {
+      display:flex; align-items:center; justify-content:space-between;
+      background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; padding:12px 16px; margin-bottom:12px;
+    }
+    .ws-badge-label { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); font-weight:700; margin-bottom:2px; }
+    .ws-badge-value { font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--accent); }
+    .ws-badge-value.green { color:var(--accent-green); }
+    .copy-pill {
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:5px;
+      color:var(--text-muted); font-size:11px; padding:4px 12px; cursor:pointer; white-space:nowrap;
+    }
+    .copy-pill:hover { color:var(--accent); border-color:var(--accent); }
+
+    /* ── Dept rows ────────────────────────────────────────────────────────────── */
+    .dept-row {
+      display:flex; align-items:center; gap:10px; padding:10px 12px;
+      background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; margin-bottom:8px; transition:border-color .15s;
+    }
+    .dept-row:focus-within { border-color:var(--accent); }
+    .dept-check {
+      width:18px; height:18px; border-radius:4px; border:2px solid var(--border);
+      cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+      background:var(--bg-panel); transition:all .15s;
+    }
+    .dept-check.checked { background:var(--accent-green); border-color:var(--accent-green); color:#fff; font-size:11px; }
+    .dept-name { flex:1; font-size:13px; color:var(--text-primary); font-weight:600; }
+    .dept-cap-wrap { display:flex; align-items:center; gap:5px; }
+    .dept-cap-label { font-size:11px; color:var(--text-muted); }
+    .dept-cap {
+      width:80px; background:var(--bg-panel); border:1px solid var(--border);
+      border-radius:6px; padding:5px 8px; color:var(--text-primary);
+      font-size:12px; font-family:var(--font-mono); text-align:right;
+    }
+    .dept-cap:focus { outline:none; border-color:var(--accent); }
+    .add-dept-row { display:flex; gap:8px; margin-top:4px; }
+    .add-dept-input {
+      flex:1; background:var(--bg-base); border:1px solid var(--border); border-radius:8px;
+      padding:9px 14px; color:var(--text-primary); font:inherit; font-size:13px;
+    }
+    .add-dept-input:focus { outline:none; border-color:var(--accent); }
+    .add-dept-btn {
+      background:transparent; border:1px solid var(--border); border-radius:8px;
+      color:var(--text-muted); padding:9px 16px; font:inherit; font-size:13px; cursor:pointer;
+    }
+    .add-dept-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* ── Platform tiles ───────────────────────────────────────────────────────── */
+    .platform-grid {
+      display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:24px;
+    }
+    .platform-tile {
+      background:var(--bg-base); border:2px solid var(--border); border-radius:10px;
+      padding:16px 10px; cursor:pointer; text-align:center; transition:all .2s;
+    }
+    .platform-tile:hover   { border-color:var(--accent); }
+    .platform-tile.selected{ border-color:var(--accent); background:rgba(88,166,255,.07); }
+    .platform-icon  { font-size:26px; margin-bottom:6px; }
+    .platform-name  { font-size:12px; font-weight:700; color:var(--text-primary); }
+
+    /* ── Code block ───────────────────────────────────────────────────────────── */
+    .code-block {
+      background:#0d1117; border:1px solid var(--border); border-radius:8px;
+      padding:18px 20px; font-family:var(--font-mono); font-size:12px;
+      color:#e6edf3; line-height:1.8; margin-bottom:14px;
+      position:relative; white-space:pre; overflow-x:auto;
+    }
+    .code-kw   { color:#ff7b72; }
+    .code-str  { color:#a5d6ff; }
+    .code-cmt  { color:#8b949e; font-style:italic; }
+    .code-key  { color:#ffa657; }
+    .code-val  { color:#3fb950; }
+    .code-copy {
+      position:absolute; top:10px; right:10px;
+      background:var(--bg-panel); border:1px solid var(--border); border-radius:5px;
+      color:var(--text-muted); font-size:11px; padding:4px 12px; cursor:pointer;
+      font-family:inherit;
+    }
+    .code-copy:hover { color:var(--accent); border-color:var(--accent); }
+
+    /* ── Buttons ──────────────────────────────────────────────────────────────── */
+    .btn-primary {
+      width:100%; padding:14px; border-radius:8px; background:var(--accent-green);
+      color:#0d1117; font:inherit; font-size:15px; font-weight:800; border:none;
+      cursor:pointer; transition:opacity .15s; display:flex; align-items:center;
+      justify-content:center; gap:8px;
+    }
+    .btn-primary:hover:not(:disabled) { opacity:.88; }
+    .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-secondary {
+      width:100%; padding:12px; border-radius:8px; margin-top:10px;
+      background:transparent; color:var(--text-muted); border:1px solid var(--border);
+      font:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s;
+    }
+    .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* ── Live indicator ───────────────────────────────────────────────────────── */
+    .live-watch {
+      display:flex; align-items:center; justify-content:center; gap:12px;
+      background:rgba(88,166,255,.06); border:1px solid rgba(88,166,255,.2);
+      border-radius:10px; padding:20px; margin-bottom:20px; flex-direction:column;
+    }
+    .pulse-ring {
+      width:48px; height:48px; border-radius:50%;
+      background:rgba(88,166,255,.15); border:2px solid var(--accent);
+      display:flex; align-items:center; justify-content:center;
+      animation:pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform:scale(1); opacity:1; }
+      50%       { transform:scale(1.08); opacity:.8; }
+    }
+    .live-text { font-size:13px; color:var(--text-muted); text-align:center; line-height:1.6; }
+    .live-text strong { color:var(--text-primary); }
+
+    /* ── Step 5 success ───────────────────────────────────────────────────────── */
+    .success-icon { font-size:56px; text-align:center; margin-bottom:16px; }
+    .success-kpi  {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:20px 0;
+    }
+    .success-kpi-box {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:8px;
+      padding:14px; text-align:center;
+    }
+    .success-kpi-val { font-size:20px; font-weight:800; color:var(--accent-green); }
+    .success-kpi-lbl { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-top:3px; font-weight:700; }
+
+    /* ── Error / misc ─────────────────────────────────────────────────────────── */
+    .error-box {
+      background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.3);
+      border-radius:8px; padding:12px 16px; font-size:13px; color:var(--accent-red);
+      margin-bottom:16px; display:none;
+    }
+    .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .section-label { font-size:10px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--text-muted); margin-bottom:10px; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <span class="header-logo">◈</span>
+    <span class="header-title">CostPilot</span>
+    <span class="header-sub">AI Cost Control · Setup</span>
+  </div>
+  <div style="font-size:12px;color:var(--text-muted)" id="trialMeta"></div>
+</header>
+
+<main class="gs-page">
+
+  <!-- Progress -->
+  <div class="gs-progress">
+    <div class="gs-steps-row">
+      <div class="gs-step-dot active" id="dot1">1</div>
+      <div class="gs-step-dot"        id="dot2">2</div>
+      <div class="gs-step-dot"        id="dot3">3</div>
+      <div class="gs-step-dot"        id="dot4">4</div>
+      <div class="gs-step-dot"        id="dot5">5</div>
+    </div>
+    <div class="gs-step-labels">
+      <div class="gs-step-lbl active" id="lbl1">Workspace</div>
+      <div class="gs-step-lbl"        id="lbl2">Your Teams</div>
+      <div class="gs-step-lbl"        id="lbl3">Platform</div>
+      <div class="gs-step-lbl"        id="lbl4">Integration</div>
+      <div class="gs-step-lbl"        id="lbl5">Go Live</div>
+    </div>
+  </div>
+
+  <div class="gs-card">
+
+    <!-- ══ STEP 1: Workspace Ready ══════════════════════════════════════════ -->
+    <div class="gs-panel active" id="gs1">
+      <div class="gs-eyebrow">🎉 Trial Active — 30 Days Free</div>
+      <h1 class="gs-title">Your workspace is <span>ready</span></h1>
+      <p class="gs-sub">Here are your credentials. Save them somewhere safe — you'll need your secret key in Step 4 to authenticate your integration.</p>
+
+      <div class="ws-badge">
+        <div>
+          <div class="ws-badge-label">Workspace ID</div>
+          <div class="ws-badge-value" id="dispWorkspaceId">—</div>
+        </div>
+        <button class="copy-pill" onclick="copyField('dispWorkspaceId', this)">Copy</button>
+      </div>
+      <div class="ws-badge">
+        <div>
+          <div class="ws-badge-label">Secret Key</div>
+          <div class="ws-badge-value green" id="dispSecretKey">—</div>
+        </div>
+        <button class="copy-pill" onclick="copyField('dispSecretKey', this)">Copy</button>
+      </div>
+      <div class="ws-badge">
+        <div>
+          <div class="ws-badge-label">Your Proxy Base URL</div>
+          <div class="ws-badge-value" id="dispProxyUrl" style="font-size:12px">—</div>
+        </div>
+        <button class="copy-pill" onclick="copyField('dispProxyUrl', this)">Copy</button>
+      </div>
+
+      <div style="background:rgba(210,153,34,.06);border:1px solid rgba(210,153,34,.2);border-radius:8px;padding:12px 16px;margin:16px 0 24px;font-size:12px;color:var(--text-muted)">
+        ⚠ Save your secret key now — it won't be shown again. If you lose it, contact support to rotate it.
+      </div>
+
+      <button class="btn-primary" onclick="goToStep(2)">Next — Set Up Your Teams →</button>
+    </div>
+
+    <!-- ══ STEP 2: Your Teams ════════════════════════════════════════════════ -->
+    <div class="gs-panel" id="gs2">
+      <div class="gs-eyebrow">Step 2 of 5</div>
+      <h2 class="gs-title">Which <span>teams</span> use AI?</h2>
+      <p class="gs-sub">Select each team and set a monthly AI spend cap. CostPilot enforces these automatically — throttling a department that goes over budget while keeping others running.</p>
+
+      <div id="deptList"></div>
+
+      <div class="add-dept-row">
+        <input type="text" class="add-dept-input" id="newDeptName" placeholder="Add a team (e.g. Legal, Finance)" onkeydown="if(event.key==='Enter')addCustomDept()" />
+        <button class="add-dept-btn" onclick="addCustomDept()">+ Add</button>
+      </div>
+
+      <div style="margin:20px 0 24px;font-size:12px;color:var(--text-muted)">
+        Budget caps are soft limits. CostPilot throttles AI calls to Scout tier when a team approaches its cap, and blocks when it's exceeded — unless you grant an override.
+      </div>
+
+      <div class="error-box" id="deptError"></div>
+      <button class="btn-primary" onclick="submitDepts()">Next — Choose Your Platform →</button>
+      <button class="btn-secondary" onclick="goToStep(1)">← Back</button>
+    </div>
+
+    <!-- ══ STEP 3: Platform ══════════════════════════════════════════════════ -->
+    <div class="gs-panel" id="gs3">
+      <div class="gs-eyebrow">Step 3 of 5</div>
+      <h2 class="gs-title">How does your team <span>call AI?</span></h2>
+      <p class="gs-sub">Choose your primary platform. We'll generate integration code specific to your stack — pre-filled with your credentials, ready to paste.</p>
+
+      <div class="platform-grid">
+        <div class="platform-tile" id="pt-salesforce"  onclick="selectPlatform('salesforce')">
+          <div class="platform-icon">☁️</div>
+          <div class="platform-name">Salesforce</div>
+        </div>
+        <div class="platform-tile" id="pt-servicenow"  onclick="selectPlatform('servicenow')">
+          <div class="platform-icon">⚙️</div>
+          <div class="platform-name">ServiceNow</div>
+        </div>
+        <div class="platform-tile" id="pt-hubspot"     onclick="selectPlatform('hubspot')">
+          <div class="platform-icon">🟠</div>
+          <div class="platform-name">HubSpot</div>
+        </div>
+        <div class="platform-tile" id="pt-python"      onclick="selectPlatform('python')">
+          <div class="platform-icon">🐍</div>
+          <div class="platform-name">Python</div>
+        </div>
+        <div class="platform-tile" id="pt-nodejs"      onclick="selectPlatform('nodejs')">
+          <div class="platform-icon">🟢</div>
+          <div class="platform-name">Node.js</div>
+        </div>
+        <div class="platform-tile" id="pt-java"        onclick="selectPlatform('java')">
+          <div class="platform-icon">☕</div>
+          <div class="platform-name">Java</div>
+        </div>
+        <div class="platform-tile" id="pt-ruby"        onclick="selectPlatform('ruby')">
+          <div class="platform-icon">💎</div>
+          <div class="platform-name">Ruby</div>
+        </div>
+        <div class="platform-tile" id="pt-other"       onclick="selectPlatform('other')">
+          <div class="platform-icon">🔌</div>
+          <div class="platform-name">Other / REST</div>
+        </div>
+      </div>
+
+      <div class="error-box" id="platformError"></div>
+      <button class="btn-primary" onclick="submitPlatform()">Next — Get Your Integration Code →</button>
+      <button class="btn-secondary" onclick="goToStep(2)">← Back</button>
+    </div>
+
+    <!-- ══ STEP 4: Integration Code ══════════════════════════════════════════ -->
+    <div class="gs-panel" id="gs4">
+      <div class="gs-eyebrow">Step 4 of 5</div>
+      <h2 class="gs-title">Your <span>integration code</span></h2>
+      <p class="gs-sub" id="gs4Sub">Your credentials are pre-filled. Copy the code below and drop it into your project.</p>
+
+      <div id="gs4Code"></div>
+
+      <div style="background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:12px;color:var(--text-muted);line-height:1.7">
+        ✅ <strong style="color:var(--text-primary)">That's the only change.</strong> Every API call now routes through CostPilot automatically — no other code changes required. Department routing uses the <code style="background:var(--bg-base);padding:1px 6px;border-radius:4px;font-size:11px">X-Department</code> header.
+      </div>
+
+      <button class="btn-primary" onclick="goToStep(5)">Next — Make Your First Call →</button>
+      <button class="btn-secondary" onclick="goToStep(3)">← Back</button>
+    </div>
+
+    <!-- ══ STEP 5: Go Live ═══════════════════════════════════════════════════ -->
+    <div class="gs-panel" id="gs5">
+      <div class="gs-eyebrow">Step 5 of 5</div>
+      <h2 class="gs-title">We're watching for your <span>first call</span></h2>
+
+      <div class="live-watch" id="watchingPanel">
+        <div class="pulse-ring">📡</div>
+        <div class="live-text">
+          <strong>Waiting for a call through your CostPilot endpoint...</strong><br>
+          Add the code from Step 4 to your project and make any API call. It will appear here within seconds.
+        </div>
+      </div>
+
+      <div id="successPanel" style="display:none">
+        <div class="success-icon">🎉</div>
+        <h2 class="gs-title" style="text-align:center">First call <span>received!</span></h2>
+        <div class="success-kpi">
+          <div class="success-kpi-box">
+            <div class="success-kpi-val" id="sc-tier">—</div>
+            <div class="success-kpi-lbl">Model Tier</div>
+          </div>
+          <div class="success-kpi-box">
+            <div class="success-kpi-val" id="sc-cost">—</div>
+            <div class="success-kpi-lbl">Cost</div>
+          </div>
+          <div class="success-kpi-box">
+            <div class="success-kpi-val" id="sc-saved">—</div>
+            <div class="success-kpi-lbl">Saved vs. Flagship</div>
+          </div>
+        </div>
+        <p style="font-size:13px;color:var(--text-muted);text-align:center;line-height:1.7;margin-bottom:24px">
+          CostPilot routed that call, logged it to your workspace, and calculated your savings. Your dashboard is live with your real data.
+        </p>
+        <a href="/" class="btn-primary" style="text-decoration:none">Open My Dashboard →</a>
+      </div>
+
+      <div style="margin-top:20px;padding:14px 16px;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted)">
+        <strong style="color:var(--text-primary);display:block;margin-bottom:6px">Quick test command</strong>
+        <div id="testCmd" style="font-family:var(--font-mono);font-size:11px;color:var(--accent-green);line-height:1.8;overflow-x:auto;white-space:pre"></div>
+      </div>
+
+      <button class="btn-secondary" style="margin-top:12px" onclick="goToStep(4)">← Back to integration code</button>
+    </div>
+
+  </div>
+</main>
+
+<footer class="footer">
+  CostPilot · Getting Started &nbsp;|&nbsp; <a href="/trial.html">← Back to trial</a>
+</footer>
+
+<script src="js/api.js"></script>
+<script>
+
+// ── State ──────────────────────────────────────────────────────────────────
+const WS       = localStorage.getItem("cp_workspace_id") || "";
+const SK       = localStorage.getItem("cp_secret_key")  || "";
+const PROVIDER = localStorage.getItem("cp_provider")    || "openai";
+const PROXY    = `https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-${WS}`;
+
+let _platform  = "";
+let _depts     = [];
+let _pollTimer = null;
+
+// ── Default departments ────────────────────────────────────────────────────
+const DEFAULT_DEPTS = [
+  { name: "Sales",       cap: 100, checked: true  },
+  { name: "Support",     cap: 100, checked: true  },
+  { name: "Engineering", cap: 200, checked: true  },
+  { name: "Marketing",   cap: 50,  checked: false },
+  { name: "Finance",     cap: 50,  checked: false },
+  { name: "Operations",  cap: 100, checked: false },
+  { name: "Legal",       cap: 75,  checked: false },
+  { name: "HR",          cap: 50,  checked: false },
+];
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(function init() {
+  if (!WS) {
+    window.location.href = "/trial.html";
+    return;
+  }
+
+  // Step 1: show credentials
+  document.getElementById("dispWorkspaceId").textContent = WS;
+  document.getElementById("dispSecretKey").textContent   = SK;
+  document.getElementById("dispProxyUrl").textContent    = PROXY;
+
+  const trialEnd = localStorage.getItem("cp_trial_end");
+  const name     = localStorage.getItem("cp_trial_name") || "";
+  if (trialEnd) {
+    const days = Math.max(0, Math.ceil((new Date(trialEnd) - new Date()) / 86400000));
+    document.getElementById("trialMeta").textContent =
+      `${name ? name.split(" ")[0] + " · " : ""}${days} days remaining · Free Trial`;
+  }
+
+  // Step 2: render dept list
+  renderDepts();
+})();
+
+// ── Step navigation ────────────────────────────────────────────────────────
+function goToStep(n) {
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById("gs" + i).classList.toggle("active", i === n);
+    const dot = document.getElementById("dot" + i);
+    const lbl = document.getElementById("lbl" + i);
+    dot.className = "gs-step-dot" + (i < n ? " done" : i === n ? " active" : "");
+    lbl.className = "gs-step-lbl" + (i < n ? " done" : i === n ? " active" : "");
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (n === 5) startPolling();
+  else stopPolling();
+}
+
+// ── Step 2: Departments ────────────────────────────────────────────────────
+function renderDepts() {
+  const list = document.getElementById("deptList");
+  list.innerHTML = DEFAULT_DEPTS.map((d, i) => `
+    <div class="dept-row" id="drow-${i}">
+      <div class="dept-check ${d.checked ? "checked" : ""}" id="dchk-${i}" onclick="toggleDept(${i})">
+        ${d.checked ? "✓" : ""}
+      </div>
+      <div class="dept-name">${d.name}</div>
+      <div class="dept-cap-wrap">
+        <div class="dept-cap-label">$</div>
+        <input type="number" class="dept-cap" id="dcap-${i}" value="${d.cap}" min="0" step="50" />
+        <div class="dept-cap-label">/mo cap</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function toggleDept(i) {
+  DEFAULT_DEPTS[i].checked = !DEFAULT_DEPTS[i].checked;
+  const el = document.getElementById("dchk-" + i);
+  el.className = "dept-check" + (DEFAULT_DEPTS[i].checked ? " checked" : "");
+  el.textContent = DEFAULT_DEPTS[i].checked ? "✓" : "";
+}
+
+function addCustomDept() {
+  const input = document.getElementById("newDeptName");
+  const name  = input.value.trim();
+  if (!name) return;
+  DEFAULT_DEPTS.push({ name, cap: 100, checked: true });
+  renderDepts();
+  input.value = "";
+}
+
+async function submitDepts() {
+  document.getElementById("deptError").style.display = "none";
+  const selected = DEFAULT_DEPTS
+    .filter((d, i) => {
+      const chk = document.getElementById("dchk-" + i);
+      return chk && chk.classList.contains("checked");
+    })
+    .map((d, i) => {
+      const idx = DEFAULT_DEPTS.indexOf(d);
+      const capEl = document.getElementById("dcap-" + idx);
+      return { name: d.name, cap_usd: capEl ? parseFloat(capEl.value) || 100 : d.cap };
+    });
+
+  if (!selected.length) {
+    const err = document.getElementById("deptError");
+    err.textContent = "Please select at least one team.";
+    err.style.display = "block";
+    return;
+  }
+
+  _depts = selected;
+  goToStep(3);
+}
+
+// ── Step 3: Platform ───────────────────────────────────────────────────────
+function selectPlatform(p) {
+  document.querySelectorAll(".platform-tile").forEach(t => t.classList.remove("selected"));
+  document.getElementById("pt-" + p).classList.add("selected");
+  _platform = p;
+}
+
+function submitPlatform() {
+  if (!_platform) {
+    const err = document.getElementById("platformError");
+    err.textContent = "Please select your platform.";
+    err.style.display = "block";
+    return;
+  }
+  document.getElementById("platformError").style.display = "none";
+  renderIntegrationCode();
+  goToStep(4);
+}
+
+// ── Step 4: Integration code ───────────────────────────────────────────────
+function renderIntegrationCode() {
+  const container = document.getElementById("gs4Code");
+  const sub       = document.getElementById("gs4Sub");
+  const snippets  = getSnippets();
+  const s         = snippets[_platform] || snippets["other"];
+
+  sub.textContent = s.description;
+  container.innerHTML = s.blocks.map(b => `
+    <div style="margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--text-muted)">${b.label}</div>
+    <div class="code-block"><button class="code-copy" onclick="copyBlock(this)">Copy</button>${b.code}</div>
+  `).join("");
+
+  // Test cURL command for Step 5
+  const provider = localStorage.getItem("cp_provider") || "openai";
+  const curlBody = provider === "openai"
+    ? `'{"model":"gpt-4o","messages":[{"role":"user","content":"Hello from CostPilot!"}]}'`
+    : `'{"model":"claude-haiku-4-5-20251001","max_tokens":10,"messages":[{"role":"user","content":"Hello!"}]}'`;
+  const curlEndpoint = provider === "openai" ? "chat/completions" : "messages";
+  const authHeader   = provider === "openai"
+    ? `-H "Authorization: Bearer YOUR_${provider.toUpperCase()}_KEY"`
+    : `-H "x-api-key: YOUR_ANTHROPIC_KEY" -H "anthropic-version: 2023-06-01"`;
+
+  document.getElementById("testCmd").textContent =
+`curl -X POST ${PROXY}/${curlEndpoint} \\
+  -H "Content-Type: application/json" \\
+  -H "X-CostPilot-Key: ${SK}" \\
+  -H "X-Department: Engineering" \\
+  ${authHeader} \\
+  -d ${curlBody}`;
+}
+
+function getSnippets() {
+  const provider = localStorage.getItem("cp_provider") || "openai";
+  const isOAI    = provider === "openai";
+  const apiNote  = isOAI
+    ? `# Your OpenAI key — passed through to OpenAI. CostPilot never stores it after setup.`
+    : `# Your Anthropic key — passed through to Anthropic.`;
+
+  return {
+    salesforce: {
+      description: "Drop this Apex class into your Salesforce org. It replaces any direct OpenAI/Anthropic calls with CostPilot-routed ones.",
+      blocks: [{
+        label: "CostPilotService.cls — drop into your Salesforce org",
+        code: `<span class="code-kw">public class</span> <span class="code-val">CostPilotService</span> {
+    <span class="code-kw">private static final</span> String ENDPOINT =
+        <span class="code-str">'${PROXY}/chat/completions'</span>;
+    <span class="code-kw">private static final</span> String CP_KEY =
+        <span class="code-str">'${SK}'</span>;
+
+    <span class="code-kw">public static</span> String route(String prompt, String department) {
+        HttpRequest req = <span class="code-kw">new</span> HttpRequest();
+        req.setEndpoint(ENDPOINT);
+        req.setMethod(<span class="code-str">'POST'</span>);
+        req.setHeader(<span class="code-str">'Content-Type'</span>, <span class="code-str">'application/json'</span>);
+        req.setHeader(<span class="code-str">'X-CostPilot-Key'</span>, CP_KEY);
+        req.setHeader(<span class="code-str">'X-Department'</span>, department);
+        req.setHeader(<span class="code-str">'Authorization'</span>, <span class="code-str">'Bearer '</span> + YOUR_OPENAI_KEY);
+
+        Map&lt;String,Object&gt; body = <span class="code-kw">new</span> Map&lt;String,Object&gt;{
+            <span class="code-str">'model'</span> => <span class="code-str">'gpt-4o'</span>,
+            <span class="code-str">'messages'</span> => <span class="code-kw">new</span> List&lt;Object&gt;{
+                <span class="code-kw">new</span> Map&lt;String,Object&gt;{
+                    <span class="code-str">'role'</span> => <span class="code-str">'user'</span>,
+                    <span class="code-str">'content'</span> => prompt
+                }
+            }
+        };
+        req.setBody(JSON.serialize(body));
+
+        Http http = <span class="code-kw">new</span> Http();
+        HttpResponse res = http.send(req);
+        <span class="code-kw">return</span> res.getBody();
+    }
+}`
+      }]
+    },
+
+    servicenow: {
+      description: "Add this script to a ServiceNow Business Rule or Flow Action. Replace any direct AI calls with CostPilotService.route().",
+      blocks: [{
+        label: "Script Include — ServiceNow",
+        code: `<span class="code-kw">var</span> CostPilotService = <span class="code-kw">Class.create</span>();
+CostPilotService.prototype = {
+    initialize: <span class="code-kw">function</span>() {},
+    route: <span class="code-kw">function</span>(prompt, department) {
+        <span class="code-kw">var</span> r = <span class="code-kw">new</span> sn_ws.RESTMessageV2();
+        r.setEndpoint(<span class="code-str">'${PROXY}/chat/completions'</span>);
+        r.setHttpMethod(<span class="code-str">'POST'</span>);
+        r.setRequestHeader(<span class="code-str">'Content-Type'</span>, <span class="code-str">'application/json'</span>);
+        r.setRequestHeader(<span class="code-str">'X-CostPilot-Key'</span>, <span class="code-str">'${SK}'</span>);
+        r.setRequestHeader(<span class="code-str">'X-Department'</span>, department);
+        r.setRequestHeader(<span class="code-str">'Authorization'</span>, <span class="code-str">'Bearer '</span> + YOUR_AI_KEY);
+        r.setRequestBody(JSON.stringify({
+            model: <span class="code-str">'gpt-4o'</span>,
+            messages: [{ role: <span class="code-str">'user'</span>, content: prompt }]
+        }));
+        <span class="code-kw">var</span> response = r.execute();
+        <span class="code-kw">return</span> JSON.parse(response.getBody());
+    },
+    type: <span class="code-str">'CostPilotService'</span>
+};`
+      }]
+    },
+
+    hubspot: {
+      description: "Add this to a HubSpot Custom Code workflow action or your HubSpot app's backend.",
+      blocks: [{
+        label: "HubSpot Custom Code Action (Python)",
+        code: `<span class="code-kw">import</span> requests
+
+<span class="code-key">COSTPILOT_URL</span> = <span class="code-str">"${PROXY}/chat/completions"</span>
+<span class="code-key">COSTPILOT_KEY</span> = <span class="code-str">"${SK}"</span>
+
+<span class="code-kw">def</span> <span class="code-val">route_ai_call</span>(prompt: str, department: str = <span class="code-str">"Marketing"</span>) -> str:
+    response = requests.post(
+        COSTPILOT_URL,
+        headers={
+            <span class="code-str">"X-CostPilot-Key"</span>: COSTPILOT_KEY,
+            <span class="code-str">"X-Department"</span>: department,
+            <span class="code-str">"Authorization"</span>: <span class="code-str">f"Bearer {YOUR_OPENAI_KEY}"</span>,
+        },
+        json={
+            <span class="code-str">"model"</span>: <span class="code-str">"gpt-4o"</span>,
+            <span class="code-str">"messages"</span>: [{<span class="code-str">"role"</span>: <span class="code-str">"user"</span>, <span class="code-str">"content"</span>: prompt}],
+        }
+    )
+    <span class="code-kw">return</span> response.json()[<span class="code-str">"choices"</span>][0][<span class="code-str">"message"</span>][<span class="code-str">"content"</span>]`
+      }]
+    },
+
+    python: {
+      description: "One URL change in your existing Python code. Everything else stays the same.",
+      blocks: [{
+        label: `${isOAI ? "OpenAI SDK" : "Anthropic SDK"} — Python`,
+        code: isOAI
+          ? `<span class="code-kw">from</span> openai <span class="code-kw">import</span> OpenAI
+
+<span class="code-cmt">${apiNote}</span>
+client = OpenAI(
+    base_url=<span class="code-str">"${PROXY}"</span>,
+    api_key=YOUR_OPENAI_KEY,
+    default_headers={
+        <span class="code-str">"X-CostPilot-Key"</span>: <span class="code-str">"${SK}"</span>,
+        <span class="code-str">"X-Department"</span>: <span class="code-str">"Engineering"</span>,  <span class="code-cmt"># change per team</span>
+    }
+)
+
+<span class="code-cmt"># All your existing code works unchanged ↓</span>
+response = client.chat.completions.create(
+    model=<span class="code-str">"gpt-4o"</span>,
+    messages=[{<span class="code-str">"role"</span>: <span class="code-str">"user"</span>, <span class="code-str">"content"</span>: <span class="code-str">"Hello!"</span>}]
+)`
+          : `<span class="code-kw">import</span> anthropic
+
+<span class="code-cmt">${apiNote}</span>
+client = anthropic.Anthropic(
+    base_url=<span class="code-str">"${PROXY}"</span>,
+    api_key=YOUR_ANTHROPIC_KEY,
+    default_headers={
+        <span class="code-str">"X-CostPilot-Key"</span>: <span class="code-str">"${SK}"</span>,
+        <span class="code-str">"X-Department"</span>: <span class="code-str">"Engineering"</span>,
+    }
+)`,
+      }]
+    },
+
+    nodejs: {
+      description: "One URL change in your existing Node.js code.",
+      blocks: [{
+        label: "OpenAI SDK — Node.js / TypeScript",
+        code: `<span class="code-kw">import</span> OpenAI <span class="code-kw">from</span> <span class="code-str">'openai'</span>;
+
+<span class="code-cmt">// Your OpenAI key — passed through, never stored by CostPilot</span>
+<span class="code-kw">const</span> client = <span class="code-kw">new</span> OpenAI({
+    baseURL: <span class="code-str">'${PROXY}'</span>,
+    apiKey: process.env.OPENAI_API_KEY,
+    defaultHeaders: {
+        <span class="code-str">'X-CostPilot-Key'</span>: <span class="code-str">'${SK}'</span>,
+        <span class="code-str">'X-Department'</span>:    <span class="code-str">'Engineering'</span>,
+    },
+});
+
+<span class="code-cmt">// All your existing code works unchanged ↓</span>
+<span class="code-kw">const</span> response = <span class="code-kw">await</span> client.chat.completions.create({
+    model: <span class="code-str">'gpt-4o'</span>,
+    messages: [{ role: <span class="code-str">'user'</span>, content: <span class="code-str">'Hello!'</span> }],
+});`
+      }]
+    },
+
+    java: {
+      description: "Add the CostPilotClient class to your Java project.",
+      blocks: [{
+        label: "CostPilotClient.java",
+        code: `<span class="code-kw">import</span> java.net.http.*;
+<span class="code-kw">import</span> java.net.URI;
+
+<span class="code-kw">public class</span> <span class="code-val">CostPilotClient</span> {
+    <span class="code-kw">private static final</span> String ENDPOINT =
+        <span class="code-str">"${PROXY}/chat/completions"</span>;
+    <span class="code-kw">private static final</span> String CP_KEY =
+        <span class="code-str">"${SK}"</span>;
+
+    <span class="code-kw">public static</span> String route(String prompt, String department,
+                                   String openAiKey) <span class="code-kw">throws</span> Exception {
+        String body = <span class="code-str">"""
+            {"model":"gpt-4o","messages":[{"role":"user","content":"%s"}]}
+            """</span>.formatted(prompt);
+
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(ENDPOINT))
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .header(<span class="code-str">"Content-Type"</span>,    <span class="code-str">"application/json"</span>)
+            .header(<span class="code-str">"Authorization"</span>,    <span class="code-str">"Bearer "</span> + openAiKey)
+            .header(<span class="code-str">"X-CostPilot-Key"</span>, CP_KEY)
+            .header(<span class="code-str">"X-Department"</span>,     department)
+            .build();
+
+        <span class="code-kw">var</span> client = HttpClient.newHttpClient();
+        HttpResponse&lt;String&gt; resp =
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+        <span class="code-kw">return</span> resp.body();
+    }
+}`
+      }]
+    },
+
+    ruby: {
+      description: "One line change in your Ruby project using the ruby-openai gem.",
+      blocks: [{
+        label: "Ruby — openai gem",
+        code: `<span class="code-kw">require</span> <span class="code-str">"openai"</span>
+
+<span class="code-cmt"># Your OpenAI key — passed through, never stored by CostPilot</span>
+client = OpenAI::Client.new(
+    access_token: YOUR_OPENAI_KEY,
+    uri_base: <span class="code-str">"${PROXY}"</span>,
+    request_timeout: 120,
+    extra_headers: {
+        <span class="code-str">"X-CostPilot-Key"</span> => <span class="code-str">"${SK}"</span>,
+        <span class="code-str">"X-Department"</span>    => <span class="code-str">"Engineering"</span>,
+    }
+)
+
+<span class="code-cmt"># All your existing code works unchanged ↓</span>
+response = client.chat(
+    parameters: {
+        model: <span class="code-str">"gpt-4o"</span>,
+        messages: [{ role: <span class="code-str">"user"</span>, content: <span class="code-str">"Hello!"</span> }]
+    }
+)`
+      }]
+    },
+
+    other: {
+      description: "Use CostPilot from any language or tool via standard HTTP.",
+      blocks: [
+        {
+          label: "Your endpoint details",
+          code: `<span class="code-key">Base URL:</span>   <span class="code-val">${PROXY}</span>
+<span class="code-key">Secret Key:</span> <span class="code-val">${SK}</span>
+
+<span class="code-key">Endpoints:</span>
+  POST /chat/completions  <span class="code-cmt">← OpenAI-compatible</span>
+  POST /messages          <span class="code-cmt">← Anthropic-compatible</span>
+
+<span class="code-key">Required headers on every request:</span>
+  X-CostPilot-Key: ${SK}
+  X-Department:    &lt;your team name&gt;
+  Authorization:   Bearer &lt;your AI provider key&gt;`
+        },
+        {
+          label: "cURL example",
+          code: `curl -X POST ${PROXY}/chat/completions \\
+  -H <span class="code-str">"Content-Type: application/json"</span> \\
+  -H <span class="code-str">"X-CostPilot-Key: ${SK}"</span> \\
+  -H <span class="code-str">"X-Department: Engineering"</span> \\
+  -H <span class="code-str">"Authorization: Bearer YOUR_OPENAI_KEY"</span> \\
+  -d <span class="code-str">'{"model":"gpt-4o","messages":[{"role":"user","content":"Hello!"}]}'</span>`
+        }
+      ]
+    },
+  };
+}
+
+// ── Step 5: Poll for first call ────────────────────────────────────────────
+function startPolling() {
+  stopPolling();
+  _pollTimer = setInterval(async () => {
+    try {
+      const data = await apiGet(`/api/trial/first-call?workspace_id=${WS}`);
+      if (data.has_calls && data.first_call) {
+        stopPolling();
+        showSuccess(data.first_call);
+      }
+    } catch(e) { /* silent */ }
+  }, 3000);
+}
+
+function stopPolling() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+}
+
+function showSuccess(call) {
+  document.getElementById("watchingPanel").style.display = "none";
+  document.getElementById("successPanel").style.display  = "block";
+  document.getElementById("sc-tier").textContent = call.model_tier || "Scout";
+  document.getElementById("sc-cost").textContent = "$" + (call.cost_usd || 0).toFixed(5);
+  const flagship_cost = (call.input_tokens || 1000) * 5 / 1_000_000;
+  const saved = Math.max(0, flagship_cost - (call.cost_usd || 0));
+  document.getElementById("sc-saved").textContent = "$" + saved.toFixed(5);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function copyField(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied";
+  setTimeout(() => btn.textContent = orig, 2000);
+}
+
+function copyBlock(btn) {
+  const block = btn.closest(".code-block");
+  const text  = block.innerText.replace("Copy", "").trim();
+  navigator.clipboard.writeText(text);
+  btn.textContent = "✓ Copied";
+  setTimeout(() => btn.textContent = "Copy", 2000);
+}
+
+window.addEventListener("beforeunload", stopPolling);
+</script>
+</body>
+</html>

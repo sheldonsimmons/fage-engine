@@ -299,9 +299,12 @@ class TrialAccount(Base):
     email        = Column(String,   nullable=False, unique=True)
     name         = Column(String,   nullable=False)
     company      = Column(String,   nullable=True)
-    api_key_enc  = Column(Text,     nullable=False)          # base64-encoded key (swap Fernet in prod)
-    provider     = Column(String,   default="openai")        # openai | anthropic | azure
-    workspace_id = Column(String,   nullable=False, unique=True)  # 16-char token used in proxy URL
+    api_key_enc  = Column(Text,     nullable=False)          # base64-encoded key
+    provider     = Column(String,   default="openai")        # openai | anthropic
+    workspace_id = Column(String,   nullable=False, unique=True)  # e.g. "A1B2C3D4E5F6G7H8"
+    secret_key   = Column(String,   nullable=True)           # sk-cp-xxx — authenticates proxy calls
+    platform     = Column(String,   nullable=True)           # salesforce | servicenow | hubspot | python | nodejs | java | ruby | other
+    setup_complete = Column(Boolean, default=False)          # True after getting-started wizard finished
     trial_start  = Column(DateTime, default=datetime.utcnow)
     trial_end    = Column(DateTime, nullable=False)
     plan         = Column(String,   default="trial")         # trial | starter | growth | business | enterprise

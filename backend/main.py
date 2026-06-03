@@ -91,12 +91,22 @@ def _run_migrations():
             conn.commit()
         except Exception:
             pass
-        # trial_accounts table is created via create_all — ensure it exists
+        # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount
             TrialAccount.__table__.create(bind=engine, checkfirst=True)
         except Exception:
             pass
+        for col, defn in [
+            ("secret_key",     "VARCHAR"),
+            ("platform",       "VARCHAR"),
+            ("setup_complete", "BOOLEAN DEFAULT FALSE"),
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE trial_accounts ADD COLUMN {col} {defn}"))
+                conn.commit()
+            except Exception:
+                pass
 
 _run_migrations()
 
@@ -367,6 +377,10 @@ app.include_router(routes_known_models.router, prefix="/api/models/known", tags=
 # Free Trial — OpenAI usage pull, trial registration, trial status
 from api import routes_trial
 app.include_router(routes_trial.router, prefix="/api/trial", tags=["Trial"])
+
+# Customer Proxy — /v1/ws-{workspace_id}/chat/completions + /messages
+from api import routes_proxy
+app.include_router(routes_proxy.router, prefix="/v1", tags=["Proxy"])
 
 # Dev/Demo — Populate dashboard with impressive demo data for screenshots
 @app.post("/api/admin/populate-demo", tags=["Admin"])

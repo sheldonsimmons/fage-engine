@@ -229,26 +229,29 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
             "message": "A trial for this email already exists.",
         }
 
+    import secrets as _secrets
+    from base64 import b64encode
+
     workspace_id = str(uuid.uuid4()).replace("-", "")[:16].upper()
+    secret_key   = "sk-cp-" + _secrets.token_urlsafe(32)
     trial_start  = datetime.utcnow()
     trial_end    = trial_start + timedelta(days=30)
 
-    # Encrypt key with a simple reversible scheme using env secret
-    from base64 import b64encode
-    secret = os.environ.get("COSTPILOT_SECRET", "default-secret-change-me")
-    encrypted = b64encode(req.api_key.encode()).decode()  # base64 for now; swap for Fernet in prod
+    encrypted = b64encode(req.api_key.encode()).decode()
 
     account = TrialAccount(
-        email        = req.email,
-        name         = req.name,
-        company      = req.company,
-        api_key_enc  = encrypted,
-        provider     = req.provider,
-        workspace_id = workspace_id,
-        trial_start  = trial_start,
-        trial_end    = trial_end,
-        plan         = "trial",
-        is_active    = True,
+        email          = req.email,
+        name           = req.name,
+        company        = req.company,
+        api_key_enc    = encrypted,
+        provider       = req.provider,
+        workspace_id   = workspace_id,
+        secret_key     = secret_key,
+        setup_complete = False,
+        trial_start    = trial_start,
+        trial_end      = trial_end,
+        plan           = "trial",
+        is_active      = True,
     )
     db.add(account)
     db.commit()
@@ -256,10 +259,11 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
 
     return {
         "workspace_id":   workspace_id,
+        "secret_key":     secret_key,
         "trial_start":    trial_start.isoformat(),
         "trial_end":      trial_end.isoformat(),
         "days_remaining": 30,
-        "proxy_endpoint": f"https://fage-engine-21cb49fe4806.herokuapp.com/v1",
+        "proxy_base_url": f"https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-{workspace_id}",
         "already_exists": False,
     }
 
@@ -342,7 +346,76 @@ def _anthropic_savings_from_rows(rows: list) -> dict:
     }
 
 
-# ── 4. Validate Anthropic Key ─────────────────────────────────────────────────
+# ── 4. Department Setup ───────────────────────────────────────────────────────
+
+class DeptInput(BaseModel):
+    name:      str
+    cap_usd:   float = 100.0
+
+class SetupDepartmentsRequest(BaseModel):
+    workspace_id: str
+    secret_key:   str
+    departments:  list
+    platform:     str = "other"
+
+@router.post("/setup-departments")
+def setup_departments(req: SetupDepartmentsRequest, db: Session = Depends(get_db)):
+    from database.models import DepartmentBudget
+
+    account = db.query(TrialAccount).filter_by(workspace_id=req.workspace_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    if account.secret_key != req.secret_key:
+        raise HTTPException(status_code=401, detail="Invalid secret key.")
+
+    created = []
+    for d in req.departments:
+        name    = d.get("name", "").strip()
+        cap_usd = float(d.get("cap_usd", 100.0))
+        if not name:
+            continue
+        dept_key = f"{req.workspace_id}:{name}"
+        existing = db.query(DepartmentBudget).filter_by(department=dept_key).first()
+        if not existing:
+            db.add(DepartmentBudget(
+                department      = dept_key,
+                monthly_cap_usd = cap_usd,
+                current_spend_usd = 0.0,
+                throttled       = False,
+                override_granted= False,
+            ))
+        created.append(name)
+
+    account.platform       = req.platform
+    account.setup_complete = True
+    db.commit()
+
+    return {"created": created, "platform": req.platform, "setup_complete": True}
+
+
+# ── 5. First Call Detection ───────────────────────────────────────────────────
+
+@router.get("/first-call")
+def first_call_check(workspace_id: str, db: Session = Depends(get_db)):
+    from database.models import TokenTransaction
+    call = db.query(TokenTransaction).filter_by(department=f"ws:{workspace_id}").first()
+    if not call:
+        # also check workspace-tagged calls
+        call = db.query(TokenTransaction).filter(
+            TokenTransaction.department.like(f"{workspace_id}:%")
+        ).first()
+    return {
+        "has_calls": call is not None,
+        "first_call": {
+            "model_tier":   call.model_tier,
+            "cost_usd":     call.cost_usd,
+            "timestamp":    call.timestamp.isoformat(),
+            "tokens_saved": call.tokens_saved,
+        } if call else None,
+    }
+
+
+# ── 6. Validate Anthropic Key ─────────────────────────────────────────────────
 
 class ValidateAnthropicRequest(BaseModel):
     api_key: str
