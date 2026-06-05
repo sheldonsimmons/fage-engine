@@ -22,7 +22,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 
 from database.db import SessionLocal
-from database.models import TrialAccount, TokenTransaction, RegisteredAgent
+from database.models import TrialAccount, TokenTransaction, RegisteredAgent, AuditEvent
 from core.pruner import prune
 
 router = APIRouter()
@@ -155,6 +155,9 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
                      cost_usd: float, routing_reason: str,
                      tokens_saved: int = 0):
     dept_key = f"{workspace_id}:{department}"
+    now = datetime.utcnow()
+
+    # Token transaction — feeds savings dashboard + reports
     txn = TokenTransaction(
         department     = dept_key,
         source_platform= "trial-proxy",
@@ -162,12 +165,33 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         input_tokens   = input_tokens,
         output_tokens  = output_tokens,
         cost_usd       = cost_usd,
-        timestamp      = datetime.utcnow(),
+        timestamp      = now,
         routing_reason = routing_reason,
         was_pruned     = tokens_saved > 0,
         tokens_saved   = tokens_saved,
     )
     db.add(txn)
+
+    # Audit event — feeds Governance Event Stream + decision ledger
+    is_routine  = routing_reason == "ROUTINE"
+    risk_level  = "low" if is_routine else "medium"
+    rationale   = (
+        f"{'Routine' if is_routine else 'Complex'} call routed to {tier} tier "
+        f"({model}). "
+        + (f"{tokens_saved:,} tokens pruned before sending." if tokens_saved > 0 else "")
+    ).strip()
+    outcome = f"ROUTED_TO_{tier.upper().replace(' ', '_')}"
+
+    audit = AuditEvent(
+        event_type       = "ROUTING",
+        department       = dept_key,
+        model_tier       = tier,
+        rationale        = rationale,
+        decision_outcome = outcome,
+        risk_level       = risk_level,
+        timestamp        = now,
+    )
+    db.add(audit)
     db.commit()
 
 
