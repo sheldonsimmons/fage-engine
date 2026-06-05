@@ -250,7 +250,7 @@ function togglePanel(bodyId, chevronId) {
   // (Chart.js can't size itself when container is display:none)
   if (!open && bodyId === "timeseriesBody") {
     requestAnimationFrame(() => {
-      if (typeof loadTimeseries === "function") loadTimeseries();
+      if (typeof loadTimeSeries === "function") loadTimeSeries();
     });
   }
 }
@@ -267,14 +267,16 @@ function restorePanelStates() {
     ["routingRulesBody",  "routingRulesChevron"],
     ["timeseriesBody",    "timeseriesChevron"],
   ];
+  // Panels that should be open by default (if no saved preference)
+  const defaultOpen = new Set(["timeseriesBody"]);
+
   panels.forEach(([bodyId, chevronId]) => {
     const body    = document.getElementById(bodyId);
     const chevron = document.getElementById(chevronId);
     if (!body || !chevron) return;
     try {
       const saved = localStorage.getItem("panel_" + bodyId);
-      // Default: all closed unless localStorage says open
-      const shouldOpen = saved === "open";
+      const shouldOpen = saved === "open" || (saved === null && defaultOpen.has(bodyId));
       body.style.display  = shouldOpen ? "" : "none";
       chevron.textContent = shouldOpen ? "▾" : "▸";
     } catch(e) {
@@ -282,6 +284,12 @@ function restorePanelStates() {
       chevron.textContent = "▸";
     }
   });
+
+  // Re-render timeseries charts after panel states are applied —
+  // the container is now guaranteed to be visible if defaultOpen
+  setTimeout(() => {
+    if (typeof loadTimeSeries === "function") loadTimeSeries();
+  }, 50);
 }
 
 // ── Draggable panels ──────────────────────────────────────────────────────────
