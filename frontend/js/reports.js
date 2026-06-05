@@ -222,9 +222,14 @@ function loadActiveTab() {
 
 // ── TAB 1: SAVINGS ────────────────────────────────────────────────────────────
 
+// Workspace filter — set when a trial user clicks through from workspace.html
+const _wsParam = new URLSearchParams(window.location.search).get("ws")
+  ? `&workspace_id=${localStorage.getItem("cp_workspace_id") || ""}`
+  : "";
+
 async function loadSavings() {
   const { days } = getActiveDateRange();
-  const data = await apiGet(`/api/reports/savings?days=${days}`);
+  const data = await apiGet(`/api/reports/savings?days=${days}${_wsParam}`);
   _rptSavingsData = data;
 
   setKpi("sv-total-saved",  fmtUsd(data.total_saved_usd));
@@ -337,7 +342,7 @@ async function loadSavings() {
 
 async function loadRisk() {
   const { days } = getActiveDateRange();
-  const data = await apiGet(`/api/reports/risk?days=${days}`);
+  const data = await apiGet(`/api/reports/risk?days=${days}${_wsParam}`);
   _rptRiskEvents = data.recent_events || [];
 
   setKpi("rk-total",    fmtNum(data.total_events));
@@ -482,7 +487,7 @@ function renderExecSummary(d) {
 
 async function loadDepartments() {
   const { days } = getActiveDateRange();
-  const data = await apiGet(`/api/reports/departments?days=${days}`);
+  const data = await apiGet(`/api/reports/departments?days=${days}${_wsParam}`);
   _rptDeptData = data.scorecards || [];
 
   // Scorecard table

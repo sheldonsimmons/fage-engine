@@ -572,7 +572,53 @@ async def anthropic_csv(file: UploadFile = File(...)):
     return {"has_usage": True, "savings": savings}
 
 
-# ── 3. Workspace Dashboard Stats ──────────────────────────────────────────────
+# ── 3. Workspace Agent Lake ───────────────────────────────────────────────────
+
+@router.get("/workspace-agents")
+def workspace_agents(workspace_id: str, db: Session = Depends(get_db)):
+    from database.models import RegisteredAgent, TokenTransaction
+    prefix = f"{workspace_id}:"
+
+    agents = db.query(RegisteredAgent).filter(
+        RegisteredAgent.department.like(f"{prefix}%"),
+        RegisteredAgent.archived != True,
+    ).order_by(RegisteredAgent.last_used_at.desc()).all()
+
+    result = []
+    for a in agents:
+        dept_display = a.department.replace(prefix, "", 1) if a.department else a.department
+        # Get call stats for this agent
+        txns = db.query(TokenTransaction).filter(
+            TokenTransaction.department == a.department
+        ).all()
+        total_cost = round(sum(t.cost_usd for t in txns), 6)
+        total_calls = len(txns)
+        tokens_saved = sum(t.tokens_saved for t in txns if t.was_pruned)
+
+        recent = sorted(txns, key=lambda t: t.timestamp, reverse=True)[:5]
+        result.append({
+            "id":             a.id,
+            "name":           a.name,
+            "department":     dept_display,
+            "platform":       a.source_platform or "api",
+            "status":         a.status,
+            "last_active":    a.last_used_at.isoformat() if a.last_used_at else None,
+            "total_calls":    total_calls,
+            "total_cost_usd": total_cost,
+            "tokens_saved":   tokens_saved,
+            "transactions":   [{
+                "timestamp":      t.timestamp.isoformat(),
+                "model_tier":     t.model_tier,
+                "routing_reason": t.routing_reason or "—",
+                "cost_usd":       t.cost_usd,
+                "tokens_saved":   t.tokens_saved,
+                "was_pruned":     t.was_pruned,
+            } for t in recent],
+        })
+    return {"agents": result, "total": len(result)}
+
+
+# ── 4. Workspace Dashboard Stats ──────────────────────────────────────────────
 
 @router.get("/workspace-stats")
 def workspace_stats(workspace_id: str, db: Session = Depends(get_db)):

@@ -6,10 +6,12 @@ POST /v1/ws-{workspace_id}/messages           — Anthropic-compatible proxy
 
 Each request:
   1. Validates workspace_id + X-CostPilot-Key header
-  2. Runs CostPilot's complexity router to pick the right tier
-  3. Forwards to the real API using the customer's stored key
-  4. Logs the transaction tagged to workspace_id
-  5. Returns the real API response transparently
+  2. Prunes user message content (strips HTML, email chains, disclaimers)
+  3. Runs CostPilot's complexity router to pick the right tier
+  4. Forwards to the real API using the customer's key (passed through)
+  5. Logs the transaction tagged to workspace_id:department
+  6. Auto-registers the agent in Agent Lake if first seen
+  7. Returns the real API response + X-CostPilot-* metadata headers
 """
 
 import httpx
@@ -20,7 +22,8 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 
 from database.db import SessionLocal
-from database.models import TrialAccount, TokenTransaction
+from database.models import TrialAccount, TokenTransaction, RegisteredAgent
+from core.pruner import prune
 
 router = APIRouter()
 
@@ -89,12 +92,71 @@ def _get_account(workspace_id: str, secret_key: str, db):
     return account
 
 
+def _prune_messages(messages: list) -> tuple:
+    """Run the pruner on user message content. Returns (pruned_messages, total_tokens_saved)."""
+    pruned   = []
+    saved    = 0
+    for msg in messages:
+        if msg.get("role") != "user":
+            pruned.append(msg)
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str) and content.strip():
+            result   = prune(content)
+            saved   += result["tokens_saved"]
+            pruned.append({**msg, "content": result["cleaned_text"]})
+        elif isinstance(content, list):
+            # Multi-part content (text + images)
+            new_parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    result  = prune(part.get("text", ""))
+                    saved  += result["tokens_saved"]
+                    new_parts.append({**part, "text": result["cleaned_text"]})
+                else:
+                    new_parts.append(part)
+            pruned.append({**msg, "content": new_parts})
+        else:
+            pruned.append(msg)
+    return pruned, saved
+
+
+def _ensure_agent(db, workspace_id: str, department: str, platform: str):
+    """Auto-register an agent for this workspace+department on first call."""
+    agent_name = f"{platform.capitalize()} · {department}"
+    dept_key   = f"{workspace_id}:{department}"
+    existing   = db.query(RegisteredAgent).filter_by(
+        name=agent_name, department=dept_key
+    ).first()
+    if existing:
+        existing.last_used_at = datetime.utcnow()
+        existing.status       = "active"
+        db.commit()
+        return existing
+    agent = RegisteredAgent(
+        name             = agent_name,
+        department       = dept_key,
+        source_platform  = platform,
+        permissions      = "read,write",
+        status           = "active",
+        collision_policy = "lock",
+        last_used_at     = datetime.utcnow(),
+        pruning_enabled  = True,
+        min_tier         = 1,
+        max_tier         = 4,
+    )
+    db.add(agent)
+    db.commit()
+    return agent
+
 
 def _log_transaction(db, workspace_id: str, department: str, model: str,
                      tier: str, input_tokens: int, output_tokens: int,
-                     cost_usd: float, routing_reason: str):
+                     cost_usd: float, routing_reason: str,
+                     tokens_saved: int = 0):
+    dept_key = f"{workspace_id}:{department}"
     txn = TokenTransaction(
-        department     = f"{workspace_id}:{department}",
+        department     = dept_key,
         source_platform= "trial-proxy",
         model_tier     = tier,
         input_tokens   = input_tokens,
@@ -102,11 +164,14 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         cost_usd       = cost_usd,
         timestamp      = datetime.utcnow(),
         routing_reason = routing_reason,
-        was_pruned     = False,
-        tokens_saved   = 0,
+        was_pruned     = tokens_saved > 0,
+        tokens_saved   = tokens_saved,
     )
     db.add(txn)
     db.commit()
+
+
+
 
 
 # ── Workspace status page (GET) ──────────────────────────────────────────────
@@ -188,7 +253,7 @@ def workspace_status(workspace_id: str):
 async def proxy_openai(workspace_id: str, request: Request):
     secret_key = request.headers.get("X-CostPilot-Key", "")
     department = request.headers.get("X-Department", "default")
-    # Customer's own API key — stays in their code, forwarded as-is
+    platform   = request.headers.get("X-Platform", "api")
     auth_header = request.headers.get("Authorization", "")
 
     if not auth_header:
@@ -197,38 +262,58 @@ async def proxy_openai(workspace_id: str, request: Request):
 
     db = SessionLocal()
     try:
-        account = _get_account(workspace_id, secret_key, db)
-
+        account  = _get_account(workspace_id, secret_key, db)
         body     = await request.json()
         messages = body.get("messages", [])
-        tokens   = _estimate_tokens(messages)
-        complex_ = _is_complex(messages, tokens)
+
+        # 1. Prune user messages
+        pruned_messages, tokens_saved = _prune_messages(messages)
+
+        # 2. Complexity routing on pruned content
+        tokens   = _estimate_tokens(pruned_messages)
+        complex_ = _is_complex(pruned_messages, tokens)
 
         requested_model = body.get("model", "gpt-4o")
         routed_model    = requested_model if complex_ else SCOUT_OPENAI
         routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
 
-        # Forward with the customer's own key — we never store or see it beyond this request
-        forward_body = {**body, "model": routed_model}
+        # 3. Forward with pruned messages
+        forward_body = {**body, "model": routed_model, "messages": pruned_messages}
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": auth_header,
-                         "Content-Type": "application/json"},
+                headers={"Authorization": auth_header, "Content-Type": "application/json"},
                 json=forward_body,
             )
 
-        resp_data    = resp.json()
-        usage        = resp_data.get("usage", {})
-        in_tokens    = usage.get("prompt_tokens", tokens)
-        out_tokens   = usage.get("completion_tokens", 100)
-        tier_meta    = OPENAI_TIERS.get(routed_model, {"tier": "Advisor", "input": 5.0, "output": 15.0})
-        cost         = (in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000
+        resp_data  = resp.json()
+        usage      = resp_data.get("usage", {})
+        in_tokens  = usage.get("prompt_tokens", tokens)
+        out_tokens = usage.get("completion_tokens", 100)
+        tier_meta  = OPENAI_TIERS.get(routed_model, {"tier": "Advisor", "input": 5.0, "output": 15.0})
+        cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
 
+        # 4. Log transaction
         _log_transaction(db, workspace_id, department, routed_model,
-                         tier_meta["tier"], in_tokens, out_tokens, cost, routing_reason)
+                         tier_meta["tier"], in_tokens, out_tokens, cost,
+                         routing_reason, tokens_saved)
 
-        return JSONResponse(content=resp_data, status_code=resp.status_code)
+        # 5. Auto-register agent
+        _ensure_agent(db, workspace_id, department, platform)
+
+        # 6. Return response + CostPilot metadata headers
+        return JSONResponse(
+            content=resp_data,
+            status_code=resp.status_code,
+            headers={
+                "X-CostPilot-Model":        routed_model,
+                "X-CostPilot-Tier":         tier_meta["tier"],
+                "X-CostPilot-Routing":      routing_reason,
+                "X-CostPilot-Cost":         str(cost),
+                "X-CostPilot-Tokens-Saved": str(tokens_saved),
+                "X-CostPilot-Workspace":    workspace_id,
+            }
+        )
 
     finally:
         db.close()
@@ -238,9 +323,9 @@ async def proxy_openai(workspace_id: str, request: Request):
 
 @router.post("/ws-{workspace_id}/messages")
 async def proxy_anthropic(workspace_id: str, request: Request):
-    secret_key = request.headers.get("X-CostPilot-Key", "")
-    department = request.headers.get("X-Department", "default")
-    # Customer's own Anthropic key — stays in their code, forwarded as-is
+    secret_key    = request.headers.get("X-CostPilot-Key", "")
+    department    = request.headers.get("X-Department", "default")
+    platform      = request.headers.get("X-Platform", "api")
     anthropic_key = request.headers.get("x-api-key", "")
 
     if not anthropic_key:
@@ -249,18 +334,23 @@ async def proxy_anthropic(workspace_id: str, request: Request):
 
     db = SessionLocal()
     try:
-        account = _get_account(workspace_id, secret_key, db)
-
+        account  = _get_account(workspace_id, secret_key, db)
         body     = await request.json()
         messages = body.get("messages", [])
-        tokens   = _estimate_tokens(messages)
-        complex_ = _is_complex(messages, tokens)
+
+        # 1. Prune user messages
+        pruned_messages, tokens_saved = _prune_messages(messages)
+
+        # 2. Complexity routing
+        tokens   = _estimate_tokens(pruned_messages)
+        complex_ = _is_complex(pruned_messages, tokens)
 
         requested_model = body.get("model", "claude-sonnet-4-6")
         routed_model    = requested_model if complex_ else SCOUT_ANTHROPIC
         routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
 
-        forward_body = {**body, "model": routed_model}
+        # 3. Forward with pruned messages
+        forward_body    = {**body, "model": routed_model, "messages": pruned_messages}
         forward_headers = {
             "x-api-key":         anthropic_key,
             "anthropic-version": request.headers.get("anthropic-version", "2023-06-01"),
@@ -276,18 +366,33 @@ async def proxy_anthropic(workspace_id: str, request: Request):
                 json=forward_body,
             )
 
-        resp_data = resp.json()
-        usage     = resp_data.get("usage", {})
-        in_tokens = usage.get("input_tokens", tokens)
-        out_tokens= usage.get("output_tokens", 100)
-        tier_meta = ANTHROPIC_TIERS.get(routed_model,
-                        {"tier": "Advisor", "input": 3.0, "output": 15.0})
-        cost      = (in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000
+        resp_data  = resp.json()
+        usage      = resp_data.get("usage", {})
+        in_tokens  = usage.get("input_tokens", tokens)
+        out_tokens = usage.get("output_tokens", 100)
+        tier_meta  = ANTHROPIC_TIERS.get(routed_model,
+                         {"tier": "Advisor", "input": 3.0, "output": 15.0})
+        cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
 
+        # 4. Log + 5. Auto-register agent
         _log_transaction(db, workspace_id, department, routed_model,
-                         tier_meta["tier"], in_tokens, out_tokens, cost, routing_reason)
+                         tier_meta["tier"], in_tokens, out_tokens, cost,
+                         routing_reason, tokens_saved)
+        _ensure_agent(db, workspace_id, department, platform)
 
-        return JSONResponse(content=resp_data, status_code=resp.status_code)
+        # 6. Return response + CostPilot metadata headers
+        return JSONResponse(
+            content=resp_data,
+            status_code=resp.status_code,
+            headers={
+                "X-CostPilot-Model":        routed_model,
+                "X-CostPilot-Tier":         tier_meta["tier"],
+                "X-CostPilot-Routing":      routing_reason,
+                "X-CostPilot-Cost":         str(cost),
+                "X-CostPilot-Tokens-Saved": str(tokens_saved),
+                "X-CostPilot-Workspace":    workspace_id,
+            }
+        )
 
     finally:
         db.close()

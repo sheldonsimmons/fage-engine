@@ -40,13 +40,18 @@ def _parse_range(days: int):
 # ── Savings Report ─────────────────────────────────────────────────────────────
 
 @router.get("/savings")
-def savings_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
+def savings_report(days: int = Query(30, ge=1, le=365),
+                   workspace_id: str = Query(None),
+                   db: Session = Depends(get_db)):
     start, end = _parse_range(days)
 
-    txns = db.query(TokenTransaction).filter(
+    q = db.query(TokenTransaction).filter(
         TokenTransaction.timestamp >= start,
         TokenTransaction.timestamp <= end,
-    ).all()
+    )
+    if workspace_id:
+        q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))
+    txns = q.all()
 
     total_cost       = sum(t.cost_usd for t in txns)
     total_calls      = len(txns)
@@ -105,13 +110,18 @@ def savings_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(ge
 # ── Risk Report ────────────────────────────────────────────────────────────────
 
 @router.get("/risk")
-def risk_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
+def risk_report(days: int = Query(30, ge=1, le=365),
+                workspace_id: str = Query(None),
+                db: Session = Depends(get_db)):
     start, end = _parse_range(days)
 
-    events = db.query(AuditEvent).filter(
+    q = db.query(AuditEvent).filter(
         AuditEvent.timestamp >= start,
         AuditEvent.timestamp <= end,
-    ).order_by(AuditEvent.timestamp.desc()).all()
+    )
+    if workspace_id:
+        q = q.filter(AuditEvent.department.like(f"{workspace_id}:%"))
+    events = q.order_by(AuditEvent.timestamp.desc()).all()
 
     total_events  = len(events)
     critical      = sum(1 for e in events if e.risk_level == "critical")
@@ -191,13 +201,18 @@ def risk_report(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_d
 # ── Department Scorecard ───────────────────────────────────────────────────────
 
 @router.get("/departments")
-def dept_scorecard(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
+def dept_scorecard(days: int = Query(30, ge=1, le=365),
+                   workspace_id: str = Query(None),
+                   db: Session = Depends(get_db)):
     start, end = _parse_range(days)
 
-    txns = db.query(TokenTransaction).filter(
+    q = db.query(TokenTransaction).filter(
         TokenTransaction.timestamp >= start,
         TokenTransaction.timestamp <= end,
-    ).all()
+    )
+    if workspace_id:
+        q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))
+    txns = q.all()
 
     budgets = {b.department: b for b in db.query(DepartmentBudget).all()}
 
