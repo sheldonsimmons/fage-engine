@@ -80,8 +80,10 @@ def get_dashboard(db: Session = Depends(get_db)):
 
     # Estimated dollar value of all pruning savings (blended micro/flagship rate)
     # Using micro rate as conservative floor estimate
-    MICRO_COST_PER_TOKEN = 0.15 / 1_000_000
-    pruning_savings_usd = round(tokens_saved_total * MICRO_COST_PER_TOKEN, 6)
+    # Savings = tokens pruned × what they would have cost at Advisor/Sonnet rate
+    # (not Scout rate — pruning saves against whatever model the call was using)
+    ADVISOR_INPUT_PER_TOKEN = 3.00 / 1_000_000
+    pruning_savings_usd = round((tokens_saved_total or 0) * ADVISOR_INPUT_PER_TOKEN, 6)
 
     # ── Call counts — exclude Voice Guard prune-only records (cost=$0, no AI call) ──
     # VOICE_GUARD_PRUNE rows exist only to record token savings; they are not AI calls.
