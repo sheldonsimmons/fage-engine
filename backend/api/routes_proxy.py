@@ -64,12 +64,12 @@ SCOUT_ANTHROPIC = "claude-haiku-4-5-20251001"
 
 
 def _get_keywords(db) -> list:
-    """Load keywords from DB routing config, falling back to defaults."""
+    """Merge DB routing config keywords with defaults — both always apply."""
     try:
         from core.routing_config import get_routing_config
         cfg = get_routing_config(db)
-        kws = cfg.complexity_keywords
-        return kws if kws else COMPLEXITY_KEYWORDS_DEFAULT
+        db_kws = cfg.complexity_keywords or []
+        return list(set(COMPLEXITY_KEYWORDS_DEFAULT + db_kws))
     except Exception:
         return COMPLEXITY_KEYWORDS_DEFAULT
 
