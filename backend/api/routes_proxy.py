@@ -179,17 +179,21 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     )
     db.add(txn)
 
-    # Budget context
-    budget = db.query(DepartmentBudget).filter_by(department=dept_key).first()
+    # Budget context — try workspace-prefixed key first, then plain dept name
+    budget = (
+        db.query(DepartmentBudget).filter_by(department=dept_key).first() or
+        db.query(DepartmentBudget).filter_by(department=department).first()
+    )
     budget_ctx = None
     if budget:
         used_pct = round(budget.current_spend_usd / budget.monthly_cap_usd * 100, 1) if budget.monthly_cap_usd else 0
         budget_ctx = json.dumps({
-            "department":   department,
-            "cap_usd":      budget.monthly_cap_usd,
-            "spent_usd":    round(budget.current_spend_usd, 4),
-            "used_pct":     used_pct,
-            "throttled":    budget.throttled,
+            "budget_spent_usd": round(budget.current_spend_usd, 4),
+            "budget_cap_usd":   budget.monthly_cap_usd,
+            "budget_used_pct":  used_pct,
+            "throttled":        budget.throttled,
+            "override_granted": budget.override_granted,
+            "captured_at":      now.isoformat(),
         })
 
     # Audit event — feeds Governance Event Stream + decision ledger
