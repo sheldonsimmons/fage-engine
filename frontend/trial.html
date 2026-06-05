@@ -777,6 +777,7 @@ async function registerTrial() {
     localStorage.setItem("cp_trial_company",   company || name);
     localStorage.setItem("cp_provider",        _provider);
     localStorage.setItem("cp_days_remaining",  String(data.days_remaining));
+    localStorage.setItem("cp_has_stored_key",  _apiKey ? "true" : "false");
 
     // Redirect to onboarding wizard
     window.location.href = "/onboarding.html";

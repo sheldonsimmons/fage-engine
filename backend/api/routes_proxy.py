@@ -256,13 +256,20 @@ async def proxy_openai(workspace_id: str, request: Request):
     platform   = request.headers.get("X-Platform", "api")
     auth_header = request.headers.get("Authorization", "")
 
-    if not auth_header:
-        raise HTTPException(status_code=401,
-            detail="Missing Authorization header. Your OpenAI API key should be in your code as normal — CostPilot just routes it.")
-
     db = SessionLocal()
     try:
-        account  = _get_account(workspace_id, secret_key, db)
+        account = _get_account(workspace_id, secret_key, db)
+
+        # If no auth header (e.g. Salesforce Apex), fall back to stored key
+        if not auth_header:
+            try:
+                stored = b64decode(account.api_key_enc.encode()).decode()
+                auth_header = f"Bearer {stored}" if stored else ""
+            except Exception:
+                stored = ""
+        if not auth_header:
+            raise HTTPException(status_code=401,
+                detail="No API key found. Provide your key in the Authorization header or ensure it was saved during trial registration.")
         body     = await request.json()
         messages = body.get("messages", [])
 
@@ -328,13 +335,19 @@ async def proxy_anthropic(workspace_id: str, request: Request):
     platform      = request.headers.get("X-Platform", "api")
     anthropic_key = request.headers.get("x-api-key", "")
 
-    if not anthropic_key:
-        raise HTTPException(status_code=401,
-            detail="Missing x-api-key header. Your Anthropic API key should be in your code as normal — CostPilot just routes it.")
-
     db = SessionLocal()
     try:
-        account  = _get_account(workspace_id, secret_key, db)
+        account = _get_account(workspace_id, secret_key, db)
+
+        # Fall back to stored key when no x-api-key header (e.g. Salesforce/ServiceNow)
+        if not anthropic_key:
+            try:
+                anthropic_key = b64decode(account.api_key_enc.encode()).decode()
+            except Exception:
+                anthropic_key = ""
+        if not anthropic_key:
+            raise HTTPException(status_code=401,
+                detail="No Anthropic key found. Ensure it was saved during trial registration.")
         body     = await request.json()
         messages = body.get("messages", [])
 

@@ -22,7 +22,33 @@ const TRIAL_PROXY = IS_TRIAL
   : "";
 
 function goToDashboard() {
-  window.location.href = IS_TRIAL ? "/workspace.html" : "/";
+  window.location.href = IS_TRIAL ? "/" : "/";
+}
+
+async function saveManagedKey() {
+  const key    = document.getElementById("managedApiKey").value.trim();
+  const status = document.getElementById("managedKeyStatus");
+  if (!key) { status.textContent = "Please enter your API key."; status.style.color = "#f85149"; status.style.display = "block"; return; }
+
+  try {
+    // Save key by re-registering with the same email — updates api_key_enc
+    const email = localStorage.getItem("cp_trial_email") || "";
+    const name  = localStorage.getItem("cp_trial_name")  || "";
+    await fetch("/api/trial/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, api_key: key, provider: TRIAL_PRV || "anthropic" }),
+    });
+    localStorage.setItem("cp_has_stored_key", "true");
+    status.textContent  = "✓ Key saved — CostPilot will handle authentication automatically.";
+    status.style.color  = "#3fb950";
+    status.style.display = "block";
+    document.getElementById("managedKeyPrompt").style.borderColor = "rgba(63,185,80,.3)";
+  } catch(e) {
+    status.textContent = "Failed to save key. Please try again.";
+    status.style.color = "#f85149";
+    status.style.display = "block";
+  }
 }
 
 // Pre-fill known trial fields on page load
@@ -355,12 +381,24 @@ const OB_PLATFORMS = {
 
 let obSelectedPlatform = null;
 
+// Platforms that manage auth server-side — no key in generated code
+const MANAGED_PLATFORMS = ["salesforce", "servicenow"];
+
 function selectObPlatform(platform) {
   obSelectedPlatform = platform;
   Object.keys(OB_PLATFORMS).forEach(p => {
     const el = document.getElementById("ob-plat-" + p);
     if (el) el.classList.toggle("selected", p === platform);
   });
+
+  // Show key prompt for managed platforms if no key is stored
+  const keyPrompt = document.getElementById("managedKeyPrompt");
+  if (keyPrompt && IS_TRIAL && MANAGED_PLATFORMS.includes(platform)) {
+    const hasKey = TRIAL_SK && localStorage.getItem("cp_has_stored_key") === "true";
+    keyPrompt.style.display = hasKey ? "none" : "block";
+  } else if (keyPrompt) {
+    keyPrompt.style.display = "none";
+  }
   const cfg = OB_PLATFORMS[platform];
   const objSel = document.getElementById("obPlatObject");
   objSel.innerHTML = cfg.objects.map(o => `<option value="${o}">${o}</option>`).join("");
@@ -443,12 +481,13 @@ function _genSalesforce(obj, dept, agent) {
   // ── Trial version: proxy endpoint, no custom fields required ─────────────
   if (IS_TRIAL) {
     const proxyEndpoint = TRIAL_PROXY + "/chat/completions";
+    const isOpenAI      = (TRIAL_PRV || "openai") === "openai";
+    const modelDefault  = isOpenAI ? "gpt-4o" : "claude-sonnet-4-6";
     const apex =
 `public class CostPilotCallout {
-    // Your CostPilot credentials — pre-filled from your workspace
-    private static final String ENDPOINT   = '${proxyEndpoint}';
-    private static final String CP_KEY     = '${TRIAL_SK}';
-    private static final String OPENAI_KEY = 'YOUR_OPENAI_KEY_HERE'; // paste your key
+    // Pre-filled — no API key needed, CostPilot handles authentication
+    private static final String ENDPOINT = '${proxyEndpoint}';
+    private static final String CP_KEY   = '${TRIAL_SK}';
 
     @InvocableMethod(label='Send to CostPilot')
     public static void sendToCostPilot(List<CostPilotRequest> requests) {
@@ -459,29 +498,51 @@ function _genSalesforce(obj, dept, agent) {
 
     @future(callout=true)
     public static void sendAsync(String subject, String recordText, String department) {
-        String subj    = String.isBlank(subject)    ? '' : subject.trim();
-        String body    = String.isBlank(recordText) ? '' : recordText.trim();
-        String prompt  = String.isBlank(subj) ? body
-                       : (String.isBlank(body) ? subj : subj + '\\n\\n' + body);
+        // ── Customize what gets sent to CostPilot ──────────────────────────
+        // Default: Subject + Description. Edit this line to change the prompt.
+        String subj   = String.isBlank(subject)    ? '' : subject.trim();
+        String body   = String.isBlank(recordText) ? '' : recordText.trim();
+        String prompt = String.isBlank(subj) ? body
+                      : (String.isBlank(body) ? subj : subj + '\\n\\n' + body);
+        // ───────────────────────────────────────────────────────────────────
 
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
         httpReq.setEndpoint(ENDPOINT);
         httpReq.setMethod('POST');
-        httpReq.setHeader('Content-Type',   'application/json');
-        httpReq.setHeader('Authorization',  'Bearer ' + OPENAI_KEY);
+        httpReq.setHeader('Content-Type',    'application/json');
         httpReq.setHeader('X-CostPilot-Key', CP_KEY);
         httpReq.setHeader('X-Department',    department);
+        httpReq.setHeader('X-Platform',      'salesforce');
         httpReq.setBody(JSON.serialize(new Map<String, Object>{
-            'model'    => 'gpt-4o',
+            'model'    => '${modelDefault}',
             'messages' => new List<Object>{
                 new Map<String, Object>{ 'role' => 'user', 'content' => prompt }
             }
         }));
         httpReq.setTimeout(30000);
         HttpResponse res = http.send(httpReq);
-        System.debug('CostPilot response: ' + res.getBody());
-        // Add your field updates here once custom fields are created in your org
+
+        // ── Write back to record fields (auto-populates once fields are created)
+        if (res.getStatusCode() == 200) {
+            try {
+                Map<String,Object> outer = (Map<String,Object>) JSON.deserializeUntyped(res.getBody());
+                List<Object> choices = (List<Object>) outer.get('choices');
+                if (choices != null && !choices.isEmpty()) {
+                    Map<String,Object> msg = (Map<String,Object>)((Map<String,Object>)choices[0]).get('message');
+                    String aiResponse = (String) msg.get('content');
+                    System.debug('CostPilot AI Response: ' + aiResponse);
+                    // Uncomment once fields are created on your object:
+                    // SObject rec = department.getSObjectType().newSObject();
+                    // rec.put('CostPilot_AI_Response__c', aiResponse);
+                    // rec.put('CostPilot_Model_Used__c',  res.getHeader('X-CostPilot-Tier'));
+                    // rec.put('CostPilot_Routing__c',     res.getHeader('X-CostPilot-Routing'));
+                    // rec.put('CostPilot_Cost_USD__c',    Decimal.valueOf(res.getHeader('X-CostPilot-Cost')));
+                }
+            } catch(Exception e) {
+                System.debug('CostPilot field write skipped: ' + e.getMessage());
+            }
+        }
     }
 
     public class CostPilotRequest {
@@ -493,13 +554,13 @@ function _genSalesforce(obj, dept, agent) {
 
     const flowHtml = `<div class="ob-flow-steps">
       <div class="ob-flow-step"><span class="ob-flow-num">1</span>
-        <div><strong>Developer Console → File → New → Apex Class → CostPilotCallout</strong><br/>Paste the class above. Replace <code>YOUR_OPENAI_KEY_HERE</code> with your actual key. Save.</div></div>
+        <div><strong>Developer Console → File → New → Apex Class</strong><br/>Name it <code>CostPilotCallout</code>, paste the class above exactly as shown. Save. No keys to fill in.</div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-        <div><strong>Setup → Remote Site Settings → New</strong><br/>Name: CostPilot · URL: <code>https://fage-engine-21cb49fe4806.herokuapp.com</code> · Active: ✓</div></div>
+        <div><strong>Setup → Remote Site Settings → New</strong><br/>Name: <code>CostPilot</code> · URL: <code>https://fage-engine-21cb49fe4806.herokuapp.com</code> · Active: ✓<br/><em style="color:var(--text-muted,#8b949e);font-size:11px">Required by Salesforce for any external HTTP callout — this is the only manual setup step.</em></div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">3</span>
-        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or updated<br/>Add Action → Apex → Send to CostPilot<br/>Map: Subject, Description, Department → <strong>${_obEsc(dept)}</strong></div></div>
+        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map: Subject → Subject · Description → recordText · Department → <strong>"${_obEsc(dept)}"</strong></div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">4</span>
-        <div><strong>Save &amp; Activate</strong> — your first call routes through CostPilot and appears on your dashboard.</div></div>
+        <div><strong>Save &amp; Activate</strong> — next time a ${_obEsc(obj)} is created or updated, CostPilot routes the call automatically. Your first call appears on your dashboard within seconds.</div></div>
     </div>`;
 
     return _obCodeSection("Apex Class — paste into Developer Console", "Replace YOUR_OPENAI_KEY_HERE with your key, then save", apex)
