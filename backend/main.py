@@ -91,6 +91,13 @@ def _run_migrations():
             conn.commit()
         except Exception:
             pass
+        try:
+            conn.execute(text(
+                "ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS matched_keywords_json TEXT"
+            ))
+            conn.commit()
+        except Exception:
+            pass
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount

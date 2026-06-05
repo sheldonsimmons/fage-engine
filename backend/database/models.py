@@ -148,8 +148,9 @@ class AuditEvent(Base):
     model_tier       = Column(String,   nullable=True)
     context_snapshot = Column(Text,     nullable=True)    # JSON string — frozen system state
     prompt_payload   = Column(Text,     nullable=True)    # The exact pruned text sent to the model
-    raw_payload      = Column(Text,     nullable=True)    # The original text before pruning (stored only when dept has raw logging enabled and pruning fired)
-    raw_logged_at    = Column(DateTime, nullable=True)    # When raw payload was captured (for retention expiry check)
+    raw_payload           = Column(Text,     nullable=True)    # The original text before pruning
+    raw_logged_at         = Column(DateTime, nullable=True)    # When raw payload was captured
+    matched_keywords_json = Column(Text,     nullable=True)    # JSON array e.g. '["urgent","legal"]'
     rationale        = Column(Text,     nullable=True)    # Plain-English justification
     decision_outcome = Column(String,   nullable=True)
     risk_level       = Column(String,   default="low")    # low | medium | high | critical

@@ -222,15 +222,16 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     outcome = f"ROUTED_TO_{tier.upper().replace(' ', '_')}"
 
     audit = AuditEvent(
-        event_type       = "ROUTING",
-        department       = dept_key,
-        model_tier       = tier,
-        rationale        = rationale,
-        decision_outcome = outcome,
-        risk_level       = risk_level,
-        timestamp        = now,
-        context_snapshot = budget_ctx,
-        prompt_payload   = prompt_text[:400] if prompt_text else None,
+        event_type            = "ROUTING",
+        department            = dept_key,
+        model_tier            = tier,
+        rationale             = rationale,
+        decision_outcome      = outcome,
+        risk_level            = risk_level,
+        timestamp             = now,
+        context_snapshot      = budget_ctx,
+        prompt_payload        = prompt_text[:400] if prompt_text else None,
+        matched_keywords_json = json.dumps(matched_keywords or []),
     )
     db.add(audit)
     db.commit()

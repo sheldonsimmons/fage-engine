@@ -12,7 +12,8 @@ GET /api/dashboard
     - Top-level throttle count
 """
 
-from datetime import datetime, date
+import json
+from datetime import datetime, date, timedelta
 from sqlalchemy import func
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -24,6 +25,26 @@ from database.models import (
 )
 
 router = APIRouter()
+
+
+def _keyword_stats(db: Session, days: int = 30, top_n: int = 10) -> list:
+    """Count keyword frequency from matched_keywords_json on recent AuditEvents."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    events = db.query(AuditEvent.matched_keywords_json).filter(
+        AuditEvent.timestamp >= cutoff,
+        AuditEvent.matched_keywords_json.isnot(None),
+        AuditEvent.matched_keywords_json != "[]",
+        AuditEvent.matched_keywords_json != "",
+    ).all()
+    counts: dict = {}
+    for (kw_json,) in events:
+        try:
+            for kw in json.loads(kw_json or "[]"):
+                counts[kw] = counts.get(kw, 0) + 1
+        except Exception:
+            pass
+    sorted_kws = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    return [{"kw": kw, "count": cnt} for kw, cnt in sorted_kws]
 
 
 @router.get("")
@@ -248,6 +269,9 @@ def get_dashboard(db: Session = Depends(get_db)):
         "routing_efficiency_pct": routing_efficiency_pct,
         "cost_reduction_pct":    cost_reduction_pct,
         "compliance_events_total": flagged_count,
+
+        # ── Top Keywords ──────────────────────────────────────────────────────
+        "keyword_stats":         _keyword_stats(db),
 
         # ── Meta ──────────────────────────────────────────────────────────────
         "generated_at":          datetime.utcnow().isoformat(),

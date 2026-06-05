@@ -141,24 +141,15 @@ async function renderInsights() {
         </div>`).join("");
     }
 
-    // Top keywords — parse from recent audit rationale
+    // Top keywords — from structured keyword_stats in dashboard API response
     const kwEl = document.getElementById("topKeywordsList");
     if (kwEl) {
-      const KEYWORDS = ["legal","contract","analyze","summarize","draft","review",
-                        "explain","generate","predict","calculate","pii","ssn",
-                        "credit card","hipaa","urgent","breach","compliance"];
-      const counts = {};
-      KEYWORDS.forEach(k => counts[k] = 0);
-      (d.recent_rationales || []).forEach(r => {
-        const lower = (r || "").toLowerCase();
-        KEYWORDS.forEach(k => { if (lower.includes(k)) counts[k]++; });
-      });
-      const sorted = Object.entries(counts).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]).slice(0,8);
-      if (!sorted.length) {
-        kwEl.innerHTML = `<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No keyword data yet — appears once calls are routed through CostPilot.</div>`;
+      const stats = d.keyword_stats || [];
+      if (!stats.length) {
+        kwEl.innerHTML = `<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No keyword data yet — appears once calls route through CostPilot.</div>`;
       } else {
-        const max = sorted[0][1];
-        kwEl.innerHTML = sorted.map(([kw, count]) => `
+        const max = stats[0].count;
+        kwEl.innerHTML = stats.map(({kw, count}) => `
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
             <div style="flex:1;font-size:12px;color:var(--text-primary);font-weight:600;min-width:80px">${kw}</div>
             <div style="flex:3;background:var(--border);border-radius:4px;height:6px;overflow:hidden">

@@ -288,6 +288,13 @@ def export_jsonl_path() -> str:
 
 
 def _serialize(e: AuditEvent, full: bool = False) -> dict:
+    # Parse matched keywords — stored as JSON array, available on list and detail views
+    try:
+        kw_json = getattr(e, "matched_keywords_json", None)
+        matched_kws = json.loads(kw_json) if kw_json else []
+    except Exception:
+        matched_kws = []
+
     base = {
         "id":               e.id,
         "event_type":       e.event_type,
@@ -297,13 +304,12 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "decision_outcome": e.decision_outcome,
         "timestamp":        e.timestamp.isoformat() if e.timestamp else None,
         "has_raw_payload":  bool(getattr(e, "raw_payload", None)),
+        "matched_keywords": matched_kws,
     }
     if full:
-        # Check retention expiry before exposing raw payload
         raw = getattr(e, "raw_payload", None)
         raw_logged_at = getattr(e, "raw_logged_at", None)
         if raw and raw_logged_at:
-            # Pull retention setting from context_snapshot if available
             retention_days = 30
             try:
                 ctx = json.loads(e.context_snapshot or "{}")
@@ -313,7 +319,7 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
             if retention_days > 0:
                 age_days = (datetime.utcnow() - raw_logged_at).days
                 if age_days > retention_days:
-                    raw = None  # Expired — return null, payload is treated as purged
+                    raw = None
         base.update({
             "agent_id":         e.agent_id,
             "rationale":        e.rationale,
