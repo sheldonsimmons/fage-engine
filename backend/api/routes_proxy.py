@@ -51,26 +51,39 @@ ANTHROPIC_TIERS = {
     "claude-3-haiku-20240307":   {"tier": "Scout",      "input": 0.25,  "output": 1.25},
 }
 
-COMPLEXITY_KEYWORDS = ["analyze", "explain", "draft", "summarize", "compare", "evaluate",
-                        "recommend", "generate", "create", "write", "plan", "design",
-                        "calculate", "predict", "debug", "review", "legal", "contract"]
+COMPLEXITY_KEYWORDS_DEFAULT = [
+    "analyze", "explain", "draft", "summarize", "compare", "evaluate",
+    "recommend", "generate", "create", "write", "plan", "design",
+    "calculate", "predict", "debug", "review", "legal", "contract",
+    "urgent", "critical", "escalate", "breach", "compliance", "hipaa",
+    "lawsuit", "dispute", "negotiate", "appeal", "investigate",
+]
 
-SCOUT_OPENAI     = "gpt-4o-mini"
-SCOUT_ANTHROPIC  = "claude-haiku-4-5-20251001"
+SCOUT_OPENAI    = "gpt-4o-mini"
+SCOUT_ANTHROPIC = "claude-haiku-4-5-20251001"
 
 
-def _complexity_check(messages: list, token_count: int) -> tuple:
-    """Returns (is_complex, matched_keywords)."""
+def _get_keywords(db) -> list:
+    """Load keywords from DB routing config, falling back to defaults."""
+    try:
+        from core.routing_config import get_routing_config
+        cfg = get_routing_config(db)
+        kws = cfg.complexity_keywords
+        return kws if kws else COMPLEXITY_KEYWORDS_DEFAULT
+    except Exception:
+        return COMPLEXITY_KEYWORDS_DEFAULT
+
+
+def _complexity_check(messages: list, token_count: int, keywords: list = None) -> tuple:
+    """Check ORIGINAL (unpruned) messages — keywords must not be stripped before detection."""
+    kws  = keywords or COMPLEXITY_KEYWORDS_DEFAULT
     text = " ".join(
         m.get("content", "") if isinstance(m.get("content"), str)
         else " ".join(b.get("text", "") for b in m.get("content", []) if isinstance(b, dict))
         for m in messages
     ).lower()
-    matched = [kw for kw in COMPLEXITY_KEYWORDS if kw in text]
+    matched = [kw for kw in kws if kw in text]
     return (token_count > 500 or bool(matched)), matched
-
-def _is_complex(messages: list, token_count: int) -> bool:
-    return _complexity_check(messages, token_count)[0]
 
 
 def _estimate_tokens(messages: list) -> int:
@@ -324,19 +337,20 @@ async def proxy_openai(workspace_id: str, request: Request):
                 detail="No API key found. Provide your key in the Authorization header or ensure it was saved during trial registration.")
         body     = await request.json()
         messages = body.get("messages", [])
+        keywords = _get_keywords(db)
 
-        # 1. Prune user messages
+        # 1. Complexity check on ORIGINAL messages — before pruning strips keywords
+        tokens               = _estimate_tokens(messages)
+        complex_, matched_kw = _complexity_check(messages, tokens, keywords)
+
+        # 2. Prune for forwarding (after complexity is determined)
         pruned_messages, tokens_saved = _prune_messages(messages)
-
-        # 2. Complexity routing on pruned content
-        tokens              = _estimate_tokens(pruned_messages)
-        complex_, matched_kw = _complexity_check(pruned_messages, tokens)
 
         requested_model = body.get("model", "gpt-4o")
         routed_model    = requested_model if complex_ else SCOUT_OPENAI
         routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
 
-        # Extract prompt text for audit log
+        # Extract prompt text for audit log (pruned version)
         prompt_text = " ".join(
             m.get("content", "") if isinstance(m.get("content"), str) else ""
             for m in pruned_messages if m.get("role") == "user"
@@ -408,13 +422,14 @@ async def proxy_anthropic(workspace_id: str, request: Request):
                 detail="No Anthropic key found. Ensure it was saved during trial registration.")
         body     = await request.json()
         messages = body.get("messages", [])
+        keywords = _get_keywords(db)
 
-        # 1. Prune user messages
+        # 1. Complexity check on ORIGINAL messages — before pruning strips keywords
+        tokens               = _estimate_tokens(messages)
+        complex_, matched_kw = _complexity_check(messages, tokens, keywords)
+
+        # 2. Prune for forwarding
         pruned_messages, tokens_saved = _prune_messages(messages)
-
-        # 2. Complexity routing
-        tokens               = _estimate_tokens(pruned_messages)
-        complex_, matched_kw = _complexity_check(pruned_messages, tokens)
 
         requested_model = body.get("model", "claude-sonnet-4-6")
         routed_model    = requested_model if complex_ else SCOUT_ANTHROPIC
