@@ -16,7 +16,7 @@ const _DEPT_COLORS = [
   "#a371f7", "#79c0ff", "#7ee787", "#ffa657",
 ];
 
-const _TIER_COLORS = {
+const _TS_TIER_COLORS = {
   Scout:      "#3fb950",
   Analyst:    "#58a6ff",
   Advisor:    "#d29922",
@@ -106,7 +106,7 @@ function _renderCallsChart(data) {
   if (!ctx) return;
   if (_tsCallsChart) { _tsCallsChart.destroy(); _tsCallsChart = null; }
 
-  const datasets = Object.entries(_TIER_COLORS).map(([tier, color]) => ({
+  const datasets = Object.entries(_TS_TIER_COLORS).map(([tier, color]) => ({
     label:           tier,
     data:            data.daily_calls.map(d => d.by_tier[tier] || 0),
     backgroundColor: color + "bb",
