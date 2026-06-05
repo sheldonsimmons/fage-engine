@@ -267,8 +267,8 @@ function restorePanelStates() {
     ["routingRulesBody",  "routingRulesChevron"],
     ["timeseriesBody",    "timeseriesChevron"],
   ];
-  // Panels that should be open by default (if no saved preference)
-  const defaultOpen = new Set(["timeseriesBody"]);
+  // Panels that are always open regardless of saved state
+  const alwaysOpen = new Set(["timeseriesBody"]);
 
   panels.forEach(([bodyId, chevronId]) => {
     const body    = document.getElementById(bodyId);
@@ -276,7 +276,7 @@ function restorePanelStates() {
     if (!body || !chevron) return;
     try {
       const saved = localStorage.getItem("panel_" + bodyId);
-      const shouldOpen = saved === "open" || (saved === null && defaultOpen.has(bodyId));
+      const shouldOpen = alwaysOpen.has(bodyId) || saved === "open";
       body.style.display  = shouldOpen ? "" : "none";
       chevron.textContent = shouldOpen ? "▾" : "▸";
     } catch(e) {
@@ -285,11 +285,13 @@ function restorePanelStates() {
     }
   });
 
-  // Re-render timeseries charts after panel states are applied —
-  // the container is now guaranteed to be visible if defaultOpen
+  // Ensure timeseries localStorage preference doesn't override alwaysOpen
+  try { localStorage.removeItem("panel_timeseriesBody"); } catch(e) {}
+
+  // Re-render timeseries charts — container is now guaranteed visible
   setTimeout(() => {
     if (typeof loadTimeSeries === "function") loadTimeSeries();
-  }, 50);
+  }, 100);
 }
 
 // ── Draggable panels ──────────────────────────────────────────────────────────
