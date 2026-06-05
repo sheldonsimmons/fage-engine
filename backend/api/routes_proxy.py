@@ -22,7 +22,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 
 from database.db import SessionLocal
-from database.models import TrialAccount, TokenTransaction, RegisteredAgent, AuditEvent
+from database.models import TrialAccount, TokenTransaction, RegisteredAgent, AuditEvent, SensitiveTerm
 from core.pruner import prune
 
 router = APIRouter()
@@ -61,6 +61,36 @@ COMPLEXITY_KEYWORDS_DEFAULT = [
 
 SCOUT_OPENAI    = "gpt-4o-mini"
 SCOUT_ANTHROPIC = "claude-haiku-4-5-20251001"
+
+
+def _check_sensitive_terms(text: str, db, department: str = None) -> dict:
+    """
+    Check text against SensitiveTerm table.
+    Returns {"action": "none"|"flag"|"escalate"|"block", "matched": [terms]}
+    Strongest action wins: block > escalate > flag > none.
+    """
+    terms = db.query(SensitiveTerm).filter(
+        (SensitiveTerm.department == None) | (SensitiveTerm.department == department)
+    ).all()
+    lower = text.lower()
+    matched_flag = []
+    matched_escalate = []
+    matched_block = []
+    for t in terms:
+        if t.term.lower() in lower:
+            if t.action == "block":
+                matched_block.append(t.term)
+            elif t.action == "escalate":
+                matched_escalate.append(t.term)
+            else:
+                matched_flag.append(t.term)
+    if matched_block:
+        return {"action": "block",    "matched": matched_block}
+    if matched_escalate:
+        return {"action": "escalate", "matched": matched_escalate}
+    if matched_flag:
+        return {"action": "flag",     "matched": matched_flag}
+    return {"action": "none",         "matched": []}
 
 
 def _get_keywords(db) -> list:
@@ -170,7 +200,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
                      tier: str, input_tokens: int, output_tokens: int,
                      cost_usd: float, routing_reason: str,
                      tokens_saved: int = 0, matched_keywords: list = None,
-                     prompt_text: str = ""):
+                     prompt_text: str = "", risk_override: str = None):
     from database.models import DepartmentBudget
     import json
 
@@ -210,8 +240,8 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         })
 
     # Audit event — feeds Governance Event Stream + decision ledger
-    is_routine = routing_reason == "ROUTINE"
-    risk_level = "low" if is_routine else "medium"
+    is_routine = routing_reason.startswith("ROUTINE") and not routing_reason == "BLOCKED"
+    risk_level = risk_override or ("low" if is_routine else "medium")
     kw_str     = ", ".join(matched_keywords) if matched_keywords else ""
 
     rationale  = (
@@ -340,24 +370,46 @@ async def proxy_openai(workspace_id: str, request: Request):
         messages = body.get("messages", [])
         keywords = _get_keywords(db)
 
-        # 1. Complexity check on ORIGINAL messages — before pruning strips keywords
+        # Extract full text for checks
+        full_text = " ".join(
+            m.get("content", "") if isinstance(m.get("content"), str) else ""
+            for m in messages if m.get("role") == "user"
+        )
+
+        # 1. Sensitive term check — runs before routing
+        st = _check_sensitive_terms(full_text, db, department)
+        if st["action"] == "block":
+            _log_transaction(db, workspace_id, department, "BLOCKED", "Blocked",
+                             0, 0, 0.0, "BLOCKED", 0, st["matched"], full_text[:400])
+            return JSONResponse(
+                status_code=403,
+                content={"error": "blocked", "detail": f"Request blocked — sensitive terms detected: {', '.join(st['matched'])}"},
+                headers={"X-CostPilot-Routing": "BLOCKED", "X-CostPilot-Workspace": workspace_id}
+            )
+
+        # 2. Complexity check on ORIGINAL messages
         tokens               = _estimate_tokens(messages)
         complex_, matched_kw = _complexity_check(messages, tokens, keywords)
 
-        # 2. Prune for forwarding (after complexity is determined)
+        # Force Advisor tier if sensitive term escalation triggered
+        if st["action"] == "escalate":
+            complex_   = True
+            matched_kw = matched_kw + [f"[escalate:{t}]" for t in st["matched"]]
+
+        # 3. Prune for forwarding
         pruned_messages, tokens_saved = _prune_messages(messages)
-
-        requested_model = body.get("model", "gpt-4o")
-        routed_model    = requested_model if complex_ else SCOUT_OPENAI
-        routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
-
-        # Extract prompt text for audit log (pruned version)
         prompt_text = " ".join(
             m.get("content", "") if isinstance(m.get("content"), str) else ""
             for m in pruned_messages if m.get("role") == "user"
         )
 
-        # 3. Forward with pruned messages
+        requested_model = body.get("model", "gpt-4o")
+        routed_model    = requested_model if complex_ else SCOUT_OPENAI
+        routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
+        if st["action"] in ("flag", "escalate"):
+            routing_reason = f"{routing_reason}_FLAGGED"
+
+        # 4. Forward with pruned messages
         forward_body = {**body, "model": routed_model, "messages": pruned_messages}
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
@@ -372,13 +424,13 @@ async def proxy_openai(workspace_id: str, request: Request):
         out_tokens = usage.get("completion_tokens", 100)
         tier_meta  = OPENAI_TIERS.get(routed_model, {"tier": "Advisor", "input": 5.0, "output": 15.0})
         cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
+        risk       = "high" if st["action"] in ("flag","escalate") else ("medium" if complex_ else "low")
 
-        # 4. Log transaction + audit event
+        # 5. Log + auto-register
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
-                         routing_reason, tokens_saved, matched_kw, prompt_text)
-
-        # 5. Auto-register agent
+                         routing_reason, tokens_saved,
+                         matched_kw + st["matched"], prompt_text, risk_override=risk)
         _ensure_agent(db, workspace_id, department, platform)
 
         # 6. Return response + CostPilot metadata headers
@@ -425,21 +477,43 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         messages = body.get("messages", [])
         keywords = _get_keywords(db)
 
-        # 1. Complexity check on ORIGINAL messages — before pruning strips keywords
+        full_text = " ".join(
+            m.get("content", "") if isinstance(m.get("content"), str) else ""
+            for m in messages if m.get("role") == "user"
+        )
+
+        # 1. Sensitive term check
+        st = _check_sensitive_terms(full_text, db, department)
+        if st["action"] == "block":
+            _log_transaction(db, workspace_id, department, "BLOCKED", "Blocked",
+                             0, 0, 0.0, "BLOCKED", 0, st["matched"], full_text[:400])
+            return JSONResponse(
+                status_code=403,
+                content={"error": "blocked", "detail": f"Request blocked — sensitive terms detected: {', '.join(st['matched'])}"},
+                headers={"X-CostPilot-Routing": "BLOCKED", "X-CostPilot-Workspace": workspace_id}
+            )
+
+        # 2. Complexity check on ORIGINAL messages
         tokens               = _estimate_tokens(messages)
         complex_, matched_kw = _complexity_check(messages, tokens, keywords)
 
-        # 2. Prune for forwarding
+        if st["action"] == "escalate":
+            complex_   = True
+            matched_kw = matched_kw + [f"[escalate:{t}]" for t in st["matched"]]
+
+        # 3. Prune for forwarding
         pruned_messages, tokens_saved = _prune_messages(messages)
-
-        requested_model = body.get("model", "claude-sonnet-4-6")
-        routed_model    = requested_model if complex_ else SCOUT_ANTHROPIC
-        routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
-
         prompt_text = " ".join(
             m.get("content", "") if isinstance(m.get("content"), str) else ""
             for m in pruned_messages if m.get("role") == "user"
         )
+
+        requested_model = body.get("model", "claude-sonnet-4-6")
+        routed_model    = requested_model if complex_ else SCOUT_ANTHROPIC
+        routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
+        if st["action"] in ("flag", "escalate"):
+            routing_reason = f"{routing_reason}_FLAGGED"
+        risk = "high" if st["action"] in ("flag","escalate") else ("medium" if complex_ else "low")
 
         # 3. Forward with pruned messages
         forward_body    = {**body, "model": routed_model, "messages": pruned_messages}
@@ -469,7 +543,8 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         # 4. Log + 5. Auto-register agent
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
-                         routing_reason, tokens_saved, matched_kw, prompt_text)
+                         routing_reason, tokens_saved,
+                         matched_kw + st["matched"], prompt_text, risk_override=risk)
         _ensure_agent(db, workspace_id, department, platform)
 
         # 6. Return response + CostPilot metadata headers
