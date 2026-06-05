@@ -59,15 +59,18 @@ SCOUT_OPENAI     = "gpt-4o-mini"
 SCOUT_ANTHROPIC  = "claude-haiku-4-5-20251001"
 
 
-def _is_complex(messages: list, token_count: int) -> bool:
-    if token_count > 500:
-        return True
+def _complexity_check(messages: list, token_count: int) -> tuple:
+    """Returns (is_complex, matched_keywords)."""
     text = " ".join(
         m.get("content", "") if isinstance(m.get("content"), str)
         else " ".join(b.get("text", "") for b in m.get("content", []) if isinstance(b, dict))
         for m in messages
     ).lower()
-    return any(kw in text for kw in COMPLEXITY_KEYWORDS)
+    matched = [kw for kw in COMPLEXITY_KEYWORDS if kw in text]
+    return (token_count > 500 or bool(matched)), matched
+
+def _is_complex(messages: list, token_count: int) -> bool:
+    return _complexity_check(messages, token_count)[0]
 
 
 def _estimate_tokens(messages: list) -> int:
@@ -153,11 +156,15 @@ def _ensure_agent(db, workspace_id: str, department: str, platform: str):
 def _log_transaction(db, workspace_id: str, department: str, model: str,
                      tier: str, input_tokens: int, output_tokens: int,
                      cost_usd: float, routing_reason: str,
-                     tokens_saved: int = 0):
+                     tokens_saved: int = 0, matched_keywords: list = None,
+                     prompt_text: str = ""):
+    from database.models import DepartmentBudget
+    import json
+
     dept_key = f"{workspace_id}:{department}"
     now = datetime.utcnow()
 
-    # Token transaction — feeds savings dashboard + reports
+    # Token transaction
     txn = TokenTransaction(
         department     = dept_key,
         source_platform= "trial-proxy",
@@ -172,14 +179,29 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     )
     db.add(txn)
 
+    # Budget context
+    budget = db.query(DepartmentBudget).filter_by(department=dept_key).first()
+    budget_ctx = None
+    if budget:
+        used_pct = round(budget.current_spend_usd / budget.monthly_cap_usd * 100, 1) if budget.monthly_cap_usd else 0
+        budget_ctx = json.dumps({
+            "department":   department,
+            "cap_usd":      budget.monthly_cap_usd,
+            "spent_usd":    round(budget.current_spend_usd, 4),
+            "used_pct":     used_pct,
+            "throttled":    budget.throttled,
+        })
+
     # Audit event — feeds Governance Event Stream + decision ledger
-    is_routine  = routing_reason == "ROUTINE"
-    risk_level  = "low" if is_routine else "medium"
-    rationale   = (
-        f"{'Routine' if is_routine else 'Complex'} call routed to {tier} tier "
-        f"({model}). "
-        + (f"{tokens_saved:,} tokens pruned before sending." if tokens_saved > 0 else "")
-    ).strip()
+    is_routine = routing_reason == "ROUTINE"
+    risk_level = "low" if is_routine else "medium"
+    kw_str     = ", ".join(matched_keywords) if matched_keywords else ""
+
+    rationale  = (
+        f"{'Routine' if is_routine else 'Complex'} call routed to {tier} tier ({model})."
+        + (f" Complexity keywords matched: {kw_str}." if kw_str else "")
+        + (f" {tokens_saved:,} tokens pruned before sending." if tokens_saved > 0 else "")
+    )
     outcome = f"ROUTED_TO_{tier.upper().replace(' ', '_')}"
 
     audit = AuditEvent(
@@ -190,6 +212,8 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         decision_outcome = outcome,
         risk_level       = risk_level,
         timestamp        = now,
+        context_snapshot = budget_ctx,
+        prompt_payload   = prompt_text[:400] if prompt_text else None,
     )
     db.add(audit)
     db.commit()
@@ -301,12 +325,18 @@ async def proxy_openai(workspace_id: str, request: Request):
         pruned_messages, tokens_saved = _prune_messages(messages)
 
         # 2. Complexity routing on pruned content
-        tokens   = _estimate_tokens(pruned_messages)
-        complex_ = _is_complex(pruned_messages, tokens)
+        tokens              = _estimate_tokens(pruned_messages)
+        complex_, matched_kw = _complexity_check(pruned_messages, tokens)
 
         requested_model = body.get("model", "gpt-4o")
         routed_model    = requested_model if complex_ else SCOUT_OPENAI
         routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
+
+        # Extract prompt text for audit log
+        prompt_text = " ".join(
+            m.get("content", "") if isinstance(m.get("content"), str) else ""
+            for m in pruned_messages if m.get("role") == "user"
+        )
 
         # 3. Forward with pruned messages
         forward_body = {**body, "model": routed_model, "messages": pruned_messages}
@@ -324,10 +354,10 @@ async def proxy_openai(workspace_id: str, request: Request):
         tier_meta  = OPENAI_TIERS.get(routed_model, {"tier": "Advisor", "input": 5.0, "output": 15.0})
         cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
 
-        # 4. Log transaction
+        # 4. Log transaction + audit event
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
-                         routing_reason, tokens_saved)
+                         routing_reason, tokens_saved, matched_kw, prompt_text)
 
         # 5. Auto-register agent
         _ensure_agent(db, workspace_id, department, platform)
@@ -379,12 +409,17 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         pruned_messages, tokens_saved = _prune_messages(messages)
 
         # 2. Complexity routing
-        tokens   = _estimate_tokens(pruned_messages)
-        complex_ = _is_complex(pruned_messages, tokens)
+        tokens               = _estimate_tokens(pruned_messages)
+        complex_, matched_kw = _complexity_check(pruned_messages, tokens)
 
         requested_model = body.get("model", "claude-sonnet-4-6")
         routed_model    = requested_model if complex_ else SCOUT_ANTHROPIC
         routing_reason  = "COMPLEX" if complex_ else "ROUTINE"
+
+        prompt_text = " ".join(
+            m.get("content", "") if isinstance(m.get("content"), str) else ""
+            for m in pruned_messages if m.get("role") == "user"
+        )
 
         # 3. Forward with pruned messages
         forward_body    = {**body, "model": routed_model, "messages": pruned_messages}
@@ -414,7 +449,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         # 4. Log + 5. Auto-register agent
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
-                         routing_reason, tokens_saved)
+                         routing_reason, tokens_saved, matched_kw, prompt_text)
         _ensure_agent(db, workspace_id, department, platform)
 
         # 6. Return response + CostPilot metadata headers
