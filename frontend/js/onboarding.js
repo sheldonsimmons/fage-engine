@@ -526,8 +526,8 @@ function _genSalesforce(obj, dept, agent) {
         // ── Write back to record fields (auto-populates once fields are created)
         if (res.getStatusCode() == 200) {
             try {
-                Map<String,Object> outer = (Map<String,Object>) JSON.deserializeUntyped(res.getBody());
-                List<Object> choices = (List<Object>) outer.get('choices');
+                Map<String,Object> responseMap = (Map<String,Object>) JSON.deserializeUntyped(res.getBody());
+                List<Object> choices = (List<Object>) responseMap.get('choices');
                 if (choices != null && !choices.isEmpty()) {
                     Map<String,Object> msg = (Map<String,Object>)((Map<String,Object>)choices[0]).get('message');
                     String aiResponse = (String) msg.get('content');
