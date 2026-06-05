@@ -37,9 +37,138 @@ async function loadDashboard() {
     renderKpis(d);
     renderStatBar(d);
     renderCeoBanner(d);
+    renderDeptHealth(d);
+    renderAgentEfficiency();
+    renderInsights();
   } catch (err) {
     console.warn("Dashboard load failed:", err.message);
   }
+}
+
+// ── Department Health Strip ───────────────────────────────────────────────────
+
+function renderDeptHealth(d) {
+  // Tier split in dept health bar
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setEl("dhScout",      `${d.scout_pct || 0}%`);
+  setEl("dhAdvisor",    `${d.advisor_pct || 0}%`);
+  setEl("dhStrategist", `${d.strategist_pct || 0}%`);
+
+  // Department pills — read from budget bars data
+  const pills = document.getElementById("deptHealthPills");
+  if (!pills) return;
+  const budgets = d.department_budgets || [];
+  if (!budgets.length) {
+    pills.innerHTML = `<span style="color:var(--text-muted);font-size:11px">No departments configured</span>`;
+    return;
+  }
+  pills.innerHTML = budgets.map(b => {
+    const pct     = b.budget_used_pct || 0;
+    const color   = b.throttled ? "var(--accent-red)" : pct >= 70 ? "var(--accent-yellow)" : "var(--accent-green)";
+    const bg      = b.throttled ? "rgba(248,81,73,.12)" : pct >= 70 ? "rgba(210,153,34,.12)" : "rgba(63,185,80,.12)";
+    const icon    = b.throttled ? "⛔" : pct >= 70 ? "⚠" : "✓";
+    const label   = b.department || b.name || "—";
+    return `<span title="${label}: ${pct}% of $${(b.monthly_cap_usd||0).toFixed(0)}/mo cap used"
+      style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;
+             font-size:11px;font-weight:600;background:${bg};color:${color};border:1px solid ${color}33;
+             cursor:default">
+      ${icon} ${label} <span style="font-weight:400;font-size:10px">${pct}%</span>
+    </span>`;
+  }).join("");
+}
+
+// ── Agent Efficiency Rank ─────────────────────────────────────────────────────
+
+async function renderAgentEfficiency() {
+  const tbody = document.getElementById("agentEffBody2");
+  if (!tbody) return;
+  try {
+    const d = await apiGet("/api/dashboard");
+    const agents = d.agents || [];
+    if (!agents.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="placeholder">No agents registered yet.</td></tr>`;
+      return;
+    }
+    const sorted = [...agents].sort((a, b) => (b.total_cost_usd || 0) - (a.total_cost_usd || 0));
+    tbody.innerHTML = sorted.map(a => {
+      const calls    = a.calls || a.total_calls || 0;
+      const cost     = a.total_cost_usd || 0;
+      const avg      = calls > 0 ? cost / calls : 0;
+      const econ     = a.micro_pct ?? a.economy_pct ?? "—";
+      const pruned   = (a.tokens_saved || 0).toLocaleString();
+      const platform = (a.source_platform || a.platform || "—").toUpperCase();
+      const dept     = (a.department || "—").replace(/^[A-F0-9]{16}:/i, "");
+      return `<tr>
+        <td style="font-weight:600">${a.name}</td>
+        <td style="font-size:11px;color:var(--accent);font-weight:700">${platform}</td>
+        <td style="font-size:11px">${dept}</td>
+        <td>${calls.toLocaleString()}</td>
+        <td style="font-family:var(--font-mono);font-size:11px;color:var(--accent-red)">$${cost.toFixed(4)}</td>
+        <td style="font-family:var(--font-mono);font-size:11px">$${avg.toFixed(5)}</td>
+        <td style="color:${econ >= 70 ? "var(--accent-green)" : econ < 40 ? "var(--accent-red)" : "var(--accent-yellow)"};font-weight:700">
+          ${econ !== "—" ? econ + "%" : "—"}
+        </td>
+        <td style="color:var(--accent-green);font-size:11px">${pruned}</td>
+      </tr>`;
+    }).join("");
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="placeholder" style="color:var(--accent-red)">${e.message}</td></tr>`;
+  }
+}
+
+// ── Routing Insights: Top Keywords + Compliance Breakdown ─────────────────────
+
+async function renderInsights() {
+  try {
+    const d = await apiGet("/api/dashboard");
+
+    // Compliance breakdown
+    const compEl = document.getElementById("complianceBreakdown");
+    if (compEl) {
+      const items = [
+        { label: "Requests Blocked",          val: d.blocked_count || 0,     color: "var(--accent-red)",    icon: "🚫" },
+        { label: "PII Detected",              val: d.pii_count || 0,          color: "var(--accent-yellow)", icon: "🔒" },
+        { label: "Flagged in Audit Log",      val: d.flagged_count || 0,      color: "var(--accent)",        icon: "🔍" },
+        { label: "Escalated to Flagship",     val: d.escalated_count || 0,    color: "var(--accent-yellow)", icon: "⚠️" },
+        { label: "Budget Overruns Prevented", val: d.throttle_prevented || 0, color: "var(--accent-green)",  icon: "💰" },
+        { label: "Agent Collisions Resolved", val: d.collision_count || 0,    color: "var(--text-muted)",    icon: "⚡" },
+      ];
+      compEl.innerHTML = items.map(i => `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+          padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <span style="color:var(--text-muted)">${i.icon} ${i.label}</span>
+          <span style="font-weight:700;font-family:var(--font-mono);color:${i.color}">${i.val.toLocaleString()}</span>
+        </div>`).join("");
+    }
+
+    // Top keywords — parse from recent audit rationale
+    const kwEl = document.getElementById("topKeywordsList");
+    if (kwEl) {
+      const KEYWORDS = ["legal","contract","analyze","summarize","draft","review",
+                        "explain","generate","predict","calculate","pii","ssn",
+                        "credit card","hipaa","urgent","breach","compliance"];
+      const counts = {};
+      KEYWORDS.forEach(k => counts[k] = 0);
+      (d.recent_rationales || []).forEach(r => {
+        const lower = (r || "").toLowerCase();
+        KEYWORDS.forEach(k => { if (lower.includes(k)) counts[k]++; });
+      });
+      const sorted = Object.entries(counts).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]).slice(0,8);
+      if (!sorted.length) {
+        kwEl.innerHTML = `<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No keyword data yet — appears once calls are routed through CostPilot.</div>`;
+      } else {
+        const max = sorted[0][1];
+        kwEl.innerHTML = sorted.map(([kw, count]) => `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="flex:1;font-size:12px;color:var(--text-primary);font-weight:600;min-width:80px">${kw}</div>
+            <div style="flex:3;background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+              <div style="width:${Math.round(count/max*100)}%;height:100%;background:var(--accent);border-radius:4px"></div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);min-width:24px;text-align:right">${count}</div>
+          </div>`).join("");
+      }
+    }
+  } catch(e) { /* silent */ }
 }
 
 function renderKpis(d) {

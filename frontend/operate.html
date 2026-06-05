@@ -140,38 +140,16 @@
   </div>
 </header>
 
-<!-- ── KPI Strip (6 cols) ──────────────────────────────────────────────────── -->
-<div class="dash-kpi">
-  <div class="dkpi-card" id="kpiSpendCard">
-    <div class="dkpi-label">Total Spend Today <span class="help-icon" data-help="kpiSpend" onclick="showHelp('kpiSpend')">?</span></div>
-    <div class="dkpi-value" style="color:var(--accent-yellow)" id="kpiSpend">—</div>
-    <div class="dkpi-sub" id="kpiSpendSub">across all departments</div>
-  </div>
-  <div class="dkpi-card" id="kpiTokensSavedCard">
-    <div class="dkpi-label">Tokens Saved (Pruning) <span class="help-icon" data-help="kpiTokensSaved" onclick="showHelp('kpiTokensSaved')">?</span></div>
-    <div class="dkpi-value" style="color:var(--accent-green)" id="kpiTokensSaved">—</div>
-    <div class="dkpi-sub" id="kpiTokensSub">via context sweeper</div>
-  </div>
-  <div class="dkpi-card">
-    <div class="dkpi-label">Month Spend</div>
-    <div class="dkpi-value" id="statMonthSpend">—</div>
-    <div class="dkpi-sub">this billing period</div>
-  </div>
-  <div class="dkpi-card" id="kpiAgentsCard">
-    <div class="dkpi-label">Active Agents <span class="help-icon" data-help="kpiAgents" onclick="showHelp('kpiAgents')">?</span></div>
-    <div class="dkpi-value" style="color:var(--accent)" id="kpiAgents">—</div>
-    <div class="dkpi-sub" id="kpiAgentsSub">registered in Agentlake</div>
-  </div>
-  <div class="dkpi-card alert" id="kpiThrottleCard">
-    <div class="dkpi-label">Throttled Depts <span class="help-icon" data-help="kpiThrottled" onclick="showHelp('kpiThrottled')">?</span></div>
-    <div class="dkpi-value" id="kpiThrottled">—</div>
-    <div class="dkpi-sub" id="kpiThrottleSub">at or over budget cap</div>
-  </div>
-  <div class="dkpi-card alert" id="kpiBlockedCard">
-    <div class="dkpi-label">Blocked Requests</div>
-    <div class="dkpi-value" id="kpiBlockedRequests">—</div>
-    <div class="dkpi-sub">PII / sensitive terms</div>
-  </div>
+<!-- Hidden IDs kept for dashboard.js compatibility — not displayed -->
+<div style="display:none" aria-hidden="true">
+  <span id="kpiSpend"></span><span id="kpiSpendSub"></span>
+  <span id="kpiTokensSaved"></span><span id="kpiTokensSub"></span>
+  <span id="statMonthSpend"></span>
+  <span id="kpiAgents"></span><span id="kpiAgentsSub"></span>
+  <span id="kpiThrottled"></span><span id="kpiThrottleSub"></span>
+  <span id="kpiBlockedRequests"></span>
+  <span id="kpiSpendCard"></span><span id="kpiTokensSavedCard"></span>
+  <span id="kpiAgentsCard"></span><span id="kpiThrottleCard"></span><span id="kpiBlockedCard"></span>
 </div>
 
 <!-- ── CEO Savings Banner ───────────────────────────────────────────────────── -->
@@ -247,43 +225,31 @@
     border-radius:4px;padding:2px 8px">LIVE SAVINGS</div>
 </div>
 
-<!-- ── Stat Bar ────────────────────────────────────────────────────────────── -->
-<div class="dash-stat stat-bar stat-bar-compact" id="statBar">
-  <div class="stat-item">
-    <span class="stat-label">Scout (T1)</span>
-    <span class="stat-val micro" id="statScoutCalls">—</span>
+<!-- Hidden stat bar IDs for dashboard.js compatibility -->
+<div style="display:none" aria-hidden="true">
+  <span id="statScoutCalls"></span><span id="statAnalystCalls"></span>
+  <span id="statAdvisorCalls"></span><span id="statStrategistCalls"></span>
+  <span id="statBudgetPct"></span><span id="statPruningSaved"></span>
+  <span id="statBar"></span>
+</div>
+
+<!-- ── Department Health Strip ──────────────────────────────────────────────── -->
+<div id="deptHealthStrip" style="
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:10px 20px; background:var(--bg-panel);
+  border-bottom:1px solid var(--border); font-size:12px;">
+  <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);flex-shrink:0">Dept Health</span>
+  <div id="deptHealthPills" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <span style="color:var(--text-muted);font-size:11px">Loading...</span>
   </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <span class="stat-label">Analyst (T2)</span>
-    <span class="stat-val" style="color:var(--accent-green)" id="statAnalystCalls">—</span>
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <span class="stat-label">Advisor (T3)</span>
-    <span class="stat-val flagship" id="statAdvisorCalls">—</span>
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <span class="stat-label">Strategist (T4)</span>
-    <span class="stat-val" style="color:var(--accent-yellow)" id="statStrategistCalls">—</span>
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <span class="stat-label">Overall Budget Used</span>
-    <span class="stat-val" id="statBudgetPct">—</span>
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <span class="stat-label">Pruning Saved (est.)</span>
-    <span class="stat-val green" id="statPruningSaved">—</span>
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <button onclick="loadDashboard()" title="Refresh KPIs"
-      style="background:transparent;color:var(--accent);border:1px solid var(--border);
-             border-radius:5px;padding:3px 12px;font-size:11px;font-weight:600;
-             cursor:pointer;letter-spacing:0.04em">↺ Refresh</button>
+  <div style="margin-left:auto;display:flex;gap:14px;align-items:center;flex-shrink:0">
+    <span style="font-size:11px;color:var(--text-muted)">
+      Tier split today:
+      <span style="color:var(--accent-green);font-weight:700" id="dhScout">—</span> Scout ·
+      <span style="color:var(--accent-yellow);font-weight:700" id="dhAdvisor">—</span> Advisor ·
+      <span style="color:var(--accent-red);font-weight:700" id="dhStrategist">—</span> Strategist
+    </span>
+    <button onclick="loadDashboard()" style="background:transparent;color:var(--accent);border:1px solid var(--border);border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer">↺</button>
   </div>
 </div>
 
@@ -453,46 +419,62 @@
         </div>
       </div>
 
-      <!-- ── Routing Decision Feed ──────────────────────────────────────────── -->
-      <div class="dp-wrap dash-section" data-panel-id="routing-feed" id="routingFeedSection">
-        <div class="dash-sec-head" onclick="togglePanel('routingFeedBody','routingFeedChevron')">
+      <!-- Hidden routing feed IDs for dashboard.js compatibility -->
+      <div style="display:none" aria-hidden="true">
+        <table id="liveRoutingTable"><tbody id="liveRoutingBody"></tbody></table>
+        <span id="routingFilterRisk"></span><span id="routingFilterTier"></span>
+        <span id="routingBlockedBtn"></span><span id="routingFeedChevron"></span>
+      </div>
+
+      <!-- ── Agent Efficiency Rank ───────────────────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="agent-efficiency" id="agentEfficiencySection">
+        <div class="dash-sec-head" onclick="togglePanel('agentEffBody','agentEffChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Routing Decision Feed</span>
-          <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:8px">● LIVE</span>
-          <span class="sec-right" onclick="event.stopPropagation()">
-            <select class="agent-filter-select" id="routingFilterRisk" onchange="applyRoutingFilters()">
-              <option value="">All Risk</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-            <select class="agent-filter-select" id="routingFilterTier" onchange="applyRoutingFilters()">
-              <option value="">All Tiers</option>
-              <option value="scout">Scout</option>
-              <option value="advisor">Advisor</option>
-              <option value="strategist">Strategist</option>
-            </select>
-            <button class="agent-filter-select" id="routingBlockedBtn" onclick="toggleRoutingBlocked()"
-              style="cursor:pointer;font-weight:600">🛡 Blocked</button>
-            <button onclick="loadEventStream();loadLiveRoutingFeed()"
-              style="background:transparent;color:var(--accent);border:1px solid var(--border);
-                     border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">↺</button>
-            <span class="sec-chev" id="routingFeedChevron">▾</span>
-          </span>
+          <span>▸ Agent Efficiency Rank</span>
+          <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">cost · routing · pruning per agent</span>
+          <span class="sec-right"><span class="sec-chev" id="agentEffChevron">▾</span></span>
         </div>
-        <div id="routingFeedBody" class="dash-sec-body">
-          <table class="audit-table" id="liveRoutingTable">
+        <div id="agentEffBody" class="dash-sec-body">
+          <table class="audit-table" id="agentEffTable">
             <thead>
               <tr>
-                <th>Time</th><th>Agent</th><th>Dept</th>
-                <th>Model Tier</th><th>Risk</th><th>Outcome</th>
+                <th>Agent</th><th>Platform</th><th>Dept</th>
+                <th>Calls</th><th>Total Cost</th><th>Avg/Call</th>
+                <th>Economy %</th><th>Tokens Pruned</th>
               </tr>
             </thead>
-            <tbody id="liveRoutingBody">
-              <tr><td colspan="6" class="placeholder">Loading...</td></tr>
+            <tbody id="agentEffBody2">
+              <tr><td colspan="8" class="placeholder">Loading...</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ── Top Keywords + Compliance Breakdown ────────────────────────────── -->
+      <div class="dp-wrap dash-section" data-panel-id="insights" id="insightsSection">
+        <div class="dash-sec-head" onclick="togglePanel('insightsBody','insightsChevron')">
+          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
+          <span>▸ Routing Insights</span>
+          <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">keywords driving complex routing · compliance events</span>
+          <span class="sec-right"><span class="sec-chev" id="insightsChevron">▾</span></span>
+        </div>
+        <div id="insightsBody" class="dash-sec-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <!-- Top Keywords -->
+            <div>
+              <div class="sec-sub-label" style="margin-bottom:10px">Top Complexity Keywords (30 days)</div>
+              <div id="topKeywordsList">
+                <div class="placeholder">Loading...</div>
+              </div>
+            </div>
+            <!-- Compliance Breakdown -->
+            <div>
+              <div class="sec-sub-label" style="margin-bottom:10px">Compliance Events Breakdown</div>
+              <div id="complianceBreakdown">
+                <div class="placeholder">Loading...</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
