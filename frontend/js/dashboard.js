@@ -83,32 +83,27 @@ async function renderAgentEfficiency() {
   const tbody = document.getElementById("agentEffBody2");
   if (!tbody) return;
   try {
-    const d = await apiGet("/api/dashboard");
-    const agents = d.agents || [];
+    const now  = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString();
+    const data = await apiGet(`/api/reports/agent-activity?date_from=${from}&date_to=${now.toISOString()}`);
+    const agents = (data.agents || []).sort((a, b) => (b.cost_usd || 0) - (a.cost_usd || 0));
     if (!agents.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="placeholder">No agents registered yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="placeholder">No agent activity yet.</td></tr>`;
       return;
     }
-    const sorted = [...agents].sort((a, b) => (b.total_cost_usd || 0) - (a.total_cost_usd || 0));
-    tbody.innerHTML = sorted.map(a => {
-      const calls    = a.calls || a.total_calls || 0;
-      const cost     = a.total_cost_usd || 0;
-      const avg      = calls > 0 ? cost / calls : 0;
-      const econ     = a.micro_pct ?? a.economy_pct ?? "—";
-      const pruned   = (a.tokens_saved || 0).toLocaleString();
-      const platform = (a.source_platform || a.platform || "—").toUpperCase();
-      const dept     = (a.department || "—").replace(/^[A-F0-9]{16}:/i, "");
+    tbody.innerHTML = agents.map(a => {
+      const dept   = (a.department || "—").replace(/^[A-F0-9]{16}:/i, "");
+      const econ   = 100 - (a.flagship_pct || 0);
+      const econColor = econ >= 70 ? "var(--accent-green)" : econ < 40 ? "var(--accent-red)" : "var(--accent-yellow)";
       return `<tr>
         <td style="font-weight:600">${a.name}</td>
-        <td style="font-size:11px;color:var(--accent);font-weight:700">${platform}</td>
+        <td style="font-size:11px;color:var(--accent);font-weight:700">${(a.platform||"—").toUpperCase()}</td>
         <td style="font-size:11px">${dept}</td>
-        <td>${calls.toLocaleString()}</td>
-        <td style="font-family:var(--font-mono);font-size:11px;color:var(--accent-red)">$${cost.toFixed(4)}</td>
-        <td style="font-family:var(--font-mono);font-size:11px">$${avg.toFixed(5)}</td>
-        <td style="color:${econ >= 70 ? "var(--accent-green)" : econ < 40 ? "var(--accent-red)" : "var(--accent-yellow)"};font-weight:700">
-          ${econ !== "—" ? econ + "%" : "—"}
-        </td>
-        <td style="color:var(--accent-green);font-size:11px">${pruned}</td>
+        <td>${(a.calls||0).toLocaleString()}</td>
+        <td style="font-family:var(--font-mono);font-size:11px;color:var(--accent-red)">$${(a.cost_usd||0).toFixed(4)}</td>
+        <td style="font-family:var(--font-mono);font-size:11px">$${(a.avg_cost_usd||0).toFixed(5)}</td>
+        <td style="color:${econColor};font-weight:700">${econ.toFixed(0)}%</td>
+        <td style="color:var(--accent-green);font-size:11px">${(a.tokens_saved||0).toLocaleString()}</td>
       </tr>`;
     }).join("");
   } catch(e) {
