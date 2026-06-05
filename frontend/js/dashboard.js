@@ -245,6 +245,14 @@ function togglePanel(bodyId, chevronId) {
   body.style.display  = open ? "none" : "";
   chevron.textContent = open ? "▸" : "▾";
   try { localStorage.setItem("panel_" + bodyId, open ? "closed" : "open"); } catch(e) {}
+
+  // Re-render timeseries charts when section becomes visible
+  // (Chart.js can't size itself when container is display:none)
+  if (!open && bodyId === "timeseriesBody") {
+    requestAnimationFrame(() => {
+      if (typeof loadTimeseries === "function") loadTimeseries();
+    });
+  }
 }
 
 // Restore panel states from localStorage on load
