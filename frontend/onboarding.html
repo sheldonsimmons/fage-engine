@@ -260,26 +260,6 @@
       <h1 class="ob-title">Connect a Platform</h1>
       <p class="ob-subtitle">Choose your CRM or support platform — CostPilot generates the integration code automatically.</p>
 
-      <!-- Key prompt — shown only for managed platforms (Salesforce/ServiceNow) when no key stored -->
-      <div id="managedKeyPrompt" style="display:none;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:10px;padding:16px 18px;margin-bottom:20px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent,#58a6ff);margin-bottom:8px">One-time setup — no key in your code</div>
-        <p style="font-size:12px;color:var(--text-muted,#8b949e);line-height:1.7;margin:0 0 12px">
-          Salesforce and ServiceNow can't include API keys directly in code — it's a platform security restriction.
-          Provide your key once here and CostPilot handles authentication automatically on every call.
-          Your key is encrypted at rest and never appears in the generated code.
-        </p>
-        <div style="display:flex;gap:10px;align-items:center">
-          <input type="password" id="managedApiKey"
-            placeholder="sk-ant-... or sk-proj-..."
-            style="flex:1;background:var(--bg-base,#0d1117);border:1px solid var(--border,#30363d);border-radius:8px;padding:10px 14px;color:var(--text-primary,#e6edf3);font-family:monospace;font-size:13px" />
-          <button onclick="saveManagedKey()"
-            style="background:var(--accent,#58a6ff);color:#000;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">
-            Save Key
-          </button>
-        </div>
-        <div id="managedKeyStatus" style="font-size:12px;margin-top:8px;display:none"></div>
-      </div>
-
       <div class="ob-platform-group">
         <div class="ob-platform-group-title">Business Platforms</div>
         <div class="ob-provider-grid ob-platform-grid">
@@ -358,7 +338,7 @@
               <span id="obFieldsLabelHint" style="font-size:10px;font-weight:400;color:var(--text-muted,#8b949e);margin-left:6px">Label shown in prompt · Field/property name from your platform</span>
             </label>
             <div id="obFieldsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
-            <button class="ob-btn-ghost" onclick="addObField()" style="font-size:12px;padding:6px 14px">+ Add Field</button>
+            <button type="button" class="ob-btn-ghost" onclick="addObField()" style="font-size:12px;padding:6px 14px">+ Add Field</button>
             <div id="obFieldsHint" style="font-size:11px;color:var(--text-muted,#8b949e);margin-top:6px;line-height:1.5"></div>
           </div>
         </div>

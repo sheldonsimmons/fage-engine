@@ -25,32 +25,6 @@ function goToDashboard() {
   window.location.href = IS_TRIAL ? "/" : "/";
 }
 
-async function saveManagedKey() {
-  const key    = document.getElementById("managedApiKey").value.trim();
-  const status = document.getElementById("managedKeyStatus");
-  if (!key) { status.textContent = "Please enter your API key."; status.style.color = "#f85149"; status.style.display = "block"; return; }
-
-  try {
-    // Save key by re-registering with the same email — updates api_key_enc
-    const email = localStorage.getItem("cp_trial_email") || "";
-    const name  = localStorage.getItem("cp_trial_name")  || "";
-    await fetch("/api/trial/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name, api_key: key, provider: TRIAL_PRV || "anthropic" }),
-    });
-    localStorage.setItem("cp_has_stored_key", "true");
-    status.textContent  = "✓ Key saved — CostPilot will handle authentication automatically.";
-    status.style.color  = "#3fb950";
-    status.style.display = "block";
-    document.getElementById("managedKeyPrompt").style.borderColor = "rgba(63,185,80,.3)";
-  } catch(e) {
-    status.textContent = "Failed to save key. Please try again.";
-    status.style.color = "#f85149";
-    status.style.display = "block";
-  }
-}
-
 // Pre-fill known trial fields on page load
 document.addEventListener("DOMContentLoaded", () => {
   if (!IS_TRIAL) return;
@@ -384,8 +358,14 @@ const OB_PLATFORMS = {
 let obSelectedPlatform = null;
 let _obLastPlatform = null;
 
-// Platforms that manage auth server-side — no key in generated code
-const MANAGED_PLATFORMS = ["salesforce", "servicenow"];
+const OB_PLATFORM_COPY = {
+  salesforce: { objectLabel: "Salesforce Object API Name", fieldsLabel: "Salesforce Fields Routed Through CostPilot", fieldHint: "Prompt label · Salesforce field API name, standard or custom", fieldHeader: "Salesforce Field API Name" },
+  servicenow: { objectLabel: "ServiceNow Table Name", fieldsLabel: "ServiceNow Fields Routed Through CostPilot", fieldHint: "Prompt label · ServiceNow column sys_name", fieldHeader: "ServiceNow Column" },
+  hubspot:    { objectLabel: "HubSpot Object Type", fieldsLabel: "HubSpot Properties Routed Through CostPilot", fieldHint: "Prompt label · HubSpot property internal name", fieldHeader: "HubSpot Property" },
+  dynamics:   { objectLabel: "Dynamics Table Name", fieldsLabel: "Dynamics Fields Routed Through CostPilot", fieldHint: "Prompt label · Dataverse field schema/logical name", fieldHeader: "Dynamics Field" },
+  zendesk:    { objectLabel: "Zendesk Record Type", fieldsLabel: "Zendesk Fields Routed Through CostPilot", fieldHint: "Prompt label · Zendesk field name or custom field identifier", fieldHeader: "Zendesk Field" },
+  code:       { objectLabel: "Code Context", fieldsLabel: "Data Routed Through CostPilot", fieldHint: "Prompt label · variable, JSON key, or request property from your code", fieldHeader: "Input Key" },
+};
 
 function selectObPlatform(platform) {
   obSelectedPlatform = platform;
@@ -394,27 +374,15 @@ function selectObPlatform(platform) {
     if (el) el.classList.toggle("selected", p === platform);
   });
 
-  // Show key prompt for managed platforms if no key is stored
-  const keyPrompt = document.getElementById("managedKeyPrompt");
-  if (keyPrompt && IS_TRIAL && MANAGED_PLATFORMS.includes(platform)) {
-    const hasKey = TRIAL_SK && localStorage.getItem("cp_has_stored_key") === "true";
-    keyPrompt.style.display = hasKey ? "none" : "block";
-  } else if (keyPrompt) {
-    keyPrompt.style.display = "none";
-  }
   const cfg = OB_PLATFORMS[platform];
   const isCode = cfg.kind === "code";
-  const isSalesforce = platform === "salesforce";
+  const copy = OB_PLATFORM_COPY[platform] || (isCode ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
   const objectLabel = document.getElementById("obObjectLabel");
   const fieldsLabel = document.getElementById("obFieldsLabel");
   const fieldsLabelHint = document.getElementById("obFieldsLabelHint");
-  if (objectLabel) objectLabel.textContent = isSalesforce ? "Salesforce Object API Name" : (isCode ? "Code Context" : "Object / Record Type");
-  if (fieldsLabel) fieldsLabel.firstChild.textContent = isSalesforce ? "Salesforce Fields Routed Through CostPilot" : (isCode ? "Data to send to AI" : "Fields to send to AI");
-  if (fieldsLabelHint) fieldsLabelHint.textContent = isCode
-    ? "Label shown in prompt · Variable / JSON key name from your code"
-    : isSalesforce
-    ? "Prompt label · Salesforce field API name, standard or custom"
-    : "Label shown in prompt · Field/property name from your platform";
+  if (objectLabel) objectLabel.textContent = copy.objectLabel;
+  if (fieldsLabel) fieldsLabel.firstChild.textContent = copy.fieldsLabel;
+  if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;
 
   const objInput = document.getElementById("obPlatObject");
   const objOptions = document.getElementById("obPlatObjectOptions");
@@ -514,12 +482,13 @@ function _renderObFields(fields) {
         style="flex:2;background:var(--bg-base,#0d1117);border:1px solid var(--border,#30363d);
                border-radius:6px;padding:7px 10px;color:var(--text-primary,#e6edf3);
                font-size:12px;font-family:monospace" />
-      <button onclick="removeObField(${i})"
+      <button type="button" onclick="removeObField(${i})"
         style="background:none;border:none;color:var(--text-muted,#8b949e);cursor:pointer;font-size:16px;padding:0 4px;line-height:1">×</button>
     </div>`).join("");
 }
 
 function addObField() {
+  _syncObFieldDataFromDom(true);
   _obFieldData.push({ label: "", name: "" });
   _renderObFields(_obFieldData);
   // Focus the new label input
@@ -528,20 +497,27 @@ function addObField() {
 }
 
 function removeObField(i) {
+  _syncObFieldDataFromDom(true);
   if (_obFieldData.length <= 1) return; // keep at least one
   _obFieldData.splice(i, 1);
   _renderObFields(_obFieldData);
 }
 
-function getObFields() {
-  // Sync from DOM before reading (handles cases where onchange didn't fire)
+function _syncObFieldDataFromDom(keepEmpty = false) {
   const inputs = document.querySelectorAll("#obFieldsList input");
   const result = [];
   for (let i = 0; i < inputs.length - 1; i += 2) {
     const label = (inputs[i]?.value || "").trim();
     const name  = (inputs[i+1]?.value || "").trim();
-    if (name) result.push({ label: label || name, name });
+    if (keepEmpty || label || name) result.push({ label: label || name, name });
   }
+  _obFieldData = result;
+  return result;
+}
+
+function getObFields() {
+  // Sync from DOM before reading (handles active inputs that have not blurred yet)
+  const result = _syncObFieldDataFromDom(false).filter(f => f.name.trim());
   return result.length ? result : _obFieldData.filter(f => f.name.trim());
 }
 
@@ -599,6 +575,27 @@ function _obCodeSection(label, hint, code) {
       </div>
       <pre class="ob-code-block" id="${id}">${_obEsc(code)}</pre>
     </div>`;
+}
+
+function _platformMappingHtml(platform, obj, fields, extraRows = "") {
+  const cfg = OB_PLATFORMS[platform] || {};
+  const copy = OB_PLATFORM_COPY[platform] || (cfg.kind === "code" ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
+  const label = cfg.label || platform;
+  const mappingRows = fields.map(f =>
+    `<div class="ob-field-row"><span>${_obEsc(f.label || f.name)}</span><span class="mono">${_obEsc(f.name)}</span><span>Prompt payload</span><span>Routed to CostPilot</span></div>`
+  ).join("");
+  return `<div class="ob-code-section" style="margin-top:20px">
+    <div class="ob-code-header">
+      <span class="ob-code-label">${_obEsc(label)} Mapping</span>
+      <span class="ob-code-hint">No model-provider key is collected here. This step only maps source data into CostPilot.</span>
+    </div>
+    <div class="ob-field-table">
+      <div class="ob-field-row ob-field-row-header"><span>Prompt Label</span><span>${_obEsc(copy.fieldHeader)}</span><span>Used As</span><span>Behavior</span></div>
+      <div class="ob-field-row"><span>Source</span><span class="mono">${_obEsc(obj)}</span><span>Trigger context</span><span>Starts route</span></div>
+      ${mappingRows}
+      ${extraRows}
+    </div>
+  </div>`;
 }
 
 // Build prompt string for Apex (Java-style string concat)
@@ -721,7 +718,7 @@ function _genSalesforce(obj, dept, agent, fields) {
     const modelDefault  = isOpenAI ? "gpt-4o" : "claude-sonnet-4-6";
     const apex =
 `public class CostPilotCallout {
-    // Pre-filled — no API key needed, CostPilot handles authentication
+    // Pre-filled — no provider credential needed in Salesforce
     private static final String ENDPOINT = '${proxyEndpoint}';
     private static final String CP_KEY   = '${TRIAL_SK}';
 
@@ -792,7 +789,7 @@ ${requestVars}
     </div>`;
 
     return `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Salesforce Mapping</span><span class="ob-code-hint">These are the exact object and field API names this setup will route.</span></div>${mappingHtml}</div>`
-      + _obCodeSection("Apex Class — paste into Developer Console", "No API key needed; map each Flow input to the field names you configured", apex)
+      + _obCodeSection("Apex Class — paste into Developer Console", "No provider credential needed; map each Flow input to the field names you configured", apex)
       + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Setup Steps</span></div>${flowHtml}</div>`
       + _obBanner("salesforce", obj, dept, agent) + _obActions();
   }
@@ -929,11 +926,12 @@ function _genServiceNow(obj, dept, agent, fields) {
     }
 })(current, previous);`;
 
-  return _obCodeSection(
-    "Business Rule Script",
-    "System Definition → Business Rules → New · Table: " + obj + " · When: after · Insert + Update",
-    code
-  ) + _obBanner("servicenow", obj, dept, agent) + _obActions();
+  return _platformMappingHtml("servicenow", obj, fields)
+    + _obCodeSection(
+      "Business Rule Script",
+      "System Definition → Business Rules → New · Table: " + obj + " · When: after · Insert + Update",
+      code
+    ) + _obBanner("servicenow", obj, dept, agent) + _obActions();
 }
 
 function _genHubSpot(obj, dept, agent, fields) {
@@ -962,7 +960,8 @@ exports.main = async (event, callback) => {
   });
 };`;
 
-  return _obCodeSection(
+  return _platformMappingHtml("hubspot", obj, fields)
+    + _obCodeSection(
     "Custom Code Action",
     "Operations Hub → Workflows → Add Action → Custom Code → Paste",
     code
@@ -992,7 +991,8 @@ Body:
 // fage_model_used:       @{body('HTTP')?['model_name']}
 // fage_routing_decision: @{body('HTTP')?['routing_decision']}`;
 
-  return _obCodeSection(
+  return _platformMappingHtml("dynamics", obj, fields)
+    + _obCodeSection(
     "Power Automate HTTP Action",
     "Power Automate → New Flow → Automated → Dataverse trigger → Add HTTP action",
     code
@@ -1009,7 +1009,6 @@ function _genZendesk(obj, dept, agent, fields) {
 const fetch = require('node-fetch');
 
 module.exports = async (event) => {
-  const ticketId = event.payload.ticket_id;
   const body     = ${prompt};
 
   const res  = await fetch('${CostPilot_URL}/api/route', {
@@ -1023,19 +1022,14 @@ module.exports = async (event) => {
   });
   const data = await res.json();
 
-  await fetch(\`https://YOUR_SUBDOMAIN.zendesk.com/api/v2/tickets/\${ticketId}.json\`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_TOKEN' },
-    body: JSON.stringify({
-      ticket: { comment: { body: '[CostPilot] ' + data.simulated_response, public: false } }
-    }),
-  });
-  return { status: 200, model: data.model_name };
+  console.log('[CostPilot]', data.simulated_response);
+  return { status: 200, model: data.model_name, routing: data.routing_decision };
 };`;
 
-  return _obCodeSection(
+  return _platformMappingHtml("zendesk", obj, fields)
+    + _obCodeSection(
     "Sunshine Function",
-    "Admin Center → Apps and integrations → Sunshine Functions → Create → Node.js 18",
+    "Admin Center → Apps and integrations → Sunshine Functions → Create → Node.js 18 · no Zendesk token required for first route",
     code
   ) + _obBanner("zendesk", obj, dept, agent) + _obActions();
 }
@@ -1063,7 +1057,8 @@ def route_to_costpilot(${params}) -> dict:
 # result = route_to_costpilot(${fields.map(f => `${_safeVar(f.name)}="..."`).join(", ")})
 # print(result["simulated_response"])`;
 
-  return _obCodeSection("Python", "pip install requests · call this function from your app or workflow", python)
+  return _platformMappingHtml("python", obj, fields)
+    + _obCodeSection("Python", "pip install requests · call this function from your app or workflow", python)
     + _obBanner("python", obj, dept, agent) + _obActions();
 }
 
@@ -1097,7 +1092,8 @@ async function routeToCostPilot(input) {
 ${exampleObj}
 // });`;
 
-  return _obCodeSection("Node.js", "Uses built-in fetch in Node 18+", code)
+  return _platformMappingHtml("nodejs", obj, fields)
+    + _obCodeSection("Node.js", "Uses built-in fetch in Node 18+", code)
     + _obBanner("nodejs", obj, dept, agent) + _obActions();
 }
 
@@ -1141,7 +1137,8 @@ public class CostPilotClient {
     }
 }`;
 
-  return _obCodeSection("Java", "Java 11+ HttpClient", code)
+  return _platformMappingHtml("java", obj, fields)
+    + _obCodeSection("Java", "Java 11+ HttpClient", code)
     + _obBanner("java", obj, dept, agent) + _obActions();
 }
 
@@ -1178,7 +1175,8 @@ end
 
 # response = route_to_costpilot(${fields.map(f => `${_safeVar(f.name)}: "..."`).join(", ")})`;
 
-  return _obCodeSection("Ruby", "Uses Net::HTTP from the Ruby standard library", code)
+  return _platformMappingHtml("ruby", obj, fields)
+    + _obCodeSection("Ruby", "Uses Net::HTTP from the Ruby standard library", code)
     + _obBanner("ruby", obj, dept, agent) + _obActions();
 }
 
@@ -1195,7 +1193,8 @@ function _genRest(obj, dept, agent, fields) {
     "source_platform": "REST"
   }'`;
 
-  return _obCodeSection("REST / cURL", "Replace ${...} placeholders with values from your app or shell", curl)
+  return _platformMappingHtml("rest", obj, fields)
+    + _obCodeSection("REST / cURL", "Replace ${...} placeholders with values from your app or shell", curl)
     + _obBanner("rest", obj, dept, agent) + _obActions();
 }
 
