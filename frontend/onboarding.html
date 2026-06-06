@@ -314,6 +314,13 @@
 
       <!-- Config form — shown after a tile is selected -->
       <div id="obPlatConfig" style="display:none">
+        <div id="obSelectedPlatformSummary" style="display:none;background:var(--bg-panel,#161b22);border:1px solid var(--border,#30363d);border-radius:8px;padding:12px 14px;margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted,#8b949e);margin-bottom:3px">Selected Platform</div>
+            <div id="obSelectedPlatformName" style="font-size:14px;font-weight:700;color:var(--text-primary,#e6edf3)"></div>
+          </div>
+          <button type="button" class="ob-btn-ghost" onclick="resetObPlatformScreen()" style="font-size:12px;padding:7px 14px">Change</button>
+        </div>
         <div class="ob-form" style="margin-bottom:20px">
           <div class="ob-field">
             <label class="ob-label" id="obObjectLabel">Object / Record Type</label>
@@ -440,9 +447,9 @@
 
   </div>
 
-  <script src="js/api.js"></script>
-<script src="js/tier-utils.js"></script>
-  <script src="js/onboarding.js"></script>
-<script src="/js/mobile-guard.js"></script>
+  <script src="js/api.js?v=20260606"></script>
+  <script src="js/tier-utils.js?v=20260606"></script>
+  <script src="js/onboarding.js?v=20260606-v321"></script>
+  <script src="/js/mobile-guard.js?v=20260606"></script>
 </body>
 </html>

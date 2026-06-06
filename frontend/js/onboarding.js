@@ -335,7 +335,11 @@ function resetObPlatformScreen() {
   document.getElementById("obPlatConfig").style.display  = "none";
   document.getElementById("obPlatBackOnly").style.display = "";
   document.getElementById("obPlatOutput").style.display  = "none";
+  const selectedSummary = document.getElementById("obSelectedPlatformSummary");
+  if (selectedSummary) selectedSummary.style.display = "none";
   selectedLaunchPlatform = null;
+  obSelectedPlatform = null;
+  _obLastPlatform = null;
 }
 
 // ── Platform Integration (Screen 5) ──────────────────────────────────────────
@@ -380,6 +384,11 @@ function selectObPlatform(platform) {
   const objectLabel = document.getElementById("obObjectLabel");
   const fieldsLabel = document.getElementById("obFieldsLabel");
   const fieldsLabelHint = document.getElementById("obFieldsLabelHint");
+  const selectedSummary = document.getElementById("obSelectedPlatformSummary");
+  const selectedName = document.getElementById("obSelectedPlatformName");
+  document.querySelectorAll("#screen-5 .ob-platform-group").forEach(group => { group.style.display = "none"; });
+  if (selectedSummary) selectedSummary.style.display = "flex";
+  if (selectedName) selectedName.textContent = cfg.label;
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
   if (fieldsLabel) fieldsLabel.firstChild.textContent = copy.fieldsLabel;
   if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;
