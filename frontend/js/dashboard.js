@@ -47,6 +47,13 @@ async function loadDashboard() {
 
 // ── Department Health Strip ───────────────────────────────────────────────────
 
+function displayDeptName(name) {
+  if (!name) return "—";
+  const text = String(name);
+  const colonIndex = text.indexOf(":");
+  return colonIndex >= 0 ? text.slice(colonIndex + 1).trim() || text : text;
+}
+
 function renderDeptHealth(d) {
   // Tier split in dept health bar
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -57,17 +64,17 @@ function renderDeptHealth(d) {
   // Department pills — read from budget bars data
   const pills = document.getElementById("deptHealthPills");
   if (!pills) return;
-  const budgets = d.department_budgets || [];
+  const budgets = d.department_budgets || d.budget_summaries || [];
   if (!budgets.length) {
     pills.innerHTML = `<span style="color:var(--text-muted);font-size:11px">No departments configured</span>`;
     return;
   }
   pills.innerHTML = budgets.map(b => {
-    const pct     = b.budget_used_pct || 0;
+    const pct     = b.budget_used_pct ?? b.used_pct ?? 0;
     const color   = b.throttled ? "var(--accent-red)" : pct >= 70 ? "var(--accent-yellow)" : "var(--accent-green)";
     const bg      = b.throttled ? "rgba(248,81,73,.12)" : pct >= 70 ? "rgba(210,153,34,.12)" : "rgba(63,185,80,.12)";
     const icon    = b.throttled ? "⛔" : pct >= 70 ? "⚠" : "✓";
-    const label   = b.department || b.name || "—";
+    const label   = displayDeptName(b.department || b.name);
     return `<span title="${label}: ${pct}% of $${(b.monthly_cap_usd||0).toFixed(0)}/mo cap used"
       style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;
              font-size:11px;font-weight:600;background:${bg};color:${color};border:1px solid ${color}33;
