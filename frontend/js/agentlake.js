@@ -2,6 +2,19 @@
  * agentlake.js — Agentlake Registry & Traffic Cop UI  [Step 5]
  */
 
+const AGENT_ACTIVE_WINDOW_MS = 15000;
+
+function effectiveAgentStatus(agent) {
+  const status = (agent.status || "idle").toLowerCase();
+  if (status === "locked" || status === "queued") return status;
+  if (status !== "active") return status;
+
+  const hasLiveClaim = !!agent.target_record_id;
+  const lastSeenMs = agent.last_used_at ? new Date(agent.last_used_at).getTime() : 0;
+  const recentlyUsed = lastSeenMs && (Date.now() - lastSeenMs <= AGENT_ACTIVE_WINDOW_MS);
+  return hasLiveClaim || recentlyUsed ? "active" : "idle";
+}
+
 /** Fetch all agents and render the registry table */
 async function loadAgents() {
   try {
@@ -19,7 +32,7 @@ function renderAgentTable(agents) {
   const alertBox  = document.getElementById("collisionAlert");
 
   // Auto-show collision alert if any agents are locked
-  const locked = agents.filter(a => a.status === "locked");
+  const locked = agents.filter(a => effectiveAgentStatus(a) === "locked");
   if (locked.length >= 2) {
     // Group by record to find actual collisions
     const byRecord = {};
@@ -53,16 +66,17 @@ function renderAgentTable(agents) {
   }
 
   tbody.innerHTML = agents.map(a => {
-    const badgeClass = a.status === "locked"  ? "badge-locked"
-                     : a.status === "queued"  ? "badge-locked"
-                     : a.status === "active"  ? "badge-active"
+    const effectiveStatus = effectiveAgentStatus(a);
+    const badgeClass = effectiveStatus === "locked"  ? "badge-locked"
+                     : effectiveStatus === "queued"  ? "badge-locked"
+                     : effectiveStatus === "active"  ? "badge-active"
                      : "badge-idle";
 
     const target = a.target_table
       ? `${a.target_table}${a.target_record_id ? " #" + a.target_record_id : ""}`
       : "—";
 
-    const actionBtn = (a.status === "locked" || a.status === "active" || a.status === "queued")
+    const actionBtn = (effectiveStatus === "locked" || effectiveStatus === "active" || effectiveStatus === "queued")
       ? `<button class="btn-release" onclick="releaseAgent(${a.id})">Release</button>`
       : a.archived
         ? `<button class="btn-deregister" style="color:var(--accent-green);border-color:var(--accent-green)" onclick="unarchiveAgent(${a.id}, '${a.name}')">Restore</button>`
@@ -115,8 +129,8 @@ function renderAgentTable(agents) {
         ${pruningOn ? "PRUNE ON" : "PRUNE OFF"}
       </button>`;
 
-    const rowClass = a.status === "locked" ? "row-locked"
-                   : a.status === "active" ? "row-active"
+    const rowClass = effectiveStatus === "locked" ? "row-locked"
+                   : effectiveStatus === "active" ? "row-active"
                    : "";
 
     return `
@@ -126,7 +140,7 @@ function renderAgentTable(agents) {
         <td style="font-size:11px; font-weight:600; color:${platformColor}">${platform}</td>
         <td style="font-family:var(--font-mono); font-size:11px">${target}</td>
         <td style="font-size:11px; font-weight:600; color:${policyColor}">${policyLabel}</td>
-        <td><span class="badge ${badgeClass}">${a.status.toUpperCase()}</span></td>
+        <td><span class="badge ${badgeClass}">${effectiveStatus.toUpperCase()}</span></td>
         <td style="font-size:11px; color:var(--text-muted)">${lastActive}</td>
         <td style="white-space:nowrap">
           <div style="display:flex;flex-direction:column;gap:3px">
@@ -310,7 +324,7 @@ setTimeout(loadAgents, 400);
 let _agentPollTimer = null;
 function scheduleAgentPoll(agents) {
   clearTimeout(_agentPollTimer);
-  const hasLive = agents && agents.some(a => a.status === "active" || a.status === "locked" || a.status === "queued");
+  const hasLive = agents && agents.some(a => ["active", "locked", "queued"].includes(effectiveAgentStatus(a)));
   _agentPollTimer = setTimeout(async () => {
     await loadAgents();
   }, hasLive ? 1000 : 5000);
@@ -377,13 +391,14 @@ function renderAgentCards(agents) {
 
   grid.innerHTML = agents.map(a => {
     const platform = a.source_platform || "Custom";
+    const effectiveStatus = effectiveAgentStatus(a);
     return `
-      <div class="agent-status-card status-${a.status}" title="Click row below to manage">
+      <div class="agent-status-card status-${effectiveStatus}" title="Click row below to manage">
         <div class="asc-name">${a.name}</div>
         <div class="asc-dept">${a.department}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
           <span class="asc-platform" style="color:${platformColor(platform)}">${platform}</span>
-          <span class="badge ${badgeClass(a.status)}" style="font-size:9px;padding:1px 6px">${a.status.toUpperCase()}</span>
+          <span class="badge ${badgeClass(effectiveStatus)}" style="font-size:9px;padding:1px 6px">${effectiveStatus.toUpperCase()}</span>
         </div>
         <div class="asc-last">${fmtLast(a.last_used_at)}</div>
       </div>`;
@@ -413,7 +428,7 @@ function applyAgentFilters() {
 
   const filtered = _allAgents.filter(a => {
     if (platform && (a.source_platform || "custom").toLowerCase() !== platform) return false;
-    if (status   && a.status.toLowerCase() !== status)   return false;
+    if (status   && effectiveAgentStatus(a) !== status)   return false;
     if (dept     && a.department.toLowerCase() !== dept) return false;
     if (search   && !a.name.toLowerCase().includes(search)) return false;
     return true;
