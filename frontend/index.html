@@ -112,6 +112,29 @@
     .metric-bar-fill  { height: 4px; background: var(--accent-green); border-radius: 2px; transition: width 0.6s ease; }
     .metric-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
+    /* ── Executive help strip ────────────────────────────────────────────────── */
+    .exec-help-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 20px; margin-bottom: 20px;
+    }
+    .exec-help-title {
+      font-size: 12px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 12px;
+    }
+    .exec-help-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    }
+    .exec-help-item {
+      border-left: 2px solid var(--border); padding-left: 12px;
+    }
+    .exec-help-label {
+      font-size: 12px; font-weight: 700; color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .exec-help-copy {
+      font-size: 11px; line-height: 1.45; color: var(--text-muted);
+    }
+
     /* ── Savings breakdown ────────────────────────────────────────────────────── */
     .breakdown-card {
       background: var(--bg-panel); border: 1px solid var(--border);
@@ -123,6 +146,7 @@
     .breakdown-item-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
     .breakdown-item-value { font-size: 18px; font-weight: 800; color: var(--text-primary);
       font-family: var(--font-mono); margin-bottom: 6px; }
+    .breakdown-item-help { font-size: 10px; color: var(--text-muted); line-height: 1.4; margin-top: 6px; }
     .breakdown-bar-track { height: 5px; background: var(--border); border-radius: 3px; }
     .breakdown-bar-fill  { height: 5px; border-radius: 3px; transition: width 0.8s ease; }
 
@@ -137,6 +161,13 @@
     .footer-stat-value { font-size: 20px; font-weight: 800; color: var(--text-primary);
       font-family: var(--font-mono); line-height: 1; }
     .footer-stat-label { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+    @media (max-width: 1100px) {
+      .exec-help-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 760px) {
+      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -221,6 +252,29 @@
 
   </div>
 
+  <!-- How to read this page -->
+  <div class="exec-help-card">
+    <div class="exec-help-title">How to read the executive savings view</div>
+    <div class="exec-help-grid">
+      <div class="exec-help-item">
+        <div class="exec-help-label">Annual savings</div>
+        <div class="exec-help-copy">Projected savings if this month's routing and governance pattern continues for a full year.</div>
+      </div>
+      <div class="exec-help-item">
+        <div class="exec-help-label">All-flagship baseline</div>
+        <div class="exec-help-copy">What spend would look like if every AI request used the premium model tier.</div>
+      </div>
+      <div class="exec-help-item">
+        <div class="exec-help-label">Routing efficiency</div>
+        <div class="exec-help-copy">Percent of requests safely served by lower-cost Scout or Analyst tiers instead of premium tiers.</div>
+      </div>
+      <div class="exec-help-item">
+        <div class="exec-help-label">Governed requests</div>
+        <div class="exec-help-copy">Total AI activity under CostPilot control, including routing, audit logging, blocking, and budget checks.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Metric cards -->
   <div class="metric-row">
 
@@ -264,6 +318,7 @@
         <div class="breakdown-bar-track">
           <div class="breakdown-bar-fill" id="execBarRouting" style="width:0%;background:var(--accent-green)"></div>
         </div>
+        <div class="breakdown-item-help">Savings from sending routine work to lower-cost tiers while preserving premium models for harder tasks.</div>
       </div>
 
       <div>
@@ -272,6 +327,7 @@
         <div class="breakdown-bar-track">
           <div class="breakdown-bar-fill" id="execBarPruning" style="width:0%;background:var(--accent-green)"></div>
         </div>
+        <div class="breakdown-item-help">Savings from removing stale or unnecessary text before a request reaches the AI model.</div>
       </div>
 
       <div>
@@ -280,6 +336,7 @@
         <div class="breakdown-bar-track">
           <div class="breakdown-bar-fill" id="execBarThrottle" style="width:0%;background:var(--accent-yellow)"></div>
         </div>
+        <div class="breakdown-item-help">Cost avoided when departments approach spend limits and CostPilot slows or downgrades traffic.</div>
       </div>
 
       <div>
@@ -288,6 +345,7 @@
         <div class="breakdown-bar-track">
           <div class="breakdown-bar-fill" id="execBarBlocked" style="width:0%;background:#cb2431"></div>
         </div>
+        <div class="breakdown-item-help">Requests stopped before model spend because sensitive, risky, or policy-blocked content was detected.</div>
       </div>
 
     </div>
