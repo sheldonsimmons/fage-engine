@@ -227,6 +227,11 @@ function loadActiveTab() {
   // efficiency tab is on-demand only — user clicks Generate Review
 }
 
+function isReportFilterActive() {
+  const active = document.activeElement;
+  return !!active && !!active.closest(".rpt-date-controls, .act-filter-bar");
+}
+
 // ── TAB 1: SAVINGS ────────────────────────────────────────────────────────────
 
 // Workspace filter — set when a trial user clicks through from workspace.html
@@ -1107,8 +1112,11 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(() => initDraggableReports("savings"), 100);
 });
 
-// Auto-refresh active tab every 30 seconds so KPIs tick to new values live
-setInterval(() => loadActiveTab(), 30000);
+// Auto-refresh active tab every 30 seconds without interrupting filter edits.
+setInterval(() => {
+  if (isReportFilterActive()) return;
+  loadActiveTab();
+}, 30000);
 
 // ── Today Counter ─────────────────────────────────────────────────────────────
 

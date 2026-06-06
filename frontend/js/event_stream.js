@@ -9,6 +9,11 @@
 let _streamOpenId  = null;
 let _streamEvents  = [];
 let _streamDashData = {};
+let _streamUserInteractingUntil = 0;
+
+function _markStreamUserInteracting() {
+  _streamUserInteractingUntil = Date.now() + 1200;
+}
 
 function _renderStreamCards(events) {
   const list = document.getElementById("eventStreamList");
@@ -128,7 +133,7 @@ async function loadEventStream() {
 
     _populateStreamDeptFilter(events);
     _streamDashData = dashData;
-    _renderStreamCards(events);
+    applyStreamFilters();
 
     // Restore the previously open event detail without closing it
     if (wasOpenId) {
@@ -213,6 +218,7 @@ async function toggleStreamEvent(eventId) {
 // ── Governance Event Stream Filters ──────────────────────────────────────────
 
 function applyStreamFilters() {
+  _markStreamUserInteracting();
   const type   = (document.getElementById("streamFilterType")?.value   || "").toLowerCase();
   const dept   = (document.getElementById("streamFilterDept")?.value   || "").toLowerCase();
   const search = (document.getElementById("streamFilterSearch")?.value || "").toLowerCase();
@@ -242,7 +248,9 @@ function _populateStreamDeptFilter(events) {
     opt.value = d.toLowerCase(); opt.textContent = d;
     sel.appendChild(opt);
   });
-  sel.value = current; // restore previously selected dept if still valid
+  if ([...sel.options].some(opt => opt.value === current)) {
+    sel.value = current; // restore previously selected dept if still valid
+  }
 }
 
 // ── Routing Decision Feed Filters ─────────────────────────────────────────────
@@ -281,4 +289,7 @@ function toggleRoutingBlocked() {
 
 // Staggered 1600ms
 setTimeout(loadEventStream, 1600);
-setInterval(loadEventStream, 15000);
+setInterval(() => {
+  if (Date.now() < _streamUserInteractingUntil) return;
+  loadEventStream();
+}, 15000);
