@@ -206,6 +206,25 @@
   margin-bottom: 14px;
 }
 
+.rpt-risk-charts-row {
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.85fr);
+  align-items: stretch;
+}
+.rpt-risk-timeline-card,
+.rpt-risk-breakdown-card {
+  min-height: 300px;
+  overflow: hidden;
+}
+.rpt-risk-timeline-card canvas,
+.rpt-risk-breakdown-card canvas {
+  height: 240px !important;
+  max-height: 240px;
+}
+.rpt-risk-breakdown-card canvas {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
 /* ── Table card ──────────────────────────────────────────────────────────────── */
 .rpt-table-card {
   background: var(--bg-panel);
@@ -374,10 +393,22 @@
 @media (max-width: 1100px) {
   .rpt-kpi-row    { grid-template-columns: repeat(3, 1fr); }
   .rpt-charts-row { grid-template-columns: 1fr; }
+  .rpt-risk-breakdown-card canvas {
+    max-width: 360px;
+  }
 }
 @media (max-width: 700px) {
   .rpt-kpi-row { grid-template-columns: repeat(2, 1fr); }
   .rpt-tabs    { flex-wrap: wrap; }
+  .rpt-risk-timeline-card,
+  .rpt-risk-breakdown-card {
+    min-height: 270px;
+  }
+  .rpt-risk-timeline-card canvas,
+  .rpt-risk-breakdown-card canvas {
+    height: 210px !important;
+    max-height: 210px;
+  }
 }
 
 /* ── Agent Activity Tab ──────────────────────────────────────────────────────── */

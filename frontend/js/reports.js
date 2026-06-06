@@ -354,6 +354,7 @@ async function loadRisk() {
   setKpi("rk-terms-sub", data.term_library.block + " block / " + data.term_library.escalate + " escalate");
 
   const labels = data.timeline.map(d => d.date);
+  const riskChartBase = chartDefaults();
 
   // Risk timeline stacked bar
   destroyChart("riskTimeline");
@@ -374,7 +375,34 @@ async function loadRisk() {
             backgroundColor: "rgba(139,148,158,0.3)", stack: "risk" },
         ],
       },
-      options: chartDefaults(),
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              color: COLORS.muted,
+              boxWidth: 12,
+              padding: 12,
+              font: { size: 10 },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ...riskChartBase.scales.x,
+            stacked: true,
+            ticks: { ...riskChartBase.scales.x.ticks, maxTicksLimit: 7, maxRotation: 25 },
+          },
+          y: {
+            ...riskChartBase.scales.y,
+            stacked: true,
+            beginAtZero: true,
+            ticks: { ...riskChartBase.scales.y.ticks, precision: 0 },
+          },
+        },
+      },
     }
   );
 
@@ -390,7 +418,22 @@ async function loadRisk() {
           backgroundColor: [COLORS.red, COLORS.yellow, COLORS.micro, COLORS.muted],
           borderWidth: 0 }],
       },
-      options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "65%" },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              color: COLORS.muted,
+              boxWidth: 12,
+              padding: 12,
+              font: { size: 10 },
+            },
+          },
+        },
+        cutout: "68%",
+      },
     }
   );
 
