@@ -290,6 +290,7 @@ function toggleRoutingBlocked() {
 // Staggered 1600ms
 setTimeout(loadEventStream, 1600);
 setInterval(() => {
+  if (_streamOpenId) return;
   if (Date.now() < _streamUserInteractingUntil) return;
   loadEventStream();
 }, 15000);

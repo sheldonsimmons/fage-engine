@@ -8,6 +8,10 @@
 let openRationaleId = null;
 const _auditDetailCache = {};  // eventId → full detail object, populated on expand
 
+function isAuditDetailOpen() {
+  return !!openRationaleId || !!document.getElementById("rawPayloadModal");
+}
+
 async function loadAuditLog() {
   try {
     const events = await apiGet("/api/audit?limit=50");
@@ -260,7 +264,10 @@ async function loadLiveRoutingFeed() {
 
 // Staggered 800ms
 setTimeout(loadLiveRoutingFeed, 800);
-setInterval(loadLiveRoutingFeed, 15000);
+setInterval(() => {
+  if (isAuditDetailOpen()) return;
+  loadLiveRoutingFeed();
+}, 15000);
 
 // ── Audit Log Filters ─────────────────────────────────────────────────────────
 
@@ -345,7 +352,10 @@ function exportAuditPdf() {
 
 // Staggered 1200ms
 setTimeout(loadAuditLog, 1200);
-setInterval(loadAuditLog, 15000);
+setInterval(() => {
+  if (isAuditDetailOpen()) return;
+  loadAuditLog();
+}, 15000);
 
 // ── Raw Payload Modal ─────────────────────────────────────────────────────────
 // Shows a side-by-side view of the original (pre-prune) text vs the cleaned
