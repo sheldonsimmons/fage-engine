@@ -322,6 +322,7 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
                     raw = None
         base.update({
             "agent_id":         e.agent_id,
+            "cost_usd":         e.cost_usd,
             "rationale":        e.rationale,
             "prompt_payload":   e.prompt_payload,
             "raw_payload":      raw,

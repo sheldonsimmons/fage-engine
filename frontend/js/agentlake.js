@@ -7,12 +7,12 @@ const AGENT_ACTIVE_WINDOW_MS = 15000;
 function effectiveAgentStatus(agent) {
   const status = (agent.status || "idle").toLowerCase();
   if (status === "locked" || status === "queued") return status;
-  if (status !== "active") return status;
 
   const hasLiveClaim = !!agent.target_record_id;
   const lastSeenMs = agent.last_used_at ? new Date(agent.last_used_at).getTime() : 0;
   const recentlyUsed = lastSeenMs && (Date.now() - lastSeenMs <= AGENT_ACTIVE_WINDOW_MS);
-  return hasLiveClaim || recentlyUsed ? "active" : "idle";
+  if (hasLiveClaim || recentlyUsed) return "active";
+  return status === "active" ? "idle" : status;
 }
 
 /** Fetch all agents and render the registry table */

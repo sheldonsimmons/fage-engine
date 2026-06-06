@@ -140,6 +140,16 @@ async function fetchRationaleContent(eventId) {
     const detail = await apiGet(`/api/audit/${eventId}`);
     let snapshot = {};
     try { snapshot = JSON.parse(detail.context_snapshot || "{}"); } catch {}
+    const hasBudgetContext = snapshot.budget_cap_usd != null || snapshot.budget_spent_usd != null;
+    const contextLine = hasBudgetContext
+      ? `Budget: $${snapshot.budget_spent_usd ?? "0"} / $${snapshot.budget_cap_usd ?? "0"}
+          &nbsp;(${snapshot.budget_used_pct ?? 0}% used)
+          &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? false}
+          &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? false}
+          &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`
+      : `Budget: Not configured for ${snapshot.department || detail.department || "this department"}
+          &nbsp;|&nbsp; Call cost: $${detail.cost_usd != null ? Number(detail.cost_usd).toFixed(6) : "0.000000"}
+          &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`;
 
     content.innerHTML = `
       <div style="display:flex; justify-content:flex-end; margin-bottom:8px">
@@ -156,11 +166,7 @@ async function fetchRationaleContent(eventId) {
       <div class="rationale-section">
         <div class="rationale-label">CONTEXT SNAPSHOT (at time of decision)</div>
         <div class="rationale-text" style="font-family:var(--font-mono); font-size:11px">
-          Budget: $${snapshot.budget_spent_usd ?? "?"} / $${snapshot.budget_cap_usd ?? "?"}
-          &nbsp;(${snapshot.budget_used_pct ?? "?"}% used)
-          &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? "?"}
-          &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? "?"}
-          &nbsp;|&nbsp; Captured: ${snapshot.captured_at ?? "?"}
+          ${contextLine}
           ${snapshot.tokens_saved > 0 ? `<br><br>
           <span style="color:var(--accent-green)">&#9660; Pruning:</span>
           Raw: ${snapshot.raw_tokens ?? "?"} tokens
