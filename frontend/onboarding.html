@@ -184,7 +184,7 @@
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted,#8b949e);margin-bottom:10px">
             Choose a platform to connect
           </div>
-          <div class="ob-provider-grid" style="grid-template-columns:repeat(3,1fr);gap:10px">
+          <div class="ob-provider-grid" style="grid-template-columns:repeat(5,1fr);gap:10px">
             <div class="ob-provider" id="lp-salesforce" onclick="selectLaunchPlatform('salesforce')">
               <div class="ob-provider-name" style="font-size:13px">☁ Salesforce</div>
               <div class="ob-provider-models">Apex · Flow</div>
@@ -205,9 +205,25 @@
               <div class="ob-provider-name" style="font-size:13px">◎ Zendesk</div>
               <div class="ob-provider-models">Sunshine Function</div>
             </div>
-            <div class="ob-provider" id="lp-custom" onclick="selectLaunchPlatform('custom')">
-              <div class="ob-provider-name" style="font-size:13px">＋ Custom / Other</div>
-              <div class="ob-provider-models">Python · cURL</div>
+            <div class="ob-provider" id="lp-python" onclick="selectLaunchPlatform('python')">
+              <div class="ob-provider-name" style="font-size:13px">Py Python</div>
+              <div class="ob-provider-models">requests</div>
+            </div>
+            <div class="ob-provider" id="lp-nodejs" onclick="selectLaunchPlatform('nodejs')">
+              <div class="ob-provider-name" style="font-size:13px">JS Node.js</div>
+              <div class="ob-provider-models">fetch</div>
+            </div>
+            <div class="ob-provider" id="lp-java" onclick="selectLaunchPlatform('java')">
+              <div class="ob-provider-name" style="font-size:13px">Java</div>
+              <div class="ob-provider-models">HttpClient</div>
+            </div>
+            <div class="ob-provider" id="lp-ruby" onclick="selectLaunchPlatform('ruby')">
+              <div class="ob-provider-name" style="font-size:13px">Ruby</div>
+              <div class="ob-provider-models">Net::HTTP</div>
+            </div>
+            <div class="ob-provider" id="lp-rest" onclick="selectLaunchPlatform('rest')">
+              <div class="ob-provider-name" style="font-size:13px">REST / cURL</div>
+              <div class="ob-provider-models">HTTP API</div>
             </div>
           </div>
         </div>
@@ -264,31 +280,55 @@
         <div id="managedKeyStatus" style="font-size:12px;margin-top:8px;display:none"></div>
       </div>
 
-      <!-- 6 platform tiles using existing ob-provider styles -->
-      <div class="ob-provider-grid" style="grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
-        <div class="ob-provider" id="ob-plat-salesforce" onclick="selectObPlatform('salesforce')">
-          <div class="ob-provider-name">☁ Salesforce</div>
-          <div class="ob-provider-models">Apex · Flow</div>
+      <div class="ob-platform-group">
+        <div class="ob-platform-group-title">Business Platforms</div>
+        <div class="ob-provider-grid ob-platform-grid">
+          <div class="ob-provider" id="ob-plat-salesforce" onclick="selectObPlatform('salesforce')">
+            <div class="ob-provider-name">☁ Salesforce</div>
+            <div class="ob-provider-models">Apex · Flow</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-servicenow" onclick="selectObPlatform('servicenow')">
+            <div class="ob-provider-name">⚙ ServiceNow</div>
+            <div class="ob-provider-models">Business Rule · JS</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-hubspot" onclick="selectObPlatform('hubspot')">
+            <div class="ob-provider-name">⬡ HubSpot</div>
+            <div class="ob-provider-models">Custom Code Action</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-dynamics" onclick="selectObPlatform('dynamics')">
+            <div class="ob-provider-name">◆ Dynamics 365</div>
+            <div class="ob-provider-models">Power Automate · HTTP</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-zendesk" onclick="selectObPlatform('zendesk')">
+            <div class="ob-provider-name">◎ Zendesk</div>
+            <div class="ob-provider-models">Sunshine Function</div>
+          </div>
         </div>
-        <div class="ob-provider" id="ob-plat-servicenow" onclick="selectObPlatform('servicenow')">
-          <div class="ob-provider-name">⚙ ServiceNow</div>
-          <div class="ob-provider-models">Business Rule · JS</div>
-        </div>
-        <div class="ob-provider" id="ob-plat-hubspot" onclick="selectObPlatform('hubspot')">
-          <div class="ob-provider-name">⬡ HubSpot</div>
-          <div class="ob-provider-models">Custom Code Action</div>
-        </div>
-        <div class="ob-provider" id="ob-plat-dynamics" onclick="selectObPlatform('dynamics')">
-          <div class="ob-provider-name">◆ Dynamics 365</div>
-          <div class="ob-provider-models">Power Automate · HTTP</div>
-        </div>
-        <div class="ob-provider" id="ob-plat-zendesk" onclick="selectObPlatform('zendesk')">
-          <div class="ob-provider-name">◎ Zendesk</div>
-          <div class="ob-provider-models">Sunshine Function</div>
-        </div>
-        <div class="ob-provider" id="ob-plat-custom" onclick="selectObPlatform('custom')">
-          <div class="ob-provider-name">＋ Custom / Other</div>
-          <div class="ob-provider-models">Python · cURL</div>
+      </div>
+
+      <div class="ob-platform-group">
+        <div class="ob-platform-group-title">Code / API</div>
+        <div class="ob-provider-grid ob-platform-grid">
+          <div class="ob-provider" id="ob-plat-python" onclick="selectObPlatform('python')">
+            <div class="ob-provider-name">Py Python</div>
+            <div class="ob-provider-models">requests</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-nodejs" onclick="selectObPlatform('nodejs')">
+            <div class="ob-provider-name">JS Node.js</div>
+            <div class="ob-provider-models">fetch</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-java" onclick="selectObPlatform('java')">
+            <div class="ob-provider-name">Java</div>
+            <div class="ob-provider-models">HttpClient</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-ruby" onclick="selectObPlatform('ruby')">
+            <div class="ob-provider-name">Ruby</div>
+            <div class="ob-provider-models">Net::HTTP</div>
+          </div>
+          <div class="ob-provider" id="ob-plat-rest" onclick="selectObPlatform('rest')">
+            <div class="ob-provider-name">REST / cURL</div>
+            <div class="ob-provider-models">HTTP API</div>
+          </div>
         </div>
       </div>
 
@@ -296,7 +336,7 @@
       <div id="obPlatConfig" style="display:none">
         <div class="ob-form" style="margin-bottom:20px">
           <div class="ob-field">
-            <label class="ob-label">Object / Record Type</label>
+            <label class="ob-label" id="obObjectLabel">Object / Record Type</label>
             <select id="obPlatObject" class="ob-input"></select>
           </div>
           <div class="ob-sf-row">
@@ -308,6 +348,17 @@
               <label class="ob-label">Agent Name</label>
               <input type="text" id="obPlatAgent" class="ob-input" placeholder="e.g. SF-CaseBot" />
             </div>
+          </div>
+
+          <!-- Field entry — which fields to send to AI -->
+          <div class="ob-field">
+            <label class="ob-label" id="obFieldsLabel">
+              Fields to send to AI
+              <span id="obFieldsLabelHint" style="font-size:10px;font-weight:400;color:var(--text-muted,#8b949e);margin-left:6px">Label shown in prompt · Field/property name from your platform</span>
+            </label>
+            <div id="obFieldsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+            <button class="ob-btn-ghost" onclick="addObField()" style="font-size:12px;padding:6px 14px">+ Add Field</button>
+            <div id="obFieldsHint" style="font-size:11px;color:var(--text-muted,#8b949e);margin-top:6px;line-height:1.5"></div>
           </div>
         </div>
         <div class="ob-actions" style="margin-bottom:0">

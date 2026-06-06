@@ -27,75 +27,55 @@ models.Base.metadata.create_all(bind=engine)
 # ── Lightweight column migrations (safe to re-run on every startup) ────────────
 def _run_migrations():
     """Add new columns to existing tables without requiring Alembic."""
+    def ensure_column(conn, table: str, column: str, definition: str):
+        if engine.dialect.name == "sqlite":
+            existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
+            if column not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+                conn.commit()
+        else:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"))
+            conn.commit()
+
     with engine.connect() as conn:
         try:
-            conn.execute(text(
-                "ALTER TABLE registered_agents ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE"
-            ))
-            conn.commit()
+            ensure_column(conn, "registered_agents", "archived", "BOOLEAN DEFAULT FALSE")
         except Exception:
             pass  # Column already exists or DB doesn't support IF NOT EXISTS
         try:
-            conn.execute(text(
-                "ALTER TABLE model_registry ADD COLUMN IF NOT EXISTS department VARCHAR"
-            ))
-            conn.commit()
+            ensure_column(conn, "model_registry", "department", "VARCHAR")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE department_budgets ADD COLUMN IF NOT EXISTS throttle_tier INTEGER DEFAULT 1"
-            ))
-            conn.commit()
+            ensure_column(conn, "department_budgets", "throttle_tier", "INTEGER DEFAULT 1")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE registered_agents ADD COLUMN IF NOT EXISTS min_tier INTEGER DEFAULT 1"
-            ))
-            conn.commit()
+            ensure_column(conn, "registered_agents", "min_tier", "INTEGER DEFAULT 1")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE registered_agents ADD COLUMN IF NOT EXISTS max_tier INTEGER DEFAULT 4"
-            ))
-            conn.commit()
+            ensure_column(conn, "registered_agents", "max_tier", "INTEGER DEFAULT 4")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE department_budgets ADD COLUMN IF NOT EXISTS raw_payload_logging_enabled BOOLEAN DEFAULT FALSE"
-            ))
-            conn.commit()
+            ensure_column(conn, "department_budgets", "raw_payload_logging_enabled", "BOOLEAN DEFAULT FALSE")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE department_budgets ADD COLUMN IF NOT EXISTS raw_retention_days INTEGER DEFAULT 30"
-            ))
-            conn.commit()
+            ensure_column(conn, "department_budgets", "raw_retention_days", "INTEGER DEFAULT 30")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS raw_payload TEXT"
-            ))
-            conn.commit()
+            ensure_column(conn, "audit_events", "raw_payload", "TEXT")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS raw_logged_at TIMESTAMP"
-            ))
-            conn.commit()
+            ensure_column(conn, "audit_events", "raw_logged_at", "TIMESTAMP")
         except Exception:
             pass
         try:
-            conn.execute(text(
-                "ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS matched_keywords_json TEXT"
-            ))
-            conn.commit()
+            ensure_column(conn, "audit_events", "matched_keywords_json", "TEXT")
         except Exception:
             pass
         # trial_accounts — create + add new columns
@@ -180,6 +160,7 @@ def _seed_on_startup():
             dict(term="passport number",      category="hipaa",     action="block"),
             dict(term="date of birth",        category="hipaa",     action="block"),
             # Legal / compliance — escalate to senior model
+            dict(term="legal",                category="legal",     action="escalate"),
             dict(term="lawsuit",              category="legal",     action="escalate"),
             dict(term="litigation",           category="legal",     action="escalate"),
             dict(term="attorney",             category="legal",     action="escalate"),

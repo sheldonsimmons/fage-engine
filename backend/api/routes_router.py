@@ -78,7 +78,19 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         agent = db.query(RegisteredAgent).filter_by(id=req.agent_id).first()
 
     if not agent and req.agent_name:
+        agent = (
+            db.query(RegisteredAgent)
+            .filter_by(name=req.agent_name, department=req.department)
+            .first()
+        )
+
+    if not agent and req.agent_name:
         agent = db.query(RegisteredAgent).filter_by(name=req.agent_name).first()
+        if agent and not req.is_test:
+            from core.agentlake import infer_platform
+            agent.department = req.department
+            agent.source_platform = infer_platform(req.agent_name, req.source_platform)
+            db.commit()
 
     if not agent and req.agent_name and not req.is_test:
         from core.agentlake import infer_platform
@@ -118,10 +130,40 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     _is_code              = _explicit_code
     _effective_auto_prune = req.auto_prune and not _is_code and not _agent_pruning_off
 
+    # ── Sensitive term check ───────────────────────────────────────────────────
+    # Run before the short-payload guard so a one-word record like "Legal" still
+    # flags/escalates instead of being skipped as empty Salesforce noise.
+    term_result = check_terms(db, req.text, req.department,
+                              skip_pii=req.voice_guard_processed)
+    if term_result["triggered"] and term_result["action"] == "block":
+        write_audit_event(
+            db               = db,
+            event_type       = "DECISION",
+            department       = req.department,
+            routing_decision = "BLOCKED",
+            routing_reason   = f"Sensitive term blocked: '{term_result['top_match']['term']}' ({term_result['top_match']['category']})",
+            prompt_payload   = req.text[:2000],
+            model_tier       = "none",
+            agent_id         = agent.id if agent else req.agent_id,
+            matched_keywords = [m["term"] for m in term_result["matches"]],
+            cost_usd         = 0.0,
+            decision_outcome = "Request blocked by sensitive term policy",
+        )
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=451,
+            detail={
+                "error":   "BLOCKED",
+                "reason":  f"Request contains a blocked sensitive term: '{term_result['top_match']['term']}'",
+                "category": term_result["top_match"]["category"],
+                "matches": [m["term"] for m in term_result["matches"]],
+            }
+        )
+
     # ── Minimum payload check ─────────────────────────────────────────────────
     from core.pruner import prune as _prune, estimate_tokens as _est
     _quick_text = _prune(req.text)["cleaned_text"] if _effective_auto_prune else req.text
-    if _est(_quick_text) < req.min_tokens:
+    if _est(_quick_text) < req.min_tokens and not term_result["triggered"]:
         return RouteResponse(
             department               = req.department,
             complexity               = "SKIPPED",
@@ -147,34 +189,6 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     budget       = db.query(DepartmentBudget).filter_by(department=req.department).first()
     is_throttled   = budget.throttled    if budget else False
     throttle_tier  = getattr(budget, "throttle_tier", 1) or 1  if budget else 1
-
-    # ── Sensitive term check ───────────────────────────────────────────────────
-    term_result = check_terms(db, req.text, req.department,
-                              skip_pii=req.voice_guard_processed)
-    if term_result["triggered"] and term_result["action"] == "block":
-        write_audit_event(
-            db               = db,
-            event_type       = "DECISION",
-            department       = req.department,
-            routing_decision = "BLOCKED",
-            routing_reason   = f"Sensitive term blocked: '{term_result['top_match']['term']}' ({term_result['top_match']['category']})",
-            prompt_payload   = req.text[:2000],
-            model_tier       = "none",
-            agent_id         = req.agent_id,
-            matched_keywords = [m["term"] for m in term_result["matches"]],
-            cost_usd         = 0.0,
-            decision_outcome = "Request blocked by sensitive term policy",
-        )
-        from fastapi import HTTPException
-        raise HTTPException(
-            status_code=451,
-            detail={
-                "error":   "BLOCKED",
-                "reason":  f"Request contains a blocked sensitive term: '{term_result['top_match']['term']}'",
-                "category": term_result["top_match"]["category"],
-                "matches": [m["term"] for m in term_result["matches"]],
-            }
-        )
 
     force_complex = term_result["triggered"] and term_result["action"] == "escalate"
 
@@ -291,7 +305,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 ) if term_result["triggered"] else result["routing_reason"],
                 prompt_payload   = req.text[:2000],
                 model_tier       = result["model_tier"],
-                agent_id         = req.agent_id,
+                agent_id         = agent.id if agent else req.agent_id,
                 matched_keywords = all_matched,
                 cost_usd         = result["cost_usd"],
                 decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",

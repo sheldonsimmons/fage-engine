@@ -18,6 +18,7 @@ from database.models import SensitiveTerm
 
 DEFAULT_TERMS = [
     # Legal
+    {"term": "legal",          "category": "legal",       "action": "escalate"},
     {"term": "lawsuit",        "category": "legal",       "action": "escalate"},
     {"term": "litigation",     "category": "legal",       "action": "escalate"},
     {"term": "attorney",       "category": "legal",       "action": "escalate"},

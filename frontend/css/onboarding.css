@@ -136,6 +136,19 @@
 }
 .ob-provider-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
 .ob-provider-models { font-size: 11px; color: var(--text-muted); }
+.ob-platform-group { margin-bottom: 18px; }
+.ob-platform-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.ob-platform-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
 
 /* ── Budget input ────────────────────────────────────────────────────────────── */
 .ob-budget-input { display: flex; align-items: center; gap: 8px; }
@@ -400,4 +413,22 @@
   font-size: 13px;
   color: var(--accent-green);
   line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .ob-shell { max-width: 100%; }
+  .ob-provider-grid,
+  .ob-platform-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .ob-sf-row,
+  .ob-dept-row {
+    grid-template-columns: 1fr;
+  }
+  .ob-budget-summary,
+  .ob-review-section,
+  .ob-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
