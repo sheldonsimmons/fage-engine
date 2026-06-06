@@ -96,6 +96,13 @@ function fmtNum(v) {
   return v.toLocaleString();
 }
 
+function displayDeptName(name) {
+  if (!name) return "Unknown";
+  const text = String(name);
+  const colonIndex = text.indexOf(":");
+  return colonIndex >= 0 ? text.slice(colonIndex + 1).trim() || text : text;
+}
+
 function fmtTs(iso) {
   if (!iso) return "—";
   return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", {
@@ -572,6 +579,7 @@ async function loadDepartments() {
 
   const labels = data.timeline.map(d => d.date);
   const depts  = data.departments;
+  const deptChartBase = chartDefaults();
 
   // Stacked dept spend chart
   destroyChart("deptSpend");
@@ -582,7 +590,7 @@ async function loadDepartments() {
       data: {
         labels,
         datasets: depts.map((dept, i) => ({
-          label: dept,
+          label: displayDeptName(dept),
           data:  data.timeline.map(d => d[dept] || 0),
           backgroundColor: COLORS.dept[i % COLORS.dept.length] + "99",
           borderColor:     COLORS.dept[i % COLORS.dept.length],
@@ -590,7 +598,33 @@ async function loadDepartments() {
           stack: "dept",
         })),
       },
-      options: chartDefaults(),
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              color: COLORS.muted,
+              boxWidth: 12,
+              padding: 12,
+              font: { size: 10 },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ...deptChartBase.scales.x,
+            stacked: true,
+            ticks: { ...deptChartBase.scales.x.ticks, maxTicksLimit: 7, maxRotation: 25 },
+          },
+          y: {
+            ...deptChartBase.scales.y,
+            stacked: true,
+            beginAtZero: true,
+          },
+        },
+      },
     }
   );
 
@@ -601,14 +635,29 @@ async function loadDepartments() {
     {
       type: "doughnut",
       data: {
-        labels: data.scorecards.map(d => d.department),
+        labels: data.scorecards.map(d => displayDeptName(d.department)),
         datasets: [{
           data: data.scorecards.map(d => d.total_cost_usd),
           backgroundColor: depts.map((_, i) => COLORS.dept[i % COLORS.dept.length]),
           borderWidth: 0,
         }],
       },
-      options: { plugins: { legend: { labels: { color: COLORS.muted } } }, cutout: "60%" },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              color: COLORS.muted,
+              boxWidth: 12,
+              padding: 12,
+              font: { size: 10 },
+            },
+          },
+        },
+        cutout: "68%",
+      },
     }
   );
 }

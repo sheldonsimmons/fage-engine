@@ -224,6 +224,24 @@
   max-width: 420px;
   margin: 0 auto;
 }
+.rpt-dept-charts-row {
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 0.9fr);
+  align-items: stretch;
+}
+.rpt-dept-spend-card,
+.rpt-dept-cost-card {
+  min-height: 300px;
+  overflow: hidden;
+}
+.rpt-dept-spend-card canvas,
+.rpt-dept-cost-card canvas {
+  height: 240px !important;
+  max-height: 240px;
+}
+.rpt-dept-cost-card canvas {
+  max-width: 420px;
+  margin: 0 auto;
+}
 
 /* ── Table card ──────────────────────────────────────────────────────────────── */
 .rpt-table-card {
@@ -396,6 +414,9 @@
   .rpt-risk-breakdown-card canvas {
     max-width: 360px;
   }
+  .rpt-dept-cost-card canvas {
+    max-width: 360px;
+  }
 }
 @media (max-width: 700px) {
   .rpt-kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -406,6 +427,15 @@
   }
   .rpt-risk-timeline-card canvas,
   .rpt-risk-breakdown-card canvas {
+    height: 210px !important;
+    max-height: 210px;
+  }
+  .rpt-dept-spend-card,
+  .rpt-dept-cost-card {
+    min-height: 270px;
+  }
+  .rpt-dept-spend-card canvas,
+  .rpt-dept-cost-card canvas {
     height: 210px !important;
     max-height: 210px;
   }
