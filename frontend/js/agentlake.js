@@ -338,9 +338,9 @@ async function loadAgents() {
     const agents = await apiGet(url);
     _allAgents = agents;
     renderAgentCards(agents.filter(a => !a.archived));  // cards show live only
-    renderAgentTable(agents);
     updateKpiAgents(agents.filter(a => !a.archived));
     populateDeptFilter(agents);
+    applyAgentFilters();
     scheduleAgentPoll(agents);
   } catch (err) {
     document.getElementById("agentTableBody").innerHTML =
@@ -409,6 +409,7 @@ function applyAgentFilters() {
   const status   = (document.getElementById("filterStatus")?.value   || "").toLowerCase();
   const dept     = (document.getElementById("filterDept")?.value     || "").toLowerCase();
   const search   = (document.getElementById("filterSearch")?.value   || "").toLowerCase();
+  const hasFilter = !!(platform || status || dept || search);
 
   const filtered = _allAgents.filter(a => {
     if (platform && (a.source_platform || "custom").toLowerCase() !== platform) return false;
@@ -422,7 +423,7 @@ function applyAgentFilters() {
 
   // Update count badge without affecting KPI
   const tbody = document.getElementById("agentTableBody");
-  if (filtered.length < _allAgents.length) {
+  if (hasFilter) {
     // Show filter indicator in title
     const title = document.querySelector("#agentPanel .panel-title");
     if (title) {
