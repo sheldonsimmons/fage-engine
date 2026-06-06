@@ -382,6 +382,7 @@ const OB_PLATFORMS = {
 };
 
 let obSelectedPlatform = null;
+let _obLastPlatform = null;
 
 // Platforms that manage auth server-side — no key in generated code
 const MANAGED_PLATFORMS = ["salesforce", "servicenow"];
@@ -403,17 +404,25 @@ function selectObPlatform(platform) {
   }
   const cfg = OB_PLATFORMS[platform];
   const isCode = cfg.kind === "code";
+  const isSalesforce = platform === "salesforce";
   const objectLabel = document.getElementById("obObjectLabel");
   const fieldsLabel = document.getElementById("obFieldsLabel");
   const fieldsLabelHint = document.getElementById("obFieldsLabelHint");
-  if (objectLabel) objectLabel.textContent = isCode ? "Code Context" : "Object / Record Type";
-  if (fieldsLabel) fieldsLabel.firstChild.textContent = isCode ? "Data to send to AI" : "Fields to send to AI";
+  if (objectLabel) objectLabel.textContent = isSalesforce ? "Salesforce Object API Name" : (isCode ? "Code Context" : "Object / Record Type");
+  if (fieldsLabel) fieldsLabel.firstChild.textContent = isSalesforce ? "Salesforce Fields Routed Through CostPilot" : (isCode ? "Data to send to AI" : "Fields to send to AI");
   if (fieldsLabelHint) fieldsLabelHint.textContent = isCode
     ? "Label shown in prompt · Variable / JSON key name from your code"
+    : isSalesforce
+    ? "Prompt label · Salesforce field API name, standard or custom"
     : "Label shown in prompt · Field/property name from your platform";
 
-  const objSel = document.getElementById("obPlatObject");
-  objSel.innerHTML = cfg.objects.map(o => `<option value="${o}">${o}</option>`).join("");
+  const objInput = document.getElementById("obPlatObject");
+  const objOptions = document.getElementById("obPlatObjectOptions");
+  if (objOptions) objOptions.innerHTML = cfg.objects.map(o => `<option value="${o}"></option>`).join("");
+  if (objInput && (platform !== _obLastPlatform || !objInput.value)) {
+    objInput.value = cfg.objects[0] || "";
+  }
+  _obLastPlatform = platform;
   // Populate department dropdown from the user's already-configured departments
   const deptSel = document.getElementById("obPlatDept");
   const userDepts = departments.filter(d => d.name.trim());
@@ -436,7 +445,7 @@ function selectObPlatform(platform) {
 
 const OB_FIELD_DEFAULTS = {
   salesforce: {
-    hint: "Use the field API name from Salesforce Setup (e.g. Contract_Text__c). Custom fields end in __c.",
+    hint: "Use exact Salesforce API names. Standard fields look like Subject or Description. Custom objects and fields usually end in __c.",
     fields: [
       { label: "Subject",     name: "Subject"      },
       { label: "Description", name: "Description"  },
@@ -563,7 +572,20 @@ function _safeVar(name, fallback = "field") {
 }
 
 function _apexVarName(field, i) {
-  return "field" + (i + 1);
+  const base = _safeVar(field.name || field.label || "", `field${i + 1}`)
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!base || base === "field") return "field" + (i + 1);
+  return /^[a-zA-Z]/.test(base) ? base : "field" + (i + 1);
+}
+
+function _apexVarNames(fields) {
+  const seen = {};
+  return fields.map((field, i) => {
+    const base = _apexVarName(field, i);
+    seen[base] = (seen[base] || 0) + 1;
+    return seen[base] === 1 ? base : `${base}${seen[base]}`;
+  });
 }
 
 function _obCodeSection(label, hint, code) {
@@ -643,7 +665,14 @@ function generateObCode() {
   const dept   = document.getElementById("obPlatDept").value;
   const agent  = document.getElementById("obPlatAgent").value.trim() || OB_PLATFORMS[obSelectedPlatform].agentDefault;
   const fields = getObFields();
+  if (!obj) { err.textContent = "Enter an object or record type."; return; }
   if (!fields.length) { err.textContent = "Add at least one field or data input."; return; }
+  if (obSelectedPlatform === "salesforce") {
+    const badObject = !_isSalesforceApiName(obj);
+    const badField = fields.find(f => !_isSalesforceApiName(f.name));
+    if (badObject) { err.textContent = "Enter a valid Salesforce object API name, like Case or Custom_Request__c."; return; }
+    if (badField) { err.textContent = `Check the Salesforce field API name: ${badField.name}`; return; }
+  }
   const fns    = {
     salesforce:_genSalesforce,
     servicenow:_genServiceNow,
@@ -663,14 +692,27 @@ function generateObCode() {
   out.scrollIntoView({ behavior: "smooth" });
 }
 
+function _isSalesforceApiName(name) {
+  return /^[A-Za-z][A-Za-z0-9_]*(?:__c|__mdt|__e|__x)?$/.test(String(name || ""));
+}
+
 // ── Code generators ───────────────────────────────────────────────────────────
 
 function _genSalesforce(obj, dept, agent, fields) {
   const sfFields = fields && fields.length ? fields : [{label:"Subject",name:"Subject"},{label:"Description",name:"Description"}];
+  const apexVars = _apexVarNames(sfFields);
   const requestVars = sfFields.map((f, i) =>
-    `        @InvocableVariable(required=${i === 0 ? "true " : "false"} label='${_codeStr(f.label || f.name)}') public String ${_apexVarName(f, i)};`
+    `        @InvocableVariable(required=${i === 0 ? "true " : "false"} label='${_codeStr(f.label || f.name)} (${_codeStr(f.name)})') public String ${apexVars[i]};`
   ).join("\n");
-  const reqPrompt = _apexPrompt(sfFields, (f, i) => `req.${_apexVarName(f, i)}`);
+  const reqPrompt = _apexPrompt(sfFields, (f, i) => `req.${apexVars[i]}`);
+  const mappingRows = sfFields.map((f, i) =>
+    `<div class="ob-field-row"><span>${_obEsc(f.label || f.name)}</span><span class="mono">${_obEsc(f.name)}</span><span class="mono">${_obEsc(apexVars[i])}</span><span>Routed to CostPilot</span></div>`
+  ).join("");
+  const mappingHtml = `<div class="ob-field-table">
+    <div class="ob-field-row ob-field-row-header"><span>Prompt Label</span><span>Salesforce Field API Name</span><span>Apex Input</span><span>Behavior</span></div>
+    <div class="ob-field-row"><span>Source Object</span><span class="mono">${_obEsc(obj)}</span><span class="mono">recordId</span><span>Record-triggered Flow</span></div>
+    ${mappingRows}
+  </div>`;
 
   // ── Trial version: proxy endpoint, no custom fields required ─────────────
   if (IS_TRIAL) {
@@ -744,12 +786,13 @@ ${requestVars}
       <div class="ob-flow-step"><span class="ob-flow-num">2</span>
         <div><strong>Setup → Remote Site Settings → New</strong><br/>Name: <code>CostPilot</code> · URL: <code>https://fage-engine-21cb49fe4806.herokuapp.com</code> · Active: ✓<br/><em style="color:var(--text-muted,#8b949e);font-size:11px">Required by Salesforce for any external HTTP callout — this is the only manual setup step.</em></div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">3</span>
-        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map: ${sfFields.map((f, i) => `${_obEsc(f.name)} → field${i + 1}`).join(" · ")} · Department → <strong>"${_obEsc(dept)}"</strong></div></div>
+        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map: ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")} · Department → <strong>"${_obEsc(dept)}"</strong></div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">4</span>
         <div><strong>Save &amp; Activate</strong> — next time a ${_obEsc(obj)} is created or updated, CostPilot routes the call automatically. Your first call appears on your dashboard within seconds.</div></div>
     </div>`;
 
-    return _obCodeSection("Apex Class — paste into Developer Console", "No API key needed; map each Flow input to the field names you configured", apex)
+    return `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Salesforce Mapping</span><span class="ob-code-hint">These are the exact object and field API names this setup will route.</span></div>${mappingHtml}</div>`
+      + _obCodeSection("Apex Class — paste into Developer Console", "No API key needed; map each Flow input to the field names you configured", apex)
       + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Setup Steps</span></div>${flowHtml}</div>`
       + _obBanner("salesforce", obj, dept, agent) + _obActions();
   }
@@ -827,7 +870,7 @@ ${requestVars}
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em> · Optimize for: <em>Actions and Related Records</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map: Record ID · ${sfFields.map((f, i) => `${_obEsc(f.name)} → field${i + 1}`).join(" · ")} · Department → ${_obEsc(dept)} · Agent Name → ${_obEsc(agent)}</div></div>
+      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map: Record ID · ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")} · Department → ${_obEsc(dept)} · Agent Name → ${_obEsc(agent)}</div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">3</span>
       <div><strong>Save &amp; Activate</strong><br/>If CostPilot does not show an event, check Setup → Apex Jobs and Setup → Paused and Failed Flow Interviews.</div></div>
   </div>`;
@@ -839,7 +882,7 @@ CostPilotCallout.CostPilotRequest req = new CostPilotCallout.CostPilotRequest();
 req.recordId = 'REPLACE_WITH_${obj.toUpperCase()}_ID';
 req.department = '${_codeStr(dept)}';
 req.agentName = '${_codeStr(agent)}';
-${sfFields.map((f, i) => `req.${_apexVarName(f, i)} = 'Test value for ${_codeStr(f.label || f.name)}';`).join("\n")}
+${sfFields.map((f, i) => `req.${apexVars[i]} = 'Test value for ${_codeStr(f.label || f.name)}';`).join("\n")}
 CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ req });`;
 
   const fieldHtml = `<div class="ob-field-table">
@@ -850,7 +893,8 @@ CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ re
     <div class="ob-field-row"><span>CostPilot Cost USD</span><span class="mono">CostPilot_Cost_USD__c</span><span>Currency</span><span>12,6</span></div>
   </div>`;
 
-  return _obCodeSection("Step 1 — Apex Class", "Developer Console → File → Open → CostPilotCallout → Replace all → Save", apex)
+  return `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Salesforce Mapping</span><span class="ob-code-hint">These are the exact object and field API names this setup will route.</span></div>${mappingHtml}</div>`
+    + _obCodeSection("Step 1 — Apex Class", "Developer Console → File → Open → CostPilotCallout → Replace all → Save", apex)
     + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 2 — Salesforce Flow</span></div>${flowHtml}</div>`
     + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 3 — Custom Fields on ${_obEsc(obj)}</span><span class="ob-code-hint">Setup → Object Manager → ${_obEsc(obj)} → Fields &amp; Relationships → New</span></div>${fieldHtml}</div>`
     + _obCodeSection("Debug Test — Execute Anonymous", "Runs the Apex action without waiting on your Flow trigger", testApex)
