@@ -21,6 +21,7 @@ Each record captures:
 
 import os
 import json
+import re
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -287,6 +288,23 @@ def export_jsonl_path() -> str:
     )
 
 
+def _extract_cost_usd(e: AuditEvent):
+    cost = getattr(e, "cost_usd", None)
+    if cost is not None:
+        return cost
+
+    for text in (getattr(e, "rationale", None), getattr(e, "decision_outcome", None)):
+        if not text:
+            continue
+        match = re.search(r"\$([0-9]+(?:\.[0-9]+)?)", text)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                return None
+    return None
+
+
 def _serialize(e: AuditEvent, full: bool = False) -> dict:
     # Parse matched keywords — stored as JSON array, available on list and detail views
     try:
@@ -322,7 +340,7 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
                     raw = None
         base.update({
             "agent_id":         e.agent_id,
-            "cost_usd":         e.cost_usd,
+            "cost_usd":         _extract_cost_usd(e),
             "rationale":        e.rationale,
             "prompt_payload":   e.prompt_payload,
             "raw_payload":      raw,

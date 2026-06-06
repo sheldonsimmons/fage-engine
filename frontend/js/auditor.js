@@ -141,6 +141,7 @@ async function fetchRationaleContent(eventId) {
     let snapshot = {};
     try { snapshot = JSON.parse(detail.context_snapshot || "{}"); } catch {}
     const hasBudgetContext = snapshot.budget_cap_usd != null || snapshot.budget_spent_usd != null;
+    const callCost = detail.cost_usd != null ? `$${Number(detail.cost_usd).toFixed(6)}` : "not recorded";
     const contextLine = hasBudgetContext
       ? `Budget: $${snapshot.budget_spent_usd ?? "0"} / $${snapshot.budget_cap_usd ?? "0"}
           &nbsp;(${snapshot.budget_used_pct ?? 0}% used)
@@ -148,7 +149,7 @@ async function fetchRationaleContent(eventId) {
           &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? false}
           &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`
       : `Budget: Not configured for ${snapshot.department || detail.department || "this department"}
-          &nbsp;|&nbsp; Call cost: $${detail.cost_usd != null ? Number(detail.cost_usd).toFixed(6) : "0.000000"}
+          &nbsp;|&nbsp; Call cost: ${callCost}
           &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`;
 
     content.innerHTML = `
