@@ -10,6 +10,8 @@
 
 let _tsSpendChart = null;
 let _tsCallsChart = null;
+const _tsSpendHiddenLabels = new Set();
+const _tsCallsHiddenLabels = new Set();
 
 const _DEPT_COLORS = [
   "#58a6ff", "#3fb950", "#d2993a", "#f85149",
@@ -33,9 +35,33 @@ async function loadTimeSeries() {
   }
 }
 
+function _rememberHiddenDatasets(chart, hiddenLabels) {
+  if (!chart) return;
+  chart.data.datasets.forEach((dataset, idx) => {
+    if (chart.isDatasetVisible(idx)) hiddenLabels.delete(dataset.label);
+    else hiddenLabels.add(dataset.label);
+  });
+}
+
+function _legendOptions(hiddenLabels) {
+  return {
+    labels: { color: "#8b949e", font: { size: 11 }, boxWidth: 12 },
+    onClick(_event, item, legend) {
+      const chart = legend.chart;
+      const dataset = chart.data.datasets[item.datasetIndex];
+      const nextVisible = !chart.isDatasetVisible(item.datasetIndex);
+      chart.setDatasetVisibility(item.datasetIndex, nextVisible);
+      if (nextVisible) hiddenLabels.delete(dataset.label);
+      else hiddenLabels.add(dataset.label);
+      chart.update();
+    },
+  };
+}
+
 function _renderSpendChart(data) {
   const ctx = document.getElementById("tsSpendCanvas");
   if (!ctx) return;
+  _rememberHiddenDatasets(_tsSpendChart, _tsSpendHiddenLabels);
   if (_tsSpendChart) { _tsSpendChart.destroy(); _tsSpendChart = null; }
 
   const depts    = data.departments || [];
@@ -52,6 +78,7 @@ function _renderSpendChart(data) {
         tension:         0.35,
         pointRadius:     hasData ? 2 : 0,
         borderWidth:     2,
+        hidden:          _tsSpendHiddenLabels.has(dept),
       }))
     : [{
         label:           "Total Spend",
@@ -62,6 +89,7 @@ function _renderSpendChart(data) {
         tension:         0.35,
         pointRadius:     hasData ? 2 : 0,
         borderWidth:     2,
+        hidden:          _tsSpendHiddenLabels.has("Total Spend"),
       }];
 
   _tsSpendChart = new Chart(ctx, {
@@ -72,9 +100,7 @@ function _renderSpendChart(data) {
       maintainAspectRatio: false,
       interaction:         { mode: "index", intersect: false },
       plugins: {
-        legend: {
-          labels: { color: "#8b949e", font: { size: 11 }, boxWidth: 12 },
-        },
+        legend: _legendOptions(_tsSpendHiddenLabels),
         tooltip: {
           callbacks: {
             label: c => ` ${c.dataset.label}: $${c.parsed.y.toFixed(4)}`,
@@ -104,6 +130,7 @@ function _renderSpendChart(data) {
 function _renderCallsChart(data) {
   const ctx = document.getElementById("tsCallsCanvas");
   if (!ctx) return;
+  _rememberHiddenDatasets(_tsCallsChart, _tsCallsHiddenLabels);
   if (_tsCallsChart) { _tsCallsChart.destroy(); _tsCallsChart = null; }
 
   const datasets = Object.entries(_TS_TIER_COLORS).map(([tier, color]) => ({
@@ -113,6 +140,7 @@ function _renderCallsChart(data) {
     borderColor:     color,
     borderWidth:     1,
     stack:           "calls",
+    hidden:          _tsCallsHiddenLabels.has(tier),
   }));
 
   _tsCallsChart = new Chart(ctx, {
@@ -123,9 +151,7 @@ function _renderCallsChart(data) {
       maintainAspectRatio: false,
       interaction:         { mode: "index", intersect: false },
       plugins: {
-        legend: {
-          labels: { color: "#8b949e", font: { size: 11 }, boxWidth: 12 },
-        },
+        legend: _legendOptions(_tsCallsHiddenLabels),
       },
       scales: {
         x: {
