@@ -305,6 +305,15 @@ def _extract_cost_usd(e: AuditEvent):
     return None
 
 
+def _display_department(department: str) -> str:
+    if not department:
+        return department
+    prefix, sep, rest = department.partition(":")
+    if sep and len(prefix) >= 8 and rest:
+        return rest
+    return department
+
+
 def _serialize(e: AuditEvent, full: bool = False) -> dict:
     # Parse matched keywords — stored as JSON array, available on list and detail views
     try:
@@ -313,13 +322,21 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
     except Exception:
         matched_kws = []
 
+    agent = getattr(e, "agent", None)
+    cost_usd = _extract_cost_usd(e)
+
     base = {
         "id":               e.id,
         "event_type":       e.event_type,
-        "department":       e.department,
+        "department":       _display_department(e.department),
+        "source_department": e.department,
+        "agent_id":         e.agent_id,
+        "agent_name":       agent.name if agent else None,
+        "source_platform":  agent.source_platform if agent else None,
         "model_tier":       e.model_tier,
         "risk_level":       e.risk_level,
         "decision_outcome": e.decision_outcome,
+        "cost_usd":         cost_usd,
         "timestamp":        e.timestamp.isoformat() if e.timestamp else None,
         "has_raw_payload":  bool(getattr(e, "raw_payload", None)),
         "matched_keywords": matched_kws,
@@ -339,8 +356,6 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
                 if age_days > retention_days:
                     raw = None
         base.update({
-            "agent_id":         e.agent_id,
-            "cost_usd":         _extract_cost_usd(e),
             "rationale":        e.rationale,
             "prompt_payload":   e.prompt_payload,
             "raw_payload":      raw,

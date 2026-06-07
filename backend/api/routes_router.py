@@ -59,6 +59,24 @@ class RouteResponse(BaseModel):
     sensitive_term_matches:     List[str] = []
 
 
+def _resolve_department(db: Session, req: RouteRequest) -> str:
+    requested = (req.department or "Support").strip() or "Support"
+    if db.query(DepartmentBudget).filter_by(department=requested).first():
+        return requested
+
+    if req.agent_id:
+        agent = db.query(RegisteredAgent).filter_by(id=req.agent_id).first()
+        if agent and agent.department:
+            return agent.department
+
+    if req.agent_name:
+        agent = db.query(RegisteredAgent).filter_by(name=req.agent_name).first()
+        if agent and agent.department:
+            return agent.department
+
+    return requested
+
+
 @router.post("", response_model=RouteResponse)
 def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     """
@@ -70,6 +88,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       5. Simulate model call + calculate real cost
       6. Record transaction and update department spend in the DB
     """
+    department = _resolve_department(db, req)
+
     # ── Resolve or auto-register agent FIRST ─────────────────────────────────
     # Agent resolution runs before pruning so the agent's pruning_enabled
     # setting can override the pruning decision.
@@ -80,7 +100,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     if not agent and req.agent_name:
         agent = (
             db.query(RegisteredAgent)
-            .filter_by(name=req.agent_name, department=req.department)
+            .filter_by(name=req.agent_name, department=department)
             .first()
         )
 
@@ -88,7 +108,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         agent = db.query(RegisteredAgent).filter_by(name=req.agent_name).first()
         if agent and not req.is_test:
             from core.agentlake import infer_platform
-            agent.department = req.department
+            agent.department = department
             agent.source_platform = infer_platform(req.agent_name, req.source_platform)
             db.commit()
 
@@ -96,7 +116,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         from core.agentlake import infer_platform
         agent = RegisteredAgent(
             name             = req.agent_name,
-            department       = req.department,
+            department       = department,
             source_platform  = infer_platform(req.agent_name, req.source_platform),
             permissions      = "read,write",
             target_table     = "tickets",
@@ -133,13 +153,13 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     # ── Sensitive term check ───────────────────────────────────────────────────
     # Run before the short-payload guard so a one-word record like "Legal" still
     # flags/escalates instead of being skipped as empty Salesforce noise.
-    term_result = check_terms(db, req.text, req.department,
+    term_result = check_terms(db, req.text, department,
                               skip_pii=req.voice_guard_processed)
     if term_result["triggered"] and term_result["action"] == "block":
         write_audit_event(
             db               = db,
             event_type       = "DECISION",
-            department       = req.department,
+            department       = department,
             routing_decision = "BLOCKED",
             routing_reason   = f"Sensitive term blocked: '{term_result['top_match']['term']}' ({term_result['top_match']['category']})",
             prompt_payload   = req.text[:2000],
@@ -165,7 +185,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     _quick_text = _prune(req.text)["cleaned_text"] if _effective_auto_prune else req.text
     if _est(_quick_text) < req.min_tokens and not term_result["triggered"]:
         return RouteResponse(
-            department               = req.department,
+            department               = department,
             complexity               = "SKIPPED",
             routing_decision         = "SKIPPED",
             routing_reason           = f"Payload too short after pruning ({_est(_quick_text)} tokens < {req.min_tokens} minimum) — likely an empty on-create trigger. No AI call made.",
@@ -186,7 +206,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         )
 
     # Check throttle status from the department budget table
-    budget       = db.query(DepartmentBudget).filter_by(department=req.department).first()
+    budget       = db.query(DepartmentBudget).filter_by(department=department).first()
     is_throttled   = budget.throttled    if budget else False
     throttle_tier  = getattr(budget, "throttle_tier", 1) or 1  if budget else 1
 
@@ -196,7 +216,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     _raw_text_for_logging = req.text
 
     # Run the routing pipeline
-    result = route(req.text, req.department, db=db, auto_prune=_effective_auto_prune, is_throttled=is_throttled, throttle_tier=throttle_tier, force_complex=force_complex)
+    result = route(req.text, department, db=db, auto_prune=_effective_auto_prune, is_throttled=is_throttled, throttle_tier=throttle_tier, force_complex=force_complex)
 
     # ── Apply agent tier bounds (clamp result to agent's min/max tier) ────────
     TIER_NUM  = {"Scout": 1, "Analyst": 2, "Advisor": 3, "Strategist": 4,
@@ -210,7 +230,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         if clamped_num != current_num:
             # Re-run the model selection for the clamped tier
             from core.router import _get_model_from_registry
-            clamped_model = _get_model_from_registry(clamped_num, db, req.department) or {}
+            clamped_model = _get_model_from_registry(clamped_num, db, department) or {}
             direction = "bumped up" if clamped_num > current_num else "capped down"
             result = dict(result)
             result["model_tier"]     = TIER_NAME[clamped_num]
@@ -231,7 +251,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         # ── Persist the token transaction ──────────────────────────────────────
         from core.agentlake import infer_platform
         tx = TokenTransaction(
-            department      = req.department,
+            department      = department,
             source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
             agent_id        = agent.id if agent else req.agent_id,
             model_tier      = result["model_tier"],
@@ -291,7 +311,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             write_audit_event(
                 db               = db,
                 event_type       = "ROUTING",
-                department       = req.department,
+                department       = department,
                 routing_decision = result["routing_decision"],
                 routing_reason   = (
                     (f"[CODE LANE — auto-detected: {_auto_detect_reason}] "

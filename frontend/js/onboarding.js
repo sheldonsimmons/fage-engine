@@ -730,13 +730,14 @@ function _genSalesforce(obj, dept, agent, fields) {
     // Pre-filled — no provider credential needed in Salesforce
     private static final String ENDPOINT = '${proxyEndpoint}';
     private static final String CP_KEY   = '${TRIAL_SK}';
+    private static final String CP_DEPARTMENT = '${_codeStr(dept)}';
 
     @InvocableMethod(label='Send to CostPilot')
     public static void sendToCostPilot(List<CostPilotRequest> requests) {
         if (System.isFuture() || System.isBatch()) return;
         CostPilotRequest req = requests[0];
         String prompt = ${reqPrompt};
-        sendAsync(prompt, req.department);
+        sendAsync(prompt, CP_DEPARTMENT);
     }
 
     @future(callout=true)
@@ -781,7 +782,6 @@ function _genSalesforce(obj, dept, agent, fields) {
     }
 
     public class CostPilotRequest {
-        @InvocableVariable(required=true  label='Department')         public String department;
 ${requestVars}
     }
 }`;
@@ -792,7 +792,7 @@ ${requestVars}
       <div class="ob-flow-step"><span class="ob-flow-num">2</span>
         <div><strong>Setup → Remote Site Settings → New</strong><br/>Name: <code>CostPilot</code> · URL: <code>https://fage-engine-21cb49fe4806.herokuapp.com</code> · Active: ✓<br/><em style="color:var(--text-muted,#8b949e);font-size:11px">Required by Salesforce for any external HTTP callout — this is the only manual setup step.</em></div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">3</span>
-        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map: ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")} · Department → <strong>"${_obEsc(dept)}"</strong></div></div>
+        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map only these data fields: ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")}<br/>Department is already locked to <strong>"${_obEsc(dept)}"</strong> in the class.</div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">4</span>
         <div><strong>Save &amp; Activate</strong> — next time a ${_obEsc(obj)} is created or updated, CostPilot routes the call automatically. Your first call appears on your dashboard within seconds.</div></div>
     </div>`;
@@ -806,13 +806,15 @@ ${requestVars}
   // ── Full version: internal routing + custom fields ────────────────────────
   const apex =
 `public class CostPilotCallout {
+    private static final String CP_DEPARTMENT = '${_codeStr(dept)}';
+    private static final String CP_AGENT      = '${_codeStr(agent)}';
+
     @InvocableMethod(label='Send to CostPilot')
     public static void sendToCostPilot(List<CostPilotRequest> requests) {
         if (System.isFuture() || System.isBatch()) return;
         CostPilotRequest req = requests[0];
         String payload = ${reqPrompt};
-        String agent = String.isBlank(req.agentName) ? '${_codeStr(agent)}' : req.agentName;
-        sendAsync(req.recordId, payload, req.department, agent);
+        sendAsync(req.recordId, payload, CP_DEPARTMENT, CP_AGENT);
     }
 
     @future(callout=true)
@@ -827,7 +829,9 @@ ${requestVars}
             'department'      => department,
             'auto_prune'      => true,
             'agent_name'      => agentName,
-            'source_platform' => 'Salesforce'
+            'source_platform' => 'Salesforce',
+            'source_object'   => '${_codeStr(obj)}',
+            'source_record_id'=> recordId
         }));
         httpReq.setTimeout(30000);
         System.debug('CostPilot request endpoint: ' + httpReq.getEndpoint());
@@ -866,8 +870,6 @@ ${requestVars}
 
     public class CostPilotRequest {
         @InvocableVariable(required=true  label='Record ID')          public String recordId;
-        @InvocableVariable(required=true  label='Department')         public String department;
-        @InvocableVariable(required=false label='Agent Name')         public String agentName;
 ${requestVars}
     }
 }`;
@@ -876,7 +878,7 @@ ${requestVars}
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em> · Optimize for: <em>Actions and Related Records</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map: Record ID · ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")} · Department → ${_obEsc(dept)} · Agent Name → ${_obEsc(agent)}</div></div>
+      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map: Record ID · ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")}<br/>Department and Agent are already locked in the class: <strong>${_obEsc(dept)}</strong> · <strong>${_obEsc(agent)}</strong></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">3</span>
       <div><strong>Save &amp; Activate</strong><br/>If CostPilot does not show an event, check Setup → Apex Jobs and Setup → Paused and Failed Flow Interviews.</div></div>
   </div>`;
@@ -886,8 +888,6 @@ ${requestVars}
 // Replace the sample record ID with a real ${obj} ID from your org.
 CostPilotCallout.CostPilotRequest req = new CostPilotCallout.CostPilotRequest();
 req.recordId = 'REPLACE_WITH_${obj.toUpperCase()}_ID';
-req.department = '${_codeStr(dept)}';
-req.agentName = '${_codeStr(agent)}';
 ${sfFields.map((f, i) => `req.${apexVars[i]} = 'Test value for ${_codeStr(f.label || f.name)}';`).join("\n")}
 CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ req });`;
 

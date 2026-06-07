@@ -87,7 +87,7 @@ function renderAuditTable(events) {
   const tbody = document.getElementById("auditTableBody");
   if (!events.length) {
     tbody.innerHTML =
-      '<tr><td colspan="6" class="placeholder">No audit events yet — run a COMPLEX or THROTTLED routing call to generate entries.</td></tr>';
+      '<tr><td colspan="7" class="placeholder">No audit events yet — run a COMPLEX or THROTTLED routing call to generate entries.</td></tr>';
     return;
   }
 
@@ -115,13 +115,14 @@ function renderAuditTable(events) {
       <tr class="${rowClass}" id="audit-entry-${e.id}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale & payload">
         <td style="font-family:var(--font-mono); font-size:11px">${ts}</td>
         <td><span class="badge ${isBlocked ? 'badge-critical' : 'badge-scout'}">${isBlocked ? "🛡 BLOCKED" : e.event_type}</span></td>
+        <td style="font-weight:600;color:var(--accent);font-size:11px">${e.agent_name || "—"}</td>
         <td>${e.department}</td>
         <td><span class="badge ${tierBadgeClass}">${tierLabel}</span></td>
         <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
         <td style="font-size:11px; color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}; font-weight:${isBlocked ? '600' : 'normal'}">${blockedIcon}${outcome}</td>
       </tr>
       <tr class="rationale-row" id="rationale-${e.id}" style="display:none">
-        <td colspan="6">
+        <td colspan="7">
           <div class="rationale-box" id="rationale-content-${e.id}">
             <span style="color:var(--text-muted)">Loading rationale...</span>
           </div>
@@ -142,6 +143,9 @@ async function fetchRationaleContent(eventId) {
     try { snapshot = JSON.parse(detail.context_snapshot || "{}"); } catch {}
     const hasBudgetContext = snapshot.budget_cap_usd != null || snapshot.budget_spent_usd != null;
     const callCost = detail.cost_usd != null ? `$${Number(detail.cost_usd).toFixed(6)}` : "not recorded";
+    const agentLine = `Agent: ${detail.agent_name || "not linked"}
+          &nbsp;|&nbsp; Platform: ${detail.source_platform || "unknown"}
+          &nbsp;|&nbsp; Department: ${detail.department || "—"}`;
     const contextLine = hasBudgetContext
       ? `Budget: $${snapshot.budget_spent_usd ?? "0"} / $${snapshot.budget_cap_usd ?? "0"}
           &nbsp;(${snapshot.budget_used_pct ?? 0}% used)
@@ -167,6 +171,7 @@ async function fetchRationaleContent(eventId) {
       <div class="rationale-section">
         <div class="rationale-label">CONTEXT SNAPSHOT (at time of decision)</div>
         <div class="rationale-text" style="font-family:var(--font-mono); font-size:11px">
+          ${agentLine}<br>
           ${contextLine}
           ${snapshot.tokens_saved > 0 ? `<br><br>
           <span style="color:var(--accent-green)">&#9660; Pruning:</span>

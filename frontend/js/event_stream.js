@@ -31,12 +31,13 @@ function _renderStreamCards(events) {
     const color  = _streamEventColor(type);
     const ts     = _fmtStreamTs(e.timestamp);
     const dept   = e.department || "—";
+    const agent  = e.agent_name || "Agent not linked";
     const cost   = e.cost_usd != null ? `$${e.cost_usd.toFixed(6)}` : "—";
     const tokens = e.tokens_in != null ? `${(e.tokens_in + (e.tokens_out || 0)).toLocaleString()} tokens` : "";
 
     const budgetUsed = dashData.budget_used_pct != null ? `${dashData.budget_used_pct.toFixed(1)}% budget used` : "";
     const monthSpend = dashData.spend_month_usd  != null ? `$${dashData.spend_month_usd.toFixed(2)} this month` : "";
-    const metaParts  = [tokens, cost, dept, budgetUsed, monthSpend].filter(Boolean);
+    const metaParts  = [tokens, cost, agent, dept, budgetUsed, monthSpend].filter(Boolean);
 
     const keywords = (e.matched_keywords || []).length
       ? `<span style="color:var(--accent-red)"> · ${e.matched_keywords.slice(0,3).join(", ")}</span>`
@@ -170,6 +171,7 @@ async function toggleStreamEvent(eventId) {
     try { snapshot = JSON.parse(e.context_snapshot || "{}"); } catch {}
 
     const cost       = e.cost_usd != null ? `$${e.cost_usd.toFixed(6)}` : "—";
+    const agentLine  = `${e.agent_name || "not linked"} &nbsp;|&nbsp; ${e.source_platform || "unknown"} &nbsp;|&nbsp; ${e.department || "—"}`;
     const budgetLine = snapshot.budget_spent_usd != null
       ? `$${snapshot.budget_spent_usd ?? "?"} / $${snapshot.budget_cap_usd ?? "?"} &nbsp;(${snapshot.budget_used_pct ?? "?"}% used) &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? "?"} &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? "?"}`
       : "—";
@@ -193,6 +195,9 @@ async function toggleStreamEvent(eventId) {
 
       <div class="gov-detail-label">Rationale</div>
       <div class="gov-detail-text">${e.rationale || "No rationale recorded."}</div>
+
+      <div class="gov-detail-label">Agent Context</div>
+      <div class="gov-detail-mono">${agentLine}</div>
 
       <div class="gov-detail-label">Budget Context</div>
       <div class="gov-detail-mono">${budgetLine}</div>

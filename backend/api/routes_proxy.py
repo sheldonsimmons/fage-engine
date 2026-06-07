@@ -193,6 +193,7 @@ def _ensure_agent(db, workspace_id: str, department: str, platform: str):
     )
     db.add(agent)
     db.commit()
+    db.refresh(agent)
     return agent
 
 
@@ -200,7 +201,8 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
                      tier: str, input_tokens: int, output_tokens: int,
                      cost_usd: float, routing_reason: str,
                      tokens_saved: int = 0, matched_keywords: list = None,
-                     prompt_text: str = "", risk_override: str = None):
+                     prompt_text: str = "", risk_override: str = None,
+                     agent_id: int = None):
     from database.models import DepartmentBudget
     import json
 
@@ -211,6 +213,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     txn = TokenTransaction(
         department     = dept_key,
         source_platform= "trial-proxy",
+        agent_id       = agent_id,
         model_tier     = tier,
         input_tokens   = input_tokens,
         output_tokens  = output_tokens,
@@ -229,8 +232,12 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     )
     budget_ctx = None
     if budget:
+        budget.current_spend_usd = round((budget.current_spend_usd or 0.0) + cost_usd, 6)
+        if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
+            budget.throttled = True
         used_pct = round(budget.current_spend_usd / budget.monthly_cap_usd * 100, 1) if budget.monthly_cap_usd else 0
         budget_ctx = json.dumps({
+            "department":       budget.department,
             "budget_spent_usd": round(budget.current_spend_usd, 4),
             "budget_cap_usd":   budget.monthly_cap_usd,
             "budget_used_pct":  used_pct,
@@ -253,6 +260,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
 
     audit = AuditEvent(
         event_type            = "ROUTING",
+        agent_id              = agent_id,
         department            = dept_key,
         model_tier            = tier,
         rationale             = rationale,
@@ -427,11 +435,12 @@ async def proxy_openai(workspace_id: str, request: Request):
         risk       = "high" if st["action"] in ("flag","escalate") else ("medium" if complex_ else "low")
 
         # 5. Log + auto-register
+        agent = _ensure_agent(db, workspace_id, department, platform)
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
-                         matched_kw + st["matched"], prompt_text, risk_override=risk)
-        _ensure_agent(db, workspace_id, department, platform)
+                         matched_kw + st["matched"], prompt_text, risk_override=risk,
+                         agent_id=agent.id if agent else None)
 
         # 6. Return response + CostPilot metadata headers
         return JSONResponse(
@@ -541,11 +550,12 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
 
         # 4. Log + 5. Auto-register agent
+        agent = _ensure_agent(db, workspace_id, department, platform)
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
-                         matched_kw + st["matched"], prompt_text, risk_override=risk)
-        _ensure_agent(db, workspace_id, department, platform)
+                         matched_kw + st["matched"], prompt_text, risk_override=risk,
+                         agent_id=agent.id if agent else None)
 
         # 6. Return response + CostPilot metadata headers
         return JSONResponse(
