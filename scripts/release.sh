@@ -24,6 +24,14 @@ with engine.connect() as conn:
         ALTER TABLE routing_configs
         ADD COLUMN IF NOT EXISTS tier_names_json TEXT
     '''))
+    conn.execute(text('''
+        ALTER TABLE trial_accounts
+        ADD COLUMN IF NOT EXISTS trial_call_cap INTEGER DEFAULT 500
+    '''))
+    conn.execute(text('''
+        ALTER TABLE trial_accounts
+        ADD COLUMN IF NOT EXISTS trial_spend_cap_usd FLOAT DEFAULT 10.0
+    '''))
     conn.commit()
 print('   Column migrations applied')
 
