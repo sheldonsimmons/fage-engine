@@ -6,7 +6,7 @@ GET /api/timeseries   — daily spend (by department) + call counts (by model ti
 """
 
 from datetime import datetime, timedelta, date as date_type
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -26,7 +26,11 @@ ALL_TIERS = ["Scout", "Analyst", "Advisor", "Strategist"]
 
 
 @router.get("")
-def get_timeseries(days: int = 30, db: Session = Depends(get_db)):
+def get_timeseries(
+    days: int = 30,
+    workspace_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
     """
     Returns the last `days` days (default 30) of:
       - daily_spend:  [{date, total_usd, by_dept}]
@@ -36,12 +40,10 @@ def get_timeseries(days: int = 30, db: Session = Depends(get_db)):
     """
     start = datetime.utcnow() - timedelta(days=days)
 
-    rows = (
-        db.query(TokenTransaction)
-        .filter(TokenTransaction.timestamp >= start)
-        .order_by(TokenTransaction.timestamp)
-        .all()
-    )
+    q = db.query(TokenTransaction).filter(TokenTransaction.timestamp >= start)
+    if workspace_id:
+        q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))
+    rows = q.order_by(TokenTransaction.timestamp).all()
 
     # Build ordered date range (oldest → newest)
     today = datetime.utcnow().date()

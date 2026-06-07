@@ -865,11 +865,14 @@ function renderExec(data) {
 
 async function loadExec() {
   try {
+    const wsId = localStorage.getItem("cp_workspace_id") || "";
+    const scope = wsId ? `workspace_id=${encodeURIComponent(wsId)}` : "";
+    const scoped = (path) => scope ? `${path}${path.includes("?") ? "&" : "?"}${scope}` : path;
     const [dashboard, timeseries, audits, agents] = await Promise.all([
-      apiGet("/api/dashboard"),
-      apiGet("/api/timeseries?days=180"),
-      apiGet("/api/audit?limit=500"),
-      apiGet("/api/agents"),
+      apiGet(scoped("/api/dashboard")),
+      apiGet(scoped("/api/timeseries?days=180")),
+      apiGet(scoped("/api/audit?limit=500")),
+      apiGet(scoped("/api/agents")),
     ]);
     execData = { dashboard, timeseries, audits, agents };
     populateExecFilters(execData);

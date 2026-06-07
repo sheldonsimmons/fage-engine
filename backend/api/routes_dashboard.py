@@ -15,7 +15,7 @@ GET /api/dashboard
 import json
 from datetime import datetime, date, timedelta
 from sqlalchemy import func
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -27,15 +27,25 @@ from database.models import (
 router = APIRouter()
 
 
-def _keyword_stats(db: Session, days: int = 30, top_n: int = 10) -> list:
+def _workspace_filter(model, workspace_id: str | None):
+    if not workspace_id:
+        return None
+    return model.department.like(f"{workspace_id}:%")
+
+
+def _keyword_stats(db: Session, days: int = 30, top_n: int = 10, workspace_id: str | None = None) -> list:
     """Count keyword frequency from matched_keywords_json on recent AuditEvents."""
     cutoff = datetime.utcnow() - timedelta(days=days)
-    events = db.query(AuditEvent.matched_keywords_json).filter(
+    filters = [
         AuditEvent.timestamp >= cutoff,
         AuditEvent.matched_keywords_json.isnot(None),
         AuditEvent.matched_keywords_json != "[]",
         AuditEvent.matched_keywords_json != "",
-    ).all()
+    ]
+    workspace_clause = _workspace_filter(AuditEvent, workspace_id)
+    if workspace_clause is not None:
+        filters.append(workspace_clause)
+    events = db.query(AuditEvent.matched_keywords_json).filter(*filters).all()
     counts: dict = {}
     for (kw_json,) in events:
         try:
@@ -48,7 +58,10 @@ def _keyword_stats(db: Session, days: int = 30, top_n: int = 10) -> list:
 
 
 @router.get("")
-def get_dashboard(db: Session = Depends(get_db)):
+def get_dashboard(
+    workspace_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
     """Single endpoint that powers the entire executive dashboard."""
 
     now         = datetime.utcnow()
@@ -57,24 +70,39 @@ def get_dashboard(db: Session = Depends(get_db)):
 
     # ── Spend ──────────────────────────────────────────────────────────────────
     # Both spend figures query token_transactions directly so they always agree.
+    tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    audit_scope = _workspace_filter(AuditEvent, workspace_id)
+    budget_scope = _workspace_filter(DepartmentBudget, workspace_id)
+    agent_scope = _workspace_filter(RegisteredAgent, workspace_id)
+
+    def _filters(*items):
+        return [x for x in items if x is not None]
+
     spend_today = db.query(func.sum(TokenTransaction.cost_usd)).filter(
+        *_filters(tx_scope),
         TokenTransaction.timestamp >= today_start
     ).scalar() or 0.0
 
     spend_month = db.query(func.sum(TokenTransaction.cost_usd)).filter(
+        *_filters(tx_scope),
         TokenTransaction.timestamp >= month_start
     ).scalar() or 0.0
 
     # Budget table still used for cap / throttle display — load once here
-    budgets_for_spend = db.query(DepartmentBudget).all()
+    budget_query = db.query(DepartmentBudget)
+    if budget_scope is not None:
+        budget_query = budget_query.filter(budget_scope)
+    budgets_for_spend = budget_query.all()
 
     # ── Token savings from pruning ─────────────────────────────────────────────
     tokens_saved_today = db.query(func.sum(TokenTransaction.tokens_saved)).filter(
+        *_filters(tx_scope),
         TokenTransaction.timestamp >= today_start,
         TokenTransaction.was_pruned == True,
     ).scalar() or 0
 
     tokens_saved_total = db.query(func.sum(TokenTransaction.tokens_saved)).filter(
+        *_filters(tx_scope),
         TokenTransaction.was_pruned == True,
     ).scalar() or 0
 
@@ -89,7 +117,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     # VOICE_GUARD_PRUNE rows exist only to record token savings; they are not AI calls.
     IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
 
-    total_calls = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL).scalar() or 0
+    total_calls = db.query(func.count(TokenTransaction.id)).filter(*_filters(tx_scope, IS_AI_CALL)).scalar() or 0
 
     # Economy tiers: Scout (tier 1), Analyst (tier 2), and legacy "micro"
     ECONOMY_TIERS  = ("Scout", "Analyst", "micro")
@@ -97,32 +125,33 @@ def get_dashboard(db: Session = Depends(get_db)):
     PREMIUM_TIERS  = ("Advisor", "Strategist", "flagship")
 
     micro_calls    = db.query(func.count(TokenTransaction.id)).filter(
-        IS_AI_CALL, TokenTransaction.model_tier.in_(ECONOMY_TIERS)
+        *_filters(tx_scope, IS_AI_CALL, TokenTransaction.model_tier.in_(ECONOMY_TIERS))
     ).scalar() or 0
     flagship_calls = db.query(func.count(TokenTransaction.id)).filter(
-        IS_AI_CALL, TokenTransaction.model_tier.in_(PREMIUM_TIERS)
+        *_filters(tx_scope, IS_AI_CALL, TokenTransaction.model_tier.in_(PREMIUM_TIERS))
     ).scalar() or 0
 
     micro_pct    = round((micro_calls    / total_calls) * 100, 1) if total_calls else 0
     flagship_pct = round((flagship_calls / total_calls) * 100, 1) if total_calls else 0
 
     # Per-tier call counts
-    scout_calls      = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier.in_(("Scout",     "micro"))).scalar() or 0
-    analyst_calls    = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier == "Analyst").scalar() or 0
-    advisor_calls    = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier.in_(("Advisor",   "flagship"))).scalar() or 0
-    strategist_calls = db.query(func.count(TokenTransaction.id)).filter(IS_AI_CALL, TokenTransaction.model_tier == "Strategist").scalar() or 0
+    scout_calls      = db.query(func.count(TokenTransaction.id)).filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.model_tier.in_(("Scout", "micro")))).scalar() or 0
+    analyst_calls    = db.query(func.count(TokenTransaction.id)).filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.model_tier == "Analyst")).scalar() or 0
+    advisor_calls    = db.query(func.count(TokenTransaction.id)).filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.model_tier.in_(("Advisor", "flagship")))).scalar() or 0
+    strategist_calls = db.query(func.count(TokenTransaction.id)).filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.model_tier == "Strategist")).scalar() or 0
 
     def _pct(n): return round((n / total_calls) * 100, 1) if total_calls else 0
 
     calls_today = db.query(func.count(TokenTransaction.id)).filter(
+        *_filters(tx_scope),
         IS_AI_CALL, TokenTransaction.timestamp >= today_start
     ).scalar() or 0
 
     # ── Agent counts ───────────────────────────────────────────────────────────
-    agents_total  = db.query(func.count(RegisteredAgent.id)).scalar() or 0
-    agents_active = db.query(func.count(RegisteredAgent.id)).filter_by(status="active").scalar()  or 0
-    agents_locked = db.query(func.count(RegisteredAgent.id)).filter_by(status="locked").scalar()  or 0
-    agents_idle   = db.query(func.count(RegisteredAgent.id)).filter_by(status="idle").scalar()    or 0
+    agents_total  = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope)).scalar() or 0
+    agents_active = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "active")).scalar()  or 0
+    agents_locked = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "locked")).scalar()  or 0
+    agents_idle   = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "idle")).scalar()    or 0
 
     # ── Budget summaries (reuse budgets_for_spend already loaded above) ──────────
     budgets = budgets_for_spend
@@ -145,12 +174,12 @@ def get_dashboard(db: Session = Depends(get_db)):
     ]
 
     # ── Governance & Compliance stats ─────────────────────────────────────────
-    blocked_count      = db.query(func.count(AuditEvent.id)).filter(AuditEvent.decision_outcome.ilike("%blocked%")).scalar() or 0
-    escalated_count    = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "ESCALATED").scalar() or 0
-    flagged_count      = db.query(func.count(AuditEvent.id)).scalar() or 0
-    pii_count          = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type.ilike("%PII%")).scalar()  or 0
-    throttle_prevented = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "THROTTLE").scalar()  or 0
-    collision_count    = db.query(func.count(AuditEvent.id)).filter(AuditEvent.event_type == "LOCK").scalar()       or 0
+    blocked_count      = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.decision_outcome.ilike("%blocked%"))).scalar() or 0
+    escalated_count    = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "ESCALATED")).scalar() or 0
+    flagged_count      = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope)).scalar() or 0
+    pii_count          = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type.ilike("%PII%"))).scalar()  or 0
+    throttle_prevented = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "THROTTLE")).scalar()  or 0
+    collision_count    = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "LOCK")).scalar()       or 0
 
     # ── Executive Summary ROI ─────────────────────────────────────────────────
     FLAGSHIP_AVG = 0.030   # avg cost per flagship call ($0.03 at Opus 4 rates)
@@ -173,7 +202,10 @@ def get_dashboard(db: Session = Depends(get_db)):
     routing_efficiency_pct = round((economy_calls / requests_routed) * 100, 1) if requests_routed > 0 else 0
 
     # ── Recent audit events (last 5 for the KPI strip) ─────────────────────────
-    recent_audits = db.query(AuditEvent).order_by(
+    recent_query = db.query(AuditEvent)
+    if audit_scope is not None:
+        recent_query = recent_query.filter(audit_scope)
+    recent_audits = recent_query.order_by(
         AuditEvent.timestamp.desc()
     ).limit(5).all()
 
@@ -191,6 +223,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     # ── Spend by department (for chart) ───────────────────────────────────────
     dept_spend = (
         db.query(TokenTransaction.department, func.sum(TokenTransaction.cost_usd))
+        .filter(*_filters(tx_scope))
         .group_by(TokenTransaction.department)
         .all()
     )
@@ -203,6 +236,7 @@ def get_dashboard(db: Session = Depends(get_db)):
             TokenTransaction.model_tier,
             func.count(TokenTransaction.id),
         )
+        .filter(*_filters(tx_scope))
         .group_by(TokenTransaction.department, TokenTransaction.model_tier)
         .all()
     )
@@ -281,7 +315,7 @@ def get_dashboard(db: Session = Depends(get_db)):
         "compliance_events_total": flagged_count,
 
         # ── Top Keywords ──────────────────────────────────────────────────────
-        "keyword_stats":         _keyword_stats(db),
+        "keyword_stats":         _keyword_stats(db, workspace_id=workspace_id),
 
         # ── Meta ──────────────────────────────────────────────────────────────
         "generated_at":          datetime.utcnow().isoformat(),

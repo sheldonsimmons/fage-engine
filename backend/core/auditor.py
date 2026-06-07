@@ -268,13 +268,11 @@ def write_audit_event(
     }
 
 
-def get_audit_events(db: Session, limit: int = 50) -> list:
-    events = (
-        db.query(AuditEvent)
-        .order_by(AuditEvent.timestamp.desc())
-        .limit(limit)
-        .all()
-    )
+def get_audit_events(db: Session, limit: int = 50, workspace_id: str = None) -> list:
+    q = db.query(AuditEvent)
+    if workspace_id:
+        q = q.filter(AuditEvent.department.like(f"{workspace_id}:%"))
+    events = q.order_by(AuditEvent.timestamp.desc()).limit(limit).all()
     return [_serialize(e) for e in events]
 
 

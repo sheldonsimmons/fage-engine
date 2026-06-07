@@ -45,9 +45,13 @@ class AuditEventDetail(AuditEventSummary):
 
 
 @router.get("", response_model=List[AuditEventSummary])
-def list_audit_events(limit: int = 50, db: Session = Depends(get_db)):
+def list_audit_events(
+    limit: int = 50,
+    workspace_id: str = None,
+    db: Session = Depends(get_db),
+):
     """Return the most recent audit events, newest first."""
-    return get_audit_events(db, limit=limit)
+    return get_audit_events(db, limit=limit, workspace_id=workspace_id)
 
 
 @router.get("/export")

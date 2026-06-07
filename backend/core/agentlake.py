@@ -69,9 +69,11 @@ def deregister_agent(db: Session, agent_id: int) -> dict:
     return {"deleted": True, "message": f"Agent '{name}' removed from registry."}
 
 
-def list_agents(db: Session, include_archived: bool = False) -> list:
+def list_agents(db: Session, include_archived: bool = False, workspace_id: str = None) -> list:
     """Return registered agents. Archived agents are hidden by default."""
     q = db.query(RegisteredAgent)
+    if workspace_id:
+        q = q.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
     if not include_archived:
         q = q.filter((RegisteredAgent.archived == False) | (RegisteredAgent.archived == None))
     return [_serialize(a) for a in q.all()]

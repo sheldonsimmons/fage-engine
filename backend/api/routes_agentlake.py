@@ -150,9 +150,13 @@ def agent_spend_summary(db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=List[AgentStatus])
-def get_agents(include_archived: bool = False, db: Session = Depends(get_db)):
+def get_agents(
+    include_archived: bool = False,
+    workspace_id: str = None,
+    db: Session = Depends(get_db),
+):
     """List registered agents. Pass ?include_archived=true to include archived agents."""
-    return list_agents(db, include_archived=include_archived)
+    return list_agents(db, include_archived=include_archived, workspace_id=workspace_id)
 
 
 @router.get("/{agent_id}", response_model=AgentStatus)
