@@ -228,6 +228,7 @@ def write_audit_event(
         prompt_payload   = prompt_payload[:2000],
         raw_payload      = raw_payload[:5000] if raw_payload else None,
         raw_logged_at    = now if raw_payload else None,
+        matched_keywords_json = json.dumps(matched_keywords or []),
         rationale        = rationale,
         decision_outcome = decision_outcome,
         risk_level       = risk_level,
@@ -293,10 +294,12 @@ def _extract_cost_usd(e: AuditEvent):
     if cost is not None:
         return cost
 
-    for text in (getattr(e, "rationale", None), getattr(e, "decision_outcome", None)):
+    for text in (getattr(e, "decision_outcome", None), getattr(e, "rationale", None)):
         if not text:
             continue
-        match = re.search(r"\$([0-9]+(?:\.[0-9]+)?)", text)
+        match = re.search(r"(?:Call cost:|model used —)\s*\$([0-9]+(?:\.[0-9]+)?)", text, re.IGNORECASE)
+        if not match:
+            match = re.search(r"\$([0-9]+(?:\.[0-9]+)?)", text)
         if match:
             try:
                 return float(match.group(1))
