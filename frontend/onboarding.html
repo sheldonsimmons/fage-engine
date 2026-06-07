@@ -258,7 +258,7 @@
     <!-- ── Screen 5: Connect a Platform ─────────────────────────────────────── -->
     <div class="ob-screen" id="screen-5">
       <h1 class="ob-title">Connect a Platform</h1>
-      <p class="ob-subtitle">Choose your CRM or support platform — CostPilot generates the integration code automatically.</p>
+      <p class="ob-subtitle" id="obPlatformSubtitle">Choose the source system that sends text to AI. CostPilot will use that platform's language and generate the matching setup.</p>
 
       <div class="ob-platform-group">
         <div class="ob-platform-group-title">Business Platforms</div>
@@ -333,7 +333,7 @@
               <select id="obPlatDept" class="ob-input"></select>
             </div>
             <div class="ob-field">
-              <label class="ob-label">Agent Name</label>
+              <label class="ob-label" id="obAgentLabel">Agent Name</label>
               <input type="text" id="obPlatAgent" class="ob-input" placeholder="e.g. SF-CaseBot" />
             </div>
           </div>
@@ -345,7 +345,7 @@
               <span id="obFieldsLabelHint" style="font-size:10px;font-weight:400;color:var(--text-muted,#8b949e);margin-left:6px">Label shown in prompt · Field/property name from your platform</span>
             </label>
             <div id="obFieldsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
-            <button type="button" class="ob-btn-ghost" onclick="addObField()" style="font-size:12px;padding:6px 14px">+ Add Field</button>
+            <button type="button" id="obAddFieldBtn" class="ob-btn-ghost" onclick="addObField()" style="font-size:12px;padding:6px 14px">+ Add Field</button>
             <div id="obFieldsHint" style="font-size:11px;color:var(--text-muted,#8b949e);margin-top:6px;line-height:1.5"></div>
           </div>
         </div>
@@ -449,7 +449,7 @@
 
   <script src="js/api.js?v=20260606"></script>
   <script src="js/tier-utils.js?v=20260606"></script>
-  <script src="js/onboarding.js?v=20260606-v325"></script>
+  <script src="js/onboarding.js?v=20260607-platform-copy"></script>
   <script src="/js/mobile-guard.js?v=20260606"></script>
 </body>
 </html>

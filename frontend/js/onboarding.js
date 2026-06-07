@@ -363,12 +363,84 @@ let obSelectedPlatform = null;
 let _obLastPlatform = null;
 
 const OB_PLATFORM_COPY = {
-  salesforce: { objectLabel: "Salesforce Object API Name", fieldsLabel: "Salesforce Fields Routed Through CostPilot", fieldHint: "Prompt label · Salesforce field API name, standard or custom", fieldHeader: "Salesforce Field API Name" },
-  servicenow: { objectLabel: "ServiceNow Table Name", fieldsLabel: "ServiceNow Fields Routed Through CostPilot", fieldHint: "Prompt label · ServiceNow column sys_name", fieldHeader: "ServiceNow Column" },
-  hubspot:    { objectLabel: "HubSpot Object Type", fieldsLabel: "HubSpot Properties Routed Through CostPilot", fieldHint: "Prompt label · HubSpot property internal name", fieldHeader: "HubSpot Property" },
-  dynamics:   { objectLabel: "Dynamics Table Name", fieldsLabel: "Dynamics Fields Routed Through CostPilot", fieldHint: "Prompt label · Dataverse field schema/logical name", fieldHeader: "Dynamics Field" },
-  zendesk:    { objectLabel: "Zendesk Record Type", fieldsLabel: "Zendesk Fields Routed Through CostPilot", fieldHint: "Prompt label · Zendesk field name or custom field identifier", fieldHeader: "Zendesk Field" },
-  code:       { objectLabel: "Code Context", fieldsLabel: "Data Routed Through CostPilot", fieldHint: "Prompt label · variable, JSON key, or request property from your code", fieldHeader: "Input Key" },
+  salesforce: {
+    objectLabel: "Salesforce Object API Name",
+    objectPlaceholder: "Case, Lead, Opportunity, Custom_Request__c",
+    agentLabel: "Salesforce Agent Name",
+    agentPlaceholder: "e.g. SF-CaseBot",
+    fieldsLabel: "Salesforce Fields to Send to AI",
+    fieldHint: "Prompt label · Salesforce field API name, standard or custom",
+    fieldHeader: "Salesforce Field API Name",
+    fieldPlaceholder: "Subject, Description, Custom_Text__c",
+    addFieldLabel: "+ Add Salesforce Field",
+    emptyFieldsError: "Add at least one Salesforce field API name.",
+    emptyObjectError: "Enter a Salesforce object API name."
+  },
+  servicenow: {
+    objectLabel: "ServiceNow Table",
+    objectPlaceholder: "incident, sc_request, u_ai_request",
+    agentLabel: "ServiceNow Bot Name",
+    agentPlaceholder: "e.g. SN-IncidentBot",
+    fieldsLabel: "ServiceNow Columns to Send to AI",
+    fieldHint: "Prompt label · ServiceNow column sys_name",
+    fieldHeader: "ServiceNow Column",
+    fieldPlaceholder: "short_description, description, u_contract_text",
+    addFieldLabel: "+ Add ServiceNow Column",
+    emptyFieldsError: "Add at least one ServiceNow column.",
+    emptyObjectError: "Enter a ServiceNow table name."
+  },
+  hubspot: {
+    objectLabel: "HubSpot Object Type",
+    objectPlaceholder: "tickets, deals, contacts",
+    agentLabel: "HubSpot Agent Name",
+    agentPlaceholder: "e.g. HS-TicketBot",
+    fieldsLabel: "HubSpot Properties to Send to AI",
+    fieldHint: "Prompt label · HubSpot property internal name",
+    fieldHeader: "HubSpot Property",
+    fieldPlaceholder: "subject, hs_note_body, dealstage",
+    addFieldLabel: "+ Add HubSpot Property",
+    emptyFieldsError: "Add at least one HubSpot property.",
+    emptyObjectError: "Enter a HubSpot object type."
+  },
+  dynamics: {
+    objectLabel: "Dynamics / Dataverse Table",
+    objectPlaceholder: "incident, lead, opportunity, new_airequest",
+    agentLabel: "Dynamics Agent Name",
+    agentPlaceholder: "e.g. D365-CaseBot",
+    fieldsLabel: "Dataverse Fields to Send to AI",
+    fieldHint: "Prompt label · Dataverse field schema or logical name",
+    fieldHeader: "Dataverse Field",
+    fieldPlaceholder: "title, description, new_contracttext",
+    addFieldLabel: "+ Add Dataverse Field",
+    emptyFieldsError: "Add at least one Dataverse field.",
+    emptyObjectError: "Enter a Dynamics table name."
+  },
+  zendesk: {
+    objectLabel: "Zendesk Record Type",
+    objectPlaceholder: "ticket, request, user",
+    agentLabel: "Zendesk Bot Name",
+    agentPlaceholder: "e.g. ZD-TicketBot",
+    fieldsLabel: "Zendesk Fields to Send to AI",
+    fieldHint: "Prompt label · Zendesk field name or custom field identifier",
+    fieldHeader: "Zendesk Field",
+    fieldPlaceholder: "subject, description, comment, custom_field_123",
+    addFieldLabel: "+ Add Zendesk Field",
+    emptyFieldsError: "Add at least one Zendesk field.",
+    emptyObjectError: "Enter a Zendesk record type."
+  },
+  code: {
+    objectLabel: "Code Entry Point",
+    objectPlaceholder: "api_route, worker, function, service",
+    agentLabel: "Service / Agent Name",
+    agentPlaceholder: "e.g. CostPilot-Agent",
+    fieldsLabel: "Request Data to Send to AI",
+    fieldHint: "Prompt label · variable, JSON key, or request property from your code",
+    fieldHeader: "Request Property",
+    fieldPlaceholder: "content, message, contract_text, customer_name",
+    addFieldLabel: "+ Add Request Property",
+    emptyFieldsError: "Add at least one request property or variable.",
+    emptyObjectError: "Enter the function, route, worker, or request type."
+  },
 };
 
 function selectObPlatform(platform) {
@@ -384,18 +456,23 @@ function selectObPlatform(platform) {
   const objectLabel = document.getElementById("obObjectLabel");
   const fieldsLabel = document.getElementById("obFieldsLabel");
   const fieldsLabelHint = document.getElementById("obFieldsLabelHint");
+  const agentLabel = document.getElementById("obAgentLabel");
+  const addFieldBtn = document.getElementById("obAddFieldBtn");
   const selectedSummary = document.getElementById("obSelectedPlatformSummary");
   const selectedName = document.getElementById("obSelectedPlatformName");
   document.querySelectorAll("#screen-5 .ob-platform-group").forEach(group => { group.style.display = "none"; });
   if (selectedSummary) selectedSummary.style.display = "flex";
   if (selectedName) selectedName.textContent = cfg.label;
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
-  if (fieldsLabel) fieldsLabel.firstChild.textContent = copy.fieldsLabel;
+  if (fieldsLabel) fieldsLabel.childNodes[0].textContent = copy.fieldsLabel + " ";
   if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;
+  if (agentLabel) agentLabel.textContent = copy.agentLabel;
+  if (addFieldBtn) addFieldBtn.textContent = copy.addFieldLabel;
 
   const objInput = document.getElementById("obPlatObject");
   const objOptions = document.getElementById("obPlatObjectOptions");
   if (objOptions) objOptions.innerHTML = cfg.objects.map(o => `<option value="${o}"></option>`).join("");
+  if (objInput) objInput.placeholder = copy.objectPlaceholder;
   if (objInput && (platform !== _obLastPlatform || !objInput.value)) {
     objInput.value = cfg.objects[0] || "";
   }
@@ -407,6 +484,7 @@ function selectObPlatform(platform) {
     deptSel.innerHTML = userDepts.map(d => `<option value="${d.name}">${d.name}</option>`).join("");
   }
   const agentEl = document.getElementById("obPlatAgent");
+  if (agentEl) agentEl.placeholder = copy.agentPlaceholder;
   if (!agentEl.value || Object.values(OB_PLATFORMS).some(c => c.agentDefault === agentEl.value)) {
     agentEl.value = cfg.agentDefault;
   }
@@ -479,18 +557,17 @@ function _renderObFields(fields) {
   _obFieldData = fields;
   const list = document.getElementById("obFieldsList");
   if (!list) return;
+  const cfg = OB_PLATFORMS[obSelectedPlatform] || {};
+  const copy = OB_PLATFORM_COPY[obSelectedPlatform] || (cfg.kind === "code" ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
   list.innerHTML = fields.map((f, i) => `
-    <div style="display:flex;gap:8px;align-items:center">
-      <input type="text" value="${_obEsc(f.label)}" placeholder="Label (e.g. Contract Body)"
-        onchange="_obFieldData[${i}].label=this.value"
-        style="flex:1;background:var(--bg-base,#0d1117);border:1px solid var(--border,#30363d);
-               border-radius:6px;padding:7px 10px;color:var(--text-primary,#e6edf3);font-size:12px" />
+    <div class="ob-map-field-row">
+      <input type="text" value="${_obEsc(f.label)}" placeholder="Prompt label"
+        oninput="_obFieldData[${i}].label=this.value"
+        class="ob-map-field-label" />
       <span style="color:var(--text-muted,#8b949e);font-size:12px;flex-shrink:0">→</span>
-      <input type="text" value="${_obEsc(f.name)}" placeholder="Field name (e.g. Contract_Text__c)"
-        onchange="_obFieldData[${i}].name=this.value"
-        style="flex:2;background:var(--bg-base,#0d1117);border:1px solid var(--border,#30363d);
-               border-radius:6px;padding:7px 10px;color:var(--text-primary,#e6edf3);
-               font-size:12px;font-family:monospace" />
+      <input type="text" value="${_obEsc(f.name)}" placeholder="${_obEsc(copy.fieldPlaceholder)}"
+        oninput="_obFieldData[${i}].name=this.value"
+        class="ob-map-field-name" />
       <button type="button" onclick="removeObField(${i})"
         style="background:none;border:none;color:var(--text-muted,#8b949e);cursor:pointer;font-size:16px;padding:0 4px;line-height:1">×</button>
     </div>`).join("");
@@ -667,12 +744,14 @@ function generateObCode() {
   const err = document.getElementById("error-5");
   if (!obSelectedPlatform) { err.textContent = "Select a platform first."; return; }
   err.textContent = "";
+  const cfg = OB_PLATFORMS[obSelectedPlatform];
+  const copy = OB_PLATFORM_COPY[obSelectedPlatform] || (cfg.kind === "code" ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
   const obj    = document.getElementById("obPlatObject").value.trim();
   const dept   = document.getElementById("obPlatDept").value;
-  const agent  = document.getElementById("obPlatAgent").value.trim() || OB_PLATFORMS[obSelectedPlatform].agentDefault;
+  const agent  = document.getElementById("obPlatAgent").value.trim() || cfg.agentDefault;
   const fields = getObFields();
-  if (!obj) { err.textContent = "Enter an object or record type."; return; }
-  if (!fields.length) { err.textContent = "Add at least one field or data input."; return; }
+  if (!obj) { err.textContent = copy.emptyObjectError; return; }
+  if (!fields.length) { err.textContent = copy.emptyFieldsError; return; }
   if (obSelectedPlatform === "salesforce") {
     const badObject = !_isSalesforceApiName(obj);
     const badField = fields.find(f => !_isSalesforceApiName(f.name));

@@ -403,6 +403,31 @@
 }
 .ob-field-row .mono { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
 
+.ob-map-field-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(180px, 2fr) 28px;
+  gap: 8px;
+  align-items: center;
+}
+.ob-map-field-label,
+.ob-map-field-name {
+  background: var(--bg-base, #0d1117);
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 12px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+.ob-map-field-name {
+  font-family: var(--font-mono);
+}
+.ob-map-field-label:focus,
+.ob-map-field-name:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
 /* ── Success Banner ──────────────────────────────────────────────────────────── */
 .ob-success-banner {
   margin-top: 20px;
@@ -422,6 +447,7 @@
     grid-template-columns: 1fr 1fr !important;
   }
   .ob-sf-row,
+  .ob-map-field-row,
   .ob-dept-row {
     grid-template-columns: 1fr;
   }
