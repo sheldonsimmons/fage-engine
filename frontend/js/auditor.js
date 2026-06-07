@@ -7,6 +7,7 @@
 
 let openRationaleId = null;
 const _auditDetailCache = {};  // eventId → full detail object, populated on expand
+const BLOCKED_BANNER_DISMISS_KEY = "costpilot_blocked_banner_dismissed_signature";
 
 function isAuditDetailOpen() {
   return !!openRationaleId || !!document.getElementById("rawPayloadModal");
@@ -55,6 +56,17 @@ function updateBlockedBanner(events) {
     return;
   }
 
+  const latestBlockedTs = blocked
+    .map(e => e.timestamp || "")
+    .sort()
+    .pop() || "";
+  const signature = `${blocked.length}:${latestBlockedTs}`;
+  banner.dataset.dismissSignature = signature;
+  if (localStorage.getItem(BLOCKED_BANNER_DISMISS_KEY) === signature) {
+    banner.style.display = "none";
+    return;
+  }
+
   banner.style.display = "block";
   countEl.textContent = `🚨 ${blocked.length} request${blocked.length > 1 ? "s" : ""} blocked in the last 24 hours`;
   subEl.textContent   = "Sensitive data was detected and stopped before reaching any AI model. Review the audit log below.";
@@ -81,6 +93,15 @@ function toggleBlockedFilter() {
   }
 
   applyAuditFilters();
+}
+
+function dismissBlockedBanner(event) {
+  if (event) event.stopPropagation();
+  const banner = document.getElementById("blockedAlertBanner");
+  if (!banner) return;
+  const signature = banner.dataset.dismissSignature || "";
+  if (signature) localStorage.setItem(BLOCKED_BANNER_DISMISS_KEY, signature);
+  banner.style.display = "none";
 }
 
 function renderAuditTable(events) {

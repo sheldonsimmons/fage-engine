@@ -5,7 +5,7 @@
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Operate</title>
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=20260607-v328" />
   <link rel="stylesheet" href="css/demo.css" />
   <style>
     /* ── Live-style layout override ──────────────────────────────────────────── */
@@ -488,6 +488,7 @@
               <span id="blockedBannerSub"></span>
             </div>
             <button class="blocked-banner-btn" onclick="toggleBlockedFilter()">Review Blocked Events ↓</button>
+            <button class="blocked-banner-dismiss" onclick="dismissBlockedBanner(event)" aria-label="Dismiss blocked requests alert">×</button>
           </div>
         </div>
         <div class="dash-sec-head" onclick="togglePanel('auditBody','auditChevron')">
@@ -590,7 +591,7 @@
 <script src="js/budget.js"></script>
 <script src="js/agentlake.js?v=20260606-v323"></script>
 <script src="js/timeseries.js"></script>
-<script src="js/auditor.js?v=20260606-v325"></script>
+<script src="js/auditor.js?v=20260607-v328"></script>
 <script src="js/event_stream.js?v=20260606-v325"></script>
 <script src="js/help.js"></script>
 <script>
