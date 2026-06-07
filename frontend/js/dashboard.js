@@ -205,16 +205,17 @@ function renderStatBar(d) {
 
 function renderCeoBanner(d) {
   // Use backend pre-computed values so all pages show the same numbers
-  const totalCalls     = (d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0);
+  const routedCalls    = d.requests_routed ?? ((d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0));
+  const governedCalls  = d.requests_governed ?? routedCalls;
   const economyCalls   = (d.scout_calls || 0) + (d.analyst_calls || 0);
-  const routingPct     = d.routing_efficiency_pct != null ? Math.round(d.routing_efficiency_pct) : (totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0);
+  const routingPct     = d.routing_efficiency_pct != null ? Math.round(d.routing_efficiency_pct) : (routedCalls > 0 ? Math.round((economyCalls / routedCalls) * 100) : 0);
 
   const routingSaved   = d.routing_savings_usd  != null ? d.routing_savings_usd  : 0;
   const pruningSaved   = d.pruning_savings_usd   || 0;
   const totalSaved     = d.total_savings_usd     != null ? d.total_savings_usd    : (routingSaved + pruningSaved);
   const annualSavings  = d.projected_annual_savings != null ? d.projected_annual_savings : totalSaved * 12;
   const FLAGSHIP_AVG   = 0.030;
-  const fullCost       = totalCalls * FLAGSHIP_AVG;
+  const fullCost       = routedCalls * FLAGSHIP_AVG;
   const wasteBlocked   = fullCost > 0 ? Math.round((routingSaved / fullCost) * 100) : 0;
 
   function fmtBig(v) {
@@ -225,8 +226,8 @@ function renderCeoBanner(d) {
 
   document.getElementById("ceoTotalSaved").textContent    = fmtBig(totalSaved);
   document.getElementById("ceoRoutingPct").textContent    = routingPct + "%";
-  document.getElementById("ceoTotalCalls").textContent    = totalCalls >= 1000
-    ? (totalCalls / 1000).toFixed(1) + "K" : totalCalls.toLocaleString();
+  document.getElementById("ceoTotalCalls").textContent    = governedCalls >= 1000
+    ? (governedCalls / 1000).toFixed(1) + "K" : governedCalls.toLocaleString();
   document.getElementById("ceoPruningSaved").textContent  = fmtBig(pruningSaved);
   document.getElementById("ceoPruningTokens").textContent = (d.tokens_saved_total || 0).toLocaleString() + " tokens stripped";
   document.getElementById("ceoAnnualSavings").textContent = fmtBig(annualSavings);

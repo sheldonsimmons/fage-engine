@@ -154,9 +154,13 @@ def get_dashboard(db: Session = Depends(get_db)):
 
     # ── Executive Summary ROI ─────────────────────────────────────────────────
     FLAGSHIP_AVG = 0.030   # avg cost per flagship call ($0.03 at Opus 4 rates)
-    full_flagship_cost = total_calls * FLAGSHIP_AVG
+    requests_routed = scout_calls + analyst_calls + advisor_calls + strategist_calls
+    requests_blocked = blocked_count
+    requests_governed = requests_routed + requests_blocked
+    full_flagship_cost = requests_routed * FLAGSHIP_AVG
     routing_savings_usd = max(0.0, full_flagship_cost - (spend_month or 0.0))
-    total_savings_usd   = routing_savings_usd + pruning_savings_usd
+    blocked_savings_usd = round(requests_blocked * 0.018, 6)
+    total_savings_usd   = routing_savings_usd + pruning_savings_usd + blocked_savings_usd
     projected_annual_savings = round(total_savings_usd * 12, 2)
 
     if full_flagship_cost > 0:
@@ -166,7 +170,7 @@ def get_dashboard(db: Session = Depends(get_db)):
         cost_reduction_pct = 0
 
     economy_calls = scout_calls + analyst_calls
-    routing_efficiency_pct = round((economy_calls / total_calls) * 100, 1) if total_calls > 0 else 0
+    routing_efficiency_pct = round((economy_calls / requests_routed) * 100, 1) if requests_routed > 0 else 0
 
     # ── Recent audit events (last 5 for the KPI strip) ─────────────────────────
     recent_audits = db.query(AuditEvent).order_by(
@@ -223,6 +227,9 @@ def get_dashboard(db: Session = Depends(get_db)):
         "pruning_savings_usd":   pruning_savings_usd,
         "calls_today":           calls_today,
         "total_calls":           total_calls,
+        "requests_governed":     requests_governed,
+        "requests_routed":       requests_routed,
+        "requests_blocked":      requests_blocked,
         "micro_calls":           micro_calls,
         "flagship_calls":        flagship_calls,
         "micro_pct":             micro_pct,
@@ -267,6 +274,7 @@ def get_dashboard(db: Session = Depends(get_db)):
         # ── Executive Summary ROI ──────────────────────────────────────────────
         "projected_annual_savings": projected_annual_savings,
         "routing_savings_usd":   round(routing_savings_usd, 6),
+        "blocked_savings_usd":   blocked_savings_usd,
         "total_savings_usd":     round(total_savings_usd, 6),
         "routing_efficiency_pct": routing_efficiency_pct,
         "cost_reduction_pct":    cost_reduction_pct,

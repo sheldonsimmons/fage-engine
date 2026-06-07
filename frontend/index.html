@@ -759,11 +759,16 @@ function renderExec(data) {
 
   const totalCalls = hasFilters
     ? events.length
-    : (d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0);
+    : d.requests_governed ?? ((d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0));
+  const routedCalls = hasFilters
+    ? events.filter(e => !norm(e.decision_outcome).includes("blocked")).length
+    : d.requests_routed ?? ((d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0));
   const economyCalls = hasFilters
     ? events.filter(e => isEconomyTier(e.model_tier)).length
     : (d.scout_calls || 0) + (d.analyst_calls || 0);
-  const routingPct = totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0;
+  const routingPct = hasFilters
+    ? (routedCalls > 0 ? Math.round((economyCalls / routedCalls) * 100) : 0)
+    : Math.round(d.routing_efficiency_pct ?? (routedCalls > 0 ? (economyCalls / routedCalls) * 100 : 0));
   const actualCost = hasFilters
     ? events.reduce((sum, e) => sum + Number(e.cost_usd || 0), 0)
     : d.spend_month_usd || 0;
@@ -778,13 +783,13 @@ function renderExec(data) {
     ? events.filter(e => norm(e.decision_outcome).includes("throttle") || norm(e.decision_outcome).includes("downgrade")).length
     : d.throttle_prevented || 0;
 
-  const fullCost = totalCalls * FLAGSHIP_AVG;
-  const routingSaved = Math.max(0, fullCost - actualCost);
+  const fullCost = routedCalls * FLAGSHIP_AVG;
+  const routingSaved = hasFilters ? Math.max(0, fullCost - actualCost) : (d.routing_savings_usd || 0);
   const pruningSaved = hasFilters ? 0 : (d.pruning_savings_usd || 0);
   const throttleSaved = throttleCount * FLAGSHIP_AVG * 10;
-  const blockedSaved = blockedCount * 0.018;
-  const totalAvoided = routingSaved + pruningSaved + throttleSaved + blockedSaved;
-  const annualSavings = totalAvoided * 12;
+  const blockedSaved = hasFilters ? blockedCount * 0.018 : (d.blocked_savings_usd || 0);
+  const totalAvoided = hasFilters ? routingSaved + pruningSaved + throttleSaved + blockedSaved : (d.total_savings_usd || 0);
+  const annualSavings = hasFilters ? totalAvoided * 12 : (d.projected_annual_savings || 0);
   const budget = visibleBudget(data, events);
 
   document.getElementById("execFilterStatus").textContent = filterSummaryText(events.length);
