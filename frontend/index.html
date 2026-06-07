@@ -43,6 +43,37 @@
     .exec-body::-webkit-scrollbar { width: 3px; }
     .exec-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+    /* ── Global filters ─────────────────────────────────────────────────────── */
+    .exec-filter-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; margin-bottom: 18px;
+    }
+    .exec-filter-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 12px;
+    }
+    .exec-filter-title {
+      font-size: 11px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted);
+    }
+    .exec-filter-status { font-size: 11px; color: var(--text-muted); }
+    .exec-filter-grid {
+      display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    .exec-filter {
+      width: 100%; height: 34px; box-sizing: border-box;
+      background: var(--bg-base); color: var(--text-primary);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 0 10px; font-size: 12px;
+    }
+    .exec-filter-clear {
+      height: 34px; border: 1px solid var(--border); border-radius: 6px;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      font-size: 12px; font-weight: 700;
+    }
+    .exec-filter-clear:hover { color: var(--text-primary); border-color: var(--accent); }
+
     /* ── Hero savings row ─────────────────────────────────────────────────────── */
     .hero-row {
       display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;
@@ -210,6 +241,46 @@
 
 <!-- ── Body ───────────────────────────────────────────────────────────────────── -->
 <div class="exec-body">
+
+  <div class="exec-filter-card">
+    <div class="exec-filter-head">
+      <div class="exec-filter-title">Executive View Filters</div>
+      <div class="exec-filter-status" id="execFilterStatus">All data</div>
+    </div>
+    <div class="exec-filter-grid">
+      <select class="exec-filter" id="execFilterDept" onchange="updateExecFilter('dept', this.value)">
+        <option value="">All Departments</option>
+      </select>
+      <select class="exec-filter" id="execFilterPlatform" onchange="updateExecFilter('platform', this.value)">
+        <option value="">All Platforms</option>
+      </select>
+      <select class="exec-filter" id="execFilterAgent" onchange="updateExecFilter('agent', this.value)">
+        <option value="">All Agents</option>
+      </select>
+      <select class="exec-filter" id="execFilterRange" onchange="updateExecFilter('range', this.value)">
+        <option value="30">Last 30 Days</option>
+        <option value="1">Last 24 Hours</option>
+        <option value="7">Last 7 Days</option>
+        <option value="mtd">Month to Date</option>
+        <option value="180">Last 180 Days</option>
+      </select>
+      <select class="exec-filter" id="execFilterTier" onchange="updateExecFilter('tier', this.value)">
+        <option value="">All Tiers</option>
+        <option value="scout">Scout</option>
+        <option value="analyst">Analyst</option>
+        <option value="advisor">Advisor</option>
+        <option value="strategist">Strategist</option>
+      </select>
+      <select class="exec-filter" id="execFilterRisk" onchange="updateExecFilter('risk', this.value)">
+        <option value="">All Risk</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+      <button class="exec-filter-clear" onclick="clearExecFilters()">Clear Filters</button>
+    </div>
+  </div>
 
   <!-- Hero row: Projected savings + Chart -->
   <div class="hero-row">
@@ -395,6 +466,137 @@ function fmtNum(v) {
   return v.toLocaleString();
 }
 
+const EXEC_FILTER_KEY = "costpilot_exec_filters";
+let execData = null;
+let execFilters = {
+  dept: "", platform: "", agent: "", range: "30", tier: "", risk: ""
+};
+
+try {
+  execFilters = { ...execFilters, ...(JSON.parse(localStorage.getItem(EXEC_FILTER_KEY) || "{}")) };
+} catch {}
+
+function displayDeptName(dept) {
+  const s = String(dept || "");
+  const parts = s.split(":");
+  return parts.length > 1 ? parts.slice(1).join(":") : s;
+}
+
+function norm(v) { return String(v || "").toLowerCase(); }
+
+function eventTs(e) {
+  return e.timestamp ? new Date(e.timestamp + "Z").getTime() : 0;
+}
+
+function rangeCutoff(range) {
+  const now = Date.now();
+  if (range === "mtd") {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  }
+  return now - Number(range || 30) * 24 * 60 * 60 * 1000;
+}
+
+function tierName(v) {
+  return typeof normaliseTierName === "function" ? normaliseTierName(v || "") : String(v || "");
+}
+
+function isEconomyTier(v) {
+  const t = norm(tierName(v));
+  return ["scout", "analyst", "micro"].includes(t);
+}
+
+function eventMatchesFilters(e) {
+  const cutoff = rangeCutoff(execFilters.range);
+  if (eventTs(e) < cutoff) return false;
+  if (execFilters.dept && norm(displayDeptName(e.department)) !== norm(execFilters.dept) && norm(displayDeptName(e.source_department)) !== norm(execFilters.dept)) return false;
+  if (execFilters.platform && norm(e.source_platform) !== norm(execFilters.platform)) return false;
+  if (execFilters.agent && String(e.agent_id || "") !== String(execFilters.agent)) return false;
+  if (execFilters.tier && norm(tierName(e.model_tier)) !== norm(execFilters.tier)) return false;
+  if (execFilters.risk && norm(e.risk_level) !== norm(execFilters.risk)) return false;
+  return true;
+}
+
+function setSelect(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value || "";
+}
+
+function fillSelect(id, values, allLabel, valueFn = v => v, labelFn = v => v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const current = el.value;
+  el.innerHTML = `<option value="">${allLabel}</option>` + values.map(v =>
+    `<option value="${String(valueFn(v)).replace(/"/g, "&quot;")}">${labelFn(v)}</option>`
+  ).join("");
+  if ([...el.options].some(o => o.value === current)) el.value = current;
+}
+
+function syncExecFilterControls() {
+  setSelect("execFilterDept", execFilters.dept);
+  setSelect("execFilterPlatform", execFilters.platform);
+  setSelect("execFilterAgent", execFilters.agent);
+  setSelect("execFilterRange", execFilters.range);
+  setSelect("execFilterTier", execFilters.tier);
+  setSelect("execFilterRisk", execFilters.risk);
+}
+
+function populateExecFilters(data) {
+  const events = data.audits || [];
+  const agents = data.agents || [];
+  const budgetDepts = (data.dashboard?.budget_summaries || []).map(b => b.department);
+  const eventDepts = events.map(e => displayDeptName(e.department)).filter(Boolean);
+  const depts = [...new Set([...budgetDepts, ...eventDepts])].sort();
+  const platforms = [...new Set([
+    ...agents.map(a => a.source_platform),
+    ...events.map(e => e.source_platform),
+  ].filter(Boolean).map(p => String(p)))].sort();
+  const activeAgentDept = execFilters.dept;
+  const filteredAgents = agents.filter(a => !activeAgentDept || norm(a.department) === norm(activeAgentDept));
+
+  fillSelect("execFilterDept", depts, "All Departments");
+  fillSelect("execFilterPlatform", platforms, "All Platforms");
+  fillSelect("execFilterAgent", filteredAgents, "All Agents", a => a.id, a => `${a.name} (${a.department || "—"})`);
+  syncExecFilterControls();
+}
+
+function updateExecFilter(key, value) {
+  execFilters[key] = value;
+  if (key === "dept") execFilters.agent = "";
+  localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
+  if (execData) {
+    populateExecFilters(execData);
+    renderExec(execData);
+  }
+}
+
+function clearExecFilters() {
+  execFilters = { dept: "", platform: "", agent: "", range: "30", tier: "", risk: "" };
+  localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
+  if (execData) {
+    populateExecFilters(execData);
+    renderExec(execData);
+  }
+}
+
+function filteredAuditEvents(data) {
+  return (data.audits || []).filter(eventMatchesFilters);
+}
+
+function filterSummaryText(count) {
+  const parts = [];
+  if (execFilters.dept) parts.push(execFilters.dept);
+  if (execFilters.platform) parts.push(execFilters.platform);
+  if (execFilters.agent) {
+    const agent = (execData?.agents || []).find(a => String(a.id) === String(execFilters.agent));
+    parts.push(agent ? agent.name : "selected agent");
+  }
+  if (execFilters.tier) parts.push(tierName(execFilters.tier));
+  if (execFilters.risk) parts.push(execFilters.risk.toUpperCase() + " risk");
+  const rangeLabel = document.getElementById("execFilterRange")?.selectedOptions?.[0]?.textContent || "Last 30 Days";
+  return `${parts.length ? parts.join(" · ") : "All data"} · ${rangeLabel} · ${fmtNum(count)} events`;
+}
+
 // ── Health check + route "Open Operate" button ────────────────────────────────
 async function checkHealth() {
   try {
@@ -509,100 +711,164 @@ function buildChart(labels, actualData, flagshipData, totalSaved) {
 }
 
 // ── Main data load ────────────────────────────────────────────────────────────
+const FLAGSHIP_AVG = 0.030;
+
+function rollupByDay(events) {
+  const byDay = {};
+  events.forEach(e => {
+    const day = (e.timestamp || "").slice(0, 10);
+    if (!day) return;
+    if (!byDay[day]) byDay[day] = { cost: 0, calls: 0 };
+    byDay[day].cost += Number(e.cost_usd || 0);
+    byDay[day].calls += 1;
+  });
+  const labels = Object.keys(byDay).sort();
+  return {
+    labels,
+    actual: labels.map(d => Number(byDay[d].cost.toFixed(6))),
+    flagship: labels.map(d => Number((byDay[d].calls * FLAGSHIP_AVG).toFixed(6))),
+  };
+}
+
+function visibleBudget(data, events) {
+  const d = data.dashboard || {};
+  const budgets = d.budget_summaries || [];
+  const dept = execFilters.dept || (events.length ? displayDeptName(events[0].department) : "");
+  const budget = dept ? budgets.find(b => norm(b.department) === norm(dept)) : null;
+  if (budget) {
+    return {
+      pct: budget.used_pct || 0,
+      cap: budget.monthly_cap_usd || 0,
+      spend: budget.current_spend_usd || 0,
+      count: 1,
+    };
+  }
+  return {
+    pct: d.overall_budget_pct || 0,
+    cap: d.total_cap_usd || 0,
+    spend: d.spend_month_usd || d.total_spend_usd || 0,
+    count: budgets.length || 0,
+  };
+}
+
+function renderExec(data) {
+  const d = data.dashboard || {};
+  const ts = data.timeseries || {};
+  const events = filteredAuditEvents(data);
+  const hasFilters = !!(execFilters.dept || execFilters.platform || execFilters.agent || execFilters.tier || execFilters.risk || execFilters.range !== "30");
+
+  const totalCalls = hasFilters
+    ? events.length
+    : (d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0);
+  const economyCalls = hasFilters
+    ? events.filter(e => isEconomyTier(e.model_tier)).length
+    : (d.scout_calls || 0) + (d.analyst_calls || 0);
+  const routingPct = totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0;
+  const actualCost = hasFilters
+    ? events.reduce((sum, e) => sum + Number(e.cost_usd || 0), 0)
+    : d.spend_month_usd || 0;
+
+  const blockedCount = hasFilters
+    ? events.filter(e => norm(e.decision_outcome).includes("blocked")).length
+    : d.blocked_count || 0;
+  const collisionCount = hasFilters
+    ? events.filter(e => norm(e.decision_outcome).includes("collision") || norm(e.decision_outcome).includes("locked")).length
+    : d.collision_count || 0;
+  const throttleCount = hasFilters
+    ? events.filter(e => norm(e.decision_outcome).includes("throttle") || norm(e.decision_outcome).includes("downgrade")).length
+    : d.throttle_prevented || 0;
+
+  const fullCost = totalCalls * FLAGSHIP_AVG;
+  const routingSaved = Math.max(0, fullCost - actualCost);
+  const pruningSaved = hasFilters ? 0 : (d.pruning_savings_usd || 0);
+  const throttleSaved = throttleCount * FLAGSHIP_AVG * 10;
+  const blockedSaved = blockedCount * 0.018;
+  const totalAvoided = routingSaved + pruningSaved + throttleSaved + blockedSaved;
+  const annualSavings = totalAvoided * 12;
+  const budget = visibleBudget(data, events);
+
+  document.getElementById("execFilterStatus").textContent = filterSummaryText(events.length);
+  document.getElementById("execAnnualSavings").textContent = fmtUsd(annualSavings);
+  document.getElementById("execHeroSavingsInline").textContent = fmtUsd(annualSavings);
+  document.getElementById("execHeroRoutingPct").textContent = routingPct + "%";
+  document.getElementById("execHeroAvoided").textContent = fmtUsd(totalAvoided);
+  document.getElementById("execTrendBadge").textContent =
+    hasFilters ? `Filtered view · ${fmtNum(totalCalls)} governed requests` : `↑ ${routingPct}% more avoided than all-flagship routing`;
+
+  document.getElementById("execMonthSpend").textContent = fmtUsd(actualCost);
+  const budgetTag = document.getElementById("execBudgetTag");
+  budgetTag.textContent = budget.pct >= 100 ? "OVER CAP" : budget.pct >= 80 ? "WARNING" : "UNDER CAP";
+  budgetTag.className = "metric-tag " + (budget.pct >= 80 ? "yellow" : "green");
+  document.getElementById("execBudgetSub").textContent = `of $${fmtNum(budget.cap || 0)} budget`;
+  const budgetBar = document.getElementById("execBudgetBar");
+  budgetBar.style.width = Math.min(budget.pct, 100) + "%";
+  budgetBar.style.background = budget.pct >= 80 ? "var(--accent-yellow)" : "var(--accent-green)";
+
+  document.getElementById("execRoutingPct").textContent = routingPct;
+  document.getElementById("execRoutingBar").style.width = routingPct + "%";
+  document.getElementById("execTotalCalls").textContent = fmtNum(totalCalls);
+
+  const incidents = blockedCount + collisionCount;
+  const incTag = document.getElementById("execIncidentTag");
+  incTag.textContent = incidents > 0 ? `${incidents} INCIDENTS` : "0 INCIDENTS";
+  incTag.className = "metric-tag " + (incidents > 0 ? "yellow" : "green");
+
+  document.getElementById("execBreakdownSub").textContent =
+    `${fmtUsd(totalAvoided)} avoided in this filtered view`;
+  const maxSaving = Math.max(routingSaved, pruningSaved, throttleSaved, blockedSaved, 1);
+  function setBreakdown(valId, barId, val) {
+    document.getElementById(valId).textContent = fmtUsd(val);
+    document.getElementById(barId).style.width = Math.round((val / maxSaving) * 100) + "%";
+  }
+  setBreakdown("execSavingRouting", "execBarRouting", routingSaved);
+  setBreakdown("execSavingPruning", "execBarPruning", pruningSaved);
+  setBreakdown("execSavingThrottle", "execBarThrottle", throttleSaved);
+  setBreakdown("execSavingBlocked", "execBarBlocked", blockedSaved);
+
+  const activeAgents = hasFilters
+    ? new Set(events.map(e => e.agent_id).filter(Boolean)).size
+    : d.agents_total || 0;
+  const activeDepts = hasFilters
+    ? new Set(events.map(e => displayDeptName(e.department)).filter(Boolean)).size
+    : budget.count || "—";
+  document.getElementById("execFooterAgents").textContent = activeAgents || 0;
+  document.getElementById("execFooterDepts").textContent = activeDepts || "—";
+  document.getElementById("execFooterCollisions").textContent = collisionCount || 0;
+  document.getElementById("execFooterAudit").textContent = fmtNum(hasFilters ? events.length : d.compliance_events_total || events.length);
+
+  let labels = [], actualDaily = [], flagshipDaily = [];
+  if (hasFilters) {
+    const rolled = rollupByDay(events);
+    labels = rolled.labels; actualDaily = rolled.actual; flagshipDaily = rolled.flagship;
+  } else if (ts.daily_spend && ts.labels) {
+    labels = ts.labels;
+    actualDaily = ts.daily_spend.map(x => x.total_usd || 0);
+    flagshipDaily = (ts.daily_calls || []).map(c => Number(((c.total_calls || 0) * FLAGSHIP_AVG).toFixed(4)));
+  }
+  if (labels.length) {
+    const firstActiveIdx = labels.findIndex((_, i) => actualDaily[i] > 0 || flagshipDaily[i] > 0);
+    const startIdx = firstActiveIdx >= 0 ? Math.max(0, firstActiveIdx - 3) : Math.max(0, labels.length - 30);
+    const activeLabels = labels.slice(startIdx);
+    const actualData = cumulative(actualDaily.slice(startIdx));
+    const flagshipData = cumulative(flagshipDaily.slice(startIdx));
+    const chartSaved = (flagshipData[flagshipData.length - 1] || 0) - (actualData[actualData.length - 1] || 0);
+    buildChart(activeLabels, actualData, flagshipData, Math.max(0, chartSaved));
+  } else {
+    buildChart([new Date().toISOString().slice(0, 10)], [0], [0], 0);
+  }
+}
+
 async function loadExec() {
   try {
-    const [d, ts] = await Promise.all([
+    const [dashboard, timeseries, audits, agents] = await Promise.all([
       apiGet("/api/dashboard"),
       apiGet("/api/timeseries?days=180"),
+      apiGet("/api/audit?limit=500"),
+      apiGet("/api/agents"),
     ]);
-
-    const totalCalls   = (d.scout_calls || 0) + (d.analyst_calls || 0) +
-                         (d.advisor_calls || 0) + (d.strategist_calls || 0);
-    const economyCalls = (d.scout_calls || 0) + (d.analyst_calls || 0);
-    const routingPct   = totalCalls > 0 ? Math.round((economyCalls / totalCalls) * 100) : 0;
-
-    // Cost avoided vs all-flagship
-    const FLAGSHIP_AVG  = 0.030;
-    const fullCost      = totalCalls * FLAGSHIP_AVG;
-    const actualCost    = d.spend_month_usd || 0;
-    const routingSaved  = Math.max(0, fullCost - actualCost);
-    const pruningSaved  = d.pruning_savings_usd || 0;
-
-    // Throttle savings: throttle_prevented events × avg call cost prevented
-    const throttleSaved = (d.throttle_prevented || 0) * FLAGSHIP_AVG * 10;
-    // Blocked savings: blocked_count × avg advisor cost avoided
-    const blockedSaved  = (d.blocked_count || 0) * 0.018;
-
-    const totalAvoided  = routingSaved + pruningSaved + throttleSaved + blockedSaved;
-    const annualSavings = totalAvoided * 12;
-
-    // ── Hero ──────────────────────────────────────────────────────────────────
-    document.getElementById("execAnnualSavings").textContent    = fmtUsd(annualSavings);
-    document.getElementById("execHeroSavingsInline").textContent = fmtUsd(annualSavings);
-    document.getElementById("execHeroRoutingPct").textContent    = routingPct + "%";
-    document.getElementById("execHeroAvoided").textContent       = fmtUsd(totalAvoided);
-    document.getElementById("execTrendBadge").textContent        =
-      `↑ ${routingPct}% more avoided than all-flagship routing`;
-
-    // ── Metric cards ─────────────────────────────────────────────────────────
-    document.getElementById("execMonthSpend").textContent = fmtUsd(actualCost);
-    const budgetPct = d.overall_budget_pct || 0;
-    const budgetTag = document.getElementById("execBudgetTag");
-    budgetTag.textContent = budgetPct >= 100 ? "OVER CAP" : budgetPct >= 80 ? "WARNING" : "UNDER CAP";
-    budgetTag.className   = "metric-tag " + (budgetPct >= 100 ? "yellow" : "green");
-    document.getElementById("execBudgetSub").textContent =
-      `of $${fmtNum(d.total_cap_usd || 0)} budget`;
-    document.getElementById("execBudgetBar").style.width = Math.min(budgetPct, 100) + "%";
-    if (budgetPct >= 80) document.getElementById("execBudgetBar").style.background = "var(--accent-yellow)";
-
-    document.getElementById("execRoutingPct").textContent = routingPct;
-    document.getElementById("execRoutingBar").style.width = routingPct + "%";
-
-    document.getElementById("execTotalCalls").textContent = fmtNum(totalCalls);
-    const incidents = (d.blocked_count || 0) + (d.collision_count || 0);
-    const incTag    = document.getElementById("execIncidentTag");
-    incTag.textContent = incidents > 0 ? `${incidents} INCIDENTS` : "0 INCIDENTS";
-    incTag.className   = "metric-tag " + (incidents > 0 ? "yellow" : "green");
-
-    // ── Breakdown ─────────────────────────────────────────────────────────────
-    document.getElementById("execBreakdownSub").textContent =
-      `${fmtUsd(totalAvoided)} avoided this month`;
-
-    const maxSaving = Math.max(routingSaved, pruningSaved, throttleSaved, blockedSaved, 1);
-    function setBreaking(valId, barId, val, max) {
-      document.getElementById(valId).textContent = fmtUsd(val);
-      document.getElementById(barId).style.width = Math.round((val / max) * 100) + "%";
-    }
-    setBreaking("execSavingRouting",  "execBarRouting",  routingSaved,  maxSaving);
-    setBreaking("execSavingPruning",  "execBarPruning",  pruningSaved,  maxSaving);
-    setBreaking("execSavingThrottle", "execBarThrottle", throttleSaved, maxSaving);
-    setBreaking("execSavingBlocked",  "execBarBlocked",  blockedSaved,  maxSaving);
-
-    // ── Footer ────────────────────────────────────────────────────────────────
-    document.getElementById("execFooterAgents").textContent     = d.agents_total || 0;
-    document.getElementById("execFooterDepts").textContent      = (d.budget_summaries || []).length || "—";
-    document.getElementById("execFooterCollisions").textContent = d.collision_count || 0;
-    document.getElementById("execFooterAudit").textContent      = fmtNum(d.compliance_events_total || 0);
-
-    // ── Chart ─────────────────────────────────────────────────────────────────
-    if (ts && ts.daily_spend && ts.labels) {
-      const labels      = ts.labels;
-      const actualDaily = ts.daily_spend.map(d => d.total_usd || 0);
-      // All-flagship: same call count × $0.030 avg
-      const callsData   = ts.daily_calls || [];
-      const flagshipDaily = callsData.map((c, i) =>
-        parseFloat(((c.total_calls || 0) * FLAGSHIP_AVG).toFixed(4))
-      );
-      const firstActiveIdx = labels.findIndex((_, i) => actualDaily[i] > 0 || flagshipDaily[i] > 0);
-      const startIdx = firstActiveIdx >= 0 ? Math.max(0, firstActiveIdx - 3) : Math.max(0, labels.length - 30);
-      const activeLabels = labels.slice(startIdx);
-      const actualData = cumulative(actualDaily.slice(startIdx));
-      const flagshipData = cumulative(flagshipDaily.slice(startIdx));
-      const chartSaved = (flagshipData[flagshipData.length - 1] || 0) -
-                         (actualData[actualData.length - 1] || 0);
-      buildChart(activeLabels, actualData, flagshipData, Math.max(0, chartSaved));
-    }
-
+    execData = { dashboard, timeseries, audits, agents };
+    populateExecFilters(execData);
+    renderExec(execData);
   } catch (err) {
     console.warn("Executive dashboard load failed:", err.message);
   }
