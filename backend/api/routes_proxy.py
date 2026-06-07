@@ -62,6 +62,8 @@ COMPLEXITY_KEYWORDS_DEFAULT = [
 
 SCOUT_OPENAI    = "gpt-4o-mini"
 SCOUT_ANTHROPIC = "claude-haiku-4-5-20251001"
+DEFAULT_TRIAL_CALL_CAP = 500
+DEFAULT_TRIAL_SPEND_CAP_USD = 10.0
 
 
 def _check_sensitive_terms(text: str, db, department: str = None) -> dict:
@@ -139,6 +141,38 @@ def _get_account(workspace_id: str, secret_key: str, db):
     if account.secret_key != secret_key:
         raise HTTPException(status_code=401, detail="Invalid X-CostPilot-Key.")
     return account
+
+
+def _trial_caps(account: TrialAccount) -> tuple[int, float]:
+    return int(account.trial_call_cap or DEFAULT_TRIAL_CALL_CAP), float(account.trial_spend_cap_usd or DEFAULT_TRIAL_SPEND_CAP_USD)
+
+
+def _workspace_usage(db, workspace_id: str) -> dict:
+    prefix = f"{workspace_id}:"
+    txns = db.query(TokenTransaction).filter(
+        TokenTransaction.department.like(f"{prefix}%")
+    ).all()
+    return {
+        "calls": len(txns),
+        "spend_usd": round(sum(t.cost_usd or 0.0 for t in txns), 6),
+    }
+
+
+def _enforce_trial_limits(account: TrialAccount, db):
+    if account.plan not in ("trial", "free"):
+        return
+    usage = _workspace_usage(db, account.workspace_id)
+    call_cap, spend_cap = _trial_caps(account)
+    if usage["calls"] >= call_cap or usage["spend_usd"] >= spend_cap:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "trial_limit_reached",
+                "message": "This trial workspace has reached its usage limit. Upgrade to continue routing AI requests through CostPilot.",
+                "usage": usage,
+                "limits": {"call_cap": call_cap, "spend_cap_usd": spend_cap},
+            },
+        )
 
 
 def _stored_provider_key(account: TrialAccount) -> str:
@@ -391,6 +425,7 @@ async def proxy_openai(workspace_id: str, request: Request):
     db = SessionLocal()
     try:
         account = _get_account(workspace_id, secret_key, db)
+        _enforce_trial_limits(account, db)
 
         # CostPilot-owned proxy: customer integrations authenticate with
         # X-CostPilot-Key; provider credentials stay server-side.
@@ -498,6 +533,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
     db = SessionLocal()
     try:
         account = _get_account(workspace_id, secret_key, db)
+        _enforce_trial_limits(account, db)
 
         # CostPilot-owned proxy: customer integrations authenticate with
         # X-CostPilot-Key; provider credentials stay server-side.

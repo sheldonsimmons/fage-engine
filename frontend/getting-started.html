@@ -452,7 +452,7 @@ const DEFAULT_DEPTS = [
 ];
 
 // ── Init ───────────────────────────────────────────────────────────────────
-(function init() {
+(async function init() {
   if (!WS) {
     window.location.href = "/trial.html";
     return;
@@ -470,6 +470,13 @@ const DEFAULT_DEPTS = [
     document.getElementById("trialMeta").textContent =
       `${name ? name.split(" ")[0] + " · " : ""}${days} days remaining · Free Trial`;
   }
+  try {
+    const status = await apiGet(`/api/trial/status?workspace_id=${encodeURIComponent(WS)}`);
+    const usage = status.usage || {};
+    const limits = status.limits || {};
+    document.getElementById("trialMeta").textContent =
+      `${name ? name.split(" ")[0] + " · " : ""}${status.days_remaining} days · $${Number(usage.spend_usd || 0).toFixed(2)} / $${Number(limits.spend_cap_usd || 10).toFixed(2)} · ${usage.calls || 0}/${limits.call_cap || 500} calls`;
+  } catch(e) { /* local fallback above */ }
 
   // Step 2: render dept list
   renderDepts();

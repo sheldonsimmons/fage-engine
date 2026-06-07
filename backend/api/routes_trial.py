@@ -24,6 +24,60 @@ from database.models import TrialAccount
 
 router = APIRouter()
 
+DEFAULT_TRIAL_CALL_CAP = 500
+DEFAULT_TRIAL_SPEND_CAP_USD = 10.0
+
+
+def _trial_caps(account: TrialAccount) -> tuple[int, float]:
+    call_cap = account.trial_call_cap or DEFAULT_TRIAL_CALL_CAP
+    spend_cap = account.trial_spend_cap_usd or DEFAULT_TRIAL_SPEND_CAP_USD
+    return int(call_cap), float(spend_cap)
+
+
+def _workspace_usage(db: Session, workspace_id: str) -> dict:
+    from database.models import TokenTransaction
+    prefix = f"{workspace_id}:"
+    q = db.query(TokenTransaction).filter(
+        TokenTransaction.department.like(f"{prefix}%")
+    )
+    total_calls = q.count()
+    total_spend = round(sum(t.cost_usd or 0.0 for t in q.all()), 6)
+    return {"calls": total_calls, "spend_usd": total_spend}
+
+
+def _trial_status_payload(account: TrialAccount, db: Session) -> dict:
+    now = datetime.utcnow()
+    days_remaining = max(0, (account.trial_end - now).days)
+    is_expired = now > account.trial_end
+    usage = _workspace_usage(db, account.workspace_id)
+    call_cap, spend_cap = _trial_caps(account)
+    call_cap_reached = usage["calls"] >= call_cap
+    spend_cap_reached = usage["spend_usd"] >= spend_cap
+    limit_reached = call_cap_reached or spend_cap_reached
+    return {
+        "workspace_id": account.workspace_id,
+        "email": account.email,
+        "name": account.name,
+        "company": account.company,
+        "provider": account.provider,
+        "plan": account.plan,
+        "trial_start": account.trial_start.isoformat() if account.trial_start else None,
+        "trial_end": account.trial_end.isoformat(),
+        "days_remaining": days_remaining,
+        "is_active": account.is_active and not is_expired and not limit_reached,
+        "is_expired": is_expired,
+        "is_paid": account.plan not in ("trial", "free"),
+        "usage": usage,
+        "limits": {
+            "call_cap": call_cap,
+            "spend_cap_usd": spend_cap,
+            "call_cap_reached": call_cap_reached,
+            "spend_cap_reached": spend_cap_reached,
+            "limit_reached": limit_reached,
+            "upgrade_required": is_expired or limit_reached,
+        },
+    }
+
 # ── Cost table: OpenAI model → $ per 1M tokens ────────────────────────────────
 MODEL_COSTS = {
     # GPT-4o family
@@ -234,7 +288,8 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
             existing.api_key_enc = b64encode(req.api_key.encode()).decode()
             db.commit()
         now = datetime.utcnow()
-        is_expired = now > existing.trial_end or not existing.is_active
+        status = _trial_status_payload(existing, db)
+        is_expired = status["is_expired"] or not existing.is_active
         return {
             "workspace_id":   existing.workspace_id,
             "secret_key":     existing.secret_key,
@@ -243,10 +298,12 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
             "days_remaining": max(0, (existing.trial_end - now).days),
             "proxy_base_url": f"https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-{existing.workspace_id}",
             "already_exists": True,
-            "is_active":      not is_expired,
+            "is_active":      existing.is_active and not status["limits"]["upgrade_required"],
             "is_expired":     is_expired,
             "managed_provider_key": not bool(req.api_key),
-            "upgrade_required": is_expired,
+            "upgrade_required": status["limits"]["upgrade_required"],
+            "usage":          status["usage"],
+            "limits":         status["limits"],
         }
 
     workspace_id = str(uuid.uuid4()).replace("-", "")[:16].upper()
@@ -269,6 +326,8 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
         trial_end      = trial_end,
         plan           = "trial",
         is_active      = True,
+        trial_call_cap = DEFAULT_TRIAL_CALL_CAP,
+        trial_spend_cap_usd = DEFAULT_TRIAL_SPEND_CAP_USD,
     )
     db.add(account)
     db.commit()
@@ -286,6 +345,15 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
         "is_expired": False,
         "managed_provider_key": not bool(req.api_key),
         "upgrade_required": False,
+        "usage": {"calls": 0, "spend_usd": 0.0},
+        "limits": {
+            "call_cap": DEFAULT_TRIAL_CALL_CAP,
+            "spend_cap_usd": DEFAULT_TRIAL_SPEND_CAP_USD,
+            "call_cap_reached": False,
+            "spend_cap_reached": False,
+            "limit_reached": False,
+            "upgrade_required": False,
+        },
     }
 
 
@@ -429,8 +497,11 @@ def first_call_check(workspace_id: str, db: Session = Depends(get_db)):
         "has_calls": call is not None,
         "first_call": {
             "model_tier":   call.model_tier,
+            "department":   call.department.replace(f"{workspace_id}:", "", 1),
             "cost_usd":     call.cost_usd,
             "timestamp":    call.timestamp.isoformat(),
+            "input_tokens": call.input_tokens,
+            "output_tokens": call.output_tokens,
             "tokens_saved": call.tokens_saved,
         } if call else None,
     }
@@ -646,8 +717,9 @@ def workspace_stats(workspace_id: str, db: Session = Depends(get_db)):
         TokenTransaction.department.like(f"{prefix}%")
     ).order_by(TokenTransaction.timestamp.desc()).all()
 
+    status        = _trial_status_payload(account, db)
     total_calls   = len(txns)
-    total_cost    = round(sum(t.cost_usd for t in txns), 6)
+    total_cost    = status["usage"]["spend_usd"]
     tokens_saved  = sum(t.tokens_saved for t in txns if t.was_pruned)
 
     # Economy vs flagship split
@@ -683,18 +755,17 @@ def workspace_stats(workspace_id: str, db: Session = Depends(get_db)):
         "routing_reason": t.routing_reason or "—",
     } for t in txns[:10]]
 
-    # Trial info
-    now = datetime.utcnow()
-    days_remaining = max(0, (account.trial_end - now).days)
-
     return {
         "workspace_id":       workspace_id,
         "name":               account.name,
         "company":            account.company,
         "provider":           account.provider,
         "trial_end":          account.trial_end.isoformat(),
-        "days_remaining":     days_remaining,
-        "is_expired":         now > account.trial_end,
+        "days_remaining":     status["days_remaining"],
+        "is_expired":         status["is_expired"],
+        "is_active":          status["is_active"],
+        "usage":              status["usage"],
+        "limits":             status["limits"],
         "has_calls":          total_calls > 0,
         "total_calls":        total_calls,
         "total_cost_usd":     total_cost,
@@ -714,22 +785,4 @@ def trial_status(workspace_id: str, db: Session = Depends(get_db)):
     account = db.query(TrialAccount).filter_by(workspace_id=workspace_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Workspace not found.")
-
-    now           = datetime.utcnow()
-    days_remaining = max(0, (account.trial_end - now).days)
-    is_expired    = now > account.trial_end
-
-    return {
-        "workspace_id":   account.workspace_id,
-        "email":          account.email,
-        "name":           account.name,
-        "company":        account.company,
-        "provider":       account.provider,
-        "plan":           account.plan,
-        "trial_start":    account.trial_start.isoformat(),
-        "trial_end":      account.trial_end.isoformat(),
-        "days_remaining": days_remaining,
-        "is_active":      account.is_active and not is_expired,
-        "is_expired":     is_expired,
-        "is_paid":        account.plan not in ("trial", "free"),
-    }
+    return _trial_status_payload(account, db)

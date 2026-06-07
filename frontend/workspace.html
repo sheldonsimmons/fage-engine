@@ -288,11 +288,22 @@ async function load() {
     // Trial banner
     const days = d.days_remaining;
     const bannerMsg = document.getElementById("trialBannerMsg");
-    bannerMsg.textContent = days > 0
-      ? `${days} day${days===1?"":"s"} left in your free trial, ${d.name.split(" ")[0]}. Trial ends ${new Date(d.trial_end).toLocaleDateString("en-US",{month:"short",day:"numeric"})}.`
-      : "Your trial has expired — upgrade to continue saving.";
-    if (days <= 3) bannerMsg.style.color = "var(--accent-yellow)";
-    if (days === 0) bannerMsg.style.color = "var(--accent-red)";
+    const usage = d.usage || {};
+    const limits = d.limits || {};
+    const spendUsed = Number(usage.spend_usd || d.total_cost_usd || 0);
+    const spendCap = Number(limits.spend_cap_usd || 10);
+    const callsUsed = Number(usage.calls || d.total_calls || 0);
+    const callCap = Number(limits.call_cap || 500);
+    if (limits.limit_reached) {
+      bannerMsg.textContent = `Trial limit reached — $${spendUsed.toFixed(2)} / $${spendCap.toFixed(2)} · ${callsUsed}/${callCap} calls. Upgrade to continue routing.`;
+      bannerMsg.style.color = "var(--accent-red)";
+    } else {
+      bannerMsg.textContent = days > 0
+        ? `${days} day${days===1?"":"s"} left, ${d.name.split(" ")[0]}. Usage: $${spendUsed.toFixed(2)} / $${spendCap.toFixed(2)} · ${callsUsed}/${callCap} calls.`
+        : "Your trial has expired — upgrade to continue saving.";
+      if (days <= 3) bannerMsg.style.color = "var(--accent-yellow)";
+      if (days === 0) bannerMsg.style.color = "var(--accent-red)";
+    }
 
     // Subtitle
     document.getElementById("wsSubtitle").textContent =
