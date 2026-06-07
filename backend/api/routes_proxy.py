@@ -8,7 +8,7 @@ Each request:
   1. Validates workspace_id + X-CostPilot-Key header
   2. Prunes user message content (strips HTML, email chains, disclaimers)
   3. Runs CostPilot's complexity router to pick the right tier
-  4. Forwards to the real API using the customer's key (passed through)
+  4. Forwards to the real API using CostPilot's managed provider key
   5. Logs the transaction tagged to workspace_id:department
   6. Auto-registers the agent in Agent Lake if first seen
   7. Returns the real API response + X-CostPilot-* metadata headers
@@ -16,6 +16,7 @@ Each request:
 
 import httpx
 import json
+import os
 from base64 import b64decode
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException
@@ -131,11 +132,38 @@ def _get_account(workspace_id: str, secret_key: str, db):
     account = db.query(TrialAccount).filter_by(workspace_id=workspace_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Workspace not found.")
-    if not account.is_active:
-        raise HTTPException(status_code=403, detail="This workspace trial has expired.")
+    if not account.is_active or datetime.utcnow() > account.trial_end:
+        account.is_active = False
+        db.commit()
+        raise HTTPException(status_code=403, detail="This workspace trial has expired. Upgrade to continue routing AI requests through CostPilot.")
     if account.secret_key != secret_key:
         raise HTTPException(status_code=401, detail="Invalid X-CostPilot-Key.")
     return account
+
+
+def _stored_provider_key(account: TrialAccount) -> str:
+    try:
+        return b64decode((account.api_key_enc or "").encode()).decode()
+    except Exception:
+        return ""
+
+
+def _managed_provider_key(provider: str) -> str:
+    if provider == "anthropic":
+        return os.getenv("ANTHROPIC_API_KEY", "")
+    return os.getenv("OPENAI_API_KEY", "")
+
+
+def _is_placeholder_provider_key(value: str) -> bool:
+    token = (value or "").replace("Bearer", "").strip().lower()
+    return token in {
+        "",
+        "costpilot-managed",
+        "cp-managed",
+        "sk-costpilot-managed",
+        "not-used",
+        "managed-by-costpilot",
+    }
 
 
 def _prune_messages(messages: list) -> tuple:
@@ -364,16 +392,14 @@ async def proxy_openai(workspace_id: str, request: Request):
     try:
         account = _get_account(workspace_id, secret_key, db)
 
-        # If no auth header (e.g. Salesforce Apex), fall back to stored key
-        if not auth_header:
-            try:
-                stored = b64decode(account.api_key_enc.encode()).decode()
-                auth_header = f"Bearer {stored}" if stored else ""
-            except Exception:
-                stored = ""
+        # CostPilot-owned proxy: customer integrations authenticate with
+        # X-CostPilot-Key; provider credentials stay server-side.
+        if _is_placeholder_provider_key(auth_header):
+            provider_key = _stored_provider_key(account) or _managed_provider_key("openai")
+            auth_header = f"Bearer {provider_key}" if provider_key else ""
         if not auth_header:
             raise HTTPException(status_code=401,
-                detail="No API key found. Provide your key in the Authorization header or ensure it was saved during trial registration.")
+                detail="CostPilot-managed OpenAI key is not configured for this trial workspace.")
         body     = await request.json()
         messages = body.get("messages", [])
         keywords = _get_keywords(db)
@@ -473,15 +499,13 @@ async def proxy_anthropic(workspace_id: str, request: Request):
     try:
         account = _get_account(workspace_id, secret_key, db)
 
-        # Fall back to stored key when no x-api-key header (e.g. Salesforce/ServiceNow)
-        if not anthropic_key:
-            try:
-                anthropic_key = b64decode(account.api_key_enc.encode()).decode()
-            except Exception:
-                anthropic_key = ""
+        # CostPilot-owned proxy: customer integrations authenticate with
+        # X-CostPilot-Key; provider credentials stay server-side.
+        if _is_placeholder_provider_key(anthropic_key):
+            anthropic_key = _stored_provider_key(account) or _managed_provider_key("anthropic")
         if not anthropic_key:
             raise HTTPException(status_code=401,
-                detail="No Anthropic key found. Ensure it was saved during trial registration.")
+                detail="CostPilot-managed Anthropic key is not configured for this trial workspace.")
         body     = await request.json()
         messages = body.get("messages", [])
         keywords = _get_keywords(db)

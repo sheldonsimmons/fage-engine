@@ -332,12 +332,12 @@
     <div class="gs-panel" id="gs4">
       <div class="gs-eyebrow">Step 4 of 5</div>
       <h2 class="gs-title">Your <span>integration code</span></h2>
-      <p class="gs-sub" id="gs4Sub">Your credentials are pre-filled. Copy the code below and drop it into your project.</p>
+      <p class="gs-sub" id="gs4Sub">Your CostPilot workspace key is pre-filled. Copy the code below and drop it into your project.</p>
 
       <div id="gs4Code"></div>
 
       <div style="background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:12px;color:var(--text-muted);line-height:1.7">
-        ✅ <strong style="color:var(--text-primary)">Your API key stays exactly where it is.</strong> CostPilot intercepts the call, routes it to the right model tier, and forwards it using your key — we never store it. The only things that change are your base URL and the one extra header.
+        ✅ <strong style="color:var(--text-primary)">No AI provider key is required for the trial.</strong> Your app authenticates with CostPilot, and CostPilot routes the call using the managed trial proxy. The only things that change are your base URL and one extra header.
       </div>
 
       <button class="btn-primary" onclick="goToStep(5)">Next — Make Your First Call →</button>
@@ -402,7 +402,7 @@
         </button>
         <div id="devToolsPanel" style="display:none;margin-top:10px;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:16px">
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">
-            For developers who want to verify the connection directly. Paste this into your terminal — replace <code style="background:var(--bg-panel);padding:1px 6px;border-radius:4px">YOUR_API_KEY</code> with your actual provider key.
+            For developers who want to verify the connection directly. Paste this into your terminal; the CostPilot workspace key is already included.
           </div>
           <div style="font-family:var(--font-mono);font-size:11px;color:var(--accent-green);line-height:1.8;overflow-x:auto;white-space:pre" id="testCmd"></div>
           <button onclick="copyDevCmd()" style="margin-top:10px;background:var(--bg-panel);border:1px solid var(--border);border-radius:5px;color:var(--text-muted);font-size:11px;padding:5px 14px;cursor:pointer">Copy command</button>
@@ -598,25 +598,20 @@ function renderIntegrationCode() {
   const curlEndpoint = provider === "openai" ? "chat/completions" : "messages";
 
   const authHeader = provider === "openai"
-    ? `-H "Authorization: Bearer YOUR_OPENAI_KEY"`
-    : `-H "x-api-key: YOUR_ANTHROPIC_KEY" \\\n  -H "anthropic-version: 2023-06-01"`;
+    ? ""
+    : `-H "anthropic-version: 2023-06-01"`;
 
   document.getElementById("testCmd").textContent =
 `curl -X POST ${PROXY}/${curlEndpoint} \\
   -H "Content-Type: application/json" \\
   -H "X-CostPilot-Key: ${SK}" \\
   -H "X-Department: Engineering" \\
-  ${authHeader} \\
-  -d ${curlBody}`;
+  ${authHeader ? authHeader + " \\\\\n  " : ""}-d ${curlBody}`;
 }
 
 function getSnippets() {
   const provider = localStorage.getItem("cp_provider") || "openai";
   const isOAI    = provider === "openai";
-  const apiNote  = isOAI
-    ? `# Your OpenAI key — passed through to OpenAI. CostPilot never stores it after setup.`
-    : `# Your Anthropic key — passed through to Anthropic.`;
-
   return {
     salesforce: {
       description: "Drop this Apex class into your Salesforce org. It replaces any direct OpenAI/Anthropic calls with CostPilot-routed ones.",
@@ -635,7 +630,7 @@ function getSnippets() {
         req.setHeader(<span class="code-str">'Content-Type'</span>, <span class="code-str">'application/json'</span>);
         req.setHeader(<span class="code-str">'X-CostPilot-Key'</span>, CP_KEY);
         req.setHeader(<span class="code-str">'X-Department'</span>, department);
-        <span class="code-cmt">// No API key needed — CostPilot uses your stored key automatically</span>
+        <span class="code-cmt">// No provider API key needed — CostPilot owns the managed trial proxy</span>
 
         Map&lt;String,Object&gt; body = <span class="code-kw">new</span> Map&lt;String,Object&gt;{
             <span class="code-str">'model'</span> => <span class="code-str">'gpt-4o'</span>,
@@ -670,7 +665,7 @@ CostPilotService.prototype = {
         r.setRequestHeader(<span class="code-str">'Content-Type'</span>, <span class="code-str">'application/json'</span>);
         r.setRequestHeader(<span class="code-str">'X-CostPilot-Key'</span>, <span class="code-str">'${SK}'</span>);
         r.setRequestHeader(<span class="code-str">'X-Department'</span>, department);
-        <span class="code-cmt">// No API key needed — CostPilot uses your stored key automatically</span>
+        <span class="code-cmt">// No provider API key needed — CostPilot owns the managed trial proxy</span>
         r.setRequestBody(JSON.stringify({
             model: <span class="code-str">'gpt-4o'</span>,
             messages: [{ role: <span class="code-str">'user'</span>, content: prompt }]
@@ -693,7 +688,7 @@ CostPilotService.prototype = {
 <span class="code-key">COSTPILOT_KEY</span> = <span class="code-str">"${SK}"</span>
 
 <span class="code-kw">def</span> <span class="code-val">route_ai_call</span>(prompt: str, department: str = <span class="code-str">"Marketing"</span>) -> str:
-    <span class="code-cmt"># No API key needed — CostPilot uses your stored key automatically</span>
+    <span class="code-cmt"># No provider API key needed — CostPilot owns the managed trial proxy</span>
     response = requests.post(
         COSTPILOT_URL,
         headers={
@@ -717,11 +712,11 @@ CostPilotService.prototype = {
           ? `<span class="code-kw">from</span> openai <span class="code-kw">import</span> OpenAI
 
 <span class="code-cmt"># Before — your existing code:</span>
-<span class="code-cmt"># client = OpenAI(api_key="sk-openai-...")</span>
+<span class="code-cmt"># client = OpenAI()</span>
 
-<span class="code-cmt"># After — two changes (your key stays right here, unchanged):</span>
+<span class="code-cmt"># After — route through CostPilot's managed trial proxy:</span>
 client = OpenAI(
-    api_key=<span class="code-str">"sk-openai-your-existing-key"</span>,  <span class="code-cmt"># ← unchanged</span>
+    api_key=<span class="code-str">"costpilot-managed"</span>,        <span class="code-cmt"># SDK requires a value; CostPilot ignores it</span>
     base_url=<span class="code-str">"${PROXY}"</span>,                   <span class="code-cmt"># ← change this</span>
     default_headers={
         <span class="code-str">"X-CostPilot-Key"</span>: <span class="code-str">"${SK}"</span>,    <span class="code-cmt"># ← add this</span>
@@ -737,11 +732,11 @@ response = client.chat.completions.create(
           : `<span class="code-kw">import</span> anthropic
 
 <span class="code-cmt"># Before — your existing code:</span>
-<span class="code-cmt"># client = anthropic.Anthropic(api_key="sk-ant-...")</span>
+<span class="code-cmt"># client = anthropic.Anthropic()</span>
 
-<span class="code-cmt"># After — two changes (your key stays right here, unchanged):</span>
+<span class="code-cmt"># After — route through CostPilot's managed trial proxy:</span>
 client = anthropic.Anthropic(
-    api_key=<span class="code-str">"sk-ant-your-existing-key"</span>,   <span class="code-cmt"># ← unchanged</span>
+    api_key=<span class="code-str">"costpilot-managed"</span>,       <span class="code-cmt"># SDK requires a value; CostPilot ignores it</span>
     base_url=<span class="code-str">"${PROXY}"</span>,                  <span class="code-cmt"># ← change this</span>
     default_headers={
         <span class="code-str">"X-CostPilot-Key"</span>: <span class="code-str">"${SK}"</span>,   <span class="code-cmt"># ← add this</span>
@@ -757,10 +752,10 @@ client = anthropic.Anthropic(
         label: "OpenAI SDK — Node.js / TypeScript",
         code: `<span class="code-kw">import</span> OpenAI <span class="code-kw">from</span> <span class="code-str">'openai'</span>;
 
-<span class="code-cmt">// Before: new OpenAI({ apiKey: "sk-openai-..." })</span>
-<span class="code-cmt">// After — two changes, your key stays right here:</span>
+<span class="code-cmt">// Before: new OpenAI()</span>
+<span class="code-cmt">// After — route through CostPilot's managed trial proxy:</span>
 <span class="code-kw">const</span> client = <span class="code-kw">new</span> OpenAI({
-    apiKey:  <span class="code-str">'sk-openai-your-existing-key'</span>,  <span class="code-cmt">// ← unchanged</span>
+    apiKey:  <span class="code-str">'costpilot-managed'</span>,          <span class="code-cmt">// SDK requires a value; CostPilot ignores it</span>
     baseURL: <span class="code-str">'${PROXY}'</span>,                     <span class="code-cmt">// ← change this</span>
     defaultHeaders: {
         <span class="code-str">'X-CostPilot-Key'</span>: <span class="code-str">'${SK}'</span>,        <span class="code-cmt">// ← add this</span>
@@ -794,7 +789,7 @@ client = anthropic.Anthropic(
             {"model":"gpt-4o","messages":[{"role":"user","content":"%s"}]}
             """</span>.formatted(prompt);
 
-        <span class="code-cmt">// No API key needed — CostPilot uses your stored key automatically</span>
+        <span class="code-cmt">// No provider API key needed — CostPilot owns the managed trial proxy</span>
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(ENDPOINT))
             .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -818,10 +813,10 @@ client = anthropic.Anthropic(
         label: "Ruby — openai gem",
         code: `<span class="code-kw">require</span> <span class="code-str">"openai"</span>
 
-<span class="code-cmt"># Before: OpenAI::Client.new(access_token: "sk-openai-...")</span>
-<span class="code-cmt"># After — two changes, your key stays right here:</span>
+<span class="code-cmt"># Before: OpenAI::Client.new</span>
+<span class="code-cmt"># After — route through CostPilot's managed trial proxy:</span>
 client = OpenAI::Client.new(
-    access_token: <span class="code-str">"sk-openai-your-existing-key"</span>,  <span class="code-cmt"># ← unchanged</span>
+    access_token: <span class="code-str">"costpilot-managed"</span>,          <span class="code-cmt"># SDK requires a value; CostPilot ignores it</span>
     uri_base: <span class="code-str">"${PROXY}"</span>,                         <span class="code-cmt"># ← change this</span>
     request_timeout: 120,
     extra_headers: {
@@ -854,8 +849,7 @@ response = client.chat(
 
 <span class="code-key">Required headers on every request:</span>
   X-CostPilot-Key: ${SK}           <span class="code-cmt">← identifies your workspace</span>
-  X-Department:    &lt;your team name&gt; <span class="code-cmt">← for budget tracking</span>
-  Authorization:   Bearer &lt;your existing AI provider key&gt; <span class="code-cmt">← unchanged from today</span>`
+  X-Department:    &lt;your team name&gt; <span class="code-cmt">← for budget tracking</span>`
         },
         {
           label: "cURL example",
@@ -863,7 +857,6 @@ response = client.chat(
   -H <span class="code-str">"Content-Type: application/json"</span> \\
   -H <span class="code-str">"X-CostPilot-Key: ${SK}"</span> \\
   -H <span class="code-str">"X-Department: Engineering"</span> \\
-  -H <span class="code-str">"Authorization: Bearer YOUR_OPENAI_KEY"</span> \\
   -d <span class="code-str">'{"model":"gpt-4o","messages":[{"role":"user","content":"Hello!"}]}'</span>`
         }
       ]

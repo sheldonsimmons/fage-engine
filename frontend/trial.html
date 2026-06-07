@@ -182,25 +182,25 @@
   <div class="trial-card">
 
     <!-- ════════════════════════════════════════════════════════════
-         STEP 1 — Choose provider + paste key
+         STEP 1 — Choose provider
     ════════════════════════════════════════════════════════════ -->
     <div class="panel active" id="panel-step1">
       <div class="card-eyebrow">Free 30-Day Trial · No Credit Card</div>
       <h1 class="card-title">See what CostPilot saves <span>your</span> team</h1>
-      <p class="card-sub">Choose your AI provider and paste your API key. We'll show you exactly how much CostPilot would save — before you change a single line of code.</p>
+      <p class="card-sub">Choose your AI provider. CostPilot gives you a 30-day workspace key and routes calls through our managed trial proxy — no provider key required to get started.</p>
 
       <div class="provider-grid">
         <div class="provider-tile" id="tile-openai" onclick="selectProvider('openai')">
           <div class="provider-icon">🟢</div>
           <div class="provider-name">OpenAI</div>
-          <span class="provider-badge badge-auto">⚡ Automatic · 30-sec</span>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">We pull your real usage automatically — no extra steps.</div>
+          <span class="provider-badge badge-auto">⚡ Managed trial</span>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Start routing through CostPilot immediately. Usage import can be added later.</div>
         </div>
         <div class="provider-tile" id="tile-anthropic" onclick="selectProvider('anthropic')">
           <div class="provider-icon">🔵</div>
           <div class="provider-name">Anthropic</div>
-          <span class="provider-badge badge-steps">2 extra steps</span>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Anthropic doesn't expose a usage API — we'll explain why and give you two easy options.</div>
+          <span class="provider-badge badge-steps">Managed trial</span>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Start routing through CostPilot immediately. Manual savings estimates are optional.</div>
         </div>
       </div>
 
@@ -236,7 +236,7 @@
       <div class="why-notice" style="padding:12px 14px;margin-bottom:20px">
         <div class="why-notice-title" style="margin-bottom:5px">ℹ Why Anthropic can't auto-pull your usage</div>
         <p style="font-size:12px">
-          Unlike OpenAI, <strong>Anthropic has no public usage API.</strong> Your spend data lives only inside the Anthropic Console and can't be fetched with just your key. This is an Anthropic platform limitation — not a CostPilot one. Choose one of the two options below to get your savings estimate.
+          Anthropic does not expose a public usage API for automatic spend import. Your trial can still start now; choose one of the two options below only if you want a savings estimate before your first routed call.
         </p>
       </div>
 
@@ -262,6 +262,7 @@
       </div>
 
       <button class="btn-secondary" onclick="goToPanel('panel-step1')">← Change provider</button>
+      <button class="btn-primary" onclick="goToPanel('panel-step3')">Skip Estimate — Start Trial →</button>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════
@@ -455,12 +456,12 @@
       </div>
 
       <div id="anthropicKeySection" style="display:none;margin-bottom:20px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:8px">Add your Anthropic API key to activate routing</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:8px">Optional BYOK upgrade</div>
         <div style="display:flex;gap:10px">
           <input type="password" id="goLiveKey" placeholder="sk-ant-..." style="flex:1;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text-primary);font-family:var(--font-mono);font-size:13px" />
           <button onclick="saveGoLiveKey()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">Save Key</button>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Your key is encrypted and only used to route your API calls. Find it at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">console.anthropic.com → API Keys</a>.</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Trials route through CostPilot's managed key. Add your own key later only if your plan requires BYOK.</div>
         <div id="goLiveKeyMsg" style="font-size:12px;color:var(--accent-green);margin-top:6px;display:none">✓ Key saved — routing is active.</div>
       </div>
 
@@ -530,17 +531,20 @@ function selectProvider(p) {
   const trustChip2 = document.getElementById("trustChip2");
 
   if (p === "openai") {
-    keyField.style.display = "block";
+    keyField.style.display = "none";
     document.getElementById("trustRow").style.display = "flex";
     document.getElementById("step1Btn").style.display = "flex";
-    keyLabel.textContent    = "OpenAI API Key";
+    keyLabel.textContent    = "OpenAI API Key (optional)";
     keyInput.placeholder    = "sk-proj-...";
-    keyHint.innerHTML       = 'Find it at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">platform.openai.com → API Keys</a>. We pull usage data only — never make calls.';
-    document.getElementById("step1Btn").innerHTML = "Pull My Usage →";
-    trustChip2.textContent = "✓ Key never stored at this step";
+    keyHint.innerHTML       = "Optional: import existing usage later for a savings estimate.";
+    document.getElementById("step1Btn").innerHTML = "Continue →";
+    trustChip2.textContent = "✓ No provider key required";
   } else {
-    // Anthropic: no key needed for the savings estimate — skip straight to usage input
-    goToPanel("panel-anthropic-path");
+    document.getElementById("trustRow").style.display = "flex";
+    document.getElementById("step1Btn").style.display = "flex";
+    keyField.style.display = "none";
+    document.getElementById("step1Btn").innerHTML = "Continue →";
+    trustChip2.textContent = "✓ No provider key required";
   }
 }
 
@@ -553,22 +557,17 @@ function toggleKeyVis() {
 async function submitStep1() {
   hideError("step1Error");
   const key = document.getElementById("apiKey").value.trim();
-  if (!key) { showError("step1Error", "Please paste your API key."); return; }
 
   const btn = document.getElementById("step1Btn");
   btn.disabled = true;
   const origText = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner"></span> ' + (_provider === "openai" ? "Pulling your data…" : "Validating key…");
+  btn.innerHTML = '<span class="spinner"></span> Preparing trial…';
 
   try {
     if (_provider === "openai") {
-      const data = await apiPost("/api/trial/connect-openai", { api_key: key, days: 30 });
-      _apiKey  = key;
-      _savings = data.savings;
-      renderSavings(data, "openai");
-      goToPanel("panel-step2");
+      _apiKey = key;
+      goToPanel("panel-step3");
     } else {
-      await apiPost("/api/trial/validate-anthropic", { api_key: key });
       _apiKey = key;
       goToPanel("panel-anthropic-path");
     }

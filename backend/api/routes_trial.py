@@ -5,7 +5,7 @@ POST /api/trial/connect-openai        — validate key + pull 30-day OpenAI usag
 POST /api/trial/validate-anthropic    — validate Anthropic key (cheap test call)
 POST /api/trial/anthropic-manual      — savings sim from manual usage inputs
 POST /api/trial/anthropic-csv         — savings sim from uploaded Anthropic usage CSV
-POST /api/trial/register              — create trial account (email, name, key)
+POST /api/trial/register              — create 30-day trial account + CostPilot key
 GET  /api/trial/status                — check trial status by workspace_id
 """
 
@@ -214,7 +214,7 @@ class RegisterTrialRequest(BaseModel):
     email:    str
     name:     str
     company:  str = ""
-    api_key:  str = ""   # optional — only used for savings estimate, not stored for routing
+    api_key:  str = ""   # optional legacy/BYOK field; trials use CostPilot-managed provider keys
     provider: str = "openai"
 
 @router.post("/register")
@@ -229,17 +229,24 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
         if not existing.secret_key:
             existing.secret_key = "sk-cp-" + _secrets.token_urlsafe(32)
             db.commit()
-        # Update API key if they're re-registering with a new one
+        # BYOK remains optional; normal trials use CostPilot's managed provider key
         if req.api_key:
             existing.api_key_enc = b64encode(req.api_key.encode()).decode()
             db.commit()
+        now = datetime.utcnow()
+        is_expired = now > existing.trial_end or not existing.is_active
         return {
             "workspace_id":   existing.workspace_id,
             "secret_key":     existing.secret_key,
+            "trial_start":    existing.trial_start.isoformat() if existing.trial_start else None,
             "trial_end":      existing.trial_end.isoformat(),
-            "days_remaining": max(0, (existing.trial_end - __import__("datetime").datetime.utcnow()).days),
+            "days_remaining": max(0, (existing.trial_end - now).days),
             "proxy_base_url": f"https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-{existing.workspace_id}",
             "already_exists": True,
+            "is_active":      not is_expired,
+            "is_expired":     is_expired,
+            "managed_provider_key": not bool(req.api_key),
+            "upgrade_required": is_expired,
         }
 
     workspace_id = str(uuid.uuid4()).replace("-", "")[:16].upper()
@@ -247,7 +254,7 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
     trial_start  = datetime.utcnow()
     trial_end    = trial_start + timedelta(days=30)
 
-    encrypted = b64encode(req.api_key.encode()).decode()
+    encrypted = b64encode((req.api_key or "").encode()).decode()
 
     account = TrialAccount(
         email          = req.email,
@@ -275,6 +282,10 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
         "days_remaining": 30,
         "proxy_base_url": f"https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-{workspace_id}",
         "already_exists": False,
+        "is_active": True,
+        "is_expired": False,
+        "managed_provider_key": not bool(req.api_key),
+        "upgrade_required": False,
     }
 
 
