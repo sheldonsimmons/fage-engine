@@ -259,15 +259,29 @@ async function launchFage() {
   try {
     // Step 1 — Create department budgets
     log("Creating department budgets...");
-    for (const dept of departments) {
-      if (!dept.name.trim()) continue;
-      try {
-        await apiPost(`/api/budget/${encodeURIComponent(dept.name)}/cap`, {
-          new_cap_usd: dept.cap || 0,
-        });
-        log(`${dept.name} — $${dept.cap}/mo`, true);
-      } catch (e) {
-        log(`${dept.name} — ${e.message}`, false);
+    if (IS_TRIAL) {
+      const validDepartments = departments
+        .filter(dept => dept.name.trim())
+        .map(dept => ({ name: dept.name.trim(), cap_usd: dept.cap || 0 }));
+      const setup = await apiPost("/api/trial/setup-departments", {
+        workspace_id: TRIAL_WS,
+        secret_key: TRIAL_SK,
+        departments: validDepartments,
+        platform: selectedLaunchPlatform || obSelectedPlatform || "other",
+      });
+      localStorage.setItem("cp_setup_complete", setup.setup_complete ? "true" : "false");
+      validDepartments.forEach(dept => log(`${dept.name} — $${dept.cap_usd}/mo`, true));
+    } else {
+      for (const dept of departments) {
+        if (!dept.name.trim()) continue;
+        try {
+          await apiPost(`/api/budget/${encodeURIComponent(dept.name)}/cap`, {
+            new_cap_usd: dept.cap || 0,
+          });
+          log(`${dept.name} — $${dept.cap}/mo`, true);
+        } catch (e) {
+          log(`${dept.name} — ${e.message}`, false);
+        }
       }
     }
 
@@ -445,6 +459,7 @@ const OB_PLATFORM_COPY = {
 
 function selectObPlatform(platform) {
   obSelectedPlatform = platform;
+  if (IS_TRIAL) localStorage.setItem("cp_platform", platform);
   Object.keys(OB_PLATFORMS).forEach(p => {
     const el = document.getElementById("ob-plat-" + p);
     if (el) el.classList.toggle("selected", p === platform);

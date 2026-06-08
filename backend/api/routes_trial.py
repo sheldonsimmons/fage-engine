@@ -60,6 +60,8 @@ def _trial_status_payload(account: TrialAccount, db: Session) -> dict:
         "name": account.name,
         "company": account.company,
         "provider": account.provider,
+        "platform": account.platform,
+        "setup_complete": bool(account.setup_complete),
         "plan": account.plan,
         "trial_start": account.trial_start.isoformat() if account.trial_start else None,
         "trial_end": account.trial_end.isoformat(),

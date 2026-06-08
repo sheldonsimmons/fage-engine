@@ -74,6 +74,68 @@
     }
     .exec-filter-clear:hover { color: var(--text-primary); border-color: var(--accent); }
 
+    /* ── Trial first-run checklist ───────────────────────────────────────────── */
+    .trial-start-card {
+      display: none;
+      background: var(--bg-panel); border: 1px solid rgba(88,166,255,0.28);
+      border-radius: 12px; padding: 18px 20px; margin-bottom: 18px;
+    }
+    .trial-start-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px; margin-bottom: 14px;
+    }
+    .trial-start-eyebrow {
+      font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--accent);
+    }
+    .trial-start-title {
+      font-size: 18px; font-weight: 800; color: var(--text-primary);
+      margin-top: 4px;
+    }
+    .trial-start-copy {
+      font-size: 12px; color: var(--text-muted); line-height: 1.5;
+      margin-top: 4px;
+    }
+    .trial-start-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .trial-start-primary,
+    .trial-start-secondary {
+      border-radius: 7px; padding: 8px 14px; font-size: 12px; font-weight: 800;
+      text-decoration: none; white-space: nowrap;
+    }
+    .trial-start-primary { background: var(--accent); color: #06111f; }
+    .trial-start-secondary {
+      background: transparent; color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+    .trial-check-grid {
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;
+    }
+    .trial-check {
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px; background: rgba(13,17,23,0.45);
+    }
+    .trial-check.done {
+      border-color: rgba(63,185,80,0.35);
+      background: rgba(46,160,67,0.08);
+    }
+    .trial-check-icon {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); color: var(--text-muted);
+      font-size: 12px; font-weight: 900; margin-bottom: 8px;
+    }
+    .trial-check.done .trial-check-icon {
+      background: var(--accent-green); border-color: var(--accent-green);
+      color: #06120a;
+    }
+    .trial-check-label {
+      font-size: 12px; font-weight: 800; color: var(--text-primary);
+      margin-bottom: 3px;
+    }
+    .trial-check-copy {
+      font-size: 11px; line-height: 1.4; color: var(--text-muted);
+    }
+
     /* ── Hero savings row ─────────────────────────────────────────────────────── */
     .hero-row {
       display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;
@@ -195,9 +257,12 @@
 
     @media (max-width: 1100px) {
       .exec-help-grid { grid-template-columns: repeat(2, 1fr); }
+      .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 760px) {
       .hero-row, .metric-row, .breakdown-grid, .exec-help-grid { grid-template-columns: 1fr; }
+      .trial-start-head { flex-direction: column; }
+      .trial-check-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -241,6 +306,49 @@
 
 <!-- ── Body ───────────────────────────────────────────────────────────────────── -->
 <div class="exec-body">
+
+  <div class="trial-start-card" id="trialStartCard">
+    <div class="trial-start-head">
+      <div>
+        <div class="trial-start-eyebrow">Pilot setup</div>
+        <div class="trial-start-title">Start sending your first governed AI request.</div>
+        <div class="trial-start-copy" id="trialStartCopy">
+          Your workspace is ready. Connect a platform, send one test payload, then come back here to see savings and audit history.
+        </div>
+      </div>
+      <div class="trial-start-actions">
+        <a class="trial-start-primary" href="/onboarding.html">Connect Platform →</a>
+        <a class="trial-start-secondary" href="/workspace.html">Open Workspace</a>
+      </div>
+    </div>
+    <div class="trial-check-grid">
+      <div class="trial-check done" id="trialStepCreated">
+        <div class="trial-check-icon">✓</div>
+        <div class="trial-check-label">Trial created</div>
+        <div class="trial-check-copy">Your 30-day workspace and proxy key are active.</div>
+      </div>
+      <div class="trial-check" id="trialStepConnect">
+        <div class="trial-check-icon">2</div>
+        <div class="trial-check-label">Connect platform</div>
+        <div class="trial-check-copy">Choose Salesforce, REST, Python, Node, Java, Ruby, or another source.</div>
+      </div>
+      <div class="trial-check" id="trialStepFields">
+        <div class="trial-check-icon">3</div>
+        <div class="trial-check-label">Map fields</div>
+        <div class="trial-check-copy">Pick the fields, JSON keys, or properties CostPilot should route.</div>
+      </div>
+      <div class="trial-check" id="trialStepFirstCall">
+        <div class="trial-check-icon">4</div>
+        <div class="trial-check-label">Send test request</div>
+        <div class="trial-check-copy">Use generated setup code or a test payload to create the first event.</div>
+      </div>
+      <div class="trial-check" id="trialStepReview">
+        <div class="trial-check-icon">5</div>
+        <div class="trial-check-label">Review savings</div>
+        <div class="trial-check-copy">Savings, routing, audit, and AgentLake activity appear here.</div>
+      </div>
+    </div>
+  </div>
 
   <div class="exec-filter-card">
     <div class="exec-filter-head">
@@ -597,6 +705,42 @@ function filterSummaryText(count) {
   return `${parts.length ? parts.join(" · ") : "All data"} · ${rangeLabel} · ${fmtNum(count)} events`;
 }
 
+function setTrialStep(id, done) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("done", !!done);
+  const icon = el.querySelector(".trial-check-icon");
+  if (icon) icon.textContent = done ? "✓" : icon.dataset.step || icon.textContent;
+}
+
+function updateTrialStartCard(data) {
+  const wsId = localStorage.getItem("cp_workspace_id") || "";
+  const card = document.getElementById("trialStartCard");
+  if (!card || !wsId) return;
+
+  const d = data.dashboard || {};
+  const governed = Number(d.requests_governed || 0);
+  if (governed > 0) {
+    card.style.display = "none";
+    return;
+  }
+
+  const setupDone = localStorage.getItem("cp_setup_complete") === "true";
+  const platform = localStorage.getItem("cp_platform") || "";
+  const company = localStorage.getItem("cp_trial_company") || "Your workspace";
+  const copy = document.getElementById("trialStartCopy");
+  if (copy) {
+    copy.textContent = `${company} is ready, but no AI requests have reached this workspace yet. Connect a platform, send one test payload, then this dashboard will start filling in with your own data.`;
+  }
+
+  setTrialStep("trialStepCreated", true);
+  setTrialStep("trialStepConnect", setupDone || !!platform);
+  setTrialStep("trialStepFields", setupDone);
+  setTrialStep("trialStepFirstCall", false);
+  setTrialStep("trialStepReview", false);
+  card.style.display = "block";
+}
+
 // ── Health check + route "Open Operate" button ────────────────────────────────
 async function checkHealth() {
   try {
@@ -877,6 +1021,7 @@ async function loadExec() {
     execData = { dashboard, timeseries, audits, agents };
     populateExecFilters(execData);
     renderExec(execData);
+    updateTrialStartCard(execData);
   } catch (err) {
     console.warn("Executive dashboard load failed:", err.message);
   }
