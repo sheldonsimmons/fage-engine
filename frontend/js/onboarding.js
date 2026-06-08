@@ -22,7 +22,7 @@ const TRIAL_PROXY = IS_TRIAL
   : "";
 
 function goToDashboard() {
-  window.location.href = IS_TRIAL ? "/" : "/";
+  window.location.href = IS_TRIAL ? "/workspace.html" : "/";
 }
 
 // Pre-fill known trial fields on page load

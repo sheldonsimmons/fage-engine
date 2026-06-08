@@ -117,6 +117,60 @@
       border-radius:10px; padding:16px 20px; text-decoration:none; display:block;
     }
     .ws-quick-link.primary { border-color:rgba(88,166,255,.45); background:rgba(88,166,255,.06); }
+    .journey-card {
+      display:none; background:var(--bg-panel); border:1px solid rgba(88,166,255,.28);
+      border-radius:12px; padding:20px 22px; margin-bottom:18px;
+    }
+    .journey-head {
+      display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
+      margin-bottom:16px; flex-wrap:wrap;
+    }
+    .journey-eyebrow {
+      font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.1em;
+      color:var(--accent); margin-bottom:5px;
+    }
+    .journey-title { font-size:19px; font-weight:900; color:var(--text-primary); }
+    .journey-copy { font-size:12px; color:var(--text-muted); line-height:1.6; margin-top:4px; max-width:680px; }
+    .journey-actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .journey-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+    .journey-step {
+      border:1px solid var(--border); border-radius:8px; padding:12px;
+      background:rgba(13,17,23,.45);
+    }
+    .journey-step.done { border-color:rgba(63,185,80,.35); background:rgba(46,160,67,.08); }
+    .journey-step.active { border-color:rgba(88,166,255,.55); background:rgba(88,166,255,.08); }
+    .journey-icon {
+      width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+      border:1px solid var(--border); color:var(--text-muted); font-size:12px; font-weight:900; margin-bottom:8px;
+    }
+    .journey-step.done .journey-icon { background:var(--accent-green); border-color:var(--accent-green); color:#06120a; }
+    .journey-step.active .journey-icon { border-color:var(--accent); color:var(--accent); }
+    .journey-label { font-size:12px; font-weight:800; color:var(--text-primary); margin-bottom:3px; }
+    .journey-step-copy { font-size:11px; line-height:1.4; color:var(--text-muted); }
+    .test-panel {
+      margin-top:16px; border-top:1px solid var(--border); padding-top:16px;
+      display:grid; grid-template-columns:160px 180px 1fr auto; gap:10px; align-items:end;
+    }
+    .test-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .test-label { font-size:10px; font-weight:800; color:var(--text-muted); letter-spacing:.08em; text-transform:uppercase; }
+    .test-input, .test-textarea {
+      width:100%; background:var(--bg-base); color:var(--text-primary);
+      border:1px solid var(--border); border-radius:7px; padding:9px 10px; font:inherit; font-size:12px;
+    }
+    .test-textarea { min-height:70px; resize:vertical; line-height:1.45; }
+    .test-button {
+      background:var(--accent-green); color:#06120a; border:none; border-radius:7px;
+      padding:10px 15px; font:inherit; font-size:12px; font-weight:900; cursor:pointer; white-space:nowrap;
+    }
+    .test-button:disabled { opacity:.6; cursor:not-allowed; }
+    .test-result {
+      display:none; margin-top:12px; background:var(--bg-base); border:1px solid var(--border);
+      border-radius:8px; padding:12px; color:var(--text-muted); font-size:12px; line-height:1.6;
+    }
+    @media (max-width: 900px) {
+      .ws-kpi-row, .ws-grid, .journey-grid, .test-panel { grid-template-columns:1fr; }
+      .trial-bar-right { width:100%; }
+    }
   </style>
 </head>
 <body>
@@ -157,6 +211,56 @@
     <div class="ws-empty-title">Loading your workspace...</div>
   </div>
 
+  <section id="journeyCard" class="journey-card">
+    <div class="journey-head">
+      <div>
+        <div class="journey-eyebrow">Trial command center</div>
+        <div class="journey-title" id="journeyTitle">Get your first governed AI request live</div>
+        <div class="journey-copy" id="journeyCopy">
+          Follow these steps once. After your first request, the dashboard becomes your savings and governance view.
+        </div>
+      </div>
+      <div class="journey-actions">
+        <a href="/onboarding.html" class="btn-dashboard" id="journeySetupBtn">Configure Platform →</a>
+        <a href="/index.html" class="btn-dashboard" style="background:var(--bg-panel);border:1px solid var(--border);color:var(--text-primary)">Open Dashboard →</a>
+      </div>
+    </div>
+    <div class="journey-grid">
+      <div class="journey-step done" id="journeyTrial"><div class="journey-icon">✓</div><div class="journey-label">Trial signup</div><div class="journey-step-copy">Workspace and CostPilot proxy key are active.</div></div>
+      <div class="journey-step" id="journeySetup"><div class="journey-icon" data-step="2">2</div><div class="journey-label">Setup</div><div class="journey-step-copy">Choose platform, departments, and budgets.</div></div>
+      <div class="journey-step" id="journeyFields"><div class="journey-icon" data-step="3">3</div><div class="journey-label">Map fields</div><div class="journey-step-copy">Pick the fields or request keys sent to AI.</div></div>
+      <div class="journey-step" id="journeyTest"><div class="journey-icon" data-step="4">4</div><div class="journey-label">Test request</div><div class="journey-step-copy">Send one sample through CostPilot.</div></div>
+      <div class="journey-step" id="journeyReview"><div class="journey-icon" data-step="5">5</div><div class="journey-label">Review savings</div><div class="journey-step-copy">Open dashboard, audit, reports, then upgrade.</div></div>
+    </div>
+    <div id="workspaceTestPanel" class="test-panel">
+      <div class="test-field">
+        <label class="test-label" for="workspaceTestPlatform">Platform</label>
+        <select id="workspaceTestPlatform" class="test-input">
+          <option value="salesforce">Salesforce</option>
+          <option value="servicenow">ServiceNow</option>
+          <option value="hubspot">HubSpot</option>
+          <option value="dynamics">Dynamics 365</option>
+          <option value="zendesk">Zendesk</option>
+          <option value="python">Python</option>
+          <option value="nodejs">Node.js</option>
+          <option value="java">Java</option>
+          <option value="ruby">Ruby</option>
+          <option value="rest">REST / API</option>
+        </select>
+      </div>
+      <div class="test-field">
+        <label class="test-label" for="workspaceTestDept">Department</label>
+        <input id="workspaceTestDept" class="test-input" value="Support" />
+      </div>
+      <div class="test-field">
+        <label class="test-label" for="workspaceTestPayload">Payload</label>
+        <textarea id="workspaceTestPayload" class="test-textarea">Customer is asking for a renewal contract review and legal approval. Summarize the risk, identify any clauses that need review, and recommend next steps.</textarea>
+      </div>
+      <button class="test-button" id="workspaceTestBtn" onclick="sendWorkspaceTestRequest()">Send Test Request →</button>
+    </div>
+    <div id="workspaceTestResult" class="test-result"></div>
+  </section>
+
   <!-- No calls yet -->
   <div id="emptyState" style="display:none">
     <div class="ws-header">
@@ -164,15 +268,15 @@
       <div class="ws-sub">Waiting for your first API call through CostPilot</div>
     </div>
 
-    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:60px 40px;text-align:center;margin-bottom:20px">
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:34px 32px;text-align:center;margin-bottom:20px">
       <div style="font-size:48px;margin-bottom:16px" class="pulse">📡</div>
       <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:8px">Watching for your first call...</div>
       <div style="font-size:13px;color:var(--text-muted);line-height:1.7;max-width:440px;margin:0 auto 24px">
-        Add the two lines from your Getting Started guide to your project and run your app as normal.
+        Use the test panel above for a quick proof, or paste the generated setup code into your platform.
         The moment a call comes through CostPilot, it appears here automatically.
       </div>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <a href="/getting-started.html" style="display:inline-block;background:var(--accent);color:#fff;border-radius:8px;padding:10px 22px;text-decoration:none;font-size:13px;font-weight:700">View Setup Guide →</a>
+        <a href="/onboarding.html" style="display:inline-block;background:var(--accent);color:#fff;border-radius:8px;padding:10px 22px;text-decoration:none;font-size:13px;font-weight:700">Configure Platform →</a>
         <a href="/index.html" style="display:inline-block;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;padding:10px 22px;text-decoration:none;font-size:13px;font-weight:700">Open Main Dashboard →</a>
       </div>
     </div>
@@ -305,10 +409,152 @@ function fmt(n) {
   return "$" + n.toFixed(2);
 }
 
+function fmtUsd(n) {
+  const v = Number(n || 0);
+  if (v < 0.001) return "$" + v.toFixed(6);
+  if (v < 0.01) return "$" + v.toFixed(4);
+  return "$" + v.toFixed(2);
+}
+
+function fmtNum(n) {
+  return Number(n || 0).toLocaleString();
+}
+
 function fmtTs(iso) {
   if (!iso) return "—";
   return new Date(iso + (iso.endsWith("Z") ? "" : "Z"))
     .toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+}
+
+function setJourneyStep(id, done, active = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("done", !!done);
+  el.classList.toggle("active", !!active && !done);
+  const icon = el.querySelector(".journey-icon");
+  if (icon) icon.textContent = done ? "✓" : icon.dataset.step || icon.textContent;
+}
+
+function updateJourney(d) {
+  const card = document.getElementById("journeyCard");
+  if (!card) return;
+  const setupDone = Boolean(d.setup_complete) || localStorage.getItem("cp_setup_complete") === "true";
+  const platform = d.platform || localStorage.getItem("cp_platform") || "rest";
+  const hasCalls = Boolean(d.has_calls);
+  const requestedPlan = d.requested_plan || "";
+  const title = document.getElementById("journeyTitle");
+  const copy = document.getElementById("journeyCopy");
+  const testPanel = document.getElementById("workspaceTestPanel");
+  const platformEl = document.getElementById("workspaceTestPlatform");
+  const deptEl = document.getElementById("workspaceTestDept");
+  const firstDept = Object.keys(d.departments || {})[0];
+
+  if (platformEl && [...platformEl.options].some(o => o.value === platform)) platformEl.value = platform;
+  if (deptEl && firstDept && !deptEl.dataset.touched) deptEl.value = firstDept;
+
+  setJourneyStep("journeyTrial", true);
+  setJourneyStep("journeySetup", setupDone, !setupDone);
+  setJourneyStep("journeyFields", setupDone, setupDone && !hasCalls);
+  setJourneyStep("journeyTest", hasCalls, setupDone && !hasCalls);
+  setJourneyStep("journeyReview", hasCalls, hasCalls);
+
+  if (hasCalls) {
+    title.textContent = "Your first governed request is live.";
+    copy.textContent = requestedPlan
+      ? `CostPilot is routing traffic and your ${requestedPlan} upgrade request is recorded. Review savings and audit activity below.`
+      : "CostPilot is routing traffic. Review savings, audit activity, and upgrade when you are ready to continue after trial.";
+    if (testPanel) testPanel.style.display = "none";
+  } else if (setupDone) {
+    title.textContent = "Send your first governed AI request.";
+    copy.textContent = "Your setup is ready. Send one test payload here or run your generated integration code to prove the flow end to end.";
+    if (testPanel) testPanel.style.display = "grid";
+  } else {
+    title.textContent = "Finish setup, then send a test request.";
+    copy.textContent = "Configure your platform and mapped fields first. After that, come back here to send one test request and unlock the dashboard view.";
+    if (testPanel) testPanel.style.display = "grid";
+  }
+  card.style.display = "block";
+}
+
+function workspaceTestHeaders(provider, wsId, secret, department, platform) {
+  const headers = {
+    "Content-Type": "application/json",
+    "X-CostPilot-Key": secret,
+    "X-Department": department,
+    "X-Platform": platform,
+  };
+  if (provider === "anthropic") {
+    headers["x-api-key"] = "costpilot-managed";
+    headers["anthropic-version"] = "2023-06-01";
+  } else {
+    headers.Authorization = "Bearer costpilot-managed";
+  }
+  return headers;
+}
+
+async function sendWorkspaceTestRequest() {
+  const provider = localStorage.getItem("cp_provider") || "openai";
+  const platform = document.getElementById("workspaceTestPlatform").value || "rest";
+  const department = (document.getElementById("workspaceTestDept").value || "Support").trim();
+  const payload = (document.getElementById("workspaceTestPayload").value || "").trim();
+  const btn = document.getElementById("workspaceTestBtn");
+  const result = document.getElementById("workspaceTestResult");
+
+  if (!WS || !SK) {
+    result.style.display = "block";
+    result.innerHTML = "<strong>Trial workspace missing.</strong> Start a trial again, then return here.";
+    return;
+  }
+  if (!payload) {
+    result.style.display = "block";
+    result.innerHTML = "<strong>Add a payload first.</strong>";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  result.style.display = "block";
+  result.textContent = "Routing through CostPilot...";
+
+  const isAnthropic = provider === "anthropic";
+  const url = isAnthropic ? `/v1/ws-${encodeURIComponent(WS)}/messages` : `/v1/ws-${encodeURIComponent(WS)}/chat/completions`;
+  const body = isAnthropic
+    ? { model: "claude-sonnet-4-6", max_tokens: 220, messages: [{ role: "user", content: payload }] }
+    : { model: "gpt-4o", max_tokens: 220, messages: [{ role: "user", content: payload }] };
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: workspaceTestHeaders(provider, WS, SK, department, platform),
+      body: JSON.stringify(body),
+    });
+    let data = {};
+    try { data = await resp.json(); } catch {}
+
+    const routing = resp.headers.get("X-CostPilot-Routing") || (resp.ok ? "ROUTED" : "ERROR");
+    const tier = resp.headers.get("X-CostPilot-Tier") || "Blocked";
+    const model = resp.headers.get("X-CostPilot-Model") || "—";
+    const cost = Number(resp.headers.get("X-CostPilot-Cost") || 0);
+    const saved = Number(resp.headers.get("X-CostPilot-Tokens-Saved") || 0);
+
+    if (!resp.ok && routing !== "BLOCKED") {
+      throw new Error(data.detail || data.error || `Request failed (${resp.status})`);
+    }
+
+    result.innerHTML = `
+      <strong>${routing === "BLOCKED" ? "Blocked by policy" : "Test request governed"}</strong><br>
+      Tier: <strong>${tier}</strong> · Model: <strong>${model}</strong> · Cost: <strong>${fmtUsd(cost)}</strong> · Tokens pruned: <strong>${fmtNum(saved)}</strong><br>
+      ${routing === "BLOCKED" ? (data.detail || "Sensitive content was stopped before reaching the model.") : "Your dashboard and audit log now contain this event."}
+    `;
+    setJourneyStep("journeyTest", true);
+    setJourneyStep("journeyReview", true);
+    setTimeout(load, 1200);
+  } catch (err) {
+    result.innerHTML = `<strong>Test failed.</strong><br>${String(err.message || err)}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send Test Request →";
+  }
 }
 
 async function load() {
@@ -346,6 +592,7 @@ async function load() {
     document.title = `CostPilot — ${d.company || d.name}`;
 
     document.getElementById("loadingState").style.display = "none";
+    updateJourney(d);
 
     if (!d.has_calls) {
       // Empty state
