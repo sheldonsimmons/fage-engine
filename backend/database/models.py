@@ -309,6 +309,8 @@ class TrialAccount(Base):
     trial_start  = Column(DateTime, default=datetime.utcnow)
     trial_end    = Column(DateTime, nullable=False)
     plan         = Column(String,   default="trial")         # trial | starter | growth | business | enterprise
+    requested_plan = Column(String, nullable=True)           # starter | growth | business | enterprise
+    upgrade_requested_at = Column(DateTime, nullable=True)
     is_active    = Column(Boolean,  default=True)
     trial_call_cap = Column(Integer, default=500)
     trial_spend_cap_usd = Column(Float, default=10.0)

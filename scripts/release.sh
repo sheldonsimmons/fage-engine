@@ -32,6 +32,14 @@ with engine.connect() as conn:
         ALTER TABLE trial_accounts
         ADD COLUMN IF NOT EXISTS trial_spend_cap_usd FLOAT DEFAULT 10.0
     '''))
+    conn.execute(text('''
+        ALTER TABLE trial_accounts
+        ADD COLUMN IF NOT EXISTS requested_plan VARCHAR
+    '''))
+    conn.execute(text('''
+        ALTER TABLE trial_accounts
+        ADD COLUMN IF NOT EXISTS upgrade_requested_at TIMESTAMP
+    '''))
     conn.commit()
 print('   Column migrations applied')
 

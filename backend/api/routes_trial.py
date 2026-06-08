@@ -6,6 +6,7 @@ POST /api/trial/validate-anthropic    — validate Anthropic key (cheap test cal
 POST /api/trial/anthropic-manual      — savings sim from manual usage inputs
 POST /api/trial/anthropic-csv         — savings sim from uploaded Anthropic usage CSV
 POST /api/trial/register              — create 30-day trial account + CostPilot key
+POST /api/trial/upgrade-request       — record upgrade interest for sales follow-up
 GET  /api/trial/status                — check trial status by workspace_id
 """
 
@@ -63,6 +64,8 @@ def _trial_status_payload(account: TrialAccount, db: Session) -> dict:
         "platform": account.platform,
         "setup_complete": bool(account.setup_complete),
         "plan": account.plan,
+        "requested_plan": account.requested_plan,
+        "upgrade_requested_at": account.upgrade_requested_at.isoformat() if account.upgrade_requested_at else None,
         "trial_start": account.trial_start.isoformat() if account.trial_start else None,
         "trial_end": account.trial_end.isoformat(),
         "days_remaining": days_remaining,
@@ -273,6 +276,15 @@ class RegisterTrialRequest(BaseModel):
     api_key:  str = ""   # optional legacy/BYOK field; trials use CostPilot-managed provider keys
     provider: str = "openai"
 
+
+class UpgradeRequest(BaseModel):
+    workspace_id: str | None = None
+    email: str | None = None
+    plan: str
+    company: str | None = None
+    name: str | None = None
+    note: str | None = None
+
 @router.post("/register")
 def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
     import secrets as _secrets
@@ -356,6 +368,37 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
             "limit_reached": False,
             "upgrade_required": False,
         },
+    }
+
+
+@router.post("/upgrade-request")
+def request_upgrade(req: UpgradeRequest, db: Session = Depends(get_db)):
+    allowed = {"starter", "growth", "business", "enterprise"}
+    plan = (req.plan or "").strip().lower()
+    if plan not in allowed:
+        raise HTTPException(status_code=422, detail="Choose starter, growth, business, or enterprise.")
+
+    account = None
+    if req.workspace_id:
+        account = db.query(TrialAccount).filter_by(workspace_id=req.workspace_id.strip()).first()
+    if not account and req.email:
+        account = db.query(TrialAccount).filter_by(email=req.email.strip().lower()).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Trial workspace not found. Start a free trial first.")
+
+    account.requested_plan = plan
+    account.upgrade_requested_at = datetime.utcnow()
+    if req.company and not account.company:
+        account.company = req.company.strip()
+    if req.name and not account.name:
+        account.name = req.name.strip()
+    db.commit()
+
+    return {
+        "status": "ok",
+        "workspace_id": account.workspace_id,
+        "requested_plan": plan,
+        "message": "Upgrade request received. We will follow up with next steps.",
     }
 
 

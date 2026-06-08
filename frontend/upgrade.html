@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot Upgrade</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+  <style>
+    body { background: var(--bg-base); }
+    .upgrade-shell { max-width: 1180px; margin: 0 auto; padding: 28px; }
+    .upgrade-top {
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      margin-bottom:24px; flex-wrap:wrap;
+    }
+    .upgrade-title { font-size:30px; font-weight:800; letter-spacing:0; margin:8px 0; }
+    .upgrade-copy { color:var(--text-muted); font-size:15px; line-height:1.6; max-width:740px; }
+    .upgrade-nav { display:flex; gap:10px; flex-wrap:wrap; }
+    .upgrade-nav a, .upgrade-btn {
+      border:1px solid var(--border); background:var(--bg-panel); color:var(--text-primary);
+      border-radius:6px; padding:9px 13px; text-decoration:none; font-weight:700; cursor:pointer;
+    }
+    .upgrade-btn.primary, .upgrade-nav a.primary {
+      background:var(--accent-green); color:#0d1117; border-color:var(--accent-green);
+    }
+    .status-panel {
+      background:linear-gradient(135deg, rgba(63,185,80,.12), rgba(88,166,255,.06));
+      border:1px solid rgba(63,185,80,.35); border-radius:8px; padding:18px;
+      display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:20px;
+    }
+    .status-k { color:var(--text-muted); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .status-v { margin-top:6px; font-size:20px; font-weight:800; font-family:var(--font-mono); }
+    .plan-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin:20px 0; }
+    .plan-card {
+      border:1px solid var(--border); background:var(--bg-panel); border-radius:8px;
+      padding:18px; display:flex; flex-direction:column; gap:12px; min-height:245px;
+    }
+    .plan-card.selected { border-color:var(--accent-green); box-shadow:0 0 0 1px rgba(63,185,80,.35); }
+    .plan-name { font-size:18px; font-weight:800; }
+    .plan-fit { color:var(--text-muted); line-height:1.45; min-height:42px; }
+    .plan-price { font-size:13px; font-weight:800; color:var(--accent-green); letter-spacing:.04em; text-transform:uppercase; }
+    .plan-card ul { list-style:none; display:flex; flex-direction:column; gap:8px; color:var(--text-muted); line-height:1.4; }
+    .plan-card li::before { content:"✓"; color:var(--accent-green); font-weight:900; margin-right:7px; }
+    .form-panel {
+      border:1px solid var(--border); background:var(--bg-panel); border-radius:8px;
+      padding:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;
+    }
+    .field { display:flex; flex-direction:column; gap:7px; }
+    .field.full { grid-column:1 / -1; }
+    label { color:var(--text-muted); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    input, select, textarea {
+      width:100%; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border);
+      border-radius:6px; padding:12px; font:inherit;
+    }
+    textarea { min-height:110px; resize:vertical; line-height:1.5; }
+    .result { display:none; margin-top:14px; border-radius:8px; padding:14px; font-weight:700; }
+    .result.ok { display:block; color:var(--accent-green); background:rgba(63,185,80,.12); border:1px solid rgba(63,185,80,.35); }
+    .result.err { display:block; color:var(--accent-red); background:rgba(248,81,73,.12); border:1px solid rgba(248,81,73,.35); }
+    @media (max-width: 920px) {
+      .status-panel, .plan-grid, .form-panel { grid-template-columns:1fr; }
+      .upgrade-shell { padding:18px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="upgrade-shell">
+    <section class="upgrade-top">
+      <div>
+        <div class="header-brand">
+          <span class="header-logo">◈</span>
+          <span class="header-title">CostPilot</span>
+          <span class="header-sub">Trial upgrade</span>
+        </div>
+        <h1 class="upgrade-title">Keep CostPilot running after your trial.</h1>
+        <p class="upgrade-copy">
+          Pick the plan you want and send the request. This records your upgrade interest so billing,
+          procurement, or a purchase order can be handled without asking your team for provider API keys.
+        </p>
+      </div>
+      <nav class="upgrade-nav">
+        <a href="/workspace.html">Workspace</a>
+        <a href="/index.html" class="primary">Dashboard</a>
+      </nav>
+    </section>
+
+    <section class="status-panel" aria-label="Trial status">
+      <div><div class="status-k">Workspace</div><div class="status-v" id="wsValue">--</div></div>
+      <div><div class="status-k">Trial</div><div class="status-v" id="daysValue">--</div></div>
+      <div><div class="status-k">Usage</div><div class="status-v" id="usageValue">--</div></div>
+      <div><div class="status-k">Requested Plan</div><div class="status-v" id="requestedValue">None</div></div>
+    </section>
+
+    <section class="plan-grid" aria-label="Plans">
+      <article class="plan-card selected" data-plan="starter">
+        <div class="plan-name">Starter</div>
+        <div class="plan-fit">Best for one team proving savings and governance value.</div>
+        <div class="plan-price">Pilot pricing</div>
+        <ul>
+          <li>2,000 governed calls per month</li>
+          <li>Audit log and routing reports</li>
+          <li>Standard platform connectors</li>
+        </ul>
+        <button class="upgrade-btn" type="button" data-pick="starter">Choose Starter</button>
+      </article>
+      <article class="plan-card" data-plan="growth">
+        <div class="plan-name">Growth</div>
+        <div class="plan-fit">For multiple departments routing traffic through CostPilot.</div>
+        <div class="plan-price">Most common</div>
+        <ul>
+          <li>10,000 governed calls per month</li>
+          <li>Department budgets and keyword policy</li>
+          <li>Executive savings dashboard</li>
+        </ul>
+        <button class="upgrade-btn" type="button" data-pick="growth">Choose Growth</button>
+      </article>
+      <article class="plan-card" data-plan="business">
+        <div class="plan-name">Business</div>
+        <div class="plan-fit">For org-wide rollout with compliance and cost controls.</div>
+        <div class="plan-price">Scale plan</div>
+        <ul>
+          <li>50,000 governed calls per month</li>
+          <li>Advanced governance reporting</li>
+          <li>Priority onboarding support</li>
+        </ul>
+        <button class="upgrade-btn" type="button" data-pick="business">Choose Business</button>
+      </article>
+      <article class="plan-card" data-plan="enterprise">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-fit">For custom volume, procurement, and security review.</div>
+        <div class="plan-price">Custom</div>
+        <ul>
+          <li>Custom call and spend limits</li>
+          <li>Security and legal review support</li>
+          <li>Dedicated rollout planning</li>
+        </ul>
+        <button class="upgrade-btn" type="button" data-pick="enterprise">Choose Enterprise</button>
+      </article>
+    </section>
+
+    <form id="upgradeForm" class="form-panel">
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" autocomplete="name" />
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" required />
+      </div>
+      <div class="field">
+        <label for="company">Company</label>
+        <input id="company" autocomplete="organization" />
+      </div>
+      <div class="field">
+        <label for="plan">Plan</label>
+        <select id="plan">
+          <option value="starter">Starter</option>
+          <option value="growth">Growth</option>
+          <option value="business">Business</option>
+          <option value="enterprise">Enterprise</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label for="note">Notes for upgrade</label>
+        <textarea id="note" placeholder="Example: We want Growth for Sales and Support, 10k calls/month, annual billing preferred."></textarea>
+      </div>
+      <div class="field full" style="align-items:flex-start">
+        <button class="upgrade-btn primary" id="submitBtn" type="submit">Request Upgrade -></button>
+      </div>
+    </form>
+    <div id="result" class="result"></div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const WS = localStorage.getItem("cp_workspace_id") || "";
+    const els = {
+      ws: document.getElementById("wsValue"),
+      days: document.getElementById("daysValue"),
+      usage: document.getElementById("usageValue"),
+      requested: document.getElementById("requestedValue"),
+      name: document.getElementById("name"),
+      email: document.getElementById("email"),
+      company: document.getElementById("company"),
+      plan: document.getElementById("plan"),
+      note: document.getElementById("note"),
+      result: document.getElementById("result"),
+      submit: document.getElementById("submitBtn"),
+    };
+
+    function selectPlan(plan) {
+      els.plan.value = plan;
+      document.querySelectorAll(".plan-card").forEach(card => {
+        card.classList.toggle("selected", card.dataset.plan === plan);
+      });
+    }
+
+    document.querySelectorAll("[data-pick]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        selectPlan(btn.dataset.pick);
+        document.getElementById("upgradeForm").scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+    els.plan.addEventListener("change", () => selectPlan(els.plan.value));
+
+    async function loadStatus() {
+      els.ws.textContent = WS ? WS.slice(0, 8) + "..." : "No trial";
+      els.name.value = localStorage.getItem("cp_trial_name") || "";
+      els.email.value = localStorage.getItem("cp_trial_email") || "";
+      els.company.value = localStorage.getItem("cp_trial_company") || "";
+      if (!WS) {
+        els.days.textContent = "Start trial";
+        els.usage.textContent = "--";
+        return;
+      }
+      try {
+        const status = await apiGet(`/api/trial/status?workspace_id=${encodeURIComponent(WS)}`);
+        els.name.value = status.name || els.name.value;
+        els.email.value = status.email || els.email.value;
+        els.company.value = status.company || els.company.value;
+        const usage = status.usage || {};
+        const limits = status.limits || {};
+        els.days.textContent = status.days_remaining > 0 ? `${status.days_remaining} days` : "Expired";
+        els.usage.textContent = `${usage.calls || 0}/${limits.call_cap || 500} calls`;
+        els.requested.textContent = status.requested_plan
+          ? status.requested_plan.charAt(0).toUpperCase() + status.requested_plan.slice(1)
+          : "None";
+        if (status.requested_plan) selectPlan(status.requested_plan);
+      } catch (err) {
+        els.days.textContent = "Unavailable";
+      }
+    }
+
+    document.getElementById("upgradeForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      els.result.className = "result";
+      els.submit.disabled = true;
+      els.submit.textContent = "Sending...";
+      try {
+        const response = await apiPost("/api/trial/upgrade-request", {
+          workspace_id: WS || null,
+          email: els.email.value.trim(),
+          name: els.name.value.trim(),
+          company: els.company.value.trim(),
+          plan: els.plan.value,
+          note: els.note.value.trim(),
+        });
+        els.result.className = "result ok";
+        els.result.textContent = response.message || "Upgrade request received.";
+        els.requested.textContent = els.plan.options[els.plan.selectedIndex].text;
+      } catch (err) {
+        els.result.className = "result err";
+        els.result.textContent = err.message || "Unable to send upgrade request.";
+      } finally {
+        els.submit.disabled = false;
+        els.submit.textContent = "Request Upgrade ->";
+      }
+    });
+
+    loadStatus();
+  </script>
+</body>
+</html>

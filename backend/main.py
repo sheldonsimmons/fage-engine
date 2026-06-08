@@ -90,6 +90,8 @@ def _run_migrations():
             ("setup_complete", "BOOLEAN DEFAULT FALSE"),
             ("trial_call_cap", "INTEGER DEFAULT 500"),
             ("trial_spend_cap_usd", "FLOAT DEFAULT 10.0"),
+            ("requested_plan", "VARCHAR"),
+            ("upgrade_requested_at", "TIMESTAMP"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE trial_accounts ADD COLUMN {col} {defn}"))
