@@ -135,6 +135,40 @@
     .trial-check-copy {
       font-size: 11px; line-height: 1.4; color: var(--text-muted);
     }
+    .trial-test-panel {
+      margin-top: 14px; border-top: 1px solid var(--border);
+      padding-top: 14px;
+    }
+    .trial-test-grid {
+      display: grid; grid-template-columns: 180px 180px 1fr auto;
+      gap: 10px; align-items: end;
+    }
+    .trial-test-field { display: flex; flex-direction: column; gap: 5px; }
+    .trial-test-label {
+      font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted);
+    }
+    .trial-test-input,
+    .trial-test-textarea {
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: 7px; color: var(--text-primary); font-size: 12px;
+      padding: 9px 10px; box-sizing: border-box; width: 100%;
+    }
+    .trial-test-textarea {
+      min-height: 74px; resize: vertical; font-family: inherit; line-height: 1.45;
+    }
+    .trial-test-button {
+      background: var(--accent-green); color: #06120a; border: none;
+      border-radius: 7px; padding: 10px 16px; font-size: 12px; font-weight: 900;
+      cursor: pointer; white-space: nowrap;
+    }
+    .trial-test-button:disabled { opacity: 0.55; cursor: wait; }
+    .trial-test-result {
+      display: none; margin-top: 12px; border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px; background: rgba(13,17,23,0.55);
+      font-size: 12px; color: var(--text-muted); line-height: 1.6;
+    }
+    .trial-test-result strong { color: var(--text-primary); }
 
     /* ── Hero savings row ─────────────────────────────────────────────────────── */
     .hero-row {
@@ -263,6 +297,7 @@
       .hero-row, .metric-row, .breakdown-grid, .exec-help-grid { grid-template-columns: 1fr; }
       .trial-start-head { flex-direction: column; }
       .trial-check-grid { grid-template-columns: 1fr; }
+      .trial-test-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -328,25 +363,56 @@
         <div class="trial-check-copy">Your 30-day workspace and proxy key are active.</div>
       </div>
       <div class="trial-check" id="trialStepConnect">
-        <div class="trial-check-icon">2</div>
+        <div class="trial-check-icon" data-step="2">2</div>
         <div class="trial-check-label">Connect platform</div>
         <div class="trial-check-copy">Choose Salesforce, REST, Python, Node, Java, Ruby, or another source.</div>
       </div>
       <div class="trial-check" id="trialStepFields">
-        <div class="trial-check-icon">3</div>
+        <div class="trial-check-icon" data-step="3">3</div>
         <div class="trial-check-label">Map fields</div>
         <div class="trial-check-copy">Pick the fields, JSON keys, or properties CostPilot should route.</div>
       </div>
       <div class="trial-check" id="trialStepFirstCall">
-        <div class="trial-check-icon">4</div>
+        <div class="trial-check-icon" data-step="4">4</div>
         <div class="trial-check-label">Send test request</div>
         <div class="trial-check-copy">Use generated setup code or a test payload to create the first event.</div>
       </div>
       <div class="trial-check" id="trialStepReview">
-        <div class="trial-check-icon">5</div>
+        <div class="trial-check-icon" data-step="5">5</div>
         <div class="trial-check-label">Review savings</div>
         <div class="trial-check-copy">Savings, routing, audit, and AgentLake activity appear here.</div>
       </div>
+    </div>
+    <div class="trial-test-panel">
+      <div class="trial-start-eyebrow">Send test request</div>
+      <div class="trial-start-copy" style="margin-bottom:10px">
+        Run one sample through CostPilot now. It uses your trial workspace, so the result will appear in your own dashboard and audit log.
+      </div>
+      <div class="trial-test-grid">
+        <div class="trial-test-field">
+          <label class="trial-test-label" for="trialTestPlatform">Platform</label>
+          <select id="trialTestPlatform" class="trial-test-input">
+            <option value="salesforce">Salesforce</option>
+            <option value="servicenow">ServiceNow</option>
+            <option value="zendesk">Zendesk</option>
+            <option value="hubspot">HubSpot</option>
+            <option value="dynamics">Dynamics 365</option>
+            <option value="python">Python</option>
+            <option value="nodejs">Node.js</option>
+            <option value="rest">REST / API</option>
+          </select>
+        </div>
+        <div class="trial-test-field">
+          <label class="trial-test-label" for="trialTestDept">Department</label>
+          <input id="trialTestDept" class="trial-test-input" value="Support" />
+        </div>
+        <div class="trial-test-field">
+          <label class="trial-test-label" for="trialTestPayload">Payload</label>
+          <textarea id="trialTestPayload" class="trial-test-textarea">Customer is asking for a renewal contract review and legal approval. Summarize the risk, identify any clauses that need review, and recommend next steps.</textarea>
+        </div>
+        <button class="trial-test-button" id="trialTestBtn" onclick="sendTrialTestRequest()">Send Test Request →</button>
+      </div>
+      <div class="trial-test-result" id="trialTestResult"></div>
     </div>
   </div>
 
@@ -727,6 +793,7 @@ function updateTrialStartCard(data) {
 
   const setupDone = localStorage.getItem("cp_setup_complete") === "true";
   const platform = localStorage.getItem("cp_platform") || "";
+  const firstDept = (d.budget_summaries || [])[0]?.department;
   const company = localStorage.getItem("cp_trial_company") || "Your workspace";
   const copy = document.getElementById("trialStartCopy");
   if (copy) {
@@ -738,7 +805,106 @@ function updateTrialStartCard(data) {
   setTrialStep("trialStepFields", setupDone);
   setTrialStep("trialStepFirstCall", false);
   setTrialStep("trialStepReview", false);
+  const platformEl = document.getElementById("trialTestPlatform");
+  if (platformEl && platform && [...platformEl.options].some(o => o.value === platform)) {
+    platformEl.value = platform;
+  }
+  const deptEl = document.getElementById("trialTestDept");
+  if (deptEl && firstDept && !deptEl.dataset.touched) {
+    deptEl.value = displayDeptName(firstDept) || "Support";
+  }
   card.style.display = "block";
+}
+
+function trialTestHeaders(provider, wsId, secret, department, platform) {
+  const headers = {
+    "Content-Type": "application/json",
+    "X-CostPilot-Key": secret,
+    "X-Department": department,
+    "X-Platform": platform,
+  };
+  if (provider === "anthropic") {
+    headers["x-api-key"] = "costpilot-managed";
+    headers["anthropic-version"] = "2023-06-01";
+  } else {
+    headers.Authorization = "Bearer costpilot-managed";
+  }
+  return headers;
+}
+
+async function sendTrialTestRequest() {
+  const wsId = localStorage.getItem("cp_workspace_id") || "";
+  const secret = localStorage.getItem("cp_secret_key") || "";
+  const provider = localStorage.getItem("cp_provider") || "openai";
+  const platform = document.getElementById("trialTestPlatform").value || "rest";
+  const department = (document.getElementById("trialTestDept").value || "Support").trim();
+  const payload = (document.getElementById("trialTestPayload").value || "").trim();
+  const btn = document.getElementById("trialTestBtn");
+  const result = document.getElementById("trialTestResult");
+
+  if (!wsId || !secret) {
+    result.style.display = "block";
+    result.innerHTML = "<strong>Trial workspace missing.</strong> Start a trial again, then send a test request.";
+    return;
+  }
+  if (!payload) {
+    result.style.display = "block";
+    result.innerHTML = "<strong>Add a payload first.</strong>";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  result.style.display = "block";
+  result.textContent = "Routing through CostPilot...";
+
+  const isAnthropic = provider === "anthropic";
+  const url = isAnthropic ? `/v1/ws-${encodeURIComponent(wsId)}/messages` : `/v1/ws-${encodeURIComponent(wsId)}/chat/completions`;
+  const body = isAnthropic
+    ? {
+        model: "claude-sonnet-4-6",
+        max_tokens: 220,
+        messages: [{ role: "user", content: payload }],
+      }
+    : {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: payload }],
+        max_tokens: 220,
+      };
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: trialTestHeaders(provider, wsId, secret, department, platform),
+      body: JSON.stringify(body),
+    });
+    let data = {};
+    try { data = await resp.json(); } catch {}
+
+    const routing = resp.headers.get("X-CostPilot-Routing") || (resp.ok ? "ROUTED" : "ERROR");
+    const tier = resp.headers.get("X-CostPilot-Tier") || "Blocked";
+    const model = resp.headers.get("X-CostPilot-Model") || "—";
+    const cost = Number(resp.headers.get("X-CostPilot-Cost") || 0);
+    const saved = Number(resp.headers.get("X-CostPilot-Tokens-Saved") || 0);
+
+    if (!resp.ok && routing !== "BLOCKED") {
+      throw new Error(data.detail || data.error || `Request failed (${resp.status})`);
+    }
+
+    result.innerHTML = `
+      <strong>${routing === "BLOCKED" ? "Blocked by policy" : "Test request governed"}</strong><br>
+      Tier: <strong>${tier}</strong> · Model: <strong>${model}</strong> · Cost: <strong>${fmtUsd(cost)}</strong> · Tokens pruned: <strong>${fmtNum(saved)}</strong><br>
+      ${routing === "BLOCKED" ? (data.detail || "Sensitive content was stopped before reaching the model.") : "Refresh complete. Your dashboard and audit log now contain this workspace event."}
+    `;
+    setTrialStep("trialStepFirstCall", true);
+    setTrialStep("trialStepReview", true);
+    setTimeout(loadExec, 1200);
+  } catch (err) {
+    result.innerHTML = `<strong>Test failed.</strong><br>${String(err.message || err)}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send Test Request →";
+  }
 }
 
 // ── Health check + route "Open Operate" button ────────────────────────────────
