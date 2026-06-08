@@ -153,7 +153,7 @@
 </div>
 
 <!-- ── CEO Savings Banner ───────────────────────────────────────────────────── -->
-<div id="ceoSavingsBanner" style="
+<div id="ceoSavingsBanner" data-guide-id="kpiSpendCard" style="
   display:flex; align-items:stretch; gap:0;
   background:linear-gradient(135deg,rgba(46,160,67,0.12) 0%,rgba(33,139,57,0.06) 50%,rgba(26,115,46,0.10) 100%);
   border-bottom:1px solid rgba(46,160,67,0.25);
@@ -234,7 +234,7 @@
 </div>
 
 <!-- ── Department Health Strip ──────────────────────────────────────────────── -->
-<div id="deptHealthStrip" style="
+<div id="deptHealthStrip" data-guide-id="kpiThrottleCard" style="
   display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   padding:10px 20px; background:var(--bg-panel);
   border-bottom:1px solid var(--border); font-size:12px;">
@@ -261,7 +261,7 @@
     <div id="draggable-panels">
 
       <!-- ── Agentlake & Budget ───────────────────────────────────────────── -->
-      <div class="dp-wrap dash-section" data-panel-id="budgets-agents" id="budgetsAgentsSection">
+      <div class="dp-wrap dash-section" data-panel-id="budgets-agents" id="budgetsAgentsSection" data-guide-id="budgetsAgentsSection">
         <div class="dash-sec-head" onclick="togglePanel('agentBudgetBody','agentBudgetChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
           <span>▸ Agentlake Registry &amp; Budget
@@ -479,7 +479,7 @@
       </div>
 
       <!-- ── AI Decision Audit Log ──────────────────────────────────────────── -->
-      <div class="dp-wrap dash-section" data-panel-id="audit" id="auditSection">
+      <div class="dp-wrap dash-section" data-panel-id="audit" id="auditSection" data-guide-id="auditSection">
         <div id="blockedAlertBanner" style="display:none">
           <div class="blocked-banner-inner">
             <span class="blocked-banner-icon">🛡</span>
@@ -547,7 +547,7 @@
   </div><!-- end dash-left -->
 
   <!-- ── Right column — Governance Event Stream (always visible) ──────────── -->
-  <div class="dash-right" id="eventStreamSection">
+  <div class="dash-right" id="eventStreamSection" data-guide-id="eventStreamSection">
     <div class="stream-head">
       <div class="stream-head-row">
         <div class="stream-head-label">▸ Governance Event Stream</div>

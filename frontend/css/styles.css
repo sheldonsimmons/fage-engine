@@ -462,6 +462,10 @@ body {
   margin-left: 8px;
 }
 .tour-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tour-btn.active {
+  color: #06111f !important; background: var(--accent) !important; border-color: var(--accent) !important;
+  font-weight: 700;
+}
 
 /* ── Tour Overlay & Box ──────────────────────────────────────────────────────── */
 .tour-overlay {
@@ -483,7 +487,19 @@ body {
 .tour-btn-next:hover { opacity: 0.85; }
 .tour-btn-prev   { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; padding: 7px 14px; font-size: 12px; cursor: pointer; }
 .tour-btn-prev:hover { border-color: var(--text-muted); color: var(--text-primary); }
-.tour-highlight  { outline: 2px solid var(--accent) !important; outline-offset: 4px; border-radius: 8px; position: relative; z-index: 910; }
+.tour-highlight  {
+  outline: 2px solid var(--accent) !important; outline-offset: 5px;
+  border-radius: 8px; position: relative; z-index: 910;
+  box-shadow: 0 0 0 5px rgba(88,166,255,0.12), 0 0 28px rgba(88,166,255,0.25);
+}
+.tour-highlight::after {
+  content: attr(data-guide-label);
+  position: absolute; top: -13px; left: 14px; z-index: 912;
+  max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: var(--accent); color: #06111f; border-radius: 999px;
+  padding: 3px 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35); pointer-events: none;
+}
 
 /* ── Footer ───────────────────────────────────────────────────────────────────── */
 .footer {

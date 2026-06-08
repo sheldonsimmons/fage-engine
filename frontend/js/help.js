@@ -119,6 +119,14 @@ let tourBox      = null;
 let tourActive   = false;
 let _activeTourSteps = null; // set at startTour time — uses PAGE_TOUR_STEPS if defined
 
+const TOUR_TARGET_ALIASES = {
+  kpiSpendCard: "ceoSavingsBanner",
+  kpiTokensSavedCard: "ceoSavingsBanner",
+  kpiAgentsCard: "budgetsAgentsSection",
+  kpiThrottleCard: "deptHealthStrip",
+  kpiBlockedCard: "auditSection",
+};
+
 // ── Contextual tooltip ────────────────────────────────────────────────────────
 function showHelp(panelId) {
   const info = HELP_CONTENT[panelId];
@@ -161,9 +169,14 @@ function showHelp(panelId) {
 
 // ── Guided tour ───────────────────────────────────────────────────────────────
 function startTour() {
+  if (tourActive) {
+    endTour();
+    return;
+  }
   tourStep         = 0;
   tourActive       = true;
   _activeTourSteps = window.PAGE_TOUR_STEPS || TOUR_STEPS;
+  setTourButtonState(true);
 
   // Overlay
   tourOverlay = document.createElement("div");
@@ -180,15 +193,69 @@ function startTour() {
   renderTourStep();
 }
 
+function setTourButtonState(active) {
+  document.querySelectorAll(".tour-btn").forEach(btn => {
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.textContent = active ? "Exit Guide" : "? Guide";
+  });
+}
+
+function isVisibleTarget(el) {
+  if (!el) return false;
+  const style = window.getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  return style.display !== "none" && style.visibility !== "hidden" && rect.width > 1 && rect.height > 1;
+}
+
+function resolveTourTarget(step) {
+  if (!step) return null;
+  const candidates = [
+    step.selector ? document.querySelector(step.selector) : null,
+    step.guideId ? document.querySelector(`[data-guide-id="${step.guideId}"]`) : null,
+    step.target ? document.querySelector(`[data-guide-id="${step.target}"]`) : null,
+    step.target ? document.getElementById(step.target) : null,
+    step.target && TOUR_TARGET_ALIASES[step.target] ? document.getElementById(TOUR_TARGET_ALIASES[step.target]) : null,
+    step.target && TOUR_TARGET_ALIASES[step.target] ? document.querySelector(`[data-guide-id="${TOUR_TARGET_ALIASES[step.target]}"]`) : null,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (isVisibleTarget(candidate)) return preferredHighlightTarget(candidate);
+    const visibleParent = candidate.closest?.(".dash-section,.panel,.rpt-card,.ws-panel,.kpi-card,.dp-wrap,[data-guide-id]");
+    if (isVisibleTarget(visibleParent)) return preferredHighlightTarget(visibleParent);
+  }
+  return null;
+}
+
+function preferredHighlightTarget(el) {
+  if (!el) return null;
+  if (["TBODY", "THEAD", "TR"].includes(el.tagName)) {
+    return el.closest("table,.dash-section,.panel") || el;
+  }
+  return el;
+}
+
+function clearTourHighlights() {
+  document.querySelectorAll(".tour-highlight").forEach(el => {
+    el.classList.remove("tour-highlight");
+    delete el.dataset.guideLabel;
+  });
+}
+
 function renderTourStep() {
   const steps  = _activeTourSteps || TOUR_STEPS;
   const step   = steps[tourStep];
-  const target = document.getElementById(step.target);
+  const target = resolveTourTarget(step);
 
   // Scroll target into view
   if (target) {
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     setTimeout(() => positionTourBox(target, step), 350);
+  } else {
+    setTimeout(() => {
+      tourBox.style.top = (window.scrollY + 84) + "px";
+      tourBox.style.left = Math.max(12, window.innerWidth - 380) + "px";
+    }, 0);
   }
 
   tourBox.innerHTML = `
@@ -208,8 +275,11 @@ function renderTourStep() {
   `;
 
   // Highlight target
-  document.querySelectorAll(".tour-highlight").forEach(el => el.classList.remove("tour-highlight"));
-  if (target) target.classList.add("tour-highlight");
+  clearTourHighlights();
+  if (target) {
+    target.dataset.guideLabel = step.title;
+    target.classList.add("tour-highlight");
+  }
 }
 
 function positionTourBox(target, step) {
@@ -260,7 +330,8 @@ function endTour() {
   tourActive = false;
   if (tourOverlay) { tourOverlay.remove(); tourOverlay = null; }
   if (tourBox)     { tourBox.remove();     tourBox     = null; }
-  document.querySelectorAll(".tour-highlight").forEach(el => el.classList.remove("tour-highlight"));
+  clearTourHighlights();
+  setTourButtonState(false);
   // Remember tour was completed
   try { localStorage.setItem("costpilot_tour_done", "1"); } catch(e) {}
 }
