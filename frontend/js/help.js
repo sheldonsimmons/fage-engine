@@ -253,7 +253,7 @@ function renderTourStep() {
     setTimeout(() => positionTourBox(target, step), 350);
   } else {
     setTimeout(() => {
-      tourBox.style.top = (window.scrollY + 84) + "px";
+      tourBox.style.top = "84px";
       tourBox.style.left = Math.max(12, window.innerWidth - 380) + "px";
     }, 0);
   }
@@ -284,28 +284,28 @@ function renderTourStep() {
 
 function positionTourBox(target, step) {
   const rect   = target.getBoundingClientRect();
-  const boxW   = 340;
+  const boxW   = Math.min(340, window.innerWidth - 24);
   const boxH   = tourBox.offsetHeight || 180;
   const margin = 16;
   let top, left;
 
   if (step.position === "bottom") {
-    top  = rect.bottom + window.scrollY + margin;
-    left = rect.left   + window.scrollX + (rect.width / 2) - (boxW / 2);
+    top  = rect.bottom + margin;
+    left = rect.left + (rect.width / 2) - (boxW / 2);
   } else if (step.position === "top") {
-    top  = rect.top  + window.scrollY - boxH - margin;
-    left = rect.left + window.scrollX + (rect.width / 2) - (boxW / 2);
+    top  = rect.top - boxH - margin;
+    left = rect.left + (rect.width / 2) - (boxW / 2);
   } else if (step.position === "right") {
-    top  = rect.top  + window.scrollY + (rect.height / 2) - (boxH / 2);
-    left = rect.right + window.scrollX + margin;
+    top  = rect.top + (rect.height / 2) - (boxH / 2);
+    left = rect.right + margin;
   } else {
-    top  = rect.top  + window.scrollY + (rect.height / 2) - (boxH / 2);
-    left = rect.left + window.scrollX - boxW - margin;
+    top  = rect.top + (rect.height / 2) - (boxH / 2);
+    left = rect.left - boxW - margin;
   }
 
   // Keep within viewport
   left = Math.max(12, Math.min(left, window.innerWidth - boxW - 12));
-  top  = Math.max(12 + window.scrollY, top);
+  top  = Math.max(12, Math.min(top, window.innerHeight - Math.min(boxH, window.innerHeight - 24) - 12));
 
   tourBox.style.top  = top  + "px";
   tourBox.style.left = left + "px";
