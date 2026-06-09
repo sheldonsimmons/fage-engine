@@ -257,7 +257,7 @@ function _renderRoutingRows(events) {
   tbody.innerHTML = events.map(e => {
     const ts = e.timestamp
       ? new Date(e.timestamp + "Z").toLocaleTimeString("en-US", {
-          hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+          hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true
         })
       : "—";
     const isBlocked = (e.decision_outcome || "").toLowerCase().includes("blocked");

@@ -104,7 +104,7 @@ function _fmtStreamTs(iso) {
   if (!iso) return "—";
   return new Date(iso + "Z").toLocaleTimeString("en-US", {
     timeZone: "America/Chicago",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true,
   });
 }
 
