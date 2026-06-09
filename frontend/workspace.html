@@ -147,9 +147,23 @@
     .journey-step.active .journey-icon { border-color:var(--accent); color:var(--accent); }
     .journey-label { font-size:12px; font-weight:800; color:var(--text-primary); margin-bottom:3px; }
     .journey-step-copy { font-size:11px; line-height:1.4; color:var(--text-muted); }
-    .test-panel {
+    .sample-strip {
       margin-top:16px; border-top:1px solid var(--border); padding-top:16px;
-      display:grid; grid-template-columns:160px 180px 1fr auto; gap:10px; align-items:end;
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    }
+    .sample-label {
+      font-size:10px; font-weight:800; color:var(--text-muted);
+      letter-spacing:.08em; text-transform:uppercase;
+    }
+    .sample-btn {
+      background:var(--bg-base); color:var(--text-primary); border:1px solid var(--border);
+      border-radius:999px; padding:7px 11px; font:inherit; font-size:11px; font-weight:800;
+      cursor:pointer;
+    }
+    .sample-btn:hover, .sample-btn.active { color:var(--accent); border-color:var(--accent); }
+    .test-panel {
+      margin-top:12px;
+      display:grid; grid-template-columns:150px 170px 190px 1fr auto; gap:10px; align-items:end;
     }
     .test-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
     .test-label { font-size:10px; font-weight:800; color:var(--text-muted); letter-spacing:.08em; text-transform:uppercase; }
@@ -232,6 +246,14 @@
       <div class="journey-step" id="journeyTest"><div class="journey-icon" data-step="4">4</div><div class="journey-label">Test request</div><div class="journey-step-copy">Send one sample through CostPilot.</div></div>
       <div class="journey-step" id="journeyReview"><div class="journey-icon" data-step="5">5</div><div class="journey-label">Review savings</div><div class="journey-step-copy">Open dashboard, audit, reports, then upgrade.</div></div>
     </div>
+    <div id="sampleStrip" class="sample-strip">
+      <span class="sample-label">Try sample data</span>
+      <button class="sample-btn" type="button" data-sample="salesforce" onclick="loadWorkspaceSample('salesforce')">Salesforce Case</button>
+      <button class="sample-btn" type="button" data-sample="servicenow" onclick="loadWorkspaceSample('servicenow')">ServiceNow Incident</button>
+      <button class="sample-btn" type="button" data-sample="hubspot" onclick="loadWorkspaceSample('hubspot')">HubSpot Ticket</button>
+      <button class="sample-btn" type="button" data-sample="zendesk" onclick="loadWorkspaceSample('zendesk')">Zendesk Ticket</button>
+      <button class="sample-btn" type="button" data-sample="rest" onclick="loadWorkspaceSample('rest')">REST/API</button>
+    </div>
     <div id="workspaceTestPanel" class="test-panel">
       <div class="test-field">
         <label class="test-label" for="workspaceTestPlatform">Platform</label>
@@ -251,6 +273,10 @@
       <div class="test-field">
         <label class="test-label" for="workspaceTestDept">Department</label>
         <input id="workspaceTestDept" class="test-input" value="Support" />
+      </div>
+      <div class="test-field">
+        <label class="test-label" for="workspaceTestAgent">Agent Name</label>
+        <input id="workspaceTestAgent" class="test-input" value="Support Sample Bot" />
       </div>
       <div class="test-field">
         <label class="test-label" for="workspaceTestPayload">Payload</label>
@@ -401,6 +427,59 @@ const WS    = localStorage.getItem("cp_workspace_id") || "";
 const SK    = localStorage.getItem("cp_secret_key")   || "";
 const PROXY = `https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-${WS}`;
 
+const WORKSPACE_SAMPLES = {
+  salesforce: {
+    platform: "salesforce",
+    department: "Support",
+    agent: "SF-CaseBot",
+    payload: `Salesforce Case
+Object: Case
+CaseNumber: 00042198
+Priority: High
+Subject: Employee portal access issue
+Description: Customer says an employee cannot access the benefits portal and their profile appears to show another employee's dependent information. Summarize the issue, identify risk level, and recommend next steps for support and compliance review.`
+  },
+  servicenow: {
+    platform: "servicenow",
+    department: "IT",
+    agent: "SN-IncidentBot",
+    payload: `ServiceNow Incident
+Table: incident
+Number: INC0012847
+Priority: 2 - High
+Short description: Payroll access failure after SSO update
+Description: Multiple employees cannot access payroll after a single sign-on configuration change. One user reports seeing another user's profile details after retrying login. Summarize impact, urgency, and remediation steps.`
+  },
+  hubspot: {
+    platform: "hubspot",
+    department: "Sales",
+    agent: "HS-TicketBot",
+    payload: `HubSpot Ticket
+Object: ticket
+Pipeline: Sales Support
+Subject: Renewal contract and pricing question
+Content: Customer is asking whether we can summarize renewal terms, identify risky clauses, and prepare a response for legal review before signature. They also asked whether pricing changes apply this quarter.`
+  },
+  zendesk: {
+    platform: "zendesk",
+    department: "Support",
+    agent: "ZD-TicketBot",
+    payload: `Zendesk Ticket
+Ticket ID: 883194
+Priority: Urgent
+Requester message: I need help with a locked account. The customer provided account verification details in the ticket and is asking for immediate access restoration. Summarize the customer need and flag any privacy or compliance concerns.`
+  },
+  rest: {
+    platform: "rest",
+    department: "Operations",
+    agent: "REST-WorkflowBot",
+    payload: `REST/API Request
+Source: internal workflow
+Route: /ai/summarize-risk
+Payload: Vendor renewal packet includes contract terms, liability language, service-level commitments, and a request for approval by end of day. Summarize the business risk and recommend the correct review path.`
+  }
+};
+
 function fmt(n) {
   if (n == null) return "—";
   if (n >= 1000) return "$" + (n/1000).toFixed(1) + "K";
@@ -447,10 +526,15 @@ function updateJourney(d) {
   const testPanel = document.getElementById("workspaceTestPanel");
   const platformEl = document.getElementById("workspaceTestPlatform");
   const deptEl = document.getElementById("workspaceTestDept");
+  const agentEl = document.getElementById("workspaceTestAgent");
   const firstDept = Object.keys(d.departments || {})[0];
 
   if (platformEl && [...platformEl.options].some(o => o.value === platform)) platformEl.value = platform;
   if (deptEl && firstDept && !deptEl.dataset.touched) deptEl.value = firstDept;
+  if (agentEl && platform && !agentEl.dataset.touched) {
+    const label = platformEl?.selectedOptions?.[0]?.textContent || "Sample";
+    agentEl.value = `${label.replace(" / API", "")} Sample Bot`;
+  }
 
   setJourneyStep("journeyTrial", true);
   setJourneyStep("journeySetup", setupDone, !setupDone);
@@ -463,7 +547,7 @@ function updateJourney(d) {
     copy.textContent = requestedPlan
       ? `CostPilot is routing traffic and your ${requestedPlan} upgrade request is recorded. Review savings and audit activity below.`
       : "CostPilot is routing traffic. Review savings, audit activity, and upgrade when you are ready to continue after trial.";
-    if (testPanel) testPanel.style.display = "none";
+    if (testPanel) testPanel.style.display = "grid";
   } else if (setupDone) {
     title.textContent = "Send your first governed AI request.";
     copy.textContent = "Your setup is ready. Send one test payload here or run your generated integration code to prove the flow end to end.";
@@ -476,12 +560,39 @@ function updateJourney(d) {
   card.style.display = "block";
 }
 
-function workspaceTestHeaders(provider, wsId, secret, department, platform) {
+function loadWorkspaceSample(key) {
+  const sample = WORKSPACE_SAMPLES[key] || WORKSPACE_SAMPLES.rest;
+  const platformEl = document.getElementById("workspaceTestPlatform");
+  const deptEl = document.getElementById("workspaceTestDept");
+  const agentEl = document.getElementById("workspaceTestAgent");
+  const payloadEl = document.getElementById("workspaceTestPayload");
+  if (platformEl) platformEl.value = sample.platform;
+  if (deptEl) {
+    deptEl.value = sample.department;
+    deptEl.dataset.touched = "1";
+  }
+  if (agentEl) {
+    agentEl.value = sample.agent;
+    agentEl.dataset.touched = "1";
+  }
+  if (payloadEl) payloadEl.value = sample.payload;
+  document.querySelectorAll(".sample-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.sample === key);
+  });
+  const result = document.getElementById("workspaceTestResult");
+  if (result) {
+    result.style.display = "block";
+    result.innerHTML = `<strong>${sample.agent} loaded.</strong><br>Click Send Test Request to route this sample through CostPilot.`;
+  }
+}
+
+function workspaceTestHeaders(provider, wsId, secret, department, platform, agentName) {
   const headers = {
     "Content-Type": "application/json",
     "X-CostPilot-Key": secret,
     "X-Department": department,
     "X-Platform": platform,
+    "X-Agent-Name": agentName,
   };
   if (provider === "anthropic") {
     headers["x-api-key"] = "costpilot-managed";
@@ -496,6 +607,7 @@ async function sendWorkspaceTestRequest() {
   const provider = localStorage.getItem("cp_provider") || "openai";
   const platform = document.getElementById("workspaceTestPlatform").value || "rest";
   const department = (document.getElementById("workspaceTestDept").value || "Support").trim();
+  const agentName = (document.getElementById("workspaceTestAgent").value || "Sample Bot").trim();
   const payload = (document.getElementById("workspaceTestPayload").value || "").trim();
   const btn = document.getElementById("workspaceTestBtn");
   const result = document.getElementById("workspaceTestResult");
@@ -525,7 +637,7 @@ async function sendWorkspaceTestRequest() {
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: workspaceTestHeaders(provider, WS, SK, department, platform),
+      headers: workspaceTestHeaders(provider, WS, SK, department, platform, agentName),
       body: JSON.stringify(body),
     });
     let data = {};
@@ -544,7 +656,7 @@ async function sendWorkspaceTestRequest() {
     result.innerHTML = `
       <strong>${routing === "BLOCKED" ? "Blocked by policy" : "Test request governed"}</strong><br>
       Tier: <strong>${tier}</strong> · Model: <strong>${model}</strong> · Cost: <strong>${fmtUsd(cost)}</strong> · Tokens pruned: <strong>${fmtNum(saved)}</strong><br>
-      ${routing === "BLOCKED" ? (data.detail || "Sensitive content was stopped before reaching the model.") : "Your dashboard and audit log now contain this event."}
+      ${routing === "BLOCKED" ? (data.detail || "Sensitive content was stopped before reaching the model.") : `${agentName} now appears in AgentLake, audit, and reports for ${department}.`}
     `;
     setJourneyStep("journeyTest", true);
     setJourneyStep("journeyReview", true);
@@ -698,6 +810,8 @@ async function loadAgents() {
 }
 
 load();
+document.getElementById("workspaceTestDept")?.addEventListener("input", e => { e.target.dataset.touched = "1"; });
+document.getElementById("workspaceTestAgent")?.addEventListener("input", e => { e.target.dataset.touched = "1"; });
 </script>
 </body>
 </html>

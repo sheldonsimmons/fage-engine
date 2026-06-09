@@ -229,9 +229,9 @@ def _prune_messages(messages: list) -> tuple:
     return pruned, saved
 
 
-def _ensure_agent(db, workspace_id: str, department: str, platform: str):
+def _ensure_agent(db, workspace_id: str, department: str, platform: str, agent_name: str = None):
     """Auto-register an agent for this workspace+department on first call."""
-    agent_name = f"{platform.capitalize()} · {department}"
+    agent_name = (agent_name or "").strip() or f"{platform.capitalize()} · {department}"
     dept_key   = f"{workspace_id}:{department}"
     existing   = db.query(RegisteredAgent).filter_by(
         name=agent_name, department=dept_key
@@ -420,6 +420,7 @@ async def proxy_openai(workspace_id: str, request: Request):
     secret_key = request.headers.get("X-CostPilot-Key", "")
     department = request.headers.get("X-Department", "default")
     platform   = request.headers.get("X-Platform", "api")
+    agent_name = request.headers.get("X-Agent-Name", "")
     auth_header = request.headers.get("Authorization", "")
 
     db = SessionLocal()
@@ -496,7 +497,7 @@ async def proxy_openai(workspace_id: str, request: Request):
         risk       = "high" if st["action"] in ("flag","escalate") else ("medium" if complex_ else "low")
 
         # 5. Log + auto-register
-        agent = _ensure_agent(db, workspace_id, department, platform)
+        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
@@ -528,6 +529,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
     secret_key    = request.headers.get("X-CostPilot-Key", "")
     department    = request.headers.get("X-Department", "default")
     platform      = request.headers.get("X-Platform", "api")
+    agent_name    = request.headers.get("X-Agent-Name", "")
     anthropic_key = request.headers.get("x-api-key", "")
 
     db = SessionLocal()
@@ -610,7 +612,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
 
         # 4. Log + 5. Auto-register agent
-        agent = _ensure_agent(db, workspace_id, department, platform)
+        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
