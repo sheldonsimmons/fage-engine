@@ -386,6 +386,10 @@ const OB_PLATFORM_COPY = {
     fieldHint: "Prompt label · Salesforce field API name, standard or custom",
     fieldHeader: "Salesforce Field API Name",
     fieldPlaceholder: "Subject, Description, Custom_Text__c",
+    returnLabel: "Salesforce Return Fields",
+    returnHint: "Optional · Salesforce field API name to update after CostPilot responds",
+    returnHeader: "Salesforce Field API Name",
+    returnPlaceholder: "CostPilot_AI_Response__c",
     addFieldLabel: "+ Add Salesforce Field",
     emptyFieldsError: "Add at least one Salesforce field API name.",
     emptyObjectError: "Enter a Salesforce object API name."
@@ -399,6 +403,10 @@ const OB_PLATFORM_COPY = {
     fieldHint: "Prompt label · ServiceNow column sys_name",
     fieldHeader: "ServiceNow Column",
     fieldPlaceholder: "short_description, description, u_contract_text",
+    returnLabel: "ServiceNow Return Columns",
+    returnHint: "Optional · ServiceNow column to update after CostPilot responds",
+    returnHeader: "ServiceNow Column",
+    returnPlaceholder: "u_costpilot_response",
     addFieldLabel: "+ Add ServiceNow Column",
     emptyFieldsError: "Add at least one ServiceNow column.",
     emptyObjectError: "Enter a ServiceNow table name."
@@ -412,6 +420,10 @@ const OB_PLATFORM_COPY = {
     fieldHint: "Prompt label · HubSpot property internal name",
     fieldHeader: "HubSpot Property",
     fieldPlaceholder: "subject, hs_note_body, dealstage",
+    returnLabel: "HubSpot Return Properties",
+    returnHint: "Optional · HubSpot output property from your custom code action",
+    returnHeader: "HubSpot Property",
+    returnPlaceholder: "costpilot_ai_response",
     addFieldLabel: "+ Add HubSpot Property",
     emptyFieldsError: "Add at least one HubSpot property.",
     emptyObjectError: "Enter a HubSpot object type."
@@ -425,6 +437,10 @@ const OB_PLATFORM_COPY = {
     fieldHint: "Prompt label · Dataverse field schema or logical name",
     fieldHeader: "Dataverse Field",
     fieldPlaceholder: "title, description, new_contracttext",
+    returnLabel: "Dataverse Return Fields",
+    returnHint: "Optional · Dataverse field to update after CostPilot responds",
+    returnHeader: "Dataverse Field",
+    returnPlaceholder: "new_costpilotresponse",
     addFieldLabel: "+ Add Dataverse Field",
     emptyFieldsError: "Add at least one Dataverse field.",
     emptyObjectError: "Enter a Dynamics table name."
@@ -438,6 +454,10 @@ const OB_PLATFORM_COPY = {
     fieldHint: "Prompt label · Zendesk field name or custom field identifier",
     fieldHeader: "Zendesk Field",
     fieldPlaceholder: "subject, description, comment, custom_field_123",
+    returnLabel: "Zendesk Return Fields",
+    returnHint: "Optional · Zendesk custom ticket field or internal-note output key",
+    returnHeader: "Zendesk Field",
+    returnPlaceholder: "custom_field_123",
     addFieldLabel: "+ Add Zendesk Field",
     emptyFieldsError: "Add at least one Zendesk field.",
     emptyObjectError: "Enter a Zendesk record type."
@@ -451,6 +471,10 @@ const OB_PLATFORM_COPY = {
     fieldHint: "Prompt label · variable, JSON key, or request property from your code",
     fieldHeader: "Request Property",
     fieldPlaceholder: "content, message, contract_text, customer_name",
+    returnLabel: "Return Values",
+    returnHint: "Optional · response keys your app should read or persist",
+    returnHeader: "Response Key",
+    returnPlaceholder: "costpilot_response",
     addFieldLabel: "+ Add Request Property",
     emptyFieldsError: "Add at least one request property or variable.",
     emptyObjectError: "Enter the function, route, worker, or request type."
@@ -471,8 +495,11 @@ function selectObPlatform(platform) {
   const objectLabel = document.getElementById("obObjectLabel");
   const fieldsLabel = document.getElementById("obFieldsLabel");
   const fieldsLabelHint = document.getElementById("obFieldsLabelHint");
+  const returnFieldsLabel = document.getElementById("obReturnFieldsLabel");
+  const returnFieldsLabelHint = document.getElementById("obReturnFieldsLabelHint");
   const agentLabel = document.getElementById("obAgentLabel");
   const addFieldBtn = document.getElementById("obAddFieldBtn");
+  const addReturnFieldBtn = document.getElementById("obAddReturnFieldBtn");
   const selectedSummary = document.getElementById("obSelectedPlatformSummary");
   const selectedName = document.getElementById("obSelectedPlatformName");
   document.querySelectorAll("#screen-5 .ob-platform-group").forEach(group => { group.style.display = "none"; });
@@ -481,8 +508,11 @@ function selectObPlatform(platform) {
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
   if (fieldsLabel) fieldsLabel.childNodes[0].textContent = copy.fieldsLabel + " ";
   if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;
+  if (returnFieldsLabel) returnFieldsLabel.childNodes[0].textContent = copy.returnLabel + " ";
+  if (returnFieldsLabelHint) returnFieldsLabelHint.textContent = copy.returnHint;
   if (agentLabel) agentLabel.textContent = copy.agentLabel;
   if (addFieldBtn) addFieldBtn.textContent = copy.addFieldLabel;
+  if (addReturnFieldBtn) addReturnFieldBtn.textContent = "+ Add Return Field";
 
   const objInput = document.getElementById("obPlatObject");
   const objOptions = document.getElementById("obPlatObjectOptions");
@@ -509,6 +539,7 @@ function selectObPlatform(platform) {
 
   // Set default fields and hint for this platform
   _initObFields(platform);
+  _initObReturnFields(platform);
 }
 
 // ── Field entry management ────────────────────────────────────────────────────
@@ -559,6 +590,64 @@ const OB_FIELD_DEFAULTS = {
 };
 ["python","nodejs","java","ruby","rest"].forEach(p => OB_FIELD_DEFAULTS[p] = OB_FIELD_DEFAULTS.custom);
 
+const OB_RETURN_DEFAULTS = {
+  salesforce: {
+    hint: "Optional. Create these fields on the Salesforce object if you want AI output and routing metadata written back.",
+    fields: [
+      { label: "AI Response",      name: "CostPilot_AI_Response__c",        source: "response" },
+      { label: "Model Tier",       name: "CostPilot_Model_Tier__c",         source: "tier" },
+      { label: "Routing Decision", name: "CostPilot_Routing_Decision__c",  source: "routing" },
+      { label: "Cost USD",         name: "CostPilot_Cost_USD__c",           source: "cost" },
+    ]
+  },
+  servicenow: {
+    hint: "Optional. Use existing or custom columns if you want CostPilot results written back to the record.",
+    fields: [
+      { label: "AI Response",      name: "u_costpilot_response",           source: "response" },
+      { label: "Model Tier",       name: "u_costpilot_model_tier",         source: "tier" },
+      { label: "Routing Decision", name: "u_costpilot_routing_decision",  source: "routing" },
+      { label: "Cost USD",         name: "u_costpilot_cost_usd",           source: "cost" },
+    ]
+  },
+  hubspot: {
+    hint: "Optional. Add matching output fields/properties to your workflow if you want values saved in HubSpot.",
+    fields: [
+      { label: "AI Response",      name: "costpilot_ai_response",          source: "response" },
+      { label: "Model Tier",       name: "costpilot_model_tier",           source: "tier" },
+      { label: "Routing Decision", name: "costpilot_routing_decision",    source: "routing" },
+      { label: "Cost USD",         name: "costpilot_cost_usd",             source: "cost" },
+    ]
+  },
+  dynamics: {
+    hint: "Optional. Use Dataverse fields you want the Power Automate update step to write back.",
+    fields: [
+      { label: "AI Response",      name: "new_costpilotresponse",          source: "response" },
+      { label: "Model Tier",       name: "new_costpilotmodeltier",         source: "tier" },
+      { label: "Routing Decision", name: "new_costpilotroutingdecision",  source: "routing" },
+      { label: "Cost USD",         name: "new_costpilotcostusd",           source: "cost" },
+    ]
+  },
+  zendesk: {
+    hint: "Optional. Use ticket custom fields or return keys your Zendesk workflow will map after the function runs.",
+    fields: [
+      { label: "AI Response",      name: "costpilot_ai_response",          source: "response" },
+      { label: "Model Tier",       name: "costpilot_model_tier",           source: "tier" },
+      { label: "Routing Decision", name: "costpilot_routing_decision",    source: "routing" },
+      { label: "Cost USD",         name: "costpilot_cost_usd",             source: "cost" },
+    ]
+  },
+  custom: {
+    hint: "Optional. These are response keys your app can read from the CostPilot result and save wherever it needs.",
+    fields: [
+      { label: "AI Response",      name: "costpilot_response",             source: "response" },
+      { label: "Model Tier",       name: "costpilot_model_tier",           source: "tier" },
+      { label: "Routing Decision", name: "costpilot_routing_decision",    source: "routing" },
+      { label: "Cost USD",         name: "costpilot_cost_usd",             source: "cost" },
+    ]
+  },
+};
+["python","nodejs","java","ruby","rest"].forEach(p => OB_RETURN_DEFAULTS[p] = OB_RETURN_DEFAULTS.custom);
+
 function _initObFields(platform) {
   const defaults = (OB_FIELD_DEFAULTS[platform] || OB_FIELD_DEFAULTS.custom);
   const hint  = document.getElementById("obFieldsHint");
@@ -567,6 +656,7 @@ function _initObFields(platform) {
 }
 
 let _obFieldData = [];
+let _obReturnFieldData = [];
 
 function _renderObFields(fields) {
   _obFieldData = fields;
@@ -620,6 +710,80 @@ function getObFields() {
   // Sync from DOM before reading (handles active inputs that have not blurred yet)
   const result = _syncObFieldDataFromDom(false).filter(f => f.name.trim());
   return result.length ? result : _obFieldData.filter(f => f.name.trim());
+}
+
+function _initObReturnFields(platform) {
+  const defaults = (OB_RETURN_DEFAULTS[platform] || OB_RETURN_DEFAULTS.custom);
+  const hint  = document.getElementById("obReturnFieldsHint");
+  if (hint) hint.textContent = defaults.hint;
+  _renderObReturnFields(defaults.fields.map(f => ({ ...f })));
+}
+
+function _renderObReturnFields(fields) {
+  _obReturnFieldData = fields;
+  const list = document.getElementById("obReturnFieldsList");
+  if (!list) return;
+  const cfg = OB_PLATFORMS[obSelectedPlatform] || {};
+  const copy = OB_PLATFORM_COPY[obSelectedPlatform] || (cfg.kind === "code" ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
+  list.innerHTML = fields.map((f, i) => `
+    <div class="ob-map-field-row">
+      <select onchange="_obReturnFieldData[${i}].source=this.value"
+        class="ob-map-field-label" style="min-width:150px">
+        ${_returnSourceOptions(f.source)}
+      </select>
+      <span style="color:var(--text-muted,#8b949e);font-size:12px;flex-shrink:0">→</span>
+      <input type="text" value="${_obEsc(f.name)}" placeholder="${_obEsc(copy.returnPlaceholder)}"
+        oninput="_obReturnFieldData[${i}].name=this.value"
+        class="ob-map-field-name" />
+      <button type="button" onclick="removeObReturnField(${i})"
+        style="background:none;border:none;color:var(--text-muted,#8b949e);cursor:pointer;font-size:16px;padding:0 4px;line-height:1">×</button>
+    </div>`).join("");
+}
+
+function _returnSourceOptions(current) {
+  const options = [
+    ["response", "AI Response"],
+    ["tier", "Model Tier"],
+    ["model", "Model Name"],
+    ["routing", "Routing Decision"],
+    ["risk", "Risk Level"],
+    ["cost", "Cost USD"],
+    ["tokens_saved", "Tokens Saved"],
+    ["audit_id", "Audit ID"],
+  ];
+  return options.map(([value, label]) =>
+    `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`
+  ).join("");
+}
+
+function addObReturnField() {
+  _syncObReturnFieldDataFromDom(true);
+  _obReturnFieldData.push({ source: "response", name: "" });
+  _renderObReturnFields(_obReturnFieldData);
+  const inputs = document.querySelectorAll("#obReturnFieldsList input");
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+function removeObReturnField(i) {
+  _syncObReturnFieldDataFromDom(true);
+  _obReturnFieldData.splice(i, 1);
+  _renderObReturnFields(_obReturnFieldData);
+}
+
+function _syncObReturnFieldDataFromDom(keepEmpty = false) {
+  const rows = document.querySelectorAll("#obReturnFieldsList .ob-map-field-row");
+  const result = [];
+  rows.forEach(row => {
+    const source = row.querySelector("select")?.value || "response";
+    const name = (row.querySelector("input")?.value || "").trim();
+    if (keepEmpty || name) result.push({ source, name });
+  });
+  _obReturnFieldData = result;
+  return result;
+}
+
+function getObReturnFields() {
+  return _syncObReturnFieldDataFromDom(false).filter(f => f.name.trim());
 }
 
 function _obEsc(s) {
@@ -678,13 +842,16 @@ function _obCodeSection(label, hint, code) {
     </div>`;
 }
 
-function _platformMappingHtml(platform, obj, fields, extraRows = "") {
+function _platformMappingHtml(platform, obj, fields, returnFields = [], extraRows = "") {
   const cfg = OB_PLATFORMS[platform] || {};
   const copy = OB_PLATFORM_COPY[platform] || (cfg.kind === "code" ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
   const label = cfg.label || platform;
   const mappingRows = fields.map(f =>
     `<div class="ob-field-row"><span>${_obEsc(f.label || f.name)}</span><span class="mono">${_obEsc(f.name)}</span><span>Prompt payload</span><span>Routed to CostPilot</span></div>`
   ).join("");
+  const returnRows = returnFields.length ? returnFields.map(f =>
+    `<div class="ob-field-row"><span>${_obEsc(_returnSourceLabel(f.source))}</span><span class="mono">${_obEsc(f.name)}</span><span>CostPilot result</span><span>Optional write-back</span></div>`
+  ).join("") : `<div class="ob-field-row"><span>No return fields</span><span class="mono">—</span><span>CostPilot only</span><span>Routes and logs without write-back</span></div>`;
   return `<div class="ob-code-section" style="margin-top:20px">
     <div class="ob-code-header">
       <span class="ob-code-label">${_obEsc(label)} Mapping</span>
@@ -695,8 +862,112 @@ function _platformMappingHtml(platform, obj, fields, extraRows = "") {
       <div class="ob-field-row"><span>Source</span><span class="mono">${_obEsc(obj)}</span><span>Trigger context</span><span>Starts route</span></div>
       ${mappingRows}
       ${extraRows}
+      <div class="ob-field-row ob-field-row-header"><span>Return Value</span><span>${_obEsc(copy.returnHeader)}</span><span>Used As</span><span>Behavior</span></div>
+      ${returnRows}
     </div>
   </div>`;
+}
+
+function _returnSourceLabel(source) {
+  const labels = {
+    response: "AI Response",
+    tier: "Model Tier",
+    model: "Model Name",
+    routing: "Routing Decision",
+    risk: "Risk Level",
+    cost: "Cost USD",
+    tokens_saved: "Tokens Saved",
+    audit_id: "Audit ID",
+  };
+  return labels[source] || "AI Response";
+}
+
+function _routeResultExpr(source, lang = "js") {
+  const key = _routeResultKey(source);
+  if (lang === "python") return `result.get("${key}", "")`;
+  if (lang === "ruby") return `result["${key}"]`;
+  if (lang === "java") return key;
+  return `data.${key} || ''`;
+}
+
+function _jsResultExpr(source, varName = "data") {
+  return `${varName}.${_routeResultKey(source)} || ''`;
+}
+
+function _routeResultKey(source) {
+  const map = {
+    response: "simulated_response",
+    tier: "model_tier",
+    model: "model_name",
+    routing: "routing_decision",
+    risk: "risk_level",
+    cost: "cost_usd",
+    tokens_saved: "tokens_saved_by_pruning",
+    audit_id: "audit_id",
+  };
+  return map[source] || "simulated_response";
+}
+
+function _serviceNowResultExpr(source) {
+  const key = _routeResultKey(source);
+  if (source === "cost" || source === "tokens_saved") return `String(r.${key} || '')`;
+  return `r.${key} || ''`;
+}
+
+function _salesforceReturnWrites(returnFields) {
+  return returnFields.map(f => {
+    const field = _codeStr(f.name);
+    const source = f.source || "response";
+    if (source === "cost") {
+      return `            if (fieldMap.containsKey('${field}') && r.get('cost_usd') != null) {
+                rec.put('${field}', Decimal.valueOf(String.valueOf(r.get('cost_usd'))));
+                hasUpdates = true;
+            }`;
+    }
+    const keyMap = {
+      response: "simulated_response",
+      tier: "model_tier",
+      model: "model_name",
+      routing: "routing_decision",
+      risk: "risk_level",
+      tokens_saved: "tokens_saved_by_pruning",
+      audit_id: "audit_id",
+    };
+    const key = keyMap[source] || "simulated_response";
+    return `            if (fieldMap.containsKey('${field}') && r.get('${key}') != null) {
+                rec.put('${field}', String.valueOf(r.get('${key}')));
+                hasUpdates = true;
+            }`;
+  }).join("\n");
+}
+
+function _salesforceTrialReturnWrites(returnFields) {
+  return returnFields.map(f => {
+    const field = _codeStr(f.name);
+    const source = f.source || "response";
+    if (source === "cost") {
+      return `                    String costHeader = res.getHeader('X-CostPilot-Cost');
+                    if (fieldMap.containsKey('${field}') && String.isNotBlank(costHeader)) {
+                        rec.put('${field}', Decimal.valueOf(costHeader));
+                        hasUpdates = true;
+                    }`;
+    }
+    const exprMap = {
+      response: "aiResponse",
+      tier: "res.getHeader('X-CostPilot-Tier')",
+      model: "res.getHeader('X-CostPilot-Model')",
+      routing: "res.getHeader('X-CostPilot-Routing')",
+      risk: "(responseMap.get('risk_level') == null ? null : String.valueOf(responseMap.get('risk_level')))",
+      tokens_saved: "res.getHeader('X-CostPilot-Tokens-Saved')",
+      audit_id: "(responseMap.get('audit_id') == null ? null : String.valueOf(responseMap.get('audit_id')))",
+    };
+    const valueExpr = exprMap[source] || "aiResponse";
+    return `                    String value_${_safeVar(field)} = ${valueExpr};
+                    if (fieldMap.containsKey('${field}') && String.isNotBlank(value_${_safeVar(field)})) {
+                        rec.put('${field}', value_${_safeVar(field)});
+                        hasUpdates = true;
+                    }`;
+  }).join("\n");
 }
 
 // Build prompt string for Apex (Java-style string concat)
@@ -765,13 +1036,16 @@ function generateObCode() {
   const dept   = document.getElementById("obPlatDept").value;
   const agent  = document.getElementById("obPlatAgent").value.trim() || cfg.agentDefault;
   const fields = getObFields();
+  const returnFields = getObReturnFields();
   if (!obj) { err.textContent = copy.emptyObjectError; return; }
   if (!fields.length) { err.textContent = copy.emptyFieldsError; return; }
   if (obSelectedPlatform === "salesforce") {
     const badObject = !_isSalesforceApiName(obj);
     const badField = fields.find(f => !_isSalesforceApiName(f.name));
+    const badReturnField = returnFields.find(f => !_isSalesforceApiName(f.name));
     if (badObject) { err.textContent = "Enter a valid Salesforce object API name, like Case or Custom_Request__c."; return; }
     if (badField) { err.textContent = `Check the Salesforce field API name: ${badField.name}`; return; }
+    if (badReturnField) { err.textContent = `Check the Salesforce return field API name: ${badReturnField.name}`; return; }
   }
   const fns    = {
     salesforce:_genSalesforce,
@@ -785,7 +1059,7 @@ function generateObCode() {
     ruby:_genRuby,
     rest:_genRest,
   };
-  const html   = (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields);
+  const html   = (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields);
   const out   = document.getElementById("obPlatOutput");
   out.innerHTML = html;
   out.style.display = "block";
@@ -798,7 +1072,7 @@ function _isSalesforceApiName(name) {
 
 // ── Code generators ───────────────────────────────────────────────────────────
 
-function _genSalesforce(obj, dept, agent, fields) {
+function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
   const sfFields = fields && fields.length ? fields : [{label:"Subject",name:"Subject"},{label:"Description",name:"Description"}];
   const apexVars = _apexVarNames(sfFields);
   const requestVars = sfFields.map((f, i) =>
@@ -808,11 +1082,18 @@ function _genSalesforce(obj, dept, agent, fields) {
   const mappingRows = sfFields.map((f, i) =>
     `<div class="ob-field-row"><span>${_obEsc(f.label || f.name)}</span><span class="mono">${_obEsc(f.name)}</span><span class="mono">${_obEsc(apexVars[i])}</span><span>Routed to CostPilot</span></div>`
   ).join("");
+  const returnRows = returnFields.length ? returnFields.map(f =>
+    `<div class="ob-field-row"><span>${_obEsc(_returnSourceLabel(f.source))}</span><span class="mono">${_obEsc(f.name)}</span><span class="mono">${_obEsc(f.source)}</span><span>Optional write-back</span></div>`
+  ).join("") : `<div class="ob-field-row"><span>No return fields</span><span class="mono">—</span><span class="mono">—</span><span>Routes and logs without write-back</span></div>`;
   const mappingHtml = `<div class="ob-field-table">
     <div class="ob-field-row ob-field-row-header"><span>Prompt Label</span><span>Salesforce Field API Name</span><span>Apex Input</span><span>Behavior</span></div>
     <div class="ob-field-row"><span>Source Object</span><span class="mono">${_obEsc(obj)}</span><span class="mono">recordId</span><span>Record-triggered Flow</span></div>
     ${mappingRows}
+    <div class="ob-field-row ob-field-row-header"><span>Return Value</span><span>Salesforce Field API Name</span><span>Source</span><span>Behavior</span></div>
+    ${returnRows}
   </div>`;
+  const sfReturnWrites = _salesforceReturnWrites(returnFields);
+  const sfTrialReturnWrites = _salesforceTrialReturnWrites(returnFields);
 
   // ── Trial version: proxy endpoint, no custom fields required ─────────────
   if (IS_TRIAL) {
@@ -831,11 +1112,11 @@ function _genSalesforce(obj, dept, agent, fields) {
         if (System.isFuture() || System.isBatch()) return;
         CostPilotRequest req = requests[0];
         String prompt = ${reqPrompt};
-        sendAsync(prompt, CP_DEPARTMENT);
+        sendAsync(req.recordId, prompt, CP_DEPARTMENT);
     }
 
     @future(callout=true)
-    public static void sendAsync(String prompt, String department) {
+    public static void sendAsync(String recordId, String prompt, String department) {
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
         httpReq.setEndpoint(ENDPOINT);
@@ -857,17 +1138,21 @@ function _genSalesforce(obj, dept, agent, fields) {
         if (res.getStatusCode() == 200) {
             try {
                 Map<String,Object> responseMap = (Map<String,Object>) JSON.deserializeUntyped(res.getBody());
+                String aiResponse = null;
                 List<Object> choices = (List<Object>) responseMap.get('choices');
                 if (choices != null && !choices.isEmpty()) {
                     Map<String,Object> msg = (Map<String,Object>)((Map<String,Object>)choices[0]).get('message');
-                    String aiResponse = (String) msg.get('content');
+                    aiResponse = (String) msg.get('content');
                     System.debug('CostPilot AI Response: ' + aiResponse);
-                    // Uncomment once fields are created on your object:
-                    // SObject rec = department.getSObjectType().newSObject();
-                    // rec.put('CostPilot_AI_Response__c', aiResponse);
-                    // rec.put('CostPilot_Model_Used__c',  res.getHeader('X-CostPilot-Tier'));
-                    // rec.put('CostPilot_Routing__c',     res.getHeader('X-CostPilot-Routing'));
-                    // rec.put('CostPilot_Cost_USD__c',    Decimal.valueOf(res.getHeader('X-CostPilot-Cost')));
+                }
+                if (recordId != null) {
+                    Schema.SObjectType objType = Id.valueOf(recordId).getSObjectType();
+                    Map<String, Schema.SObjectField> fieldMap = objType.getDescribe().fields.getMap();
+                    SObject rec = objType.newSObject(recordId);
+                    Boolean hasUpdates = false;
+
+${sfTrialReturnWrites || "                    // No return fields configured. CostPilot will still route, log, and report this request."}
+                    if (hasUpdates) update rec;
                 }
             } catch(Exception e) {
                 System.debug('CostPilot field write skipped: ' + e.getMessage());
@@ -876,6 +1161,7 @@ function _genSalesforce(obj, dept, agent, fields) {
     }
 
     public class CostPilotRequest {
+        @InvocableVariable(required=false label='Record ID for optional write-back') public String recordId;
 ${requestVars}
     }
 }`;
@@ -888,6 +1174,8 @@ ${requestVars}
       <div class="ob-flow-step"><span class="ob-flow-num">3</span>
         <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map only these data fields: ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")}<br/>Department is already locked to <strong>"${_obEsc(dept)}"</strong> in the class.</div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">4</span>
+        <div><strong>Optional write-back</strong><br/>Create the return fields listed above, then map <code>$Record.Id</code> to <code>recordId</code>. If you skip this, CostPilot still routes and logs the request.</div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">5</span>
         <div><strong>Save &amp; Activate</strong> — next time a ${_obEsc(obj)} is created or updated, CostPilot routes the call automatically. Your first call appears on your dashboard within seconds.</div></div>
     </div>`;
 
@@ -937,27 +1225,12 @@ ${requestVars}
         }
         if (res.getStatusCode() == 200 && recordId != null) {
             Map<String,Object> r = (Map<String,Object>) JSON.deserializeUntyped(res.getBody());
-            SObjectType objType = Id.valueOf(recordId).getSObjectType();
+            Schema.SObjectType objType = Id.valueOf(recordId).getSObjectType();
             Map<String, Schema.SObjectField> fieldMap = objType.getDescribe().fields.getMap();
             SObject rec = objType.newSObject(recordId);
             Boolean hasUpdates = false;
 
-            if (fieldMap.containsKey('CostPilot_AI_Response__c')) {
-                rec.put('CostPilot_AI_Response__c', (String) r.get('simulated_response'));
-                hasUpdates = true;
-            }
-            if (fieldMap.containsKey('CostPilot_Model_Used__c')) {
-                rec.put('CostPilot_Model_Used__c', (String) r.get('model_name'));
-                hasUpdates = true;
-            }
-            if (fieldMap.containsKey('CostPilot_Routing_Decision__c')) {
-                rec.put('CostPilot_Routing_Decision__c', (String) r.get('routing_decision'));
-                hasUpdates = true;
-            }
-            if (fieldMap.containsKey('CostPilot_Cost_USD__c') && r.get('cost_usd') != null) {
-                rec.put('CostPilot_Cost_USD__c', Decimal.valueOf(String.valueOf(r.get('cost_usd'))));
-                hasUpdates = true;
-            }
+${sfReturnWrites || "            // No return fields configured. CostPilot will still route, log, and report this request."}
             if (hasUpdates) update rec;
         }
     }
@@ -987,10 +1260,7 @@ CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ re
 
   const fieldHtml = `<div class="ob-field-table">
     <div class="ob-field-row ob-field-row-header"><span>Label</span><span>API Name</span><span>Type</span><span>Settings</span></div>
-    <div class="ob-field-row"><span>CostPilot AI Response</span><span class="mono">CostPilot_AI_Response__c</span><span>Long Text</span><span>32,768 chars</span></div>
-    <div class="ob-field-row"><span>CostPilot Model Used</span><span class="mono">CostPilot_Model_Used__c</span><span>Text</span><span>255 chars</span></div>
-    <div class="ob-field-row"><span>CostPilot Routing</span><span class="mono">CostPilot_Routing_Decision__c</span><span>Text</span><span>50 chars</span></div>
-    <div class="ob-field-row"><span>CostPilot Cost USD</span><span class="mono">CostPilot_Cost_USD__c</span><span>Currency</span><span>12,6</span></div>
+    ${returnFields.length ? returnFields.map(f => `<div class="ob-field-row"><span>${_obEsc(_returnSourceLabel(f.source))}</span><span class="mono">${_obEsc(f.name)}</span><span>${f.source === "cost" ? "Currency" : f.source === "response" ? "Long Text" : "Text"}</span><span>${f.source === "cost" ? "12,6" : f.source === "response" ? "32,768 chars" : "255 chars"}</span></div>`).join("") : `<div class="ob-field-row"><span>No return fields configured</span><span class="mono">—</span><span>—</span><span>Add fields above and regenerate if you want write-back</span></div>`}
   </div>`;
 
   return `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Salesforce Mapping</span><span class="ob-code-hint">These are the exact object and field API names this setup will route.</span></div>${mappingHtml}</div>`
@@ -1001,8 +1271,11 @@ CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ re
     + _obBanner("salesforce", obj, dept, agent) + _obActions();
 }
 
-function _genServiceNow(obj, dept, agent, fields) {
+function _genServiceNow(obj, dept, agent, fields, returnFields = []) {
   const prompt = _jsPrompt(fields, "current", (v, f) => `(${v}.getValue('${_codeStr(f)}') || '')`);
+  const returnWrites = returnFields.map(f =>
+    `        current.setValue('${_codeStr(f.name)}', ${_serviceNowResultExpr(f.source)});`
+  ).join("\n");
   const code =
 `// ServiceNow Business Rule — Table: ${obj}
 // When: after | Insert: true | Update: true
@@ -1024,12 +1297,15 @@ function _genServiceNow(obj, dept, agent, fields) {
     var response = rm.execute();
     if (response.getStatusCode() == 200) {
         var r = JSON.parse(response.getBody());
-        current.work_notes = '[CostPilot] ' + r.simulated_response +
-            '\\nModel: ' + r.model_name + ' | Cost: $' + r.cost_usd;
+${returnWrites || "        // No return columns configured. CostPilot still routes, logs, and reports this request."}
+        if (${returnFields.length ? "true" : "false"}) {
+            current.setWorkflow(false);
+            current.update();
+        }
     }
 })(current, previous);`;
 
-  return _platformMappingHtml("servicenow", obj, fields)
+  return _platformMappingHtml("servicenow", obj, fields, returnFields)
     + _obCodeSection(
       "Business Rule Script",
       "System Definition → Business Rules → New · Table: " + obj + " · When: after · Insert + Update",
@@ -1037,8 +1313,11 @@ function _genServiceNow(obj, dept, agent, fields) {
     ) + _obBanner("servicenow", obj, dept, agent) + _obActions();
 }
 
-function _genHubSpot(obj, dept, agent, fields) {
+function _genHubSpot(obj, dept, agent, fields, returnFields = []) {
   const prompt = _jsPrompt(fields, "event.inputFields", (v, f) => `(${v}['${_codeStr(f)}'] || '')`);
+  const outputFields = returnFields.length
+    ? returnFields.map(f => `      '${_codeStr(f.name)}': ${_jsResultExpr(f.source, "res.data")}`).join(",\n")
+    : "      // No return properties configured. CostPilot still routes, logs, and reports this request.";
   const code =
 `// HubSpot Custom Code Action (Node.js)
 // Operations Hub → Workflows → Add Action → Custom Code
@@ -1055,15 +1334,12 @@ exports.main = async (event, callback) => {
   });
   callback({
     outputFields: {
-      fage_response: res.data.simulated_response,
-      fage_model:    res.data.model_name,
-      fage_routing:  res.data.routing_decision,
-      fage_cost:     String(res.data.cost_usd),
+${outputFields}
     }
   });
 };`;
 
-  return _platformMappingHtml("hubspot", obj, fields)
+  return _platformMappingHtml("hubspot", obj, fields, returnFields)
     + _obCodeSection(
     "Custom Code Action",
     "Operations Hub → Workflows → Add Action → Custom Code → Paste",
@@ -1071,8 +1347,11 @@ exports.main = async (event, callback) => {
   ) + _obBanner("hubspot", obj, dept, agent) + _obActions();
 }
 
-function _genDynamics(obj, dept, agent, fields) {
+function _genDynamics(obj, dept, agent, fields, returnFields = []) {
   const dynPrompt = _plainPromptTemplate(fields, f => `@{triggerOutputs()?['body/${f.name}']}`);
+  const dynReturns = returnFields.length
+    ? returnFields.map(f => `${f.name}: @{body('HTTP')?['${_routeResultKey(f.source)}']}`).join("\n")
+    : "No return fields configured. CostPilot still routes, logs, and reports this request.";
   const code =
 `// Power Automate — HTTP Action Configuration
 // Trigger: When a row is added, modified or deleted · Table: ${obj}
@@ -1090,11 +1369,9 @@ Body:
 }
 
 // After HTTP — add "Update a row" action:
-// fage_ai_response:      @{body('HTTP')?['simulated_response']}
-// fage_model_used:       @{body('HTTP')?['model_name']}
-// fage_routing_decision: @{body('HTTP')?['routing_decision']}`;
+${dynReturns}`;
 
-  return _platformMappingHtml("dynamics", obj, fields)
+  return _platformMappingHtml("dynamics", obj, fields, returnFields)
     + _obCodeSection(
     "Power Automate HTTP Action",
     "Power Automate → New Flow → Automated → Dataverse trigger → Add HTTP action",
@@ -1102,10 +1379,13 @@ Body:
   ) + _obBanner("dynamics", obj, dept, agent) + _obActions();
 }
 
-function _genZendesk(obj, dept, agent, fields) {
+function _genZendesk(obj, dept, agent, fields, returnFields = []) {
   const prompt = _jsPrompt(fields, "event.payload", (v, f) =>
     `((${v}.ticket && ${v}.ticket['${_codeStr(f)}']) || ${v}['${_codeStr(f)}'] || '')`
   );
+  const returnObject = returnFields.length
+    ? returnFields.map(f => `    ${_safeVar(f.name)}: ${_routeResultExpr(f.source)}`).join(",\n")
+    : "    message: 'No return fields configured; CostPilot routed and logged the request.'";
   const code =
 `// Zendesk Sunshine Function (Node.js 18)
 // Admin Center → Apps and integrations → Sunshine Functions → Create
@@ -1126,10 +1406,13 @@ module.exports = async (event) => {
   const data = await res.json();
 
   console.log('[CostPilot]', data.simulated_response);
-  return { status: 200, model: data.model_name, routing: data.routing_decision };
+  return {
+    status: 200,
+${returnObject}
+  };
 };`;
 
-  return _platformMappingHtml("zendesk", obj, fields)
+  return _platformMappingHtml("zendesk", obj, fields, returnFields)
     + _obCodeSection(
     "Sunshine Function",
     "Admin Center → Apps and integrations → Sunshine Functions → Create → Node.js 18 · no Zendesk token required for first route",
@@ -1137,9 +1420,12 @@ module.exports = async (event) => {
   ) + _obBanner("zendesk", obj, dept, agent) + _obActions();
 }
 
-function _genPython(obj, dept, agent, fields) {
+function _genPython(obj, dept, agent, fields, returnFields = []) {
   const params = fields.map(f => `${_safeVar(f.name)}: str`).join(", ");
   const prompt = _pythonPrompt(fields);
+  const returnMap = returnFields.length
+    ? returnFields.map(f => `# ${f.name} = ${_routeResultExpr(f.source, "python")}`).join("\n")
+    : "# No return fields configured. CostPilot still routes, logs, and reports this request.";
   const python =
 `import requests
 
@@ -1158,16 +1444,20 @@ def route_to_costpilot(${params}) -> dict:
     return resp.json()
 
 # result = route_to_costpilot(${fields.map(f => `${_safeVar(f.name)}="..."`).join(", ")})
-# print(result["simulated_response"])`;
+# print(result["simulated_response"])
+${returnMap}`;
 
-  return _platformMappingHtml("python", obj, fields)
+  return _platformMappingHtml("python", obj, fields, returnFields)
     + _obCodeSection("Python", "pip install requests · call this function from your app or workflow", python)
     + _obBanner("python", obj, dept, agent) + _obActions();
 }
 
-function _genNode(obj, dept, agent, fields) {
+function _genNode(obj, dept, agent, fields, returnFields = []) {
   const prompt = _jsPrompt(fields, "input", (v, f) => `(${v}.${_safeVar(f)} || '')`);
   const exampleObj = fields.map(f => `//   ${_safeVar(f.name)}: '...'`).join(",\n");
+  const returnMap = returnFields.length
+    ? returnFields.map(f => `// const ${_safeVar(f.name)} = ${_jsResultExpr(f.source, "result")};`).join("\n")
+    : "// No return fields configured. CostPilot still routes, logs, and reports this request.";
   const code =
 `// Node.js 18+
 const CostPilot_URL = '${CostPilot_URL}';
@@ -1193,14 +1483,15 @@ async function routeToCostPilot(input) {
 
 // const result = await routeToCostPilot({
 ${exampleObj}
-// });`;
+// });
+${returnMap}`;
 
-  return _platformMappingHtml("nodejs", obj, fields)
+  return _platformMappingHtml("nodejs", obj, fields, returnFields)
     + _obCodeSection("Node.js", "Uses built-in fetch in Node 18+", code)
     + _obBanner("nodejs", obj, dept, agent) + _obActions();
 }
 
-function _genJava(obj, dept, agent, fields) {
+function _genJava(obj, dept, agent, fields, returnFields = []) {
   const params = fields.map(f => `String ${_safeVar(f.name)}`).join(", ");
   const textExpr = fields.map((f, i) => {
     const join = i < fields.length - 1 ? ' + "\\n\\n" +\n            ' : "";
@@ -1240,12 +1531,17 @@ public class CostPilotClient {
     }
 }`;
 
-  return _platformMappingHtml("java", obj, fields)
+  const returnNote = returnFields.length
+    ? `\n// Return fields to parse from the JSON response:\n${returnFields.map(f => `// ${f.name} <= ${_routeResultKey(f.source)} (${_returnSourceLabel(f.source)})`).join("\n")}`
+    : "\n// No return fields configured. CostPilot still routes, logs, and reports this request.";
+
+  return _platformMappingHtml("java", obj, fields, returnFields)
     + _obCodeSection("Java", "Java 11+ HttpClient", code)
+    + _obCodeSection("Java Return Mapping", "Parse these response keys if you want write-back in your app", returnNote)
     + _obBanner("java", obj, dept, agent) + _obActions();
 }
 
-function _genRuby(obj, dept, agent, fields) {
+function _genRuby(obj, dept, agent, fields, returnFields = []) {
   const params = fields.map(f => `${_safeVar(f.name)}:`).join(", ");
   const prompt = fields.map(f => `#{${_safeVar(f.name)}}`).map((token, i) =>
     `${_doubleCodeStr(fields[i].label || fields[i].name)}:\\n${token}`
@@ -1276,14 +1572,15 @@ def route_to_costpilot(${params})
   end
 end
 
-# response = route_to_costpilot(${fields.map(f => `${_safeVar(f.name)}: "..."`).join(", ")})`;
+# response = route_to_costpilot(${fields.map(f => `${_safeVar(f.name)}: "..."`).join(", ")})
+${returnFields.length ? returnFields.map(f => `# ${_safeVar(f.name)} = ${_routeResultExpr(f.source, "ruby")}`).join("\n") : "# No return fields configured. CostPilot still routes, logs, and reports this request."}`;
 
-  return _platformMappingHtml("ruby", obj, fields)
+  return _platformMappingHtml("ruby", obj, fields, returnFields)
     + _obCodeSection("Ruby", "Uses Net::HTTP from the Ruby standard library", code)
     + _obBanner("ruby", obj, dept, agent) + _obActions();
 }
 
-function _genRest(obj, dept, agent, fields) {
+function _genRest(obj, dept, agent, fields, returnFields = []) {
   const prompt = _plainPromptTemplate(fields, f => `\${${_safeVar(f.name)}}`);
   const curl =
 `curl -X POST ${CostPilot_URL}/api/route \\
@@ -1295,9 +1592,13 @@ function _genRest(obj, dept, agent, fields) {
     "agent_name":      "${agent}",
     "source_platform": "REST"
   }'`;
+  const returnNote = returnFields.length
+    ? returnFields.map(f => `${f.name} <= response.${_routeResultKey(f.source)} (${_returnSourceLabel(f.source)})`).join("\n")
+    : "No return fields configured. CostPilot still routes, logs, and reports this request.";
 
-  return _platformMappingHtml("rest", obj, fields)
+  return _platformMappingHtml("rest", obj, fields, returnFields)
     + _obCodeSection("REST / cURL", "Replace ${...} placeholders with values from your app or shell", curl)
+    + _obCodeSection("Return Mapping", "Read these response keys if you want write-back in your app", returnNote)
     + _obBanner("rest", obj, dept, agent) + _obActions();
 }
 

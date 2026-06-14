@@ -348,6 +348,17 @@
             <button type="button" id="obAddFieldBtn" class="ob-btn-ghost" onclick="addObField()" style="font-size:12px;padding:6px 14px">+ Add Field</button>
             <div id="obFieldsHint" style="font-size:11px;color:var(--text-muted,#8b949e);margin-top:6px;line-height:1.5"></div>
           </div>
+
+          <!-- Optional return mapping — where CostPilot results go back -->
+          <div class="ob-field">
+            <label class="ob-label" id="obReturnFieldsLabel">
+              Return results to
+              <span id="obReturnFieldsLabelHint" style="font-size:10px;font-weight:400;color:var(--text-muted,#8b949e);margin-left:6px">Optional · response/metadata field in your platform</span>
+            </label>
+            <div id="obReturnFieldsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+            <button type="button" id="obAddReturnFieldBtn" class="ob-btn-ghost" onclick="addObReturnField()" style="font-size:12px;padding:6px 14px">+ Add Return Field</button>
+            <div id="obReturnFieldsHint" style="font-size:11px;color:var(--text-muted,#8b949e);margin-top:6px;line-height:1.5"></div>
+          </div>
         </div>
         <div class="ob-actions" style="margin-bottom:0">
           <button class="ob-btn-ghost" onclick="resetObPlatformScreen(); goToScreen(4)">← Back</button>
