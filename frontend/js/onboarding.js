@@ -1106,17 +1106,20 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
     private static final String ENDPOINT = '${proxyEndpoint}';
     private static final String CP_KEY   = '${TRIAL_SK}';
     private static final String CP_DEPARTMENT = '${_codeStr(dept)}';
+    private static final String CP_AGENT      = '${_codeStr(agent)}';
 
     @InvocableMethod(label='Send to CostPilot')
     public static void sendToCostPilot(List<CostPilotRequest> requests) {
         if (System.isFuture() || System.isBatch()) return;
         CostPilotRequest req = requests[0];
         String prompt = ${reqPrompt};
-        sendAsync(req.recordId, prompt, CP_DEPARTMENT);
+        String department = String.isBlank(req.department) ? CP_DEPARTMENT : req.department;
+        String agentName  = String.isBlank(req.agentName)  ? CP_AGENT      : req.agentName;
+        sendAsync(req.recordId, prompt, department, agentName);
     }
 
     @future(callout=true)
-    public static void sendAsync(String recordId, String prompt, String department) {
+    public static void sendAsync(String recordId, String prompt, String department, String agentName) {
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
         httpReq.setEndpoint(ENDPOINT);
@@ -1124,6 +1127,7 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
         httpReq.setHeader('Content-Type',    'application/json');
         httpReq.setHeader('X-CostPilot-Key', CP_KEY);
         httpReq.setHeader('X-Department',    department);
+        httpReq.setHeader('X-Agent-Name',    agentName);
         httpReq.setHeader('X-Platform',      'salesforce');
         httpReq.setBody(JSON.serialize(new Map<String, Object>{
             'model'    => '${modelDefault}',
@@ -1161,6 +1165,8 @@ ${sfTrialReturnWrites || "                    // No return fields configured. Co
     }
 
     public class CostPilotRequest {
+        @InvocableVariable(required=false label='agentName')  public String agentName;
+        @InvocableVariable(required=false label='department') public String department;
         @InvocableVariable(required=false label='Record ID for optional write-back') public String recordId;
 ${requestVars}
     }
@@ -1172,7 +1178,7 @@ ${requestVars}
       <div class="ob-flow-step"><span class="ob-flow-num">2</span>
         <div><strong>Setup → Remote Site Settings → New</strong><br/>Name: <code>CostPilot</code> · URL: <code>https://fage-engine-21cb49fe4806.herokuapp.com</code> · Active: ✓<br/><em style="color:var(--text-muted,#8b949e);font-size:11px">Required by Salesforce for any external HTTP callout — this is the only manual setup step.</em></div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">3</span>
-        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map only these data fields: ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")}<br/>Department is already locked to <strong>"${_obEsc(dept)}"</strong> in the class.</div></div>
+        <div><strong>Setup → Flows → New Flow → Record-Triggered</strong><br/>Object: <strong>${_obEsc(obj)}</strong> · Trigger: Created or Updated<br/>Add Action → Apex → Send to CostPilot<br/>Map: <code>agentName</code> → <strong>${_obEsc(agent)}</strong> · <code>department</code> → <strong>${_obEsc(dept)}</strong> · ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")}<br/>You can also leave agentName/department blank to use the defaults built into the class.</div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">4</span>
         <div><strong>Optional write-back</strong><br/>Create the return fields listed above, then map <code>$Record.Id</code> to <code>recordId</code>. If you skip this, CostPilot still routes and logs the request.</div></div>
       <div class="ob-flow-step"><span class="ob-flow-num">5</span>
@@ -1196,7 +1202,9 @@ ${requestVars}
         if (System.isFuture() || System.isBatch()) return;
         CostPilotRequest req = requests[0];
         String payload = ${reqPrompt};
-        sendAsync(req.recordId, payload, CP_DEPARTMENT, CP_AGENT);
+        String department = String.isBlank(req.department) ? CP_DEPARTMENT : req.department;
+        String agentName  = String.isBlank(req.agentName)  ? CP_AGENT      : req.agentName;
+        sendAsync(req.recordId, payload, department, agentName);
     }
 
     @future(callout=true)
@@ -1236,6 +1244,8 @@ ${sfReturnWrites || "            // No return fields configured. CostPilot will 
     }
 
     public class CostPilotRequest {
+        @InvocableVariable(required=false label='agentName')  public String agentName;
+        @InvocableVariable(required=false label='department') public String department;
         @InvocableVariable(required=true  label='Record ID')          public String recordId;
 ${requestVars}
     }
@@ -1245,7 +1255,7 @@ ${requestVars}
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em> · Optimize for: <em>Actions and Related Records</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
-      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map: Record ID · ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")}<br/>Department and Agent are already locked in the class: <strong>${_obEsc(dept)}</strong> · <strong>${_obEsc(agent)}</strong></div></div>
+      <div><strong>Add Action → Apex → Send to CostPilot</strong><br/>Map: <code>agentName</code> → <strong>${_obEsc(agent)}</strong> · <code>department</code> → <strong>${_obEsc(dept)}</strong> · Record ID · ${sfFields.map((f, i) => `${_obEsc(f.name)} → ${_obEsc(apexVars[i])}`).join(" · ")}<br/>Agent and department are optional Flow inputs; if blank, the class uses the onboarding defaults.</div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">3</span>
       <div><strong>Save &amp; Activate</strong><br/>If CostPilot does not show an event, check Setup → Apex Jobs and Setup → Paused and Failed Flow Interviews.</div></div>
   </div>`;
@@ -1255,6 +1265,8 @@ ${requestVars}
 // Replace the sample record ID with a real ${obj} ID from your org.
 CostPilotCallout.CostPilotRequest req = new CostPilotCallout.CostPilotRequest();
 req.recordId = 'REPLACE_WITH_${obj.toUpperCase()}_ID';
+req.agentName = '${_codeStr(agent)}';
+req.department = '${_codeStr(dept)}';
 ${sfFields.map((f, i) => `req.${apexVars[i]} = 'Test value for ${_codeStr(f.label || f.name)}';`).join("\n")}
 CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ req });`;
 
