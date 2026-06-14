@@ -30,8 +30,8 @@ function _renderStreamCards(events) {
     const title  = _streamEventTitle(e);
     const color  = _streamEventColor(type);
     const ts     = _fmtStreamTs(e.timestamp);
-    const dept   = e.department || "—";
-    const agent  = e.agent_name || "Agent not linked";
+    const dept   = e.display_department || e.department || "—";
+    const agent  = e.display_agent_name || e.agent_name || "Agent not linked";
     const cost   = e.cost_usd != null ? `$${e.cost_usd.toFixed(6)}` : "—";
     const tokens = e.tokens_in != null ? `${(e.tokens_in + (e.tokens_out || 0)).toLocaleString()} tokens` : "";
 
@@ -171,7 +171,7 @@ async function toggleStreamEvent(eventId) {
     try { snapshot = JSON.parse(e.context_snapshot || "{}"); } catch {}
 
     const cost       = e.cost_usd != null ? `$${e.cost_usd.toFixed(6)}` : "—";
-    const agentLine  = `${e.agent_name || "not linked"} &nbsp;|&nbsp; ${e.source_platform || "unknown"} &nbsp;|&nbsp; ${e.department || "—"}`;
+    const agentLine  = `${e.display_agent_name || e.agent_name || "not linked"} &nbsp;|&nbsp; ${e.source_platform || "unknown"} &nbsp;|&nbsp; ${e.display_department || e.department || "—"}`;
     const budgetLine = snapshot.budget_spent_usd != null
       ? `$${snapshot.budget_spent_usd ?? "?"} / $${snapshot.budget_cap_usd ?? "?"} &nbsp;(${snapshot.budget_used_pct ?? "?"}% used) &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? "?"} &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? "?"}`
       : "—";
@@ -230,10 +230,11 @@ function applyStreamFilters() {
 
   const filtered = _streamEvents.filter(e => {
     if (type   && _streamEventType(e) !== type) return false;
-    if (dept   && (e.department || "").toLowerCase() !== dept) return false;
+    if (dept   && (e.display_department || e.department || "").toLowerCase() !== dept) return false;
     if (search && !(
       (e.decision_outcome || "").toLowerCase().includes(search) ||
-      (e.department       || "").toLowerCase().includes(search) ||
+      (e.display_department || e.department || "").toLowerCase().includes(search) ||
+      (e.display_agent_name || e.agent_name || "").toLowerCase().includes(search) ||
       (e.rationale        || "").toLowerCase().includes(search)
     )) return false;
     return true;
@@ -247,7 +248,7 @@ function _populateStreamDeptFilter(events) {
   if (!sel) return;
   const current = sel.value;
   while (sel.options.length > 1) sel.remove(1);  // keep "All Depts", rebuild the rest
-  const depts = [...new Set(events.map(e => e.department).filter(Boolean))].sort();
+  const depts = [...new Set(events.map(e => e.display_department || e.department).filter(Boolean))].sort();
   depts.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.toLowerCase(); opt.textContent = d;

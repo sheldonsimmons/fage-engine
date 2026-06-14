@@ -402,8 +402,8 @@ async function loadAgentSpend() {
                      : "$" + a.total_cost_usd.toFixed(4);
       return `
         <tr class="audit-row">
-          <td style="font-weight:600;color:var(--accent)">${a.agent_name}</td>
-          <td style="color:var(--text-muted);font-size:11px">${a.department || "—"}</td>
+          <td style="font-weight:600;color:var(--accent)">${a.display_name || a.agent_name}</td>
+          <td style="color:var(--text-muted);font-size:11px">${a.display_department || (typeof displayDeptName === "function" ? displayDeptName(a.department) : a.department) || "—"}</td>
           <td style="color:var(--text-muted);font-size:11px">${a.source_platform || "—"}</td>
           <td style="font-family:var(--font-mono);font-size:11px">${a.call_count.toLocaleString()}</td>
           <td><span class="badge ${tierCls}">${a.top_tier ? normaliseTierName(a.top_tier) : "—"}</span></td>

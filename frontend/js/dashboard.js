@@ -99,11 +99,11 @@ async function renderAgentEfficiency() {
       return;
     }
     tbody.innerHTML = agents.map(a => {
-      const dept   = (a.department || "—").replace(/^[A-F0-9]{16}:/i, "");
+      const dept   = displayDeptName(a.display_department || a.department || "—");
       const econ   = 100 - (a.flagship_pct || 0);
       const econColor = econ >= 70 ? "var(--accent-green)" : econ < 40 ? "var(--accent-red)" : "var(--accent-yellow)";
       return `<tr>
-        <td style="font-weight:600">${a.name}</td>
+        <td style="font-weight:600">${a.display_name || a.name}</td>
         <td style="font-size:11px;color:var(--accent);font-weight:700">${(a.platform||"—").toUpperCase()}</td>
         <td style="font-size:11px">${dept}</td>
         <td>${(a.calls||0).toLocaleString()}</td>

@@ -704,6 +704,7 @@ async def anthropic_csv(file: UploadFile = File(...)):
 @router.get("/workspace-agents")
 def workspace_agents(workspace_id: str, db: Session = Depends(get_db)):
     from database.models import RegisteredAgent, TokenTransaction
+    from core.agentlake import display_agent_name, agent_active_recently
     prefix = f"{workspace_id}:"
 
     agents = db.query(RegisteredAgent).filter(
@@ -726,9 +727,12 @@ def workspace_agents(workspace_id: str, db: Session = Depends(get_db)):
         result.append({
             "id":             a.id,
             "name":           a.name,
+            "display_name":   display_agent_name(a.name, a.department, a.source_platform),
             "department":     dept_display,
+            "display_department": dept_display,
             "platform":       a.source_platform or "api",
             "status":         a.status,
+            "active_recently": agent_active_recently(a),
             "last_active":    a.last_used_at.isoformat() if a.last_used_at else None,
             "total_calls":    total_calls,
             "total_cost_usd": total_cost,

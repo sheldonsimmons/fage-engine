@@ -2,11 +2,25 @@
  * agentlake.js — Agentlake Registry & Traffic Cop UI  [Step 5]
  */
 
-const AGENT_ACTIVE_WINDOW_MS = 15000;
+const AGENT_ACTIVE_WINDOW_MS = 60000;
+
+function displayAgentName(agent) {
+  return agent?.display_name || agent?.agent_name || agent?.name || "Unnamed agent";
+}
+
+function displayAgentDept(agent) {
+  if (agent?.display_department) return agent.display_department;
+  return String(agent?.department || "—").replace(/^[A-Z0-9-]{12,}:/i, "");
+}
+
+function jsString(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, " ");
+}
 
 function effectiveAgentStatus(agent) {
   const status = (agent.status || "idle").toLowerCase();
   if (status === "locked" || status === "queued") return status;
+  if (agent.active_recently) return "active";
 
   const hasLiveClaim = !!agent.target_record_id;
   const lastSeenMs = agent.last_used_at ? new Date(agent.last_used_at).getTime() : 0;
@@ -44,7 +58,7 @@ function renderAgentTable(agents) {
     const collisions = Object.entries(byRecord).filter(([, agents]) => agents.length >= 2);
     if (collisions.length) {
       const [record, collidedAgents] = collisions[0];
-      const names = collidedAgents.map(a => a.name).join(" & ");
+      const names = collidedAgents.map(displayAgentName).join(" & ");
       alertBox.innerHTML = `
         <div class="collision-header">&#9888;&nbsp; CONCURRENCY COLLISION DETECTED</div>
         <div class="collision-body">
@@ -79,8 +93,8 @@ function renderAgentTable(agents) {
     const actionBtn = (effectiveStatus === "locked" || effectiveStatus === "active" || effectiveStatus === "queued")
       ? `<button class="btn-release" onclick="releaseAgent(${a.id})">Release</button>`
       : a.archived
-        ? `<button class="btn-deregister" style="color:var(--accent-green);border-color:var(--accent-green)" onclick="unarchiveAgent(${a.id}, '${a.name}')">Restore</button>`
-        : `<button class="btn-deregister" onclick="archiveAgent(${a.id}, '${a.name}')">Archive</button>`;
+        ? `<button class="btn-deregister" style="color:var(--accent-green);border-color:var(--accent-green)" onclick="unarchiveAgent(${a.id}, '${jsString(displayAgentName(a))}')">Restore</button>`
+        : `<button class="btn-deregister" onclick="archiveAgent(${a.id}, '${jsString(displayAgentName(a))}')">Archive</button>`;
 
     const lockTip = a.lock_reason
       ? `title="${a.lock_reason}"`
@@ -135,8 +149,13 @@ function renderAgentTable(agents) {
 
     return `
       <tr id="agent-row-${a.id}" ${rowClass ? `class="${rowClass}"` : ""}>
-        <td ${lockTip}>${a.name}</td>
-        <td>${a.department}</td>
+        <td ${lockTip}>
+          <span>${displayAgentName(a)}</span>
+          <button type="button" onclick="event.stopPropagation(); renameAgent(${a.id}, '${jsString(displayAgentName(a))}')"
+            title="Rename agent"
+            style="margin-left:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer">Rename</button>
+        </td>
+        <td>${displayAgentDept(a)}</td>
         <td style="font-size:11px; font-weight:600; color:${platformColor}">${platform}</td>
         <td style="font-family:var(--font-mono); font-size:11px">${target}</td>
         <td style="font-size:11px; font-weight:600; color:${policyColor}">${policyLabel}</td>
@@ -258,6 +277,22 @@ async function toggleAgentPruning(agentId, currentlyOn) {
     }
   } catch (err) {
     alert("Failed to update pruning setting: " + err.message);
+  }
+}
+
+async function renameAgent(agentId, currentName) {
+  const next = prompt("Agent display name", currentName || "");
+  if (next == null) return;
+  const clean = next.trim();
+  if (!clean) {
+    alert("Agent name cannot be blank.");
+    return;
+  }
+  try {
+    await apiPatch(`/api/agents/${agentId}/name`, { name: clean });
+    await loadAgents();
+  } catch (err) {
+    alert("Failed to rename agent: " + err.message);
   }
 }
 
@@ -394,8 +429,8 @@ function renderAgentCards(agents) {
     const effectiveStatus = effectiveAgentStatus(a);
     return `
       <div class="agent-status-card status-${effectiveStatus}" title="Click row below to manage">
-        <div class="asc-name">${a.name}</div>
-        <div class="asc-dept">${a.department}</div>
+        <div class="asc-name">${displayAgentName(a)}</div>
+        <div class="asc-dept">${displayAgentDept(a)}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
           <span class="asc-platform" style="color:${platformColor(platform)}">${platform}</span>
           <span class="badge ${badgeClass(effectiveStatus)}" style="font-size:9px;padding:1px 6px">${effectiveStatus.toUpperCase()}</span>
@@ -409,7 +444,7 @@ function populateDeptFilter(agents) {
   const sel = document.getElementById("filterDept");
   if (!sel) return;
   const existing = new Set(Array.from(sel.options).map(o => o.value));
-  const depts = [...new Set(agents.map(a => a.department).filter(Boolean))];
+  const depts = [...new Set(agents.map(displayAgentDept).filter(Boolean))];
   depts.forEach(d => {
     if (!existing.has(d)) {
       const opt = document.createElement("option");
@@ -429,8 +464,8 @@ function applyAgentFilters() {
   const filtered = _allAgents.filter(a => {
     if (platform && (a.source_platform || "custom").toLowerCase() !== platform) return false;
     if (status   && effectiveAgentStatus(a) !== status)   return false;
-    if (dept     && a.department.toLowerCase() !== dept) return false;
-    if (search   && !a.name.toLowerCase().includes(search)) return false;
+    if (dept     && displayAgentDept(a).toLowerCase() !== dept) return false;
+    if (search   && !displayAgentName(a).toLowerCase().includes(search) && !displayAgentDept(a).toLowerCase().includes(search)) return false;
     return true;
   });
 

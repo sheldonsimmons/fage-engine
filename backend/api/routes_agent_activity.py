@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import TokenTransaction, RegisteredAgent
+from core.agentlake import display_agent_name, display_department, agent_active_recently
 
 router = APIRouter()
 
@@ -111,9 +112,12 @@ def get_agent_activity(
         agent_rows.append({
             "id":            ag.id,
             "name":          ag.name,
+            "display_name":  display_agent_name(ag.name, ag.department, ag.source_platform),
             "department":    ag.department,
+            "display_department": display_department(ag.department),
             "platform":      ag.source_platform or "Custom",
             "status":        ag.status,
+            "active_recently": agent_active_recently(ag),
             "calls":         total_calls,
             "cost_usd":      round(total_cost, 4),
             "avg_cost_usd":  round(total_cost / total_calls, 5) if total_calls else 0,
@@ -131,7 +135,7 @@ def get_agent_activity(
     total_calls = sum(a["calls"]    for a in agent_rows)
     total_cost  = sum(a["cost_usd"] for a in agent_rows)
     platforms   = list({a["platform"] for a in agent_rows})
-    departments = list({a["department"] for a in agent_rows})
+    departments = list({a["display_department"] or a["department"] for a in agent_rows})
 
     return {
         "summary": {

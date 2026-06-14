@@ -9,7 +9,7 @@ Responsibilities:
   - Allow a supervisor to release a lock manually
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from database.models import RegisteredAgent
@@ -35,6 +35,45 @@ def infer_platform(name: str, explicit: str = None) -> str:
         if upper.startswith(prefix):
             return platform
     return "Custom"
+
+
+def display_department(department: str) -> str:
+    """Hide internal workspace prefixes like WORKSPACE_ID:Support from UI labels."""
+    text = (department or "").strip()
+    if ":" not in text:
+        return text
+    prefix, label = text.split(":", 1)
+    # Trial workspace ids are stored as long uppercase hex-like keys. Keep other
+    # colon labels intact if they are not workspace prefixes.
+    if len(prefix) >= 12 and prefix.replace("-", "").isalnum():
+        return label.strip() or text
+    return label.strip() or text
+
+
+def display_agent_name(name: str, department: str = None, platform: str = None) -> str:
+    """Return a human-friendly agent label while preserving the raw name in storage."""
+    text = (name or "").strip()
+    dept = display_department(department) or "Agent"
+    source = (platform or "").strip()
+    if not text:
+        return f"{source or 'AI'} {dept} Agent".strip()
+    if ":" in text:
+        prefix, label = text.split(":", 1)
+        if len(prefix) >= 12 and prefix.replace("-", "").isalnum():
+            return label.strip() or f"{dept} Agent"
+    return text
+
+
+def agent_active_recently(agent: RegisteredAgent, window_seconds: int = 60) -> bool:
+    """Treat a just-used active agent as live briefly so UI polling feels responsive."""
+    status = (agent.status or "idle").lower()
+    if status in ("locked", "queued"):
+        return False
+    if agent.target_record_id:
+        return True
+    if not agent.last_used_at:
+        return False
+    return datetime.utcnow() - agent.last_used_at <= timedelta(seconds=window_seconds)
 
 
 def register_agent(db: Session, name: str, department: str, permissions: str, target_table: str, collision_policy: str = "lock", source_platform: str = None) -> dict:
@@ -269,15 +308,21 @@ def simulate_collision(db: Session, agent_id_1: int, agent_id_2: int, table: str
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _serialize(a: RegisteredAgent) -> dict:
+    platform = a.source_platform or infer_platform(a.name)
+    display_dept = display_department(a.department)
+    display_name = display_agent_name(a.name, a.department, platform)
     return {
         "id":               a.id,
         "name":             a.name,
+        "display_name":     display_name,
         "department":       a.department,
-        "source_platform":  a.source_platform or infer_platform(a.name),
+        "display_department": display_dept,
+        "source_platform":  platform,
         "permissions":      a.permissions,
         "target_table":     a.target_table,
         "target_record_id": a.target_record_id,
         "status":           a.status,
+        "active_recently":  agent_active_recently(a),
         "collision_policy": a.collision_policy or "lock",
         "locked_at":        a.locked_at.isoformat() if a.locked_at else None,
         "lock_reason":      a.lock_reason,

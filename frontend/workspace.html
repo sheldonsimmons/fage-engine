@@ -793,17 +793,20 @@ async function loadAgents() {
     el.innerHTML = `
       <table class="ws-table">
         <thead><tr><th>Agent</th><th>Platform</th><th>Department</th><th>Status</th><th>Calls</th><th>Cost</th><th>Tokens Saved</th><th>Last Active</th></tr></thead>
-        <tbody>${d.agents.map(a => `
+        <tbody>${d.agents.map(a => {
+          const effectiveStatus = a.status === "locked" ? "locked" : a.active_recently ? "active" : (a.status || "idle");
+          return `
           <tr>
-            <td style="font-weight:600">${a.name}</td>
+            <td style="font-weight:600">${a.display_name || a.name}</td>
             <td style="font-size:11px;color:var(--accent);font-weight:700">${(a.platform||"api").toUpperCase()}</td>
-            <td style="font-size:11px">${a.department}</td>
-            <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:rgba(63,185,80,.15);color:var(--accent-green);text-transform:uppercase">${a.status}</span></td>
+            <td style="font-size:11px">${a.display_department || a.department}</td>
+            <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:${effectiveStatus === "active" ? "rgba(63,185,80,.15)" : "rgba(139,148,158,.15)"};color:${effectiveStatus === "active" ? "var(--accent-green)" : "var(--text-muted)"};text-transform:uppercase">${effectiveStatus}</span></td>
             <td>${(a.total_calls||0).toLocaleString()}</td>
             <td style="font-family:var(--font-mono);font-size:11px">$${(a.total_cost_usd||0).toFixed(4)}</td>
             <td style="color:var(--accent-green);font-size:11px">${(a.tokens_saved||0).toLocaleString()}</td>
             <td style="font-size:11px;color:var(--text-muted)">${a.last_active ? new Date(a.last_active).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
-          </tr>`).join("")}
+          </tr>`;
+        }).join("")}
         </tbody>
       </table>`;
   } catch(e) { /* silent */ }

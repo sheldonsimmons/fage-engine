@@ -21,6 +21,7 @@ from core.agentlake import (
     release_lock, simulate_collision,
     register_agent, deregister_agent,
     archive_agent, unarchive_agent,
+    display_agent_name, display_department, agent_active_recently,
 )
 
 router = APIRouter()
@@ -29,7 +30,9 @@ router = APIRouter()
 class AgentStatus(BaseModel):
     id:               int
     name:             str
+    display_name:     Optional[str] = None
     department:       str
+    display_department: Optional[str] = None
     source_platform:  Optional[str]
     permissions:      str
     target_table:     Optional[str]
@@ -39,6 +42,7 @@ class AgentStatus(BaseModel):
     locked_at:        Optional[str]
     lock_reason:      Optional[str]
     archived:         Optional[bool] = False
+    active_recently:  Optional[bool] = False
     min_tier:         Optional[int]  = 1
     max_tier:         Optional[int]  = 4
     pruning_enabled:  Optional[bool] = True
@@ -51,6 +55,10 @@ class TierBoundsRequest(BaseModel):
 
 class PruningToggleRequest(BaseModel):
     enabled: bool
+
+
+class RenameAgentRequest(BaseModel):
+    name: str
 
 
 class RegisterRequest(BaseModel):
@@ -133,9 +141,12 @@ def agent_spend_summary(db: Session = Depends(get_db)):
         results.append({
             "agent_id":        agent.id,
             "agent_name":      agent.name,
+            "display_name":    display_agent_name(agent.name, agent.department, agent.source_platform),
             "department":      agent.department,
+            "display_department": display_department(agent.department),
             "source_platform": agent.source_platform,
             "status":          agent.status,
+            "active_recently": agent_active_recently(agent),
             "last_used_at":    agent.last_used_at.isoformat() if agent.last_used_at else None,
             "call_count":      call_count,
             "total_cost_usd":  total_cost,
@@ -235,6 +246,23 @@ def toggle_pruning(agent_id: int, req: PruningToggleRequest, db: Session = Depen
     db.commit()
     db.refresh(agent)
     from core.agentlake import _serialize
+    return _serialize(agent)
+
+
+@router.patch("/{agent_id}/name", response_model=AgentStatus)
+def rename_agent(agent_id: int, req: RenameAgentRequest, db: Session = Depends(get_db)):
+    """Rename an agent's display/source name without changing its history."""
+    clean = (req.name or "").strip()
+    if not clean:
+        raise HTTPException(status_code=422, detail="Agent name cannot be blank.")
+    from database.models import RegisteredAgent
+    from core.agentlake import _serialize
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent.name = clean
+    db.commit()
+    db.refresh(agent)
     return _serialize(agent)
 
 

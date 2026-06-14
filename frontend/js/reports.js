@@ -735,8 +735,8 @@ function renderEfficiencyCard(r) {
       <div class="eff-card-header">
         <div class="eff-grade-badge ${grad}">${grad}</div>
         <div>
-          <div class="eff-card-name">${r.agent_name}</div>
-          <div class="eff-card-dept">${r.department} · ${s.target_table || ""}</div>
+          <div class="eff-card-name">${r.display_name || r.agent_name}</div>
+          <div class="eff-card-dept">${displayDeptName(r.display_department || r.department)} · ${s.target_table || ""}</div>
         </div>
       </div>
 
@@ -795,7 +795,7 @@ async function populateActivityDropdowns() {
     agents.forEach(a => {
       const opt = document.createElement("option");
       opt.value = a.id;
-      opt.textContent = a.name + " (" + (a.source_platform || "Custom") + ")";
+      opt.textContent = (a.display_name || a.name) + " (" + (a.source_platform || "Custom") + ")";
       agentSel.appendChild(opt);
     });
 
@@ -805,7 +805,7 @@ async function populateActivityDropdowns() {
     depts.forEach(d => {
       const opt = document.createElement("option");
       opt.value = d;
-      opt.textContent = d;
+      opt.textContent = displayDeptName(d);
       deptSel.appendChild(opt);
     });
   } catch (e) { /* silent */ }
@@ -859,8 +859,9 @@ function renderActivityTable(agents) {
       : a.platform === "HubSpot"     ? "var(--accent-yellow)"
       : "var(--text-muted)";
 
-    const statusBadge = a.status === "locked" ? "badge-locked"
-      : a.status === "active"  ? "badge-active"
+    const effectiveStatus = a.status === "locked" ? "locked" : a.active_recently ? "active" : (a.status || "idle");
+    const statusBadge = effectiveStatus === "locked" ? "badge-locked"
+      : effectiveStatus === "active"  ? "badge-active"
       : "badge-idle";
 
     const lastActive = a.last_active
@@ -872,10 +873,10 @@ function renderActivityTable(agents) {
     return `
       <tr class="act-agent-row ${isOpen ? "act-row-open" : ""}" onclick="toggleCallLog(${a.id})">
         <td class="act-expand-cell">${isOpen ? "▾" : "▸"}</td>
-        <td style="font-weight:600">${a.name}</td>
+        <td style="font-weight:600">${a.display_name || a.name}</td>
         <td style="font-size:11px; font-weight:700; color:${platformColor}">${a.platform}</td>
-        <td>${a.department}</td>
-        <td><span class="badge ${statusBadge}">${a.status.toUpperCase()}</span></td>
+        <td>${displayDeptName(a.display_department || a.department)}</td>
+        <td><span class="badge ${statusBadge}">${effectiveStatus.toUpperCase()}</span></td>
         <td style="font-weight:600">${a.calls.toLocaleString()}</td>
         <td style="color:var(--accent-red)">$${a.cost_usd.toFixed(4)}</td>
         <td style="color:var(--text-muted); font-size:11px">$${a.avg_cost_usd.toFixed(5)}</td>

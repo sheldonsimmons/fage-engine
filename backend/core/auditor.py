@@ -325,14 +325,24 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
 
     agent = getattr(e, "agent", None)
     cost_usd = _extract_cost_usd(e)
+    display_dept = _display_department(e.department)
+    display_agent = None
+    if agent:
+        try:
+            from core.agentlake import display_agent_name
+            display_agent = display_agent_name(agent.name, agent.department, agent.source_platform)
+        except Exception:
+            display_agent = agent.name
 
     base = {
         "id":               e.id,
         "event_type":       e.event_type,
-        "department":       _display_department(e.department),
+        "department":       display_dept,
+        "display_department": display_dept,
         "source_department": e.department,
         "agent_id":         e.agent_id,
         "agent_name":       agent.name if agent else None,
+        "display_agent_name": display_agent,
         "source_platform":  agent.source_platform if agent else None,
         "model_tier":       e.model_tier,
         "risk_level":       e.risk_level,

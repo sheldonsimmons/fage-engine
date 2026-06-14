@@ -26,6 +26,8 @@ class AuditEventSummary(BaseModel):
     source_department: Optional[str] = None
     agent_id:         Optional[int] = None
     agent_name:       Optional[str] = None
+    display_agent_name: Optional[str] = None
+    display_department: Optional[str] = None
     source_platform:  Optional[str] = None
     model_tier:       Optional[str]
     risk_level:       str

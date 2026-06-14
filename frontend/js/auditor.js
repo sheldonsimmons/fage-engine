@@ -136,8 +136,8 @@ function renderAuditTable(events) {
       <tr class="${rowClass}" id="audit-entry-${e.id}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale & payload">
         <td style="font-family:var(--font-mono); font-size:11px">${ts}</td>
         <td><span class="badge ${isBlocked ? 'badge-critical' : 'badge-scout'}">${isBlocked ? "🛡 BLOCKED" : e.event_type}</span></td>
-        <td style="font-weight:600;color:var(--accent);font-size:11px">${e.agent_name || "—"}</td>
-        <td>${e.department}</td>
+        <td style="font-weight:600;color:var(--accent);font-size:11px">${e.display_agent_name || e.agent_name || "—"}</td>
+        <td>${e.display_department || e.department}</td>
         <td><span class="badge ${tierBadgeClass}">${tierLabel}</span></td>
         <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
         <td style="font-size:11px; color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}; font-weight:${isBlocked ? '600' : 'normal'}">${blockedIcon}${outcome}</td>
@@ -164,16 +164,16 @@ async function fetchRationaleContent(eventId) {
     try { snapshot = JSON.parse(detail.context_snapshot || "{}"); } catch {}
     const hasBudgetContext = snapshot.budget_cap_usd != null || snapshot.budget_spent_usd != null;
     const callCost = detail.cost_usd != null ? `$${Number(detail.cost_usd).toFixed(6)}` : "not recorded";
-    const agentLine = `Agent: ${detail.agent_name || "not linked"}
+    const agentLine = `Agent: ${detail.display_agent_name || detail.agent_name || "not linked"}
           &nbsp;|&nbsp; Platform: ${detail.source_platform || "unknown"}
-          &nbsp;|&nbsp; Department: ${detail.department || "—"}`;
+          &nbsp;|&nbsp; Department: ${detail.display_department || detail.department || "—"}`;
     const contextLine = hasBudgetContext
       ? `Budget: $${snapshot.budget_spent_usd ?? "0"} / $${snapshot.budget_cap_usd ?? "0"}
           &nbsp;(${snapshot.budget_used_pct ?? 0}% used)
           &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? false}
           &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? false}
           &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`
-      : `Budget: Not configured for ${snapshot.department || detail.department || "this department"}
+      : `Budget: Not configured for ${snapshot.department || detail.display_department || detail.department || "this department"}
           &nbsp;|&nbsp; Call cost: ${callCost}
           &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`;
 
@@ -273,8 +273,8 @@ function _renderRoutingRows(events) {
     return `
       <tr class="${rowClass}" onclick="jumpToMainAuditRow(${e.id})" style="cursor:pointer" title="Click to jump to audit log entry">
         <td style="font-family:var(--font-mono);color:var(--text-muted);font-size:11px">${ts}</td>
-        <td style="font-weight:600;color:var(--accent);font-size:11px">${e.agent_name || "—"}</td>
-        <td style="color:var(--text-muted);font-size:11px">${e.department || "—"}</td>
+        <td style="font-weight:600;color:var(--accent);font-size:11px">${e.display_agent_name || e.agent_name || "—"}</td>
+        <td style="color:var(--text-muted);font-size:11px">${e.display_department || e.department || "—"}</td>
         <td>${tierBadge}</td>
         <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
         <td style="font-size:11px;color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}">${e.decision_outcome || "—"}</td>
@@ -315,7 +315,7 @@ function applyAuditFilters() {
 
   const filtered = auditAllEvents.filter(e => {
     if (_auditBlockedOnly && !(e.decision_outcome || "").toLowerCase().includes("blocked")) return false;
-    if (dept && (e.department || "").toLowerCase() !== dept) return false;
+    if (dept && (e.display_department || e.department || "").toLowerCase() !== dept) return false;
     if (risk && (e.risk_level || "").toLowerCase() !== risk) return false;
     if (cutoff && new Date(e.timestamp + "Z").getTime() < cutoff) return false;
     return true;
@@ -348,7 +348,7 @@ function _populateAuditDeptFilter(events) {
   if (!sel) return;
   const current = sel.value;
   while (sel.options.length > 1) sel.remove(1);  // keep "All Depts", rebuild the rest
-  const depts = [...new Set(events.map(e => e.department).filter(Boolean))].sort();
+  const depts = [...new Set(events.map(e => e.display_department || e.department).filter(Boolean))].sort();
   depts.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.toLowerCase(); opt.textContent = d;
@@ -368,7 +368,7 @@ function exportAuditCsv() {
   const rows = auditAllEvents.map(e => [
     fmtTs(e.timestamp),
     e.event_type,
-    e.department,
+    e.display_department || e.department,
     e.model_tier || "",
     e.risk_level || "",
     e.decision_outcome || "",

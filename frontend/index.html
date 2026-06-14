@@ -718,7 +718,7 @@ function syncExecFilterControls() {
 function populateExecFilters(data) {
   const events = data.audits || [];
   const agents = data.agents || [];
-  const budgetDepts = (data.dashboard?.budget_summaries || []).map(b => b.department);
+  const budgetDepts = (data.dashboard?.budget_summaries || []).map(b => displayDeptName(b.display_department || b.department));
   const eventDepts = events.map(e => displayDeptName(e.department)).filter(Boolean);
   const depts = [...new Set([...budgetDepts, ...eventDepts])].sort();
   const platforms = [...new Set([
@@ -726,11 +726,11 @@ function populateExecFilters(data) {
     ...events.map(e => e.source_platform),
   ].filter(Boolean).map(p => String(p)))].sort();
   const activeAgentDept = execFilters.dept;
-  const filteredAgents = agents.filter(a => !activeAgentDept || norm(a.department) === norm(activeAgentDept));
+  const filteredAgents = agents.filter(a => !activeAgentDept || norm(displayDeptName(a.display_department || a.department)) === norm(activeAgentDept));
 
   fillSelect("execFilterDept", depts, "All Departments");
   fillSelect("execFilterPlatform", platforms, "All Platforms");
-  fillSelect("execFilterAgent", filteredAgents, "All Agents", a => a.id, a => `${a.name} (${a.department || "—"})`);
+  fillSelect("execFilterAgent", filteredAgents, "All Agents", a => a.id, a => `${a.display_name || a.name} (${displayDeptName(a.display_department || a.department) || "—"})`);
   syncExecFilterControls();
 }
 
