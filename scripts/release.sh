@@ -40,6 +40,30 @@ with engine.connect() as conn:
         ALTER TABLE trial_accounts
         ADD COLUMN IF NOT EXISTS upgrade_requested_at TIMESTAMP
     '''))
+    conn.execute(text('''
+        ALTER TABLE department_budgets
+        ADD COLUMN IF NOT EXISTS throttle_tier INTEGER DEFAULT 1
+    '''))
+    conn.execute(text('''
+        ALTER TABLE department_budgets
+        ADD COLUMN IF NOT EXISTS raw_payload_logging_enabled BOOLEAN DEFAULT FALSE
+    '''))
+    conn.execute(text('''
+        ALTER TABLE department_budgets
+        ADD COLUMN IF NOT EXISTS raw_retention_days INTEGER DEFAULT 30
+    '''))
+    conn.execute(text('''
+        ALTER TABLE audit_events
+        ADD COLUMN IF NOT EXISTS raw_payload TEXT
+    '''))
+    conn.execute(text('''
+        ALTER TABLE audit_events
+        ADD COLUMN IF NOT EXISTS raw_logged_at TIMESTAMP
+    '''))
+    conn.execute(text('''
+        ALTER TABLE audit_events
+        ADD COLUMN IF NOT EXISTS matched_keywords_json TEXT
+    '''))
     conn.commit()
 print('   Column migrations applied')
 
