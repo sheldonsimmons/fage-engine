@@ -54,6 +54,28 @@ function displayDeptName(name) {
   return colonIndex >= 0 ? text.slice(colonIndex + 1).trim() || text : text;
 }
 
+function mergedDeptBudgets(rows = []) {
+  const merged = new Map();
+  rows.forEach(b => {
+    const label = displayDeptName(b.display_department || b.department || b.name);
+    const key = label.toLowerCase();
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, { ...b, display_department: label });
+      return;
+    }
+    current.current_spend_usd = (current.current_spend_usd || 0) + (b.current_spend_usd || 0);
+    current.monthly_cap_usd = Math.max(current.monthly_cap_usd || 0, b.monthly_cap_usd || 0);
+    current.throttled = current.throttled || b.throttled;
+    const pct = current.monthly_cap_usd ? (current.current_spend_usd / current.monthly_cap_usd) * 100 : 0;
+    current.budget_used_pct = Math.round(pct * 10) / 10;
+    current.used_pct = current.budget_used_pct;
+  });
+  return Array.from(merged.values()).sort((a, b) =>
+    String(a.display_department).localeCompare(String(b.display_department))
+  );
+}
+
 function renderDeptHealth(d) {
   // Tier split in dept health bar
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -64,7 +86,7 @@ function renderDeptHealth(d) {
   // Department pills — read from budget bars data
   const pills = document.getElementById("deptHealthPills");
   if (!pills) return;
-  const budgets = d.department_budgets || d.budget_summaries || [];
+  const budgets = mergedDeptBudgets(d.department_budgets || d.budget_summaries || []);
   if (!budgets.length) {
     pills.innerHTML = `<span style="color:var(--text-muted);font-size:11px">No departments configured</span>`;
     return;

@@ -53,6 +53,41 @@ function fmtPct(spend, cap) {
   return pct.toFixed(1) + "%";
 }
 
+function cleanBudgetDeptName(department) {
+  if (!department) return "—";
+  const text = String(department).trim();
+  const colonIndex = text.indexOf(":");
+  if (colonIndex < 0) return text;
+  const prefix = text.slice(0, colonIndex);
+  const label = text.slice(colonIndex + 1).trim();
+  return prefix.length >= 12 && /^[A-Za-z0-9-]+$/.test(prefix) && label ? label : text;
+}
+
+function displayBudgetRows(rows = []) {
+  const merged = new Map();
+  rows.forEach(b => {
+    const label = cleanBudgetDeptName(b.display_department || b.department || b.name);
+    const key = label.toLowerCase();
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, { ...b, display_department: label, raw_departments: [b.department] });
+      return;
+    }
+    current.current_spend_usd = (current.current_spend_usd || 0) + (b.current_spend_usd || 0);
+    current.monthly_cap_usd = Math.max(current.monthly_cap_usd || 0, b.monthly_cap_usd || 0);
+    current.remaining_usd = current.monthly_cap_usd - current.current_spend_usd;
+    current.throttled = current.throttled || b.throttled;
+    current.override_granted = current.override_granted || b.override_granted;
+    current.raw_departments.push(b.department);
+    const usedPct = current.monthly_cap_usd ? (current.current_spend_usd / current.monthly_cap_usd) * 100 : 0;
+    current.used_pct = Math.round(usedPct * 10) / 10;
+    current.state = current.throttled ? "throttled" : current.used_pct >= 80 ? "warning" : "healthy";
+  });
+  return Array.from(merged.values()).sort((a, b) =>
+    String(a.display_department).localeCompare(String(b.display_department))
+  );
+}
+
 function renderBudgets() {
   const container = document.getElementById("budgetList");
   if (!budgetData.length) {
@@ -152,7 +187,7 @@ function renderLiveBudgetBars() {
     container.innerHTML = '<p class="placeholder">Loading...</p>';
     return;
   }
-  container.innerHTML = budgetData.map(b => {
+  container.innerHTML = displayBudgetRows(budgetData).map(b => {
     const fillClass = b.state === "throttled" ? "critical"
                     : b.state === "warning"   ? "warn"
                     : "";
@@ -175,7 +210,7 @@ function renderLiveBudgetBars() {
     return `
       <div class="budget-item">
         <div class="budget-dept">
-          <span class="dept-name">${b.department} ${stateTag}</span>
+          <span class="dept-name">${b.display_department || cleanBudgetDeptName(b.department)} ${stateTag}</span>
           <span style="display:flex;align-items:center;gap:10px">
             ${overrideBtn}
             <span class="dept-spend">${fmtUsd(b.current_spend_usd)} / ${fmtUsd(b.monthly_cap_usd)} &nbsp;(${displayPct})</span>
