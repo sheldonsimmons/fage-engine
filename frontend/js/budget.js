@@ -8,6 +8,9 @@
  */
 
 let budgetData = [];
+let openBudgetKey = null;
+let budgetSearchTerm = "";
+let budgetStateFilter = "";
 
 /** Fetch all budgets and re-render the panel */
 async function loadBudgets() {
@@ -63,6 +66,18 @@ function cleanBudgetDeptName(department) {
   return prefix.length >= 12 && /^[A-Za-z0-9-]+$/.test(prefix) && label ? label : text;
 }
 
+function budgetJsString(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, " ");
+}
+
+function budgetAttr(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function displayBudgetRows(rows = []) {
   const merged = new Map();
   rows.forEach(b => {
@@ -70,7 +85,7 @@ function displayBudgetRows(rows = []) {
     const key = label.toLowerCase();
     const current = merged.get(key);
     if (!current) {
-      merged.set(key, { ...b, display_department: label, raw_departments: [b.department] });
+      merged.set(key, { ...b, budget_key: key, display_department: label, raw_departments: [b.department] });
       return;
     }
     current.current_spend_usd = (current.current_spend_usd || 0) + (b.current_spend_usd || 0);
@@ -78,6 +93,7 @@ function displayBudgetRows(rows = []) {
     current.remaining_usd = current.monthly_cap_usd - current.current_spend_usd;
     current.throttled = current.throttled || b.throttled;
     current.override_granted = current.override_granted || b.override_granted;
+    current.raw_payload_logging_enabled = current.raw_payload_logging_enabled || b.raw_payload_logging_enabled;
     current.raw_departments.push(b.department);
     const usedPct = current.monthly_cap_usd ? (current.current_spend_usd / current.monthly_cap_usd) * 100 : 0;
     current.used_pct = Math.round(usedPct * 10) / 10;
@@ -90,12 +106,24 @@ function displayBudgetRows(rows = []) {
 
 function renderBudgets() {
   const container = document.getElementById("budgetList");
+  const searchWasFocused = document.activeElement?.dataset?.budgetSearch === "true";
+  const searchCursor = searchWasFocused ? document.activeElement.selectionStart : null;
   if (!budgetData.length) {
     container.innerHTML = '<p class="placeholder">No budget data found.</p>';
     return;
   }
 
-  container.innerHTML = budgetData.map(b => {
+  let rows = displayBudgetRows(budgetData);
+  const search = budgetSearchTerm.trim().toLowerCase();
+  if (search) rows = rows.filter(b => String(b.display_department || "").toLowerCase().includes(search));
+  if (budgetStateFilter) {
+    rows = rows.filter(b => {
+      if (budgetStateFilter === "raw") return b.raw_payload_logging_enabled;
+      return (b.state || "healthy") === budgetStateFilter;
+    });
+  }
+
+  const tableRows = rows.map(b => {
     const fillClass = b.state === "throttled" ? "critical"
                     : b.state === "warning"   ? "warn"
                     : "";
@@ -107,12 +135,6 @@ function renderBudgets() {
         : b.state === "warning"
           ? `<span class="budget-tag" style="color:var(--accent-yellow)">WARNING</span>`
           : "";
-
-    const overrideBtn = b.throttled
-      ? `<button class="btn-override" onclick="doOverride('${b.department}')">Grant Override</button>`
-      : b.override_granted
-        ? `<button class="btn-override btn-revoke" onclick="doRevoke('${b.department}')">Revoke Override</button>`
-        : "";
 
     const displayPct = fmtPct(b.current_spend_usd, b.monthly_cap_usd);
     const barPct     = b.monthly_cap_usd > 0
@@ -128,55 +150,98 @@ function renderBudgets() {
     ].map(o =>
       `<option value="${o.v}" ${o.v === throttleTier ? "selected" : ""}>${o.label}</option>`
     ).join("");
+    const key = budgetJsString(b.budget_key);
+    const departments = (b.raw_departments || [b.department]).filter(Boolean);
+    const rawCount = departments.length > 1
+      ? `<span style="color:var(--text-muted);font-size:10px"> ${departments.length} records</span>`
+      : "";
+    const editor = openBudgetKey === b.budget_key ? `
+      <tr>
+        <td colspan="6" style="padding:12px 10px;background:rgba(88,166,255,.04)">
+          <div class="budget-actions" style="margin-top:0">
+            <input type="number" class="cap-input" id="cap-${b.budget_key}"
+                   value="${b.monthly_cap_usd}" min="1" step="10" />
+            <button class="btn-cap" onclick="doSetCapGroup('${key}')">Set Cap</button>
+            <button class="btn-cap btn-reset" onclick="doResetGroup('${key}')">Reset Month</button>
+            ${b.throttled
+              ? `<button class="btn-override" onclick="doOverrideGroup('${key}')">Grant Override</button>`
+              : b.override_granted
+                ? `<button class="btn-override btn-revoke" onclick="doRevokeGroup('${key}')">Revoke Override</button>`
+                : ""}
+          </div>
+          <div class="budget-throttle-row">
+            <span class="budget-throttle-label">Throttle floor:</span>
+            <select class="budget-throttle-select" id="throttle-tier-${b.budget_key}">
+              ${tierOpts}
+            </select>
+            <button class="btn-cap" onclick="doSetThrottleTierGroup('${key}')">Save Floor</button>
+          </div>
+          <div class="budget-throttle-row">
+            <span class="budget-throttle-label">Raw payload log:</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="raw-log-${b.budget_key}" ${b.raw_payload_logging_enabled ? "checked" : ""}>
+              <span class="toggle-slider"></span>
+            </label>
+            <select class="budget-throttle-select" id="raw-retention-${b.budget_key}">
+              <option value="30"  ${(b.raw_retention_days ?? 30) === 30  ? "selected" : ""}>30 days</option>
+              <option value="90"  ${(b.raw_retention_days ?? 30) === 90  ? "selected" : ""}>90 days</option>
+              <option value="180" ${(b.raw_retention_days ?? 30) === 180 ? "selected" : ""}>180 days</option>
+              <option value="365" ${(b.raw_retention_days ?? 30) === 365 ? "selected" : ""}>1 year</option>
+              <option value="0"   ${(b.raw_retention_days ?? 30) === 0   ? "selected" : ""}>Indefinite</option>
+            </select>
+            <button class="btn-cap" onclick="doSetRawLoggingGroup('${key}')">Save Logging</button>
+          </div>
+          <div class="budget-throttle-hint">Applies to: ${departments.map(cleanBudgetDeptName).join(", ")}</div>
+        </td>
+      </tr>` : "";
 
     return `
-      <div class="budget-item" id="budget-${b.department}">
-        <div class="budget-dept">
-          <span class="dept-name">${b.department} ${stateTag}</span>
-          <span class="dept-spend">
-            ${fmtUsd(b.current_spend_usd)} / ${fmtUsd(b.monthly_cap_usd)}
-            &nbsp;(${displayPct})
-          </span>
-        </div>
-        <div class="budget-bar-track">
-          <div class="budget-bar-fill ${fillClass}" style="width:${barPct}%"></div>
-        </div>
-        <div class="budget-actions">
-          <input  type="number" class="cap-input" id="cap-${b.department}"
-                  value="${b.monthly_cap_usd}" min="1" step="10" />
-          <button class="btn-cap" onclick="doSetCap('${b.department}')">Set Cap</button>
-          <button class="btn-cap btn-reset" onclick="doReset('${b.department}')">Reset Month</button>
-          ${overrideBtn}
-        </div>
-        <div class="budget-throttle-row">
-          <span class="budget-throttle-label">Throttle floor:</span>
-          <select class="budget-throttle-select" id="throttle-tier-${b.department}"
-                  onchange="doSetThrottleTier('${b.department}')">
-            ${tierOpts}
-          </select>
-          <span class="budget-throttle-hint">Min tier when over budget</span>
-        </div>
-        <div class="budget-throttle-row">
-          <span class="budget-throttle-label">Raw payload log:</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="raw-log-${b.department}"
-                   ${b.raw_payload_logging_enabled ? "checked" : ""}
-                   onchange="doSetRawLogging('${b.department}')">
-            <span class="toggle-slider"></span>
-          </label>
-          <select class="budget-throttle-select" id="raw-retention-${b.department}"
-                  onchange="doSetRawLogging('${b.department}')">
-            <option value="30"  ${(b.raw_retention_days ?? 30) === 30  ? "selected" : ""}>30 days</option>
-            <option value="90"  ${(b.raw_retention_days ?? 30) === 90  ? "selected" : ""}>90 days</option>
-            <option value="180" ${(b.raw_retention_days ?? 30) === 180 ? "selected" : ""}>180 days</option>
-            <option value="365" ${(b.raw_retention_days ?? 30) === 365 ? "selected" : ""}>1 year</option>
-            <option value="0"   ${(b.raw_retention_days ?? 30) === 0   ? "selected" : ""}>Indefinite</option>
-          </select>
-          <span class="budget-throttle-hint">Store pre-prune text in audit log</span>
-        </div>
-      </div>
+      <tr>
+        <td>
+          <strong>${b.display_department}</strong>${rawCount}
+          <div class="budget-bar-track" style="margin-top:6px">
+            <div class="budget-bar-fill ${fillClass}" style="width:${barPct}%"></div>
+          </div>
+        </td>
+        <td class="dept-spend">${fmtUsd(b.current_spend_usd)} / ${fmtUsd(b.monthly_cap_usd)}</td>
+        <td>${displayPct}</td>
+        <td>${stateTag || `<span style="color:var(--accent-green);font-weight:700">HEALTHY</span>`}</td>
+        <td>${b.raw_payload_logging_enabled ? "On" : "Off"}</td>
+        <td><button class="btn-cap" onclick="toggleBudgetEditor('${key}')">${openBudgetKey === b.budget_key ? "Close" : "Edit"}</button></td>
+      </tr>
+      ${editor}
     `;
   }).join("");
+
+  container.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+      <input class="agent-filter-search" style="flex:1;min-width:180px" placeholder="Search departments..."
+             data-budget-search="true" value="${budgetAttr(budgetSearchTerm)}" oninput="budgetSearchTerm=this.value;renderBudgets()" />
+      <select class="agent-filter-select" onchange="budgetStateFilter=this.value;renderBudgets()">
+        <option value="" ${budgetStateFilter === "" ? "selected" : ""}>All Statuses</option>
+        <option value="healthy" ${budgetStateFilter === "healthy" ? "selected" : ""}>Healthy</option>
+        <option value="warning" ${budgetStateFilter === "warning" ? "selected" : ""}>Warning</option>
+        <option value="throttled" ${budgetStateFilter === "throttled" ? "selected" : ""}>Throttled</option>
+        <option value="raw" ${budgetStateFilter === "raw" ? "selected" : ""}>Raw Logging On</option>
+      </select>
+    </div>
+    <table class="agent-table">
+      <thead>
+        <tr>
+          <th>Department</th><th>Spend / Cap</th><th>Used</th><th>Status</th><th>Raw Log</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows || `<tr><td colspan="6" class="placeholder">No departments match this filter.</td></tr>`}
+      </tbody>
+    </table>`;
+  if (searchWasFocused) {
+    const input = container.querySelector("[data-budget-search='true']");
+    if (input) {
+      input.focus();
+      input.setSelectionRange(searchCursor, searchCursor);
+    }
+  }
 }
 
 /** Render budget bars only (no cap controls) for the live ops strip */
@@ -229,6 +294,102 @@ function updateKpiThrottled() {
   const kpiCard = document.getElementById("kpiThrottleCard");
   if (kpiEl)   kpiEl.textContent = count;
   if (kpiCard) kpiCard.className = "kpi-card" + (count > 0 ? " alert" : "");
+}
+
+function toggleBudgetEditor(key) {
+  openBudgetKey = openBudgetKey === key ? null : key;
+  renderBudgets();
+}
+
+function findBudgetGroup(key) {
+  return displayBudgetRows(budgetData).find(b => b.budget_key === key);
+}
+
+async function forEachBudgetDepartment(key, fn) {
+  const row = findBudgetGroup(key);
+  const departments = row?.raw_departments?.filter(Boolean) || [];
+  if (!departments.length) throw new Error("Department not found.");
+  for (const department of departments) {
+    await fn(department);
+  }
+}
+
+async function doSetCapGroup(key) {
+  const input = document.getElementById(`cap-${key}`);
+  const newCap = parseFloat(input.value);
+  if (!newCap || newCap <= 0) return;
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPost(`/api/budget/${encodeURIComponent(department)}/cap`, { new_cap_usd: newCap })
+    );
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to set cap: ${err.message}`);
+  }
+}
+
+async function doOverrideGroup(key) {
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPost(`/api/budget/${encodeURIComponent(department)}/override`, {})
+    );
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to grant override: ${err.message}`);
+  }
+}
+
+async function doRevokeGroup(key) {
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPost(`/api/budget/${encodeURIComponent(department)}/revoke`, {})
+    );
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to revoke override: ${err.message}`);
+  }
+}
+
+async function doSetThrottleTierGroup(key) {
+  const sel = document.getElementById(`throttle-tier-${key}`);
+  const tier = parseInt(sel.value, 10);
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPatch(`/api/budget/${encodeURIComponent(department)}/throttle-tier`, { tier })
+    );
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to set throttle floor: ${err.message}`);
+  }
+}
+
+async function doSetRawLoggingGroup(key) {
+  const checkbox = document.getElementById(`raw-log-${key}`);
+  const retentionSel = document.getElementById(`raw-retention-${key}`);
+  const enabled = checkbox.checked;
+  const retention_days = parseInt(retentionSel.value, 10);
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPatch(`/api/budget/${encodeURIComponent(department)}/raw-logging`, { enabled, retention_days })
+    );
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to update raw logging: ${err.message}`);
+  }
+}
+
+async function doResetGroup(key) {
+  const row = findBudgetGroup(key);
+  const label = row?.display_department || key;
+  if (!confirm(`Reset ${label} spend to $0.00? This simulates a new billing period.`)) return;
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPost(`/api/budget/${encodeURIComponent(department)}/reset`, {})
+    );
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to reset: ${err.message}`);
+  }
 }
 
 /** Supervisor: update a department's monthly cap */
