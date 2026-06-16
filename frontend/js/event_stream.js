@@ -34,10 +34,12 @@ function _renderStreamCards(events) {
     const agent  = e.display_agent_name || e.agent_name || "Agent not linked";
     const cost   = e.cost_usd != null ? `$${e.cost_usd.toFixed(6)}` : "—";
     const tokens = e.tokens_in != null ? `${(e.tokens_in + (e.tokens_out || 0)).toLocaleString()} tokens` : "";
+    const savedTokens = Number(e.tokens_saved || 0);
+    const pruning = savedTokens > 0 ? `↓ ${savedTokens.toLocaleString()} tokens saved` : "";
 
     const budgetUsed = dashData.budget_used_pct != null ? `${dashData.budget_used_pct.toFixed(1)}% budget used` : "";
     const monthSpend = dashData.spend_month_usd  != null ? `$${dashData.spend_month_usd.toFixed(2)} this month` : "";
-    const metaParts  = [tokens, cost, agent, dept, budgetUsed, monthSpend].filter(Boolean);
+    const metaParts  = [pruning, tokens, cost, agent, dept, budgetUsed, monthSpend].filter(Boolean);
 
     const keywords = (e.matched_keywords || []).length
       ? `<span style="color:var(--accent-red)"> · ${e.matched_keywords.slice(0,3).join(", ")}</span>`
@@ -176,9 +178,15 @@ async function toggleStreamEvent(eventId) {
       ? `$${snapshot.budget_spent_usd ?? "?"} / $${snapshot.budget_cap_usd ?? "?"} &nbsp;(${snapshot.budget_used_pct ?? "?"}% used) &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? "?"} &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? "?"}`
       : "—";
 
-    const pruningLine = snapshot.tokens_saved > 0
+    const detailSaved = Number(snapshot.tokens_saved ?? e.tokens_saved ?? 0);
+    const hasPruningStats = snapshot.raw_tokens != null || snapshot.clean_tokens != null || snapshot.tokens_saved != null || e.tokens_saved != null;
+    const pruningLine = hasPruningStats
       ? `<div class="gov-detail-label">Pruning</div>
-         <div class="gov-detail-mono">Raw: ${snapshot.raw_tokens ?? "?"} tokens &nbsp;→&nbsp; Clean: ${snapshot.clean_tokens ?? "?"} tokens &nbsp;|&nbsp; <span style="color:var(--accent-green)">Saved: ${snapshot.tokens_saved ?? 0} tokens (${snapshot.compression_pct ?? 0}% reduction)</span></div>`
+         <div class="gov-detail-mono">${
+           detailSaved > 0
+             ? `Raw: ${snapshot.raw_tokens ?? e.raw_tokens ?? "?"} tokens &nbsp;→&nbsp; Clean: ${snapshot.clean_tokens ?? e.clean_tokens ?? "?"} tokens &nbsp;|&nbsp; <span style="color:var(--accent-green)">Saved: ${detailSaved.toLocaleString()} tokens (${snapshot.compression_pct ?? e.compression_pct ?? 0}% reduction)</span>`
+             : `No token savings recorded for this event. Short payloads often have nothing for the pruner to remove.`
+         }</div>`
       : "";
 
     const keywords = (e.matched_keywords || []).length

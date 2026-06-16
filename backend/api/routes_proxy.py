@@ -292,20 +292,35 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         db.query(DepartmentBudget).filter_by(department=dept_key).first() or
         db.query(DepartmentBudget).filter_by(department=department).first()
     )
-    budget_ctx = None
+    budget_ctx = {
+        "department": dept_key,
+        "budget_spent_usd": None,
+        "budget_cap_usd": None,
+        "budget_used_pct": None,
+        "throttled": None,
+        "override_granted": None,
+        "captured_at": now.isoformat(),
+    }
     if budget:
         budget.current_spend_usd = round((budget.current_spend_usd or 0.0) + cost_usd, 6)
         if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
             budget.throttled = True
         used_pct = round(budget.current_spend_usd / budget.monthly_cap_usd * 100, 1) if budget.monthly_cap_usd else 0
-        budget_ctx = json.dumps({
+        budget_ctx.update({
             "department":       budget.department,
             "budget_spent_usd": round(budget.current_spend_usd, 4),
             "budget_cap_usd":   budget.monthly_cap_usd,
             "budget_used_pct":  used_pct,
             "throttled":        budget.throttled,
             "override_granted": budget.override_granted,
-            "captured_at":      now.isoformat(),
+        })
+    if tokens_saved or input_tokens:
+        raw_tokens = int((input_tokens or 0) + (tokens_saved or 0))
+        budget_ctx.update({
+            "raw_tokens": raw_tokens,
+            "clean_tokens": int(input_tokens or 0),
+            "tokens_saved": int(tokens_saved or 0),
+            "compression_pct": round((tokens_saved / raw_tokens) * 100, 1) if raw_tokens > 0 else 0.0,
         })
 
     # Audit event — feeds Governance Event Stream + decision ledger
@@ -329,7 +344,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         decision_outcome      = outcome,
         risk_level            = risk_level,
         timestamp             = now,
-        context_snapshot      = budget_ctx,
+        context_snapshot      = json.dumps(budget_ctx),
         prompt_payload        = prompt_text[:400] if prompt_text else None,
         matched_keywords_json = json.dumps(matched_keywords or []),
     )

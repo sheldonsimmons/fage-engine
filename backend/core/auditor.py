@@ -323,6 +323,11 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
     except Exception:
         matched_kws = []
 
+    try:
+        context = json.loads(e.context_snapshot or "{}")
+    except Exception:
+        context = {}
+
     agent = getattr(e, "agent", None)
     cost_usd = _extract_cost_usd(e)
     display_dept = _display_department(e.department)
@@ -351,6 +356,10 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "timestamp":        e.timestamp.isoformat() if e.timestamp else None,
         "has_raw_payload":  bool(getattr(e, "raw_payload", None)),
         "matched_keywords": matched_kws,
+        "raw_tokens":       context.get("raw_tokens"),
+        "clean_tokens":     context.get("clean_tokens"),
+        "tokens_saved":     context.get("tokens_saved", 0) or 0,
+        "compression_pct":  context.get("compression_pct"),
     }
     if full:
         raw = getattr(e, "raw_payload", None)
@@ -358,8 +367,7 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         if raw and raw_logged_at:
             retention_days = 30
             try:
-                ctx = json.loads(e.context_snapshot or "{}")
-                retention_days = ctx.get("raw_retention_days", 30) or 30
+                retention_days = context.get("raw_retention_days", 30) or 30
             except Exception:
                 pass
             if retention_days > 0:
