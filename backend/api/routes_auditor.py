@@ -33,6 +33,10 @@ class AuditEventSummary(BaseModel):
     risk_level:       str
     decision_outcome: Optional[str]
     cost_usd:         Optional[float] = None
+    raw_tokens:       Optional[int] = None
+    clean_tokens:     Optional[int] = None
+    tokens_saved:     Optional[int] = 0
+    compression_pct:  Optional[float] = None
     has_raw_payload:  Optional[bool] = False
     matched_keywords: Optional[List[str]] = Field(default_factory=list)
     timestamp:        Optional[str]
