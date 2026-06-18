@@ -513,11 +513,12 @@ function renderExecSummary(d) {
     ? ((d.compliance_events_total) / 1000).toFixed(1) + "K"
     : (d.compliance_events_total || 0).toString();
   const savings = (d.projected_annual_savings || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const governed = (d.requests_governed || d.total_calls || 0).toLocaleString();
   const items = [
     { icon: "$", cls: "green",  color: "green",  title: "PROJECTED ANNUAL SAVINGS",  value: "$" + savings,                        sub: "Based on 30-day actual performance extrapolated to 12 months" },
     { icon: "%", cls: "accent", color: "accent", title: "AI COST REDUCTION",         value: (d.cost_reduction_pct || 0) + "%",    sub: "Achieved through smart routing, token pruning, and budget enforcement" },
     { icon: "◈", cls: "purple", color: "purple", title: "COMPLIANCE EVENTS LOGGED",  value: eventsLabel,                          sub: "Immutable audit trail — every AI decision logged, timestamped, exportable" },
-    { icon: "⚡", cls: "yellow", color: "yellow", title: "TIME TO DEPLOY",            value: "15 min",                             sub: "One Apex class · one Flow action · 4 custom fields · no IT project required" },
+    { icon: "✓", cls: "yellow", color: "yellow", title: "REQUESTS GOVERNED",         value: governed,                             sub: "AI requests routed, blocked, audited, or budget-checked by CostPilot" },
     { icon: "↑", cls: "green",  color: "green",  title: "TOKENS SAVED",              value: tokensLabel,                          sub: "Context pruned before every AI call — savings start from day one" },
     { icon: "0", cls: "red",    color: "",        title: "DATA CORRUPTION EVENTS",    value: "Zero",                               sub: (d.collision_count || 0) + " agent collisions detected and locked — no silent overwrites" },
   ];
