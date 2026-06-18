@@ -285,6 +285,36 @@
           <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
           <div class="rpt-table-card">
             <div class="rpt-table-title">Recent High-Stakes Events</div>
+            <div class="act-filter-bar risk-event-filter-bar">
+              <div class="act-filter-group">
+                <label class="act-filter-label">Department</label>
+                <select id="riskEventDept" class="act-filter-select" onchange="renderRiskEventTable()">
+                  <option value="">All Departments</option>
+                </select>
+              </div>
+              <div class="act-filter-group">
+                <label class="act-filter-label">Risk</label>
+                <select id="riskEventRisk" class="act-filter-select" onchange="renderRiskEventTable()">
+                  <option value="">All Risk</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div class="act-filter-group">
+                <label class="act-filter-label">Type</label>
+                <select id="riskEventType" class="act-filter-select" onchange="renderRiskEventTable()">
+                  <option value="">All Types</option>
+                </select>
+              </div>
+              <div class="act-filter-group risk-event-search">
+                <label class="act-filter-label">Search</label>
+                <input id="riskEventSearch" class="act-filter-input" type="search" placeholder="Outcome or type..." oninput="renderRiskEventTable()" />
+              </div>
+              <button class="act-reset-btn" onclick="resetRiskEventFilters()">Clear</button>
+              <span class="risk-event-count" id="riskEventCount">—</span>
+            </div>
             <table class="rpt-table">
               <thead>
                 <tr>

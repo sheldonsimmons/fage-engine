@@ -103,6 +103,20 @@ function displayDeptName(name) {
   return colonIndex >= 0 ? text.slice(colonIndex + 1).trim() || text : text;
 }
 
+function selectValue(id) {
+  return (document.getElementById(id)?.value || "").trim();
+}
+
+function fillRiskEventSelect(id, values, allLabel) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">${allLabel}</option>` + values.map(v =>
+    `<option value="${String(v).replace(/"/g, "&quot;")}">${v}</option>`
+  ).join("");
+  if (values.includes(current)) select.value = current;
+}
+
 function fmtTs(iso) {
   if (!iso) return "—";
   return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", {
@@ -356,6 +370,7 @@ async function loadRisk() {
   const { days } = getActiveDateRange();
   const data = await apiGet(`/api/reports/risk?days=${days}${_wsParam}`);
   _rptRiskEvents = data.recent_events || [];
+  populateRiskEventFilters(_rptRiskEvents);
 
   setKpi("rk-total",    fmtNum(data.total_events));
   setKpi("rk-critical", fmtNum(data.critical));
@@ -449,21 +464,7 @@ async function loadRisk() {
     }
   );
 
-  // Event table
-  const tbody = document.getElementById("riskEventTable");
-  if (!data.recent_events.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="placeholder">No events in this period.</td></tr>`;
-  } else {
-    tbody.innerHTML = data.recent_events.map(e => `
-      <tr>
-        <td style="font-size:11px; font-family:var(--font-mono)">${fmtTs(e.timestamp)}</td>
-        <td><span class="rpt-badge badge-event">${e.event_type}</span></td>
-        <td>${displayDeptName(e.display_department || e.department)}</td>
-        <td>${riskBadge(e.risk_level)}</td>
-        <td style="font-size:11px; color:var(--text-muted)">${e.decision_outcome}</td>
-      </tr>
-    `).join("");
-  }
+  renderRiskEventTable();
 
   // Load governance summary panels from dashboard API
   try {
@@ -473,6 +474,77 @@ async function loadRisk() {
   } catch (e) {
     console.warn("Governance panels failed:", e.message);
   }
+}
+
+function populateRiskEventFilters(events) {
+  const active = document.activeElement;
+  if (active && active.closest(".risk-event-filter-bar")) return;
+
+  const depts = [...new Set(events.map(e => displayDeptName(e.display_department || e.department)).filter(Boolean))].sort();
+  const types = [...new Set(events.map(e => e.event_type).filter(Boolean))].sort();
+  fillRiskEventSelect("riskEventDept", depts, "All Departments");
+  fillRiskEventSelect("riskEventType", types, "All Types");
+}
+
+function renderRiskEventTable() {
+  const tbody = document.getElementById("riskEventTable");
+  if (!tbody) return;
+
+  if (!_rptRiskEvents.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="placeholder">No events in this period.</td></tr>`;
+    const count = document.getElementById("riskEventCount");
+    if (count) count.textContent = "0 events";
+    return;
+  }
+
+  const dept = selectValue("riskEventDept").toLowerCase();
+  const risk = selectValue("riskEventRisk").toLowerCase();
+  const type = selectValue("riskEventType").toLowerCase();
+  const search = selectValue("riskEventSearch").toLowerCase();
+
+  const rows = _rptRiskEvents.filter(e => {
+    const displayDept = displayDeptName(e.display_department || e.department);
+    if (dept && displayDept.toLowerCase() !== dept) return false;
+    if (risk && String(e.risk_level || "").toLowerCase() !== risk) return false;
+    if (type && String(e.event_type || "").toLowerCase() !== type) return false;
+    if (search) {
+      const haystack = [
+        e.event_type,
+        displayDept,
+        e.risk_level,
+        e.decision_outcome,
+        e.rationale,
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const count = document.getElementById("riskEventCount");
+  if (count) count.textContent = `${rows.length} of ${_rptRiskEvents.length} events`;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="placeholder">No events match these filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(e => `
+    <tr>
+      <td style="font-size:11px; font-family:var(--font-mono)">${fmtTs(e.timestamp)}</td>
+      <td><span class="rpt-badge badge-event">${e.event_type}</span></td>
+      <td>${displayDeptName(e.display_department || e.department)}</td>
+      <td>${riskBadge(e.risk_level)}</td>
+      <td style="font-size:11px; color:var(--text-muted)">${e.decision_outcome}</td>
+    </tr>
+  `).join("");
+}
+
+function resetRiskEventFilters() {
+  ["riskEventDept", "riskEventRisk", "riskEventType", "riskEventSearch"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  renderRiskEventTable();
 }
 
 function renderComplianceGrid(d) {

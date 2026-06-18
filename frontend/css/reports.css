@@ -477,6 +477,16 @@
   cursor: pointer;
 }
 .act-filter-select:focus { outline: none; border-color: var(--accent); }
+.act-filter-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 6px 10px;
+  min-width: 180px;
+}
+.act-filter-input:focus { outline: none; border-color: var(--accent); }
 .act-reset-btn {
   background: transparent;
   border: 1px solid var(--border);
@@ -489,6 +499,24 @@
   transition: all 0.15s;
 }
 .act-reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+.risk-event-filter-bar {
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+}
+.risk-event-search {
+  flex: 1;
+  min-width: 220px;
+}
+.risk-event-search .act-filter-input {
+  width: 100%;
+}
+.risk-event-count {
+  align-self: flex-end;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 7px 0;
+  white-space: nowrap;
+}
 
 .act-summary-bar {
   display: flex;
