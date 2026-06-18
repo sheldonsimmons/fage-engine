@@ -13,6 +13,7 @@ const charts   = {};
 let _rptRiskEvents  = [];
 let _rptDeptData    = [];
 let _rptSavingsData = null;
+const _hiddenDeptChartLabels = new Set();
 
 const COLORS = {
   scout:     "#3fb950",   // Tier 1 — green (cheapest)
@@ -115,6 +116,59 @@ function fillRiskEventSelect(id, values, allLabel) {
     `<option value="${String(v).replace(/"/g, "&quot;")}">${v}</option>`
   ).join("");
   if (values.includes(current)) select.value = current;
+}
+
+function deptChartLabel(label) {
+  return String(label || "").trim().toLowerCase();
+}
+
+function setBarDatasetVisible(chart, index, visible) {
+  if (!chart) return;
+  if (typeof chart.setDatasetVisibility === "function") {
+    chart.setDatasetVisibility(index, visible);
+  } else {
+    const meta = chart.getDatasetMeta(index);
+    if (meta) meta.hidden = !visible;
+  }
+}
+
+function setDoughnutSliceVisible(chart, index, visible) {
+  if (!chart) return;
+  if (typeof chart.setDataVisibility === "function") {
+    chart.setDataVisibility(index, visible);
+  } else {
+    const slice = chart.getDatasetMeta(0)?.data?.[index];
+    if (slice) slice.hidden = !visible;
+  }
+}
+
+function applyDeptChartVisibility() {
+  const spendChart = charts["deptSpend"];
+  if (spendChart) {
+    spendChart.data.datasets.forEach((dataset, index) => {
+      setBarDatasetVisible(spendChart, index, !_hiddenDeptChartLabels.has(deptChartLabel(dataset.label)));
+    });
+    spendChart.update();
+  }
+
+  const costChart = charts["deptCost"];
+  if (costChart) {
+    costChart.data.labels.forEach((label, index) => {
+      setDoughnutSliceVisible(costChart, index, !_hiddenDeptChartLabels.has(deptChartLabel(label)));
+    });
+    costChart.update();
+  }
+}
+
+function toggleDeptChartLabel(label) {
+  const key = deptChartLabel(label);
+  if (!key) return;
+  if (_hiddenDeptChartLabels.has(key)) {
+    _hiddenDeptChartLabels.delete(key);
+  } else {
+    _hiddenDeptChartLabels.add(key);
+  }
+  applyDeptChartVisibility();
 }
 
 function fmtTs(iso) {
@@ -682,6 +736,7 @@ async function loadDepartments() {
         plugins: {
           legend: {
             position: "bottom",
+            onClick: (_evt, item) => toggleDeptChartLabel(item.text),
             labels: {
               color: COLORS.muted,
               boxWidth: 12,
@@ -726,6 +781,7 @@ async function loadDepartments() {
         plugins: {
           legend: {
             position: "bottom",
+            onClick: (_evt, item) => toggleDeptChartLabel(item.text),
             labels: {
               color: COLORS.muted,
               boxWidth: 12,
@@ -738,6 +794,8 @@ async function loadDepartments() {
       },
     }
   );
+
+  applyDeptChartVisibility();
 }
 
 // ── TAB 4: BOT EFFICIENCY REVIEW ──────────────────────────────────────────────
