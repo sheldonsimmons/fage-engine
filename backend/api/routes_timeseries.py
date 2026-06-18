@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import TokenTransaction
+from core.agentlake import display_department
 
 router = APIRouter()
 
@@ -49,8 +50,10 @@ def get_timeseries(
     today = datetime.utcnow().date()
     date_range = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
 
-    # Collect all departments seen in data
-    all_depts = sorted({r.department for r in rows if r.department})
+    # Collect display-safe department labels. Raw values may include internal
+    # workspace prefixes like WORKSPACE_ID:Sales; those stay in storage but
+    # should not leak into charts.
+    all_depts = sorted({display_department(r.department) for r in rows if r.department})
 
     # Initialize per-day buckets
     spend_by_day_dept: dict[date_type, dict] = {d: {} for d in date_range}
@@ -61,7 +64,7 @@ def get_timeseries(
         if d not in spend_by_day_dept:
             continue
         canonical_tier = TIER_ALIASES.get(r.model_tier, r.model_tier)
-        dept = r.department
+        dept = display_department(r.department)
         if dept:
             spend_by_day_dept[d][dept] = spend_by_day_dept[d].get(dept, 0.0) + (r.cost_usd or 0.0)
         if canonical_tier:
