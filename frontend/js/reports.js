@@ -458,7 +458,7 @@ async function loadRisk() {
       <tr>
         <td style="font-size:11px; font-family:var(--font-mono)">${fmtTs(e.timestamp)}</td>
         <td><span class="rpt-badge badge-event">${e.event_type}</span></td>
-        <td>${e.department}</td>
+        <td>${displayDeptName(e.display_department || e.department)}</td>
         <td>${riskBadge(e.risk_level)}</td>
         <td style="font-size:11px; color:var(--text-muted)">${e.decision_outcome}</td>
       </tr>
@@ -563,7 +563,7 @@ async function loadDepartments() {
                  : COLORS.green;
       return `
         <tr>
-          <td><strong>${d.department}</strong></td>
+          <td><strong>${displayDeptName(d.display_department || d.department)}</strong></td>
           <td>${fmtNum(d.total_calls)}</td>
           <td>${d.micro_pct}%</td>
           <td>${fmtUsd(d.total_cost_usd)}</td>

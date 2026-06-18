@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import TokenTransaction, AuditEvent, DepartmentBudget, SensitiveTerm
+from core.agentlake import display_department
 
 router = APIRouter()
 
@@ -153,10 +154,11 @@ def risk_report(days: int = Query(30, ge=1, le=365),
     # By department
     dept_risk = {}
     for e in events:
-        if e.department not in dept_risk:
-            dept_risk[e.department] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
-        dept_risk[e.department][e.risk_level] += 1
-        dept_risk[e.department]["total"]      += 1
+        dept = display_department(e.department)
+        if dept not in dept_risk:
+            dept_risk[dept] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
+        dept_risk[dept][e.risk_level] += 1
+        dept_risk[dept]["total"]      += 1
 
     # Recent high-stakes events for table
     recent = [
@@ -165,6 +167,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
             "timestamp":      e.timestamp.isoformat() if e.timestamp else None,
             "event_type":     e.event_type,
             "department":     e.department,
+            "display_department": display_department(e.department),
             "risk_level":     e.risk_level,
             "decision_outcome": e.decision_outcome or "—",
             "rationale":      (e.rationale or "")[:200],
@@ -252,6 +255,7 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
         calls  = data["total_calls"]
         scorecards.append({
             "department":        d,
+            "display_department": display_department(d),
             "total_calls":       calls,
             "micro_calls":       data["micro_calls"],
             "flagship_calls":    data["flagship_calls"],
