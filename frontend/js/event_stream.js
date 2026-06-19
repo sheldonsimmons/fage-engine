@@ -10,9 +10,26 @@ let _streamOpenId  = null;
 let _streamEvents  = [];
 let _streamDashData = {};
 let _streamUserInteractingUntil = 0;
+let _streamLoadedLimit = 0;
+
+const STREAM_DEFAULT_LIMIT = 25;
+const STREAM_FILTER_LIMIT  = 250;
 
 function _markStreamUserInteracting() {
   _streamUserInteractingUntil = Date.now() + 1200;
+}
+
+function _streamFilterState() {
+  return {
+    type:   (document.getElementById("streamFilterType")?.value   || "").toLowerCase(),
+    dept:   (document.getElementById("streamFilterDept")?.value   || "").toLowerCase(),
+    search: (document.getElementById("streamFilterSearch")?.value || "").toLowerCase(),
+  };
+}
+
+function _streamHasActiveFilters() {
+  const f = _streamFilterState();
+  return !!(f.type || f.dept || f.search);
 }
 
 function _renderStreamCards(events) {
@@ -119,16 +136,18 @@ function _fmtStreamTs(iso) {
 
 // ── Main render ───────────────────────────────────────────────────────────────
 
-async function loadEventStream() {
+async function loadEventStream(limit) {
   const list = document.getElementById("eventStreamList");
   if (!list) return;
 
   // Remember which event was open so we can restore it after re-render
   const wasOpenId = _streamOpenId;
+  const targetLimit = limit || (_streamHasActiveFilters() ? STREAM_FILTER_LIMIT : STREAM_DEFAULT_LIMIT);
 
   try {
-    const events = await apiGet("/api/audit?limit=25");
+    const events = await apiGet(`/api/audit?limit=${targetLimit}`);
     _streamEvents = events;
+    _streamLoadedLimit = targetLimit;
 
     if (!events.length) {
       list.innerHTML = '<p class="placeholder">No events yet — route a payload to generate entries.</p>';
@@ -237,11 +256,21 @@ async function toggleStreamEvent(eventId) {
 
 // ── Governance Event Stream Filters ──────────────────────────────────────────
 
-function applyStreamFilters() {
+async function applyStreamFilters() {
   _markStreamUserInteracting();
-  const type   = (document.getElementById("streamFilterType")?.value   || "").toLowerCase();
-  const dept   = (document.getElementById("streamFilterDept")?.value   || "").toLowerCase();
-  const search = (document.getElementById("streamFilterSearch")?.value || "").toLowerCase();
+  const hasFilters = _streamHasActiveFilters();
+
+  if (hasFilters && _streamLoadedLimit < STREAM_FILTER_LIMIT) {
+    await loadEventStream(STREAM_FILTER_LIMIT);
+    return;
+  }
+
+  if (!hasFilters && _streamLoadedLimit > STREAM_DEFAULT_LIMIT) {
+    await loadEventStream(STREAM_DEFAULT_LIMIT);
+    return;
+  }
+
+  const { type, dept, search } = _streamFilterState();
 
   const filtered = _streamEvents.filter(e => {
     if (!_streamTypeMatchesFilter(_streamEventType(e), type)) return false;
@@ -254,6 +283,14 @@ function applyStreamFilters() {
     )) return false;
     return true;
   });
+
+  if (!filtered.length && hasFilters) {
+    const list = document.getElementById("eventStreamList");
+    if (list) {
+      list.innerHTML = `<p class="placeholder">No events match the current filters in the latest ${_streamLoadedLimit} audit records.</p>`;
+    }
+    return;
+  }
 
   _renderStreamCards(filtered);
 }
