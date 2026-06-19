@@ -64,13 +64,15 @@ def display_agent_name(name: str, department: str = None, platform: str = None) 
     return text
 
 
-def agent_active_recently(agent: RegisteredAgent, window_seconds: int = 60) -> bool:
-    """Treat a just-used active agent as live briefly so UI polling feels responsive."""
+def agent_active_recently(agent: RegisteredAgent, window_seconds: int = 5) -> bool:
+    """Treat only active or claimed agents as live, with a short UI catch-up buffer."""
     status = (agent.status or "idle").lower()
     if status in ("locked", "queued"):
         return False
     if agent.target_record_id:
         return True
+    if status != "active":
+        return False
     if not agent.last_used_at:
         return False
     return datetime.utcnow() - agent.last_used_at <= timedelta(seconds=window_seconds)

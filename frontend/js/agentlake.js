@@ -2,7 +2,7 @@
  * agentlake.js — Agentlake Registry & Traffic Cop UI  [Step 5]
  */
 
-const AGENT_ACTIVE_WINDOW_MS = 60000;
+const AGENT_ACTIVE_WINDOW_MS = 5000;
 
 function displayAgentName(agent) {
   return agent?.display_name || agent?.agent_name || agent?.name || "Unnamed agent";
@@ -20,13 +20,15 @@ function jsString(value) {
 function effectiveAgentStatus(agent) {
   const status = (agent.status || "idle").toLowerCase();
   if (status === "locked" || status === "queued") return status;
-  if (agent.active_recently) return "active";
 
   const hasLiveClaim = !!agent.target_record_id;
+  if (hasLiveClaim) return "active";
+  if (status !== "active") return "idle";
+  if (agent.active_recently) return "active";
+
   const lastSeenMs = agent.last_used_at ? new Date(agent.last_used_at).getTime() : 0;
   const recentlyUsed = lastSeenMs && (Date.now() - lastSeenMs <= AGENT_ACTIVE_WINDOW_MS);
-  if (hasLiveClaim || recentlyUsed) return "active";
-  return status === "active" ? "idle" : status;
+  return recentlyUsed ? "active" : "idle";
 }
 
 /** Fetch all agents and render the registry table */

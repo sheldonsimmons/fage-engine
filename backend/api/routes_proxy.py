@@ -259,6 +259,28 @@ def _ensure_agent(db, workspace_id: str, department: str, platform: str, agent_n
     return agent
 
 
+def _schedule_agent_idle(agent_id: int, delay_seconds: int = 4):
+    """Return an active agent to idle shortly after the request finishes."""
+    if not agent_id:
+        return
+    import threading
+    import time
+
+    def _reset():
+        time.sleep(delay_seconds)
+        _db = SessionLocal()
+        try:
+            _agent = _db.query(RegisteredAgent).filter_by(id=agent_id).first()
+            if _agent and (_agent.status or "").lower() == "active":
+                _agent.status = "idle"
+                _agent.target_record_id = None
+                _db.commit()
+        finally:
+            _db.close()
+
+    threading.Thread(target=_reset, daemon=True).start()
+
+
 def _log_transaction(db, workspace_id: str, department: str, model: str,
                      tier: str, input_tokens: int, output_tokens: int,
                      cost_usd: float, routing_reason: str,
@@ -439,6 +461,7 @@ async def proxy_openai(workspace_id: str, request: Request):
     auth_header = request.headers.get("Authorization", "")
 
     db = SessionLocal()
+    agent = None
     try:
         account = _get_account(workspace_id, secret_key, db)
         _enforce_trial_limits(account, db)
@@ -496,6 +519,7 @@ async def proxy_openai(workspace_id: str, request: Request):
 
         # 4. Forward with pruned messages
         forward_body = {**body, "model": routed_model, "messages": pruned_messages}
+        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -511,8 +535,7 @@ async def proxy_openai(workspace_id: str, request: Request):
         cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
         risk       = "high" if st["action"] in ("flag","escalate") else ("medium" if complex_ else "low")
 
-        # 5. Log + auto-register
-        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
+        # 5. Log the completed request
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
@@ -534,6 +557,8 @@ async def proxy_openai(workspace_id: str, request: Request):
         )
 
     finally:
+        if agent:
+            _schedule_agent_idle(agent.id)
         db.close()
 
 
@@ -548,6 +573,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
     anthropic_key = request.headers.get("x-api-key", "")
 
     db = SessionLocal()
+    agent = None
     try:
         account = _get_account(workspace_id, secret_key, db)
         _enforce_trial_limits(account, db)
@@ -611,6 +637,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         if "anthropic-beta" in request.headers:
             forward_headers["anthropic-beta"] = request.headers["anthropic-beta"]
 
+        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
@@ -626,8 +653,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
                          {"tier": "Advisor", "input": 3.0, "output": 15.0})
         cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
 
-        # 4. Log + 5. Auto-register agent
-        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
+        # 4. Log the completed request
         _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
@@ -649,4 +675,6 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         )
 
     finally:
+        if agent:
+            _schedule_agent_idle(agent.id)
         db.close()

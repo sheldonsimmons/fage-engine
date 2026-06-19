@@ -990,7 +990,8 @@ function renderActivityTable(agents) {
       : a.platform === "HubSpot"     ? "var(--accent-yellow)"
       : "var(--text-muted)";
 
-    const effectiveStatus = a.status === "locked" ? "locked" : a.active_recently ? "active" : (a.status || "idle");
+    const status = (a.status || "idle").toLowerCase();
+    const effectiveStatus = status === "locked" ? "locked" : a.active_recently ? "active" : "idle";
     const statusBadge = effectiveStatus === "locked" ? "badge-locked"
       : effectiveStatus === "active"  ? "badge-active"
       : "badge-idle";
