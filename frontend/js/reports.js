@@ -14,6 +14,8 @@ let _rptRiskEvents  = [];
 let _rptDeptData    = [];
 let _rptSavingsData = null;
 const _hiddenDeptChartLabels = new Set();
+let _riskDrillDate = "";
+let _riskOpenEventId = null;
 
 const COLORS = {
   scout:     "#3fb950",   // Tier 1 — green (cheapest)
@@ -102,6 +104,15 @@ function displayDeptName(name) {
   const text = String(name);
   const colonIndex = text.indexOf(":");
   return colonIndex >= 0 ? text.slice(colonIndex + 1).trim() || text : text;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function selectValue(id) {
@@ -433,6 +444,7 @@ async function loadRisk() {
   setKpi("rk-locks",    fmtNum(data.locks));
   setKpi("rk-terms",    fmtNum(data.term_library.total));
   setKpi("rk-terms-sub", data.term_library.block + " block / " + data.term_library.escalate + " escalate");
+  wireRiskDrilldowns();
 
   const labels = data.timeline.map(d => d.date);
   const riskChartBase = chartDefaults();
@@ -483,6 +495,13 @@ async function loadRisk() {
             ticks: { ...riskChartBase.scales.y.ticks, precision: 0 },
           },
         },
+        onClick: (_evt, elements) => {
+          if (!elements.length) return;
+          const el = elements[0];
+          const risk = charts["riskTimeline"].data.datasets[el.datasetIndex].label.toLowerCase();
+          const date = charts["riskTimeline"].data.labels[el.index];
+          applyRiskDrilldown({ risk, date, label: `${risk.toUpperCase()} events on ${date}` });
+        },
       },
     }
   );
@@ -514,6 +533,11 @@ async function loadRisk() {
           },
         },
         cutout: "68%",
+        onClick: (_evt, elements) => {
+          if (!elements.length) return;
+          const risk = charts["riskBreakdown"].data.labels[elements[0].index].toLowerCase();
+          applyRiskDrilldown({ risk, label: `${risk.toUpperCase()} risk events` });
+        },
       },
     }
   );
@@ -528,6 +552,51 @@ async function loadRisk() {
   } catch (e) {
     console.warn("Governance panels failed:", e.message);
   }
+}
+
+function wireRiskDrilldowns() {
+  document.querySelectorAll("[data-risk-drill]").forEach(el => {
+    if (el.dataset.drillReady === "1") return;
+    el.dataset.drillReady = "1";
+    el.addEventListener("click", () => {
+      const target = el.dataset.riskDrill;
+      if (target === "terms") {
+        window.location.href = "/policy.html";
+      } else if (target === "all") {
+        applyRiskDrilldown({ label: "All audit events" });
+      } else if (target === "blocked") {
+        applyRiskDrilldown({ search: "blocked", label: "Blocked request events" });
+      } else if (target === "locks") {
+        applyRiskDrilldown({ type: "LOCK", label: "Agent collision and lock events" });
+      } else {
+        applyRiskDrilldown({ risk: target, label: `${target.toUpperCase()} risk events` });
+      }
+    });
+  });
+}
+
+function setRiskControl(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value || "";
+}
+
+function applyRiskDrilldown({ risk = "", type = "", search = "", date = "", label = "Filtered events" } = {}) {
+  _riskDrillDate = date;
+  _riskOpenEventId = null;
+  setRiskControl("riskEventDept", "");
+  setRiskControl("riskEventRisk", risk);
+  setRiskControl("riskEventType", type);
+  setRiskControl("riskEventSearch", search);
+  const banner = document.getElementById("riskDrillBanner");
+  if (banner) {
+    banner.style.display = "flex";
+    banner.innerHTML = `
+      <span><strong>Drill-down:</strong> ${escapeHtml(label)}</span>
+      <button type="button" onclick="resetRiskEventFilters()">Clear drill-down</button>
+    `;
+  }
+  renderRiskEventTable();
+  document.querySelector('[data-card-id="rk-events"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function populateRiskEventFilters(events) {
@@ -558,6 +627,8 @@ function renderRiskEventTable() {
 
   const rows = _rptRiskEvents.filter(e => {
     const displayDept = displayDeptName(e.display_department || e.department);
+    const eventDate = e.timestamp ? String(e.timestamp).slice(0, 10) : "";
+    if (_riskDrillDate && eventDate !== _riskDrillDate) return false;
     if (dept && displayDept.toLowerCase() !== dept) return false;
     if (risk && String(e.risk_level || "").toLowerCase() !== risk) return false;
     if (type && String(e.event_type || "").toLowerCase() !== type) return false;
@@ -583,14 +654,17 @@ function renderRiskEventTable() {
   }
 
   tbody.innerHTML = rows.map(e => `
-    <tr>
+    <tr class="risk-event-row" onclick="toggleRiskEventDetail(${e.id})">
       <td style="font-size:11px; font-family:var(--font-mono)">${fmtTs(e.timestamp)}</td>
-      <td><span class="rpt-badge badge-event">${e.event_type}</span></td>
-      <td>${displayDeptName(e.display_department || e.department)}</td>
+      <td><span class="rpt-badge badge-event">${escapeHtml(e.event_type)}</span></td>
+      <td>${escapeHtml(displayDeptName(e.display_department || e.department))}</td>
       <td>${riskBadge(e.risk_level)}</td>
-      <td style="font-size:11px; color:var(--text-muted)">${e.decision_outcome}</td>
+      <td style="font-size:11px; color:var(--text-muted)">${escapeHtml(e.decision_outcome)}</td>
     </tr>
+    ${_riskOpenEventId === e.id ? `<tr class="risk-detail-row"><td colspan="5" id="riskEventDetail-${e.id}" class="risk-detail-cell">Loading detail...</td></tr>` : ""}
   `).join("");
+
+  if (_riskOpenEventId) loadRiskEventDetail(_riskOpenEventId);
 }
 
 function resetRiskEventFilters() {
@@ -598,27 +672,79 @@ function resetRiskEventFilters() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+  _riskDrillDate = "";
+  _riskOpenEventId = null;
+  const banner = document.getElementById("riskDrillBanner");
+  if (banner) {
+    banner.style.display = "none";
+    banner.innerHTML = "";
+  }
   renderRiskEventTable();
+}
+
+async function toggleRiskEventDetail(eventId) {
+  _riskOpenEventId = _riskOpenEventId === eventId ? null : eventId;
+  renderRiskEventTable();
+}
+
+function formatMatchedKeywords(keywords) {
+  if (!keywords || !keywords.length) return "None";
+  return keywords.map(k => `<span class="risk-keyword">${escapeHtml(k)}</span>`).join("");
+}
+
+async function loadRiskEventDetail(eventId) {
+  const cell = document.getElementById(`riskEventDetail-${eventId}`);
+  if (!cell) return;
+  try {
+    const detail = await apiGet(`/api/audit/${eventId}`);
+    cell.innerHTML = `
+      <div class="risk-detail-grid">
+        <div>
+          <div class="risk-detail-label">Why It Happened</div>
+          <div class="risk-detail-text">${escapeHtml(detail.rationale || "No rationale recorded.")}</div>
+        </div>
+        <div>
+          <div class="risk-detail-label">Decision Context</div>
+          <div class="risk-detail-meta">
+            Agent: ${escapeHtml(detail.display_agent_name || detail.agent_name || "Not linked")}<br/>
+            Platform: ${escapeHtml(detail.source_platform || "Unknown")}<br/>
+            Model tier: ${escapeHtml(detail.model_tier || "none")}<br/>
+            Cost: ${fmtUsd(detail.cost_usd || 0)}
+          </div>
+        </div>
+        <div>
+          <div class="risk-detail-label">Matched Keywords</div>
+          <div class="risk-keyword-list">${formatMatchedKeywords(detail.matched_keywords)}</div>
+        </div>
+        <div>
+          <div class="risk-detail-label">Payload Preview</div>
+          <pre class="risk-payload-preview">${escapeHtml(detail.prompt_payload || "No payload preview stored.")}</pre>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    cell.innerHTML = `<span style="color:var(--accent-red)">Failed to load event detail: ${escapeHtml(err.message)}</span>`;
+  }
 }
 
 function renderComplianceGrid(d) {
   const grid = document.getElementById("complianceGrid");
   if (!grid) return;
   const items = [
-    { icon: "🚫", value: d.blocked_count,     label: "Requests Blocked",          sub: "Sensitive terms triggered block policy — request never reached AI model",          cls: "critical" },
-    { icon: "⚠️",  value: d.escalated_count,   label: "Escalated to Flagship",     sub: "Legal, NDA, contract language forced flagship model review",                       cls: "high"     },
-    { icon: "🔍", value: d.flagged_count,      label: "Flagged in Audit Log",      sub: "High-risk keywords logged for compliance review",                                   cls: "medium"   },
-    { icon: "🔒", value: d.pii_count,          label: "PII Detected",              sub: "Credit cards, SSNs, emails, phone numbers caught before AI processing",             cls: "high"     },
-    { icon: "💰", value: d.throttle_prevented, label: "Budget Overruns Prevented", sub: "Auto-throttle engaged before department cap was breached",                          cls: "low"      },
-    { icon: "⚡", value: d.collision_count,    label: "Agent Collisions Resolved", sub: "Concurrent write conflicts detected and locked — zero data corruption",             cls: "low"      },
+    { icon: "🚫", value: d.blocked_count,     label: "Requests Blocked",          sub: "Sensitive terms triggered block policy — request never reached AI model",          cls: "critical", drill: { search: "blocked", label: "Blocked request events" } },
+    { icon: "⚠️",  value: d.escalated_count,   label: "Escalated to Flagship",     sub: "Legal, NDA, contract language forced flagship model review",                       cls: "high",     drill: { search: "escalate", label: "Escalated model-review events" } },
+    { icon: "🔍", value: d.flagged_count,      label: "Flagged in Audit Log",      sub: "High-risk keywords logged for compliance review",                                   cls: "medium",   drill: { risk: "high", label: "High-risk flagged audit events" } },
+    { icon: "🔒", value: d.pii_count,          label: "PII Detected",              sub: "Credit cards, SSNs, emails, phone numbers caught before AI processing",             cls: "high",     drill: { search: "pii", label: "PII-related events" } },
+    { icon: "💰", value: d.throttle_prevented, label: "Budget Overruns Prevented", sub: "Auto-throttle engaged before department cap was breached",                          cls: "low",      drill: { search: "throttle budget", label: "Budget throttle events" } },
+    { icon: "⚡", value: d.collision_count,    label: "Agent Collisions Resolved", sub: "Concurrent write conflicts detected and locked — zero data corruption",             cls: "low",      drill: { type: "LOCK", label: "Agent collision events" } },
   ];
   const hasData = items.some(i => i.value > 0);
   if (!hasData) {
     grid.innerHTML = '<p class="placeholder">No compliance events yet — load enterprise demo or route a call.</p>';
     return;
   }
-  grid.innerHTML = items.map(i => `
-    <div class="demo-compliance-card ${i.cls}">
+  grid.innerHTML = items.map((i, idx) => `
+    <div class="demo-compliance-card ${i.cls} rpt-drill" onclick="applyRiskDrilldown(${JSON.stringify(i.drill).replace(/"/g, "&quot;")})" title="Drill down into related events">
       <div class="demo-compliance-icon">${i.icon}</div>
       <div class="demo-compliance-value">${i.value.toLocaleString()}</div>
       <div class="demo-compliance-label">${i.label}</div>

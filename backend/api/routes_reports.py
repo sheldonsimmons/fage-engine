@@ -160,7 +160,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
         dept_risk[dept][e.risk_level] += 1
         dept_risk[dept]["total"]      += 1
 
-    # Recent high-stakes events for table
+    # Recent high-stakes events for table and report drill-downs
     recent = [
         {
             "id":             e.id,
@@ -172,7 +172,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
             "decision_outcome": e.decision_outcome or "—",
             "rationale":      (e.rationale or "")[:200],
         }
-        for e in events[:25]
+        for e in events[:500]
     ]
 
     # Term library stats

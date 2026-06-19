@@ -149,6 +149,15 @@
   border-radius: 10px;
   padding: 16px;
 }
+.rpt-drill {
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.rpt-drill:hover {
+  border-color: var(--accent);
+  background: rgba(88,166,255,0.05);
+  transform: translateY(-1px);
+}
 .rpt-kpi.alert { border-color: rgba(248,81,73,0.3); }
 .rpt-kpi-label {
   font-size: 10px;
@@ -281,6 +290,88 @@
 }
 .rpt-table tr:last-child td { border-bottom: none; }
 .rpt-table td.green { color: var(--accent-green); }
+.risk-event-row {
+  cursor: pointer;
+}
+.risk-event-row:hover td {
+  background: rgba(88,166,255,0.04);
+}
+.risk-drill-banner {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(88,166,255,0.35);
+  border-radius: 8px;
+  background: rgba(88,166,255,0.07);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.risk-drill-banner button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-muted);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.risk-drill-banner button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.risk-detail-row td {
+  background: var(--bg-base);
+}
+.risk-detail-cell {
+  padding: 16px 18px !important;
+}
+.risk-detail-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+}
+.risk-detail-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.risk-detail-text,
+.risk-detail-meta {
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.risk-keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.risk-keyword {
+  border: 1px solid rgba(210,153,34,0.35);
+  border-radius: 999px;
+  color: var(--accent-yellow);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+}
+.risk-payload-preview {
+  background: rgba(13,17,23,0.8);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 130px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+}
 
 /* ── Badges ──────────────────────────────────────────────────────────────────── */
 .rpt-badge {
@@ -411,6 +502,7 @@
 @media (max-width: 1100px) {
   .rpt-kpi-row    { grid-template-columns: repeat(3, 1fr); }
   .rpt-charts-row { grid-template-columns: 1fr; }
+  .risk-detail-grid { grid-template-columns: 1fr; }
   .rpt-risk-breakdown-card canvas {
     max-width: 360px;
   }
@@ -421,6 +513,7 @@
 @media (max-width: 700px) {
   .rpt-kpi-row { grid-template-columns: repeat(2, 1fr); }
   .rpt-tabs    { flex-wrap: wrap; }
+  .risk-drill-banner { align-items: flex-start; flex-direction: column; }
   .rpt-risk-timeline-card,
   .rpt-risk-breakdown-card {
     min-height: 270px;

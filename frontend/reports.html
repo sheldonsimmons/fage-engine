@@ -213,32 +213,32 @@
       </div>
 
       <div class="rpt-kpi-row">
-        <div class="rpt-kpi">
+        <div class="rpt-kpi rpt-drill" data-risk-drill="all" title="Show all events behind this number">
           <div class="rpt-kpi-label">Total Events</div>
           <div class="rpt-kpi-value" id="rk-total">—</div>
           <div class="rpt-kpi-sub">audit log entries</div>
         </div>
-        <div class="rpt-kpi alert">
+        <div class="rpt-kpi alert rpt-drill" data-risk-drill="critical" title="Show critical events">
           <div class="rpt-kpi-label">Critical</div>
           <div class="rpt-kpi-value red" id="rk-critical">—</div>
           <div class="rpt-kpi-sub">HIPAA, fraud, lawsuits</div>
         </div>
-        <div class="rpt-kpi">
+        <div class="rpt-kpi rpt-drill" data-risk-drill="high" title="Show high-risk events">
           <div class="rpt-kpi-label">High Risk</div>
           <div class="rpt-kpi-value yellow" id="rk-high">—</div>
           <div class="rpt-kpi-sub">legal, compliance, locks</div>
         </div>
-        <div class="rpt-kpi">
+        <div class="rpt-kpi rpt-drill" data-risk-drill="blocked" title="Show blocked requests">
           <div class="rpt-kpi-label">Blocked Requests</div>
           <div class="rpt-kpi-value red" id="rk-blocked">—</div>
           <div class="rpt-kpi-sub">stopped by term policy</div>
         </div>
-        <div class="rpt-kpi">
+        <div class="rpt-kpi rpt-drill" data-risk-drill="locks" title="Show collision and lock events">
           <div class="rpt-kpi-label">Agent Collisions</div>
           <div class="rpt-kpi-value yellow" id="rk-locks">—</div>
           <div class="rpt-kpi-sub">concurrent write conflicts</div>
         </div>
-        <div class="rpt-kpi">
+        <div class="rpt-kpi rpt-drill" data-risk-drill="terms" title="Open policy and term library setup">
           <div class="rpt-kpi-label">Term Library</div>
           <div class="rpt-kpi-value" id="rk-terms">—</div>
           <div class="rpt-kpi-sub" id="rk-terms-sub">— block / — escalate</div>
@@ -285,6 +285,7 @@
           <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
           <div class="rpt-table-card">
             <div class="rpt-table-title">Recent High-Stakes Events</div>
+            <div id="riskDrillBanner" class="risk-drill-banner" style="display:none"></div>
             <div class="act-filter-bar risk-event-filter-bar">
               <div class="act-filter-group">
                 <label class="act-filter-label">Department</label>
