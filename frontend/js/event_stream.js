@@ -102,6 +102,13 @@ function _streamEventColor(type) {
        : "var(--tier-scout)";
 }
 
+function _streamTypeMatchesFilter(eventType, filterType) {
+  if (!filterType) return true;
+  if (filterType === "routine") return ["scout", "analyst"].includes(eventType);
+  if (filterType === "complex") return ["advisor", "strategist"].includes(eventType);
+  return eventType === filterType;
+}
+
 function _fmtStreamTs(iso) {
   if (!iso) return "—";
   return new Date(iso + "Z").toLocaleTimeString("en-US", {
@@ -237,7 +244,7 @@ function applyStreamFilters() {
   const search = (document.getElementById("streamFilterSearch")?.value || "").toLowerCase();
 
   const filtered = _streamEvents.filter(e => {
-    if (type   && _streamEventType(e) !== type) return false;
+    if (!_streamTypeMatchesFilter(_streamEventType(e), type)) return false;
     if (dept   && (e.display_department || e.department || "").toLowerCase() !== dept) return false;
     if (search && !(
       (e.decision_outcome || "").toLowerCase().includes(search) ||
