@@ -73,6 +73,21 @@
       font-size: 12px; font-weight: 700;
     }
     .exec-filter-clear:hover { color: var(--text-primary); border-color: var(--accent); }
+    .exec-filter-scope {
+      display: none; align-items: center; justify-content: space-between; gap: 12px;
+      margin-top: 12px; padding: 10px 12px;
+      border: 1px solid rgba(46,160,67,0.28); border-radius: 8px;
+      background: rgba(46,160,67,0.08); color: var(--text-muted);
+      font-size: 12px; line-height: 1.4;
+    }
+    .exec-filter-scope.active { display: flex; }
+    .exec-filter-scope strong { color: var(--accent-green); }
+    .exec-filter-scope button {
+      border: 1px solid rgba(46,160,67,0.35); border-radius: 6px;
+      background: rgba(46,160,67,0.12); color: var(--accent-green);
+      font-size: 11px; font-weight: 800; padding: 6px 10px; cursor: pointer;
+      white-space: nowrap;
+    }
 
     /* ── Trial first-run checklist ───────────────────────────────────────────── */
     .trial-start-card {
@@ -454,6 +469,10 @@
       </select>
       <button class="exec-filter-clear" onclick="clearExecFilters()">Clear Filters</button>
     </div>
+    <div class="exec-filter-scope" id="execScopeNotice">
+      <span><strong>Filtered executive view active.</strong> Savings, routing percent, and governed requests below are calculated only from the selected slice.</span>
+      <button onclick="clearExecFilters()">Show all data</button>
+    </div>
   </div>
 
   <!-- Hero row: Projected savings + Chart -->
@@ -461,7 +480,7 @@
 
     <!-- Left: Giant savings number -->
     <div class="hero-card green">
-      <div class="hero-eyebrow">Projected Annual Savings · At Current Routing Efficiency</div>
+      <div class="hero-eyebrow" id="execSavingsScopeLabel">Projected Annual Savings · All Workspace Data</div>
       <div class="hero-number" id="execAnnualSavings">—</div>
       <div class="hero-sub" id="execHeroSub">
         You're on track to save <strong id="execHeroSavingsInline">—</strong> this year.
@@ -1103,12 +1122,20 @@ function renderExec(data) {
   const budget = visibleBudget(data, events);
 
   document.getElementById("execFilterStatus").textContent = filterSummaryText(events.length);
+  const scopeNotice = document.getElementById("execScopeNotice");
+  if (scopeNotice) scopeNotice.classList.toggle("active", hasFilters);
+  const scopeLabel = document.getElementById("execSavingsScopeLabel");
+  if (scopeLabel) {
+    scopeLabel.textContent = hasFilters
+      ? "Filtered Projected Annual Savings"
+      : "Projected Annual Savings · All Workspace Data";
+  }
   document.getElementById("execAnnualSavings").textContent = fmtUsd(annualSavings);
   document.getElementById("execHeroSavingsInline").textContent = fmtUsd(annualSavings);
   document.getElementById("execHeroRoutingPct").textContent = routingPct + "%";
   document.getElementById("execHeroAvoided").textContent = fmtUsd(totalAvoided);
   document.getElementById("execTrendBadge").textContent =
-    hasFilters ? `Filtered view · ${fmtNum(totalCalls)} governed requests` : `↑ ${routingPct}% more avoided than all-flagship routing`;
+    hasFilters ? `Filtered view · ${fmtNum(totalCalls)} governed requests` : `All workspace data · ${fmtNum(totalCalls)} governed requests`;
 
   document.getElementById("execMonthSpend").textContent = fmtUsd(actualCost);
   const budgetTag = document.getElementById("execBudgetTag");
