@@ -31,9 +31,16 @@ async function checkHealth() {
 }
 
 // ── Main dashboard loader ──────────────────────────────────────────────────────
+function scopedApiPath(path) {
+  const wsId = localStorage.getItem("cp_workspace_id") || "";
+  if (!wsId) return path;
+  const joiner = path.includes("?") ? "&" : "?";
+  return `${path}${joiner}workspace_id=${encodeURIComponent(wsId)}`;
+}
+
 async function loadDashboard() {
   try {
-    const d = await apiGet("/api/dashboard");
+    const d = await apiGet(scopedApiPath("/api/dashboard"));
     renderKpis(d);
     renderStatBar(d);
     renderCeoBanner(d);
@@ -144,7 +151,7 @@ async function renderAgentEfficiency() {
 
 async function renderInsights() {
   try {
-    const d = await apiGet("/api/dashboard");
+    const d = await apiGet(scopedApiPath("/api/dashboard"));
 
     // Compliance breakdown
     const compEl = document.getElementById("complianceBreakdown");
