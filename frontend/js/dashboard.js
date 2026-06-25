@@ -38,6 +38,29 @@ function scopedApiPath(path) {
   return `${path}${joiner}workspace_id=${encodeURIComponent(wsId)}`;
 }
 
+function localDayKey(value) {
+  if (!value) return "";
+  const text = String(value);
+  const date = new Date(text.endsWith("Z") ? text : `${text}Z`);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function normalizeTierName(tier) {
+  const value = String(tier || "").toLowerCase();
+  if (value === "micro" || value === "scout") return "Scout";
+  if (value === "analyst") return "Analyst";
+  if (value === "advisor" || value === "flagship") return "Advisor";
+  if (value === "strategist") return "Strategist";
+  return "";
+}
+
 async function loadDashboard() {
   try {
     const d = await apiGet(scopedApiPath("/api/dashboard"));
@@ -45,6 +68,7 @@ async function loadDashboard() {
     renderStatBar(d);
     renderCeoBanner(d);
     renderDeptHealth(d);
+    renderTodayTierSplit();
     renderAgentEfficiency();
     renderInsights();
   } catch (err) {
@@ -84,12 +108,6 @@ function mergedDeptBudgets(rows = []) {
 }
 
 function renderDeptHealth(d) {
-  // Tier split in dept health bar
-  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  setEl("dhScout",      `${d.scout_pct || 0}%`);
-  setEl("dhAdvisor",    `${d.advisor_pct || 0}%`);
-  setEl("dhStrategist", `${d.strategist_pct || 0}%`);
-
   // Department pills — read from budget bars data
   const pills = document.getElementById("deptHealthPills");
   if (!pills) return;
@@ -111,6 +129,33 @@ function renderDeptHealth(d) {
       ${icon} ${label} <span style="font-weight:400;font-size:10px">${pct}%</span>
     </span>`;
   }).join("");
+}
+
+async function renderTodayTierSplit() {
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const label = document.getElementById("dhTierSplitLabel");
+  try {
+    const events = await apiGet(scopedApiPath("/api/audit?limit=1000"));
+    const today = localDayKey(new Date().toISOString());
+    const counts = { Scout: 0, Analyst: 0, Advisor: 0, Strategist: 0 };
+
+    events.forEach(event => {
+      if (localDayKey(event.timestamp) !== today) return;
+      const tier = normalizeTierName(event.model_tier);
+      if (tier && Object.prototype.hasOwnProperty.call(counts, tier)) counts[tier] += 1;
+    });
+
+    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    if (label) label.textContent = total ? "Tier split today:" : "Tier split today: no routed calls";
+
+    ["Scout", "Analyst", "Advisor", "Strategist"].forEach(tier => {
+      const pct = total ? Math.round((counts[tier] / total) * 1000) / 10 : 0;
+      setEl(`dh${tier}`, `${pct}%`);
+    });
+  } catch (err) {
+    if (label) label.textContent = "Tier split current view:";
+    console.warn("Today tier split failed:", err.message);
+  }
 }
 
 // ── Agent Efficiency Rank ─────────────────────────────────────────────────────
