@@ -16,6 +16,7 @@ let _rptSavingsData = null;
 const _hiddenDeptChartLabels = new Set();
 let _riskDrillDate = "";
 let _riskOpenEventId = null;
+const EFFICIENCY_REVIEW_CACHE_PREFIX = "fage_efficiency_review_v1";
 
 const COLORS = {
   scout:     "#3fb950",   // Tier 1 — green (cheapest)
@@ -99,11 +100,90 @@ function fmtNum(v) {
   return v.toLocaleString();
 }
 
+function roundMoney(v) {
+  return Math.round((Number(v) || 0) * 1000000) / 1000000;
+}
+
 function displayDeptName(name) {
   if (!name) return "Unknown";
   const text = String(name);
   const colonIndex = text.indexOf(":");
   return colonIndex >= 0 ? text.slice(colonIndex + 1).trim() || text : text;
+}
+
+function mergeDepartmentReportRows(data) {
+  const sourceScorecards = data.scorecards || [];
+  const rawDepartments   = data.departments || [];
+  const deptNameMap      = {};
+
+  rawDepartments.forEach(dept => {
+    deptNameMap[dept] = displayDeptName(dept);
+  });
+  sourceScorecards.forEach(row => {
+    deptNameMap[row.department] = displayDeptName(row.display_department || row.department);
+  });
+
+  const scorecardMap = new Map();
+  sourceScorecards.forEach(row => {
+    const displayName = displayDeptName(row.display_department || row.department);
+    const current = scorecardMap.get(displayName) || {
+      ...row,
+      department: displayName,
+      display_department: displayName,
+      total_calls: 0,
+      micro_calls: 0,
+      flagship_calls: 0,
+      total_cost_usd: 0,
+      tokens_pruned: 0,
+      pruning_saved_usd: 0,
+      monthly_cap_usd: 0,
+      current_spend_usd: 0,
+      budget_used_pct: 0,
+      throttled: false,
+      override_granted: false,
+    };
+
+    current.total_calls       += row.total_calls || 0;
+    current.micro_calls       += row.micro_calls || 0;
+    current.flagship_calls    += row.flagship_calls || 0;
+    current.total_cost_usd     = roundMoney(current.total_cost_usd + (row.total_cost_usd || 0));
+    current.tokens_pruned     += row.tokens_pruned || 0;
+    current.pruning_saved_usd  = roundMoney(current.pruning_saved_usd + (row.pruning_saved_usd || 0));
+    current.monthly_cap_usd    = roundMoney(current.monthly_cap_usd + (row.monthly_cap_usd || 0));
+    current.current_spend_usd  = roundMoney(current.current_spend_usd + (row.current_spend_usd || 0));
+    current.throttled          = current.throttled || !!row.throttled;
+    current.override_granted   = current.override_granted || !!row.override_granted;
+
+    scorecardMap.set(displayName, current);
+  });
+
+  const scorecards = Array.from(scorecardMap.values()).map(row => {
+    const calls = row.total_calls || 0;
+    return {
+      ...row,
+      micro_pct: calls ? Math.round((row.micro_calls / calls) * 1000) / 10 : 0,
+      budget_used_pct: row.monthly_cap_usd > 0
+        ? Math.round((row.current_spend_usd / row.monthly_cap_usd) * 1000) / 10
+        : 0,
+    };
+  }).sort((a, b) => a.department.localeCompare(b.department));
+
+  const timeline = (data.timeline || []).map(point => {
+    const merged = { date: point.date };
+    Object.keys(point).forEach(key => {
+      if (key === "date") return;
+      const displayName = deptNameMap[key] || displayDeptName(key);
+      merged[displayName] = roundMoney((merged[displayName] || 0) + (point[key] || 0));
+    });
+    return merged;
+  });
+
+  return {
+    ...data,
+    scorecards,
+    timeline,
+    departments: scorecards.map(row => row.department),
+  };
 }
 
 function escapeHtml(value) {
@@ -303,7 +383,8 @@ function loadActiveTab() {
   if (activeTab === "risk")        loadRisk();
   if (activeTab === "departments") loadDepartments();
   if (activeTab === "activity")    loadAgentActivity();
-  // efficiency tab is on-demand only — user clicks Generate Review
+  if (activeTab === "efficiency")  restoreEfficiencyReviewForSelectedDays();
+  // efficiency tab remains on-demand. Restore cached reviews, but do not rerun analysis automatically.
 }
 
 function isReportFilterActive() {
@@ -799,7 +880,8 @@ function renderExecSummary(d) {
 
 async function loadDepartments() {
   const { days } = getActiveDateRange();
-  const data = await apiGet(`/api/reports/departments?days=${days}${_wsParam}`);
+  const rawData = await apiGet(`/api/reports/departments?days=${days}${_wsParam}`);
+  const data = mergeDepartmentReportRows(rawData);
   _rptDeptData = data.scorecards || [];
 
   // Scorecard table
@@ -898,7 +980,7 @@ async function loadDepartments() {
     {
       type: "doughnut",
       data: {
-        labels: data.scorecards.map(d => displayDeptName(d.department)),
+        labels: data.scorecards.map(d => d.display_department || d.department),
         datasets: [{
           data: data.scorecards.map(d => d.total_cost_usd),
           backgroundColor: depts.map((_, i) => COLORS.dept[i % COLORS.dept.length]),
@@ -930,10 +1012,117 @@ async function loadDepartments() {
 
 // ── TAB 4: BOT EFFICIENCY REVIEW ──────────────────────────────────────────────
 
+function getEfficiencyDays() {
+  return (document.getElementById("effDaysSelect") || {}).value || "30";
+}
+
+function efficiencyCacheKey(days) {
+  return `${EFFICIENCY_REVIEW_CACHE_PREFIX}_${days}`;
+}
+
+function formatEfficiencyTimestamp(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function setEfficiencyGeneratedStatus(generatedAt, days) {
+  const status = document.getElementById("effGeneratedStatus");
+  if (!status) return;
+
+  const formatted = formatEfficiencyTimestamp(generatedAt);
+  if (!formatted) {
+    status.textContent = "No review generated yet.";
+    status.classList.remove("ready");
+    return;
+  }
+
+  status.textContent = `Generated ${formatted} for the last ${days} days.`;
+  status.classList.add("ready");
+}
+
+function setEfficiencyButtonState(hasReview) {
+  const btn = document.getElementById("effGenerateBtn");
+  if (!btn || btn.disabled) return;
+  btn.textContent = hasReview ? "Refresh Review" : "⚡ Generate Review";
+}
+
+function saveEfficiencyReview(days, data) {
+  const cached = {
+    generated_at: new Date().toISOString(),
+    days,
+    data,
+  };
+
+  try {
+    sessionStorage.setItem(efficiencyCacheKey(days), JSON.stringify(cached));
+  } catch (e) {}
+
+  return cached;
+}
+
+function readEfficiencyReview(days) {
+  try {
+    const raw = sessionStorage.getItem(efficiencyCacheKey(days));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderEfficiencyReview(data, generatedAt, days) {
+  const grid = document.getElementById("effGrid");
+  if (!grid) return;
+
+  document.getElementById("effFleetGrade").textContent   = data.fleet_grade || "—";
+  document.getElementById("effAgentsCount").textContent  = data.total_agents_analyzed || 0;
+  document.getElementById("effTotalSavings").textContent = "$" + (data.total_projected_savings || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById("effGeneratedBy").textContent  = data.generated_by === "ai" ? "GPT-4o" : "CostPilot Analytics";
+  document.getElementById("effFleetBar").style.display   = "grid";
+  setEfficiencyGeneratedStatus(generatedAt, days);
+  setEfficiencyButtonState(true);
+
+  if (!data.reviews || !data.reviews.length) {
+    grid.innerHTML = `<div class="eff-empty" style="grid-column:1/-1">${data.message || "No agent data found for this period."}</div>`;
+    return;
+  }
+
+  grid.innerHTML = data.reviews.map(r => renderEfficiencyCard(r)).join("");
+}
+
+function restoreEfficiencyReviewForSelectedDays() {
+  const days = getEfficiencyDays();
+  const cached = readEfficiencyReview(days);
+
+  if (!cached || !cached.data) {
+    document.getElementById("effFleetBar").style.display = "none";
+    setEfficiencyGeneratedStatus(null, days);
+    setEfficiencyButtonState(false);
+    const grid = document.getElementById("effGrid");
+    if (grid) {
+      grid.innerHTML = `
+        <div class="eff-empty">
+          Click <strong>Generate Review</strong> to analyze your bot fleet.
+        </div>
+      `;
+    }
+    return false;
+  }
+
+  renderEfficiencyReview(cached.data, cached.generated_at, days);
+  return true;
+}
+
 async function generateEfficiencyReview() {
   const btn  = document.getElementById("effGenerateBtn");
   const grid = document.getElementById("effGrid");
-  const days = document.getElementById("effDaysSelect").value;
+  const days = getEfficiencyDays();
 
   btn.disabled    = true;
   btn.textContent = "⚡ Analyzing...";
@@ -942,26 +1131,14 @@ async function generateEfficiencyReview() {
 
   try {
     const data = await apiPost(`/api/reports/bot-efficiency?days=${days}`, {});
-
-    // Fleet summary bar
-    document.getElementById("effFleetGrade").textContent   = data.fleet_grade || "—";
-    document.getElementById("effAgentsCount").textContent  = data.total_agents_analyzed;
-    document.getElementById("effTotalSavings").textContent = "$" + (data.total_projected_savings || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    document.getElementById("effGeneratedBy").textContent  = data.generated_by === "ai" ? "GPT-4o" : "CostPilot Analytics";
-    document.getElementById("effFleetBar").style.display   = "grid";
-
-    if (!data.reviews || !data.reviews.length) {
-      grid.innerHTML = `<div class="eff-empty" style="grid-column:1/-1">${data.message || "No agent data found for this period."}</div>`;
-      return;
-    }
-
-    grid.innerHTML = data.reviews.map(r => renderEfficiencyCard(r)).join("");
+    const cached = saveEfficiencyReview(days, data);
+    renderEfficiencyReview(data, cached.generated_at, days);
 
   } catch (e) {
     grid.innerHTML = `<div class="eff-empty" style="grid-column:1/-1; color:var(--accent-red)">Analysis failed: ${e.message}</div>`;
   } finally {
     btn.disabled    = false;
-    btn.textContent = "⚡ Generate Review";
+    setEfficiencyButtonState(!!readEfficiencyReview(days));
   }
 }
 

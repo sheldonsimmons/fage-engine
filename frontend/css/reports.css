@@ -395,7 +395,15 @@
   background: var(--bg-panel); border: 1px solid var(--border);
   border-radius: 8px; padding: 16px 20px;
 }
-.eff-generate-bar p { font-size: 13px; color: var(--text-muted); margin: 0; flex: 1; }
+.eff-generate-copy { flex: 1; min-width: 0; }
+.eff-generate-bar p { font-size: 13px; color: var(--text-muted); margin: 0; }
+.eff-generated-status {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.eff-generated-status.ready { color: var(--accent-green); }
 .eff-generate-btn {
   background: var(--accent); color: #fff; border: none; border-radius: 6px;
   padding: 10px 22px; font-size: 13px; font-weight: 700; cursor: pointer;
