@@ -64,6 +64,20 @@ SCOUT_OPENAI    = "gpt-4o-mini"
 SCOUT_ANTHROPIC = "claude-haiku-4-5-20251001"
 DEFAULT_TRIAL_CALL_CAP = 500
 DEFAULT_TRIAL_SPEND_CAP_USD = 10.0
+TIER_NUM_BY_NAME = {"Scout": 1, "Analyst": 2, "Advisor": 3, "Strategist": 4}
+TIER_NAME_BY_NUM = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
+OPENAI_MODEL_BY_TIER = {
+    1: SCOUT_OPENAI,
+    2: "gpt-4.1-mini",
+    3: "gpt-4o",
+    4: "gpt-4-turbo",
+}
+ANTHROPIC_MODEL_BY_TIER = {
+    1: SCOUT_ANTHROPIC,
+    2: "claude-sonnet-4-6",
+    3: "claude-sonnet-4-6",
+    4: "claude-opus-4-6",
+}
 
 
 def _check_sensitive_terms(text: str, db, department: str = None) -> dict:
@@ -128,6 +142,28 @@ def _estimate_tokens(messages: list) -> int:
         elif isinstance(content, list):
             total += sum(len(b.get("text", "")) // 4 for b in content if isinstance(b, dict))
     return total
+
+
+def _apply_agent_tier_bounds(model_id: str, tier_table: dict, default_models: dict, agent: RegisteredAgent = None) -> tuple:
+    """Clamp a selected model to the registered agent's min/max tier policy."""
+    if not agent:
+        return model_id, ""
+
+    meta = tier_table.get(model_id, {})
+    current_tier = TIER_NUM_BY_NAME.get(meta.get("tier"), 3)
+    agent_min = max(1, min(4, agent.min_tier or 1))
+    agent_max = max(1, min(4, agent.max_tier or 4))
+    final_tier = max(agent_min, min(agent_max, current_tier))
+    if final_tier == current_tier:
+        return model_id, ""
+
+    bounded_model = default_models.get(final_tier, model_id)
+    direction = "bumped up" if final_tier > current_tier else "capped down"
+    note = (
+        f"[AGENT BOUND: {direction} from {TIER_NAME_BY_NUM.get(current_tier, current_tier)} "
+        f"to {TIER_NAME_BY_NUM.get(final_tier, final_tier)} by agent policy]"
+    )
+    return bounded_model, note
 
 
 def _get_account(workspace_id: str, secret_key: str, db):
@@ -286,7 +322,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
                      cost_usd: float, routing_reason: str,
                      tokens_saved: int = 0, matched_keywords: list = None,
                      prompt_text: str = "", risk_override: str = None,
-                     agent_id: int = None):
+                     agent_id: int = None, usage_source: str = "estimated"):
     from database.models import DepartmentBudget
     import json
 
@@ -301,6 +337,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         model_tier     = tier,
         input_tokens   = input_tokens,
         output_tokens  = output_tokens,
+        usage_source   = usage_source,
         cost_usd       = cost_usd,
         timestamp      = now,
         routing_reason = routing_reason,
@@ -343,6 +380,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
             "clean_tokens": int(input_tokens or 0),
             "tokens_saved": int(tokens_saved or 0),
             "compression_pct": round((tokens_saved / raw_tokens) * 100, 1) if raw_tokens > 0 else 0.0,
+            "usage_source": usage_source,
         })
 
     # Audit event — feeds Governance Event Stream + decision ledger
@@ -517,9 +555,13 @@ async def proxy_openai(workspace_id: str, request: Request):
         if st["action"] in ("flag", "escalate"):
             routing_reason = f"{routing_reason}_FLAGGED"
 
+        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
+        routed_model, bound_note = _apply_agent_tier_bounds(routed_model, OPENAI_TIERS, OPENAI_MODEL_BY_TIER, agent)
+        if bound_note:
+            routing_reason = f"{routing_reason} {bound_note}"
+
         # 4. Forward with pruned messages
         forward_body = {**body, "model": routed_model, "messages": pruned_messages}
-        agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -529,6 +571,7 @@ async def proxy_openai(workspace_id: str, request: Request):
 
         resp_data  = resp.json()
         usage      = resp_data.get("usage", {})
+        usage_source = "provider_reported" if usage else "estimated"
         in_tokens  = usage.get("prompt_tokens", tokens)
         out_tokens = usage.get("completion_tokens", 100)
         tier_meta  = OPENAI_TIERS.get(routed_model, {"tier": "Advisor", "input": 5.0, "output": 15.0})
@@ -540,7 +583,7 @@ async def proxy_openai(workspace_id: str, request: Request):
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
                          matched_kw + st["matched"], prompt_text, risk_override=risk,
-                         agent_id=agent.id if agent else None)
+                         agent_id=agent.id if agent else None, usage_source=usage_source)
 
         # 6. Return response + CostPilot metadata headers
         return JSONResponse(
@@ -627,8 +670,6 @@ async def proxy_anthropic(workspace_id: str, request: Request):
             routing_reason = f"{routing_reason}_FLAGGED"
         risk = "high" if st["action"] in ("flag","escalate") else ("medium" if complex_ else "low")
 
-        # 3. Forward with pruned messages
-        forward_body    = {**body, "model": routed_model, "messages": pruned_messages}
         forward_headers = {
             "x-api-key":         anthropic_key,
             "anthropic-version": request.headers.get("anthropic-version", "2023-06-01"),
@@ -638,6 +679,12 @@ async def proxy_anthropic(workspace_id: str, request: Request):
             forward_headers["anthropic-beta"] = request.headers["anthropic-beta"]
 
         agent = _ensure_agent(db, workspace_id, department, platform, agent_name)
+        routed_model, bound_note = _apply_agent_tier_bounds(routed_model, ANTHROPIC_TIERS, ANTHROPIC_MODEL_BY_TIER, agent)
+        if bound_note:
+            routing_reason = f"{routing_reason} {bound_note}"
+
+        # 3. Forward with pruned messages
+        forward_body    = {**body, "model": routed_model, "messages": pruned_messages}
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
@@ -647,6 +694,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
 
         resp_data  = resp.json()
         usage      = resp_data.get("usage", {})
+        usage_source = "provider_reported" if usage else "estimated"
         in_tokens  = usage.get("input_tokens", tokens)
         out_tokens = usage.get("output_tokens", 100)
         tier_meta  = ANTHROPIC_TIERS.get(routed_model,
@@ -658,7 +706,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
                          matched_kw + st["matched"], prompt_text, risk_override=risk,
-                         agent_id=agent.id if agent else None)
+                         agent_id=agent.id if agent else None, usage_source=usage_source)
 
         # 6. Return response + CostPilot metadata headers
         return JSONResponse(

@@ -125,6 +125,7 @@ class TokenTransaction(Base):
     model_tier      = Column(String,   nullable=False)    # micro | flagship
     input_tokens   = Column(Integer,  nullable=False)
     output_tokens  = Column(Integer,  nullable=False)
+    usage_source   = Column(String,   nullable=False, default="estimated")  # provider_reported | estimated
     cost_usd       = Column(Float,    nullable=False)
     timestamp      = Column(DateTime, default=datetime.utcnow)
     routing_reason = Column(String,   nullable=True)     # ROUTINE | COMPLEX | THROTTLED

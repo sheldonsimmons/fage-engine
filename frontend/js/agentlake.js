@@ -131,6 +131,8 @@ function renderAgentTable(agents) {
 
     const minVal = a.min_tier || 1;
     const maxVal = a.max_tier || 4;
+    const deptRaw = jsString(a.department || "");
+    const deptLabel = jsString(displayAgentDept(a));
 
     const pruningOn = a.pruning_enabled !== false;
     const pruneBtn = `
@@ -164,9 +166,16 @@ function renderAgentTable(agents) {
         <td><span class="badge ${badgeClass}">${effectiveStatus.toUpperCase()}</span></td>
         <td style="font-size:11px; color:var(--text-muted)">${lastActive}</td>
         <td style="white-space:nowrap">
-          <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
             ${tierSelect(`min-tier-${a.id}`, "Min", minVal)}
             ${tierSelect(`max-tier-${a.id}`, "Max", maxVal)}
+            <button type="button"
+              onclick="event.stopPropagation(); applyTierBoundsToDepartment(${a.id}, '${deptRaw}', '${deptLabel}')"
+              title="Apply this min/max tier policy to all visible agents in this department"
+              style="background:transparent;border:1px solid var(--border);color:var(--text-muted);
+                     border-radius:3px;padding:2px 5px;font-size:10px;cursor:pointer">
+              Apply to Dept
+            </button>
           </div>
         </td>
         <td style="text-align:center">${pruneBtn}</td>
@@ -203,6 +212,34 @@ async function saveTierBounds(agentId) {
     }
   } catch (err) {
     alert("Failed to save tier bounds: " + err.message);
+  }
+}
+
+async function applyTierBoundsToDepartment(agentId, department, departmentLabel) {
+  const minEl = document.getElementById(`min-tier-${agentId}`);
+  const maxEl = document.getElementById(`max-tier-${agentId}`);
+  if (!minEl || !maxEl || !department) return;
+
+  const minTier = parseInt(minEl.value, 10);
+  const maxTier = parseInt(maxEl.value, 10);
+  if (minTier > maxTier) {
+    alert("Min tier cannot be higher than max tier.");
+    return;
+  }
+
+  const ok = confirm(`Apply ${getTierName(minTier)}-${getTierName(maxTier)} tier bounds to all visible ${departmentLabel || department} agents?`);
+  if (!ok) return;
+
+  try {
+    const result = await apiPatch("/api/agents/department-tier-bounds", {
+      department,
+      min_tier: minTier,
+      max_tier: maxTier,
+    });
+    await loadAgents();
+    alert(`Updated ${result.updated || 0} visible ${departmentLabel || department} agent(s).`);
+  } catch (err) {
+    alert("Failed to apply department tier bounds: " + err.message);
   }
 }
 

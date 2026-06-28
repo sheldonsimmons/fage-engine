@@ -78,6 +78,10 @@ def _run_migrations():
             ensure_column(conn, "audit_events", "matched_keywords_json", "TEXT")
         except Exception:
             pass
+        try:
+            ensure_column(conn, "token_transactions", "usage_source", "VARCHAR DEFAULT 'estimated'")
+        except Exception:
+            pass
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount

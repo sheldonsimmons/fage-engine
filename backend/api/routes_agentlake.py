@@ -53,6 +53,10 @@ class TierBoundsRequest(BaseModel):
     max_tier: int  # 1–4
 
 
+class DepartmentTierBoundsRequest(TierBoundsRequest):
+    department: str
+
+
 class PruningToggleRequest(BaseModel):
     enabled: bool
 
@@ -168,6 +172,39 @@ def get_agents(
 ):
     """List registered agents. Pass ?include_archived=true to include archived agents."""
     return list_agents(db, include_archived=include_archived, workspace_id=workspace_id)
+
+
+@router.patch("/department-tier-bounds")
+def set_department_tier_bounds(req: DepartmentTierBoundsRequest, db: Session = Depends(get_db)):
+    """Apply min/max tier bounds to every non-archived agent in a department."""
+    if not (1 <= req.min_tier <= 4) or not (1 <= req.max_tier <= 4):
+        raise HTTPException(status_code=422, detail="Tier values must be between 1 and 4.")
+    if req.min_tier > req.max_tier:
+        raise HTTPException(status_code=422, detail="min_tier cannot exceed max_tier.")
+
+    from database.models import RegisteredAgent
+    department = (req.department or "").strip()
+    if not department:
+        raise HTTPException(status_code=422, detail="Department is required.")
+
+    agents = db.query(RegisteredAgent).filter(
+        RegisteredAgent.department == department,
+        (RegisteredAgent.archived == False) | (RegisteredAgent.archived == None),
+    ).all()
+    if not agents:
+        raise HTTPException(status_code=404, detail=f"No visible agents found for department '{department}'.")
+
+    for agent in agents:
+        agent.min_tier = req.min_tier
+        agent.max_tier = req.max_tier
+    db.commit()
+
+    return {
+        "department": department,
+        "updated": len(agents),
+        "min_tier": req.min_tier,
+        "max_tier": req.max_tier,
+    }
 
 
 @router.get("/{agent_id}", response_model=AgentStatus)

@@ -203,6 +203,8 @@ async function toggleStreamEvent(eventId) {
     const budgetLine = snapshot.budget_spent_usd != null
       ? `$${snapshot.budget_spent_usd ?? "?"} / $${snapshot.budget_cap_usd ?? "?"} &nbsp;(${snapshot.budget_used_pct ?? "?"}% used) &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? "?"} &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? "?"}`
       : "—";
+    const usageSource = e.usage_source || snapshot.usage_source || null;
+    const usageLabel = usageSource === "provider_reported" ? "Provider reported" : (usageSource === "estimated" ? "Estimated" : "Not recorded");
 
     const detailSaved = Number(snapshot.tokens_saved ?? e.tokens_saved ?? 0);
     const hasPruningStats = snapshot.raw_tokens != null || snapshot.clean_tokens != null || snapshot.tokens_saved != null || e.tokens_saved != null;
@@ -235,6 +237,9 @@ async function toggleStreamEvent(eventId) {
 
       <div class="gov-detail-label">Budget Context</div>
       <div class="gov-detail-mono">${budgetLine}</div>
+
+      <div class="gov-detail-label">Token Usage Source</div>
+      <div class="gov-detail-mono">${usageLabel}</div>
 
       ${pruningLine}
 

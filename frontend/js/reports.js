@@ -697,6 +697,9 @@ async function loadRiskEventDetail(eventId) {
   if (!cell) return;
   try {
     const detail = await apiGet(`/api/audit/${eventId}`);
+    const usageSource = detail.usage_source === "provider_reported"
+      ? "Provider reported"
+      : (detail.usage_source === "estimated" ? "Estimated" : "Not recorded");
     cell.innerHTML = `
       <div class="risk-detail-grid">
         <div>
@@ -709,7 +712,8 @@ async function loadRiskEventDetail(eventId) {
             Agent: ${escapeHtml(detail.display_agent_name || detail.agent_name || "Not linked")}<br/>
             Platform: ${escapeHtml(detail.source_platform || "Unknown")}<br/>
             Model tier: ${escapeHtml(detail.model_tier || "none")}<br/>
-            Cost: ${fmtUsd(detail.cost_usd || 0)}
+            Cost: ${fmtUsd(detail.cost_usd || 0)}<br/>
+            Token usage source: ${escapeHtml(usageSource)}
           </div>
         </div>
         <div>

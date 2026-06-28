@@ -113,6 +113,7 @@ def _call_simulated(text: str, tier: str) -> dict:
         "model_id":      f"simulated-{tier}",
         "input_tokens":  input_tokens,
         "output_tokens": output_tokens,
+        "usage_source":  "estimated",
         "provider":      "simulated",
     }
 
@@ -146,6 +147,7 @@ def _call_openai(text: str, model_id: str) -> dict:
         "model_id":      model_id,
         "input_tokens":  usage.prompt_tokens,
         "output_tokens": usage.completion_tokens,
+        "usage_source":  "provider_reported",
         "provider":      "openai",
     }
 
@@ -184,6 +186,7 @@ def _call_anthropic(text: str, model_id: str) -> dict:
         "model_id":      model_id,
         "input_tokens":  usage.input_tokens,
         "output_tokens": usage.output_tokens,
+        "usage_source":  "provider_reported",
         "provider":      "anthropic",
     }
 

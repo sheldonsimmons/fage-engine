@@ -37,6 +37,7 @@ class AuditEventSummary(BaseModel):
     clean_tokens:     Optional[int] = None
     tokens_saved:     Optional[int] = 0
     compression_pct:  Optional[float] = None
+    usage_source:     Optional[str] = None
     has_raw_payload:  Optional[bool] = False
     matched_keywords: Optional[List[str]] = Field(default_factory=list)
     timestamp:        Optional[str]

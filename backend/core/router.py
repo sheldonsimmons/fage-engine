@@ -182,6 +182,8 @@ def route(
     is_throttled:  bool = False,
     throttle_tier: int  = 1,
     force_complex: bool = False,
+    agent_min_tier: int = None,
+    agent_max_tier: int = None,
 ) -> dict:
     """
     Full routing pipeline for one payload.
@@ -277,6 +279,18 @@ def route(
         routing_decision = "ROUTINE"
         routing_reason   = complexity_result["reason"]
 
+    if agent_min_tier is not None or agent_max_tier is not None:
+        agent_min = max(1, min(4, agent_min_tier or 1))
+        agent_max = max(1, min(4, agent_max_tier or 4))
+        original_tier = tier_num
+        tier_num = max(agent_min, min(agent_max, tier_num))
+        if tier_num != original_tier:
+            direction = "bumped up" if tier_num > original_tier else "capped down"
+            routing_reason = (
+                f"[AGENT BOUND: {direction} from {TIER_NAMES.get(original_tier, original_tier)} "
+                f"to {TIER_NAMES.get(tier_num, tier_num)} by agent policy] {routing_reason}"
+            )
+
     # Step 4 — Look up model from registry (department-specific first, then global)
     registry_model = _get_model_from_registry(tier_num, db, department=department)
 
@@ -292,7 +306,7 @@ def route(
         # No models in registry — fall back to hardcoded config
         is_micro         = tier_num <= 2
         model_id_to_use  = None
-        model_tier_label = "micro" if is_micro else "flagship"
+        model_tier_label = TIER_NAMES.get(tier_num, "Scout" if is_micro else "Advisor")
         display_name     = MICRO_MODEL["display_name"] if is_micro else FLAGSHIP_MODEL["display_name"]
         cost_in_per_m    = MICRO_MODEL["input_cost_per_million"]  if is_micro else FLAGSHIP_MODEL["input_cost_per_million"]
         cost_out_per_m   = MICRO_MODEL["output_cost_per_million"] if is_micro else FLAGSHIP_MODEL["output_cost_per_million"]
@@ -331,6 +345,7 @@ def route(
         "model_name":               model_name,
         "input_tokens":             model_result["input_tokens"],
         "output_tokens":            model_result["output_tokens"],
+        "usage_source":             model_result.get("usage_source", "estimated"),
         "cost_usd":                 cost_usd,
         "simulated_response":       model_result["response_text"],
         "was_pruned":               auto_prune,
