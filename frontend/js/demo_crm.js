@@ -932,6 +932,54 @@ function toggleVoiceGuard() {
   setVoiceGuard(!voiceGuardEnabled);
 }
 
+// ── Demo agent chat ───────────────────────────────────────────────────────────
+
+function appendAgentMessage(kind, text) {
+  const log = document.getElementById("agentChatLog");
+  if (!log) return;
+  const msg = document.createElement("div");
+  msg.className = `agent-msg ${kind}`;
+  msg.textContent = text;
+  log.appendChild(msg);
+  log.scrollTop = log.scrollHeight;
+}
+
+function buildDemoAgentPayload(prompt, subject, body) {
+  const recordText = [subject && `Record subject: ${subject}`, body && `Record details: ${body}`]
+    .filter(Boolean)
+    .join("\n\n");
+  return [
+    `Demo agent instruction: ${prompt}`,
+    recordText || "No CRM record was selected. Use the user's pasted request as the working payload.",
+  ].join("\n\n");
+}
+
+async function sendDemoAgentMessage() {
+  const promptEl = document.getElementById("agentPrompt");
+  const prompt = (promptEl && promptEl.value.trim()) || "Review this CRM record and recommend the next response.";
+  const subjectEl = document.getElementById("caseSubject");
+  const bodyEl = document.getElementById("caseBody");
+  const subject = subjectEl.value.trim() || "Demo agent request";
+  const body = bodyEl.value.trim();
+  const payload = buildDemoAgentPayload(prompt, subject, body);
+
+  appendAgentMessage("user", prompt);
+  appendAgentMessage("bot", "Running this through CostPilot now. Watch the decision panel below for tier, risk, pruning, budget, and audit details.");
+
+  subjectEl.value = subject;
+  bodyEl.value = payload;
+  await submitCase();
+}
+
+function clearDemoAgentData() {
+  clearScenario();
+  document.getElementById("caseSubject").value = "";
+  document.getElementById("caseBody").value = "";
+  document.getElementById("agentPrompt").value = "";
+  appendAgentMessage("bot", "Blank workspace ready. Paste any demo-safe text or describe what the fake agent should do.");
+  showWaiting();
+}
+
 // ── State helpers ─────────────────────────────────────────────────────────────
 
 function showWaiting() {
