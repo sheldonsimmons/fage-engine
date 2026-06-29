@@ -38,6 +38,15 @@ def _parse_range(days: int):
     return start, end
 
 
+def _timeline_dates(start: datetime, end: datetime):
+    """Return calendar dates covered by the report window, including today."""
+    current = start.date()
+    last = end.date()
+    while current <= last:
+        yield current.strftime("%Y-%m-%d")
+        current += timedelta(days=1)
+
+
 # ── Savings Report ─────────────────────────────────────────────────────────────
 
 @router.get("/savings")
@@ -87,8 +96,7 @@ def savings_report(days: int = Query(30, ge=1, le=365),
 
     # Fill missing days with zeros
     timeline = []
-    for i in range(days):
-        day = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+    for day in _timeline_dates(start, end):
         d   = daily.get(day, {"cost": 0.0, "tokens_saved": 0, "calls": 0, "flagship": 0, "micro": 0})
         timeline.append({"date": day, **d})
 
@@ -146,8 +154,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
         daily[day]["total"]      += 1
 
     timeline = []
-    for i in range(days):
-        day = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+    for day in _timeline_dates(start, end):
         d   = daily.get(day, {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0})
         timeline.append({"date": day, **d})
 
@@ -281,8 +288,7 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
         daily_dept[day][dept] = round(daily_dept[day].get(dept, 0) + t.cost_usd, 6)
 
     timeline = []
-    for i in range(days):
-        day = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+    for day in _timeline_dates(start, end):
         timeline.append({"date": day, **(daily_dept.get(day, {}))})
 
     return {
