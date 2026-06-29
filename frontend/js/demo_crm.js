@@ -944,6 +944,13 @@ function appendAgentMessage(kind, text) {
   log.scrollTop = log.scrollHeight;
 }
 
+function resetAgentChat(message) {
+  const log = document.getElementById("agentChatLog");
+  if (!log) return;
+  log.innerHTML = "";
+  appendAgentMessage("bot", message || "Blank workspace ready. Paste any demo-safe text or describe what the fake agent should do.");
+}
+
 function buildDemoAgentPayload(prompt, subject, body) {
   const recordText = [subject && `Record subject: ${subject}`, body && `Record details: ${body}`]
     .filter(Boolean)
@@ -967,8 +974,7 @@ async function sendDemoAgentMessage() {
   appendAgentMessage("bot", "Running this through CostPilot now. Watch the decision panel below for tier, risk, pruning, budget, and audit details.");
 
   subjectEl.value = subject;
-  bodyEl.value = payload;
-  await submitCase();
+  await submitCase(payload);
 }
 
 function clearDemoAgentData() {
@@ -976,7 +982,7 @@ function clearDemoAgentData() {
   document.getElementById("caseSubject").value = "";
   document.getElementById("caseBody").value = "";
   document.getElementById("agentPrompt").value = "";
-  appendAgentMessage("bot", "Blank workspace ready. Paste any demo-safe text or describe what the fake agent should do.");
+  resetAgentChat();
   showWaiting();
 }
 
@@ -1005,18 +1011,18 @@ function showResult(html) {
 
 // ── Main submit ───────────────────────────────────────────────────────────────
 
-async function submitCase() {
+async function submitCase(routeTextOverride) {
   const subject = document.getElementById("caseSubject").value.trim();
   const body    = document.getElementById("caseBody").value.trim();
   const dept    = document.getElementById("deptSelect").value;
   const agent   = document.getElementById("agentName").value.trim() || "CostPilot-Demo-Bot";
 
-  if (!subject && !body) {
+  if (!subject && !body && !routeTextOverride) {
     document.getElementById("caseBody").focus();
     return;
   }
 
-  const text = subject && body ? subject + "\n\n" + body : subject || body;
+  const text = routeTextOverride || (subject && body ? subject + "\n\n" + body : subject || body);
 
   const btn = document.getElementById("submitBtn");
   btn.disabled = true;

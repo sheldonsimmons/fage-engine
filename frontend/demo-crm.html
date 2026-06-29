@@ -557,14 +557,14 @@
           <div>
             <div class="agent-demo-title">Demo AI Agent</div>
             <div class="agent-demo-sub">
-              Chat with a lightweight fake agent. It uses the selected platform, record data, department, and agent name, then sends the request through CostPilot.
+              Chat with a lightweight fake agent. Each run sends only the current instruction and CRM record through CostPilot.
             </div>
           </div>
           <span class="agent-demo-badge">Investor friendly</span>
         </div>
         <div class="agent-chat-log" id="agentChatLog">
           <div class="agent-msg bot">
-            I can draft replies, summarize records, review renewal requests, or test a pasted payload. Nothing here requires Salesforce access.
+            I can draft replies, summarize records, review renewal requests, or test a pasted payload. Past chat is not reused in the next CostPilot request.
           </div>
         </div>
         <div class="agent-chat-input">

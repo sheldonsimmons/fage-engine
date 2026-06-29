@@ -13,6 +13,23 @@ function isAuditDetailOpen() {
   return !!openRationaleId || !!document.getElementById("rawPayloadModal");
 }
 
+function formatAuditCapturedAt(value) {
+  if (!value) return "—";
+  const raw = String(value);
+  const iso = raw.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(raw) ? raw : `${raw}Z`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
 async function loadAuditLog() {
   try {
     const events = await apiGet("/api/audit?limit=50");
@@ -164,6 +181,7 @@ async function fetchRationaleContent(eventId) {
     try { snapshot = JSON.parse(detail.context_snapshot || "{}"); } catch {}
     const hasBudgetContext = snapshot.budget_cap_usd != null || snapshot.budget_spent_usd != null;
     const callCost = detail.cost_usd != null ? `$${Number(detail.cost_usd).toFixed(6)}` : "not recorded";
+    const capturedAt = formatAuditCapturedAt(snapshot.captured_at);
     const agentLine = `Agent: ${detail.display_agent_name || detail.agent_name || "not linked"}
           &nbsp;|&nbsp; Platform: ${detail.source_platform || "unknown"}
           &nbsp;|&nbsp; Department: ${detail.display_department || detail.department || "—"}`;
@@ -172,10 +190,10 @@ async function fetchRationaleContent(eventId) {
           &nbsp;(${snapshot.budget_used_pct ?? 0}% used)
           &nbsp;|&nbsp; Throttled: ${snapshot.throttled ?? false}
           &nbsp;|&nbsp; Override: ${snapshot.override_granted ?? false}
-          &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`
+          &nbsp;|&nbsp; Captured: ${capturedAt}`
       : `Budget: Not configured for ${snapshot.department || detail.display_department || detail.department || "this department"}
           &nbsp;|&nbsp; Call cost: ${callCost}
-          &nbsp;|&nbsp; Captured: ${snapshot.captured_at || "—"}`;
+          &nbsp;|&nbsp; Captured: ${capturedAt}`;
 
     content.innerHTML = `
       <div style="display:flex; justify-content:flex-end; margin-bottom:8px">
