@@ -970,6 +970,8 @@ async function sendDemoAgentMessage() {
   const body = bodyEl.value.trim();
   const payload = buildDemoAgentPayload(prompt, subject, body);
 
+  const log = document.getElementById("agentChatLog");
+  if (log) log.innerHTML = "";
   appendAgentMessage("user", prompt);
   appendAgentMessage("bot", "Running this through CostPilot now. Watch the decision panel below for tier, risk, pruning, budget, and audit details.");
 
