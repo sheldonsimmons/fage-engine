@@ -15,6 +15,7 @@ let _rptDeptData    = [];
 let _rptSavingsData = null;
 const _hiddenDeptChartLabels = new Set();
 let _riskDrillDate = "";
+let _riskDrillKind = "";
 let _riskOpenEventId = null;
 const EFFICIENCY_REVIEW_CACHE_PREFIX = "fage_efficiency_review_v1";
 
@@ -109,6 +110,54 @@ function displayDeptName(name) {
   const text = String(name);
   const colonIndex = text.indexOf(":");
   return colonIndex >= 0 ? text.slice(colonIndex + 1).trim() || text : text;
+}
+
+function normEventValue(value) {
+  return String(value || "").toLowerCase();
+}
+
+function isPremiumTierEvent(e) {
+  const tier = normEventValue(e.model_tier);
+  const outcome = normEventValue(e.decision_outcome);
+  const type = normEventValue(e.event_type);
+  return type === "escalated"
+    || ["advisor", "strategist", "flagship"].includes(tier)
+    || outcome.includes("routed_to_advisor")
+    || outcome.includes("routed_to_strategist")
+    || outcome.includes("advisor model")
+    || outcome.includes("strategist model")
+    || outcome.includes("flagship");
+}
+
+function riskDrillKindMatch(e, kind) {
+  const type = normEventValue(e.event_type);
+  const outcome = normEventValue(e.decision_outcome);
+  const risk = normEventValue(e.risk_level);
+  const keywords = Array.isArray(e.matched_keywords)
+    ? e.matched_keywords.join(" ").toLowerCase()
+    : normEventValue(e.matched_keywords);
+
+  switch (kind) {
+    case "blocked":
+      return type === "blocked" || outcome.includes("blocked");
+    case "premium":
+      return isPremiumTierEvent(e);
+    case "pii":
+      return type.includes("pii") || outcome.includes("pii") || keywords.includes("pii");
+    case "throttle":
+      return type.includes("throttle") || outcome.includes("throttle") || outcome.includes("budget");
+    case "locks":
+      return type === "lock" || outcome.includes("collision") || outcome.includes("conflict") || outcome.includes("lock");
+    case "flagged":
+      return risk === "high" || risk === "critical";
+    default:
+      return true;
+  }
+}
+
+function countRiskDrill(kind, fallback = 0) {
+  if (!_rptRiskEvents.length) return Number(fallback) || 0;
+  return _rptRiskEvents.filter(e => riskDrillKindMatch(e, kind)).length;
 }
 
 function mergeDepartmentReportRows(data) {
@@ -646,9 +695,9 @@ function wireRiskDrilldowns() {
       } else if (target === "all") {
         applyRiskDrilldown({ label: "All audit events" });
       } else if (target === "blocked") {
-        applyRiskDrilldown({ search: "blocked", label: "Blocked request events" });
+        applyRiskDrilldown({ drill: "blocked", label: "Blocked request events" });
       } else if (target === "locks") {
-        applyRiskDrilldown({ type: "LOCK", label: "Agent collision and lock events" });
+        applyRiskDrilldown({ drill: "locks", label: "Agent collision and lock events" });
       } else {
         applyRiskDrilldown({ risk: target, label: `${target.toUpperCase()} risk events` });
       }
@@ -661,8 +710,9 @@ function setRiskControl(id, value) {
   if (el) el.value = value || "";
 }
 
-function applyRiskDrilldown({ risk = "", type = "", search = "", date = "", label = "Filtered events" } = {}) {
+function applyRiskDrilldown({ risk = "", type = "", search = "", date = "", drill = "", label = "Filtered events" } = {}) {
   _riskDrillDate = date;
+  _riskDrillKind = drill;
   _riskOpenEventId = null;
   setRiskControl("riskEventDept", "");
   setRiskControl("riskEventRisk", risk);
@@ -710,6 +760,7 @@ function renderRiskEventTable() {
     const displayDept = displayDeptName(e.display_department || e.department);
     const eventDate = e.timestamp ? String(e.timestamp).slice(0, 10) : "";
     if (_riskDrillDate && eventDate !== _riskDrillDate) return false;
+    if (_riskDrillKind && !riskDrillKindMatch(e, _riskDrillKind)) return false;
     if (dept && displayDept.toLowerCase() !== dept) return false;
     if (risk && String(e.risk_level || "").toLowerCase() !== risk) return false;
     if (type && String(e.event_type || "").toLowerCase() !== type) return false;
@@ -754,6 +805,7 @@ function resetRiskEventFilters() {
     if (el) el.value = "";
   });
   _riskDrillDate = "";
+  _riskDrillKind = "";
   _riskOpenEventId = null;
   const banner = document.getElementById("riskDrillBanner");
   if (banner) {
@@ -815,13 +867,19 @@ async function loadRiskEventDetail(eventId) {
 function renderComplianceGrid(d) {
   const grid = document.getElementById("complianceGrid");
   if (!grid) return;
+  const blockedCount = countRiskDrill("blocked", d.blocked_count);
+  const premiumCount = countRiskDrill("premium", d.escalated_count);
+  const flaggedCount = countRiskDrill("flagged", d.flagged_count);
+  const piiCount = countRiskDrill("pii", d.pii_count);
+  const throttleCount = countRiskDrill("throttle", d.throttle_prevented);
+  const lockCount = countRiskDrill("locks", d.collision_count);
   const items = [
-    { icon: "🚫", value: d.blocked_count,     label: "Requests Blocked",          sub: "Sensitive terms triggered block policy — request never reached AI model",          cls: "critical", drill: { search: "blocked", label: "Blocked request events" } },
-    { icon: "⚠️",  value: d.escalated_count,   label: "Escalated to Flagship",     sub: "Legal, NDA, contract language forced flagship model review",                       cls: "high",     drill: { search: "escalate", label: "Escalated model-review events" } },
-    { icon: "🔍", value: d.flagged_count,      label: "Flagged in Audit Log",      sub: "High-risk keywords logged for compliance review",                                   cls: "medium",   drill: { risk: "high", label: "High-risk flagged audit events" } },
-    { icon: "🔒", value: d.pii_count,          label: "PII Detected",              sub: "Credit cards, SSNs, emails, phone numbers caught before AI processing",             cls: "high",     drill: { search: "pii", label: "PII-related events" } },
-    { icon: "💰", value: d.throttle_prevented, label: "Budget Overruns Prevented", sub: "Auto-throttle engaged before department cap was breached",                          cls: "low",      drill: { search: "throttle budget", label: "Budget throttle events" } },
-    { icon: "⚡", value: d.collision_count,    label: "Agent Collisions Resolved", sub: "Concurrent write conflicts detected and locked — zero data corruption",             cls: "low",      drill: { type: "LOCK", label: "Agent collision events" } },
+    { icon: "🚫", value: blockedCount,  label: "Requests Blocked",          sub: "Sensitive terms triggered block policy — request never reached AI model",          cls: "critical", drill: { drill: "blocked", label: "Blocked request events" } },
+    { icon: "⚠️",  value: premiumCount,  label: "Escalated to Flagship",     sub: "Requests routed to Advisor, Strategist, or flagship review",                      cls: "high",     drill: { drill: "premium", label: "Premium-tier routed events" } },
+    { icon: "🔍", value: flaggedCount,  label: "Flagged in Audit Log",      sub: "High-risk keywords logged for compliance review",                                   cls: "medium",   drill: { drill: "flagged", label: "High-risk flagged audit events" } },
+    { icon: "🔒", value: piiCount,      label: "PII Detected",              sub: "Credit cards, SSNs, emails, phone numbers caught before AI processing",             cls: "high",     drill: { drill: "pii", label: "PII-related events" } },
+    { icon: "💰", value: throttleCount, label: "Budget Overruns Prevented", sub: "Auto-throttle engaged before department cap was breached",                          cls: "low",      drill: { drill: "throttle", label: "Budget throttle events" } },
+    { icon: "⚡", value: lockCount,     label: "Agent Collisions Resolved", sub: "Concurrent write conflicts detected and locked — zero data corruption",             cls: "low",      drill: { drill: "locks", label: "Agent collision events" } },
   ];
   const hasData = items.some(i => i.value > 0);
   if (!hasData) {
