@@ -47,6 +47,13 @@
       background: rgba(63,185,80,0.12); color: var(--accent-green);
       border: 1px solid var(--accent-green); border-radius: 10px; padding: 3px 10px;
     }
+    .copy-link-btn {
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px;
+      background: transparent; color: var(--text-muted); font: inherit; font-size: 11px;
+      cursor: pointer; transition: color 0.15s, border-color 0.15s;
+    }
+    .copy-link-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .copy-link-btn.copied { color: var(--accent-green); border-color: var(--accent-green); }
 
     /* ── Split layout ────────────────────────────────────────────────────────── */
     .demo-split {
@@ -67,6 +74,37 @@
       font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
       color: var(--text-muted); font-weight: 600; margin-bottom: 10px;
     }
+    .quick-start-panel {
+      background: linear-gradient(135deg, rgba(88,166,255,0.08), rgba(63,185,80,0.05));
+      border: 1px solid rgba(88,166,255,0.35); border-radius: 10px;
+      padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .quick-start-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .quick-start-title {
+      color: var(--text-primary); font-size: 13px; font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .quick-start-badge {
+      color: var(--accent); border: 1px solid rgba(88,166,255,0.4);
+      background: rgba(88,166,255,0.07); border-radius: 999px;
+      font-size: 9px; font-weight: 800; letter-spacing: 0.08em;
+      text-transform: uppercase; padding: 3px 8px; white-space: nowrap;
+    }
+    .quick-start-steps {
+      display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px;
+    }
+    .quick-start-step {
+      background: rgba(13,17,23,0.45); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; min-height: 82px;
+    }
+    .quick-start-num {
+      width: 18px; height: 18px; border-radius: 50%; display: inline-flex;
+      align-items: center; justify-content: center; margin-bottom: 7px;
+      background: rgba(88,166,255,0.12); color: var(--accent);
+      font-size: 10px; font-weight: 800;
+    }
+    .quick-start-label { color: var(--text-primary); font-size: 11px; font-weight: 800; margin-bottom: 4px; }
+    .quick-start-copy { color: var(--text-muted); font-size: 10px; line-height: 1.45; }
 
     /* Platform selector */
     .platform-grid {
@@ -433,6 +471,14 @@
       box-shadow: 0 0 0 3px rgba(88,166,255,0.9), 0 0 0 9999px rgba(1,4,9,0.18);
       border-radius: 10px;
     }
+    @media (max-width: 900px) {
+      .quick-start-steps { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 560px) {
+      .quick-start-steps { grid-template-columns: 1fr; }
+      .demo-banner { align-items: flex-start; flex-direction: column; }
+      .demo-banner-right { flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
@@ -473,6 +519,7 @@
     <div class="demo-banner-right">
       <span class="live-badge">● LIVE ENGINE</span>
       <span style="font-size:11px;color:var(--text-muted)">Every submission hits the real CostPilot routing pipeline</span>
+      <button type="button" class="copy-link-btn" id="copyDemoLinkBtn" onclick="copyDemoLink()">Copy demo link</button>
     </div>
   </div>
 
@@ -481,6 +528,35 @@
 
     <!-- ── LEFT — Case Form ──────────────────────────────────────────────────── -->
     <div class="demo-left">
+
+      <div class="quick-start-panel" id="guideQuickStart">
+        <div class="quick-start-head">
+          <div class="quick-start-title">How to demo CostPilot in 2 minutes</div>
+          <span class="quick-start-badge">Quick start</span>
+        </div>
+        <div class="quick-start-steps">
+          <div class="quick-start-step">
+            <div class="quick-start-num">1</div>
+            <div class="quick-start-label">Pick a platform</div>
+            <div class="quick-start-copy">Choose Salesforce, ServiceNow, HubSpot, or another source.</div>
+          </div>
+          <div class="quick-start-step">
+            <div class="quick-start-num">2</div>
+            <div class="quick-start-label">Load a scenario</div>
+            <div class="quick-start-copy">Routine, complex, blocked, and voice each show a different decision.</div>
+          </div>
+          <div class="quick-start-step">
+            <div class="quick-start-num">3</div>
+            <div class="quick-start-label">Submit it</div>
+            <div class="quick-start-copy">CostPilot routes, checks risk, prunes context, and logs the event.</div>
+          </div>
+          <div class="quick-start-step">
+            <div class="quick-start-num">4</div>
+            <div class="quick-start-label">Review proof</div>
+            <div class="quick-start-copy">Open the dashboard or reports to see the same event reflected.</div>
+          </div>
+        </div>
+      </div>
 
       <!-- Platform -->
       <div>

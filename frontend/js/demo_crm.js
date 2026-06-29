@@ -1336,6 +1336,11 @@ const DEMO_GUIDE_STEPS = [
     body: "This is a live, investor-friendly demo. Every submission uses the real CostPilot routing pipeline, so the results also appear in the dashboard, reports, audit log, and budget totals.",
   },
   {
+    target: "#guideQuickStart",
+    title: "The 2-Minute Demo Path",
+    body: "Use this quick-start panel when you are showing CostPilot to someone new. It gives them the simple path: pick a platform, load a scenario, submit it, then review the proof.",
+  },
+  {
     target: "#guidePlatform",
     title: "Choose a Source Platform",
     body: "Pick the system the request is pretending to come from: Salesforce, ServiceNow, HubSpot, Zendesk, Dynamics, or a custom app. This changes the platform and default agent identity sent to CostPilot.",
@@ -1465,6 +1470,48 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeDemoGuide();
 });
 
+function maybeAutoOpenDemoGuide() {
+  try {
+    if (localStorage.getItem("costpilot_demo_guide_seen") === "1") return;
+    localStorage.setItem("costpilot_demo_guide_seen", "1");
+  } catch (e) {
+    /* localStorage may be disabled; the guide button still works. */
+  }
+  window.setTimeout(startDemoGuide, 450);
+}
+
+async function copyDemoLink() {
+  const btn = document.getElementById("copyDemoLinkBtn");
+  const url = `${window.location.origin}/demo-crm.html`;
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const temp = document.createElement("textarea");
+      temp.value = url;
+      temp.setAttribute("readonly", "");
+      temp.style.position = "fixed";
+      temp.style.opacity = "0";
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand("copy");
+      temp.remove();
+    }
+
+    if (btn) {
+      btn.classList.add("copied");
+      btn.textContent = "Copied";
+      window.setTimeout(() => {
+        btn.classList.remove("copied");
+        btn.textContent = "Copy demo link";
+      }, 1800);
+    }
+  } catch (e) {
+    if (btn) btn.textContent = url;
+  }
+}
+
 // ── System status ─────────────────────────────────────────────────────────────
 
 async function initStatus() {
@@ -1485,3 +1532,4 @@ async function initStatus() {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 initStatus();
+maybeAutoOpenDemoGuide();
