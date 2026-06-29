@@ -17,6 +17,14 @@
     }
     .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
     .header-nav-link.active { color: var(--accent); border-color: var(--accent); }
+    .demo-guide-btn {
+      text-decoration: none; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      background: none; cursor: pointer; font: inherit;
+    }
+    .demo-guide-btn:hover,
+    .demo-guide-btn.active { color: var(--accent); border-color: var(--accent); }
 
     /* ── Page layout ─────────────────────────────────────────────────────────── */
     .demo-page { flex: 1; display: flex; flex-direction: column; }
@@ -393,6 +401,38 @@
       display: flex; align-items: center; justify-content: space-between;
       font-size: 11px; color: var(--text-muted); flex-shrink: 0;
     }
+
+    /* ── Demo guide ─────────────────────────────────────────────────────────── */
+    .demo-guide-backdrop {
+      position: fixed; inset: 0; z-index: 90;
+      background: rgba(1,4,9,0.58); pointer-events: none;
+    }
+    .demo-guide-popover {
+      position: fixed; z-index: 100; width: min(340px, calc(100vw - 28px));
+      background: var(--bg-panel); border: 1px solid var(--accent);
+      border-radius: 10px; box-shadow: 0 18px 54px rgba(0,0,0,0.48);
+      padding: 14px;
+    }
+    .demo-guide-kicker {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--text-muted); font-weight: 800; margin-bottom: 8px;
+    }
+    .demo-guide-title { color: var(--accent); font-size: 14px; font-weight: 800; margin-bottom: 8px; }
+    .demo-guide-body { color: var(--text-primary); font-size: 12px; line-height: 1.65; margin-bottom: 14px; }
+    .demo-guide-actions { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .demo-guide-actions button {
+      border-radius: 6px; border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); font: inherit; font-size: 11px; padding: 7px 11px; cursor: pointer;
+    }
+    .demo-guide-actions button:hover { border-color: var(--accent); color: var(--accent); }
+    .demo-guide-actions .primary {
+      background: var(--accent); color: #06101f; border-color: var(--accent); font-weight: 800;
+    }
+    .demo-guide-highlight {
+      position: relative; z-index: 95;
+      box-shadow: 0 0 0 3px rgba(88,166,255,0.9), 0 0 0 9999px rgba(1,4,9,0.18);
+      border-radius: 10px;
+    }
   </style>
 </head>
 <body>
@@ -418,6 +458,7 @@
     <a href="/sandbox.html"  class="header-nav-link" style="color:var(--accent-yellow)">⚗ Sandbox</a>
     <a href="/savings.html"  class="header-nav-link" style="color:var(--accent-green)">💰 Savings Calc</a>
     <a href="/demo-crm.html" class="header-nav-link active">🎯 Live Demo</a>
+    <button type="button" class="demo-guide-btn" id="demoGuideBtn" onclick="startDemoGuide()">? Guide</button>
   </div>
 </header>
 
@@ -444,7 +485,7 @@
       <!-- Platform -->
       <div>
         <div class="form-section-title">1 · Select Platform</div>
-        <div class="platform-grid">
+        <div class="platform-grid" id="guidePlatform">
           <div class="plat-tile selected" id="plat-salesforce" onclick="selectPlatform('salesforce','SF-CaseBot')">
             <span class="plat-icon">☁</span>Salesforce
           </div>
@@ -469,7 +510,7 @@
       <!-- Scenario presets + generate -->
       <div>
         <div class="form-section-title">2 · Load a Scenario</div>
-        <div class="scenario-grid">
+        <div class="scenario-grid" id="guideScenario">
           <button class="scenario-btn" onclick="loadScenario('routine')">
             <span class="scen-icon">⚡</span>Routine
           </button>
@@ -486,7 +527,7 @@
             <span class="scen-icon">🎙</span>Voice
           </button>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+        <div id="guideGenerate" style="display:flex;align-items:center;gap:10px;margin-top:10px">
           <button id="generateBtn" onclick="generateCase()" style="
             flex:1; background:rgba(188,140,255,0.08); border:1px solid var(--accent-purple);
             color:var(--accent-purple); border-radius:7px; padding:10px 16px;
@@ -512,7 +553,7 @@
       </div>
 
       <!-- Form fields -->
-      <div>
+      <div id="guideCaseDetails">
         <div class="form-section-title">3 · Case Details</div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <div class="form-row">
@@ -552,7 +593,7 @@
     <!-- ── RIGHT — Result Panel ──────────────────────────────────────────────── -->
     <div class="demo-right" id="resultPanel">
 
-      <div class="agent-demo-card">
+      <div class="agent-demo-card" id="guideAgent">
         <div class="agent-demo-head">
           <div>
             <div class="agent-demo-title">Demo AI Agent</div>
@@ -609,7 +650,7 @@
   </div>
 
   <!-- ── Footer ────────────────────────────────────────────────────────────────── -->
-  <div class="demo-footer">
+  <div class="demo-footer" id="guideFooter">
     <span>Every submission hits the real CostPilot routing pipeline — transactions, audit events, and budget spend are all live</span>
     <div style="display:flex;gap:12px">
       <a href="/operate.html" style="color:var(--accent);text-decoration:none;font-weight:600">View Dashboard →</a>

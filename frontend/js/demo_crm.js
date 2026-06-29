@@ -1327,6 +1327,144 @@ function escHtml(str) {
     .replace(/"/g,"&quot;");
 }
 
+// ── Page guide ────────────────────────────────────────────────────────────────
+
+const DEMO_GUIDE_STEPS = [
+  {
+    target: ".demo-banner",
+    title: "What This Page Demonstrates",
+    body: "This is a live, investor-friendly demo. Every submission uses the real CostPilot routing pipeline, so the results also appear in the dashboard, reports, audit log, and budget totals.",
+  },
+  {
+    target: "#guidePlatform",
+    title: "Choose a Source Platform",
+    body: "Pick the system the request is pretending to come from: Salesforce, ServiceNow, HubSpot, Zendesk, Dynamics, or a custom app. This changes the platform and default agent identity sent to CostPilot.",
+  },
+  {
+    target: "#guideScenario",
+    title: "Load a Scenario",
+    body: "Use these buttons for quick tests. Routine should route cheaply, Complex should escalate, Blocked should stop sensitive data, and Voice shows pre-routing redaction behavior.",
+  },
+  {
+    target: "#guideGenerate",
+    title: "Generate More Examples",
+    body: "Generate Case pulls from a larger library of demo-safe records across departments and industries. It is useful when you want fresh examples without writing your own payload.",
+  },
+  {
+    target: "#guideCaseDetails",
+    title: "Edit the Request",
+    body: "This is the payload CostPilot evaluates. You can change the department, agent name, subject, and description to show how routing, pruning, compliance, and budget decisions respond.",
+  },
+  {
+    target: "#submitBtn",
+    title: "Submit Through CostPilot",
+    body: "This button sends the case directly to CostPilot. The system chooses a model tier, checks risky terms, applies pruning when available, updates budget usage, and writes an audit event.",
+  },
+  {
+    target: "#guideAgent",
+    title: "Demo AI Agent",
+    body: "This lightweight fake agent lets someone type a natural request. Each run sends only the current instruction plus the CRM record through CostPilot, so old chat does not pollute the next test.",
+  },
+  {
+    target: "#resultPanel",
+    title: "Read the Decision",
+    body: "Results appear here after a submission: routed or blocked status, model tier, reason, latency, cost estimate, token usage, pruning details, budget position, and audit links.",
+  },
+  {
+    target: "#guideFooter",
+    title: "Follow the Evidence",
+    body: "After testing, jump to the dashboard or reports to see the same request reflected in live governance, savings, AgentLake, and reporting views.",
+  },
+];
+
+let demoGuideStep = 0;
+
+function startDemoGuide() {
+  demoGuideStep = 0;
+  const btn = document.getElementById("demoGuideBtn");
+  if (btn) btn.classList.add("active");
+  renderDemoGuideStep();
+}
+
+function closeDemoGuide() {
+  document.querySelectorAll(".demo-guide-backdrop,.demo-guide-popover").forEach(el => el.remove());
+  document.querySelectorAll(".demo-guide-highlight").forEach(el => el.classList.remove("demo-guide-highlight"));
+  const btn = document.getElementById("demoGuideBtn");
+  if (btn) btn.classList.remove("active");
+}
+
+function nextDemoGuideStep() {
+  if (demoGuideStep >= DEMO_GUIDE_STEPS.length - 1) {
+    closeDemoGuide();
+    return;
+  }
+  demoGuideStep += 1;
+  renderDemoGuideStep();
+}
+
+function prevDemoGuideStep() {
+  if (demoGuideStep <= 0) return;
+  demoGuideStep -= 1;
+  renderDemoGuideStep();
+}
+
+function renderDemoGuideStep() {
+  closeDemoGuide();
+  const btn = document.getElementById("demoGuideBtn");
+  if (btn) btn.classList.add("active");
+
+  const step = DEMO_GUIDE_STEPS[demoGuideStep];
+  const target = document.querySelector(step.target);
+  if (target) {
+    target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+    target.classList.add("demo-guide-highlight");
+  }
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "demo-guide-backdrop";
+  document.body.appendChild(backdrop);
+
+  const popover = document.createElement("div");
+  popover.className = "demo-guide-popover";
+  popover.innerHTML = `
+    <div class="demo-guide-kicker">Step ${demoGuideStep + 1} of ${DEMO_GUIDE_STEPS.length}</div>
+    <div class="demo-guide-title">${escHtml(step.title)}</div>
+    <div class="demo-guide-body">${escHtml(step.body)}</div>
+    <div class="demo-guide-actions">
+      <button type="button" onclick="closeDemoGuide()">Close</button>
+      <div style="display:flex;gap:8px">
+        ${demoGuideStep > 0 ? `<button type="button" onclick="prevDemoGuideStep()">Back</button>` : ""}
+        <button type="button" class="primary" onclick="nextDemoGuideStep()">
+          ${demoGuideStep === DEMO_GUIDE_STEPS.length - 1 ? "Done" : "Next"}
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(popover);
+
+  requestAnimationFrame(() => positionDemoGuidePopover(popover, target));
+}
+
+function positionDemoGuidePopover(popover, target) {
+  const pad = 14;
+  const rect = target ? target.getBoundingClientRect() : null;
+  const box = popover.getBoundingClientRect();
+  let top = rect ? rect.bottom + 12 : 90;
+  let left = rect ? rect.left : window.innerWidth - box.width - pad;
+
+  if (rect && top + box.height > window.innerHeight - pad) top = rect.top - box.height - 12;
+  if (top < pad) top = pad;
+  if (left + box.width > window.innerWidth - pad) left = window.innerWidth - box.width - pad;
+  if (left < pad) left = pad;
+
+  popover.style.top = `${top}px`;
+  popover.style.left = `${left}px`;
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeDemoGuide();
+});
+
 // ── System status ─────────────────────────────────────────────────────────────
 
 async function initStatus() {
