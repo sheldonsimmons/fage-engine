@@ -32,6 +32,7 @@ async function checkHealth() {
 
 // ── Main dashboard loader ──────────────────────────────────────────────────────
 function scopedApiPath(path) {
+  if (document.body?.dataset?.dashboardScope === "all") return path;
   const wsId = localStorage.getItem("cp_workspace_id") || "";
   if (!wsId) return path;
   const joiner = path.includes("?") ? "&" : "?";
