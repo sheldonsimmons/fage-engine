@@ -49,11 +49,13 @@
     .why-notice-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
     .why-notice p { font-size:12px; color:var(--text-muted); line-height:1.7; margin:0; }
 
-    /* ── Anthropic path selector ─────────────────────────────────────────────── */
+    /* ── Usage proof path selector ───────────────────────────────────────────── */
     .path-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px; }
     .path-tile { background:var(--bg-base); border:2px solid var(--border); border-radius:10px; padding:18px 16px; cursor:pointer; transition:all .2s; text-align:center; }
     .path-tile:hover { border-color:var(--accent); }
     .path-tile.selected { border-color:var(--accent); background:rgba(88,166,255,.06); }
+    .path-tile.disabled { cursor:not-allowed; opacity:.55; }
+    .path-tile.disabled:hover { border-color:var(--border); }
     .path-icon { font-size:24px; margin-bottom:8px; }
     .path-label { font-size:13px; font-weight:700; color:var(--text-primary); margin-bottom:4px; }
     .path-sub { font-size:11px; color:var(--text-muted); line-height:1.5; }
@@ -227,42 +229,81 @@
     </div>
 
     <!-- ════════════════════════════════════════════════════════════
-         STEP 1b — Anthropic: explain + choose path
+         STEP 1b — Optional usage proof path
     ════════════════════════════════════════════════════════════ -->
-    <div class="panel" id="panel-anthropic-path">
-      <div class="card-eyebrow">Anthropic · Key Verified ✓</div>
-      <h2 class="card-title" style="margin-bottom:12px">One more step — <span>here's why</span></h2>
+    <div class="panel" id="panel-usage-path">
+      <div class="card-eyebrow" id="usageProviderEyebrow">Usage Proof · Optional</div>
+      <h2 class="card-title" style="margin-bottom:12px">Choose how to <span>prove savings</span></h2>
 
       <div class="why-notice" style="padding:12px 14px;margin-bottom:20px">
-        <div class="why-notice-title" style="margin-bottom:5px">ℹ Why Anthropic can't auto-pull your usage</div>
-        <p style="font-size:12px">
-          Anthropic does not expose a public usage API for automatic spend import. Your trial can still start now; choose one of the two options below only if you want a savings estimate before your first routed call.
+        <div class="why-notice-title" style="margin-bottom:5px">ℹ No provider key required to start</div>
+        <p id="usagePathCopy" style="font-size:12px">
+          Start in estimate mode now, upload a usage export, or connect provider usage access if your team wants verified savings from past spend.
         </p>
       </div>
 
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">How would you like to provide your usage data?</div>
+      <div class="error-box" id="usagePathError"></div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">How would you like to handle usage data?</div>
 
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
-        <div class="path-tile" id="path-manual" onclick="selectAnthropicPath('manual')" style="display:flex;align-items:center;gap:16px;text-align:left;padding:16px">
-          <div style="font-size:28px;flex-shrink:0">✏️</div>
+        <div class="path-tile" id="path-estimate" onclick="selectUsagePath('estimate')" style="display:flex;align-items:center;gap:16px;text-align:left;padding:16px">
+          <div style="font-size:28px;flex-shrink:0">⚡</div>
           <div>
-            <div class="path-label">Tell us your numbers <span style="font-size:10px;font-weight:600;color:var(--accent-green);margin-left:6px">Fastest</span></div>
-            <div class="path-sub">Answer 3 quick questions — takes 60 seconds. We'll project your savings from your stated monthly spend.</div>
+            <div class="path-label">Estimate mode <span style="font-size:10px;font-weight:600;color:var(--accent-green);margin-left:6px">Fastest</span></div>
+            <div class="path-sub">Start the 30-day trial now. CostPilot estimates savings until real routed calls create live proof.</div>
           </div>
           <div style="flex-shrink:0;font-size:18px;color:var(--text-muted)">›</div>
         </div>
-        <div class="path-tile" id="path-csv" onclick="selectAnthropicPath('csv')" style="display:flex;align-items:center;gap:16px;text-align:left;padding:16px">
+        <div class="path-tile" id="path-csv" onclick="selectUsagePath('csv')" style="display:flex;align-items:center;gap:16px;text-align:left;padding:16px">
           <div style="font-size:28px;flex-shrink:0">📄</div>
           <div>
-            <div class="path-label">Upload my usage CSV <span style="font-size:10px;font-weight:600;color:var(--accent);margin-left:6px">Most Accurate</span></div>
-            <div class="path-sub">Export from Anthropic Console → Usage → Export CSV. We parse your real model-by-model spend.</div>
+            <div class="path-label">Upload usage CSV <span style="font-size:10px;font-weight:600;color:var(--accent);margin-left:6px">No live connection</span></div>
+            <div class="path-sub">Upload a provider usage export. Best when security prefers file-based review over API access.</div>
+          </div>
+          <div style="flex-shrink:0;font-size:18px;color:var(--text-muted)">›</div>
+        </div>
+        <div class="path-tile" id="path-api" onclick="selectUsagePath('api')" style="display:flex;align-items:center;gap:16px;text-align:left;padding:16px">
+          <div style="font-size:28px;flex-shrink:0">🔌</div>
+          <div>
+            <div class="path-label">Connect provider usage API <span style="font-size:10px;font-weight:600;color:var(--accent-yellow);margin-left:6px">Verified</span></div>
+            <div class="path-sub" id="pathApiSub">Use customer-approved provider usage access to pull recent spend and show verified savings.</div>
           </div>
           <div style="flex-shrink:0;font-size:18px;color:var(--text-muted)">›</div>
         </div>
       </div>
 
       <button class="btn-secondary" onclick="goToPanel('panel-step1')">← Change provider</button>
-      <button class="btn-primary" onclick="goToPanel('panel-step3')">Skip Estimate — Start Trial →</button>
+      <button class="btn-primary" onclick="goToPanel('panel-step3')">Start Trial Without Usage Proof →</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════
+         STEP 1c — Provider usage API
+    ════════════════════════════════════════════════════════════ -->
+    <div class="panel" id="panel-provider-api">
+      <div class="card-eyebrow" id="providerApiEyebrow">Usage API · Optional</div>
+      <h2 class="card-title">Connect <span>usage proof</span></h2>
+      <p class="card-sub" id="providerApiCopy">Paste a customer-approved usage key. CostPilot uses it to read historical usage for savings proof before the trial starts.</p>
+
+      <div class="error-box" id="providerApiError"></div>
+
+      <div class="field">
+        <label id="providerApiLabel">Provider usage key</label>
+        <div class="key-wrap">
+          <input type="password" id="providerApiKey" placeholder="sk-..." autocomplete="off" />
+          <button class="key-toggle" onclick="toggleProviderKeyVis()">👁</button>
+        </div>
+        <div class="field-hint" id="providerApiHint">Optional. You can skip this and use estimate mode.</div>
+      </div>
+
+      <div class="trust-row">
+        <span class="trust-chip">✓ Optional for pilots</span>
+        <span class="trust-chip">✓ Used for savings proof</span>
+        <span class="trust-chip">✓ No provider key needed for estimate mode</span>
+      </div>
+
+      <button class="btn-primary" id="providerApiBtn" onclick="connectProviderUsageApi()">Pull Usage & Calculate →</button>
+      <button class="btn-secondary" onclick="goToPanel('panel-usage-path')">← Back to options</button>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════
@@ -298,19 +339,19 @@
       </div>
 
       <button class="btn-primary" id="manualBtn" onclick="submitManual()">Calculate My Savings →</button>
-      <button class="btn-secondary" onclick="goToPanel('panel-anthropic-path')">← Back</button>
+      <button class="btn-secondary" onclick="goToPanel('panel-usage-path')">← Back</button>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════
          STEP 1d — Anthropic CSV upload
     ════════════════════════════════════════════════════════════ -->
     <div class="panel" id="panel-anthropic-csv">
-      <div class="card-eyebrow">Anthropic · CSV Upload</div>
+      <div class="card-eyebrow">Usage CSV · No Live Connection</div>
       <h2 class="card-title">Upload your <span>usage export</span></h2>
-      <p class="card-sub">This gives us your real model-by-model usage for the most accurate savings calculation.</p>
+      <p class="card-sub">This gives CostPilot real historical usage without connecting a provider account. Anthropic usage exports are supported today; other provider CSV formats can be mapped during pilot setup.</p>
 
       <div class="csv-steps">
-        <div class="csv-steps-title">How to export from Anthropic Console</div>
+        <div class="csv-steps-title">Anthropic CSV format supported today</div>
         <div class="csv-step"><span class="csv-step-num">1</span> Go to <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a></div>
         <div class="csv-step"><span class="csv-step-num">2</span> Click <strong style="color:var(--text-primary)">Usage</strong> in the left sidebar</div>
         <div class="csv-step"><span class="csv-step-num">3</span> Set date range to last 30 days</div>
@@ -327,7 +368,7 @@
       <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="onFileSelect(event)" />
 
       <button class="btn-primary" id="csvBtn" onclick="submitCsv()" style="margin-top:16px" disabled>Upload & Calculate →</button>
-      <button class="btn-secondary" onclick="goToPanel('panel-anthropic-path')">← Back</button>
+      <button class="btn-secondary" onclick="goToPanel('panel-usage-path')">← Back</button>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════
@@ -498,7 +539,8 @@ let _workspace = "";
 // ── Stepper ────────────────────────────────────────────────────────────────
 const STEP_PANELS = {
   "panel-step1":           1,
-  "panel-anthropic-path":  1,
+  "panel-usage-path":      1,
+  "panel-provider-api":    1,
   "panel-anthropic-manual":1,
   "panel-anthropic-csv":   1,
   "panel-step2":           2,
@@ -553,6 +595,11 @@ function toggleKeyVis() {
   inp.type = inp.type === "password" ? "text" : "password";
 }
 
+function toggleProviderKeyVis() {
+  const inp = document.getElementById("providerApiKey");
+  inp.type = inp.type === "password" ? "text" : "password";
+}
+
 // ── Step 1 submit ──────────────────────────────────────────────────────────
 async function submitStep1() {
   hideError("step1Error");
@@ -564,13 +611,9 @@ async function submitStep1() {
   btn.innerHTML = '<span class="spinner"></span> Preparing trial…';
 
   try {
-    if (_provider === "openai") {
-      _apiKey = key;
-      goToPanel("panel-step3");
-    } else {
-      _apiKey = key;
-      goToPanel("panel-anthropic-path");
-    }
+    _apiKey = key;
+    configureUsagePath();
+    goToPanel("panel-usage-path");
   } catch (e) {
     showError("step1Error", e.message || "Something went wrong. Please try again.");
   } finally {
@@ -579,11 +622,89 @@ async function submitStep1() {
   }
 }
 
-// ── Anthropic path selection ───────────────────────────────────────────────
-function selectAnthropicPath(path) {
-  document.getElementById("path-manual").className = "path-tile" + (path === "manual" ? " selected" : "");
-  document.getElementById("path-csv").className    = "path-tile" + (path === "csv"    ? " selected" : "");
-  setTimeout(() => goToPanel("panel-anthropic-" + path), 200);
+// ── Usage proof path selection ─────────────────────────────────────────────
+function configureUsagePath() {
+  hideError("usagePathError");
+  const providerName = _provider === "openai" ? "OpenAI" : "Anthropic";
+  document.getElementById("usageProviderEyebrow").textContent = `${providerName} · Usage Proof Optional`;
+  document.getElementById("providerApiEyebrow").textContent = `${providerName} · Usage API`;
+  document.getElementById("providerApiLabel").textContent = `${providerName} usage key`;
+
+  const apiTile = document.getElementById("path-api");
+  const apiCopy = document.getElementById("pathApiSub");
+  const apiHint = document.getElementById("providerApiHint");
+
+  if (_provider === "anthropic") {
+    document.getElementById("usagePathCopy").textContent =
+      "Anthropic does not currently expose a standard public usage-history API for automatic spend import. You can start now in estimate mode, or upload a CSV usage export for stronger savings proof.";
+    apiTile.className = "path-tile disabled";
+    apiCopy.textContent = "Not available for standard Anthropic keys today. Use CSV upload or estimate mode.";
+    apiHint.textContent = "Anthropic usage API access is limited. CSV or estimate mode is recommended for pilots.";
+  } else {
+    document.getElementById("usagePathCopy").textContent =
+      "Start immediately with estimates, upload usage history, or connect OpenAI usage access to calculate savings from recent real spend.";
+    apiTile.className = "path-tile";
+    apiCopy.textContent = "Use customer-approved OpenAI usage access to pull recent spend and show verified savings.";
+    apiHint.textContent = "Use a customer-approved OpenAI key with usage access. You can skip this and use estimate mode.";
+  }
+}
+
+function selectUsagePath(path) {
+  hideError("usagePathError");
+  ["estimate", "csv", "api"].forEach(p => {
+    const tile = document.getElementById("path-" + p);
+    if (!tile) return;
+    const disabled = tile.classList.contains("disabled");
+    tile.className = "path-tile" + (disabled ? " disabled" : "") + (p === path && !disabled ? " selected" : "");
+  });
+
+  if (path === "estimate") {
+    _apiKey = "";
+    setTimeout(() => goToPanel("panel-step3"), 180);
+    return;
+  }
+
+  if (path === "csv") {
+    setTimeout(() => goToPanel("panel-anthropic-csv"), 180);
+    return;
+  }
+
+  if (path === "api") {
+    if (_provider === "anthropic") {
+      showError("usagePathError", "Anthropic standard keys do not support automatic usage import today. Use CSV upload or estimate mode for the pilot.");
+      return;
+    }
+    setTimeout(() => goToPanel("panel-provider-api"), 180);
+  }
+}
+
+async function connectProviderUsageApi() {
+  hideError("providerApiError");
+  const key = document.getElementById("providerApiKey").value.trim();
+  if (!key) {
+    showError("providerApiError", "Paste a provider usage key, or go back and choose estimate mode.");
+    return;
+  }
+
+  const btn = document.getElementById("providerApiBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Pulling usage…';
+
+  try {
+    if (_provider !== "openai") {
+      throw new Error("Automatic usage import is currently available for OpenAI only. Use CSV upload or estimate mode for this provider.");
+    }
+    const data = await apiPost("/api/trial/connect-openai", { api_key: key, days: 30 });
+    _apiKey = key;
+    _savings = data.savings || null;
+    renderSavings(data, "openai");
+    goToPanel("panel-step2");
+  } catch (e) {
+    showError("providerApiError", e.message || "Usage import failed. You can still start in estimate mode.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Pull Usage & Calculate →";
+  }
 }
 
 // ── Anthropic manual ───────────────────────────────────────────────────────
