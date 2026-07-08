@@ -18,6 +18,7 @@ from database.models import DepartmentBudget, TokenTransaction, RegisteredAgent
 from core.router import route
 from core.auditor import write_audit_event
 from core.keywords import check_terms
+from core.budget import reconcile_throttle_state
 
 router = APIRouter()
 
@@ -207,6 +208,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
     # Check throttle status from the department budget table
     budget       = db.query(DepartmentBudget).filter_by(department=department).first()
+    if budget:
+        reconcile_throttle_state(budget)
     is_throttled   = budget.throttled    if budget else False
     throttle_tier  = getattr(budget, "throttle_tier", 1) or 1  if budget else 1
 

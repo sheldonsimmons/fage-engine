@@ -24,6 +24,7 @@ from core.pruner import prune, estimate_tokens
 from core.router import route
 from core.auditor import write_audit_event
 from core.keywords import check_terms
+from core.budget import reconcile_throttle_state
 
 router = APIRouter()
 
@@ -235,6 +236,8 @@ async def enrich_and_route_salesforce(
     # ── Step 4: Sensitive term check ──────────────────────────────────────────
     term_result  = check_terms(db, clean_text, req.department)
     budget        = db.query(DepartmentBudget).filter_by(department=req.department).first()
+    if budget:
+        reconcile_throttle_state(budget)
     is_throttled  = budget.throttled if budget else False
     throttle_tier = getattr(budget, "throttle_tier", 1) or 1 if budget else 1
 

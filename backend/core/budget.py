@@ -17,12 +17,19 @@ from config import THROTTLE_TRIGGER_PERCENT, WARN_TRIGGER_PERCENT
 def get_all_budgets(db: Session) -> list:
     """Return budget status for every department, enriched with usage metrics."""
     budgets = db.query(DepartmentBudget).all()
+    dirty = False
+    for b in budgets:
+        dirty = reconcile_throttle_state(b) or dirty
+    if dirty:
+        db.commit()
     return [_enrich(b) for b in budgets]
 
 
 def get_budget(db: Session, department: str):
     """Return budget status for a single department, or None if not found."""
     b = db.query(DepartmentBudget).filter_by(department=department).first()
+    if b and reconcile_throttle_state(b):
+        db.commit()
     return _enrich(b) if b else None
 
 
@@ -129,6 +136,21 @@ def reset_period(db: Session, department: str) -> dict:
     b.period_start      = datetime.utcnow()
     db.commit()
     return _enrich(b)
+
+
+def reconcile_throttle_state(b: DepartmentBudget) -> bool:
+    """
+    Clear stale throttle flags when a department is back under its cap.
+
+    This can happen after a cap increase: the previous cap may have triggered
+    throttle, but the new cap gives the department headroom again.
+    """
+    if not b or not b.throttled or not b.monthly_cap_usd:
+        return False
+    if b.current_spend_usd < b.monthly_cap_usd:
+        b.throttled = False
+        return True
+    return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
