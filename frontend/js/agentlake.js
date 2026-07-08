@@ -13,6 +13,15 @@ function displayAgentDept(agent) {
   return String(agent?.department || "—").replace(/^[A-Z0-9-]{12,}:/i, "");
 }
 
+function platformFamily(value) {
+  const p = String(value || "").trim().toLowerCase();
+  if (!p) return "";
+  if (p.startsWith("salesforce")) return "salesforce";
+  if (p.startsWith("servicenow")) return "servicenow";
+  if (p.startsWith("hubspot")) return "hubspot";
+  return p;
+}
+
 function jsString(value) {
   return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, " ");
 }
@@ -114,9 +123,9 @@ function renderAgentTable(agents) {
       : "—";
 
     const platform = a.source_platform || "Custom";
-    const platformColor = platform === "Salesforce" ? "var(--accent)"
-      : platform === "ServiceNow" ? "var(--accent-green)"
-      : platform === "HubSpot"    ? "var(--accent-yellow)"
+    const platformColor = platformFamily(platform) === "salesforce" ? "var(--accent)"
+      : platformFamily(platform) === "servicenow" ? "var(--accent-green)"
+      : platformFamily(platform) === "hubspot"    ? "var(--accent-yellow)"
       : "var(--text-muted)";
 
     const TIER_OPTS = [1, 2, 3, 4].map(v => [v, getTierName(v), getTierCssVar(v)]);
@@ -448,9 +457,9 @@ function renderAgentCards(agents) {
   }
 
   const platformColor = p =>
-    p === "Salesforce"  ? "var(--accent)" :
-    p === "ServiceNow"  ? "var(--accent-green)" :
-    p === "HubSpot"     ? "var(--accent-yellow)" :
+    platformFamily(p) === "salesforce"  ? "var(--accent)" :
+    platformFamily(p) === "servicenow"  ? "var(--accent-green)" :
+    platformFamily(p) === "hubspot"     ? "var(--accent-yellow)" :
     "var(--text-muted)";
 
   const badgeClass = s =>
@@ -494,14 +503,14 @@ function populateDeptFilter(agents) {
 }
 
 function applyAgentFilters() {
-  const platform = (document.getElementById("filterPlatform")?.value || "").toLowerCase();
+  const platform = platformFamily(document.getElementById("filterPlatform")?.value || "");
   const status   = (document.getElementById("filterStatus")?.value   || "").toLowerCase();
   const dept     = (document.getElementById("filterDept")?.value     || "").toLowerCase();
   const search   = (document.getElementById("filterSearch")?.value   || "").toLowerCase();
   const hasFilter = !!(platform || status || dept || search);
 
   const filtered = _allAgents.filter(a => {
-    if (platform && (a.source_platform || "custom").toLowerCase() !== platform) return false;
+    if (platform && platformFamily(a.source_platform) !== platform) return false;
     if (status   && effectiveAgentStatus(a) !== status)   return false;
     if (dept     && displayAgentDept(a).toLowerCase() !== dept) return false;
     if (search   && !displayAgentName(a).toLowerCase().includes(search) && !displayAgentDept(a).toLowerCase().includes(search)) return false;
