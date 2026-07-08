@@ -109,6 +109,7 @@ class DepartmentBudget(Base):
     throttle_tier              = Column(Integer,  default=1)      # ceiling tier when throttled (1=Scout … 4=Strategist)
     raw_payload_logging_enabled = Column(Boolean, default=False)  # per-dept raw payload logging toggle
     raw_retention_days          = Column(Integer, default=30)     # 30 | 90 | 180 | 365 | 0=indefinite
+    archived          = Column(Boolean,  nullable=True, default=False)  # soft-hide stale departments without deleting history
 
 
 class TokenTransaction(Base):

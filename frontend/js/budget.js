@@ -11,6 +11,7 @@ let budgetData = [];
 let openBudgetKey = null;
 let budgetSearchTerm = "";
 let budgetStateFilter = "";
+let budgetShowArchived = false;
 
 /** Fetch all budgets and re-render the panel */
 async function loadBudgets() {
@@ -94,6 +95,7 @@ function displayBudgetRows(rows = []) {
     current.throttled = current.throttled || b.throttled;
     current.override_granted = current.override_granted || b.override_granted;
     current.raw_payload_logging_enabled = current.raw_payload_logging_enabled || b.raw_payload_logging_enabled;
+    current.archived = current.archived && (b.archived || false);
     current.raw_departments.push(b.department);
     const usedPct = current.monthly_cap_usd ? (current.current_spend_usd / current.monthly_cap_usd) * 100 : 0;
     current.used_pct = Math.round(usedPct * 10) / 10;
@@ -114,6 +116,7 @@ function renderBudgets() {
   }
 
   let rows = displayBudgetRows(budgetData);
+  rows = rows.filter(b => budgetShowArchived ? b.archived : !b.archived);
   const search = budgetSearchTerm.trim().toLowerCase();
   if (search) rows = rows.filter(b => String(b.display_department || "").toLowerCase().includes(search));
   if (budgetStateFilter) {
@@ -163,6 +166,9 @@ function renderBudgets() {
                    value="${b.monthly_cap_usd}" min="1" step="10" />
             <button class="btn-cap" onclick="doSetCapGroup('${key}')">Set Cap</button>
             <button class="btn-cap btn-reset" onclick="doResetGroup('${key}')">Reset Month</button>
+            <button class="btn-cap btn-reset" onclick="${b.archived ? `doRestoreGroup('${key}')` : `doArchiveGroup('${key}')`}">
+              ${b.archived ? "Restore" : "Archive"}
+            </button>
             ${b.throttled
               ? `<button class="btn-override" onclick="doOverrideGroup('${key}')">Grant Override</button>`
               : b.override_granted
@@ -224,6 +230,9 @@ function renderBudgets() {
         <option value="throttled" ${budgetStateFilter === "throttled" ? "selected" : ""}>Throttled</option>
         <option value="raw" ${budgetStateFilter === "raw" ? "selected" : ""}>Raw Logging On</option>
       </select>
+      <button class="btn-cap" onclick="budgetShowArchived=!budgetShowArchived;openBudgetKey=null;renderBudgets()">
+        ${budgetShowArchived ? "Show Active" : "Show Archived"}
+      </button>
     </div>
     <table class="agent-table">
       <thead>
@@ -232,7 +241,7 @@ function renderBudgets() {
         </tr>
       </thead>
       <tbody>
-        ${tableRows || `<tr><td colspan="6" class="placeholder">No departments match this filter.</td></tr>`}
+        ${tableRows || `<tr><td colspan="6" class="placeholder">No ${budgetShowArchived ? "archived" : "active"} departments match this filter.</td></tr>`}
       </tbody>
     </table>`;
   if (searchWasFocused) {
@@ -252,7 +261,7 @@ function renderLiveBudgetBars() {
     container.innerHTML = '<p class="placeholder">Loading...</p>';
     return;
   }
-  container.innerHTML = displayBudgetRows(budgetData).map(b => {
+  container.innerHTML = displayBudgetRows(budgetData).filter(b => !b.archived).map(b => {
     const fillClass = b.state === "throttled" ? "critical"
                     : b.state === "warning"   ? "warn"
                     : "";
@@ -389,6 +398,35 @@ async function doResetGroup(key) {
     await loadBudgets();
   } catch (err) {
     alert(`Failed to reset: ${err.message}`);
+  }
+}
+
+async function doArchiveGroup(key) {
+  const row = findBudgetGroup(key);
+  const label = row?.display_department || key;
+  if (!confirm(`Archive ${label}? It will be hidden from default budget views, but history stays available.`)) return;
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPatch(`/api/budget/${encodeURIComponent(department)}/archive`, {})
+    );
+    openBudgetKey = null;
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to archive department: ${err.message}`);
+  }
+}
+
+async function doRestoreGroup(key) {
+  const row = findBudgetGroup(key);
+  const label = row?.display_department || key;
+  try {
+    await forEachBudgetDepartment(key, department =>
+      apiPatch(`/api/budget/${encodeURIComponent(department)}/restore`, {})
+    );
+    openBudgetKey = null;
+    await loadBudgets();
+  } catch (err) {
+    alert(`Failed to restore department: ${err.message}`);
   }
 }
 

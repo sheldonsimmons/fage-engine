@@ -18,7 +18,7 @@ from database.db import get_db
 from core.budget import (
     get_all_budgets, get_budget, set_cap,
     grant_override, revoke_override, reset_period, set_throttle_tier,
-    set_raw_logging,
+    set_raw_logging, archive_department,
 )
 
 router = APIRouter()
@@ -38,6 +38,7 @@ class BudgetStatus(BaseModel):
     throttle_tier_name:          str
     raw_payload_logging_enabled: bool  = False
     raw_retention_days:          int   = 30
+    archived:                    bool  = False
 
 
 class SetCapRequest(BaseModel):
@@ -103,6 +104,24 @@ def reset_month(department: str, db: Session = Depends(get_db)):
     """Reset a department's spend to zero — simulates the start of a new billing period."""
     try:
         return reset_period(db, department)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.patch("/{department}/archive", response_model=BudgetStatus)
+def archive_budget_department(department: str, db: Session = Depends(get_db)):
+    """Soft-hide a stale department from default budget views."""
+    try:
+        return archive_department(db, department, True)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.patch("/{department}/restore", response_model=BudgetStatus)
+def restore_budget_department(department: str, db: Session = Depends(get_db)):
+    """Restore a previously hidden department to default budget views."""
+    try:
+        return archive_department(db, department, False)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

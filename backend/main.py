@@ -67,6 +67,10 @@ def _run_migrations():
         except Exception:
             pass
         try:
+            ensure_column(conn, "department_budgets", "archived", "BOOLEAN DEFAULT FALSE")
+        except Exception:
+            pass
+        try:
             ensure_column(conn, "audit_events", "raw_payload", "TEXT")
         except Exception:
             pass

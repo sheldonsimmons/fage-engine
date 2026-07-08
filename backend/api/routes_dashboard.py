@@ -14,7 +14,7 @@ GET /api/dashboard
 
 import json
 from datetime import datetime, date, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -89,7 +89,9 @@ def get_dashboard(
     ).scalar() or 0.0
 
     # Budget table still used for cap / throttle display — load once here
-    budget_query = db.query(DepartmentBudget)
+    budget_query = db.query(DepartmentBudget).filter(
+        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))
+    )
     if budget_scope is not None:
         budget_query = budget_query.filter(budget_scope)
     budgets_for_spend = budget_query.all()

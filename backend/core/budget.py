@@ -138,6 +138,17 @@ def reset_period(db: Session, department: str) -> dict:
     return _enrich(b)
 
 
+def archive_department(db: Session, department: str, archived: bool = True) -> dict:
+    """Soft-hide or restore a department budget while preserving historical records."""
+    b = db.query(DepartmentBudget).filter_by(department=department).first()
+    if not b:
+        raise ValueError(f"Department '{department}' not found.")
+
+    b.archived = archived
+    db.commit()
+    return _enrich(b)
+
+
 def reconcile_throttle_state(b: DepartmentBudget) -> bool:
     """
     Clear stale throttle flags when a department is back under its cap.
@@ -186,4 +197,5 @@ def _enrich(b: DepartmentBudget) -> dict:
         "throttle_tier_name":          tier_names.get(throttle_tier, "Scout"),
         "raw_payload_logging_enabled": getattr(b, "raw_payload_logging_enabled", False) or False,
         "raw_retention_days":          getattr(b, "raw_retention_days", 30) or 30,
+        "archived":                    getattr(b, "archived", False) or False,
     }
