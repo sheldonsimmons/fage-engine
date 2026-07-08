@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot - Enterprise Traffic Simulator</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body {
+      min-height: 100vh;
+      background: var(--bg-base);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sim-page {
+      width: min(1440px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 28px 0 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .sim-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .sim-panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .sim-eyebrow {
+      color: var(--accent-green);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .sim-title {
+      color: var(--text-primary);
+      font-size: clamp(26px, 4vw, 46px);
+      line-height: 1.05;
+      letter-spacing: 0;
+      margin: 0 0 12px;
+    }
+
+    .sim-copy {
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.55;
+      max-width: 780px;
+      margin: 0;
+    }
+
+    .sim-disclosure {
+      margin-top: 16px;
+      border: 1px solid rgba(88, 166, 255, 0.34);
+      background: rgba(88, 166, 255, 0.07);
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.45;
+      padding: 12px 14px;
+    }
+
+    .sim-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .sim-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .sim-link:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: rgba(88, 166, 255, 0.06);
+    }
+
+    .sim-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .section-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .field-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .field label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .field select {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text-primary);
+      font: inherit;
+      font-size: 14px;
+      padding: 11px 12px;
+    }
+
+    .field select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .choice-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .choice-btn {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font: inherit;
+      min-height: 72px;
+      padding: 11px;
+      text-align: left;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .choice-btn:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .choice-btn.active {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+      background: rgba(63, 185, 80, 0.08);
+    }
+
+    .choice-title {
+      display: block;
+      color: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .choice-sub {
+      display: block;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .run-btn {
+      width: 100%;
+      margin-top: 2px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #0d1117;
+      cursor: pointer;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 900;
+      padding: 15px;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .run-btn:hover { opacity: 0.92; }
+    .run-btn:active { transform: scale(0.99); }
+    .run-btn:disabled { cursor: not-allowed; opacity: 0.48; }
+
+    .stop-btn {
+      width: 100%;
+      border: 1px solid rgba(248, 81, 73, 0.55);
+      border-radius: 8px;
+      background: rgba(248, 81, 73, 0.08);
+      color: var(--accent-red);
+      cursor: pointer;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      padding: 12px;
+    }
+
+    .stop-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat-card {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-height: 92px;
+      padding: 14px;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      color: var(--text-primary);
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .stat-value.green { color: var(--accent-green); }
+    .stat-value.blue { color: var(--accent); }
+    .stat-value.gold { color: var(--accent-gold); }
+    .stat-value.red { color: var(--accent-red); }
+
+    .stat-sub {
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-top: 8px;
+      line-height: 1.35;
+    }
+
+    .progress-wrap {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .progress-track {
+      height: 10px;
+      border-radius: 999px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-green));
+      transition: width 0.2s ease;
+    }
+
+    .progress-text {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 800;
+      min-width: 70px;
+      text-align: right;
+    }
+
+    .summary-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .secondary-btn {
+      color: var(--text-muted);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-base);
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 10px 14px;
+    }
+
+    .secondary-btn:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .activity-log {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 460px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .activity-log::-webkit-scrollbar { width: 4px; }
+    .activity-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+    .activity-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-left-width: 4px;
+      border-radius: 8px;
+      padding: 11px;
+    }
+
+    .activity-item.scout { border-left-color: var(--accent-green); }
+    .activity-item.analyst { border-left-color: var(--accent); }
+    .activity-item.advisor { border-left-color: var(--accent-gold); }
+    .activity-item.strategist { border-left-color: var(--accent-red); }
+    .activity-item.blocked { border-left-color: var(--accent-red); background: rgba(248, 81, 73, 0.04); }
+    .activity-item.error { border-left-color: var(--text-muted); }
+
+    .activity-pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      min-width: 78px;
+      padding: 4px 8px;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .activity-pill.scout { color: var(--accent-green); border-color: rgba(63, 185, 80, 0.55); }
+    .activity-pill.analyst { color: var(--accent); border-color: rgba(88, 166, 255, 0.55); }
+    .activity-pill.advisor { color: var(--accent-gold); border-color: rgba(210, 153, 34, 0.55); }
+    .activity-pill.strategist,
+    .activity-pill.blocked { color: var(--accent-red); border-color: rgba(248, 81, 73, 0.55); }
+
+    .activity-main {
+      min-width: 0;
+    }
+
+    .activity-title {
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 800;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .activity-meta {
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-top: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .activity-cost {
+      color: var(--text-muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .empty-state {
+      color: var(--text-muted);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .sim-hero,
+      .sim-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .sim-nav {
+        justify-content: flex-start;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .sim-page {
+        width: min(100vw - 24px, 1440px);
+        padding-top: 18px;
+      }
+
+      .choice-grid,
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .activity-item {
+        grid-template-columns: 1fr;
+      }
+
+      .activity-pill,
+      .activity-cost {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-brand">
+      <span class="header-logo">◈</span>
+      <div>
+        <div class="header-title">CostPilot</div>
+        <div class="header-sub">AI Cost Control · Enterprise Traffic Simulator</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <span class="status-dot online"></span>
+      <span>Simulator ready</span>
+    </div>
+    <nav class="header-actions sim-nav" aria-label="Simulator navigation">
+      <a class="sim-link" href="/index.html">Dashboard</a>
+      <a class="sim-link" href="/operate.html">Operate</a>
+      <a class="sim-link" href="/reports.html">Reports</a>
+      <a class="sim-link" href="/demo-crm.html">Live Demo</a>
+    </nav>
+  </header>
+
+  <main class="sim-page">
+    <section class="sim-hero">
+      <div class="sim-panel">
+        <div class="sim-eyebrow">Synthetic enterprise AI traffic</div>
+        <h1 class="sim-title">See CostPilot working at business scale.</h1>
+        <p class="sim-copy">
+          Generate realistic AI agent requests across departments and watch CostPilot route, prune,
+          block, and log each one through the real governance pipeline.
+        </p>
+        <div class="sim-disclosure">
+          Synthetic demo traffic. Every request is fake, but each one runs through the real CostPilot
+          routing, pruning, budget, and audit pipeline for this demo environment.
+        </div>
+      </div>
+
+      <div class="sim-panel">
+        <div class="section-label">Recommended path</div>
+        <p class="sim-copy">
+          Use <strong>Full Demo</strong> with <strong>Balanced</strong> traffic to show savings,
+          pruning, escalation, blocked requests, and reporting in one run.
+        </p>
+      </div>
+    </section>
+
+    <section class="sim-grid">
+      <div class="sim-panel">
+        <div class="section-label">Simulation setup</div>
+        <div class="field-stack">
+          <div class="field">
+            <label for="companyProfile">Company profile</label>
+            <select id="companyProfile">
+              <option value="enterpriseSaas">Enterprise SaaS</option>
+              <option value="retailServices">Retail Services</option>
+              <option value="manufacturing">Manufacturing</option>
+              <option value="professionalServices">Professional Services</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Simulation size</label>
+            <div class="choice-grid" id="sizeChoices">
+              <button class="choice-btn" type="button" data-size="10">
+                <span class="choice-title">Quick</span>
+                <span class="choice-sub">10 requests</span>
+              </button>
+              <button class="choice-btn" type="button" data-size="25">
+                <span class="choice-title">Standard</span>
+                <span class="choice-sub">25 requests</span>
+              </button>
+              <button class="choice-btn active" type="button" data-size="50">
+                <span class="choice-title">Full Demo</span>
+                <span class="choice-sub">50 requests</span>
+              </button>
+              <button class="choice-btn" type="button" data-size="100">
+                <span class="choice-title">Heavy Run</span>
+                <span class="choice-sub">100 requests</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Traffic style</label>
+            <div class="choice-grid" id="styleChoices">
+              <button class="choice-btn active" type="button" data-style="balanced">
+                <span class="choice-title">Balanced</span>
+                <span class="choice-sub">Savings, pruning, risk, and blocked events</span>
+              </button>
+              <button class="choice-btn" type="button" data-style="savings">
+                <span class="choice-title">Savings-Heavy</span>
+                <span class="choice-sub">More routine lower-cost routing</span>
+              </button>
+              <button class="choice-btn" type="button" data-style="risk">
+                <span class="choice-title">Risk-Heavy</span>
+                <span class="choice-sub">More escalations and blocked payloads</span>
+              </button>
+              <button class="choice-btn" type="button" data-style="pruning">
+                <span class="choice-title">Pruning Showcase</span>
+                <span class="choice-sub">More messy payloads and token cleanup</span>
+              </button>
+            </div>
+          </div>
+
+          <button class="run-btn" id="runSimulationBtn" type="button">Run Simulation</button>
+          <button class="stop-btn" id="stopSimulationBtn" type="button" disabled>Stop Run</button>
+        </div>
+      </div>
+
+      <div class="sim-panel">
+        <div class="section-label">Live run summary</div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Sent</div>
+            <div class="stat-value" id="sentCount">0</div>
+            <div class="stat-sub" id="targetCount">of 50 requests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Lower-cost routed</div>
+            <div class="stat-value green" id="economyCount">0</div>
+            <div class="stat-sub">Scout + Analyst</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Pruned</div>
+            <div class="stat-value blue" id="prunedCount">0</div>
+            <div class="stat-sub"><span id="tokensSavedCount">0</span> tokens saved</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Blocked</div>
+            <div class="stat-value red" id="blockedCount">0</div>
+            <div class="stat-sub">Sensitive payloads stopped</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Scout</div>
+            <div class="stat-value green" id="scoutCount">0</div>
+            <div class="stat-sub">Routine work</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Analyst</div>
+            <div class="stat-value blue" id="analystCount">0</div>
+            <div class="stat-sub">Moderate work</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Advisor</div>
+            <div class="stat-value gold" id="advisorCount">0</div>
+            <div class="stat-sub">Complex work</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Strategist</div>
+            <div class="stat-value red" id="strategistCount">0</div>
+            <div class="stat-sub">High-risk work</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Estimated spend</div>
+            <div class="stat-value" id="spendCount">$0.0000</div>
+            <div class="stat-sub">Current simulation</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Errors</div>
+            <div class="stat-value red" id="errorCount">0</div>
+            <div class="stat-sub">Requests not completed</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Status</div>
+            <div class="stat-value blue" id="runStatus">Ready</div>
+            <div class="stat-sub" id="runStatusSub">Choose a run and start.</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Traffic style</div>
+            <div class="stat-value gold" id="styleLabel">Balanced</div>
+            <div class="stat-sub" id="profileLabel">Enterprise SaaS</div>
+          </div>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-track" aria-label="Simulation progress">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <div class="progress-text" id="progressText">0%</div>
+        </div>
+
+        <div class="summary-actions">
+          <a class="secondary-btn" href="/index.html">Open Dashboard</a>
+          <a class="secondary-btn" href="/operate.html">Open Operate</a>
+          <a class="secondary-btn" href="/reports.html">Open Reports</a>
+          <button class="secondary-btn" id="clearLogBtn" type="button">Clear Log</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="sim-panel">
+      <div class="section-label">Request activity</div>
+      <div class="activity-log" id="activityLog">
+        <div class="empty-state">
+          No simulated requests yet. Start a run to send synthetic AI traffic through CostPilot.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/traffic_simulator.js"></script>
+</body>
+</html>
