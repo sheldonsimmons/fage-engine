@@ -19,7 +19,22 @@ function platformFamily(value) {
   if (p.startsWith("salesforce")) return "salesforce";
   if (p.startsWith("servicenow")) return "servicenow";
   if (p.startsWith("hubspot")) return "hubspot";
+  if (p.startsWith("dynamics")) return "dynamics365";
+  if (p.startsWith("custom")) return "custom";
   return p;
+}
+
+function platformFilterLabel(value, rawValue) {
+  const labels = {
+    salesforce: "Salesforce",
+    servicenow: "ServiceNow",
+    hubspot: "HubSpot",
+    dynamics365: "Dynamics365",
+    zendesk: "Zendesk",
+    slack: "Slack",
+    custom: "Custom"
+  };
+  return labels[value] || rawValue || value;
 }
 
 function jsString(value) {
@@ -436,6 +451,7 @@ async function loadAgents() {
     _allAgents = agents;
     renderAgentCards(agents.filter(a => !a.archived));  // cards show live only
     updateKpiAgents(agents.filter(a => !a.archived));
+    populatePlatformFilter(agents);
     populateDeptFilter(agents);
     applyAgentFilters();
     scheduleAgentPoll(agents);
@@ -500,6 +516,30 @@ function populateDeptFilter(agents) {
       sel.appendChild(opt);
     }
   });
+}
+
+function populatePlatformFilter(agents) {
+  const sel = document.getElementById("filterPlatform");
+  if (!sel) return;
+
+  const current = platformFamily(sel.value);
+  const platforms = new Map([["", "All Platforms"]]);
+
+  agents.forEach(a => {
+    const raw = (a.source_platform || "Custom").trim();
+    const key = platformFamily(raw) || "custom";
+    if (!platforms.has(key)) platforms.set(key, platformFilterLabel(key, raw));
+  });
+
+  sel.innerHTML = "";
+  platforms.forEach((label, value) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  });
+
+  sel.value = platforms.has(current) ? current : "";
 }
 
 function applyAgentFilters() {
