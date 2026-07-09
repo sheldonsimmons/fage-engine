@@ -24,6 +24,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+.ob-brand .brand-logo-img {
+  width: min(240px, 42vw);
 }
 .ob-brand-sub {
   font-size: 13px;
