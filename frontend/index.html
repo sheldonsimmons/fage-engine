@@ -591,7 +591,7 @@
         <div class="breakdown-bar-track">
           <div class="breakdown-bar-fill" id="execBarPruning" style="width:0%;background:var(--accent-green)"></div>
         </div>
-        <div class="breakdown-item-help">Savings from removing stale or unnecessary text before a request reaches the AI model.</div>
+        <div class="breakdown-item-help" id="execPruningHelp">Savings from removing stale or unnecessary text before a request reaches the AI model.</div>
       </div>
 
       <div>
@@ -1107,6 +1107,7 @@ function filteredSavingsBreakdown(events) {
     actualCost,
     routingSaved: Math.max(0, economyBaseline - economyActualCost),
     pruningSaved: Math.max(0, tokensSaved * ADVISOR_INPUT_PER_TOKEN),
+    tokensSaved,
     throttleSaved: throttleCount * FLAGSHIP_AVG,
     blockedSaved: blockedCount * 0.018,
     blockedCount,
@@ -1154,6 +1155,7 @@ function renderExec(data) {
   const totalAvoided = hasFilters ? routingSaved + pruningSaved + throttleSaved + blockedSaved : (d.total_savings_usd || 0);
   const annualSavings = hasFilters ? totalAvoided * 12 : (d.projected_annual_savings || 0);
   const budget = visibleBudget(data, events);
+  const pruningTokens = hasFilters ? filteredSavings.tokensSaved : (d.tokens_saved_total || 0);
 
   document.getElementById("execFilterStatus").textContent = filterSummaryText(events.length);
   const scopeNotice = document.getElementById("execScopeNotice");
@@ -1200,6 +1202,10 @@ function renderExec(data) {
   setBreakdown("execSavingPruning", "execBarPruning", pruningSaved);
   setBreakdown("execSavingThrottle", "execBarThrottle", throttleSaved);
   setBreakdown("execSavingBlocked", "execBarBlocked", blockedSaved);
+  const pruningHelp = document.getElementById("execPruningHelp");
+  if (pruningHelp) {
+    pruningHelp.textContent = `${fmtNum(pruningTokens)} tokens stripped in ${hasFilters ? "this filtered view" : "all workspace data"} at the same $3.00 / 1M input-token savings rate.`;
+  }
 
   const activeAgents = hasFilters
     ? new Set(events.map(e => e.agent_id).filter(Boolean)).size
@@ -1239,7 +1245,7 @@ async function loadExec() {
     const [dashboard, timeseries, audits, agents] = await Promise.all([
       apiGet("/api/dashboard"),
       apiGet("/api/timeseries?days=180"),
-      apiGet("/api/audit?limit=500"),
+      apiGet("/api/audit?limit=5000"),
       apiGet("/api/agents"),
     ]);
     execData = { dashboard, timeseries, audits, agents };
