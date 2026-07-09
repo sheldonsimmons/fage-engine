@@ -9,15 +9,57 @@ Responsibilities:
 """
 
 from datetime import datetime
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from database.models import DepartmentBudget
-from config import THROTTLE_TRIGGER_PERCENT, WARN_TRIGGER_PERCENT
+from database.models import DepartmentBudget, RegisteredAgent
+from config import DEFAULT_BUDGET_CAPS, THROTTLE_TRIGGER_PERCENT, WARN_TRIGGER_PERCENT
+
+
+def _default_cap_for(department: str) -> float:
+    """Return a sensible cap for departments discovered from AgentLake."""
+    if department in DEFAULT_BUDGET_CAPS:
+        return DEFAULT_BUDGET_CAPS[department]
+    if ":" in str(department):
+        label = str(department).split(":", 1)[1].strip()
+        if label in DEFAULT_BUDGET_CAPS:
+            return DEFAULT_BUDGET_CAPS[label]
+    return 1.0
+
+
+def ensure_agent_departments_have_budgets(db: Session) -> bool:
+    """Create missing budget rows for departments that have active agents."""
+    existing = {row[0] for row in db.query(DepartmentBudget.department).all()}
+    agent_departments = {
+        row[0]
+        for row in db.query(RegisteredAgent.department)
+        .filter(
+            RegisteredAgent.department.isnot(None),
+            RegisteredAgent.department != "",
+            or_(RegisteredAgent.archived == False, RegisteredAgent.archived.is_(None)),
+        )
+        .distinct()
+        .all()
+    }
+
+    missing = sorted(dept for dept in agent_departments if dept not in existing)
+    for dept in missing:
+        db.add(DepartmentBudget(
+            department=dept,
+            monthly_cap_usd=_default_cap_for(dept),
+            current_spend_usd=0.0,
+            period_start=datetime.utcnow(),
+            throttled=False,
+            override_granted=False,
+        ))
+    return bool(missing)
 
 
 def get_all_budgets(db: Session) -> list:
     """Return budget status for every department, enriched with usage metrics."""
+    dirty = ensure_agent_departments_have_budgets(db)
+    if dirty:
+        db.flush()
     budgets = db.query(DepartmentBudget).all()
-    dirty = False
     for b in budgets:
         dirty = reconcile_throttle_state(b) or dirty
     if dirty:
