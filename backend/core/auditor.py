@@ -298,7 +298,7 @@ def _extract_cost_usd(e: AuditEvent):
     for text in (getattr(e, "decision_outcome", None), getattr(e, "rationale", None)):
         if not text:
             continue
-        match = re.search(r"(?:Call cost:|model used —)\s*\$([0-9]+(?:\.[0-9]+)?)", text, re.IGNORECASE)
+        match = re.search(r"(?:Call cost:|Estimated cost:|model used —)\s*\$([0-9]+(?:\.[0-9]+)?)", text, re.IGNORECASE)
         if not match:
             match = re.search(r"\$([0-9]+(?:\.[0-9]+)?)", text)
         if match:

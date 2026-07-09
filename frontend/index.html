@@ -1041,6 +1041,7 @@ function buildChart(labels, actualData, flagshipData, totalSaved) {
 
 // ── Main data load ────────────────────────────────────────────────────────────
 const FLAGSHIP_AVG = 0.030;
+const ADVISOR_INPUT_PER_TOKEN = 3.00 / 1000000;
 
 function rollupByDay(events) {
   const byDay = {};
@@ -1080,43 +1081,76 @@ function visibleBudget(data, events) {
   };
 }
 
+function isBlockedEvent(e) {
+  return norm(e.decision_outcome).includes("blocked");
+}
+
+function isThrottleEvent(e) {
+  const outcome = norm(e.decision_outcome);
+  const type = norm(e.event_type);
+  return outcome.includes("throttle") || outcome.includes("downgrade") || type === "throttle";
+}
+
+function filteredSavingsBreakdown(events) {
+  const routedEvents = events.filter(e => !isBlockedEvent(e));
+  const economyEvents = routedEvents.filter(e => isEconomyTier(e.model_tier));
+  const actualCost = routedEvents.reduce((sum, e) => sum + Number(e.cost_usd || 0), 0);
+  const economyActualCost = economyEvents.reduce((sum, e) => sum + Number(e.cost_usd || 0), 0);
+  const economyBaseline = economyEvents.length * FLAGSHIP_AVG;
+  const tokensSaved = events.reduce((sum, e) => sum + Number(e.tokens_saved || 0), 0);
+  const throttleCount = events.filter(isThrottleEvent).length;
+  const blockedCount = events.filter(isBlockedEvent).length;
+
+  return {
+    routedCalls: routedEvents.length,
+    economyCalls: economyEvents.length,
+    actualCost,
+    routingSaved: Math.max(0, economyBaseline - economyActualCost),
+    pruningSaved: Math.max(0, tokensSaved * ADVISOR_INPUT_PER_TOKEN),
+    throttleSaved: throttleCount * FLAGSHIP_AVG,
+    blockedSaved: blockedCount * 0.018,
+    blockedCount,
+    throttleCount,
+  };
+}
+
 function renderExec(data) {
   const d = data.dashboard || {};
   const ts = data.timeseries || {};
   const events = filteredAuditEvents(data);
   const hasFilters = !!(execFilters.dept || execFilters.platform || execFilters.agent || execFilters.tier || execFilters.risk || execFilters.range !== "30");
+  const filteredSavings = hasFilters ? filteredSavingsBreakdown(events) : null;
 
   const totalCalls = hasFilters
     ? events.length
     : d.requests_governed ?? ((d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0));
   const routedCalls = hasFilters
-    ? events.filter(e => !norm(e.decision_outcome).includes("blocked")).length
+    ? filteredSavings.routedCalls
     : d.requests_routed ?? ((d.scout_calls || 0) + (d.analyst_calls || 0) + (d.advisor_calls || 0) + (d.strategist_calls || 0));
   const economyCalls = hasFilters
-    ? events.filter(e => isEconomyTier(e.model_tier)).length
+    ? filteredSavings.economyCalls
     : (d.scout_calls || 0) + (d.analyst_calls || 0);
   const routingPct = hasFilters
     ? (routedCalls > 0 ? Math.round((economyCalls / routedCalls) * 100) : 0)
     : Math.round(d.routing_efficiency_pct ?? (routedCalls > 0 ? (economyCalls / routedCalls) * 100 : 0));
   const actualCost = hasFilters
-    ? events.reduce((sum, e) => sum + Number(e.cost_usd || 0), 0)
+    ? filteredSavings.actualCost
     : d.spend_month_usd || 0;
 
   const blockedCount = hasFilters
-    ? events.filter(e => norm(e.decision_outcome).includes("blocked")).length
+    ? filteredSavings.blockedCount
     : d.blocked_count || 0;
   const collisionCount = hasFilters
     ? events.filter(e => norm(e.decision_outcome).includes("collision") || norm(e.decision_outcome).includes("locked")).length
     : d.collision_count || 0;
   const throttleCount = hasFilters
-    ? events.filter(e => norm(e.decision_outcome).includes("throttle") || norm(e.decision_outcome).includes("downgrade")).length
+    ? filteredSavings.throttleCount
     : d.throttle_prevented || 0;
 
-  const fullCost = routedCalls * FLAGSHIP_AVG;
-  const routingSaved = hasFilters ? Math.max(0, fullCost - actualCost) : (d.routing_savings_usd || 0);
-  const pruningSaved = hasFilters ? 0 : (d.pruning_savings_usd || 0);
-  const throttleSaved = throttleCount * FLAGSHIP_AVG * 10;
-  const blockedSaved = hasFilters ? blockedCount * 0.018 : (d.blocked_savings_usd || 0);
+  const routingSaved = hasFilters ? filteredSavings.routingSaved : (d.routing_savings_usd || 0);
+  const pruningSaved = hasFilters ? filteredSavings.pruningSaved : (d.pruning_savings_usd || 0);
+  const throttleSaved = hasFilters ? filteredSavings.throttleSaved : (throttleCount * FLAGSHIP_AVG);
+  const blockedSaved = hasFilters ? filteredSavings.blockedSaved : (d.blocked_savings_usd || 0);
   const totalAvoided = hasFilters ? routingSaved + pruningSaved + throttleSaved + blockedSaved : (d.total_savings_usd || 0);
   const annualSavings = hasFilters ? totalAvoided * 12 : (d.projected_annual_savings || 0);
   const budget = visibleBudget(data, events);
@@ -1156,7 +1190,7 @@ function renderExec(data) {
   incTag.className = "metric-tag " + (incidents > 0 ? "yellow" : "green");
 
   document.getElementById("execBreakdownSub").textContent =
-    `${fmtUsd(totalAvoided)} avoided in this filtered view`;
+    `${fmtUsd(totalAvoided)} avoided in ${hasFilters ? "this filtered view" : "all workspace data"}`;
   const maxSaving = Math.max(routingSaved, pruningSaved, throttleSaved, blockedSaved, 1);
   function setBreakdown(valId, barId, val) {
     document.getElementById(valId).textContent = fmtUsd(val);
