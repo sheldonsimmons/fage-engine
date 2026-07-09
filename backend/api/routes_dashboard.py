@@ -149,6 +149,22 @@ def get_dashboard(
         IS_AI_CALL, TokenTransaction.timestamp >= today_start
     ).scalar() or 0
 
+    scout_calls_today = db.query(func.count(TokenTransaction.id)).filter(
+        *_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= today_start, TokenTransaction.model_tier.in_(("Scout", "micro")))
+    ).scalar() or 0
+    analyst_calls_today = db.query(func.count(TokenTransaction.id)).filter(
+        *_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= today_start, TokenTransaction.model_tier == "Analyst")
+    ).scalar() or 0
+    advisor_calls_today = db.query(func.count(TokenTransaction.id)).filter(
+        *_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= today_start, TokenTransaction.model_tier.in_(("Advisor", "flagship")))
+    ).scalar() or 0
+    strategist_calls_today = db.query(func.count(TokenTransaction.id)).filter(
+        *_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= today_start, TokenTransaction.model_tier == "Strategist")
+    ).scalar() or 0
+    tier_split_today_total = scout_calls_today + analyst_calls_today + advisor_calls_today + strategist_calls_today
+
+    def _today_pct(n): return round((n / tier_split_today_total) * 100, 1) if tier_split_today_total else 0
+
     # ── Agent counts ───────────────────────────────────────────────────────────
     agents_total  = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope)).scalar() or 0
     agents_active = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "active")).scalar()  or 0
@@ -278,6 +294,17 @@ def get_dashboard(
         "analyst_pct":           _pct(analyst_calls),
         "advisor_pct":           _pct(advisor_calls),
         "strategist_pct":        _pct(strategist_calls),
+        "tier_split_today": {
+            "total":             tier_split_today_total,
+            "scout_calls":       scout_calls_today,
+            "analyst_calls":     analyst_calls_today,
+            "advisor_calls":     advisor_calls_today,
+            "strategist_calls":  strategist_calls_today,
+            "scout_pct":         _today_pct(scout_calls_today),
+            "analyst_pct":       _today_pct(analyst_calls_today),
+            "advisor_pct":       _today_pct(advisor_calls_today),
+            "strategist_pct":    _today_pct(strategist_calls_today),
+        },
 
         # ── Agents ────────────────────────────────────────────────────────────
         "agents_total":          agents_total,

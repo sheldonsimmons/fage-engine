@@ -69,7 +69,7 @@ async function loadDashboard() {
     renderStatBar(d);
     renderCeoBanner(d);
     renderDeptHealth(d);
-    renderTodayTierSplit();
+    renderTodayTierSplit(d);
     renderAgentEfficiency();
     renderInsights();
   } catch (err) {
@@ -132,9 +132,20 @@ function renderDeptHealth(d) {
   }).join("");
 }
 
-async function renderTodayTierSplit() {
+async function renderTodayTierSplit(d = {}) {
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   const label = document.getElementById("dhTierSplitLabel");
+  const split = d.tier_split_today;
+  if (split) {
+    const total = split.total || 0;
+    if (label) label.textContent = total ? "Tier split today:" : "Tier split today: no routed calls";
+    setEl("dhScout", `${split.scout_pct || 0}%`);
+    setEl("dhAnalyst", `${split.analyst_pct || 0}%`);
+    setEl("dhAdvisor", `${split.advisor_pct || 0}%`);
+    setEl("dhStrategist", `${split.strategist_pct || 0}%`);
+    return;
+  }
+
   try {
     const events = await apiGet(scopedApiPath("/api/audit?limit=1000"));
     const today = localDayKey(new Date().toISOString());
