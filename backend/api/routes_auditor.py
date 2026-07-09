@@ -39,6 +39,7 @@ class AuditEventSummary(BaseModel):
     compression_pct:  Optional[float] = None
     usage_source:     Optional[str] = None
     has_raw_payload:  Optional[bool] = False
+    budget_controlled: Optional[bool] = False
     matched_keywords: Optional[List[str]] = Field(default_factory=list)
     timestamp:        Optional[str]
 

@@ -335,6 +335,15 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
     cost_usd = _extract_cost_usd(e)
     display_dept = _display_department(e.department)
     display_agent = None
+    rationale_text = (getattr(e, "rationale", None) or "").lower()
+    outcome_text = (getattr(e, "decision_outcome", None) or "").lower()
+    budget_controlled = (
+        e.event_type == "THROTTLE"
+        or "budget cap enforced" in rationale_text
+        or "budget cap" in outcome_text
+        or "capped at" in rationale_text
+        or "downgraded to the micro-model tier" in rationale_text
+    )
     if agent:
         try:
             from core.agentlake import display_agent_name
@@ -358,6 +367,7 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "cost_usd":         cost_usd,
         "timestamp":        e.timestamp.isoformat() if e.timestamp else None,
         "has_raw_payload":  bool(getattr(e, "raw_payload", None)),
+        "budget_controlled": budget_controlled,
         "matched_keywords": matched_kws,
         "raw_tokens":       context.get("raw_tokens"),
         "clean_tokens":     context.get("clean_tokens"),

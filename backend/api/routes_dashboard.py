@@ -196,7 +196,17 @@ def get_dashboard(
     escalated_count    = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "ESCALATED")).scalar() or 0
     flagged_count      = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope)).scalar() or 0
     pii_count          = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type.ilike("%PII%"))).scalar()  or 0
-    throttle_prevented = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "THROTTLE")).scalar()  or 0
+    throttle_prevented = db.query(func.count(AuditEvent.id)).filter(
+        *_filters(
+            audit_scope,
+            or_(
+                AuditEvent.event_type == "THROTTLE",
+                AuditEvent.rationale.ilike("%BUDGET CAP ENFORCED%"),
+                AuditEvent.rationale.ilike("%capped at%"),
+                AuditEvent.rationale.ilike("%downgraded to the micro-model tier%"),
+            ),
+        )
+    ).scalar() or 0
     collision_count    = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "LOCK")).scalar()       or 0
 
     # ── Executive Summary ROI ─────────────────────────────────────────────────
@@ -207,7 +217,8 @@ def get_dashboard(
     full_flagship_cost = requests_routed * FLAGSHIP_AVG
     routing_savings_usd = max(0.0, full_flagship_cost - (spend_month or 0.0))
     blocked_savings_usd = round(requests_blocked * 0.018, 6)
-    total_savings_usd   = routing_savings_usd + pruning_savings_usd + blocked_savings_usd
+    throttle_savings_usd = round(throttle_prevented * FLAGSHIP_AVG, 6)
+    total_savings_usd   = routing_savings_usd + pruning_savings_usd + blocked_savings_usd + throttle_savings_usd
     projected_annual_savings = round(total_savings_usd * 12, 2)
 
     if full_flagship_cost > 0:
@@ -338,6 +349,7 @@ def get_dashboard(
         "projected_annual_savings": projected_annual_savings,
         "routing_savings_usd":   round(routing_savings_usd, 6),
         "blocked_savings_usd":   blocked_savings_usd,
+        "throttle_savings_usd":  throttle_savings_usd,
         "total_savings_usd":     round(total_savings_usd, 6),
         "routing_efficiency_pct": routing_efficiency_pct,
         "cost_reduction_pct":    cost_reduction_pct,
