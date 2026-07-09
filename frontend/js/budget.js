@@ -276,10 +276,11 @@ function renderLiveBudgetBars() {
     const barPct     = b.monthly_cap_usd > 0
       ? Math.min((b.current_spend_usd / b.monthly_cap_usd) * 100, 100)
       : 0;
+    const key = budgetJsString(b.budget_key);
     const overrideBtn = b.throttled
-      ? `<button class="btn-override" onclick="doOverride('${b.department}')">Grant Override</button>`
+      ? `<button class="btn-override" onclick="doOverrideGroup('${key}')">Grant Override</button>`
       : b.override_granted
-        ? `<button class="btn-override btn-revoke" onclick="doRevoke('${b.department}')">Revoke Override</button>`
+        ? `<button class="btn-override btn-revoke" onclick="doRevokeGroup('${key}')">Revoke Override</button>`
         : "";
     return `
       <div class="budget-item">
