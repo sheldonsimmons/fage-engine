@@ -238,13 +238,17 @@
   display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   padding:10px 20px; background:var(--bg-panel);
   border-bottom:1px solid var(--border); font-size:12px;">
-  <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);flex-shrink:0">Dept Health</span>
+  <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);flex-shrink:0">
+    Dept Health
+    <span class="help-icon" data-help="deptHealthPanel" onclick="event.stopPropagation();showHelp('deptHealthPanel')">?</span>
+  </span>
   <div id="deptHealthPills" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <span style="color:var(--text-muted);font-size:11px">Loading...</span>
   </div>
   <div style="margin-left:auto;display:flex;gap:14px;align-items:center;flex-shrink:0">
     <span style="font-size:11px;color:var(--text-muted)">
       <span id="dhTierSplitLabel">Tier split today:</span>
+      <span class="help-icon" data-help="tierSplitPanel" onclick="event.stopPropagation();showHelp('tierSplitPanel')">?</span>
       <span style="color:var(--accent-green);font-weight:700" id="dhScout">—</span> Scout ·
       <span style="color:var(--accent);font-weight:700" id="dhAnalyst">—</span> Analyst ·
       <span style="color:var(--accent-yellow);font-weight:700" id="dhAdvisor">—</span> Advisor ·
@@ -403,7 +407,9 @@
       <div class="dp-wrap dash-section" data-panel-id="timeseries">
         <div class="dash-sec-head" onclick="togglePanel('timeseriesBody','timeseriesChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ 30-Day Spend &amp; Activity Trends</span>
+          <span>▸ 30-Day Spend &amp; Activity Trends
+            <span class="help-icon" data-help="trendsPanel" onclick="event.stopPropagation();showHelp('trendsPanel')">?</span>
+          </span>
           <span class="sec-right"><span class="sec-chev" id="timeseriesChevron">▾</span></span>
         </div>
         <div id="timeseriesBody" class="dash-sec-body">
@@ -431,7 +437,9 @@
       <div class="dp-wrap dash-section" data-panel-id="agent-efficiency" id="agentEfficiencySection">
         <div class="dash-sec-head" onclick="togglePanel('agentEffBody','agentEffChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Agent Efficiency Rank</span>
+          <span>▸ Agent Efficiency Rank
+            <span class="help-icon" data-help="agentEfficiencyPanel" onclick="event.stopPropagation();showHelp('agentEfficiencyPanel')">?</span>
+          </span>
           <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">cost · routing · pruning per agent</span>
           <span class="sec-right"><span class="sec-chev" id="agentEffChevron">▾</span></span>
         </div>
@@ -455,7 +463,9 @@
       <div class="dp-wrap dash-section" data-panel-id="insights" id="insightsSection">
         <div class="dash-sec-head" onclick="togglePanel('insightsBody','insightsChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Routing Insights</span>
+          <span>▸ Routing Insights
+            <span class="help-icon" data-help="routingInsightsPanel" onclick="event.stopPropagation();showHelp('routingInsightsPanel')">?</span>
+          </span>
           <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">keywords driving complex routing · compliance events</span>
           <span class="sec-right"><span class="sec-chev" id="insightsChevron">▾</span></span>
         </div>
@@ -551,7 +561,9 @@
   <div class="dash-right" id="eventStreamSection" data-guide-id="eventStreamSection">
     <div class="stream-head">
       <div class="stream-head-row">
-        <div class="stream-head-label">▸ Governance Event Stream</div>
+        <div class="stream-head-label">▸ Governance Event Stream
+          <span class="help-icon" data-help="eventStreamPanel" onclick="event.stopPropagation();showHelp('eventStreamPanel')">?</span>
+        </div>
         <span style="font-size:10px;color:var(--accent-green);font-weight:700">● LIVE</span>
       </div>
       <div class="stream-filters">

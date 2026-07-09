@@ -28,9 +28,33 @@ const HELP_CONTENT = {
     title: "Department Budgets",
     body:  "Each department gets its own monthly AI spend cap. The bar fills as spend accumulates. Green = healthy, yellow = approaching limit, red = at or over cap. Set the cap, reset the month, or grant an override — all from here.",
   },
+  deptHealthPanel: {
+    title: "Department Health",
+    body:  "This strip summarizes each department's current budget position. Green means healthy, yellow means getting close to the cap, and red means the department is over budget or being throttled. The percentage shows how much of that department's monthly AI budget has been used.",
+  },
+  tierSplitPanel: {
+    title: "Tier Split Today",
+    body:  "This shows how today's routed AI calls were divided across model tiers. Scout and Analyst are lower-cost tiers. Advisor and Strategist are stronger, higher-cost tiers. The split helps you see whether routine work is staying inexpensive and complex work is being escalated appropriately.",
+  },
   agentPanel: {
     title: "Agentlake Registry",
     body:  "Every AI agent connected to CostPilot appears here automatically on first use. The Traffic Cop monitors all agents in real time — if two agents try to update the same record simultaneously, CostPilot detects the collision and locks both until a supervisor resolves it. No data corruption, no silent overwrites.",
+  },
+  agentEfficiencyPanel: {
+    title: "Agent Efficiency Rank",
+    body:  "This ranks agents by usage, cost, routing efficiency, and pruning performance. It helps identify which agents are driving spend, which ones are being routed to lower-cost tiers, and which ones are producing the most context-pruning savings.",
+  },
+  routingInsightsPanel: {
+    title: "Routing Insights",
+    body:  "This section explains why requests are becoming complex or high-risk. It highlights the keywords and compliance signals that caused CostPilot to escalate, flag, block, or route requests differently.",
+  },
+  trendsPanel: {
+    title: "30-Day Spend & Activity Trends",
+    body:  "These charts show AI spend and model-tier activity over the last 30 days. They help you see whether spend is rising, which departments are driving usage, and whether routing behavior is changing over time.",
+  },
+  eventStreamPanel: {
+    title: "Governance Event Stream",
+    body:  "This is the live feed of CostPilot decisions. It shows routine routing, complex routing, pruning, throttling, and blocked requests as they happen, with filters for event type, department, and search.",
   },
   prunerPanel: {
     title: "Context-Pruning Sweeper",
