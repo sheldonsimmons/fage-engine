@@ -16,13 +16,13 @@
       padding: 0 28px; height: 52px; border-bottom: 1px solid var(--border);
       flex-shrink: 0; background: var(--bg-panel);
     }
-    .exec-header-left  { display: flex; align-items: center; gap: 16px; }
+    .exec-header-left  { display: flex; align-items: center; gap: 16px; min-width: 0; }
     .exec-header-right { display: flex; align-items: center; gap: 10px; }
-    .exec-logo { display: inline-flex; align-items: center; min-width: 210px; }
+    .exec-logo { display: inline-flex; align-items: center; min-width: 260px; flex: 0 1 320px; }
     .exec-logo-img {
       display: block;
-      width: min(260px, 22vw);
-      max-width: 260px;
+      width: min(320px, 24vw);
+      max-width: 100%;
       max-height: 42px;
       object-fit: contain;
       object-position: left center;
