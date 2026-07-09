@@ -182,41 +182,189 @@
     ].join("\n");
   }
 
-  function buildPruning({ department, agent, platform, index }) {
-    const header = [
+  const pruningTemplates = [
+    ["Forwarded renewal thread", "email", "Summarize the renewal ask, open questions, and next customer response."],
+    ["Support ticket history dump", "ticket", "Extract the current customer problem and next troubleshooting step."],
+    ["Slack incident recap", "chat", "Summarize the incident status and identify the owner for follow-up."],
+    ["Teams meeting notes", "meeting", "Turn the discussion into a short action list and customer update."],
+    ["Invoice OCR paste", "document", "Find the invoice issue and prepare a finance-ready summary."],
+    ["Procurement RFQ chain", "email", "Summarize supplier asks and next procurement action."],
+    ["CRM activity timeline", "crm", "Summarize the latest useful activity and ignore duplicate history."],
+    ["Customer success handoff", "ticket", "Create a handoff summary for the next team."],
+    ["Product feedback export", "chat", "Group the feedback into themes and recommended actions."],
+    ["Weekly operations digest", "meeting", "Extract only decisions, risks, and owners."],
+    ["Sales quote revision thread", "email", "Summarize the quote change request and next approval step."],
+    ["Returns case transcript", "ticket", "Identify the active return request and customer-facing response."],
+    ["IoT alert log", "log", "Summarize the current equipment issue and urgency."],
+    ["Marketing brief revisions", "document", "Extract final campaign changes and unresolved questions."],
+    ["Vendor onboarding packet", "document", "Summarize required vendor setup steps."],
+    ["Account planning notes", "crm", "Summarize account priorities and next sales motion."],
+    ["Customer escalation recap", "email", "Summarize the escalation, owner, and latest commitment."],
+    ["Refund review thread", "ticket", "Identify refund reason, status, and recommended next action."],
+    ["Field service visit notes", "crm", "Summarize the visit outcome and follow-up needed."],
+    ["Internal approval chain", "email", "Extract the approval request and outstanding decision."],
+    ["Integration monitor alerts", "log", "Summarize the latest integration failure and likely owner."],
+    ["Knowledge article cleanup", "document", "Extract the useful instructions and remove outdated notes."],
+    ["Renewal forecast notes", "crm", "Summarize renewal status, risk, and next step."],
+    ["Training feedback dump", "chat", "Group employee feedback into practical improvements."],
+    ["Customer survey export", "document", "Summarize sentiment and repeated customer issues."],
+    ["Service desk macro chain", "ticket", "Identify the real customer ask beneath repeated macros."],
+    ["Partner channel update", "email", "Summarize the partner request and internal response needed."],
+    ["Shipment exception log", "log", "Summarize the shipment issue and next operations step."],
+    ["Budget review notes", "meeting", "Extract spend concerns and recommended action items."],
+    ["Campaign launch checklist", "document", "Summarize blockers and launch readiness."],
+    ["Case merge history", "ticket", "Find the current case status and ignore merged duplicates."],
+    ["Salesforce field dump", "crm", "Summarize populated fields and ignore blanks."],
+    ["Zendesk conversation export", "ticket", "Create a customer-facing support summary."],
+    ["ServiceNow incident notes", "ticket", "Summarize the active incident and owner."],
+    ["HubSpot email sequence", "email", "Extract the latest prospect ask and next response."],
+    ["NetSuite invoice notes", "document", "Summarize billing discrepancy and next finance action."],
+    ["SAP production notes", "log", "Summarize production delay and operational risk."],
+    ["Quality review transcript", "meeting", "Extract defect summary and follow-up actions."],
+    ["Maintenance ticket chain", "ticket", "Summarize equipment issue and next maintenance step."],
+    ["Distributor quote email", "email", "Summarize quote requirements and missing details."],
+    ["Client onboarding notes", "crm", "Summarize onboarding state and next client task."],
+    ["Project risk thread", "email", "Summarize project risk and next mitigation step."],
+    ["Billing dispute notes", "ticket", "Summarize dispute reason and next finance response."],
+    ["Revenue forecast paste", "document", "Extract forecast change and assumptions."],
+    ["Contract intake notes", "crm", "Summarize business terms and review owner."],
+    ["Engagement kickoff transcript", "meeting", "Summarize kickoff decisions and owners."],
+    ["Executive meeting transcript", "meeting", "Extract decisions, risks, and owner follow-ups."],
+    ["Ops daily standup", "chat", "Summarize blockers and team commitments."],
+    ["Customer care email loop", "email", "Find the current customer ask and next response."],
+    ["Warranty claim thread", "ticket", "Summarize warranty status and missing information."],
+    ["Store assist chat", "chat", "Summarize store request and recommended response."],
+    ["Inventory variance log", "log", "Summarize inventory mismatch and likely cause."],
+    ["Chargeback evidence packet", "document", "Extract the evidence summary and next action."],
+    ["Loyalty offer notes", "crm", "Summarize customer eligibility and response."],
+    ["Content QA findings", "document", "Summarize final content issues and fixes."],
+    ["Campaign performance thread", "email", "Extract performance issue and recommended change."],
+    ["Workflow automation log", "log", "Summarize failed automation and owner."],
+    ["Data sync warning digest", "log", "Summarize sync health and open issues."],
+    ["Spend review export", "document", "Summarize spend anomaly and next review step."],
+    ["Pipeline follow-up chain", "email", "Summarize opportunity status and next touch."],
+    ["Customer renewal notes", "crm", "Summarize renewal risk and next action."],
+    ["Support shift handover", "ticket", "Create a clean handover summary."],
+    ["Case triage export", "ticket", "Classify the case and recommend next queue."],
+    ["Refund queue dump", "ticket", "Summarize active refund request."],
+    ["Promotion planning thread", "email", "Summarize promotion request and open approvals."],
+    ["Customer segment export", "document", "Summarize useful segment insight."],
+    ["Asset renewal notes", "crm", "Summarize renewal asset list and next step."],
+    ["Sensor summary dump", "log", "Summarize current signal and operational concern."],
+    ["Capex review packet", "document", "Summarize investment request and next review item."],
+    ["Proposal revision history", "document", "Extract final proposal ask and open edits."],
+    ["Staffing request chat", "chat", "Summarize role need, timing, and owner."],
+    ["Delivery desk queue", "ticket", "Summarize delivery issue and next response."],
+    ["Account health notes", "crm", "Summarize account risk and next customer touch."],
+    ["Meeting follow-up archive", "email", "Extract the actual follow-up request."],
+    ["Internal routing transcript", "chat", "Find the final owner and current ask."],
+  ];
+
+  const noiseBlocks = {
+    email: ({ index, agent, platform, department }) => [
       `From: taylor.casey${index}@example.com`,
       `To: ${agent.toLowerCase().replaceAll(" ", ".")}@example.com`,
-      `CC: operations.team@example.com; support.queue@example.com; updates@example.com`,
+      "CC: ops.team@example.com; support.queue@example.com; updates@example.com",
       "Date: Wednesday, May 27, 2026, 8:22 AM",
       `Subject: RE: RE: RE: RE: ${department} customer request - follow up needed`,
       "X-Mailer: Microsoft Outlook 16.0",
       "Importance: High",
-      "Thread-ID: demo-thread-93A7-FAKE-ONLY",
+      `Thread-ID: demo-thread-${index}-FAKE-ONLY`,
+      `Platform-Routing: ${platform} > shared inbox > agent queue`,
       "",
-    ].join("\n");
+    ],
+    ticket: ({ index, agent, platform }) => [
+      `Ticket-ID: DEMO-${String(index).padStart(5, "0")}`,
+      `Assigned-Agent: ${agent}`,
+      `Source-System: ${platform}`,
+      "Status history: New > Open > Pending > Waiting on customer > Open > Pending > Open",
+      "Macro applied: empathy opening. Macro applied: troubleshooting steps. Macro applied: closing note.",
+      "Internal tags: copied, merged, copied, duplicate, customer-visible, pending-review",
+      "",
+    ],
+    chat: ({ index, platform }) => [
+      `${platform} export channel: #customer-ops-${index}`,
+      "[09:01] system: user joined the channel",
+      "[09:02] system: bot reminder posted",
+      "[09:03] teammate: adding this here for visibility",
+      "[09:04] teammate: bumping old context from the prior thread",
+      "[09:05] system: integration notice repeated",
+      "",
+    ],
+    meeting: ({ index }) => [
+      `Meeting transcript ID: MTG-${index}-DEMO`,
+      "Speaker 1: um, okay, let me restate the context from last week.",
+      "Speaker 2: yeah, yeah, just adding color before the real ask.",
+      "Speaker 3: repeating the old decision so everyone has it in one place.",
+      "Auto-caption notice: transcript may contain filler words and repeated speaker labels.",
+      "",
+    ],
+    document: ({ index, platform }) => [
+      `Document export: ${platform}-doc-${index}.txt`,
+      "Page 1 of 12",
+      "Header: Demo company internal working copy",
+      "Footer: Generated by synthetic test data. Do not treat as real customer data.",
+      "OCR confidence: medium. Duplicate line blocks may appear.",
+      "",
+    ],
+    crm: ({ index, platform }) => [
+      `${platform} record export ID: CRM-DEMO-${index}`,
+      "Field dump: Owner, Stage, Amount, Next Step, Last Activity, Empty Field, Empty Field, Empty Field",
+      "Activity timeline copied from previous owner notes.",
+      "Duplicate system note: record viewed by automation.",
+      "Duplicate system note: record viewed by automation.",
+      "",
+    ],
+    log: ({ index, platform }) => [
+      `${platform} log export batch ${index}`,
+      "2026-05-27T08:22:11Z INFO heartbeat ok",
+      "2026-05-27T08:22:12Z INFO heartbeat ok",
+      "2026-05-27T08:22:13Z WARN retry scheduled",
+      "2026-05-27T08:22:14Z INFO metadata copied from previous run",
+      "",
+    ],
+  };
 
-    const body = [
-      "Hi team, following up on the customer request below. The customer wants a concise summary, next steps, and a clear explanation of what we can do by Friday.",
-      "Please ignore duplicate signatures, previous routing notes, old disclaimers, tracking lines, and repeated headers. The useful business request is only the current ask plus the latest customer constraints.",
-      "Latest request: summarize the status, identify open questions, and draft a short response that a manager can approve.",
-      "",
-      "--",
-      "Taylor Casey",
-      `${platform} Operations`,
-      "This message may contain internal business information. If you received this in error, delete it.",
-      "",
-      "-----Original Message-----",
-    ].join("\n");
+  const fillerBlocks = [
+    "Confidentiality footer: This is synthetic demo footer text repeated to test context pruning. ",
+    "Routing metadata: copied from earlier system notes and not needed for the answer. ",
+    "Blank-line spacer and old signature content retained from the source platform export. ",
+    "Previous response boilerplate: thank you for your patience while we review. ",
+    "Audit-safe demo disclaimer: no real customer information is included in this payload. ",
+    "Historical note: copied forward from a previous conversation and now stale. ",
+  ];
 
-    return Array.from({ length: 5 }, (_, i) => {
+  function buildPruning({ department, agent, platform, index }) {
+    const [title, kind, request] = pruningTemplates[(index - 1) % pruningTemplates.length];
+    const noise = noiseBlocks[kind] || noiseBlocks.email;
+    const noisyHeader = noise({ department, agent, platform, index }).join("\n");
+    const repeatedBlocks = 4 + (index % 6);
+    const filler = Array.from({ length: repeatedBlocks }, (_, i) => {
+      const line = fillerBlocks[(index + i) % fillerBlocks.length];
       return [
-        header,
-        body,
-        `Prior note ${i + 1}: repeating old context, boilerplate, routing metadata, blank lines, and signatures that should not be needed for the AI answer.`,
-        "Status: copied from earlier message. Owner: copied from earlier message. Deadline: copied from earlier message.",
-        "Confidentiality footer: This is a synthetic demo footer repeated to test context pruning. ".repeat(6),
+        `----- Repeated source block ${i + 1} / ${repeatedBlocks} -----`,
+        noisyHeader,
+        `Old copied context ${i + 1}: ${line.repeat(5 + (index % 4))}`,
+        "Prior status: copied from earlier message. Prior owner: copied from earlier message. Prior deadline: copied from earlier message.",
+        "Signature: Taylor Casey | Demo Operations | Phone: 555-0100 | This repeated signature is not needed for the AI answer.",
       ].join("\n");
     }).join("\n\n");
+
+    return [
+      `${title}`,
+      `Current department: ${department}`,
+      `Current agent: ${agent}`,
+      `Current platform: ${platform}`,
+      "",
+      "CURRENT BUSINESS REQUEST:",
+      request,
+      "Keep the answer short, practical, and focused on the latest useful customer or business ask.",
+      "",
+      "NOISY SOURCE MATERIAL BELOW:",
+      filler,
+      "",
+      "FINAL NOTE: Use only the latest business request above. Ignore duplicate headers, stale routing notes, repeated signatures, footers, blank fields, and copied history.",
+    ].join("\n");
   }
 
   function buildRisk({ department }) {
