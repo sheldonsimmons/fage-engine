@@ -15,6 +15,38 @@ from database.models import DepartmentBudget, RegisteredAgent
 from config import DEFAULT_BUDGET_CAPS, THROTTLE_TRIGGER_PERCENT, WARN_TRIGGER_PERCENT
 
 
+def clean_budget_department_name(department: str) -> str:
+    """
+    Return the human-facing department label used by the dashboard.
+
+    Some trial/workspace budget rows are stored as "workspace-id:Department".
+    The UI groups those rows under "Department"; backend budget snapshots need
+    to use the same grouping so override/throttle state matches what users see.
+    """
+    text = str(department or "").strip()
+    prefix, sep, label = text.partition(":")
+    if sep and label.strip() and len(prefix) >= 12 and prefix.replace("-", "").isalnum():
+        return label.strip()
+    return text
+
+
+def related_budget_rows(db: Session, department: str) -> list[DepartmentBudget]:
+    """Return budget rows that belong to the same displayed department."""
+    target = clean_budget_department_name(department).lower()
+    if not target:
+        return []
+
+    rows = [
+        row for row in db.query(DepartmentBudget).all()
+        if clean_budget_department_name(row.department).lower() == target
+    ]
+    if rows:
+        return rows
+
+    exact = db.query(DepartmentBudget).filter_by(department=department).first()
+    return [exact] if exact else []
+
+
 def _default_cap_for(department: str) -> float:
     """Return a sensible cap for departments discovered from AgentLake."""
     if department in DEFAULT_BUDGET_CAPS:
@@ -204,6 +236,40 @@ def reconcile_throttle_state(b: DepartmentBudget) -> bool:
         b.throttled = False
         return True
     return False
+
+
+def effective_budget_context(db: Session, department: str) -> dict | None:
+    """
+    Summarize the effective budget state for a displayed department group.
+
+    This keeps audit snapshots and routing controls aligned with the dashboard
+    when the same department has multiple underlying rows.
+    """
+    rows = related_budget_rows(db, department)
+    if not rows:
+        return None
+
+    spend = round(sum((row.current_spend_usd or 0.0) for row in rows), 4)
+    cap = max((row.monthly_cap_usd or 0.0) for row in rows) or 0.0
+    used_pct = round((spend / cap) * 100, 1) if cap else 0.0
+    override_granted = any(bool(row.override_granted) for row in rows)
+    throttled = any(bool(row.throttled) for row in rows) and not override_granted
+    throttle_tiers = [getattr(row, "throttle_tier", 1) or 1 for row in rows]
+    retention_days = max((getattr(row, "raw_retention_days", 30) or 30) for row in rows)
+
+    return {
+        "department": clean_budget_department_name(department),
+        "budget_cap_usd": cap,
+        "budget_spent_usd": spend,
+        "budget_used_pct": used_pct,
+        "throttled": throttled,
+        "override_granted": override_granted,
+        "throttle_tier": min(throttle_tiers) if throttle_tiers else 1,
+        "raw_payload_logging_enabled": any(
+            bool(getattr(row, "raw_payload_logging_enabled", False)) for row in rows
+        ),
+        "raw_retention_days": retention_days,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

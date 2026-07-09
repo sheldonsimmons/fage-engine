@@ -25,8 +25,9 @@ import re
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from database.models import AuditEvent, DepartmentBudget
+from database.models import AuditEvent
 from config import AUDIT_LOG_DIR, AUDIT_LOG_FILENAME
+from core.budget import effective_budget_context
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -60,16 +61,16 @@ def classify_risk(event_type: str, routing_decision: str, matched_keywords: list
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_context_snapshot(db: Session, department: str) -> dict:
-    budget = db.query(DepartmentBudget).filter_by(department=department).first()
+    budget = effective_budget_context(db, department)
     return {
         "captured_at":        datetime.utcnow().isoformat(),
         "department":         department,
-        "budget_cap_usd":     budget.monthly_cap_usd   if budget else None,
-        "budget_spent_usd":   round(budget.current_spend_usd, 4) if budget else None,
-        "budget_used_pct":    round((budget.current_spend_usd / budget.monthly_cap_usd) * 100, 1)
-                              if budget else None,
-        "throttled":          budget.throttled          if budget else None,
-        "override_granted":   budget.override_granted   if budget else None,
+        "budget_cap_usd":     budget.get("budget_cap_usd") if budget else None,
+        "budget_spent_usd":   budget.get("budget_spent_usd") if budget else None,
+        "budget_used_pct":    budget.get("budget_used_pct") if budget else None,
+        "throttled":          budget.get("throttled") if budget else None,
+        "override_granted":   budget.get("override_granted") if budget else None,
+        "raw_retention_days": budget.get("raw_retention_days") if budget else None,
     }
 
 

@@ -18,7 +18,7 @@ from database.models import DepartmentBudget, TokenTransaction, RegisteredAgent
 from core.router import route
 from core.auditor import write_audit_event
 from core.keywords import check_terms
-from core.budget import reconcile_throttle_state
+from core.budget import effective_budget_context, reconcile_throttle_state
 
 router = APIRouter()
 
@@ -210,8 +210,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     budget       = db.query(DepartmentBudget).filter_by(department=department).first()
     if budget:
         reconcile_throttle_state(budget)
-    is_throttled   = budget.throttled    if budget else False
-    throttle_tier  = getattr(budget, "throttle_tier", 1) or 1  if budget else 1
+    budget_context = effective_budget_context(db, department)
+    is_throttled   = bool(budget_context.get("throttled")) if budget_context else (budget.throttled if budget else False)
+    throttle_tier  = (budget_context.get("throttle_tier") if budget_context else (getattr(budget, "throttle_tier", 1) if budget else 1)) or 1
 
     force_complex = term_result["triggered"] and term_result["action"] == "escalate"
 
@@ -288,8 +289,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
         # Determine if raw payload should be stored for this department
         _pruning_fired   = result.get("tokens_saved_by_pruning", 0) > 0
-        _raw_logging_on  = getattr(budget, "raw_payload_logging_enabled", False) or False
-        _retention_days  = getattr(budget, "raw_retention_days", 30) or 30
+        _effective_budget_context = effective_budget_context(db, department) or budget_context or {}
+        _raw_logging_on  = _effective_budget_context.get("raw_payload_logging_enabled", getattr(budget, "raw_payload_logging_enabled", False) if budget else False) or False
+        _retention_days  = _effective_budget_context.get("raw_retention_days", getattr(budget, "raw_retention_days", 30) if budget else 30) or 30
         _raw_to_store    = _raw_text_for_logging[:5000] if (_pruning_fired and _raw_logging_on) else None
 
         try:
@@ -329,7 +331,15 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             db.commit()
 
     # ── Budget stats for the response ──────────────────────────────────────────
-    if budget and budget.monthly_cap_usd > 0:
+    response_budget_context = effective_budget_context(db, department)
+    if response_budget_context and response_budget_context.get("budget_cap_usd", 0) > 0:
+        budget_used_pct      = response_budget_context.get("budget_used_pct", 0.0)
+        budget_remaining_usd = round(
+            response_budget_context.get("budget_cap_usd", 0.0)
+            - response_budget_context.get("budget_spent_usd", 0.0),
+            4,
+        )
+    elif budget and budget.monthly_cap_usd > 0:
         budget_used_pct      = round((budget.current_spend_usd / budget.monthly_cap_usd) * 100, 1)
         budget_remaining_usd = round(budget.monthly_cap_usd - budget.current_spend_usd, 4)
     else:
