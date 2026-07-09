@@ -357,7 +357,8 @@
 <!-- ── Body ───────────────────────────────────────────────────────────────────── -->
 <div class="exec-body">
 
-  <div class="trial-start-card" id="trialStartCard">
+  <!-- Temporarily hidden for the main dashboard; setup remains available from Connect Platform and Workspace pages. -->
+  <div class="trial-start-card" id="trialStartCard" style="display:none">
     <div class="trial-start-head">
       <div>
         <div class="trial-start-eyebrow">Pilot setup</div>
@@ -799,9 +800,13 @@ function setTrialStep(id, done) {
 }
 
 function updateTrialStartCard(data) {
-  const wsId = localStorage.getItem("cp_workspace_id") || "";
   const card = document.getElementById("trialStartCard");
-  if (!card || !wsId) return;
+  const hideTrialStartCard = true;
+  if (hideTrialStartCard) {
+    if (card) card.style.display = "none";
+    return;
+  }
+  const wsId = localStorage.getItem("cp_workspace_id") || "";
 
   const d = data.dashboard || {};
   const governed = Number(d.requests_governed || 0);
