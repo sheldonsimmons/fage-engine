@@ -1128,7 +1128,7 @@ function rollupByDay(events) {
 function visibleBudget(data, events) {
   const d = data.dashboard || {};
   const budgets = d.budget_summaries || [];
-  const dept = execFilters.dept || (events.length ? displayDeptName(events[0].department) : "");
+  const dept = execFilters.dept || "";
   const budget = dept ? budgets.find(b => norm(b.department) === norm(dept)) : null;
   if (budget) {
     return {
@@ -1144,6 +1144,21 @@ function visibleBudget(data, events) {
     spend: d.spend_month_usd || d.total_spend_usd || 0,
     count: budgets.length || 0,
   };
+}
+
+function workspaceDepartmentCount(data, events) {
+  const names = new Set();
+  const add = value => {
+    const label = displayDeptName(value);
+    if (label) names.add(norm(label));
+  };
+
+  (data.dashboard?.budget_summaries || []).forEach(b => add(b.display_department || b.department));
+  (data.agents || []).forEach(a => add(a.display_department || a.department));
+  (events || []).forEach(e => add(e.department || e.source_department));
+  (data.timeseries?.departments || []).forEach(add);
+
+  return names.size;
 }
 
 function isBlockedEvent(e) {
@@ -1277,7 +1292,7 @@ function renderExec(data) {
     : d.agents_total || 0;
   const activeDepts = hasFilters
     ? new Set(events.map(e => displayDeptName(e.department)).filter(Boolean)).size
-    : budget.count || "—";
+    : workspaceDepartmentCount(data, events) || budget.count || "—";
   document.getElementById("execFooterAgents").textContent = activeAgents || 0;
   document.getElementById("execFooterDepts").textContent = activeDepts || "—";
   document.getElementById("execFooterCollisions").textContent = collisionCount || 0;
