@@ -12,6 +12,7 @@ let openBudgetKey = null;
 let budgetSearchTerm = "";
 let budgetStateFilter = "";
 let budgetShowArchived = false;
+const BUDGET_WARNING_PCT = 70;
 
 /** Fetch all budgets and re-render the panel */
 async function loadBudgets() {
@@ -79,6 +80,11 @@ function budgetAttr(value) {
     .replace(/>/g, "&gt;");
 }
 
+function budgetStateFor(row) {
+  if (row.throttled) return "throttled";
+  return (row.used_pct || 0) >= BUDGET_WARNING_PCT ? "warning" : "healthy";
+}
+
 function displayBudgetRows(rows = []) {
   const merged = new Map();
   rows.forEach(b => {
@@ -97,13 +103,15 @@ function displayBudgetRows(rows = []) {
     current.raw_payload_logging_enabled = current.raw_payload_logging_enabled || b.raw_payload_logging_enabled;
     current.archived = current.archived && (b.archived || false);
     current.raw_departments.push(b.department);
-    const usedPct = current.monthly_cap_usd ? (current.current_spend_usd / current.monthly_cap_usd) * 100 : 0;
-    current.used_pct = Math.round(usedPct * 10) / 10;
-    current.state = current.throttled ? "throttled" : current.used_pct >= 80 ? "warning" : "healthy";
   });
-  return Array.from(merged.values()).sort((a, b) =>
-    String(a.display_department).localeCompare(String(b.display_department))
-  );
+  return Array.from(merged.values())
+    .map(row => {
+      const usedPct = row.monthly_cap_usd ? (row.current_spend_usd / row.monthly_cap_usd) * 100 : 0;
+      row.used_pct = Math.round(usedPct * 10) / 10;
+      row.state = budgetStateFor(row);
+      return row;
+    })
+    .sort((a, b) => String(a.display_department).localeCompare(String(b.display_department)));
 }
 
 function renderBudgets() {
