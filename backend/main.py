@@ -203,7 +203,7 @@ def _seed_on_startup():
             if not exists:
                 db.add(SensitiveTerm(**t))
 
-        # ── Routing Config (single-row settings — always sync keywords from config.py) ──
+        # ── Routing Config (single-row settings) ──
         import json as _json
         from database.models import RoutingConfig
         from config import COMPLEXITY_TOKEN_THRESHOLD, COMPLEXITY_KEYWORDS
@@ -214,9 +214,6 @@ def _seed_on_startup():
                 complexity_token_threshold=COMPLEXITY_TOKEN_THRESHOLD,
                 complexity_keywords_json=_json.dumps(COMPLEXITY_KEYWORDS),
             ))
-        else:
-            # Always update keywords from config.py so new keywords take effect on deploy
-            exists.complexity_keywords_json = _json.dumps(COMPLEXITY_KEYWORDS)
 
         db.commit()
     finally:
@@ -227,15 +224,11 @@ _seed_on_startup()
 
 # ── One-time config migrations (safe to re-run) ────────────────────────────────
 def _patch_routing_config():
-    """Push config.py defaults into the live RoutingConfig row if they differ."""
-    from config import COMPLEXITY_TOKEN_THRESHOLD
+    """Ensure the persisted RoutingConfig row exists without overwriting admin edits."""
     from core.routing_config import get_routing_config
     db = SessionLocal()
     try:
-        cfg = get_routing_config(db)
-        if cfg.complexity_token_threshold != COMPLEXITY_TOKEN_THRESHOLD:
-            cfg.complexity_token_threshold = COMPLEXITY_TOKEN_THRESHOLD
-            db.commit()
+        get_routing_config(db)
     except Exception:
         pass
     finally:

@@ -70,7 +70,7 @@ def remove_keyword(db: Session, keyword: str) -> RoutingConfig:
     cfg = get_routing_config(db)
     kws = cfg.complexity_keywords
     if kw not in kws:
-        raise ValueError(f"Keyword '{kw}' not found.")
+        return cfg
     kws.remove(kw)
     cfg.complexity_keywords = kws
     cfg.updated_at = datetime.utcnow()
