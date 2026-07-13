@@ -449,7 +449,8 @@ async function loadAgents() {
     const url = _showArchived ? "/api/agents?include_archived=true" : "/api/agents";
     const agents = await apiGet(url);
     _allAgents = agents;
-    renderAgentCards(agents.filter(a => !a.archived));  // cards show live only
+    populateAgentCardFilters(agents.filter(a => !a.archived));
+    applyAgentCardFilters();
     updateKpiAgents(agents.filter(a => !a.archived));
     populatePlatformFilter(agents);
     populateDeptFilter(agents);
@@ -462,13 +463,102 @@ async function loadAgents() {
   }
 }
 
-/** Render live-status agent cards (the visual grid at the top of the registry) */
-function renderAgentCards(agents) {
+function setSelectOptions(selectId, options, defaultLabel, selectedValue = "") {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+
+  const normalizedSelected = String(selectedValue || "");
+  sel.innerHTML = "";
+
+  const allOpt = document.createElement("option");
+  allOpt.value = "";
+  allOpt.textContent = defaultLabel;
+  sel.appendChild(allOpt);
+
+  options.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  });
+
+  sel.value = options.some(o => o.value === normalizedSelected) ? normalizedSelected : "";
+}
+
+function populateAgentCardFilters(agents) {
+  const deptSelected = document.getElementById("agentCardFilterDept")?.value || "";
+  const platformSelected = document.getElementById("agentCardFilterPlatform")?.value || "";
+
+  const deptOptions = [...new Set(agents.map(displayAgentDept).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+    .map(d => ({ value: d, label: d }));
+
+  const platformMap = new Map();
+  agents.forEach(a => {
+    const raw = (a.source_platform || "Custom").trim();
+    const key = platformFamily(raw) || "custom";
+    if (!platformMap.has(key)) platformMap.set(key, platformFilterLabel(key, raw));
+  });
+  const platformOptions = [...platformMap.entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([value, label]) => ({ value, label }));
+
+  setSelectOptions("agentCardFilterDept", deptOptions, "All Departments", deptSelected);
+  setSelectOptions("agentCardFilterPlatform", platformOptions, "All Platforms", platformFamily(platformSelected));
+}
+
+function applyAgentCardFilters() {
   const grid = document.getElementById("agentCardGrid");
   if (!grid) return;
 
+  const activeAgents = _allAgents.filter(a => !a.archived);
+  const dept = (document.getElementById("agentCardFilterDept")?.value || "").toLowerCase();
+  const platform = platformFamily(document.getElementById("agentCardFilterPlatform")?.value || "");
+  const status = (document.getElementById("agentCardFilterStatus")?.value || "").toLowerCase();
+  const search = (document.getElementById("agentCardFilterSearch")?.value || "").trim().toLowerCase();
+
+  const filtered = activeAgents.filter(a => {
+    const name = displayAgentName(a).toLowerCase();
+    const agentDept = displayAgentDept(a).toLowerCase();
+    const rawPlatform = (a.source_platform || "Custom").toLowerCase();
+    const family = platformFamily(a.source_platform || "Custom");
+    const effectiveStatus = effectiveAgentStatus(a);
+
+    if (dept && agentDept !== dept) return false;
+    if (platform && family !== platform) return false;
+    if (status && effectiveStatus !== status) return false;
+    if (search && !name.includes(search) && !agentDept.includes(search) && !rawPlatform.includes(search)) return false;
+    return true;
+  });
+
+  renderAgentCards(filtered, activeAgents.length);
+}
+
+function clearAgentCardFilters() {
+  const ids = ["agentCardFilterDept", "agentCardFilterPlatform", "agentCardFilterStatus", "agentCardFilterSearch"];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  applyAgentCardFilters();
+}
+
+/** Render live-status agent cards (the visual grid at the top of the registry) */
+function renderAgentCards(agents, totalAgents = agents.length) {
+  const grid = document.getElementById("agentCardGrid");
+  if (!grid) return;
+
+  const count = document.getElementById("agentCardFilterCount");
+  if (count) {
+    count.textContent = agents.length === totalAgents
+      ? `Showing ${totalAgents} agents`
+      : `Showing ${agents.length} of ${totalAgents} agents`;
+  }
+
   if (!agents.length) {
-    grid.innerHTML = '<p class="placeholder" style="font-size:12px">No agents registered yet.</p>';
+    grid.innerHTML = totalAgents
+      ? '<p class="placeholder" style="font-size:12px">No agents match these filters.</p>'
+      : '<p class="placeholder" style="font-size:12px">No agents registered yet.</p>';
     return;
   }
 

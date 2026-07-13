@@ -284,6 +284,28 @@
         <div id="agentBudgetBody" class="dash-sec-body">
 
           <div class="sec-sub-label">Agentlake Registry — Live Status</div>
+          <div class="agent-card-filterbar" aria-label="Agentlake live status filters">
+            <div class="agent-card-filter-meta">
+              <span id="agentCardFilterCount">Showing all agents</span>
+            </div>
+            <div class="agent-card-filter-controls">
+              <select id="agentCardFilterDept" class="agent-filter-select" onchange="applyAgentCardFilters()">
+                <option value="">All Departments</option>
+              </select>
+              <select id="agentCardFilterPlatform" class="agent-filter-select" onchange="applyAgentCardFilters()">
+                <option value="">All Platforms</option>
+              </select>
+              <select id="agentCardFilterStatus" class="agent-filter-select" onchange="applyAgentCardFilters()">
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="idle">Idle</option>
+                <option value="queued">Queued</option>
+                <option value="locked">Locked</option>
+              </select>
+              <input id="agentCardFilterSearch" class="agent-filter-search agent-card-search" type="search" placeholder="Search agents..." oninput="applyAgentCardFilters()" />
+              <button type="button" class="agent-card-clear-btn" onclick="clearAgentCardFilters()">Clear</button>
+            </div>
+          </div>
           <div id="agentCardGrid" class="agent-card-grid-6" style="margin-bottom:20px"></div>
 
           <div class="sec-sub-label">Department Budget Utilization</div>
