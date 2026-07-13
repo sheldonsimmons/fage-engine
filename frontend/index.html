@@ -233,6 +233,10 @@
       letter-spacing: -2px; line-height: 1; font-family: var(--font-mono);
       margin-bottom: 10px; text-shadow: 0 0 18px rgba(63,185,80,0.18);
     }
+    .hero-number-label {
+      font-size: 12px; font-weight: 900; text-transform: uppercase;
+      letter-spacing: 0.10em; color: var(--text-primary); margin-bottom: 5px;
+    }
     .hero-sub { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px; }
     .hero-sub strong { color: var(--text-primary); }
     .hero-badge {
@@ -276,6 +280,24 @@
     .savings-proof-label {
       margin-top: 4px; color: var(--text-muted); font-size: 9px; line-height: 1.25;
     }
+    .impact-bar {
+      display: grid; grid-template-columns: 1fr; gap: 7px; margin: 14px 0 2px;
+    }
+    .impact-bar-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; font-size: 10px; color: var(--text-muted);
+    }
+    .impact-bar-head strong { color: var(--text-primary); font-family: var(--font-mono); }
+    .impact-bar-track {
+      height: 14px; display: flex; overflow: hidden; border-radius: 999px;
+      border: 1px solid rgba(139,148,158,0.25); background: var(--border);
+    }
+    .impact-bar-actual {
+      height: 100%; background: #8b949e; min-width: 2px; transition: width 0.7s ease;
+    }
+    .impact-bar-saved {
+      height: 100%; background: var(--accent-green); min-width: 0; transition: width 0.7s ease;
+    }
 
     /* ── Chart card ───────────────────────────────────────────────────────────── */
     .chart-label {
@@ -307,6 +329,26 @@
     .metric-bar-track { height: 4px; background: var(--border); border-radius: 2px; margin-top: 8px; }
     .metric-bar-fill  { height: 4px; background: var(--accent-green); border-radius: 2px; transition: width 0.6s ease; }
     .metric-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    .usage-snapshot {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .usage-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; min-width: 0;
+    }
+    .usage-label {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 900; margin-bottom: 7px;
+    }
+    .usage-value {
+      font-family: var(--font-mono); font-size: 24px; font-weight: 900;
+      line-height: 1; color: var(--text-primary); margin-bottom: 7px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .usage-value.green { color: var(--accent-green); }
+    .usage-sub { font-size: 10px; color: var(--text-muted); line-height: 1.35; }
 
     .exec-kpi-row {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -446,10 +488,11 @@
       .exec-help-grid { grid-template-columns: repeat(2, 1fr); }
       .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
       .savings-proof-grid { grid-template-columns: repeat(2, 1fr); }
+      .usage-snapshot { grid-template-columns: repeat(2, 1fr); }
       .exec-kpi-row, .exec-insight-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 760px) {
-      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
+      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
       .hero-number { font-size: 46px; }
       .trial-start-head { flex-direction: column; }
       .trial-check-grid { grid-template-columns: 1fr; }
@@ -631,16 +674,17 @@
 
     <!-- Left: Giant savings number -->
     <div class="hero-card green savings-impact">
-      <div class="hero-eyebrow" id="execSavingsScopeLabel">Projected Annual Savings · All Workspace Data</div>
+      <div class="hero-eyebrow" id="execSavingsScopeLabel">CostPilot Savings · All Workspace Data</div>
+      <div class="hero-number-label">AI spend avoided</div>
       <div class="hero-number" id="execAnnualSavings">—</div>
       <div class="hero-sub" id="execHeroSub">
-        CostPilot is projected to put <strong id="execHeroSavingsInline">—</strong> back into the business this year.
-        It routed <strong id="execHeroRoutingPct">—</strong> of governed AI calls to lower-cost tiers and avoided
-        <strong id="execHeroAvoided">—</strong> in waste this period.
+        CostPilot avoided <strong id="execHeroAvoided">—</strong> in this view by routing, pruning, blocking, and throttling governed AI traffic.
+        At this pace, that is <strong id="execHeroSavingsInline">—</strong> annualized, with
+        <strong id="execHeroRoutingPct">—</strong> of routed calls handled by lower-cost tiers.
       </div>
       <div class="savings-compare-grid" aria-label="CostPilot savings comparison">
         <div class="savings-compare-card">
-          <div class="savings-compare-label">Without CostPilot</div>
+          <div class="savings-compare-label">Would Have Spent</div>
           <div class="savings-compare-value" id="execWithoutCostPilot">—</div>
         </div>
         <div class="savings-compare-card">
@@ -650,6 +694,16 @@
         <div class="savings-compare-card saved">
           <div class="savings-compare-label">Spend Avoided</div>
           <div class="savings-compare-value" id="execSavedCost">—</div>
+        </div>
+      </div>
+      <div class="impact-bar" aria-label="Actual spend versus savings">
+        <div class="impact-bar-head">
+          <span>Actual spend <strong id="execImpactActual">—</strong></span>
+          <span>Saved <strong id="execImpactSaved">—</strong></span>
+        </div>
+        <div class="impact-bar-track">
+          <div class="impact-bar-actual" id="execImpactActualBar" style="width:0%"></div>
+          <div class="impact-bar-saved" id="execImpactSavedBar" style="width:0%"></div>
         </div>
       </div>
       <div class="savings-proof-grid" aria-label="Savings proof points">
@@ -697,6 +751,29 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="usage-snapshot" aria-label="AI usage snapshot">
+    <div class="usage-card">
+      <div class="usage-label">Today</div>
+      <div class="usage-value" id="execTodaySpend">—</div>
+      <div class="usage-sub"><span id="execTodayReq">—</span> governed requests today</div>
+    </div>
+    <div class="usage-card">
+      <div class="usage-label">Last 7 Days</div>
+      <div class="usage-value" id="execSevenDaySpend">—</div>
+      <div class="usage-sub">actual AI spend under CostPilot control</div>
+    </div>
+    <div class="usage-card">
+      <div class="usage-label">Token Volume</div>
+      <div class="usage-value green" id="execTokenVolume">—</div>
+      <div class="usage-sub">input and output tokens governed</div>
+    </div>
+    <div class="usage-card">
+      <div class="usage-label">Top Cost Driver</div>
+      <div class="usage-value" id="execTopDriverMini">—</div>
+      <div class="usage-sub" id="execTopDriverMiniSub">highest spend in current view</div>
+    </div>
   </div>
 
   <!-- How to read this page -->
@@ -1463,6 +1540,25 @@ function topCostDrivers(events, data) {
   return [...groups.values()].sort((a, b) => b.cost - a.cost);
 }
 
+function eventIsoDay(e) {
+  return (e.timestamp || "").slice(0, 10);
+}
+
+function eventsSince(events, days) {
+  const cutoff = Date.now() - Number(days || 0) * 24 * 60 * 60 * 1000;
+  return events.filter(e => eventTs(e) >= cutoff);
+}
+
+function eventTokenVolume(e) {
+  const input = Number(e.input_tokens ?? e.prompt_tokens ?? e.tokens_in ?? e.clean_tokens ?? e.raw_tokens ?? 0);
+  const output = Number(e.output_tokens ?? e.completion_tokens ?? e.tokens_out ?? 0);
+  return input + output;
+}
+
+function totalEventCost(events) {
+  return routedCostEvents(events).reduce((sum, e) => sum + Number(e.cost_usd || 0), 0);
+}
+
 function renderTopCostDrivers(drivers) {
   const container = document.getElementById("execTopCostDrivers");
   if (!container) return;
@@ -1595,16 +1691,25 @@ function renderExec(data) {
   const scopeLabel = document.getElementById("execSavingsScopeLabel");
   if (scopeLabel) {
     scopeLabel.textContent = hasFilters
-      ? "Filtered Projected Annual Savings"
-      : "Projected Annual Savings · All Workspace Data";
+      ? "CostPilot Savings · Filtered View"
+      : "CostPilot Savings · All Workspace Data";
   }
-  document.getElementById("execAnnualSavings").textContent = fmtUsd(annualSavings);
+  document.getElementById("execAnnualSavings").textContent = fmtUsd(totalAvoided);
   document.getElementById("execHeroSavingsInline").textContent = fmtUsd(annualSavings);
   document.getElementById("execHeroRoutingPct").textContent = routingPct + "%";
   document.getElementById("execHeroAvoided").textContent = fmtUsd(totalAvoided);
   document.getElementById("execWithoutCostPilot").textContent = fmtUsd(withoutCostPilot);
   document.getElementById("execWithCostPilot").textContent = fmtUsd(actualCost);
   document.getElementById("execSavedCost").textContent = fmtUsd(totalAvoided);
+  setText("execImpactActual", fmtUsd(actualCost));
+  setText("execImpactSaved", fmtUsd(totalAvoided));
+  const impactTotal = Math.max(withoutCostPilot, 0.000001);
+  const actualImpactPct = Math.max(2, Math.min(100, Math.round((actualCost / impactTotal) * 100)));
+  const savedImpactPct = Math.max(totalAvoided > 0 ? 2 : 0, Math.min(100, 100 - actualImpactPct));
+  const actualImpactBar = document.getElementById("execImpactActualBar");
+  const savedImpactBar = document.getElementById("execImpactSavedBar");
+  if (actualImpactBar) actualImpactBar.style.width = actualImpactPct + "%";
+  if (savedImpactBar) savedImpactBar.style.width = savedImpactPct + "%";
   document.getElementById("execProofCalls").textContent = fmtNum(totalCalls);
   document.getElementById("execProofRouting").textContent = routingPct + "%";
   document.getElementById("execProofTokens").textContent = fmtNum(pruningTokens);
@@ -1637,6 +1742,17 @@ function renderExec(data) {
   const drivers = topCostDrivers(events, data);
   renderTopCostDrivers(drivers);
   setText("execTopDriverScope", hasFilters ? "Filtered view" : "Last 30 days");
+  const today = localIsoDate();
+  const todayEvents = events.filter(e => eventIsoDay(e) === today);
+  const sevenDayEvents = eventsSince(events, 7);
+  const tokenVolume = events.reduce((sum, e) => sum + eventTokenVolume(e), 0);
+  const topDriver = drivers[0];
+  setText("execTodaySpend", fmtUsd(totalEventCost(todayEvents)));
+  setText("execTodayReq", fmtNum(todayEvents.length));
+  setText("execSevenDaySpend", fmtUsd(totalEventCost(sevenDayEvents)));
+  setText("execTokenVolume", fmtNum(tokenVolume));
+  setText("execTopDriverMini", topDriver ? fmtUsd(topDriver.cost) : "—");
+  setText("execTopDriverMiniSub", topDriver ? `${topDriver.agent} · ${topDriver.dept}` : "highest spend in current view");
 
   const mix = costMix(events);
   const knownMix = mix.input + mix.output;
@@ -1755,6 +1871,12 @@ setInterval(loadExec, 30000);
 <script src="/js/mobile-guard.js"></script>
 <script>
 (async function() {
+  const SHOW_TRIAL_BANNER = false;
+  if (!SHOW_TRIAL_BANNER) {
+    const hiddenBanner = document.getElementById("trialBanner");
+    if (hiddenBanner) hiddenBanner.style.display = "none";
+    return;
+  }
   const wsId    = localStorage.getItem("cp_workspace_id");
   const trialEnd = localStorage.getItem("cp_trial_end");
   const name    = localStorage.getItem("cp_trial_name");
