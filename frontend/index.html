@@ -350,6 +350,90 @@
     .usage-value.green { color: var(--accent-green); }
     .usage-sub { font-size: 10px; color: var(--text-muted); line-height: 1.35; }
 
+    .burn-strip {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .burn-card {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, rgba(88,166,255,0.08), var(--bg-panel) 58%);
+      border: 1px solid rgba(88,166,255,0.18);
+      border-radius: 12px; padding: 16px 18px; min-width: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .burn-card.green {
+      background: linear-gradient(145deg, rgba(46,160,67,0.12), var(--bg-panel) 58%);
+      border-color: rgba(46,160,67,0.30);
+    }
+    .burn-card.hot {
+      background: linear-gradient(145deg, rgba(210,153,34,0.12), var(--bg-panel) 58%);
+      border-color: rgba(210,153,34,0.28);
+    }
+    .burn-label {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.09em; font-weight: 900; margin-bottom: 8px;
+    }
+    .burn-value {
+      font-family: var(--font-mono); font-size: 30px; font-weight: 900;
+      line-height: 1; color: var(--text-primary); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .burn-card.green .burn-value { color: var(--accent-green); }
+    .burn-card.hot .burn-value { color: var(--accent-yellow); }
+    .burn-sub { margin-top: 8px; font-size: 10px; line-height: 1.35; color: var(--text-muted); }
+
+    .source-tile-grid {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .source-tile {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px; min-width: 0;
+    }
+    .source-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; margin-bottom: 10px;
+    }
+    .source-name {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 900;
+    }
+    .source-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent-green); box-shadow: 0 0 14px rgba(63,185,80,0.35);
+    }
+    .source-dot.yellow { background: var(--accent-yellow); box-shadow: 0 0 14px rgba(210,153,34,0.35); }
+    .source-dot.red { background: #ff4d4f; box-shadow: 0 0 14px rgba(255,77,79,0.35); }
+    .source-value {
+      font-family: var(--font-mono); color: var(--text-primary);
+      font-size: 24px; line-height: 1; font-weight: 900; margin-bottom: 10px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .source-track { height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
+    .source-fill { height: 100%; border-radius: 999px; background: var(--accent-green); transition: width 0.7s ease; }
+    .source-fill.yellow { background: var(--accent-yellow); }
+    .source-fill.red { background: #ff4d4f; }
+
+    .recommendation-grid {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .rec-card {
+      background: rgba(13,17,23,0.55); border: 1px solid var(--border);
+      border-radius: 12px; padding: 15px 16px; min-width: 0;
+    }
+    .rec-card.alert { border-color: rgba(210,153,34,0.35); background: rgba(210,153,34,0.07); }
+    .rec-card.save { border-color: rgba(46,160,67,0.30); background: rgba(46,160,67,0.07); }
+    .rec-kicker {
+      font-size: 9px; font-weight: 900; letter-spacing: 0.09em;
+      text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px;
+    }
+    .rec-title {
+      font-size: 13px; line-height: 1.25; color: var(--text-primary);
+      font-weight: 900; margin-bottom: 8px;
+    }
+    .rec-copy { font-size: 10px; line-height: 1.4; color: var(--text-muted); }
+
     .exec-kpi-row {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px; margin-bottom: 20px;
@@ -488,11 +572,11 @@
       .exec-help-grid { grid-template-columns: repeat(2, 1fr); }
       .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
       .savings-proof-grid { grid-template-columns: repeat(2, 1fr); }
-      .usage-snapshot { grid-template-columns: repeat(2, 1fr); }
+      .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid { grid-template-columns: repeat(2, 1fr); }
       .exec-kpi-row, .exec-insight-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 760px) {
-      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
+      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
       .hero-number { font-size: 46px; }
       .trial-start-head { flex-direction: column; }
       .trial-check-grid { grid-template-columns: 1fr; }
@@ -776,26 +860,79 @@
     </div>
   </div>
 
-  <!-- How to read this page -->
-  <div class="exec-help-card">
-    <div class="exec-help-title">How to read the executive savings view</div>
-    <div class="exec-help-grid">
-      <div class="exec-help-item">
-        <div class="exec-help-label">Annual savings</div>
-        <div class="exec-help-copy">Projected savings if this month's routing and governance pattern continues for a full year.</div>
+  <div class="burn-strip" aria-label="Executive AI spend console">
+    <div class="burn-card">
+      <div class="burn-label">Today Spend</div>
+      <div class="burn-value" id="execBurnToday">—</div>
+      <div class="burn-sub"><span id="execBurnTodayReq">—</span> governed requests today</div>
+    </div>
+    <div class="burn-card">
+      <div class="burn-label">7-Day Spend</div>
+      <div class="burn-value" id="execBurn7">—</div>
+      <div class="burn-sub">actual spend under CostPilot control</div>
+    </div>
+    <div class="burn-card hot">
+      <div class="burn-label">Projected Month-End</div>
+      <div class="burn-value" id="execBurnMonth">—</div>
+      <div class="burn-sub">based on recent governed AI usage</div>
+    </div>
+    <div class="burn-card green">
+      <div class="burn-label">Annualized Avoided</div>
+      <div class="burn-value" id="execBurnAnnualized">—</div>
+      <div class="burn-sub">savings pace if current controls continue</div>
+    </div>
+  </div>
+
+  <div class="source-tile-grid" aria-label="CostPilot savings sources">
+    <div class="source-tile">
+      <div class="source-head">
+        <div class="source-name">Routing</div>
+        <div class="source-dot"></div>
       </div>
-      <div class="exec-help-item">
-        <div class="exec-help-label">All-flagship baseline</div>
-        <div class="exec-help-copy">What spend would look like if every AI request used the premium model tier.</div>
+      <div class="source-value" id="execSourceRouting">—</div>
+      <div class="source-track"><div class="source-fill" id="execSourceRoutingBar" style="width:0%"></div></div>
+    </div>
+    <div class="source-tile">
+      <div class="source-head">
+        <div class="source-name">Pruning</div>
+        <div class="source-dot"></div>
       </div>
-      <div class="exec-help-item">
-        <div class="exec-help-label">Routing efficiency</div>
-        <div class="exec-help-copy">Percent of requests safely served by lower-cost Scout or Analyst tiers instead of premium tiers.</div>
+      <div class="source-value" id="execSourcePruning">—</div>
+      <div class="source-track"><div class="source-fill" id="execSourcePruningBar" style="width:0%"></div></div>
+    </div>
+    <div class="source-tile">
+      <div class="source-head">
+        <div class="source-name">Budget Caps</div>
+        <div class="source-dot yellow"></div>
       </div>
-      <div class="exec-help-item">
-        <div class="exec-help-label">Governed requests</div>
-        <div class="exec-help-copy">Total AI activity under CostPilot control, including routing, audit logging, blocking, and budget checks.</div>
+      <div class="source-value" id="execSourceThrottle">—</div>
+      <div class="source-track"><div class="source-fill yellow" id="execSourceThrottleBar" style="width:0%"></div></div>
+    </div>
+    <div class="source-tile">
+      <div class="source-head">
+        <div class="source-name">Blocked Risk</div>
+        <div class="source-dot red"></div>
       </div>
+      <div class="source-value" id="execSourceBlocked">—</div>
+      <div class="source-track"><div class="source-fill red" id="execSourceBlockedBar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="recommendation-grid" aria-label="Executive recommendations">
+    <div class="rec-card alert">
+      <div class="rec-kicker">Budget Signal</div>
+      <div class="rec-title" id="execRecBudgetTitle">Loading budget signal</div>
+      <div class="rec-copy" id="execRecBudgetCopy">CostPilot is checking spend against department caps.</div>
+    </div>
+    <div class="rec-card save">
+      <div class="rec-kicker">Waste Signal</div>
+      <div class="rec-title" id="execRecWasteTitle">Loading pruning signal</div>
+      <div class="rec-copy" id="execRecWasteCopy">CostPilot is checking avoidable prompt context.</div>
+    </div>
+    <div class="rec-card">
+      <div class="rec-kicker">Spend Driver</div>
+      <div class="rec-title" id="execRecDriverTitle">Loading top driver</div>
+      <div class="rec-copy" id="execRecDriverCopy">CostPilot is identifying the agent creating the most AI spend.</div>
     </div>
   </div>
 
@@ -1747,12 +1884,58 @@ function renderExec(data) {
   const sevenDayEvents = eventsSince(events, 7);
   const tokenVolume = events.reduce((sum, e) => sum + eventTokenVolume(e), 0);
   const topDriver = drivers[0];
-  setText("execTodaySpend", fmtUsd(totalEventCost(todayEvents)));
+  const todayCost = totalEventCost(todayEvents);
+  const sevenDayCost = totalEventCost(sevenDayEvents);
+  const sevenDayActiveDays = new Set(sevenDayEvents.map(eventIsoDay).filter(Boolean)).size;
+  const projectedMonthCost = sevenDayCost > 0 ? (sevenDayCost / Math.max(1, sevenDayActiveDays)) * 30 : actualCost;
+  setText("execTodaySpend", fmtUsd(todayCost));
   setText("execTodayReq", fmtNum(todayEvents.length));
-  setText("execSevenDaySpend", fmtUsd(totalEventCost(sevenDayEvents)));
+  setText("execSevenDaySpend", fmtUsd(sevenDayCost));
   setText("execTokenVolume", fmtNum(tokenVolume));
   setText("execTopDriverMini", topDriver ? fmtUsd(topDriver.cost) : "—");
   setText("execTopDriverMiniSub", topDriver ? `${topDriver.agent} · ${topDriver.dept}` : "highest spend in current view");
+  setText("execBurnToday", fmtUsd(todayCost));
+  setText("execBurnTodayReq", fmtNum(todayEvents.length));
+  setText("execBurn7", fmtUsd(sevenDayCost));
+  setText("execBurnMonth", fmtUsd(projectedMonthCost));
+  setText("execBurnAnnualized", fmtUsd(annualSavings));
+
+  const sourceMax = Math.max(routingSaved, pruningSaved, throttleSaved, blockedSaved, 1);
+  function setSourceTile(valId, barId, value) {
+    setText(valId, fmtUsd(value));
+    const bar = document.getElementById(barId);
+    if (bar) bar.style.width = Math.max(value > 0 ? 3 : 0, Math.round((value / sourceMax) * 100)) + "%";
+  }
+  setSourceTile("execSourceRouting", "execSourceRoutingBar", routingSaved);
+  setSourceTile("execSourcePruning", "execSourcePruningBar", pruningSaved);
+  setSourceTile("execSourceThrottle", "execSourceThrottleBar", throttleSaved);
+  setSourceTile("execSourceBlocked", "execSourceBlockedBar", blockedSaved);
+
+  const budgetScope = execFilters.dept ? displayDeptName(execFilters.dept) : "Workspace";
+  if (budget.pct >= 100) {
+    setText("execRecBudgetTitle", `${budgetScope} is over budget`);
+    setText("execRecBudgetCopy", `${fmtUsd(budget.spend)} of ${fmtUsd(budget.cap)} used. CostPilot can throttle or require override before premium routing continues.`);
+  } else if (budget.pct >= 80) {
+    setText("execRecBudgetTitle", `${budgetScope} is nearing budget`);
+    setText("execRecBudgetCopy", `${Math.round(budget.pct)}% of budget is used. Review heavy agents before the team hits the monthly cap.`);
+  } else {
+    setText("execRecBudgetTitle", `${budgetScope} budget is healthy`);
+    setText("execRecBudgetCopy", `${Math.round(budget.pct)}% of budget is used. Spend is currently under the configured cap.`);
+  }
+  if (pruningTokens > 0) {
+    setText("execRecWasteTitle", `${fmtNum(pruningTokens)} tokens removed`);
+    setText("execRecWasteCopy", `Pruning removed repeated headers, stale thread history, signatures, boilerplate, and other low-value context before model calls.`);
+  } else {
+    setText("execRecWasteTitle", "No prompt waste detected yet");
+    setText("execRecWasteCopy", "Pruning savings will appear when routed requests contain removable email history, metadata, or boilerplate.");
+  }
+  if (topDriver) {
+    setText("execRecDriverTitle", `${topDriver.agent} is the top driver`);
+    setText("execRecDriverCopy", `${topDriver.dept} on ${topDriver.platform} accounts for ${fmtUsd(topDriver.cost)} across ${fmtNum(topDriver.calls)} governed requests.`);
+  } else {
+    setText("execRecDriverTitle", "No cost driver yet");
+    setText("execRecDriverCopy", "Top agent spend will appear after governed requests are recorded in this view.");
+  }
 
   const mix = costMix(events);
   const knownMix = mix.input + mix.output;
