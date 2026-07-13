@@ -324,6 +324,40 @@
       font-size: 11px; color: var(--text-muted); margin-top: 10px;
     }
 
+    .exec-customize-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin: -2px 0 14px; color: var(--text-muted);
+      font-size: 11px;
+    }
+    .exec-customize-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .exec-customize-btn {
+      background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.28);
+      color: var(--accent); border-radius: 7px; padding: 7px 10px;
+      font-size: 11px; font-weight: 800; cursor: pointer;
+    }
+    .exec-customize-btn.secondary {
+      background: rgba(139,148,158,0.08); border-color: var(--border); color: var(--text-muted);
+    }
+    .exec-layout-zone { display: block; }
+    .exec-section-draggable { position: relative; }
+    .exec-section-drag-handle {
+      display: none; align-items: center; gap: 8px; width: max-content;
+      margin: 0 0 8px; color: var(--text-muted); font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.10em; font-weight: 900;
+      user-select: none;
+    }
+    .exec-layout-zone.customizing .exec-section-draggable {
+      cursor: grab;
+    }
+    .exec-layout-zone.customizing .exec-section-drag-handle {
+      display: flex;
+    }
+    .exec-section-draggable.dragging {
+      opacity: 0.55;
+      outline: 1px dashed rgba(88,166,255,0.55);
+      outline-offset: 6px;
+    }
+
     /* ── Metric cards row ─────────────────────────────────────────────────────── */
     .metric-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
     .metric-card {
@@ -812,19 +846,19 @@
       <div class="savings-proof-grid" aria-label="Savings proof points">
         <div class="savings-proof">
           <div class="savings-proof-value" id="execProofCalls">—</div>
-          <div class="savings-proof-label">AI calls controlled</div>
+          <div class="savings-proof-label" title="Total requests CostPilot evaluated, routed, blocked, or logged.">requests governed</div>
         </div>
         <div class="savings-proof">
           <div class="savings-proof-value" id="execProofRouting">—</div>
-          <div class="savings-proof-label">sent cheaper safely</div>
+          <div class="savings-proof-label" title="Share of routed requests handled by Scout or Analyst instead of premium tiers.">lower-cost routing</div>
         </div>
         <div class="savings-proof">
           <div class="savings-proof-value" id="execProofTokens">—</div>
-          <div class="savings-proof-label">tokens stripped</div>
+          <div class="savings-proof-label" title="Prompt tokens removed before the model call, such as repeated headers, signatures, and old thread history.">prompt tokens removed</div>
         </div>
         <div class="savings-proof">
           <div class="savings-proof-value" id="execProofControls">—</div>
-          <div class="savings-proof-label">risk/cap controls</div>
+          <div class="savings-proof-label" title="Blocked requests, throttles, and collision controls enforced by policy.">policy actions</div>
         </div>
       </div>
       <div class="hero-badge" id="execTrendBadge">
@@ -1144,14 +1178,164 @@ function fmtNum(v) {
 }
 
 const EXEC_FILTER_KEY = "costpilot_exec_filters";
+const EXEC_LAYOUT_KEY = "costpilot_exec_layout_v1";
 let execData = null;
 let execFilters = {
   dept: "", platform: "", agent: "", range: "30", tier: "", risk: ""
 };
+let execCustomizeMode = false;
+
+const EXEC_LAYOUT_SECTIONS = [
+  { id: "baselineChart", label: "Baseline chart", selector: ".hero-card.chart-wide" },
+  { id: "usageSnapshot", label: "Usage snapshot", selector: ".usage-snapshot" },
+  { id: "burnStrip", label: "Spend console", selector: ".burn-strip" },
+  { id: "savingsSources", label: "Savings sources", selector: ".source-tile-grid" },
+  { id: "recommendations", label: "Recommendations", selector: ".recommendation-grid" },
+  { id: "metricCards", label: "Operating metrics", selector: ".metric-row" },
+  { id: "kpiCards", label: "Savings KPIs", selector: ".exec-kpi-row" },
+  { id: "insightGrid", label: "Cost insights", selector: ".exec-insight-grid" },
+  { id: "savingsBreakdown", label: "Savings breakdown", selector: ".breakdown-card" },
+];
 
 try {
   execFilters = { ...execFilters, ...(JSON.parse(localStorage.getItem(EXEC_FILTER_KEY) || "{}")) };
 } catch {}
+
+function execLayoutIds() {
+  const defaults = EXEC_LAYOUT_SECTIONS.map(s => s.id);
+  try {
+    const saved = JSON.parse(localStorage.getItem(EXEC_LAYOUT_KEY) || "[]");
+    const clean = Array.isArray(saved) ? saved.filter(id => defaults.includes(id)) : [];
+    return [...clean, ...defaults.filter(id => !clean.includes(id))];
+  } catch {
+    return defaults;
+  }
+}
+
+function ensureExecLayoutShell() {
+  const heroRow = document.querySelector(".hero-row");
+  if (!heroRow) return null;
+  if (!document.getElementById("execCustomizeBar")) {
+    heroRow.insertAdjacentHTML("afterend", `
+      <div class="exec-customize-bar" id="execCustomizeBar">
+        <div id="execLayoutStatus">Layout locked · savings hero pinned</div>
+        <div class="exec-customize-actions">
+          <button type="button" class="exec-customize-btn" id="execCustomizeBtn" onclick="toggleExecCustomize()">Customize layout</button>
+          <button type="button" class="exec-customize-btn secondary" onclick="resetExecLayout()">Reset layout</button>
+        </div>
+      </div>
+      <div class="exec-layout-zone" id="execLayoutZone"></div>
+    `);
+  }
+  return document.getElementById("execLayoutZone");
+}
+
+function wrapExecSection(section) {
+  const el = document.querySelector(section.selector);
+  if (!el) return null;
+  const existing = el.closest(".exec-section-draggable");
+  if (existing) return existing;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "exec-section-draggable";
+  wrapper.dataset.sectionId = section.id;
+  wrapper.dataset.sectionLabel = section.label;
+  const handle = document.createElement("div");
+  handle.className = "exec-section-drag-handle";
+  handle.setAttribute("aria-hidden", "true");
+  handle.textContent = `⋮⋮ ${section.label}`;
+  el.parentNode.insertBefore(wrapper, el);
+  wrapper.appendChild(handle);
+  wrapper.appendChild(el);
+  return wrapper;
+}
+
+function saveExecLayout() {
+  const zone = document.getElementById("execLayoutZone");
+  if (!zone) return;
+  const order = [...zone.querySelectorAll(".exec-section-draggable")]
+    .map(el => el.dataset.sectionId)
+    .filter(Boolean);
+  localStorage.setItem(EXEC_LAYOUT_KEY, JSON.stringify(order));
+}
+
+function getExecDragAfterElement(container, y) {
+  const items = [...container.querySelectorAll(".exec-section-draggable:not(.dragging)")];
+  return items.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) return { offset, element: child };
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+}
+
+function setupExecDragHandlers() {
+  const zone = document.getElementById("execLayoutZone");
+  if (!zone) return;
+  zone.querySelectorAll(".exec-section-draggable").forEach(item => {
+    item.draggable = execCustomizeMode;
+    item.ondragstart = (event) => {
+      if (!execCustomizeMode) {
+        event.preventDefault();
+        return;
+      }
+      item.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", item.dataset.sectionId || "");
+    };
+    item.ondragend = () => {
+      item.classList.remove("dragging");
+      saveExecLayout();
+    };
+  });
+  zone.ondragover = (event) => {
+    if (!execCustomizeMode) return;
+    event.preventDefault();
+    const dragging = zone.querySelector(".dragging");
+    if (!dragging) return;
+    const after = getExecDragAfterElement(zone, event.clientY);
+    if (after == null) zone.appendChild(dragging);
+    else zone.insertBefore(dragging, after);
+  };
+}
+
+function updateExecCustomizeUi() {
+  const zone = document.getElementById("execLayoutZone");
+  const btn = document.getElementById("execCustomizeBtn");
+  const status = document.getElementById("execLayoutStatus");
+  if (zone) zone.classList.toggle("customizing", execCustomizeMode);
+  if (btn) btn.textContent = execCustomizeMode ? "Done customizing" : "Customize layout";
+  if (status) status.textContent = execCustomizeMode
+    ? "Drag sections to reorder · savings hero stays pinned"
+    : "Layout locked · savings hero pinned";
+}
+
+function applyExecLayout() {
+  const zone = ensureExecLayoutShell();
+  if (!zone) return;
+  const wrapped = {};
+  EXEC_LAYOUT_SECTIONS.forEach(section => {
+    const wrapper = wrapExecSection(section);
+    if (wrapper) wrapped[section.id] = wrapper;
+  });
+  execLayoutIds().forEach(id => {
+    if (wrapped[id]) zone.appendChild(wrapped[id]);
+  });
+  setupExecDragHandlers();
+  updateExecCustomizeUi();
+}
+
+function toggleExecCustomize() {
+  execCustomizeMode = !execCustomizeMode;
+  setupExecDragHandlers();
+  updateExecCustomizeUi();
+}
+
+function resetExecLayout() {
+  localStorage.removeItem(EXEC_LAYOUT_KEY);
+  execCustomizeMode = false;
+  applyExecLayout();
+}
 
 function displayDeptName(dept) {
   const s = String(dept || "");
@@ -1871,7 +2055,9 @@ function renderExec(data) {
   document.getElementById("execProofTokens").textContent = fmtNum(pruningTokens);
   document.getElementById("execProofControls").textContent = fmtNum(controlsCount);
   document.getElementById("execTrendBadge").textContent =
-    hasFilters ? `Filtered view · ${fmtNum(totalCalls)} governed requests` : `All workspace data · ${fmtNum(totalCalls)} governed requests`;
+    hasFilters
+      ? `Filtered view · ${fmtNum(totalCalls)} requests evaluated by CostPilot`
+      : `All workspace data · ${fmtNum(totalCalls)} requests evaluated by CostPilot`;
 
   document.getElementById("execMonthSpend").textContent = fmtUsd(actualCost);
   const budgetTag = document.getElementById("execBudgetTag");
@@ -2066,6 +2252,7 @@ async function loadTrialScopedExecData(fallbackData) {
   }
 }
 
+applyExecLayout();
 checkHealth();
 loadExec();
 setInterval(loadExec, 30000);
