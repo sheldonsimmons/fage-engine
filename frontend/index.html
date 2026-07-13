@@ -431,10 +431,96 @@
     .burn-card.green .burn-value { color: var(--accent-green); }
     .burn-card.hot .burn-value { color: var(--accent-yellow); }
     .burn-sub { margin-top: 8px; font-size: 10px; line-height: 1.35; color: var(--text-muted); }
+    .burn-card.trend { grid-column: span 2; }
+    .burn-trend-head {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px; margin-bottom: 12px;
+    }
+    .burn-trend-metric {
+      min-width: 0;
+    }
+    .burn-trend-label {
+      font-size: 9px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.09em; font-weight: 900; margin-bottom: 6px;
+    }
+    .burn-mini-bars {
+      height: 72px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 7px; align-items: end; padding: 8px 0 2px;
+    }
+    .burn-mini-bar-wrap {
+      height: 58px; display: flex; align-items: end; justify-content: center;
+      border-bottom: 1px solid rgba(139,148,158,0.20);
+    }
+    .burn-mini-bar {
+      width: 100%; min-height: 2px; border-radius: 5px 5px 0 0;
+      background: linear-gradient(180deg, #58a6ff, rgba(88,166,255,0.45));
+      box-shadow: 0 0 16px rgba(88,166,255,0.18);
+      transition: height 0.7s ease;
+    }
+    .burn-mini-bar.today {
+      background: linear-gradient(180deg, var(--accent-green), rgba(46,160,67,0.45));
+      box-shadow: 0 0 16px rgba(46,160,67,0.22);
+    }
+    .burn-mini-day {
+      margin-top: 4px; font-size: 8px; color: var(--text-muted); text-align: center;
+      text-transform: uppercase; font-weight: 800;
+    }
 
     .source-tile-grid {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px; margin-bottom: 20px;
+    }
+    .savings-mix-card {
+      grid-column: 1 / -1;
+      background:
+        radial-gradient(circle at top left, rgba(46,160,67,0.13), transparent 34%),
+        var(--bg-panel);
+      border: 1px solid rgba(46,160,67,0.20);
+      border-radius: 12px; padding: 16px 18px; min-width: 0;
+    }
+    .savings-mix-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin-bottom: 12px;
+    }
+    .savings-mix-title {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.09em; font-weight: 900;
+    }
+    .savings-mix-total {
+      font-family: var(--font-mono); color: var(--accent-green);
+      font-size: 18px; font-weight: 900;
+    }
+    .savings-mix-stack {
+      display: flex; height: 18px; overflow: hidden; border-radius: 999px;
+      background: var(--border); margin-bottom: 12px;
+    }
+    .savings-mix-segment {
+      height: 100%; min-width: 0; transition: width 0.7s ease;
+    }
+    .savings-mix-segment.routing { background: var(--accent-green); }
+    .savings-mix-segment.pruning { background: #58a6ff; }
+    .savings-mix-segment.throttle { background: var(--accent-yellow); }
+    .savings-mix-segment.blocked { background: #ff4d4f; }
+    .savings-mix-legend {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .savings-mix-item { min-width: 0; }
+    .savings-mix-label {
+      display: flex; align-items: center; gap: 7px;
+      color: var(--text-muted); font-size: 9px; text-transform: uppercase;
+      letter-spacing: 0.07em; font-weight: 900; margin-bottom: 5px;
+    }
+    .savings-mix-swatch {
+      width: 8px; height: 8px; border-radius: 2px; background: var(--accent-green);
+    }
+    .savings-mix-swatch.pruning { background: #58a6ff; }
+    .savings-mix-swatch.throttle { background: var(--accent-yellow); }
+    .savings-mix-swatch.blocked { background: #ff4d4f; }
+    .savings-mix-value {
+      font-family: var(--font-mono); color: var(--text-primary);
+      font-size: 15px; font-weight: 900; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
     }
     .source-tile {
       background:
@@ -466,6 +552,9 @@
     .source-fill { height: 100%; border-radius: 999px; background: var(--accent-green); transition: width 0.7s ease; }
     .source-fill.yellow { background: var(--accent-yellow); }
     .source-fill.red { background: #ff4d4f; }
+    .source-share {
+      margin-top: 7px; color: var(--text-muted); font-size: 9px; line-height: 1.25;
+    }
 
     .recommendation-grid {
       display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -486,6 +575,74 @@
       font-weight: 900; margin-bottom: 8px;
     }
     .rec-copy { font-size: 10px; line-height: 1.4; color: var(--text-muted); }
+    .budget-gauge {
+      margin-top: 13px;
+    }
+    .budget-gauge-track {
+      position: relative; height: 10px; border-radius: 999px; overflow: hidden;
+      background: linear-gradient(90deg, var(--accent-green) 0 70%, var(--accent-yellow) 70% 90%, #ff4d4f 90% 100%);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+    }
+    .budget-gauge-mask {
+      position: absolute; top: 0; right: 0; bottom: 0;
+      width: 100%; background: rgba(48,54,61,0.92);
+      transition: width 0.7s ease;
+    }
+    .budget-gauge-meta {
+      display: flex; justify-content: space-between; gap: 8px;
+      margin-top: 7px; color: var(--text-muted); font-size: 9px; font-weight: 800;
+    }
+    .prune-visual {
+      margin-top: 13px; display: grid; gap: 8px;
+    }
+    .prune-row {
+      display: grid; grid-template-columns: 34px minmax(0, 1fr) 74px;
+      gap: 8px; align-items: center;
+    }
+    .prune-label {
+      color: var(--text-muted); font-size: 9px; text-transform: uppercase;
+      letter-spacing: 0.07em; font-weight: 900;
+    }
+    .prune-track {
+      height: 8px; border-radius: 999px; background: var(--border);
+      overflow: hidden;
+    }
+    .prune-fill {
+      height: 100%; border-radius: 999px; background: #8b949e;
+      transition: width 0.7s ease;
+    }
+    .prune-fill.clean { background: var(--accent-green); }
+    .prune-value {
+      font-family: var(--font-mono); color: var(--text-primary);
+      font-size: 10px; font-weight: 900; text-align: right;
+      white-space: nowrap;
+    }
+    .prune-saved {
+      color: var(--accent-green); font-size: 10px; font-weight: 900;
+    }
+    .rec-driver-bars {
+      margin-top: 13px; display: grid; gap: 8px;
+    }
+    .rec-driver-row {
+      display: grid; grid-template-columns: minmax(0, 1fr) 68px;
+      gap: 8px; align-items: center;
+    }
+    .rec-driver-name {
+      color: var(--text-primary); font-size: 10px; font-weight: 800;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .rec-driver-cost {
+      font-family: var(--font-mono); color: var(--text-primary);
+      font-size: 10px; font-weight: 900; text-align: right;
+    }
+    .rec-driver-track {
+      grid-column: 1 / -1; height: 6px; border-radius: 999px;
+      background: var(--border); overflow: hidden;
+    }
+    .rec-driver-fill {
+      height: 100%; border-radius: 999px; background: #58a6ff;
+      transition: width 0.7s ease;
+    }
 
     .exec-kpi-row {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -626,10 +783,14 @@
       .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
       .savings-proof-grid { grid-template-columns: repeat(2, 1fr); }
       .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid { grid-template-columns: repeat(2, 1fr); }
+      .savings-mix-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .exec-kpi-row, .exec-insight-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 760px) {
       .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
+      .burn-card.trend { grid-column: auto; }
+      .burn-trend-head { grid-template-columns: 1fr; }
+      .savings-mix-legend { grid-template-columns: 1fr; }
       .hero-number { font-size: 46px; }
       .trial-start-head { flex-direction: column; }
       .trial-check-grid { grid-template-columns: 1fr; }
@@ -914,15 +1075,21 @@
   </div>
 
   <div class="burn-strip" aria-label="Executive AI spend console">
-    <div class="burn-card">
-      <div class="burn-label">Today Spend</div>
-      <div class="burn-value" id="execBurnToday">—</div>
-      <div class="burn-sub"><span id="execBurnTodayReq">—</span> governed requests today</div>
-    </div>
-    <div class="burn-card">
-      <div class="burn-label">7-Day Spend</div>
-      <div class="burn-value" id="execBurn7">—</div>
-      <div class="burn-sub">actual spend under CostPilot control</div>
+    <div class="burn-card trend">
+      <div class="burn-label">Today vs. Last 7 Days</div>
+      <div class="burn-trend-head">
+        <div class="burn-trend-metric">
+          <div class="burn-trend-label">Today Spend</div>
+          <div class="burn-value" id="execBurnToday">—</div>
+          <div class="burn-sub"><span id="execBurnTodayReq">—</span> governed requests today</div>
+        </div>
+        <div class="burn-trend-metric">
+          <div class="burn-trend-label">7-Day Spend</div>
+          <div class="burn-value" id="execBurn7">—</div>
+          <div class="burn-sub">actual spend under CostPilot control</div>
+        </div>
+      </div>
+      <div class="burn-mini-bars" id="execSevenDayBars" aria-label="Daily spend bars for the last 7 days"></div>
     </div>
     <div class="burn-card hot">
       <div class="burn-label">Projected Month-End</div>
@@ -937,6 +1104,36 @@
   </div>
 
   <div class="source-tile-grid" aria-label="CostPilot savings sources">
+    <div class="savings-mix-card">
+      <div class="savings-mix-head">
+        <div class="savings-mix-title">Savings Mix</div>
+        <div class="savings-mix-total" id="execMixTotal">— avoided</div>
+      </div>
+      <div class="savings-mix-stack" aria-label="Savings mix by source">
+        <div class="savings-mix-segment routing" id="execMixRouting" style="width:0%"></div>
+        <div class="savings-mix-segment pruning" id="execMixPruning" style="width:0%"></div>
+        <div class="savings-mix-segment throttle" id="execMixThrottle" style="width:0%"></div>
+        <div class="savings-mix-segment blocked" id="execMixBlocked" style="width:0%"></div>
+      </div>
+      <div class="savings-mix-legend">
+        <div class="savings-mix-item">
+          <div class="savings-mix-label"><span class="savings-mix-swatch"></span>Routing</div>
+          <div class="savings-mix-value" id="execMixRoutingValue">—</div>
+        </div>
+        <div class="savings-mix-item">
+          <div class="savings-mix-label"><span class="savings-mix-swatch pruning"></span>Pruning</div>
+          <div class="savings-mix-value" id="execMixPruningValue">—</div>
+        </div>
+        <div class="savings-mix-item">
+          <div class="savings-mix-label"><span class="savings-mix-swatch throttle"></span>Budget Caps</div>
+          <div class="savings-mix-value" id="execMixThrottleValue">—</div>
+        </div>
+        <div class="savings-mix-item">
+          <div class="savings-mix-label"><span class="savings-mix-swatch blocked"></span>Blocked Risk</div>
+          <div class="savings-mix-value" id="execMixBlockedValue">—</div>
+        </div>
+      </div>
+    </div>
     <div class="source-tile">
       <div class="source-head">
         <div class="source-name">Routing</div>
@@ -944,6 +1141,7 @@
       </div>
       <div class="source-value" id="execSourceRouting">—</div>
       <div class="source-track"><div class="source-fill" id="execSourceRoutingBar" style="width:0%"></div></div>
+      <div class="source-share" id="execSourceRoutingShare">— of avoided spend</div>
     </div>
     <div class="source-tile">
       <div class="source-head">
@@ -952,6 +1150,7 @@
       </div>
       <div class="source-value" id="execSourcePruning">—</div>
       <div class="source-track"><div class="source-fill" id="execSourcePruningBar" style="width:0%"></div></div>
+      <div class="source-share" id="execSourcePruningShare">— of avoided spend</div>
     </div>
     <div class="source-tile">
       <div class="source-head">
@@ -960,6 +1159,7 @@
       </div>
       <div class="source-value" id="execSourceThrottle">—</div>
       <div class="source-track"><div class="source-fill yellow" id="execSourceThrottleBar" style="width:0%"></div></div>
+      <div class="source-share" id="execSourceThrottleShare">— of avoided spend</div>
     </div>
     <div class="source-tile">
       <div class="source-head">
@@ -968,6 +1168,7 @@
       </div>
       <div class="source-value" id="execSourceBlocked">—</div>
       <div class="source-track"><div class="source-fill red" id="execSourceBlockedBar" style="width:0%"></div></div>
+      <div class="source-share" id="execSourceBlockedShare">— of avoided spend</div>
     </div>
   </div>
 
@@ -976,16 +1177,37 @@
       <div class="rec-kicker">Budget Signal</div>
       <div class="rec-title" id="execRecBudgetTitle">Loading budget signal</div>
       <div class="rec-copy" id="execRecBudgetCopy">CostPilot is checking spend against department caps.</div>
+      <div class="budget-gauge" aria-label="Budget usage gauge">
+        <div class="budget-gauge-track"><div class="budget-gauge-mask" id="execBudgetSignalMask"></div></div>
+        <div class="budget-gauge-meta">
+          <span id="execBudgetSignalUsed">— used</span>
+          <span id="execBudgetSignalRemaining">— left</span>
+        </div>
+      </div>
     </div>
     <div class="rec-card save">
       <div class="rec-kicker">Waste Signal</div>
       <div class="rec-title" id="execRecWasteTitle">Loading pruning signal</div>
       <div class="rec-copy" id="execRecWasteCopy">CostPilot is checking avoidable prompt context.</div>
+      <div class="prune-visual" aria-label="Pruning compression visual">
+        <div class="prune-row">
+          <div class="prune-label">Raw</div>
+          <div class="prune-track"><div class="prune-fill" id="execPruneRawBar" style="width:0%"></div></div>
+          <div class="prune-value" id="execPruneRawTokens">—</div>
+        </div>
+        <div class="prune-row">
+          <div class="prune-label">Sent</div>
+          <div class="prune-track"><div class="prune-fill clean" id="execPruneCleanBar" style="width:0%"></div></div>
+          <div class="prune-value" id="execPruneCleanTokens">—</div>
+        </div>
+        <div class="prune-saved" id="execPruneSavedPct">—</div>
+      </div>
     </div>
     <div class="rec-card">
       <div class="rec-kicker">Spend Driver</div>
       <div class="rec-title" id="execRecDriverTitle">Loading top driver</div>
       <div class="rec-copy" id="execRecDriverCopy">CostPilot is identifying the agent creating the most AI spend.</div>
+      <div class="rec-driver-bars" id="execRecDriverBars" aria-label="Top spend drivers"></div>
     </div>
   </div>
 
@@ -1924,6 +2146,138 @@ function renderTopCostDrivers(drivers) {
   }).join("");
 }
 
+function renderRecommendationDrivers(drivers) {
+  const container = document.getElementById("execRecDriverBars");
+  if (!container) return;
+  const top = drivers.slice(0, 3);
+  if (!top.length) {
+    container.innerHTML = `<div class="rec-copy">No agent spend yet in this view.</div>`;
+    return;
+  }
+  const maxCost = Math.max(...top.map(d => d.cost), 0.000001);
+  container.innerHTML = top.map(d => {
+    const width = Math.max(4, Math.round((d.cost / maxCost) * 100));
+    return `
+      <div class="rec-driver-row">
+        <div class="rec-driver-name">${escapeHtml(d.agent)}</div>
+        <div class="rec-driver-cost">${fmtUsd(d.cost)}</div>
+        <div class="rec-driver-track"><div class="rec-driver-fill" style="width:${width}%"></div></div>
+      </div>
+    `;
+  }).join("");
+}
+
+function pruningTokenStats(events, fallbackSaved, fallbackTokenVolume) {
+  let raw = 0;
+  let clean = 0;
+  let saved = 0;
+  events.forEach(e => {
+    const eventSaved = Number(e.tokens_saved || 0);
+    const eventClean = Number(e.clean_tokens ?? e.input_tokens ?? e.prompt_tokens ?? e.tokens_in ?? 0);
+    const eventRaw = Number(e.raw_tokens ?? (eventClean + eventSaved));
+    saved += eventSaved;
+    clean += eventClean;
+    raw += eventRaw;
+  });
+  if (saved <= 0) saved = Number(fallbackSaved || 0);
+  if (raw <= 0 && clean <= 0) {
+    clean = Math.max(0, Number(fallbackTokenVolume || 0) - saved);
+    raw = clean + saved;
+  } else if (raw <= 0) {
+    raw = clean + saved;
+  } else if (clean <= 0) {
+    clean = Math.max(0, raw - saved);
+  }
+  return {
+    raw,
+    clean,
+    saved,
+    pct: raw > 0 ? Math.round((saved / raw) * 100) : 0,
+  };
+}
+
+function renderPruningVisual(stats) {
+  const maxTokens = Math.max(stats.raw, stats.clean, 1);
+  const rawBar = document.getElementById("execPruneRawBar");
+  const cleanBar = document.getElementById("execPruneCleanBar");
+  if (rawBar) rawBar.style.width = Math.round((stats.raw / maxTokens) * 100) + "%";
+  if (cleanBar) cleanBar.style.width = Math.round((stats.clean / maxTokens) * 100) + "%";
+  setText("execPruneRawTokens", fmtNum(stats.raw));
+  setText("execPruneCleanTokens", fmtNum(stats.clean));
+  setText(
+    "execPruneSavedPct",
+    stats.saved > 0
+      ? `${fmtNum(stats.saved)} tokens removed · ${stats.pct}% smaller`
+      : "No removable prompt waste in this view yet"
+  );
+}
+
+function renderSavingsMix(routingSaved, pruningSaved, throttleSaved, blockedSaved) {
+  const total = routingSaved + pruningSaved + throttleSaved + blockedSaved;
+  setText("execMixTotal", `${fmtUsd(total)} avoided`);
+  setText("execMixRoutingValue", fmtUsd(routingSaved));
+  setText("execMixPruningValue", fmtUsd(pruningSaved));
+  setText("execMixThrottleValue", fmtUsd(throttleSaved));
+  setText("execMixBlockedValue", fmtUsd(blockedSaved));
+
+  const parts = [
+    ["execMixRouting", routingSaved],
+    ["execMixPruning", pruningSaved],
+    ["execMixThrottle", throttleSaved],
+    ["execMixBlocked", blockedSaved],
+  ];
+  parts.forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.width = total > 0 ? Math.round((value / total) * 100) + "%" : "0%";
+  });
+
+  function share(id, value) {
+    const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+    setText(id, `${pct}% of avoided spend`);
+  }
+  share("execSourceRoutingShare", routingSaved);
+  share("execSourcePruningShare", pruningSaved);
+  share("execSourceThrottleShare", throttleSaved);
+  share("execSourceBlockedShare", blockedSaved);
+}
+
+function renderSevenDaySpendBars(events) {
+  const container = document.getElementById("execSevenDayBars");
+  if (!container) return;
+  const byDay = new Map();
+  routedCostEvents(events).forEach(e => {
+    const day = eventIsoDay(e);
+    if (!day) return;
+    byDay.set(day, (byDay.get(day) || 0) + Number(e.cost_usd || 0));
+  });
+  const days = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i -= 1) {
+    const dt = new Date(now);
+    dt.setDate(now.getDate() - i);
+    const key = dt.toISOString().slice(0, 10);
+    days.push({
+      key,
+      label: dt.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3),
+      cost: byDay.get(key) || 0,
+      today: i === 0,
+    });
+  }
+  const maxCost = Math.max(...days.map(d => d.cost), 0.000001);
+  container.innerHTML = days.map(day => {
+    const height = day.cost > 0 ? Math.max(5, Math.round((day.cost / maxCost) * 58)) : 2;
+    return `
+      <div>
+        <div class="burn-mini-bar-wrap" title="${escapeHtml(day.label)}: ${fmtUsd(day.cost)}">
+          <div class="burn-mini-bar ${day.today ? "today" : ""}" style="height:${height}px"></div>
+        </div>
+        <div class="burn-mini-day">${escapeHtml(day.label)}</div>
+      </div>
+    `;
+  }).join("");
+}
+
 function tierCostRates(tier) {
   const t = norm(tierName(tier));
   if (["scout", "micro"].includes(t)) return { input: 0.15, output: 0.60 };
@@ -2083,6 +2437,7 @@ function renderExec(data) {
 
   const drivers = topCostDrivers(events, data);
   renderTopCostDrivers(drivers);
+  renderRecommendationDrivers(drivers);
   setText("execTopDriverScope", hasFilters ? "Filtered view" : "Last 30 days");
   const today = localIsoDate();
   const todayEvents = events.filter(e => eventIsoDay(e) === today);
@@ -2104,6 +2459,7 @@ function renderExec(data) {
   setText("execBurn7", fmtUsd(sevenDayCost));
   setText("execBurnMonth", fmtUsd(projectedMonthCost));
   setText("execBurnAnnualized", fmtUsd(annualSavings));
+  renderSevenDaySpendBars(sevenDayEvents);
 
   const sourceMax = Math.max(routingSaved, pruningSaved, throttleSaved, blockedSaved, 1);
   function setSourceTile(valId, barId, value) {
@@ -2115,8 +2471,14 @@ function renderExec(data) {
   setSourceTile("execSourcePruning", "execSourcePruningBar", pruningSaved);
   setSourceTile("execSourceThrottle", "execSourceThrottleBar", throttleSaved);
   setSourceTile("execSourceBlocked", "execSourceBlockedBar", blockedSaved);
+  renderSavingsMix(routingSaved, pruningSaved, throttleSaved, blockedSaved);
 
   const budgetScope = execFilters.dept ? displayDeptName(execFilters.dept) : "Workspace";
+  const budgetMask = document.getElementById("execBudgetSignalMask");
+  if (budgetMask) budgetMask.style.width = Math.max(0, 100 - Math.min(budget.pct, 100)) + "%";
+  const budgetRemaining = Math.max(0, Number(budget.cap || 0) - Number(budget.spend || 0));
+  setText("execBudgetSignalUsed", `${Math.round(budget.pct)}% used`);
+  setText("execBudgetSignalRemaining", `${fmtUsd(budgetRemaining)} left`);
   if (budget.pct >= 100) {
     setText("execRecBudgetTitle", `${budgetScope} is over budget`);
     setText("execRecBudgetCopy", `${fmtUsd(budget.spend)} of ${fmtUsd(budget.cap)} used. CostPilot can throttle or require override before premium routing continues.`);
@@ -2127,6 +2489,8 @@ function renderExec(data) {
     setText("execRecBudgetTitle", `${budgetScope} budget is healthy`);
     setText("execRecBudgetCopy", `${Math.round(budget.pct)}% of budget is used. Spend is currently under the configured cap.`);
   }
+  const pruneStats = pruningTokenStats(events, pruningTokens, tokenVolume);
+  renderPruningVisual(pruneStats);
   if (pruningTokens > 0) {
     setText("execRecWasteTitle", `${fmtNum(pruningTokens)} tokens removed`);
     setText("execRecWasteCopy", `Pruning removed repeated headers, stale thread history, signatures, boilerplate, and other low-value context before model calls.`);
