@@ -92,6 +92,27 @@ DEFAULT_TERMS = [
     {"term": "pwd=",             "category": "code",       "action": "block"},
 ]
 
+PROTECTED_TERMS = {
+    "ssn",
+    "social security",
+    "social security number",
+    "credit card",
+    "card number",
+    "cvv",
+    "routing number",
+    "bank account",
+    "passport number",
+    "date of birth",
+}
+
+
+def _is_protected_default(term: dict) -> bool:
+    return term["term"].lower() in PROTECTED_TERMS and term["action"] == "block"
+
+
+def _is_protected_term(obj: SensitiveTerm) -> bool:
+    return obj.term.lower() in PROTECTED_TERMS and obj.action == "block"
+
 # ── PII regex patterns (detect actual numbers, not just keywords) ─────────────
 
 PII_PATTERNS = [
@@ -175,13 +196,22 @@ PII_PATTERNS = [
 
 
 def seed_defaults(db: Session):
-    """Upsert default terms — adds any new terms not yet in the table.
-    Safe to call on existing deployments; never removes custom terms."""
+    """Seed defaults without undoing user removals.
+
+    On an empty install, add the full starter library. On an existing install,
+    only restore protected PII blocker terms. This keeps critical safety terms
+    available while allowing admins to remove non-protected defaults such as
+    "audit" without seeing them reappear on refresh or restart.
+    """
     existing = {t.term for t in db.query(SensitiveTerm).all()}
+    terms_to_seed = DEFAULT_TERMS if not existing else [
+        t for t in DEFAULT_TERMS if _is_protected_default(t)
+    ]
     added = False
-    for t in DEFAULT_TERMS:
+    for t in terms_to_seed:
         if t["term"] not in existing:
             db.add(SensitiveTerm(**t))
+            existing.add(t["term"])
             added = True
     if added:
         db.commit()
@@ -302,6 +332,8 @@ def delete_term(db: Session, term_id: int) -> bool:
     obj = db.query(SensitiveTerm).filter(SensitiveTerm.id == term_id).first()
     if not obj:
         return False
+    if _is_protected_term(obj):
+        raise PermissionError(f"'{obj.term}' is a protected PII blocker and cannot be removed.")
     db.delete(obj)
     db.commit()
     return True

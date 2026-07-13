@@ -198,10 +198,27 @@ def _seed_on_startup():
             dict(term="my diagnosis",         category="hipaa",     action="block"),
             dict(term="medical record",       category="hipaa",     action="block"),
         ]
-        for t in SEED_TERMS:
-            exists = db.query(SensitiveTerm).filter_by(term=t["term"]).first()
-            if not exists:
+        PROTECTED_SEED_TERMS = {
+            "ssn",
+            "social security",
+            "social security number",
+            "credit card",
+            "card number",
+            "cvv",
+            "routing number",
+            "bank account",
+            "passport number",
+            "date of birth",
+        }
+        existing_terms = {row.term for row in db.query(SensitiveTerm).all()}
+        terms_to_seed = SEED_TERMS if not existing_terms else [
+            t for t in SEED_TERMS
+            if t["term"] in PROTECTED_SEED_TERMS and t["action"] == "block"
+        ]
+        for t in terms_to_seed:
+            if t["term"] not in existing_terms:
                 db.add(SensitiveTerm(**t))
+                existing_terms.add(t["term"])
 
         # ── Routing Config (single-row settings) ──
         import json as _json

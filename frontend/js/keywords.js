@@ -41,7 +41,9 @@ async function loadKeywords() {
       return `<span class="kw-cat">${labels[cat] || cat}</span>`;
     };
 
-    tbody.innerHTML = terms.map(t => `
+    tbody.innerHTML = terms.map(t => {
+      const safeTerm = JSON.stringify(t.term);
+      return `
       <tr>
         <td class="kw-term-cell"><code class="kw-term">${t.term}</code></td>
         <td>${categoryBadge(t.category)}</td>
@@ -49,10 +51,10 @@ async function loadKeywords() {
         <td class="kw-scope">${t.department || "Global"}</td>
         <td>${_isLockedTerm(t)
           ? `<span style="font-size:11px;color:var(--text-muted)" title="Core PII compliance term — cannot be removed">🔒 Protected</span>`
-          : `<button class="btn-deregister" onclick="removeKeyword(${t.id}, '${t.term}')">Remove</button>`
+          : `<button class="btn-deregister" onclick="removeKeyword(${t.id}, ${safeTerm})">Remove</button>`
         }</td>
       </tr>
-    `).join("");
+    `}).join("");
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="5" class="placeholder">Error loading terms.</td></tr>`;
   }
@@ -103,7 +105,7 @@ async function removeKeyword(id, term) {
     await loadKeywords();
     setTimeout(() => status.textContent = "", 3000);
   } catch (e) {
-    status.textContent = "Error removing term.";
+    status.textContent = "Error removing term: " + e.message;
     status.style.color = "var(--accent-red)";
   }
 }

@@ -72,6 +72,9 @@ def patch_term(term_id: int, body: UpdateTermRequest, db: Session = Depends(get_
 @router.delete("/{term_id}")
 def remove_term(term_id: int, db: Session = Depends(get_db)):
     """Remove a sensitive term by ID."""
-    if not delete_term(db, term_id):
-        raise HTTPException(status_code=404, detail=f"Term ID {term_id} not found.")
+    try:
+        if not delete_term(db, term_id):
+            raise HTTPException(status_code=404, detail=f"Term ID {term_id} not found.")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     return {"deleted": term_id}
