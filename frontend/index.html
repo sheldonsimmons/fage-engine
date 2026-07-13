@@ -308,6 +308,90 @@
     .metric-bar-fill  { height: 4px; background: var(--accent-green); border-radius: 2px; transition: width 0.6s ease; }
     .metric-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
+    .exec-kpi-row {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .exec-kpi-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px; min-width: 0;
+    }
+    .exec-kpi-label {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 800; margin-bottom: 8px;
+    }
+    .exec-kpi-value {
+      font-size: 26px; font-weight: 900; color: var(--text-primary);
+      font-family: var(--font-mono); line-height: 1; margin-bottom: 7px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .exec-kpi-value.green { color: var(--accent-green); }
+    .exec-kpi-sub { font-size: 10px; color: var(--text-muted); line-height: 1.35; }
+
+    .exec-insight-grid {
+      display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 20px; margin-bottom: 20px;
+    }
+    .exec-insight-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 22px 26px; min-width: 0;
+    }
+    .exec-insight-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .exec-insight-title { font-size: 15px; font-weight: 800; color: var(--text-primary); }
+    .exec-insight-sub { font-size: 11px; color: var(--text-muted); }
+    .driver-list { display: flex; flex-direction: column; gap: 12px; }
+    .driver-row {
+      display: grid; grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 12px; align-items: center;
+    }
+    .driver-rank {
+      width: 24px; height: 24px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(88,166,255,0.12); color: var(--accent);
+      font-size: 11px; font-weight: 900; font-family: var(--font-mono);
+    }
+    .driver-name {
+      color: var(--text-primary); font-weight: 800; font-size: 12px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .driver-meta {
+      color: var(--text-muted); font-size: 10px; margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .driver-value {
+      color: var(--text-primary); font-family: var(--font-mono);
+      font-weight: 900; font-size: 13px; text-align: right;
+    }
+    .driver-track {
+      grid-column: 2 / 4; height: 5px; background: var(--border);
+      border-radius: 3px; overflow: hidden; margin-top: -4px;
+    }
+    .driver-fill {
+      height: 100%; background: var(--accent-green); border-radius: 3px;
+      transition: width 0.7s ease;
+    }
+    .cost-mix-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px; margin-bottom: 18px;
+    }
+    .cost-mix-value {
+      font-family: var(--font-mono); font-size: 24px; line-height: 1;
+      color: var(--text-primary); font-weight: 900; margin-bottom: 6px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cost-mix-label { color: var(--text-muted); font-size: 10px; line-height: 1.35; }
+    .mix-bar {
+      display: flex; height: 12px; background: var(--border);
+      border-radius: 999px; overflow: hidden; margin: 6px 0 8px;
+    }
+    .mix-segment { height: 100%; min-width: 0; transition: width 0.7s ease; }
+    .mix-segment.input { background: var(--accent); }
+    .mix-segment.output { background: var(--accent-yellow); }
+    .mix-note { font-size: 10px; color: var(--text-muted); line-height: 1.4; }
+
     /* ── Executive help strip ────────────────────────────────────────────────── */
     .exec-help-card {
       background: var(--bg-panel); border: 1px solid var(--border);
@@ -362,9 +446,10 @@
       .exec-help-grid { grid-template-columns: repeat(2, 1fr); }
       .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
       .savings-proof-grid { grid-template-columns: repeat(2, 1fr); }
+      .exec-kpi-row, .exec-insight-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 760px) {
-      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid { grid-template-columns: 1fr; }
+      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
       .hero-number { font-size: 46px; }
       .trial-start-head { flex-direction: column; }
       .trial-check-grid { grid-template-columns: 1fr; }
@@ -666,6 +751,74 @@
       <div class="metric-bar-track"><div class="metric-bar-fill" id="execCallsBar" style="width:100%;background:var(--accent-green)"></div></div>
     </div>
 
+  </div>
+
+  <div class="exec-kpi-row">
+    <div class="exec-kpi-card">
+      <div class="exec-kpi-label">Spend Avoidance Rate</div>
+      <div class="exec-kpi-value green" id="execAvoidanceRate">—</div>
+      <div class="exec-kpi-sub">avoided versus the all-premium baseline</div>
+    </div>
+    <div class="exec-kpi-card">
+      <div class="exec-kpi-label">Cost / Request Before</div>
+      <div class="exec-kpi-value" id="execAvgBefore">—</div>
+      <div class="exec-kpi-sub">if every governed request used premium routing</div>
+    </div>
+    <div class="exec-kpi-card">
+      <div class="exec-kpi-label">Cost / Request After</div>
+      <div class="exec-kpi-value green" id="execAvgAfter">—</div>
+      <div class="exec-kpi-sub">actual average under CostPilot control</div>
+    </div>
+    <div class="exec-kpi-card">
+      <div class="exec-kpi-label">Premium Calls Avoided</div>
+      <div class="exec-kpi-value green" id="execPremiumAvoided">—</div>
+      <div class="exec-kpi-sub">requests safely handled by lower-cost tiers</div>
+    </div>
+  </div>
+
+  <div class="exec-insight-grid">
+    <div class="exec-insight-card">
+      <div class="exec-insight-head">
+        <div>
+          <div class="exec-insight-title">Top AI cost drivers</div>
+          <div class="exec-insight-sub">Agents and departments creating the most spend</div>
+        </div>
+        <div class="exec-insight-sub" id="execTopDriverScope">Current view</div>
+      </div>
+      <div class="driver-list" id="execTopCostDrivers"></div>
+    </div>
+
+    <div class="exec-insight-card">
+      <div class="exec-insight-head">
+        <div>
+          <div class="exec-insight-title">Cost mix</div>
+          <div class="exec-insight-sub">Input, output, concentration, and run rate</div>
+        </div>
+      </div>
+      <div class="cost-mix-grid">
+        <div>
+          <div class="cost-mix-value" id="execInputCost">—</div>
+          <div class="cost-mix-label">input / prompt spend</div>
+        </div>
+        <div>
+          <div class="cost-mix-value" id="execOutputCost">—</div>
+          <div class="cost-mix-label">output / response spend</div>
+        </div>
+        <div>
+          <div class="cost-mix-value" id="execTopConcentration">—</div>
+          <div class="cost-mix-label">spend from top 3 cost drivers</div>
+        </div>
+        <div>
+          <div class="cost-mix-value" id="execRunRate">—</div>
+          <div class="cost-mix-label">current period spend</div>
+        </div>
+      </div>
+      <div class="mix-bar" aria-hidden="true">
+        <div class="mix-segment input" id="execInputMixBar" style="width:0%"></div>
+        <div class="mix-segment output" id="execOutputMixBar" style="width:0%"></div>
+      </div>
+      <div class="mix-note" id="execCostMixNote">Input/output split is estimated from recorded tokens and actual stored cost.</div>
+    </div>
   </div>
 
   <!-- Where savings came from -->
@@ -1268,6 +1421,123 @@ function filteredSavingsBreakdown(events) {
   };
 }
 
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+
+function agentNameForEvent(e, data) {
+  if (e.agent_name) return e.agent_name;
+  if (e.agent) return e.agent;
+  const id = String(e.agent_id || "");
+  const agent = (data.agents || []).find(a => String(a.id) === id);
+  return agent?.display_name || agent?.name || (id ? `Agent ${id}` : "Unknown agent");
+}
+
+function platformNameForEvent(e) {
+  return e.source_platform || e.platform || "Unknown platform";
+}
+
+function routedCostEvents(events) {
+  return events.filter(e => !isBlockedEvent(e) && Number(e.cost_usd || 0) > 0);
+}
+
+function topCostDrivers(events, data) {
+  const groups = new Map();
+  routedCostEvents(events).forEach(e => {
+    const agent = agentNameForEvent(e, data);
+    const dept = displayDeptName(e.department || e.source_department) || "Unknown department";
+    const platform = platformNameForEvent(e);
+    const key = `${agent}|${dept}|${platform}`;
+    if (!groups.has(key)) groups.set(key, { agent, dept, platform, cost: 0, calls: 0 });
+    const item = groups.get(key);
+    item.cost += Number(e.cost_usd || 0);
+    item.calls += 1;
+  });
+  return [...groups.values()].sort((a, b) => b.cost - a.cost);
+}
+
+function renderTopCostDrivers(drivers) {
+  const container = document.getElementById("execTopCostDrivers");
+  if (!container) return;
+  const top = drivers.slice(0, 5);
+  if (!top.length) {
+    container.innerHTML = `<div class="exec-insight-sub">No model spend in the current view yet.</div>`;
+    return;
+  }
+  const maxCost = Math.max(...top.map(d => d.cost), 0.000001);
+  container.innerHTML = top.map((d, idx) => {
+    const width = Math.max(4, Math.round((d.cost / maxCost) * 100));
+    return `
+      <div class="driver-row">
+        <div class="driver-rank">${idx + 1}</div>
+        <div>
+          <div class="driver-name">${escapeHtml(d.agent)}</div>
+          <div class="driver-meta">${escapeHtml(d.dept)} · ${escapeHtml(d.platform)} · ${fmtNum(d.calls)} calls</div>
+        </div>
+        <div class="driver-value">${fmtUsd(d.cost)}</div>
+        <div class="driver-track"><div class="driver-fill" style="width:${width}%"></div></div>
+      </div>
+    `;
+  }).join("");
+}
+
+function tierCostRates(tier) {
+  const t = norm(tierName(tier));
+  if (["scout", "micro"].includes(t)) return { input: 0.15, output: 0.60 };
+  if (t === "analyst") return { input: 0.40, output: 1.60 };
+  return { input: 3.00, output: 15.00 };
+}
+
+function eventCostComponents(e) {
+  const total = Number(e.cost_usd || 0);
+  if (total <= 0) return { input: 0, output: 0, unknown: 0 };
+
+  const explicitInput = Number(e.input_cost_usd ?? e.prompt_cost_usd ?? e.input_usd ?? 0);
+  const explicitOutput = Number(e.output_cost_usd ?? e.completion_cost_usd ?? e.output_usd ?? 0);
+  if (explicitInput + explicitOutput > 0) {
+    const known = explicitInput + explicitOutput;
+    const scale = known > total ? total / known : 1;
+    return {
+      input: explicitInput * scale,
+      output: explicitOutput * scale,
+      unknown: Math.max(0, total - (known * scale)),
+    };
+  }
+
+  const inputTokens = Number(e.input_tokens ?? e.prompt_tokens ?? e.tokens_in ?? 0);
+  const outputTokens = Number(e.output_tokens ?? e.completion_tokens ?? e.tokens_out ?? 0);
+  if (inputTokens + outputTokens <= 0) return { input: 0, output: 0, unknown: total };
+
+  const rates = tierCostRates(e.model_tier);
+  const weightedInput = inputTokens * rates.input;
+  const weightedOutput = outputTokens * rates.output;
+  const weightedTotal = weightedInput + weightedOutput;
+  if (weightedTotal <= 0) return { input: 0, output: 0, unknown: total };
+
+  return {
+    input: total * (weightedInput / weightedTotal),
+    output: total * (weightedOutput / weightedTotal),
+    unknown: 0,
+  };
+}
+
+function costMix(events) {
+  return routedCostEvents(events).reduce((sum, e) => {
+    const c = eventCostComponents(e);
+    sum.input += c.input;
+    sum.output += c.output;
+    sum.unknown += c.unknown;
+    return sum;
+  }, { input: 0, output: 0, unknown: 0 });
+}
+
 function renderExec(data) {
   const d = data.dashboard || {};
   const ts = data.timeseries || {};
@@ -1347,6 +1617,41 @@ function renderExec(data) {
   document.getElementById("execRoutingPct").textContent = routingPct;
   document.getElementById("execRoutingBar").style.width = routingPct + "%";
   document.getElementById("execTotalCalls").textContent = fmtNum(totalCalls);
+
+  const baselineCost = withoutCostPilot;
+  const avoidanceRate = baselineCost > 0 ? Math.round((totalAvoided / baselineCost) * 100) : 0;
+  const avgBefore = totalCalls > 0 ? baselineCost / totalCalls : 0;
+  const avgAfter = totalCalls > 0 ? actualCost / totalCalls : 0;
+  setText("execAvoidanceRate", avoidanceRate + "%");
+  setText("execAvgBefore", fmtUsd(avgBefore));
+  setText("execAvgAfter", fmtUsd(avgAfter));
+  setText("execPremiumAvoided", fmtNum(economyCalls));
+
+  const drivers = topCostDrivers(events, data);
+  renderTopCostDrivers(drivers);
+  setText("execTopDriverScope", hasFilters ? "Filtered view" : "Last 30 days");
+
+  const mix = costMix(events);
+  const knownMix = mix.input + mix.output;
+  const inputPct = knownMix > 0 ? Math.round((mix.input / knownMix) * 100) : 0;
+  const outputPct = knownMix > 0 ? Math.max(0, 100 - inputPct) : 0;
+  const topThreeCost = drivers.slice(0, 3).reduce((sum, d) => sum + d.cost, 0);
+  const driverTotalCost = drivers.reduce((sum, d) => sum + d.cost, 0);
+  const concentration = driverTotalCost > 0 ? Math.round((topThreeCost / driverTotalCost) * 100) : 0;
+  setText("execInputCost", knownMix > 0 ? fmtUsd(mix.input) : "—");
+  setText("execOutputCost", knownMix > 0 ? fmtUsd(mix.output) : "—");
+  setText("execTopConcentration", driverTotalCost > 0 ? concentration + "%" : "—");
+  setText("execRunRate", fmtUsd(actualCost));
+  const inputMixBar = document.getElementById("execInputMixBar");
+  const outputMixBar = document.getElementById("execOutputMixBar");
+  if (inputMixBar) inputMixBar.style.width = inputPct + "%";
+  if (outputMixBar) outputMixBar.style.width = outputPct + "%";
+  const mixNote = document.getElementById("execCostMixNote");
+  if (mixNote) {
+    mixNote.textContent = knownMix > 0
+      ? `${inputPct}% input cost · ${outputPct}% output cost, split from recorded token usage and stored cost.`
+      : "Input/output cost mix will appear after routed requests record token usage.";
+  }
 
   const incidents = blockedCount + collisionCount;
   const incTag = document.getElementById("execIncidentTag");
