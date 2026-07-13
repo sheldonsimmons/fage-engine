@@ -200,6 +200,8 @@ def write_audit_event(
     tokens_saved:     int       = 0,
     raw_tokens:       int       = 0,
     clean_tokens:     int       = 0,
+    input_tokens:     int       = None,
+    output_tokens:    int       = None,
     usage_source:     str       = None,
     raw_payload:      str       = None,   # original text before pruning (None = not logged)
 ) -> dict:
@@ -214,6 +216,10 @@ def write_audit_event(
         context["clean_tokens"]  = clean_tokens
         context["tokens_saved"]  = tokens_saved
         context["compression_pct"] = round((tokens_saved / raw_tokens) * 100, 1) if raw_tokens > 0 else 0.0
+    if input_tokens is not None:
+        context["input_tokens"] = input_tokens
+    if output_tokens is not None:
+        context["output_tokens"] = output_tokens
     if usage_source:
         context["usage_source"] = usage_source
     risk_level = classify_risk(event_type, routing_decision, matched_keywords)
@@ -372,6 +378,8 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "matched_keywords": matched_kws,
         "raw_tokens":       context.get("raw_tokens"),
         "clean_tokens":     context.get("clean_tokens"),
+        "input_tokens":     context.get("input_tokens"),
+        "output_tokens":    context.get("output_tokens"),
         "tokens_saved":     context.get("tokens_saved", 0) or 0,
         "compression_pct":  context.get("compression_pct"),
         "usage_source":     context.get("usage_source"),

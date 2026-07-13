@@ -1511,9 +1511,14 @@ function eventCostComponents(e) {
     };
   }
 
-  const inputTokens = Number(e.input_tokens ?? e.prompt_tokens ?? e.tokens_in ?? 0);
-  const outputTokens = Number(e.output_tokens ?? e.completion_tokens ?? e.tokens_out ?? 0);
-  if (inputTokens + outputTokens <= 0) return { input: 0, output: 0, unknown: total };
+  const inputTokens = Number(e.input_tokens ?? e.prompt_tokens ?? e.tokens_in ?? e.clean_tokens ?? e.raw_tokens ?? 0);
+  let outputTokens = Number(e.output_tokens ?? e.completion_tokens ?? e.tokens_out ?? 0);
+  let estimated = false;
+  if (inputTokens > 0 && outputTokens <= 0) {
+    outputTokens = Math.max(1, Math.round(inputTokens * (isEconomyTier(e.model_tier) ? 0.2 : 0.35)));
+    estimated = true;
+  }
+  if (inputTokens + outputTokens <= 0) return { input: 0, output: 0, unknown: total, estimated: false };
 
   const rates = tierCostRates(e.model_tier);
   const weightedInput = inputTokens * rates.input;
@@ -1525,6 +1530,7 @@ function eventCostComponents(e) {
     input: total * (weightedInput / weightedTotal),
     output: total * (weightedOutput / weightedTotal),
     unknown: 0,
+    estimated,
   };
 }
 
@@ -1534,8 +1540,9 @@ function costMix(events) {
     sum.input += c.input;
     sum.output += c.output;
     sum.unknown += c.unknown;
+    if (c.estimated) sum.estimated += 1;
     return sum;
-  }, { input: 0, output: 0, unknown: 0 });
+  }, { input: 0, output: 0, unknown: 0, estimated: 0 });
 }
 
 function renderExec(data) {
@@ -1649,7 +1656,7 @@ function renderExec(data) {
   const mixNote = document.getElementById("execCostMixNote");
   if (mixNote) {
     mixNote.textContent = knownMix > 0
-      ? `${inputPct}% input cost · ${outputPct}% output cost, split from recorded token usage and stored cost.`
+      ? `${inputPct}% input cost · ${outputPct}% output cost, ${mix.estimated ? "estimated from recorded input tokens, tier rates, and stored cost." : "split from recorded input/output token usage and stored cost."}`
       : "Input/output cost mix will appear after routed requests record token usage.";
   }
 

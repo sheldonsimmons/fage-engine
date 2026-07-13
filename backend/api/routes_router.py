@@ -319,6 +319,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 tokens_saved     = result.get("tokens_saved_by_pruning", 0),
                 raw_tokens       = result.get("tokens_saved_by_pruning", 0) + result.get("input_tokens", 0),
                 clean_tokens     = result.get("input_tokens", 0),
+                input_tokens     = result.get("input_tokens", 0),
+                output_tokens    = result.get("output_tokens", 0),
                 usage_source     = result.get("usage_source", "estimated"),
                 raw_payload      = _raw_to_store,
             )
