@@ -1310,12 +1310,12 @@
 
     <!-- Baseline chart -->
     <div class="hero-card chart-wide">
-      <div class="chart-label">Cumulative spend vs. all-flagship baseline <span class="exec-help" tabindex="0" data-help="The gray line estimates what spend would look like if every request used premium routing. The green line shows actual CostPilot-controlled spend.">?</span></div>
+      <div class="chart-label">Cumulative spend vs. no-control baseline <span class="exec-help" tabindex="0" data-help="The gray line estimates what spend would look like without CostPilot routing, pruning, blocking, and budget controls. The green line shows actual CostPilot-controlled spend.">?</span></div>
       <div class="chart-sublabel">The space between the lines is money CostPilot kept from becoming AI spend.</div>
       <div class="chart-legend">
         <div class="chart-legend-item">
           <div class="chart-legend-dot" style="background:var(--text-muted);opacity:0.5;height:2px;border-top:2px dashed var(--text-muted)"></div>
-          All-flagship
+          No-control baseline
         </div>
         <div class="chart-legend-item">
           <div class="chart-legend-dot" style="background:var(--accent-green)"></div>
@@ -2282,7 +2282,7 @@ function buildChart(labels, actualData, flagshipData, totalSaved) {
       labels: shortLabels,
       datasets: [
         {
-          label: "All-flagship",
+          label: "No-control baseline",
           data: flagshipData,
           borderColor: "rgba(139,148,158,0.75)",
           borderWidth: 2,
@@ -2325,7 +2325,7 @@ function buildChart(labels, actualData, flagshipData, totalSaved) {
             label: ctx => ` ${ctx.dataset.label}: ${fmtUsd(ctx.parsed.y)}`,
             afterBody(items) {
               if (!items || items.length < 2) return "";
-              const baseline = items.find(i => i.dataset.label === "All-flagship")?.parsed.y || 0;
+              const baseline = items.find(i => i.dataset.label === "No-control baseline")?.parsed.y || 0;
               const actual = items.find(i => i.dataset.label === "Actual")?.parsed.y || 0;
               return `Saved to date: ${fmtUsd(Math.max(0, baseline - actual))}`;
             },
@@ -2362,15 +2362,18 @@ function rollupByDay(events) {
   events.forEach(e => {
     const day = (e.timestamp || "").slice(0, 10);
     if (!day) return;
-    if (!byDay[day]) byDay[day] = { cost: 0, calls: 0 };
-    byDay[day].cost += Number(e.cost_usd || 0);
+    if (!byDay[day]) byDay[day] = { cost: 0, avoided: 0, calls: 0 };
+    const actualCost = Number(e.cost_usd || 0);
+    byDay[day].cost += actualCost;
+    byDay[day].avoided += eventAvoidedSpend(e);
     byDay[day].calls += 1;
   });
   const labels = Object.keys(byDay).sort();
   return {
     labels,
     actual: labels.map(d => Number(byDay[d].cost.toFixed(6))),
-    flagship: labels.map(d => Number((byDay[d].calls * FLAGSHIP_AVG).toFixed(6))),
+    flagship: labels.map(d => Number((byDay[d].cost + byDay[d].avoided).toFixed(6))),
+    avoided: labels.map(d => Number(byDay[d].avoided.toFixed(6))),
   };
 }
 
@@ -2418,6 +2421,18 @@ function isThrottleEvent(e) {
   const outcome = norm(e.decision_outcome);
   const type = norm(e.event_type);
   return Boolean(e.budget_controlled) || outcome.includes("throttle") || outcome.includes("downgrade") || type === "throttle";
+}
+
+function eventAvoidedSpend(e) {
+  const actualCost = Number(e.cost_usd || 0);
+  const pruningSaved = Math.max(0, Number(e.tokens_saved || 0) * ADVISOR_INPUT_PER_TOKEN);
+  const routingSaved = (!isBlockedEvent(e) && isEconomyTier(e.model_tier))
+    ? Math.max(0, FLAGSHIP_AVG - actualCost)
+    : 0;
+  const throttleSaved = isThrottleEvent(e) ? FLAGSHIP_AVG : 0;
+  const blockedSaved = isBlockedEvent(e) ? 0.018 : 0;
+
+  return routingSaved + pruningSaved + throttleSaved + blockedSaved;
 }
 
 function filteredSavingsBreakdown(events) {
@@ -3144,13 +3159,16 @@ function renderExec(data) {
   document.getElementById("execFooterAudit").textContent = fmtNum(hasFilters ? events.length : d.compliance_events_total || events.length);
 
   let labels = [], actualDaily = [], flagshipDaily = [];
-  if (hasFilters) {
+  if (events.length) {
     const rolled = rollupByDay(events);
     labels = rolled.labels; actualDaily = rolled.actual; flagshipDaily = rolled.flagship;
   } else if (ts.daily_spend && ts.labels) {
     labels = ts.labels;
     actualDaily = ts.daily_spend.map(x => x.total_usd || 0);
-    flagshipDaily = (ts.daily_calls || []).map(c => Number(((c.total_calls || 0) * FLAGSHIP_AVG).toFixed(4)));
+    flagshipDaily = (ts.daily_calls || []).map((c, i) => {
+      const estimatedBaseline = Number(((c.total_calls || 0) * FLAGSHIP_AVG).toFixed(4));
+      return Math.max(Number(actualDaily[i] || 0), estimatedBaseline);
+    });
   }
   if (labels.length) {
     const padded = padSeriesThroughToday(labels, actualDaily, flagshipDaily);
