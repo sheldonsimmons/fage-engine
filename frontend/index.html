@@ -202,7 +202,8 @@
 
     /* ── Hero savings row ─────────────────────────────────────────────────────── */
     .hero-row {
-      display: grid; grid-template-columns: 1fr; gap: 18px; margin-bottom: 20px;
+      display: grid; grid-template-columns: minmax(560px, 1.12fr) minmax(420px, 0.88fr);
+      gap: 18px; margin-bottom: 20px; align-items: stretch;
     }
 
     .hero-card {
@@ -222,10 +223,10 @@
     .hero-card.savings-impact {
       border-color: rgba(63,185,80,0.55);
       box-shadow: 0 0 0 1px rgba(63,185,80,0.10), 0 18px 60px rgba(46,160,67,0.12);
-      padding: 34px 38px;
+      padding: 28px 30px;
     }
     .hero-card.chart-wide {
-      min-height: 360px;
+      min-height: 0;
       background:
         linear-gradient(145deg, rgba(88,166,255,0.05), transparent 40%),
         var(--bg-panel);
@@ -245,7 +246,7 @@
       letter-spacing: 0.10em; color: var(--text-primary); margin-bottom: 5px;
     }
     .hero-sub {
-      font-size: 15px; color: var(--text-muted); line-height: 1.45;
+      font-size: 14px; color: var(--text-muted); line-height: 1.45;
       margin-bottom: 16px; max-width: 1180px;
     }
     .hero-sub strong { color: var(--text-primary); }
@@ -261,20 +262,39 @@
     }
     .savings-compare-card {
       border: 1px solid var(--border); background: rgba(13,17,23,0.48);
-      border-radius: 8px; padding: 14px 16px; min-width: 0;
+      border-radius: 8px; padding: 12px 14px; min-width: 0;
     }
     .savings-compare-card.saved {
       border-color: rgba(46,160,67,0.35); background: rgba(46,160,67,0.08);
+    }
+    .savings-compare-card.driver {
+      border-color: rgba(88,166,255,0.28); background: rgba(88,166,255,0.06);
+    }
+    .savings-compare-card.warning {
+      border-color: rgba(210,153,34,0.34); background: rgba(210,153,34,0.08);
+    }
+    .savings-compare-card.risk {
+      border-color: rgba(248,81,73,0.34); background: rgba(248,81,73,0.08);
     }
     .savings-compare-label {
       font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--text-muted); margin-bottom: 5px; font-weight: 800;
     }
     .savings-compare-value {
-      font-family: var(--font-mono); font-weight: 900; font-size: 26px;
+      font-family: var(--font-mono); font-weight: 900; font-size: 24px;
       color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .savings-compare-card.saved .savings-compare-value { color: var(--accent-green); }
+    .savings-compare-card.driver .savings-compare-value { color: var(--accent); }
+    .savings-compare-card.warning .savings-compare-value { color: var(--accent-yellow); }
+    .savings-compare-card.risk .savings-compare-value { color: var(--accent-red); }
+    .savings-compare-value.text {
+      font-family: inherit; font-size: 18px; line-height: 1.12; letter-spacing: 0;
+    }
+    .savings-compare-sub {
+      margin-top: 5px; color: var(--text-muted); font-size: 10px; line-height: 1.25;
+      min-height: 24px; overflow: hidden;
+    }
     .savings-proof-grid {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 8px; margin-top: 12px;
@@ -318,7 +338,7 @@
     .chart-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
     .chart-legend-dot { width: 10px; height: 3px; border-radius: 2px; }
     .chart-canvas-wrap {
-      position: relative; height: 260px; width: 100%;
+      position: relative; height: 295px; width: 100%;
     }
     .chart-caption {
       font-size: 11px; color: var(--text-muted); margin-top: 10px;
@@ -1225,16 +1245,34 @@
       </div>
       <div class="savings-compare-grid" aria-label="CostPilot savings comparison">
         <div class="savings-compare-card">
-          <div class="savings-compare-label">Would Have Spent</div>
+          <div class="savings-compare-label">Would Have Spent <span class="exec-help" tabindex="0" data-help="Estimated cost if these requests all used the premium model path.">?</span></div>
           <div class="savings-compare-value" id="execWithoutCostPilot">—</div>
+          <div class="savings-compare-sub">all-flagship baseline</div>
         </div>
         <div class="savings-compare-card">
-          <div class="savings-compare-label">Actual AI Spend</div>
+          <div class="savings-compare-label">Actual AI Spend <span class="exec-help" tabindex="0" data-help="What the governed requests actually cost after CostPilot routing, pruning, and controls.">?</span></div>
           <div class="savings-compare-value" id="execWithCostPilot">—</div>
+          <div class="savings-compare-sub">current period</div>
         </div>
         <div class="savings-compare-card saved">
-          <div class="savings-compare-label">Spend Avoided</div>
+          <div class="savings-compare-label">AI Spend Avoided <span class="exec-help" tabindex="0" data-help="The difference between the all-premium baseline and actual AI spend.">?</span></div>
           <div class="savings-compare-value" id="execSavedCost">—</div>
+          <div class="savings-compare-sub">kept from spend</div>
+        </div>
+        <div class="savings-compare-card driver">
+          <div class="savings-compare-label">Top Cost Driver <span class="exec-help" tabindex="0" data-help="The agent, workflow, or owner creating the most AI spend in this view.">?</span></div>
+          <div class="savings-compare-value text" id="execHeroTopDriverValue">—</div>
+          <div class="savings-compare-sub" id="execHeroTopDriverSub">highest spend owner</div>
+        </div>
+        <div class="savings-compare-card warning" id="execHeroBudgetCard">
+          <div class="savings-compare-label">Budget Health <span class="exec-help" tabindex="0" data-help="Shows whether the selected workspace or department is under budget, nearing cap, or over cap.">?</span></div>
+          <div class="savings-compare-value text" id="execHeroBudgetValue">—</div>
+          <div class="savings-compare-sub" id="execHeroBudgetSub">budget signal</div>
+        </div>
+        <div class="savings-compare-card risk" id="execHeroRiskCard">
+          <div class="savings-compare-label">Risk Events <span class="exec-help" tabindex="0" data-help="Blocked requests, sensitive payloads, collision locks, or policy actions that need executive awareness.">?</span></div>
+          <div class="savings-compare-value text" id="execHeroRiskValue">—</div>
+          <div class="savings-compare-sub" id="execHeroRiskSub">blocked and controlled events</div>
         </div>
       </div>
       <div class="impact-bar" aria-label="Actual spend versus savings">
@@ -2955,6 +2993,14 @@ function renderExec(data) {
   setText("execPremiumAvoided", fmtNum(economyCalls));
 
   const drivers = topCostDrivers(events, data);
+  const topDriver = drivers[0];
+  setText("execHeroTopDriverValue", topDriver ? topDriver.agent : "No driver yet");
+  setText(
+    "execHeroTopDriverSub",
+    topDriver
+      ? `${topDriver.dept} · ${fmtUsd(topDriver.cost)} · ${fmtNum(topDriver.calls)} req`
+      : "appears after governed requests"
+  );
   renderTopCostDrivers(drivers);
   renderRecommendationDrivers(drivers);
   setText("execTopDriverScope", hasFilters ? "Filtered view" : "Last 30 days");
@@ -2962,7 +3008,6 @@ function renderExec(data) {
   const todayEvents = events.filter(e => eventIsoDay(e) === today);
   const sevenDayEvents = eventsSince(events, 7);
   const tokenVolume = events.reduce((sum, e) => sum + eventTokenVolume(e), 0);
-  const topDriver = drivers[0];
   const todayCost = totalEventCost(todayEvents);
   const sevenDayCost = totalEventCost(sevenDayEvents);
   const sevenDayActiveDays = new Set(sevenDayEvents.map(eventIsoDay).filter(Boolean)).size;
@@ -3002,6 +3047,13 @@ function renderExec(data) {
   const budgetMask = document.getElementById("execBudgetSignalMask");
   if (budgetMask) budgetMask.style.width = Math.max(0, 100 - Math.min(budget.pct, 100)) + "%";
   const budgetRemaining = Math.max(0, Number(budget.cap || 0) - Number(budget.spend || 0));
+  const budgetHealthLabel = budget.pct >= 100 ? "Over Cap" : budget.pct >= 80 ? "Watch" : "Healthy";
+  const heroBudgetCard = document.getElementById("execHeroBudgetCard");
+  if (heroBudgetCard) {
+    heroBudgetCard.className = `savings-compare-card ${budget.pct >= 100 ? "risk" : budget.pct >= 80 ? "warning" : "saved"}`;
+  }
+  setText("execHeroBudgetValue", budgetHealthLabel);
+  setText("execHeroBudgetSub", `${Math.round(budget.pct)}% used · ${fmtUsd(budgetRemaining)} left`);
   setText("execBudgetSignalUsed", `${Math.round(budget.pct)}% used`);
   setText("execBudgetSignalRemaining", `${fmtUsd(budgetRemaining)} left`);
   if (budget.pct >= 100) {
@@ -3054,6 +3106,12 @@ function renderExec(data) {
   }
 
   const incidents = blockedCount + collisionCount;
+  const heroRiskCard = document.getElementById("execHeroRiskCard");
+  if (heroRiskCard) {
+    heroRiskCard.className = `savings-compare-card ${incidents > 0 ? "risk" : "saved"}`;
+  }
+  setText("execHeroRiskValue", fmtNum(incidents));
+  setText("execHeroRiskSub", `${fmtNum(blockedCount)} blocked · ${fmtNum(collisionCount)} collision`);
   const incTag = document.getElementById("execIncidentTag");
   incTag.textContent = incidents > 0 ? `${incidents} INCIDENTS` : "0 INCIDENTS";
   incTag.className = "metric-tag " + (incidents > 0 ? "yellow" : "green");
