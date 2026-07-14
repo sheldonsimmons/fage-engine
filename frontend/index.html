@@ -644,6 +644,232 @@
       transition: width 0.7s ease;
     }
 
+    .exec-help {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      margin-left: 6px;
+      border: 1px solid rgba(139,148,158,0.55);
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 900;
+      cursor: help;
+      vertical-align: middle;
+    }
+    .exec-help::after {
+      content: attr(data-help);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 9px);
+      width: min(280px, 70vw);
+      transform: translateX(-50%) translateY(4px);
+      padding: 10px 12px;
+      border: 1px solid rgba(88,166,255,0.35);
+      border-radius: 8px;
+      background: #0d1117;
+      color: var(--text-primary);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+      font-size: 11px;
+      line-height: 1.35;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: none;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .exec-help::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 3px);
+      width: 10px;
+      height: 10px;
+      transform: translateX(-50%) rotate(45deg);
+      background: #0d1117;
+      border-right: 1px solid rgba(88,166,255,0.35);
+      border-bottom: 1px solid rgba(88,166,255,0.35);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 51;
+      transition: opacity 0.15s ease;
+    }
+    .exec-help:hover::after,
+    .exec-help:focus::after,
+    .exec-help:hover::before,
+    .exec-help:focus::before {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .exec-help:hover::before,
+    .exec-help:focus::before {
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    .spend-visual-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .spend-visual-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      min-width: 0;
+    }
+    .spend-visual-card.wide {
+      grid-column: 1 / -1;
+      border-color: rgba(88,166,255,0.28);
+      background:
+        radial-gradient(circle at 18% 18%, rgba(88,166,255,0.11), transparent 30%),
+        rgba(22,27,34,0.95);
+    }
+    .spend-visual-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .spend-visual-title {
+      color: var(--text-primary);
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .spend-visual-sub {
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.35;
+    }
+    .spend-trend-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.75fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+    .spend-trend-bars {
+      display: flex;
+      align-items: end;
+      gap: 12px;
+      min-height: 152px;
+      padding: 8px 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .spend-trend-bar-wrap {
+      flex: 1;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 8px;
+      align-items: end;
+    }
+    .spend-trend-bar {
+      width: 100%;
+      min-height: 4px;
+      border-radius: 8px 8px 2px 2px;
+      background: linear-gradient(180deg, #58a6ff, rgba(88,166,255,0.45));
+      box-shadow: 0 0 16px rgba(88,166,255,0.16);
+      transition: height 0.7s ease;
+    }
+    .spend-trend-label {
+      color: var(--text-muted);
+      font-size: 9px;
+      font-weight: 800;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .spend-trend-kpis {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .spend-trend-kpi {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: rgba(13,17,23,0.42);
+    }
+    .spend-trend-kpi.green {
+      border-color: rgba(46,160,67,0.28);
+      background: rgba(46,160,67,0.07);
+    }
+    .spend-trend-kpi-label {
+      color: var(--text-muted);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 900;
+      margin-bottom: 5px;
+    }
+    .spend-trend-kpi-value {
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .spend-trend-kpi.green .spend-trend-kpi-value {
+      color: var(--accent-green);
+    }
+    .spend-bars {
+      display: grid;
+      gap: 11px;
+      margin-top: 10px;
+    }
+    .spend-bar-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+      margin-bottom: 5px;
+    }
+    .spend-bar-name {
+      color: var(--text-primary);
+      font-size: 11px;
+      font-weight: 850;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .spend-bar-value {
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .spend-bar-track {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--border);
+      overflow: hidden;
+    }
+    .spend-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--accent-green);
+      transition: width 0.7s ease;
+    }
+    .spend-bar-fill.blue { background: #58a6ff; }
+    .spend-bar-fill.yellow { background: var(--accent-yellow); }
+    .spend-bar-caption {
+      color: var(--text-muted);
+      font-size: 9px;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .exec-kpi-row {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px; margin-bottom: 20px;
@@ -783,11 +1009,13 @@
       .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
       .savings-proof-grid { grid-template-columns: repeat(2, 1fr); }
       .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid { grid-template-columns: repeat(2, 1fr); }
+      .spend-visual-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .spend-trend-layout { grid-template-columns: 1fr; }
       .savings-mix-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .exec-kpi-row, .exec-insight-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 760px) {
-      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
+      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid, .spend-visual-grid, .spend-trend-kpis, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
       .burn-card.trend { grid-column: auto; }
       .burn-trend-head { grid-template-columns: 1fr; }
       .savings-mix-legend { grid-template-columns: 1fr; }
@@ -973,7 +1201,7 @@
     <!-- Left: Giant savings number -->
     <div class="hero-card green savings-impact">
       <div class="hero-eyebrow" id="execSavingsScopeLabel">CostPilot Savings · All Workspace Data</div>
-      <div class="hero-number-label">AI spend avoided</div>
+      <div class="hero-number-label">AI spend avoided <span class="exec-help" tabindex="0" data-help="The estimated money CostPilot kept from becoming AI spend by routing cheaper, pruning waste, blocking risky requests, or enforcing budget controls.">?</span></div>
       <div class="hero-number" id="execAnnualSavings">—</div>
       <div class="hero-sub" id="execHeroSub">
         Saved <strong id="execHeroAvoided">—</strong> against an all-flagship baseline.
@@ -1029,7 +1257,7 @@
 
     <!-- Baseline chart -->
     <div class="hero-card chart-wide">
-      <div class="chart-label">Cumulative spend vs. all-flagship baseline</div>
+      <div class="chart-label">Cumulative spend vs. all-flagship baseline <span class="exec-help" tabindex="0" data-help="The gray line estimates what spend would look like if every request used premium routing. The green line shows actual CostPilot-controlled spend.">?</span></div>
       <div class="chart-sublabel">The space between the lines is money CostPilot kept from becoming AI spend.</div>
       <div class="chart-legend">
         <div class="chart-legend-item">
@@ -1103,10 +1331,78 @@
     </div>
   </div>
 
+  <div class="spend-visual-grid" aria-label="Executive spend breakdowns">
+    <div class="spend-visual-card wide">
+      <div class="spend-visual-head">
+        <div>
+          <div class="spend-visual-title">
+            AI spend trend
+            <span class="exec-help" tabindex="0" data-help="Shows actual AI spend over time for the selected executive view. This helps leaders see whether AI cost is rising, flat, or falling.">?</span>
+          </div>
+          <div class="spend-visual-sub">Actual spend by month, with savings and avoided spend called out.</div>
+        </div>
+        <div class="spend-visual-sub" id="execSpendTrendScope">Current view</div>
+      </div>
+      <div class="spend-trend-layout">
+        <div class="spend-trend-bars" id="execSpendTrendBars" aria-label="Monthly AI spend bars"></div>
+        <div class="spend-trend-kpis">
+          <div class="spend-trend-kpi">
+            <div class="spend-trend-kpi-label">Current Month</div>
+            <div class="spend-trend-kpi-value" id="execSpendTrendCurrent">—</div>
+          </div>
+          <div class="spend-trend-kpi green">
+            <div class="spend-trend-kpi-label">Savings Pace</div>
+            <div class="spend-trend-kpi-value" id="execSpendTrendSaved">—</div>
+          </div>
+          <div class="spend-trend-kpi green">
+            <div class="spend-trend-kpi-label">Avoided Spend</div>
+            <div class="spend-trend-kpi-value" id="execSpendTrendAvoided">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="spend-visual-card">
+      <div class="spend-visual-title">
+        Spend by department
+        <span class="exec-help" tabindex="0" data-help="Shows which departments are creating the most governed AI spend in the current view.">?</span>
+      </div>
+      <div class="spend-visual-sub">Where AI spend is coming from inside the business.</div>
+      <div class="spend-bars" id="execSpendByDeptBars"></div>
+    </div>
+
+    <div class="spend-visual-card">
+      <div class="spend-visual-title">
+        Spend by AI agent
+        <span class="exec-help" tabindex="0" data-help="Shows the individual AI agents or bots driving the most spend. Helpful for deciding which agents need tighter routing, pruning, or review.">?</span>
+      </div>
+      <div class="spend-visual-sub">Top cost-driving agents and bots.</div>
+      <div class="spend-bars" id="execSpendByAgentBars"></div>
+    </div>
+
+    <div class="spend-visual-card">
+      <div class="spend-visual-title">
+        Spend by business unit
+        <span class="exec-help" tabindex="0" data-help="Groups departments into executive-level business units so the dashboard feels less technical and easier to discuss with leadership.">?</span>
+      </div>
+      <div class="spend-visual-sub">Executive roll-up across related departments.</div>
+      <div class="spend-bars" id="execSpendByBusinessUnitBars"></div>
+    </div>
+
+    <div class="spend-visual-card">
+      <div class="spend-visual-title">
+        Spend by model
+        <span class="exec-help" tabindex="0" data-help="Shows which model tiers or named models are creating spend. If provider model names are unavailable, CostPilot groups spend by tier.">?</span>
+      </div>
+      <div class="spend-visual-sub">Model or tier cost concentration.</div>
+      <div class="spend-bars" id="execSpendByModelBars"></div>
+    </div>
+  </div>
+
   <div class="source-tile-grid" aria-label="CostPilot savings sources">
     <div class="savings-mix-card">
       <div class="savings-mix-head">
-        <div class="savings-mix-title">Savings Mix</div>
+        <div class="savings-mix-title">Savings Mix <span class="exec-help" tabindex="0" data-help="Breaks avoided spend into the main ways CostPilot saves money: smarter routing, context pruning, budget controls, and blocked sensitive requests.">?</span></div>
         <div class="savings-mix-total" id="execMixTotal">— avoided</div>
       </div>
       <div class="savings-mix-stack" aria-label="Savings mix by source">
@@ -1269,7 +1565,7 @@
     <div class="exec-insight-card">
       <div class="exec-insight-head">
         <div>
-          <div class="exec-insight-title">Top AI cost drivers</div>
+          <div class="exec-insight-title">Top AI cost drivers <span class="exec-help" tabindex="0" data-help="Ranks the agents, teams, or workflows creating the most AI cost so leaders know where to investigate first.">?</span></div>
           <div class="exec-insight-sub">Agents and departments creating the most spend</div>
         </div>
         <div class="exec-insight-sub" id="execTopDriverScope">Current view</div>
@@ -1280,7 +1576,7 @@
     <div class="exec-insight-card">
       <div class="exec-insight-head">
         <div>
-          <div class="exec-insight-title">Cost mix</div>
+          <div class="exec-insight-title">Cost mix <span class="exec-help" tabindex="0" data-help="Splits AI cost between prompt/input spend and response/output spend, then shows whether a small number of drivers account for most of the bill.">?</span></div>
           <div class="exec-insight-sub">Input, output, concentration, and run rate</div>
         </div>
       </div>
@@ -1312,7 +1608,7 @@
 
   <!-- Where savings came from -->
   <div class="breakdown-card">
-    <div class="breakdown-title">Where the savings came from</div>
+    <div class="breakdown-title">Where the savings came from <span class="exec-help" tabindex="0" data-help="Shows the dollar contribution of each CostPilot control, so savings are easier to explain and defend.">?</span></div>
     <div class="breakdown-sub" id="execBreakdownSub">Loading savings breakdown...</div>
     <div class="breakdown-grid">
 
@@ -1411,6 +1707,7 @@ const EXEC_LAYOUT_SECTIONS = [
   { id: "baselineChart", label: "Baseline chart", selector: ".hero-card.chart-wide" },
   { id: "usageSnapshot", label: "Usage snapshot", selector: ".usage-snapshot" },
   { id: "burnStrip", label: "Spend console", selector: ".burn-strip" },
+  { id: "spendVisuals", label: "Spend breakdown charts", selector: ".spend-visual-grid" },
   { id: "savingsSources", label: "Savings sources", selector: ".source-tile-grid" },
   { id: "recommendations", label: "Recommendations", selector: ".recommendation-grid" },
   { id: "metricCards", label: "Operating metrics", selector: ".metric-row" },
@@ -2335,6 +2632,130 @@ function costMix(events) {
   }, { input: 0, output: 0, unknown: 0, estimated: 0 });
 }
 
+function businessUnitForDept(dept) {
+  const d = norm(displayDeptName(dept));
+  if (["sales", "marketing"].includes(d)) return "Revenue";
+  if (["support", "customer support", "customer service", "success"].includes(d)) return "Customer Operations";
+  if (["finance", "legal"].includes(d)) return "Finance & Risk";
+  if (["engineering", "operations"].includes(d)) return "Product & Operations";
+  return displayDeptName(dept) || "Other";
+}
+
+function modelLabelForEvent(e) {
+  const direct = e.model_name || e.model_id || e.model || e.provider_model || e.llm_model;
+  if (direct) return String(direct);
+  const tier = tierName(e.model_tier);
+  return tier ? `${tier} tier` : "Unknown model";
+}
+
+function groupSpend(events, keyFn, data) {
+  const grouped = new Map();
+  routedCostEvents(events).forEach(e => {
+    const key = keyFn(e, data) || "Unknown";
+    const current = grouped.get(key) || { label: key, value: 0, calls: 0, tokens: 0 };
+    current.value += Number(e.cost_usd || 0);
+    current.calls += 1;
+    current.tokens += eventTokenVolume(e);
+    grouped.set(key, current);
+  });
+  return [...grouped.values()].sort((a, b) => b.value - a.value);
+}
+
+function renderSpendBars(containerId, rows, options = {}) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const top = rows.filter(row => row.value > 0 || row.calls > 0).slice(0, options.limit || 5);
+  if (!top.length) {
+    container.innerHTML = `<div class="spend-visual-sub">${options.empty || "No spend recorded in this view yet."}</div>`;
+    return;
+  }
+  const maxValue = Math.max(...top.map(row => row.value), 0.000001);
+  const fillClass = options.fillClass || "";
+  container.innerHTML = top.map(row => {
+    const width = Math.max(row.value > 0 ? 4 : 0, Math.round((row.value / maxValue) * 100));
+    const meta = options.meta
+      ? options.meta(row)
+      : `${fmtNum(row.calls)} requests · ${fmtNum(row.tokens)} tokens`;
+    return `
+      <div class="spend-bar-row">
+        <div class="spend-bar-meta">
+          <div class="spend-bar-name" title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</div>
+          <div class="spend-bar-value">${fmtUsd(row.value)}</div>
+        </div>
+        <div class="spend-bar-track"><div class="spend-bar-fill ${fillClass}" style="width:${width}%"></div></div>
+        <div class="spend-bar-caption">${escapeHtml(meta)}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function monthKeyForEvent(e) {
+  const ts = eventTs(e);
+  if (!ts) return "";
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelFromKey(key) {
+  const [year, month] = String(key).split("-").map(Number);
+  if (!year || !month) return key || "—";
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: "short" });
+}
+
+function renderSpendTrendVisual(events, context) {
+  const container = document.getElementById("execSpendTrendBars");
+  if (!container) return;
+  const byMonth = new Map();
+  routedCostEvents(events).forEach(e => {
+    const key = monthKeyForEvent(e);
+    if (!key) return;
+    byMonth.set(key, (byMonth.get(key) || 0) + Number(e.cost_usd || 0));
+  });
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i -= 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    months.push({ key, label: monthLabelFromKey(key), value: byMonth.get(key) || 0 });
+  }
+  const hasSpend = months.some(m => m.value > 0);
+  const maxValue = Math.max(...months.map(m => m.value), 0.000001);
+  container.innerHTML = months.map(month => {
+    const height = month.value > 0 ? Math.max(8, Math.round((month.value / maxValue) * 132)) : 4;
+    return `
+      <div class="spend-trend-bar-wrap" title="${escapeHtml(month.label)}: ${fmtUsd(month.value)}">
+        <div class="spend-trend-bar" style="height:${height}px;opacity:${month.value > 0 ? 1 : 0.28}"></div>
+        <div class="spend-trend-label">${escapeHtml(month.label)}</div>
+      </div>
+    `;
+  }).join("");
+  setText("execSpendTrendScope", hasSpend ? "Last 6 months" : "No monthly spend yet");
+  setText("execSpendTrendCurrent", fmtUsd(context.actualCost || 0));
+  setText("execSpendTrendSaved", fmtUsd(context.annualSavings || 0));
+  setText("execSpendTrendAvoided", fmtUsd(context.totalAvoided || 0));
+}
+
+function renderExecSpendBreakdowns(events, data, context) {
+  const dashboard = data.dashboard || {};
+  const byDept = groupSpend(events, e => displayDeptName(e.department || e.source_department), data);
+  if (!byDept.length && dashboard.spend_by_dept) {
+    Object.entries(dashboard.spend_by_dept).forEach(([label, value]) => {
+      byDept.push({ label: displayDeptName(label), value: Number(value || 0), calls: 0, tokens: 0 });
+    });
+    byDept.sort((a, b) => b.value - a.value);
+  }
+
+  const byAgent = groupSpend(events, (e, d) => agentNameForEvent(e, d), data);
+  const byBusinessUnit = groupSpend(events, e => businessUnitForDept(e.department || e.source_department), data);
+  const byModel = groupSpend(events, e => modelLabelForEvent(e), data);
+
+  renderSpendTrendVisual(events, context);
+  renderSpendBars("execSpendByDeptBars", byDept, { fillClass: "blue", empty: "Department spend appears after governed requests are routed." });
+  renderSpendBars("execSpendByAgentBars", byAgent, { empty: "Agent spend appears after governed requests are routed." });
+  renderSpendBars("execSpendByBusinessUnitBars", byBusinessUnit, { fillClass: "yellow", empty: "Business unit spend appears after governed requests are routed." });
+  renderSpendBars("execSpendByModelBars", byModel, { fillClass: "blue", empty: "Model spend appears after routed requests include model or tier data." });
+}
+
 function renderExec(data) {
   const d = data.dashboard || {};
   const ts = data.timeseries || {};
@@ -2460,6 +2881,12 @@ function renderExec(data) {
   setText("execBurnMonth", fmtUsd(projectedMonthCost));
   setText("execBurnAnnualized", fmtUsd(annualSavings));
   renderSevenDaySpendBars(sevenDayEvents);
+  renderExecSpendBreakdowns(events, data, {
+    actualCost,
+    annualSavings,
+    totalAvoided,
+    withoutCostPilot,
+  });
 
   const sourceMax = Math.max(routingSaved, pruningSaved, throttleSaved, blockedSaved, 1);
   function setSourceTile(valId, barId, value) {
