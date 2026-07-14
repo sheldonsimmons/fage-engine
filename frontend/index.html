@@ -202,7 +202,7 @@
 
     /* ── Hero savings row ─────────────────────────────────────────────────────── */
     .hero-row {
-      display: grid; grid-template-columns: minmax(560px, 1.12fr) minmax(420px, 0.88fr);
+      display: grid; grid-template-columns: 1fr;
       gap: 18px; margin-bottom: 20px; align-items: stretch;
     }
 
@@ -223,13 +223,30 @@
     .hero-card.savings-impact {
       border-color: rgba(63,185,80,0.55);
       box-shadow: 0 0 0 1px rgba(63,185,80,0.10), 0 18px 60px rgba(46,160,67,0.12);
-      padding: 28px 30px;
+      padding: 22px;
+      display: grid;
+      grid-template-columns: minmax(340px, 0.72fr) minmax(620px, 1.28fr);
+      gap: 20px;
+      align-items: stretch;
     }
     .hero-card.chart-wide {
       min-height: 0;
+      padding: 22px 26px 24px;
       background:
         linear-gradient(145deg, rgba(88,166,255,0.05), transparent 40%),
         var(--bg-panel);
+    }
+
+    .savings-primary-panel {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column; justify-content: space-between;
+      min-height: 360px; padding: 6px 4px 4px;
+    }
+
+    .savings-scoreboard {
+      position: relative; z-index: 1;
+      display: grid; grid-template-rows: auto auto; gap: 12px;
+      min-width: 0;
     }
 
     .hero-eyebrow {
@@ -237,7 +254,7 @@
       color: rgba(46,160,67,0.9); font-weight: 700; margin-bottom: 6px;
     }
     .hero-number {
-      font-size: 82px; font-weight: 900; color: #3fb950;
+      font-size: 92px; font-weight: 900; color: #3fb950;
       letter-spacing: -2px; line-height: 1; font-family: var(--font-mono);
       margin-bottom: 10px; text-shadow: 0 0 18px rgba(63,185,80,0.18);
     }
@@ -246,10 +263,18 @@
       letter-spacing: 0.10em; color: var(--text-primary); margin-bottom: 5px;
     }
     .hero-sub {
-      font-size: 14px; color: var(--text-muted); line-height: 1.45;
+      display: flex; flex-wrap: wrap; gap: 8px;
+      font-size: 12px; color: var(--text-muted); line-height: 1.35;
       margin-bottom: 16px; max-width: 1180px;
     }
     .hero-sub strong { color: var(--text-primary); }
+    .hero-sub-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px solid rgba(63,185,80,0.22);
+      background: rgba(63,185,80,0.08);
+      border-radius: 999px; padding: 6px 10px;
+      white-space: nowrap;
+    }
     .hero-badge {
       display: inline-flex; align-items: center; gap: 6px;
       background: rgba(46,160,67,0.12); border: 1px solid rgba(46,160,67,0.25);
@@ -258,11 +283,13 @@
     }
     .savings-compare-grid {
       display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px; margin: 16px 0 14px;
+      gap: 12px; margin: 0;
     }
     .savings-compare-card {
       border: 1px solid var(--border); background: rgba(13,17,23,0.48);
-      border-radius: 8px; padding: 12px 14px; min-width: 0;
+      border-radius: 8px; padding: 14px 16px; min-width: 0;
+      min-height: 132px; display: flex; flex-direction: column;
+      justify-content: space-between;
     }
     .savings-compare-card.saved {
       border-color: rgba(46,160,67,0.35); background: rgba(46,160,67,0.08);
@@ -276,12 +303,24 @@
     .savings-compare-card.risk {
       border-color: rgba(248,81,73,0.34); background: rgba(248,81,73,0.08);
     }
+    .savings-compare-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    }
     .savings-compare-label {
       font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--text-muted); margin-bottom: 5px; font-weight: 800;
     }
+    .savings-compare-badge {
+      flex-shrink: 0; font-family: var(--font-mono); font-size: 10px; font-weight: 800;
+      padding: 2px 7px; border-radius: 20px; white-space: nowrap; line-height: 1.5;
+      background: rgba(139,148,158,0.14); color: var(--text-muted);
+    }
+    .savings-compare-badge.badge-green  { background: rgba(63,185,80,0.16);  color: var(--accent-green); }
+    .savings-compare-badge.badge-blue   { background: rgba(88,166,255,0.16); color: var(--accent); }
+    .savings-compare-badge.badge-yellow { background: rgba(210,153,34,0.18); color: var(--accent-yellow); }
+    .savings-compare-badge.badge-red    { background: rgba(248,81,73,0.18);  color: var(--accent-red); }
     .savings-compare-value {
-      font-family: var(--font-mono); font-weight: 900; font-size: 24px;
+      font-family: var(--font-mono); font-weight: 900; font-size: 30px;
       color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .savings-compare-card.saved .savings-compare-value { color: var(--accent-green); }
@@ -289,15 +328,29 @@
     .savings-compare-card.warning .savings-compare-value { color: var(--accent-yellow); }
     .savings-compare-card.risk .savings-compare-value { color: var(--accent-red); }
     .savings-compare-value.text {
-      font-family: inherit; font-size: 18px; line-height: 1.12; letter-spacing: 0;
+      font-family: inherit; font-size: 20px; line-height: 1.12; letter-spacing: 0;
     }
+    .risk-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      margin-right: 7px; background: var(--accent-green); vertical-align: middle;
+      box-shadow: 0 0 6px currentColor;
+    }
+    .savings-compare-card.risk .risk-dot { background: var(--accent-red); }
     .savings-compare-sub {
       margin-top: 5px; color: var(--text-muted); font-size: 10px; line-height: 1.25;
       min-height: 24px; overflow: hidden;
     }
+    .savings-compare-gauge-track {
+      margin-top: 8px; height: 8px; border-radius: 999px; overflow: hidden;
+      background: rgba(139,148,158,0.18);
+    }
+    .savings-compare-gauge-fill {
+      height: 100%; border-radius: 999px; background: var(--accent-green);
+      transition: width 0.5s ease; width: 0%;
+    }
     .savings-proof-grid {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px; margin-top: 12px;
+      gap: 10px; margin-top: 0;
     }
     .savings-proof {
       border: 1px solid rgba(63,185,80,0.20); background: rgba(63,185,80,0.06);
@@ -319,7 +372,7 @@
     }
     .impact-bar-head strong { color: var(--text-primary); font-family: var(--font-mono); }
     .impact-bar-track {
-      height: 18px; display: flex; overflow: hidden; border-radius: 999px;
+      height: 26px; display: flex; overflow: hidden; border-radius: 999px;
       border: 1px solid rgba(139,148,158,0.25); background: var(--border);
     }
     .impact-bar-actual {
@@ -338,7 +391,7 @@
     .chart-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
     .chart-legend-dot { width: 10px; height: 3px; border-radius: 2px; }
     .chart-canvas-wrap {
-      position: relative; height: 295px; width: 100%;
+      position: relative; height: 365px; width: 100%;
     }
     .chart-caption {
       font-size: 11px; color: var(--text-muted); margin-top: 10px;
@@ -509,6 +562,29 @@
     .savings-mix-total {
       font-family: var(--font-mono); color: var(--accent-green);
       font-size: 18px; font-weight: 900;
+    }
+    .savings-mix-body {
+      display: grid; grid-template-columns: minmax(180px, 260px) 1fr;
+      gap: 18px; align-items: center;
+    }
+    .savings-donut-wrap {
+      position: relative; min-height: 220px; width: 100%;
+    }
+    .savings-donut-wrap canvas {
+      position: relative; z-index: 1;
+    }
+    .savings-donut-center {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center;
+      pointer-events: none; z-index: 2;
+    }
+    .savings-donut-center-value {
+      font-family: var(--font-mono); color: var(--accent-green);
+      font-size: 24px; line-height: 1; font-weight: 900;
+    }
+    .savings-donut-center-label {
+      margin-top: 6px; color: var(--text-muted); font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.08em; font-weight: 900;
     }
     .savings-mix-stack {
       display: flex; height: 18px; overflow: hidden; border-radius: 999px;
@@ -1042,10 +1118,13 @@
     @media (max-width: 1100px) {
       .exec-help-grid { grid-template-columns: repeat(2, 1fr); }
       .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
+      .hero-card.savings-impact { grid-template-columns: 1fr; }
+      .savings-primary-panel { min-height: auto; }
       .savings-proof-grid { grid-template-columns: repeat(2, 1fr); }
       .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid { grid-template-columns: repeat(2, 1fr); }
       .spend-visual-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .spend-trend-layout { grid-template-columns: 1fr; }
+      .savings-mix-body { grid-template-columns: 1fr; }
       .savings-mix-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .exec-kpi-row, .exec-insight-grid { grid-template-columns: repeat(2, 1fr); }
     }
@@ -1053,6 +1132,7 @@
       .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid, .spend-visual-grid, .spend-trend-kpis, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
       .burn-card.trend { grid-column: auto; }
       .burn-trend-head { grid-template-columns: 1fr; }
+      .savings-donut-wrap { min-height: 200px; }
       .savings-mix-legend { grid-template-columns: 1fr; }
       .hero-number { font-size: 46px; }
       .trial-start-head { flex-direction: column; }
@@ -1235,76 +1315,105 @@
 
     <!-- Left: Giant savings number -->
     <div class="hero-card green savings-impact">
-      <div class="hero-eyebrow" id="execSavingsScopeLabel">CostPilot Savings · All Workspace Data</div>
-      <div class="hero-number-label">AI spend avoided <span class="exec-help" tabindex="0" data-help="The estimated money CostPilot kept from becoming AI spend by routing cheaper, pruning waste, blocking risky requests, or enforcing budget controls.">?</span></div>
-      <div class="hero-number" id="execAnnualSavings">—</div>
-      <div class="hero-sub" id="execHeroSub">
-        Saved <strong id="execHeroAvoided">—</strong> against an all-flagship baseline.
-        Current pace: <strong id="execHeroSavingsInline">—</strong> annualized.
-        Cheaper safe routing: <strong id="execHeroRoutingPct">—</strong>.
-      </div>
-      <div class="savings-compare-grid" aria-label="CostPilot savings comparison">
-        <div class="savings-compare-card">
-          <div class="savings-compare-label">Would Have Spent <span class="exec-help" tabindex="0" data-help="Estimated cost if these requests all used the premium model path.">?</span></div>
-          <div class="savings-compare-value" id="execWithoutCostPilot">—</div>
-          <div class="savings-compare-sub">all-flagship baseline</div>
+      <div class="savings-primary-panel">
+        <div>
+          <div class="hero-eyebrow" id="execSavingsScopeLabel">CostPilot Savings · All Workspace Data</div>
+          <div class="hero-number-label">AI spend avoided <span class="exec-help" tabindex="0" data-help="The estimated money CostPilot kept from becoming AI spend by routing cheaper, pruning waste, blocking risky requests, or enforcing budget controls.">?</span></div>
+          <div class="hero-number" id="execAnnualSavings">—</div>
+          <div class="hero-sub" id="execHeroSub">
+            <span class="hero-sub-pill">Saved <strong id="execHeroAvoided">—</strong></span>
+            <span class="hero-sub-pill">Annual pace <strong id="execHeroSavingsInline">—</strong></span>
+            <span class="hero-sub-pill">Lower-cost routing <strong id="execHeroRoutingPct">—</strong></span>
+          </div>
         </div>
-        <div class="savings-compare-card">
-          <div class="savings-compare-label">Actual AI Spend <span class="exec-help" tabindex="0" data-help="What the governed requests actually cost after CostPilot routing, pruning, and controls.">?</span></div>
-          <div class="savings-compare-value" id="execWithCostPilot">—</div>
-          <div class="savings-compare-sub">current period</div>
-        </div>
-        <div class="savings-compare-card saved">
-          <div class="savings-compare-label">AI Spend Avoided <span class="exec-help" tabindex="0" data-help="The difference between the all-premium baseline and actual AI spend.">?</span></div>
-          <div class="savings-compare-value" id="execSavedCost">—</div>
-          <div class="savings-compare-sub">kept from spend</div>
-        </div>
-        <div class="savings-compare-card driver">
-          <div class="savings-compare-label">Top Cost Driver <span class="exec-help" tabindex="0" data-help="The agent, workflow, or owner creating the most AI spend in this view.">?</span></div>
-          <div class="savings-compare-value text" id="execHeroTopDriverValue">—</div>
-          <div class="savings-compare-sub" id="execHeroTopDriverSub">highest spend owner</div>
-        </div>
-        <div class="savings-compare-card warning" id="execHeroBudgetCard">
-          <div class="savings-compare-label">Budget Health <span class="exec-help" tabindex="0" data-help="Shows whether the selected workspace or department is under budget, nearing cap, or over cap.">?</span></div>
-          <div class="savings-compare-value text" id="execHeroBudgetValue">—</div>
-          <div class="savings-compare-sub" id="execHeroBudgetSub">budget signal</div>
-        </div>
-        <div class="savings-compare-card risk" id="execHeroRiskCard">
-          <div class="savings-compare-label">Risk Events <span class="exec-help" tabindex="0" data-help="Blocked requests, sensitive payloads, collision locks, or policy actions that need executive awareness.">?</span></div>
-          <div class="savings-compare-value text" id="execHeroRiskValue">—</div>
-          <div class="savings-compare-sub" id="execHeroRiskSub">blocked and controlled events</div>
+        <div>
+          <div class="impact-bar" aria-label="Actual spend versus savings">
+            <div class="impact-bar-head">
+              <span>Actual spend <strong id="execImpactActual">—</strong></span>
+              <span>Saved <strong id="execImpactSaved">—</strong></span>
+            </div>
+            <div class="impact-bar-track">
+              <div class="impact-bar-actual" id="execImpactActualBar" style="width:0%"></div>
+              <div class="impact-bar-saved" id="execImpactSavedBar" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="hero-badge" id="execTrendBadge">
+            ↑ Loading savings data...
+          </div>
         </div>
       </div>
-      <div class="impact-bar" aria-label="Actual spend versus savings">
-        <div class="impact-bar-head">
-          <span>Actual spend <strong id="execImpactActual">—</strong></span>
-          <span>Saved <strong id="execImpactSaved">—</strong></span>
+
+      <div class="savings-scoreboard">
+        <div class="savings-compare-grid" aria-label="CostPilot savings comparison">
+          <div class="savings-compare-card">
+            <div class="savings-compare-top">
+              <div class="savings-compare-label">Would Have Spent <span class="exec-help" tabindex="0" data-help="Estimated cost if these requests all used the premium model path.">?</span></div>
+              <div class="savings-compare-badge">baseline</div>
+            </div>
+            <div class="savings-compare-value" id="execWithoutCostPilot">—</div>
+            <div class="savings-compare-sub">all-flagship baseline</div>
+          </div>
+          <div class="savings-compare-card">
+            <div class="savings-compare-top">
+              <div class="savings-compare-label">Actual AI Spend <span class="exec-help" tabindex="0" data-help="What the governed requests actually cost after CostPilot routing, pruning, and controls.">?</span></div>
+              <div class="savings-compare-badge badge-blue" id="execActualSpendBadge">—</div>
+            </div>
+            <div class="savings-compare-value" id="execWithCostPilot">—</div>
+            <div class="savings-compare-sub">current period</div>
+          </div>
+          <div class="savings-compare-card saved">
+            <div class="savings-compare-top">
+              <div class="savings-compare-label">AI Spend Avoided <span class="exec-help" tabindex="0" data-help="The difference between the all-premium baseline and actual AI spend.">?</span></div>
+              <div class="savings-compare-badge badge-green" id="execAvoidedBadge">—</div>
+            </div>
+            <div class="savings-compare-value" id="execSavedCost">—</div>
+            <div class="savings-compare-sub">kept from spend</div>
+          </div>
+          <div class="savings-compare-card driver">
+            <div class="savings-compare-top">
+              <div class="savings-compare-label">Top Cost Driver <span class="exec-help" tabindex="0" data-help="The agent, workflow, or owner creating the most AI spend in this view.">?</span></div>
+              <div class="savings-compare-badge badge-blue" id="execHeroTopDriverBadge">—</div>
+            </div>
+            <div class="savings-compare-value text" id="execHeroTopDriverValue">—</div>
+            <div class="savings-compare-sub" id="execHeroTopDriverSub">highest spend owner</div>
+            <div class="savings-compare-gauge-track"><div class="savings-compare-gauge-fill" id="execHeroTopDriverBar" style="background:var(--accent)"></div></div>
+          </div>
+          <div class="savings-compare-card warning" id="execHeroBudgetCard">
+            <div class="savings-compare-top">
+              <div class="savings-compare-label">Budget Health <span class="exec-help" tabindex="0" data-help="Shows whether the selected workspace or department is under budget, nearing cap, or over cap.">?</span></div>
+              <div class="savings-compare-badge" id="execHeroBudgetBadge">—</div>
+            </div>
+            <div class="savings-compare-value text" id="execHeroBudgetValue">—</div>
+            <div class="savings-compare-sub" id="execHeroBudgetSub">budget signal</div>
+            <div class="savings-compare-gauge-track"><div class="savings-compare-gauge-fill" id="execHeroBudgetBar"></div></div>
+          </div>
+          <div class="savings-compare-card risk" id="execHeroRiskCard">
+            <div class="savings-compare-top">
+              <div class="savings-compare-label">Risk Events <span class="exec-help" tabindex="0" data-help="Blocked requests, sensitive payloads, collision locks, or policy actions that need executive awareness.">?</span></div>
+              <div class="savings-compare-badge" id="execHeroRiskBadge">—</div>
+            </div>
+            <div class="savings-compare-value text"><span class="risk-dot" id="execHeroRiskDot"></span><span id="execHeroRiskValue">—</span></div>
+            <div class="savings-compare-sub" id="execHeroRiskSub">blocked and controlled events</div>
+          </div>
         </div>
-        <div class="impact-bar-track">
-          <div class="impact-bar-actual" id="execImpactActualBar" style="width:0%"></div>
-          <div class="impact-bar-saved" id="execImpactSavedBar" style="width:0%"></div>
+        <div class="savings-proof-grid" aria-label="Savings proof points">
+          <div class="savings-proof">
+            <div class="savings-proof-value" id="execProofCalls">—</div>
+            <div class="savings-proof-label" title="Total requests CostPilot evaluated, routed, blocked, or logged.">requests governed</div>
+          </div>
+          <div class="savings-proof">
+            <div class="savings-proof-value" id="execProofRouting">—</div>
+            <div class="savings-proof-label" title="Share of routed requests handled by Scout or Analyst instead of premium tiers.">lower-cost routing</div>
+          </div>
+          <div class="savings-proof">
+            <div class="savings-proof-value" id="execProofTokens">—</div>
+            <div class="savings-proof-label" title="Prompt tokens removed before the model call, such as repeated headers, signatures, and old thread history.">prompt tokens removed</div>
+          </div>
+          <div class="savings-proof">
+            <div class="savings-proof-value" id="execProofControls">—</div>
+            <div class="savings-proof-label" title="Blocked requests, throttles, and collision controls enforced by policy.">policy actions</div>
+          </div>
         </div>
-      </div>
-      <div class="savings-proof-grid" aria-label="Savings proof points">
-        <div class="savings-proof">
-          <div class="savings-proof-value" id="execProofCalls">—</div>
-          <div class="savings-proof-label" title="Total requests CostPilot evaluated, routed, blocked, or logged.">requests governed</div>
-        </div>
-        <div class="savings-proof">
-          <div class="savings-proof-value" id="execProofRouting">—</div>
-          <div class="savings-proof-label" title="Share of routed requests handled by Scout or Analyst instead of premium tiers.">lower-cost routing</div>
-        </div>
-        <div class="savings-proof">
-          <div class="savings-proof-value" id="execProofTokens">—</div>
-          <div class="savings-proof-label" title="Prompt tokens removed before the model call, such as repeated headers, signatures, and old thread history.">prompt tokens removed</div>
-        </div>
-        <div class="savings-proof">
-          <div class="savings-proof-value" id="execProofControls">—</div>
-          <div class="savings-proof-label" title="Blocked requests, throttles, and collision controls enforced by policy.">policy actions</div>
-        </div>
-      </div>
-      <div class="hero-badge" id="execTrendBadge">
-        ↑ Loading savings data...
       </div>
     </div>
 
@@ -1458,28 +1567,31 @@
         <div class="savings-mix-title">Savings Mix <span class="exec-help" tabindex="0" data-help="Breaks avoided spend into the main ways CostPilot saves money: smarter routing, context pruning, budget controls, and blocked sensitive requests.">?</span></div>
         <div class="savings-mix-total" id="execMixTotal">— avoided</div>
       </div>
-      <div class="savings-mix-stack" aria-label="Savings mix by source">
-        <div class="savings-mix-segment routing" id="execMixRouting" style="width:0%"></div>
-        <div class="savings-mix-segment pruning" id="execMixPruning" style="width:0%"></div>
-        <div class="savings-mix-segment throttle" id="execMixThrottle" style="width:0%"></div>
-        <div class="savings-mix-segment blocked" id="execMixBlocked" style="width:0%"></div>
-      </div>
-      <div class="savings-mix-legend">
-        <div class="savings-mix-item">
-          <div class="savings-mix-label"><span class="savings-mix-swatch"></span>Routing</div>
-          <div class="savings-mix-value" id="execMixRoutingValue">—</div>
+      <div class="savings-mix-body">
+        <div class="savings-donut-wrap" aria-label="Savings mix by source">
+          <canvas id="savingsDonutChart"></canvas>
+          <div class="savings-donut-center">
+            <div class="savings-donut-center-value" id="execMixCenterValue">—</div>
+            <div class="savings-donut-center-label">avoided spend</div>
+          </div>
         </div>
-        <div class="savings-mix-item">
-          <div class="savings-mix-label"><span class="savings-mix-swatch pruning"></span>Pruning</div>
-          <div class="savings-mix-value" id="execMixPruningValue">—</div>
-        </div>
-        <div class="savings-mix-item">
-          <div class="savings-mix-label"><span class="savings-mix-swatch throttle"></span>Budget Caps</div>
-          <div class="savings-mix-value" id="execMixThrottleValue">—</div>
-        </div>
-        <div class="savings-mix-item">
-          <div class="savings-mix-label"><span class="savings-mix-swatch blocked"></span>Blocked Risk</div>
-          <div class="savings-mix-value" id="execMixBlockedValue">—</div>
+        <div class="savings-mix-legend">
+          <div class="savings-mix-item">
+            <div class="savings-mix-label"><span class="savings-mix-swatch"></span>Routing</div>
+            <div class="savings-mix-value" id="execMixRoutingValue">—</div>
+          </div>
+          <div class="savings-mix-item">
+            <div class="savings-mix-label"><span class="savings-mix-swatch pruning"></span>Pruning</div>
+            <div class="savings-mix-value" id="execMixPruningValue">—</div>
+          </div>
+          <div class="savings-mix-item">
+            <div class="savings-mix-label"><span class="savings-mix-swatch throttle"></span>Budget Caps</div>
+            <div class="savings-mix-value" id="execMixThrottleValue">—</div>
+          </div>
+          <div class="savings-mix-item">
+            <div class="savings-mix-label"><span class="savings-mix-swatch blocked"></span>Blocked Risk</div>
+            <div class="savings-mix-value" id="execMixBlockedValue">—</div>
+          </div>
         </div>
       </div>
     </div>
@@ -2220,6 +2332,7 @@ async function checkHealth() {
 
 // ── Chart ─────────────────────────────────────────────────────────────────────
 let execChart = null;
+let savingsDonutChartInstance = null;
 
 function cumulative(values) {
   let running = 0;
@@ -2611,13 +2724,70 @@ function renderPruningVisual(stats) {
   );
 }
 
+function updateSavingsDonut(routingSaved, pruningSaved, throttleSaved, blockedSaved) {
+  const canvas = document.getElementById("savingsDonutChart");
+  if (!canvas || typeof Chart === "undefined") return;
+
+  const values = [routingSaved, pruningSaved, throttleSaved, blockedSaved]
+    .map(value => Math.max(0, Number(value) || 0));
+  const hasSavings = values.some(value => value > 0);
+  const chartValues = hasSavings ? values : [1, 0, 0, 0];
+  const colors = hasSavings
+    ? ["#3fb950", "#58a6ff", "rgba(210,153,34,1)", "#ff4d4f"]
+    : ["rgba(139,148,158,0.35)", "rgba(139,148,158,0.10)", "rgba(139,148,158,0.10)", "rgba(139,148,158,0.10)"];
+
+  if (!savingsDonutChartInstance) {
+    savingsDonutChartInstance = new Chart(canvas.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels: ["Routing", "Pruning", "Budget Caps", "Blocked Risk"],
+        datasets: [{
+          data: chartValues,
+          backgroundColor: colors,
+          borderWidth: 0,
+          cutout: "70%",
+          hoverOffset: 6,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                const data = context.chart.data.datasets[0].data.map(value => Number(value) || 0);
+                const total = data.reduce((sum, value) => sum + value, 0);
+                const chartHasSavings = Boolean(context.chart.$costpilotHasSavings);
+                const rawValue = chartHasSavings ? Number(context.parsed || 0) : 0;
+                const pct = total > 0 && chartHasSavings ? Math.round((rawValue / total) * 100) : 0;
+                return `${context.label}: ${fmtUsd(rawValue)} (${pct}%)`;
+              },
+            },
+          },
+        },
+      },
+    });
+    savingsDonutChartInstance.$costpilotHasSavings = hasSavings;
+    return;
+  }
+
+  savingsDonutChartInstance.$costpilotHasSavings = hasSavings;
+  savingsDonutChartInstance.data.datasets[0].data = chartValues;
+  savingsDonutChartInstance.data.datasets[0].backgroundColor = colors;
+  savingsDonutChartInstance.update();
+}
+
 function renderSavingsMix(routingSaved, pruningSaved, throttleSaved, blockedSaved) {
   const total = routingSaved + pruningSaved + throttleSaved + blockedSaved;
   setText("execMixTotal", `${fmtUsd(total)} avoided`);
+  setText("execMixCenterValue", fmtUsd(total));
   setText("execMixRoutingValue", fmtUsd(routingSaved));
   setText("execMixPruningValue", fmtUsd(pruningSaved));
   setText("execMixThrottleValue", fmtUsd(throttleSaved));
   setText("execMixBlockedValue", fmtUsd(blockedSaved));
+  updateSavingsDonut(routingSaved, pruningSaved, throttleSaved, blockedSaved);
 
   const parts = [
     ["execMixRouting", routingSaved],
@@ -2967,6 +3137,11 @@ function renderExec(data) {
   document.getElementById("execWithoutCostPilot").textContent = fmtUsd(withoutCostPilot);
   document.getElementById("execWithCostPilot").textContent = fmtUsd(actualCost);
   document.getElementById("execSavedCost").textContent = fmtUsd(totalAvoided);
+  const badgeBaseline = Math.max(withoutCostPilot, 0.000001);
+  const avoidedBadgePct = withoutCostPilot > 0 ? Math.round((totalAvoided / badgeBaseline) * 100) : 0;
+  const actualBadgePct = withoutCostPilot > 0 ? Math.max(0, 100 - avoidedBadgePct) : 0;
+  setText("execActualSpendBadge", withoutCostPilot > 0 ? `${actualBadgePct}% of baseline` : "—");
+  setText("execAvoidedBadge", withoutCostPilot > 0 ? `${avoidedBadgePct}% avoided` : "—");
   setText("execImpactActual", fmtUsd(actualCost));
   setText("execImpactSaved", fmtUsd(totalAvoided));
   const impactTotal = Math.max(withoutCostPilot, 0.000001);
@@ -3016,6 +3191,10 @@ function renderExec(data) {
       ? `${topDriver.dept} · ${fmtUsd(topDriver.cost)} · ${fmtNum(topDriver.calls)} req`
       : "appears after governed requests"
   );
+  const topDriverSharePct = topDriver && actualCost > 0 ? Math.round((topDriver.cost / actualCost) * 100) : 0;
+  setText("execHeroTopDriverBadge", topDriver ? `${topDriverSharePct}% of spend` : "—");
+  const topDriverBar = document.getElementById("execHeroTopDriverBar");
+  if (topDriverBar) topDriverBar.style.width = (topDriver ? Math.max(2, Math.min(100, topDriverSharePct)) : 0) + "%";
   renderTopCostDrivers(drivers);
   renderRecommendationDrivers(drivers);
   setText("execTopDriverScope", hasFilters ? "Filtered view" : "Last 30 days");
@@ -3069,6 +3248,17 @@ function renderExec(data) {
   }
   setText("execHeroBudgetValue", budgetHealthLabel);
   setText("execHeroBudgetSub", `${Math.round(budget.pct)}% used · ${fmtUsd(budgetRemaining)} left`);
+  const budgetStatusClass = budget.pct >= 100 ? "badge-red" : budget.pct >= 80 ? "badge-yellow" : "badge-green";
+  const budgetBadge = document.getElementById("execHeroBudgetBadge");
+  if (budgetBadge) {
+    budgetBadge.textContent = `${Math.round(budget.pct)}% used`;
+    budgetBadge.className = "savings-compare-badge " + budgetStatusClass;
+  }
+  const heroBudgetBar = document.getElementById("execHeroBudgetBar");
+  if (heroBudgetBar) {
+    heroBudgetBar.style.width = Math.max(2, Math.min(100, budget.pct)) + "%";
+    heroBudgetBar.style.background = budget.pct >= 100 ? "var(--accent-red)" : budget.pct >= 80 ? "var(--accent-yellow)" : "var(--accent-green)";
+  }
   setText("execBudgetSignalUsed", `${Math.round(budget.pct)}% used`);
   setText("execBudgetSignalRemaining", `${fmtUsd(budgetRemaining)} left`);
   if (budget.pct >= 100) {
@@ -3127,6 +3317,11 @@ function renderExec(data) {
   }
   setText("execHeroRiskValue", fmtNum(incidents));
   setText("execHeroRiskSub", `${fmtNum(blockedCount)} blocked · ${fmtNum(collisionCount)} collision`);
+  const riskBadge = document.getElementById("execHeroRiskBadge");
+  if (riskBadge) {
+    riskBadge.textContent = incidents > 0 ? "needs review" : "all clear";
+    riskBadge.className = "savings-compare-badge " + (incidents > 0 ? "badge-red" : "badge-green");
+  }
   const incTag = document.getElementById("execIncidentTag");
   incTag.textContent = incidents > 0 ? `${incidents} INCIDENTS` : "0 INCIDENTS";
   incTag.className = "metric-tag " + (incidents > 0 ? "yellow" : "green");
