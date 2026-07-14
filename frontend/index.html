@@ -778,6 +778,7 @@
       pointer-events: none;
       z-index: 50;
       transition: opacity 0.15s ease, transform 0.15s ease;
+      display: none;
     }
     .exec-help::before {
       content: "";
@@ -794,6 +795,7 @@
       pointer-events: none;
       z-index: 51;
       transition: opacity 0.15s ease;
+      display: none;
     }
     .exec-help:hover::after,
     .exec-help:focus::after,
@@ -805,6 +807,44 @@
     .exec-help:hover::before,
     .exec-help:focus::before {
       transform: translateX(-50%) rotate(45deg);
+    }
+
+    .exec-help-floating {
+      position: fixed;
+      z-index: 100000;
+      max-width: min(360px, calc(100vw - 32px));
+      padding: 11px 13px;
+      border: 1px solid rgba(88,166,255,0.45);
+      border-radius: 8px;
+      background: #0d1117;
+      color: var(--text-primary);
+      box-shadow: 0 18px 45px rgba(0,0,0,0.58);
+      font-size: 12px;
+      line-height: 1.4;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: none;
+      pointer-events: none;
+    }
+    .exec-help-floating::after {
+      content: "";
+      position: absolute;
+      left: var(--tip-x, 50%);
+      bottom: -6px;
+      width: 10px;
+      height: 10px;
+      transform: translateX(-50%) rotate(45deg);
+      background: #0d1117;
+      border-right: 1px solid rgba(88,166,255,0.45);
+      border-bottom: 1px solid rgba(88,166,255,0.45);
+    }
+    .exec-help-floating.below::after {
+      top: -6px;
+      bottom: auto;
+      border-right: 0;
+      border-bottom: 0;
+      border-left: 1px solid rgba(88,166,255,0.45);
+      border-top: 1px solid rgba(88,166,255,0.45);
     }
 
     .spend-visual-grid {
@@ -2333,6 +2373,68 @@ async function checkHealth() {
 // ── Chart ─────────────────────────────────────────────────────────────────────
 let execChart = null;
 let savingsDonutChartInstance = null;
+let execHelpFloating = null;
+
+function showExecHelpTip(target) {
+  const text = target?.dataset?.help;
+  if (!text) return;
+  if (!execHelpFloating) {
+    execHelpFloating = document.createElement("div");
+    execHelpFloating.className = "exec-help-floating";
+    document.body.appendChild(execHelpFloating);
+  }
+  execHelpFloating.textContent = text;
+  execHelpFloating.classList.remove("below");
+  execHelpFloating.style.left = "0px";
+  execHelpFloating.style.top = "0px";
+  execHelpFloating.style.visibility = "hidden";
+
+  const targetBox = target.getBoundingClientRect();
+  const tipBox = execHelpFloating.getBoundingClientRect();
+  const margin = 12;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  let left = targetBox.left + (targetBox.width / 2) - (tipBox.width / 2);
+  left = Math.max(margin, Math.min(left, viewportWidth - tipBox.width - margin));
+
+  let top = targetBox.top - tipBox.height - 10;
+  let below = false;
+  if (top < margin) {
+    top = targetBox.bottom + 10;
+    below = true;
+  }
+  if (top + tipBox.height > viewportHeight - margin) {
+    top = Math.max(margin, viewportHeight - tipBox.height - margin);
+  }
+
+  const arrowX = targetBox.left + (targetBox.width / 2) - left;
+  execHelpFloating.style.setProperty("--tip-x", `${Math.max(14, Math.min(arrowX, tipBox.width - 14))}px`);
+  execHelpFloating.classList.toggle("below", below);
+  execHelpFloating.style.left = `${left}px`;
+  execHelpFloating.style.top = `${top}px`;
+  execHelpFloating.style.visibility = "visible";
+}
+
+function hideExecHelpTip() {
+  if (execHelpFloating) execHelpFloating.style.visibility = "hidden";
+}
+
+document.addEventListener("mouseover", (event) => {
+  const target = event.target.closest?.(".exec-help");
+  if (target) showExecHelpTip(target);
+});
+document.addEventListener("focusin", (event) => {
+  const target = event.target.closest?.(".exec-help");
+  if (target) showExecHelpTip(target);
+});
+document.addEventListener("mouseout", (event) => {
+  if (event.target.closest?.(".exec-help")) hideExecHelpTip();
+});
+document.addEventListener("focusout", (event) => {
+  if (event.target.closest?.(".exec-help")) hideExecHelpTip();
+});
+document.addEventListener("scroll", hideExecHelpTip, true);
+window.addEventListener("resize", hideExecHelpTip);
 
 function cumulative(values) {
   let running = 0;
