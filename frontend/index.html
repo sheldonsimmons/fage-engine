@@ -825,6 +825,21 @@
       gap: 11px;
       margin-top: 10px;
     }
+    .spend-bar-row {
+      border: 1px solid transparent;
+      border-radius: 7px;
+      padding: 5px 6px;
+      margin: -5px -6px;
+    }
+    .spend-bar-row.drillable {
+      cursor: pointer;
+    }
+    .spend-bar-row.drillable:hover,
+    .spend-bar-row.drillable:focus-visible {
+      background: rgba(88,166,255,0.07);
+      border-color: rgba(88,166,255,0.35);
+      outline: none;
+    }
     .spend-bar-meta {
       display: flex;
       justify-content: space-between;
@@ -1699,7 +1714,7 @@ const EXEC_FILTER_KEY = "costpilot_exec_filters";
 const EXEC_LAYOUT_KEY = "costpilot_exec_layout_v1";
 let execData = null;
 let execFilters = {
-  dept: "", platform: "", agent: "", range: "30", tier: "", risk: ""
+  dept: "", platform: "", agent: "", range: "30", tier: "", risk: "", businessUnit: "", model: ""
 };
 let execCustomizeMode = false;
 
@@ -1890,9 +1905,11 @@ function eventMatchesFilters(e) {
   const cutoff = rangeCutoff(execFilters.range);
   if (eventTs(e) < cutoff) return false;
   if (execFilters.dept && norm(displayDeptName(e.department)) !== norm(execFilters.dept) && norm(displayDeptName(e.source_department)) !== norm(execFilters.dept)) return false;
+  if (execFilters.businessUnit && norm(businessUnitForDept(e.department || e.source_department)) !== norm(execFilters.businessUnit)) return false;
   if (execFilters.platform && norm(e.source_platform) !== norm(execFilters.platform)) return false;
   if (execFilters.agent && String(e.agent_id || "") !== String(execFilters.agent)) return false;
   if (execFilters.tier && norm(tierName(e.model_tier)) !== norm(execFilters.tier)) return false;
+  if (execFilters.model && norm(modelLabelForEvent(e)) !== norm(execFilters.model)) return false;
   if (execFilters.risk && norm(e.risk_level) !== norm(execFilters.risk)) return false;
   return true;
 }
@@ -1942,7 +1959,11 @@ function populateExecFilters(data) {
 
 function updateExecFilter(key, value) {
   execFilters[key] = value;
-  if (key === "dept") execFilters.agent = "";
+  if (key === "dept") {
+    execFilters.agent = "";
+    execFilters.businessUnit = "";
+  }
+  if (key === "tier") execFilters.model = "";
   localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
   if (execData) {
     populateExecFilters(execData);
@@ -1951,11 +1972,37 @@ function updateExecFilter(key, value) {
 }
 
 function clearExecFilters() {
-  execFilters = { dept: "", platform: "", agent: "", range: "30", tier: "", risk: "" };
+  execFilters = { dept: "", platform: "", agent: "", range: "30", tier: "", risk: "", businessUnit: "", model: "" };
   localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
   if (execData) {
     populateExecFilters(execData);
     renderExec(execData);
+  }
+}
+
+function applyExecDrillFilter(updates = {}) {
+  execFilters = { ...execFilters, ...updates };
+  localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
+  if (execData) {
+    populateExecFilters(execData);
+    renderExec(execData);
+  }
+}
+
+function execDrill(type, value) {
+  if (!type || !value) return;
+  if (type === "dept") {
+    applyExecDrillFilter({ dept: value, agent: "", businessUnit: "" });
+  } else if (type === "agent") {
+    applyExecDrillFilter({ agent: value });
+  } else if (type === "businessUnit") {
+    applyExecDrillFilter({ businessUnit: value, dept: "", agent: "" });
+  } else if (type === "model") {
+    applyExecDrillFilter({ model: value, tier: "" });
+  } else if (type === "tier") {
+    applyExecDrillFilter({ tier: value, model: "" });
+  } else if (type === "risk") {
+    applyExecDrillFilter({ risk: value });
   }
 }
 
@@ -1971,7 +2018,9 @@ function filterSummaryText(count) {
     const agent = (execData?.agents || []).find(a => String(a.id) === String(execFilters.agent));
     parts.push(agent ? agent.name : "selected agent");
   }
+  if (execFilters.businessUnit) parts.push(execFilters.businessUnit);
   if (execFilters.tier) parts.push(tierName(execFilters.tier));
+  if (execFilters.model) parts.push(execFilters.model);
   if (execFilters.risk) parts.push(execFilters.risk.toUpperCase() + " risk");
   const rangeLabel = document.getElementById("execFilterRange")?.selectedOptions?.[0]?.textContent || "Last 30 Days";
   return `${parts.length ? parts.join(" · ") : "All data"} · ${rangeLabel} · ${fmtNum(count)} events`;
@@ -2661,6 +2710,21 @@ function groupSpend(events, keyFn, data) {
   return [...grouped.values()].sort((a, b) => b.value - a.value);
 }
 
+function groupAgentSpend(events, data) {
+  const grouped = new Map();
+  routedCostEvents(events).forEach(e => {
+    const label = agentNameForEvent(e, data) || "Unknown agent";
+    const id = String(e.agent_id || "");
+    const key = id || label;
+    const current = grouped.get(key) || { label, value: 0, calls: 0, tokens: 0, agentId: id };
+    current.value += Number(e.cost_usd || 0);
+    current.calls += 1;
+    current.tokens += eventTokenVolume(e);
+    grouped.set(key, current);
+  });
+  return [...grouped.values()].sort((a, b) => b.value - a.value);
+}
+
 function renderSpendBars(containerId, rows, options = {}) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -2676,8 +2740,12 @@ function renderSpendBars(containerId, rows, options = {}) {
     const meta = options.meta
       ? options.meta(row)
       : `${fmtNum(row.calls)} requests · ${fmtNum(row.tokens)} tokens`;
+    const drill = options.drill ? options.drill(row) : null;
+    const drillAttrs = drill
+      ? ` role="button" tabindex="0" data-drill-type="${escapeHtml(drill.type)}" data-drill-value="${escapeHtml(drill.value)}" title="Click to filter by ${escapeHtml(row.label)}"`
+      : ` title="${escapeHtml(row.label)}"`;
     return `
-      <div class="spend-bar-row">
+      <div class="spend-bar-row ${drill ? "drillable" : ""}"${drillAttrs}>
         <div class="spend-bar-meta">
           <div class="spend-bar-name" title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</div>
           <div class="spend-bar-value">${fmtUsd(row.value)}</div>
@@ -2687,6 +2755,15 @@ function renderSpendBars(containerId, rows, options = {}) {
       </div>
     `;
   }).join("");
+  container.querySelectorAll(".spend-bar-row.drillable").forEach(row => {
+    row.addEventListener("click", () => execDrill(row.dataset.drillType, row.dataset.drillValue));
+    row.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        execDrill(row.dataset.drillType, row.dataset.drillValue);
+      }
+    });
+  });
 }
 
 function monthKeyForEvent(e) {
@@ -2745,22 +2822,37 @@ function renderExecSpendBreakdowns(events, data, context) {
     byDept.sort((a, b) => b.value - a.value);
   }
 
-  const byAgent = groupSpend(events, (e, d) => agentNameForEvent(e, d), data);
+  const byAgent = groupAgentSpend(events, data);
   const byBusinessUnit = groupSpend(events, e => businessUnitForDept(e.department || e.source_department), data);
   const byModel = groupSpend(events, e => modelLabelForEvent(e), data);
 
   renderSpendTrendVisual(events, context);
-  renderSpendBars("execSpendByDeptBars", byDept, { fillClass: "blue", empty: "Department spend appears after governed requests are routed." });
-  renderSpendBars("execSpendByAgentBars", byAgent, { empty: "Agent spend appears after governed requests are routed." });
-  renderSpendBars("execSpendByBusinessUnitBars", byBusinessUnit, { fillClass: "yellow", empty: "Business unit spend appears after governed requests are routed." });
-  renderSpendBars("execSpendByModelBars", byModel, { fillClass: "blue", empty: "Model spend appears after routed requests include model or tier data." });
+  renderSpendBars("execSpendByDeptBars", byDept, {
+    fillClass: "blue",
+    empty: "Department spend appears after governed requests are routed.",
+    drill: row => ({ type: "dept", value: row.label }),
+  });
+  renderSpendBars("execSpendByAgentBars", byAgent, {
+    empty: "Agent spend appears after governed requests are routed.",
+    drill: row => row.agentId ? ({ type: "agent", value: row.agentId }) : null,
+  });
+  renderSpendBars("execSpendByBusinessUnitBars", byBusinessUnit, {
+    fillClass: "yellow",
+    empty: "Business unit spend appears after governed requests are routed.",
+    drill: row => ({ type: "businessUnit", value: row.label }),
+  });
+  renderSpendBars("execSpendByModelBars", byModel, {
+    fillClass: "blue",
+    empty: "Model spend appears after routed requests include model or tier data.",
+    drill: row => ({ type: "model", value: row.label }),
+  });
 }
 
 function renderExec(data) {
   const d = data.dashboard || {};
   const ts = data.timeseries || {};
   const events = filteredAuditEvents(data);
-  const hasFilters = !!(execFilters.dept || execFilters.platform || execFilters.agent || execFilters.tier || execFilters.risk || execFilters.range !== "30");
+  const hasFilters = !!(execFilters.dept || execFilters.platform || execFilters.agent || execFilters.tier || execFilters.risk || execFilters.businessUnit || execFilters.model || execFilters.range !== "30");
   const filteredSavings = hasFilters ? filteredSavingsBreakdown(events) : null;
 
   const totalCalls = hasFilters
@@ -2802,7 +2894,13 @@ function renderExec(data) {
 
   document.getElementById("execFilterStatus").textContent = filterSummaryText(events.length);
   const scopeNotice = document.getElementById("execScopeNotice");
-  if (scopeNotice) scopeNotice.classList.toggle("active", hasFilters);
+  if (scopeNotice) {
+    scopeNotice.classList.toggle("active", hasFilters);
+    const scopeText = scopeNotice.querySelector("span");
+    if (scopeText && hasFilters) {
+      scopeText.innerHTML = `<strong>Filtered: ${escapeHtml(filterSummaryText(events.length))}.</strong> All executive numbers and charts reflect this slice.`;
+    }
+  }
   const scopeLabel = document.getElementById("execSavingsScopeLabel");
   if (scopeLabel) {
     scopeLabel.textContent = hasFilters
