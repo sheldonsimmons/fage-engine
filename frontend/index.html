@@ -774,6 +774,16 @@
       min-width: 0; border: 1px solid var(--border); border-radius: 10px;
       padding: 12px 13px; background: rgba(13,17,23,0.58);
     }
+    .exec-action-card.drillable {
+      cursor: pointer;
+      transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease;
+    }
+    .exec-action-card.drillable:hover,
+    .exec-action-card.drillable:focus-visible {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      outline: none;
+    }
     .exec-action-card.green { border-color: rgba(46,160,67,0.24); }
     .exec-action-card.yellow {
       border-color: rgba(210,153,34,0.35); background: rgba(210,153,34,0.06);
@@ -798,6 +808,11 @@
     .exec-action-sub {
       margin-top: 5px; color: var(--text-muted); font-size: 10px;
       line-height: 1.35;
+    }
+    .exec-action-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-top: 8px; color: var(--accent); font-size: 10px;
+      font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;
     }
 
     .recommendation-grid {
@@ -1522,9 +1537,9 @@
         <div class="exec-action-sub" id="execActionRiskSub">No blocked or collision events.</div>
       </div>
       <div class="exec-action-card blue" id="execActionDriverCard">
-        <div class="exec-action-label">Owner</div>
-        <div class="exec-action-value" id="execActionDriverTitle">No top driver yet</div>
-        <div class="exec-action-sub" id="execActionDriverSub">Top spend owner appears after usage.</div>
+        <div class="exec-action-label">Recommended Action</div>
+        <div class="exec-action-value" id="execActionDriverTitle">No action needed</div>
+        <div class="exec-action-sub" id="execActionDriverSub">CostPilot will surface the next best review step here.</div>
       </div>
     </div>
   </section>
@@ -1772,7 +1787,7 @@
       </div>
     </div>
 
-    <div class="spend-visual-card">
+    <div class="spend-visual-card" id="execSpendByDeptSection">
       <div class="spend-visual-title">
         Spend by department
         <span class="exec-help" tabindex="0" data-help="Shows which departments are creating the most governed AI spend in the current view.">?</span>
@@ -2404,6 +2419,15 @@ function execDrill(type, value) {
   }
 }
 
+function execDrillToDepartment(department) {
+  if (!department) return;
+  execDrill("dept", department);
+  setTimeout(() => {
+    const target = document.getElementById("execSpendByDeptSection") || document.getElementById("execFilterDept");
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 80);
+}
+
 function filteredAuditEvents(data) {
   return (data.audits || []).filter(eventMatchesFilters);
 }
@@ -2883,14 +2907,36 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
   setText("execActionTitle", title);
 
   const budgetRow = overCap[0] || nearCap[0] || rows[0] || { department: "Workspace", spend: 0, cap: 0, pct: 0 };
-  setClassById("execActionBudgetCard", "exec-action-card", overCap.length ? "red" : nearCap.length ? "yellow" : "green");
+  const budgetCard = document.getElementById("execActionBudgetCard");
+  const budgetNeedsReview = overCap.length || nearCap.length;
+  setClassById("execActionBudgetCard", `exec-action-card${budgetNeedsReview ? " drillable" : ""}`, overCap.length ? "red" : nearCap.length ? "yellow" : "green");
   setText("execActionBudgetTitle", overCap.length ? `${budgetRow.department} over cap` : nearCap.length ? `${budgetRow.department} nearing cap` : "Budget healthy");
-  setText(
-    "execActionBudgetSub",
-    budgetRow.cap > 0
-      ? `${Math.round(budgetRow.pct)}% used · ${fmtUsd(budgetRow.spend)} of ${fmtUsd(budgetRow.cap)}`
-      : "No budget cap configured."
-  );
+  const budgetSub = budgetRow.cap > 0
+    ? `${Math.round(budgetRow.pct)}% used · ${fmtUsd(budgetRow.spend)} of ${fmtUsd(budgetRow.cap)}`
+    : "No budget cap configured.";
+  const budgetLink = budgetNeedsReview ? `<span class="exec-action-link">View ${escapeHtml(budgetRow.department)} →</span>` : "";
+  const budgetSubEl = document.getElementById("execActionBudgetSub");
+  if (budgetSubEl) budgetSubEl.innerHTML = `${escapeHtml(budgetSub)}${budgetLink}`;
+  if (budgetCard) {
+    if (budgetNeedsReview) {
+      budgetCard.setAttribute("role", "button");
+      budgetCard.setAttribute("tabindex", "0");
+      budgetCard.setAttribute("title", `Filter executive dashboard to ${budgetRow.department}`);
+      budgetCard.onclick = () => execDrillToDepartment(budgetRow.department);
+      budgetCard.onkeydown = event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          execDrillToDepartment(budgetRow.department);
+        }
+      };
+    } else {
+      budgetCard.removeAttribute("role");
+      budgetCard.removeAttribute("tabindex");
+      budgetCard.removeAttribute("title");
+      budgetCard.onclick = null;
+      budgetCard.onkeydown = null;
+    }
+  }
 
   setClassById("execActionRiskCard", "exec-action-card", incidents ? "red" : "green");
   setText("execActionRiskTitle", incidents ? `${fmtNum(incidents)} risk events` : "No risk events");
@@ -2901,13 +2947,27 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
       : "No blocked or collision events in this view."
   );
 
-  setClassById("execActionDriverCard", "exec-action-card", topDriver ? "blue" : "green");
-  setText("execActionDriverTitle", topDriver ? topDriver.agent : "No top driver yet");
+  const actionTone = overCap.length || incidents ? "red" : nearCap.length ? "yellow" : "green";
+  setClassById("execActionDriverCard", "exec-action-card", actionTone);
+  setText(
+    "execActionDriverTitle",
+    overCap.length
+      ? `Review ${budgetRow.department} budget`
+      : nearCap.length
+        ? `Watch ${budgetRow.department}`
+        : incidents
+          ? "Review blocked requests"
+          : "No action needed"
+  );
   setText(
     "execActionDriverSub",
-    topDriver
-      ? `${topDriver.dept} · ${fmtUsd(topDriver.cost)} · ${fmtNum(topDriver.calls)} requests`
-      : "Top spend owner appears after governed usage."
+    overCap.length
+      ? "Open the department view, inspect top agents, then revoke or adjust override/throttle policy."
+      : nearCap.length
+        ? "Check whether spend is expected before this department crosses its cap."
+        : incidents
+          ? `${fmtNum(blockedCount || 0)} blocked requests need audit review before policy changes.`
+          : "All departments are under cap and no risk events need review in this view."
   );
 }
 
