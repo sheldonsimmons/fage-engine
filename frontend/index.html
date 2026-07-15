@@ -472,6 +472,7 @@
     }
     .usage-value.green { color: var(--accent-green); }
     .usage-sub { font-size: 10px; color: var(--text-muted); line-height: 1.35; }
+    .exec-hidden-duplicate { display: none !important; }
 
     .burn-strip {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1439,19 +1440,19 @@
         <div class="savings-proof-grid" aria-label="Savings proof points">
           <div class="savings-proof">
             <div class="savings-proof-value" id="execProofCalls">—</div>
-            <div class="savings-proof-label" title="Total requests CostPilot evaluated, routed, blocked, or logged.">requests governed</div>
+            <div class="savings-proof-label" title="Total AI requests CostPilot evaluated, routed, blocked, or logged.">AI requests governed</div>
           </div>
           <div class="savings-proof">
             <div class="savings-proof-value" id="execProofRouting">—</div>
-            <div class="savings-proof-label" title="Share of routed requests handled by Scout or Analyst instead of premium tiers.">lower-cost routing</div>
+            <div class="savings-proof-label" title="Share of routed requests handled by Scout or Analyst instead of premium tiers.">served by lower-cost tiers</div>
           </div>
           <div class="savings-proof">
             <div class="savings-proof-value" id="execProofTokens">—</div>
-            <div class="savings-proof-label" title="Prompt tokens removed before the model call, such as repeated headers, signatures, and old thread history.">prompt tokens removed</div>
+            <div class="savings-proof-label" title="Prompt tokens removed before the model call, such as repeated headers, signatures, and old thread history.">junk prompt tokens removed</div>
           </div>
           <div class="savings-proof">
             <div class="savings-proof-value" id="execProofControls">—</div>
-            <div class="savings-proof-label" title="Blocked requests, throttles, and collision controls enforced by policy.">policy actions</div>
+            <div class="savings-proof-label" title="Blocked requests, throttles, and collision controls enforced by policy.">risk and budget controls</div>
           </div>
         </div>
       </div>
@@ -1481,7 +1482,7 @@
 
   </div>
 
-  <div class="usage-snapshot" aria-label="AI usage snapshot">
+  <div class="usage-snapshot exec-hidden-duplicate" aria-label="AI usage snapshot">
     <div class="usage-card">
       <div class="usage-label">Today</div>
       <div class="usage-value" id="execTodaySpend">—</div>
@@ -1504,7 +1505,7 @@
     </div>
   </div>
 
-  <div class="burn-strip" aria-label="Executive AI spend console">
+  <div class="burn-strip exec-hidden-duplicate" aria-label="Executive AI spend console">
     <div class="burn-card trend">
       <div class="burn-label">Today vs. Last 7 Days</div>
       <div class="burn-trend-head">
@@ -1534,7 +1535,7 @@
   </div>
 
   <div class="spend-visual-grid" aria-label="Executive spend breakdowns">
-    <div class="spend-visual-card wide">
+    <div class="spend-visual-card wide exec-hidden-duplicate">
       <div class="spend-visual-head">
         <div>
           <div class="spend-visual-title">
@@ -1743,7 +1744,7 @@
 
   </div>
 
-  <div class="exec-kpi-row">
+  <div class="exec-kpi-row exec-hidden-duplicate">
     <div class="exec-kpi-card">
       <div class="exec-kpi-label">Spend Avoidance Rate</div>
       <div class="exec-kpi-value green" id="execAvoidanceRate">—</div>
@@ -1812,7 +1813,7 @@
   </div>
 
   <!-- Where savings came from -->
-  <div class="breakdown-card">
+  <div class="breakdown-card exec-hidden-duplicate">
     <div class="breakdown-title">Where the savings came from <span class="exec-help" tabindex="0" data-help="Shows the dollar contribution of each CostPilot control, so savings are easier to explain and defend.">?</span></div>
     <div class="breakdown-sub" id="execBreakdownSub">Loading savings breakdown...</div>
     <div class="breakdown-grid">
