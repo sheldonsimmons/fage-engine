@@ -814,6 +814,33 @@
       margin-top: 8px; color: var(--accent); font-size: 10px;
       font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;
     }
+    .exec-budget-list {
+      display: grid; gap: 6px; margin-top: 8px;
+    }
+    .exec-budget-item {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+      gap: 8px; width: 100%; border: 1px solid rgba(255,77,79,0.26);
+      border-radius: 8px; padding: 7px 8px; color: var(--text-primary);
+      background: rgba(255,77,79,0.08); text-align: left; cursor: pointer;
+      font: inherit;
+    }
+    .exec-budget-item:hover,
+    .exec-budget-item:focus-visible {
+      border-color: var(--accent); outline: none;
+      background: rgba(88,166,255,0.10);
+    }
+    .exec-budget-item strong {
+      display: block; color: #ff6b66; font-size: 11px; line-height: 1.15;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .exec-budget-item span {
+      display: block; color: var(--text-muted); font-size: 9px; line-height: 1.25;
+      margin-top: 2px;
+    }
+    .exec-budget-view {
+      color: var(--accent); font-size: 9px; font-weight: 900;
+      letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap;
+    }
 
     .recommendation-grid {
       display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2910,13 +2937,45 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
   const budgetCard = document.getElementById("execActionBudgetCard");
   const budgetNeedsReview = overCap.length || nearCap.length;
   setClassById("execActionBudgetCard", `exec-action-card${budgetNeedsReview ? " drillable" : ""}`, overCap.length ? "red" : nearCap.length ? "yellow" : "green");
-  setText("execActionBudgetTitle", overCap.length ? `${budgetRow.department} over cap` : nearCap.length ? `${budgetRow.department} nearing cap` : "Budget healthy");
-  const budgetSub = budgetRow.cap > 0
-    ? `${Math.round(budgetRow.pct)}% used · ${fmtUsd(budgetRow.spend)} of ${fmtUsd(budgetRow.cap)}`
-    : "No budget cap configured.";
-  const budgetLink = budgetNeedsReview ? `<span class="exec-action-link">View ${escapeHtml(budgetRow.department)} →</span>` : "";
+  setText(
+    "execActionBudgetTitle",
+    overCap.length > 1
+      ? "Over-cap departments"
+      : overCap.length
+        ? `${budgetRow.department} over cap`
+        : nearCap.length > 1
+          ? "Departments nearing cap"
+          : nearCap.length
+            ? `${budgetRow.department} nearing cap`
+            : "Budget healthy"
+  );
   const budgetSubEl = document.getElementById("execActionBudgetSub");
-  if (budgetSubEl) budgetSubEl.innerHTML = `${escapeHtml(budgetSub)}${budgetLink}`;
+  if (budgetSubEl) {
+    const priorityRows = overCap.length ? overCap : nearCap;
+    if (priorityRows.length > 1) {
+      budgetSubEl.innerHTML = `<div class="exec-budget-list">${priorityRows.map(row => `
+        <button class="exec-budget-item" type="button" data-exec-budget-dept="${escapeHtml(row.department)}">
+          <span>
+            <strong>${escapeHtml(row.department)}</strong>
+            <span>${Math.round(row.pct)}% used · ${fmtUsd(row.spend)} of ${fmtUsd(row.cap)}</span>
+          </span>
+          <span class="exec-budget-view">View</span>
+        </button>
+      `).join("")}</div>`;
+      budgetSubEl.querySelectorAll("[data-exec-budget-dept]").forEach(button => {
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          execDrillToDepartment(button.getAttribute("data-exec-budget-dept"));
+        });
+      });
+    } else {
+      const budgetSub = budgetRow.cap > 0
+        ? `${Math.round(budgetRow.pct)}% used · ${fmtUsd(budgetRow.spend)} of ${fmtUsd(budgetRow.cap)}`
+        : "No budget cap configured.";
+      const budgetLink = budgetNeedsReview ? `<span class="exec-action-link">View ${escapeHtml(budgetRow.department)} →</span>` : "";
+      budgetSubEl.innerHTML = `${escapeHtml(budgetSub)}${budgetLink}`;
+    }
+  }
   if (budgetCard) {
     if (budgetNeedsReview) {
       budgetCard.setAttribute("role", "button");
