@@ -237,6 +237,82 @@
         var(--bg-panel);
     }
 
+    .annual-savings-card {
+      border-color: rgba(63,185,80,0.55);
+      background:
+        radial-gradient(circle at 12% 20%, rgba(63,185,80,0.20), transparent 34%),
+        linear-gradient(135deg, rgba(46,160,67,0.13), rgba(13,17,23,0.96) 58%),
+        var(--bg-panel);
+      box-shadow: 0 0 0 1px rgba(63,185,80,0.08), 0 20px 64px rgba(46,160,67,0.10);
+      padding: 26px 32px;
+    }
+    .annual-savings-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.44fr) minmax(420px, 1fr);
+      gap: 30px;
+      align-items: center;
+    }
+    .annual-savings-eyebrow {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--accent-green);
+      font-weight: 900;
+      margin-bottom: 10px;
+    }
+    .annual-savings-value {
+      font-size: clamp(54px, 7vw, 96px);
+      line-height: 0.96;
+      font-family: var(--font-mono);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--accent-green);
+      text-shadow: 0 0 24px rgba(63,185,80,0.18);
+      white-space: nowrap;
+    }
+    .annual-savings-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-primary);
+      font-weight: 900;
+      margin-bottom: 12px;
+    }
+    .annual-savings-copy {
+      color: var(--text-muted);
+      font-size: 18px;
+      line-height: 1.45;
+      max-width: 980px;
+    }
+    .annual-savings-copy strong { color: var(--text-primary); }
+    .annual-savings-proof {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .annual-savings-proof-card {
+      border: 1px solid rgba(63,185,80,0.24);
+      border-radius: 10px;
+      background: rgba(63,185,80,0.07);
+      padding: 14px 16px;
+      min-width: 0;
+    }
+    .annual-savings-proof-value {
+      color: var(--accent-green);
+      font-family: var(--font-mono);
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1;
+      margin-bottom: 7px;
+    }
+    .annual-savings-proof-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
     .savings-primary-panel {
       position: relative; z-index: 1;
       display: flex; flex-direction: column; justify-content: space-between;
@@ -1160,6 +1236,7 @@
       .exec-help-grid { grid-template-columns: repeat(2, 1fr); }
       .trial-check-grid { grid-template-columns: repeat(2, 1fr); }
       .hero-card.savings-impact { grid-template-columns: 1fr; }
+      .annual-savings-layout { grid-template-columns: 1fr; }
       .savings-primary-panel { min-height: auto; }
       .savings-proof-grid { grid-template-columns: repeat(2, 1fr); }
       .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1170,12 +1247,14 @@
       .exec-kpi-row, .exec-insight-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 760px) {
-      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid, .spend-visual-grid, .spend-trend-kpis, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid { grid-template-columns: 1fr; }
+      .hero-row, .metric-row, .breakdown-grid, .exec-help-grid, .savings-compare-grid, .savings-proof-grid, .usage-snapshot, .burn-strip, .source-tile-grid, .recommendation-grid, .spend-visual-grid, .spend-trend-kpis, .exec-kpi-row, .exec-insight-grid, .cost-mix-grid, .annual-savings-proof { grid-template-columns: 1fr; }
       .burn-card.trend { grid-column: auto; }
       .burn-trend-head { grid-template-columns: 1fr; }
       .savings-donut-wrap { min-height: 200px; }
       .savings-mix-legend { grid-template-columns: 1fr; }
       .hero-number { font-size: 46px; }
+      .annual-savings-card { padding: 22px; }
+      .annual-savings-value { white-space: normal; }
       .trial-start-head { flex-direction: column; }
       .trial-check-grid { grid-template-columns: 1fr; }
       .trial-test-grid { grid-template-columns: 1fr; }
@@ -1458,6 +1537,35 @@
       </div>
     </div>
 
+    <div class="hero-card annual-savings-card">
+      <div class="annual-savings-layout">
+        <div>
+          <div class="annual-savings-eyebrow" id="execProjectedAnnualScope">All Workspace Projected Annual Savings</div>
+          <div class="annual-savings-value" id="execProjectedAnnualSavings">—</div>
+        </div>
+        <div>
+          <div class="annual-savings-title">Annual savings pace <span class="exec-help" tabindex="0" data-help="Projected savings if the current CostPilot routing, pruning, blocking, and budget controls continue for a full year.">?</span></div>
+          <div class="annual-savings-copy">
+            At current routing efficiency, CostPilot prevents <strong id="execProjectedAnnualPrevented">—</strong> of AI spend from going to premium models unnecessarily.
+          </div>
+          <div class="annual-savings-proof">
+            <div class="annual-savings-proof-card">
+              <div class="annual-savings-proof-value" id="execProjectedAnnualAvoided">—</div>
+              <div class="annual-savings-proof-label">current avoided spend</div>
+            </div>
+            <div class="annual-savings-proof-card">
+              <div class="annual-savings-proof-value" id="execProjectedAnnualRouting">—</div>
+              <div class="annual-savings-proof-label">handled by lower-cost tiers</div>
+            </div>
+            <div class="annual-savings-proof-card">
+              <div class="annual-savings-proof-value" id="execProjectedAnnualCalls">—</div>
+              <div class="annual-savings-proof-label">requests evaluated</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Baseline chart -->
     <div class="hero-card chart-wide">
       <div class="chart-label">Cumulative spend vs. no-control baseline <span class="exec-help" tabindex="0" data-help="The gray line estimates what spend would look like without CostPilot routing, pruning, blocking, and budget controls. The green line shows actual CostPilot-controlled spend.">?</span></div>
@@ -1595,9 +1703,9 @@
     <div class="spend-visual-card">
       <div class="spend-visual-title">
         Spend by model
-        <span class="exec-help" tabindex="0" data-help="Shows which model tiers or named models are creating spend. If provider model names are unavailable, CostPilot groups spend by tier.">?</span>
+        <span class="exec-help" tabindex="0" data-help="Shows the actual LLM model names recorded by providers or the model registry, such as claude-opus-4-6 or gpt-4o. If an audit event only has a tier, CostPilot maps it to the configured default model for that tier.">?</span>
       </div>
-      <div class="spend-visual-sub">Model or tier cost concentration.</div>
+      <div class="spend-visual-sub">LLM model cost concentration.</div>
       <div class="spend-bars" id="execSpendByModelBars"></div>
     </div>
   </div>
@@ -2100,7 +2208,7 @@ function eventMatchesFilters(e) {
   if (execFilters.platform && norm(e.source_platform) !== norm(execFilters.platform)) return false;
   if (execFilters.agent && String(e.agent_id || "") !== String(execFilters.agent)) return false;
   if (execFilters.tier && norm(tierName(e.model_tier)) !== norm(execFilters.tier)) return false;
-  if (execFilters.model && norm(modelLabelForEvent(e)) !== norm(execFilters.model)) return false;
+  if (execFilters.model && norm(modelLabelForEvent(e, execData)) !== norm(execFilters.model)) return false;
   if (execFilters.risk && norm(e.risk_level) !== norm(execFilters.risk)) return false;
   return true;
 }
@@ -3016,9 +3124,47 @@ function businessUnitForDept(dept) {
   return displayDeptName(dept) || "Other";
 }
 
-function modelLabelForEvent(e) {
+function modelListFromData(data) {
+  const candidates = [
+    data?.models,
+    data?.model_registry,
+    data?.registry_models,
+    data?.known_models,
+    data?.dashboard?.models,
+    data?.dashboard?.model_registry,
+    data?.dashboard?.registry_models,
+  ];
+  return candidates.flatMap(item => Array.isArray(item) ? item : []);
+}
+
+function modelNameFromRecord(model) {
+  return model?.model_id
+    || model?.api_model_id
+    || model?.provider_model
+    || model?.llm_model
+    || model?.model_name
+    || model?.name
+    || model?.display_name
+    || "";
+}
+
+function modelTierFromRecord(model) {
+  return tierName(model?.tier || model?.model_tier || model?.tier_name || model?.costpilot_tier || "");
+}
+
+function configuredModelForTier(tier, data) {
+  const target = norm(tierName(tier) || tier);
+  if (!target) return "";
+  const candidates = modelListFromData(data).filter(model => norm(modelTierFromRecord(model)) === target);
+  const preferred = candidates.find(model => model?.is_default || model?.default || model?.is_enabled || model?.enabled) || candidates[0];
+  return modelNameFromRecord(preferred);
+}
+
+function modelLabelForEvent(e, data) {
   const direct = e.model_name || e.model_id || e.model || e.provider_model || e.llm_model;
   if (direct) return String(direct);
+  const configured = configuredModelForTier(e.model_tier, data);
+  if (configured) return String(configured);
   const tier = tierName(e.model_tier);
   return tier ? `${tier} tier` : "Unknown model";
 }
@@ -3150,7 +3296,7 @@ function renderExecSpendBreakdowns(events, data, context) {
 
   const byAgent = groupAgentSpend(events, data);
   const byBusinessUnit = groupSpend(events, e => businessUnitForDept(e.department || e.source_department), data);
-  const byModel = groupSpend(events, e => modelLabelForEvent(e), data);
+  const byModel = groupSpend(events, (e, currentData) => modelLabelForEvent(e, currentData), data);
 
   renderSpendTrendVisual(events, context);
   renderSpendBars("execSpendByDeptBars", byDept, {
@@ -3237,6 +3383,12 @@ function renderExec(data) {
   document.getElementById("execHeroSavingsInline").textContent = fmtUsd(annualSavings);
   document.getElementById("execHeroRoutingPct").textContent = routingPct + "%";
   document.getElementById("execHeroAvoided").textContent = fmtUsd(totalAvoided);
+  setText("execProjectedAnnualScope", hasFilters ? "Filtered Projected Annual Savings" : "All Workspace Projected Annual Savings");
+  setText("execProjectedAnnualSavings", fmtUsd(annualSavings));
+  setText("execProjectedAnnualPrevented", `${routingPct}%`);
+  setText("execProjectedAnnualAvoided", fmtUsd(totalAvoided));
+  setText("execProjectedAnnualRouting", `${routingPct}%`);
+  setText("execProjectedAnnualCalls", fmtNum(totalCalls));
   document.getElementById("execWithoutCostPilot").textContent = fmtUsd(withoutCostPilot);
   document.getElementById("execWithCostPilot").textContent = fmtUsd(actualCost);
   document.getElementById("execSavedCost").textContent = fmtUsd(totalAvoided);
