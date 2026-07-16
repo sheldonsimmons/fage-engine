@@ -2151,7 +2151,7 @@ function fmtNum(v) {
 }
 
 const EXEC_FILTER_KEY = "costpilot_exec_filters";
-const EXEC_LAYOUT_KEY = "costpilot_exec_layout_v1";
+const EXEC_LAYOUT_KEY = "costpilot_exec_layout_v2";
 let execData = null;
 let execFilters = {
   dept: "", platform: "", agent: "", range: "30", tier: "", risk: "", businessUnit: "", model: ""
@@ -2159,12 +2159,12 @@ let execFilters = {
 let execCustomizeMode = false;
 
 const EXEC_LAYOUT_SECTIONS = [
-  { id: "baselineChart", label: "Baseline chart", selector: ".hero-card.chart-wide" },
-  { id: "usageSnapshot", label: "Usage snapshot", selector: ".usage-snapshot" },
-  { id: "burnStrip", label: "Spend console", selector: ".burn-strip" },
   { id: "spendVisuals", label: "Spend breakdown charts", selector: ".spend-visual-grid" },
   { id: "savingsSources", label: "Savings sources", selector: ".source-tile-grid" },
   { id: "recommendations", label: "Recommendations", selector: ".recommendation-grid" },
+  { id: "baselineChart", label: "Baseline chart", selector: ".hero-card.chart-wide" },
+  { id: "usageSnapshot", label: "Usage snapshot", selector: ".usage-snapshot" },
+  { id: "burnStrip", label: "Spend console", selector: ".burn-strip" },
   { id: "metricCards", label: "Operating metrics", selector: ".metric-row" },
   { id: "kpiCards", label: "Savings KPIs", selector: ".exec-kpi-row" },
   { id: "insightGrid", label: "Cost insights", selector: ".exec-insight-grid" },
@@ -2200,6 +2200,11 @@ function ensureExecLayoutShell() {
       </div>
       <div class="exec-layout-zone" id="execLayoutZone"></div>
     `);
+  }
+  const actionStrip = document.getElementById("execActionStrip");
+  const customizeBar = document.getElementById("execCustomizeBar");
+  if (actionStrip && customizeBar && customizeBar.previousElementSibling !== actionStrip) {
+    customizeBar.parentNode.insertBefore(actionStrip, customizeBar);
   }
   return document.getElementById("execLayoutZone");
 }
