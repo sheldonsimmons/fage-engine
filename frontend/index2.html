@@ -1845,9 +1845,10 @@ function fmtNum(v) {
 const EXEC_FILTER_KEY = "costpilot_exec_filters";
 const EXEC_LAYOUT_KEY = "costpilot_exec_layout_v1";
 let execData = null;
-let execFilters = {
-  dept: "", platform: "", agent: "", range: "30", tier: "", risk: "", businessUnit: "", model: ""
-};
+function defaultExecFilters() {
+  return { dept: "", platform: "", agent: "", range: "30", tier: "", risk: "", businessUnit: "", model: "" };
+}
+let execFilters = defaultExecFilters();
 let execCustomizeMode = false;
 
 const EXEC_LAYOUT_SECTIONS = [
@@ -1864,8 +1865,40 @@ const EXEC_LAYOUT_SECTIONS = [
 ];
 
 try {
-  execFilters = { ...execFilters, ...(JSON.parse(localStorage.getItem(EXEC_FILTER_KEY) || "{}")) };
+  execFilters = normalizeExecFilters(JSON.parse(localStorage.getItem(EXEC_FILTER_KEY) || "{}"));
 } catch {}
+
+function normalizeExecFilters(filters = {}) {
+  const next = { ...defaultExecFilters(), ...(filters || {}) };
+  const allowedRanges = new Set(["1", "7", "30", "mtd", "180"]);
+  if (!allowedRanges.has(String(next.range || ""))) next.range = "30";
+  Object.keys(next).forEach(key => {
+    if (next[key] == null) next[key] = "";
+    next[key] = String(next[key]);
+  });
+  return next;
+}
+
+function execActiveFilters() {
+  const filters = normalizeExecFilters(execFilters);
+  const active = [];
+  if (filters.dept) active.push(["department", filters.dept]);
+  if (filters.platform) active.push(["platform", filters.platform]);
+  if (filters.agent) active.push(["agent", filters.agent]);
+  if (filters.businessUnit) active.push(["business unit", filters.businessUnit]);
+  if (filters.tier) active.push(["tier", tierName(filters.tier)]);
+  if (filters.model) active.push(["model", filters.model]);
+  if (filters.risk) active.push(["risk", `${filters.risk.toUpperCase()} risk`]);
+  if (filters.range !== "30") {
+    const rangeLabels = { "1": "Last 24 Hours", "7": "Last 7 Days", "mtd": "Month to Date", "180": "Last 180 Days" };
+    active.push(["time range", rangeLabels[filters.range] || filters.range]);
+  }
+  return active;
+}
+
+function execHasActiveFilters() {
+  return execActiveFilters().length > 0;
+}
 
 function execLayoutIds() {
   const defaults = EXEC_LAYOUT_SECTIONS.map(s => s.id);
@@ -2096,6 +2129,7 @@ function updateExecFilter(key, value) {
     execFilters.businessUnit = "";
   }
   if (key === "tier") execFilters.model = "";
+  execFilters = normalizeExecFilters(execFilters);
   localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
   if (execData) {
     populateExecFilters(execData);
@@ -2104,7 +2138,7 @@ function updateExecFilter(key, value) {
 }
 
 function clearExecFilters() {
-  execFilters = { dept: "", platform: "", agent: "", range: "30", tier: "", risk: "", businessUnit: "", model: "" };
+  execFilters = defaultExecFilters();
   localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
   if (execData) {
     populateExecFilters(execData);
@@ -2113,7 +2147,7 @@ function clearExecFilters() {
 }
 
 function applyExecDrillFilter(updates = {}) {
-  execFilters = { ...execFilters, ...updates };
+  execFilters = normalizeExecFilters({ ...execFilters, ...updates });
   localStorage.setItem(EXEC_FILTER_KEY, JSON.stringify(execFilters));
   if (execData) {
     populateExecFilters(execData);
@@ -2143,19 +2177,20 @@ function filteredAuditEvents(data) {
 }
 
 function filterSummaryText(count) {
+  const filters = normalizeExecFilters(execFilters);
   const parts = [];
-  if (execFilters.dept) parts.push(execFilters.dept);
-  if (execFilters.platform) parts.push(execFilters.platform);
-  if (execFilters.agent) {
-    const agent = (execData?.agents || []).find(a => String(a.id) === String(execFilters.agent));
+  if (filters.dept) parts.push(filters.dept);
+  if (filters.platform) parts.push(filters.platform);
+  if (filters.agent) {
+    const agent = (execData?.agents || []).find(a => String(a.id) === String(filters.agent));
     parts.push(agent ? agent.name : "selected agent");
   }
-  if (execFilters.businessUnit) parts.push(execFilters.businessUnit);
-  if (execFilters.tier) parts.push(tierName(execFilters.tier));
-  if (execFilters.model) parts.push(execFilters.model);
-  if (execFilters.risk) parts.push(execFilters.risk.toUpperCase() + " risk");
+  if (filters.businessUnit) parts.push(`Business unit: ${filters.businessUnit}`);
+  if (filters.tier) parts.push(tierName(filters.tier));
+  if (filters.model) parts.push(`Model: ${filters.model}`);
+  if (filters.risk) parts.push(filters.risk.toUpperCase() + " risk");
   const rangeLabel = document.getElementById("execFilterRange")?.selectedOptions?.[0]?.textContent || "Last 30 Days";
-  return `${parts.length ? parts.join(" · ") : "All data"} · ${rangeLabel} · ${fmtNum(count)} events`;
+  return `${parts.length ? parts.join(" · ") : "All workspace data"} · ${rangeLabel} · ${fmtNum(count)} events`;
 }
 
 function setTrialStep(id, done) {
@@ -2999,7 +3034,7 @@ function renderExec(data) {
   const d = data.dashboard || {};
   const ts = data.timeseries || {};
   const events = filteredAuditEvents(data);
-  const hasFilters = !!(execFilters.dept || execFilters.platform || execFilters.agent || execFilters.tier || execFilters.risk || execFilters.businessUnit || execFilters.model || execFilters.range !== "30");
+  const hasFilters = execHasActiveFilters();
   const filteredSavings = hasFilters ? filteredSavingsBreakdown(events) : null;
 
   const totalCalls = hasFilters
@@ -3045,7 +3080,7 @@ function renderExec(data) {
     scopeNotice.classList.toggle("active", hasFilters);
     const scopeText = scopeNotice.querySelector("span");
     if (scopeText && hasFilters) {
-      scopeText.innerHTML = `<strong>Filtered: ${escapeHtml(filterSummaryText(events.length))}.</strong> All executive numbers and charts reflect this slice.`;
+      scopeText.innerHTML = `<strong>Filtered: ${escapeHtml(filterSummaryText(events.length))}.</strong> Executive numbers reflect this slice. Clear filters to match the all-workspace dashboard totals.`;
     }
   }
   const scopeLabel = document.getElementById("execSavingsScopeLabel");
