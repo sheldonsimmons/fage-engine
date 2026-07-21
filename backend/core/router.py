@@ -20,6 +20,7 @@ from config import (
 )
 from core.pruner import prune, estimate_tokens
 from core.model_client import call_model, get_mode_info
+from core.keywords import term_matches_text
 
 TIER_NAMES = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
 
@@ -42,9 +43,8 @@ def score_complexity(text: str, threshold: int = None, keywords: list = None) ->
     """
     _threshold  = threshold if threshold is not None else _DEFAULT_THRESHOLD
     _keywords   = keywords  if keywords  is not None else _DEFAULT_KEYWORDS
-    text_lower  = text.lower()
     token_count = estimate_tokens(text)
-    matched     = [kw for kw in _keywords if kw in text_lower]
+    matched     = [kw for kw in _keywords if term_matches_text(kw, text)]
     over_limit  = token_count > _threshold
 
     if matched and over_limit:

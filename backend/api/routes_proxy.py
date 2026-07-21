@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 
 from database.db import SessionLocal
 from database.models import TrialAccount, TokenTransaction, RegisteredAgent, AuditEvent, SensitiveTerm
+from core.keywords import term_matches_text
 from core.pruner import prune
 
 router = APIRouter()
@@ -89,12 +90,11 @@ def _check_sensitive_terms(text: str, db, department: str = None) -> dict:
     terms = db.query(SensitiveTerm).filter(
         (SensitiveTerm.department == None) | (SensitiveTerm.department == department)
     ).all()
-    lower = text.lower()
     matched_flag = []
     matched_escalate = []
     matched_block = []
     for t in terms:
-        if t.term.lower() in lower:
+        if term_matches_text(t.term, text):
             if t.action == "block":
                 matched_block.append(t.term)
             elif t.action == "escalate":
@@ -128,8 +128,8 @@ def _complexity_check(messages: list, token_count: int, keywords: list = None) -
         m.get("content", "") if isinstance(m.get("content"), str)
         else " ".join(b.get("text", "") for b in m.get("content", []) if isinstance(b, dict))
         for m in messages
-    ).lower()
-    matched = [kw for kw in kws if kw in text]
+    )
+    matched = [kw for kw in kws if term_matches_text(kw, text)]
     return (token_count > 500 or bool(matched)), matched
 
 

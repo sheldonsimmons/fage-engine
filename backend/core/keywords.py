@@ -106,6 +106,18 @@ PROTECTED_TERMS = {
 }
 
 
+def term_matches_text(term: str, text: str) -> bool:
+    """Return True only when a configured term appears as a complete term."""
+    normalized_term = (term or "").strip()
+    if not normalized_term:
+        return False
+
+    # Prevent short terms such as "nda" from matching inside "Monday" while
+    # preserving matches next to punctuation and for multi-word phrases.
+    pattern = rf"(?<!\w){re.escape(normalized_term)}(?!\w)"
+    return re.search(pattern, text or "", flags=re.IGNORECASE) is not None
+
+
 def _is_protected_default(term: dict) -> bool:
     return term["term"].lower() in PROTECTED_TERMS and term["action"] == "block"
 
@@ -240,7 +252,6 @@ def check_terms(db: Session, text: str, department: str = None,
                         lambda m: re.sub(r'[\s\-]', '', m.group(0)),
                         text)
 
-    text_lower = normalized.lower()
     priority   = {"block": 3, "escalate": 2, "flag": 1}
     matches    = []
 
@@ -259,7 +270,7 @@ def check_terms(db: Session, text: str, department: str = None,
             continue   # Voice Guard already handled PII — don't block on context words
         if skip_pii and t.category == "hipaa" and t.term.lower() in _HIPAA_PII_TERMS:
             continue   # Voice Guard redacted the actual value; phrase alone is not a risk
-        if t.term.lower() in text_lower:
+        if term_matches_text(t.term, normalized):
             matches.append({
                 "id":         t.id,
                 "term":       t.term,
