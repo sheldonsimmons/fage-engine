@@ -3054,26 +3054,52 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
 
   const actionTone = overCap.length || incidents ? "red" : nearCap.length ? "yellow" : "green";
   setClassById("execActionDriverCard", "exec-action-card", actionTone);
-  setText(
-    "execActionDriverTitle",
-    overCap.length
-      ? `Review ${budgetRow.department} budget`
-      : nearCap.length
-        ? `Watch ${budgetRow.department}`
-        : incidents
-          ? "Review blocked requests"
-          : "No action needed"
-  );
-  setText(
-    "execActionDriverSub",
-    overCap.length
-      ? "Open the department view, inspect top agents, then revoke or adjust override/throttle policy."
-      : nearCap.length
-        ? "Check whether spend is expected before this department crosses its cap."
-        : incidents
-          ? `${fmtNum(blockedCount || 0)} blocked requests need audit review before policy changes.`
-          : "All departments are under cap and no risk events need review in this view."
-  );
+  const joinDepartmentNames = rowsToJoin => {
+    const names = rowsToJoin.map(row => row.department);
+    if (names.length <= 1) return names[0] || "";
+    if (names.length === 2) return names.join(" and ");
+    return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  };
+  const blockedReviewCount = Number(blockedCount || 0);
+  const collisionReviewCount = Number(collisionCount || 0);
+  const recommendedTitle = overCap.length
+    ? blockedReviewCount
+      ? `Review ${overCap.length} budgets and ${fmtNum(blockedReviewCount)} blocked requests`
+      : `Review ${overCap.length} over-cap department${overCap.length === 1 ? "" : "s"}`
+    : nearCap.length
+      ? blockedReviewCount
+        ? `Watch ${nearCap.length} budgets and review blocked requests`
+        : `Watch ${nearCap.length} department${nearCap.length === 1 ? "" : "s"} nearing cap`
+      : blockedReviewCount
+        ? `Review ${fmtNum(blockedReviewCount)} blocked requests`
+        : collisionReviewCount
+          ? `Review ${fmtNum(collisionReviewCount)} agent collisions`
+          : "No action needed";
+
+  const recommendedSteps = [];
+  if (overCap.length) {
+    recommendedSteps.push(
+      `${joinDepartmentNames(overCap)} ${overCap.length === 1 ? "is" : "are"} at or over cap. Inspect top agents, then adjust caps, throttles, or overrides.`
+    );
+  } else if (nearCap.length) {
+    recommendedSteps.push(
+      `${joinDepartmentNames(nearCap)} ${nearCap.length === 1 ? "is" : "are"} nearing cap. Confirm the spend is expected before the limit is reached.`
+    );
+  }
+  if (blockedReviewCount) {
+    recommendedSteps.push(
+      `Review ${fmtNum(blockedReviewCount)} blocked request${blockedReviewCount === 1 ? "" : "s"} in Audit before changing sensitive-term policy.`
+    );
+  }
+  if (collisionReviewCount) {
+    recommendedSteps.push(`Review collision outcomes: ${collisionBreakdownText(collisionBreakdown)}.`);
+  }
+  if (!recommendedSteps.length) {
+    recommendedSteps.push("All departments are under cap and no risk events need review in this view.");
+  }
+
+  setText("execActionDriverTitle", recommendedTitle);
+  setText("execActionDriverSub", recommendedSteps.join(" "));
 }
 
 function workspaceDepartmentCount(data, events) {
