@@ -3553,31 +3553,47 @@ function modelListFromData(data) {
 }
 
 function modelNameFromRecord(model) {
-  return model?.model_id
+  return model?.display_name
+    || model?.model_name
+    || model?.name
+    || model?.model_id
     || model?.api_model_id
     || model?.provider_model
     || model?.llm_model
-    || model?.model_name
-    || model?.name
-    || model?.display_name
     || "";
 }
 
+function modelRecordForIdentifier(identifier, data) {
+  const target = norm(identifier);
+  if (!target) return null;
+  return modelListFromData(data).find(model => [
+    model?.model_id,
+    model?.api_model_id,
+    model?.provider_model,
+    model?.llm_model,
+    model?.model_name,
+    model?.name,
+    model?.display_name,
+  ].some(value => norm(value) === target)) || null;
+}
+
 function modelTierFromRecord(model) {
-  return tierName(model?.tier || model?.model_tier || model?.tier_name || model?.costpilot_tier || "");
+  return tierName(model?.tier_name || model?.model_tier || model?.costpilot_tier || model?.tier || "");
 }
 
 function configuredModelForTier(tier, data) {
   const target = norm(tierName(tier) || tier);
   if (!target) return "";
   const candidates = modelListFromData(data).filter(model => norm(modelTierFromRecord(model)) === target);
-  const preferred = candidates.find(model => model?.is_default || model?.default || model?.is_enabled || model?.enabled) || candidates[0];
+  const preferred = candidates.find(model => model?.is_default || model?.default)
+    || candidates.find(model => model?.is_enabled || model?.enabled)
+    || candidates[0];
   return modelNameFromRecord(preferred);
 }
 
 function modelLabelForEvent(e, data) {
   const direct = e.model_name || e.model_id || e.model || e.provider_model || e.llm_model;
-  if (direct) return String(direct);
+  if (direct) return modelNameFromRecord(modelRecordForIdentifier(direct, data)) || String(direct);
   const configured = configuredModelForTier(e.model_tier, data);
   if (configured) return String(configured);
   const tier = tierName(e.model_tier);
@@ -4065,13 +4081,17 @@ function renderExec(data) {
 
 async function loadExec() {
   try {
-    const [dashboard, timeseries, audits, agents] = await Promise.all([
+    const [dashboard, timeseries, audits, agents, models] = await Promise.all([
       apiGet("/api/dashboard"),
       apiGet("/api/timeseries?days=180"),
       apiGet("/api/audit?limit=5000"),
       apiGet("/api/agents"),
+      apiGet("/api/models").catch(err => {
+        console.warn("Model registry load failed; using tier labels:", err.message);
+        return [];
+      }),
     ]);
-    execData = { dashboard, timeseries, audits, agents };
+    execData = { dashboard, timeseries, audits, agents, models };
     populateExecFilters(execData);
     renderExec(execData);
     updateTrialStartCard(await loadTrialScopedExecData(execData));
