@@ -1553,7 +1553,7 @@
         <div class="exec-action-kicker">Action Required</div>
         <div class="exec-action-title" id="execActionTitle">Checking CostPilot signals</div>
       </div>
-      <div class="exec-action-badge badge-green" id="execActionBadge">Healthy</div>
+      <div class="exec-action-badge badge-green" id="execActionBadge">✓ Healthy</div>
     </div>
     <div class="exec-action-grid">
       <div class="exec-action-card green" id="execActionBudgetCard">
@@ -1656,7 +1656,7 @@
               <div class="savings-compare-label">Risk Events <span class="exec-help" tabindex="0" data-help="Blocked requests, sensitive payloads, collision locks, or policy actions that need executive awareness.">?</span></div>
               <div class="savings-compare-badge" id="execHeroRiskBadge">—</div>
             </div>
-            <div class="savings-compare-value text"><span class="risk-dot" id="execHeroRiskDot"></span><span id="execHeroRiskValue">—</span></div>
+            <div class="savings-compare-value text"><span class="risk-dot clear" id="execHeroRiskDot" aria-hidden="true"></span><span id="execHeroRiskValue">—</span></div>
             <div class="savings-compare-sub" id="execHeroRiskSub">blocked and controlled events</div>
           </div>
         </div>
@@ -1716,16 +1716,16 @@
       <div class="chart-sublabel">The space between the lines is money CostPilot kept from becoming AI spend.</div>
       <div class="chart-legend">
         <div class="chart-legend-item">
-          <div class="chart-legend-dot" style="background:var(--text-muted);opacity:0.5;height:2px;border-top:2px dashed var(--text-muted)"></div>
+          <div class="chart-legend-dot baseline" aria-hidden="true"></div>
           No-control baseline
         </div>
         <div class="chart-legend-item">
-          <div class="chart-legend-dot" style="background:var(--accent-green)"></div>
+          <div class="chart-legend-dot actual" aria-hidden="true"></div>
           Actual
         </div>
       </div>
       <div class="chart-canvas-wrap">
-        <canvas id="execSpendChart"></canvas>
+        <canvas id="execSpendChart" role="img" aria-label="Cumulative actual AI spend compared with the no-control baseline"></canvas>
       </div>
       <div class="chart-caption" id="execChartSub">
         Loading chart data...
@@ -1862,7 +1862,7 @@
       </div>
       <div class="savings-mix-body">
         <div class="savings-donut-wrap" aria-label="Savings mix by source">
-          <canvas id="savingsDonutChart"></canvas>
+          <canvas id="savingsDonutChart" role="img" aria-label="Savings mix by routing, pruning, budget caps, and blocked risk"></canvas>
           <div class="savings-donut-center">
             <div class="savings-donut-center-value" id="execMixCenterValue">—</div>
             <div class="savings-donut-center-label">avoided spend</div>
@@ -2804,6 +2804,7 @@ function buildChart(labels, actualData, flagshipData, totalSaved) {
           borderColor: "rgba(139,148,158,0.75)",
           borderWidth: 2,
           borderDash: [4, 3],
+          pointStyle: "rectRot",
           pointRadius: 2,
           pointHoverRadius: 4,
           fill: false,
@@ -2815,8 +2816,10 @@ function buildChart(labels, actualData, flagshipData, totalSaved) {
           borderColor: "#3fb950",
           backgroundColor: "rgba(46,160,67,0.10)",
           borderWidth: 2.5,
-          pointRadius: 2,
-          pointHoverRadius: 4,
+          borderDash: [],
+          pointStyle: "circle",
+          pointRadius: 3,
+          pointHoverRadius: 5,
           fill: {
             target: 0,  // fill to dataset index 0 (flagship)
             above: "rgba(46,160,67,0.10)",
@@ -2963,7 +2966,7 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
   strip.className = `exec-action-strip ${needsAction ? "danger" : isWarning ? "warning" : "clear"}`;
   const badge = document.getElementById("execActionBadge");
   if (badge) {
-    badge.textContent = needsAction ? "Action needed" : isWarning ? "Watch" : "Healthy";
+    badge.textContent = needsAction ? "× Action needed" : isWarning ? "! Watch" : "✓ Healthy";
     badge.className = `exec-action-badge ${needsAction ? "badge-red" : isWarning ? "badge-yellow" : "badge-green"}`;
   }
 
@@ -3298,6 +3301,13 @@ function updateSavingsDonut(routingSaved, pruningSaved, throttleSaved, blockedSa
     ? ["#3fb950", "#58a6ff", "rgba(210,153,34,1)", "#ff4d4f"]
     : ["rgba(139,148,158,0.35)", "rgba(139,148,158,0.10)", "rgba(139,148,158,0.10)", "rgba(139,148,158,0.10)"];
 
+  canvas.setAttribute(
+    "aria-label",
+    hasSavings
+      ? `Savings mix: routing ${fmtUsd(values[0])}, pruning ${fmtUsd(values[1])}, budget caps ${fmtUsd(values[2])}, blocked risk ${fmtUsd(values[3])}.`
+      : "Savings mix: no avoided spend recorded in the current view."
+  );
+
   if (!savingsDonutChartInstance) {
     savingsDonutChartInstance = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
@@ -3306,7 +3316,9 @@ function updateSavingsDonut(routingSaved, pruningSaved, throttleSaved, blockedSa
         datasets: [{
           data: chartValues,
           backgroundColor: colors,
-          borderWidth: 0,
+          borderColor: "#111820",
+          borderWidth: 2,
+          spacing: 2,
           cutout: "70%",
           hoverOffset: 6,
         }],
@@ -3858,13 +3870,15 @@ function renderExec(data) {
   const budgetStatusClass = budget.pct >= 100 ? "badge-red" : budget.pct >= 80 ? "badge-yellow" : "badge-green";
   const budgetBadge = document.getElementById("execHeroBudgetBadge");
   if (budgetBadge) {
-    budgetBadge.textContent = `${Math.round(budget.pct)}% used`;
+    const budgetIcon = budget.pct >= 100 ? "×" : budget.pct >= 80 ? "!" : "✓";
+    budgetBadge.textContent = `${budgetIcon} ${Math.round(budget.pct)}% used`;
     budgetBadge.className = "savings-compare-badge " + budgetStatusClass;
   }
   const heroBudgetBar = document.getElementById("execHeroBudgetBar");
   if (heroBudgetBar) {
     heroBudgetBar.style.width = Math.max(2, Math.min(100, budget.pct)) + "%";
-    heroBudgetBar.style.background = budget.pct >= 100 ? "var(--accent-red)" : budget.pct >= 80 ? "var(--accent-yellow)" : "var(--accent-green)";
+    heroBudgetBar.style.background = "";
+    heroBudgetBar.className = `savings-compare-gauge-fill ${budget.pct >= 100 ? "status-critical" : budget.pct >= 80 ? "status-warning" : "status-healthy"}`;
   }
   setText("execBudgetSignalUsed", `${Math.round(budget.pct)}% used`);
   setText("execBudgetSignalRemaining", `${fmtUsd(budgetRemaining)} left`);
@@ -3926,9 +3940,11 @@ function renderExec(data) {
   setText("execHeroRiskSub", `${fmtNum(blockedCount)} blocked · ${fmtNum(collisionCount)} collision`);
   const riskBadge = document.getElementById("execHeroRiskBadge");
   if (riskBadge) {
-    riskBadge.textContent = incidents > 0 ? "needs review" : "all clear";
+    riskBadge.textContent = incidents > 0 ? "× needs review" : "✓ all clear";
     riskBadge.className = "savings-compare-badge " + (incidents > 0 ? "badge-red" : "badge-green");
   }
+  const riskDot = document.getElementById("execHeroRiskDot");
+  if (riskDot) riskDot.className = `risk-dot ${incidents > 0 ? "critical" : "clear"}`;
   const incTag = document.getElementById("execIncidentTag");
   incTag.textContent = incidents > 0 ? `${incidents} INCIDENTS` : "0 INCIDENTS";
   incTag.className = "metric-tag " + (incidents > 0 ? "yellow" : "green");

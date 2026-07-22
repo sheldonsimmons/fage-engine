@@ -219,6 +219,222 @@
   box-shadow: none;
 }
 
+/* Color remains supplemental: status cards also differ by border treatment. */
+.cp-executive-page .exec-action-card.green,
+.cp-executive-page .savings-compare-card.saved {
+  border-style: solid;
+}
+
+.cp-executive-page .exec-action-card.yellow,
+.cp-executive-page .savings-compare-card.warning {
+  border-style: dashed;
+  border-width: 2px;
+}
+
+.cp-executive-page .exec-action-card.red,
+.cp-executive-page .savings-compare-card.risk {
+  border-style: double;
+  border-width: 3px;
+}
+
+.cp-executive-page .exec-action-badge {
+  border: 1px solid currentColor;
+}
+
+.cp-executive-page .exec-action-badge.badge-yellow {
+  border-style: dashed;
+}
+
+.cp-executive-page .exec-action-badge.badge-red {
+  border-style: double;
+  border-width: 3px;
+}
+
+.cp-executive-page .exec-action-strip.warning {
+  border-style: dashed;
+  border-width: 2px;
+}
+
+.cp-executive-page .exec-action-strip.danger {
+  border-style: double;
+  border-width: 3px;
+}
+
+/* Tier names gain a stable ordinal cue instead of relying on hue. */
+.cp-executive-page .badge-scout::before { content: "S1 · "; }
+.cp-executive-page .badge-analyst::before { content: "S2 · "; }
+.cp-executive-page .badge-advisor::before { content: "S3 · "; }
+.cp-executive-page .badge-strategist::before { content: "S4 · "; }
+
+/* Status dots change shape as well as color. Visible text remains adjacent. */
+.cp-executive-page .status-dot.online {
+  border-radius: 50%;
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
+.cp-executive-page .status-dot.offline {
+  border-radius: 1px;
+  transform: rotate(45deg);
+  box-shadow: none;
+}
+
+.cp-executive-page .risk-dot.clear {
+  border-radius: 50%;
+  background: var(--cp-color-positive);
+  outline: 1px solid var(--cp-color-positive);
+  outline-offset: 2px;
+}
+
+.cp-executive-page .risk-dot.critical {
+  border-radius: 1px;
+  background: var(--cp-color-danger);
+  transform: rotate(45deg);
+  outline: 1px solid var(--cp-color-danger);
+  outline-offset: 2px;
+}
+
+/* Bars combine color with patterns. Numeric values and captions remain visible. */
+.cp-executive-page .savings-compare-gauge-fill.status-healthy {
+  background-color: var(--cp-color-positive);
+  background-image: none;
+}
+
+.cp-executive-page .savings-compare-gauge-fill.status-warning {
+  background-color: var(--cp-color-warning);
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.28) 0 3px,
+    transparent 3px 7px
+  );
+}
+
+.cp-executive-page .savings-compare-gauge-fill.status-critical {
+  background-color: var(--cp-color-danger);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.34) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.cp-executive-page .spend-bar-fill.blue,
+.cp-executive-page .rec-driver-fill {
+  background-color: var(--cp-color-primary);
+  background-image: none;
+}
+
+.cp-executive-page .spend-bar-fill.yellow {
+  background-color: var(--cp-color-warning);
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.26) 0 3px,
+    transparent 3px 7px
+  );
+}
+
+.cp-executive-page .source-dot.yellow {
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+.cp-executive-page .source-dot.red {
+  border-radius: 1px;
+  outline: 2px solid var(--cp-color-danger);
+  outline-offset: 2px;
+}
+
+.cp-executive-page .source-fill.yellow {
+  background-color: var(--cp-color-warning);
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.28) 0 3px,
+    transparent 3px 7px
+  );
+}
+
+.cp-executive-page .source-fill.red {
+  background-color: var(--cp-color-danger);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.34) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.cp-executive-page .savings-mix-swatch {
+  border-radius: 50%;
+  outline: 1px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 1px;
+}
+
+.cp-executive-page .savings-mix-swatch.pruning {
+  border-radius: 1px;
+}
+
+.cp-executive-page .savings-mix-swatch.throttle {
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+.cp-executive-page .savings-mix-swatch.blocked {
+  border-radius: 1px;
+  outline-style: double;
+  outline-width: 3px;
+}
+
+.cp-executive-page .budget-gauge-track {
+  background:
+    repeating-linear-gradient(135deg, transparent 0 5px, rgba(0, 0, 0, 0.25) 5px 7px),
+    linear-gradient(
+      90deg,
+      var(--cp-color-positive) 0 70%,
+      var(--cp-color-warning) 70% 90%,
+      var(--cp-color-danger) 90% 100%
+    );
+}
+
+/* Manual chart legend mirrors the actual line and point styles. */
+.cp-executive-page .chart-legend-dot.baseline {
+  width: 20px;
+  height: 8px;
+  border-radius: 0;
+  background: transparent;
+  border-top: 2px dashed var(--cp-color-text-secondary);
+  position: relative;
+}
+
+.cp-executive-page .chart-legend-dot.baseline::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  position: absolute;
+  left: 8px;
+  top: -4px;
+  background: var(--cp-color-text-secondary);
+  transform: rotate(45deg);
+}
+
+.cp-executive-page .chart-legend-dot.actual {
+  width: 20px;
+  height: 8px;
+  border-radius: 0;
+  background: transparent;
+  border-top: 3px solid var(--cp-color-positive);
+  position: relative;
+}
+
+.cp-executive-page .chart-legend-dot.actual::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  position: absolute;
+  left: 7px;
+  top: -5px;
+  border-radius: 50%;
+  background: var(--cp-color-positive);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cp-executive-page *,
   .cp-executive-page *::before,
