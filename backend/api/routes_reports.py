@@ -141,7 +141,9 @@ def risk_report(days: int = Query(30, ge=1, le=365),
         "blocked" in (e.decision_outcome or "").lower() or
         "REQUEST BLOCKED" in (e.rationale or "")
     ))
-    locks         = sum(1 for e in events if e.event_type == "LOCK")
+    locks         = sum(1 for e in events if e.event_type in ("LOCK", "COLLISION_LOCK"))
+    collision_queues = sum(1 for e in events if e.event_type == "COLLISION_QUEUE")
+    collision_skips  = sum(1 for e in events if e.event_type == "COLLISION_SKIP")
     throttled     = sum(1 for e in events if "throttled" in (e.rationale or "").lower())
 
     # Daily risk buckets
@@ -196,6 +198,12 @@ def risk_report(days: int = Query(30, ge=1, le=365),
         "low":             low,
         "blocked":         blocked,
         "locks":           locks,
+        "collision_count": locks + collision_queues + collision_skips,
+        "collision_breakdown": {
+            "lock": locks,
+            "queue": collision_queues,
+            "skip": collision_skips,
+        },
         "throttled":       throttled,
         "by_department":   dept_risk,
         "timeline":        timeline,

@@ -207,7 +207,16 @@ def get_dashboard(
             ),
         )
     ).scalar() or 0
-    collision_count    = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "LOCK")).scalar()       or 0
+    collision_lock_count = db.query(func.count(AuditEvent.id)).filter(
+        *_filters(audit_scope, AuditEvent.event_type.in_(("LOCK", "COLLISION_LOCK")))
+    ).scalar() or 0
+    collision_queue_count = db.query(func.count(AuditEvent.id)).filter(
+        *_filters(audit_scope, AuditEvent.event_type == "COLLISION_QUEUE")
+    ).scalar() or 0
+    collision_skip_count = db.query(func.count(AuditEvent.id)).filter(
+        *_filters(audit_scope, AuditEvent.event_type == "COLLISION_SKIP")
+    ).scalar() or 0
+    collision_count = collision_lock_count + collision_queue_count + collision_skip_count
 
     # ── Executive Summary ROI ─────────────────────────────────────────────────
     FLAGSHIP_AVG = 0.030   # avg cost per flagship call ($0.03 at Opus 4 rates)
@@ -344,6 +353,11 @@ def get_dashboard(
         "pii_count":             pii_count,
         "throttle_prevented":    throttle_prevented,
         "collision_count":       collision_count,
+        "collision_breakdown": {
+            "lock":  collision_lock_count,
+            "queue": collision_queue_count,
+            "skip":  collision_skip_count,
+        },
 
         # ── Executive Summary ROI ──────────────────────────────────────────────
         "projected_annual_savings": projected_annual_savings,

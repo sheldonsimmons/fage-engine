@@ -2952,7 +2952,7 @@ function setClassById(id, baseClass, tone) {
   el.className = `${baseClass}${tone ? ` ${tone}` : ""}`;
 }
 
-function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisionCount }) {
+function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisionCount, collisionBreakdown }) {
   const strip = document.getElementById("execActionStrip");
   if (!strip) return;
 
@@ -3048,7 +3048,7 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
   setText(
     "execActionRiskSub",
     incidents
-      ? `${fmtNum(blockedCount || 0)} blocked · ${fmtNum(collisionCount || 0)} collision controls`
+      ? `${fmtNum(blockedCount || 0)} blocked requests · ${collisionBreakdownText(collisionBreakdown)}`
       : "No blocked or collision events in this view."
   );
 
@@ -3093,6 +3093,32 @@ function workspaceDepartmentCount(data, events) {
 
 function isBlockedEvent(e) {
   return norm(e.decision_outcome).includes("blocked");
+}
+
+function collisionPolicyForEvent(e) {
+  const type = norm(e.event_type);
+  const outcome = norm(e.decision_outcome);
+  if (type === "lock" || type === "collision_lock") return "lock";
+  if (type === "collision_queue") return "queue";
+  if (type === "collision_skip") return "skip";
+  if (!outcome.includes("collision")) return "";
+  if (outcome.includes("queue")) return "queue";
+  if (outcome.includes("skip")) return "skip";
+  if (outcome.includes("lock")) return "lock";
+  return "";
+}
+
+function collisionBreakdownForEvents(events) {
+  return (events || []).reduce((counts, event) => {
+    const policy = collisionPolicyForEvent(event);
+    if (policy) counts[policy] += 1;
+    return counts;
+  }, { lock: 0, queue: 0, skip: 0 });
+}
+
+function collisionBreakdownText(breakdown) {
+  const values = breakdown || {};
+  return `${fmtNum(values.lock || 0)} locked · ${fmtNum(values.queue || 0)} queued · ${fmtNum(values.skip || 0)} skipped`;
 }
 
 function isThrottleEvent(e) {
@@ -3709,9 +3735,14 @@ function renderExec(data) {
   const blockedCount = hasFilters
     ? filteredSavings.blockedCount
     : d.blocked_count || 0;
-  const collisionCount = hasFilters
-    ? events.filter(e => norm(e.decision_outcome).includes("collision") || norm(e.decision_outcome).includes("locked")).length
-    : d.collision_count || 0;
+  const collisionBreakdown = hasFilters
+    ? collisionBreakdownForEvents(events)
+    : {
+        lock: Number(d.collision_breakdown?.lock ?? d.collision_count ?? 0),
+        queue: Number(d.collision_breakdown?.queue || 0),
+        skip: Number(d.collision_breakdown?.skip || 0),
+      };
+  const collisionCount = collisionBreakdown.lock + collisionBreakdown.queue + collisionBreakdown.skip;
   const throttleCount = hasFilters
     ? filteredSavings.throttleCount
     : d.throttle_prevented || 0;
@@ -3802,7 +3833,7 @@ function renderExec(data) {
 
   const drivers = topCostDrivers(events, data);
   const topDriver = drivers[0];
-  updateExecActionStrip({ data, budget, topDriver, blockedCount, collisionCount });
+  updateExecActionStrip({ data, budget, topDriver, blockedCount, collisionCount, collisionBreakdown });
   setText("execHeroTopDriverValue", topDriver ? topDriver.agent : "No driver yet");
   setText(
     "execHeroTopDriverSub",
@@ -3937,7 +3968,7 @@ function renderExec(data) {
     heroRiskCard.className = `savings-compare-card ${incidents > 0 ? "risk" : "saved"}`;
   }
   setText("execHeroRiskValue", fmtNum(incidents));
-  setText("execHeroRiskSub", `${fmtNum(blockedCount)} blocked · ${fmtNum(collisionCount)} collision`);
+  setText("execHeroRiskSub", `${fmtNum(blockedCount)} blocked requests · ${collisionBreakdownText(collisionBreakdown)}`);
   const riskBadge = document.getElementById("execHeroRiskBadge");
   if (riskBadge) {
     riskBadge.textContent = incidents > 0 ? "× needs review" : "✓ all clear";

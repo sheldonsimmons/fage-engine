@@ -872,14 +872,16 @@ function renderComplianceGrid(d) {
   const flaggedCount = countRiskDrill("flagged", d.flagged_count);
   const piiCount = countRiskDrill("pii", d.pii_count);
   const throttleCount = countRiskDrill("throttle", d.throttle_prevented);
-  const lockCount = countRiskDrill("locks", d.collision_count);
+  const collisionCount = countRiskDrill("locks", d.collision_count);
+  const collisionBreakdown = d.collision_breakdown || { lock: d.collision_count || 0, queue: 0, skip: 0 };
+  const collisionSummary = `${collisionBreakdown.lock || 0} locked · ${collisionBreakdown.queue || 0} queued · ${collisionBreakdown.skip || 0} skipped`;
   const items = [
     { icon: "🚫", value: blockedCount,  label: "Requests Blocked",          sub: "Sensitive terms triggered block policy — request never reached AI model",          cls: "critical", drill: { drill: "blocked", label: "Blocked request events" } },
     { icon: "⚠️",  value: premiumCount,  label: "Escalated to Flagship",     sub: "Requests routed to Advisor, Strategist, or flagship review",                      cls: "high",     drill: { drill: "premium", label: "Premium-tier routed events" } },
     { icon: "🔍", value: flaggedCount,  label: "Flagged in Audit Log",      sub: "High-risk keywords logged for compliance review",                                   cls: "medium",   drill: { drill: "flagged", label: "High-risk flagged audit events" } },
     { icon: "🔒", value: piiCount,      label: "PII Detected",              sub: "Credit cards, SSNs, emails, phone numbers caught before AI processing",             cls: "high",     drill: { drill: "pii", label: "PII-related events" } },
     { icon: "💰", value: throttleCount, label: "Budget Overruns Prevented", sub: "Auto-throttle engaged before department cap was breached",                          cls: "low",      drill: { drill: "throttle", label: "Budget throttle events" } },
-    { icon: "⚡", value: lockCount,     label: "Agent Collisions Resolved", sub: "Concurrent write conflicts detected and locked — zero data corruption",             cls: "low",      drill: { drill: "locks", label: "Agent collision events" } },
+    { icon: "⚡", value: collisionCount, label: "Agent Collisions Controlled", sub: collisionSummary + " — zero silent overwrites",                              cls: "low",      drill: { drill: "locks", label: "Agent collision events" } },
   ];
   const hasData = items.some(i => i.value > 0);
   if (!hasData) {
@@ -915,7 +917,7 @@ function renderExecSummary(d) {
     { icon: "◈", cls: "purple", color: "purple", title: "COMPLIANCE EVENTS LOGGED",  value: eventsLabel,                          sub: "Immutable audit trail — every AI decision logged, timestamped, exportable" },
     { icon: "✓", cls: "yellow", color: "yellow", title: "REQUESTS GOVERNED",         value: governed,                             sub: "AI requests routed, blocked, audited, or budget-checked by CostPilot" },
     { icon: "↑", cls: "green",  color: "green",  title: "TOKENS SAVED",              value: tokensLabel,                          sub: "Context pruned before every AI call — savings start from day one" },
-    { icon: "0", cls: "red",    color: "",        title: "DATA CORRUPTION EVENTS",    value: "Zero",                               sub: (d.collision_count || 0) + " agent collisions detected and locked — no silent overwrites" },
+    { icon: "0", cls: "red",    color: "",        title: "DATA CORRUPTION EVENTS",    value: "Zero",                               sub: `${d.collision_count || 0} agent collisions controlled — ${((d.collision_breakdown || {}).lock || 0)} locked, ${((d.collision_breakdown || {}).queue || 0)} queued, ${((d.collision_breakdown || {}).skip || 0)} skipped` },
   ];
   const hasData = (d.total_calls || 0) > 0 || (d.flagged_count || 0) > 0;
   if (!hasData) {

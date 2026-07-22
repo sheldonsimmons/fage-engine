@@ -219,8 +219,8 @@ def get_single_agent(agent_id: int, db: Session = Depends(get_db)):
 def claim(req: ClaimRequest, db: Session = Depends(get_db)):
     """
     Traffic Cop endpoint: an agent requests exclusive write access to a record.
-    If another agent already holds that record, a collision is triggered and
-    both agents are locked until a supervisor intervenes.
+    If another agent already holds that record, the requesting agent's
+    configured lock, queue, or skip collision policy is applied.
     """
     try:
         return claim_record(db, req.agent_id, req.table, req.record_id)

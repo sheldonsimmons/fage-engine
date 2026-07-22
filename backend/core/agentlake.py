@@ -5,7 +5,7 @@ Responsibilities:
   - List all registered AI agents and their current status
   - Let an agent "claim" a record before writing to it
   - Detect when two agents claim the same record simultaneously (collision)
-  - Lock both agents and raise an alert — no data is written until resolved
+  - Apply each agent's lock, queue, or skip policy and audit the outcome
   - Allow a supervisor to release a lock manually
 """
 
@@ -156,7 +156,7 @@ def claim_record(db: Session, agent_id: int, table: str, record_id: int) -> dict
 
     Logic:
       1. Check if any OTHER agent already holds a claim on (table, record_id)
-      2. If yes  → collision detected. Lock BOTH agents. Return collision report.
+      2. If yes  → apply the requesting agent's lock, queue, or skip policy.
       3. If no   → grant the claim. Set agent status to 'active'.
     """
     agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
@@ -192,26 +192,30 @@ def claim_record(db: Session, agent_id: int, table: str, record_id: int) -> dict
             agent.locked_at   = None
             agent.lock_reason = None
             db.commit()
+            audit = _record_collision(db, agent, blocker, table, record_id, "skip", lock_reason)
             return {
                 "collision":  True,
                 "policy":     "skip",
                 "agent":      _serialize(agent),
                 "lock_reason": lock_reason,
                 "message":    f"'{agent.name}' skipped {table} #{record_id} — already held by '{blocker.name}'.",
+                "audit_id":   audit["id"],
             }
 
         elif policy == "queue":
-            # ── QUEUE — block but don't lock, auto-proceeds when free ─────────
+            # ── QUEUE — hold the request for a later release or retry ──────────
             agent.status      = "queued"
             agent.locked_at   = now
             agent.lock_reason = lock_reason
             db.commit()
+            audit = _record_collision(db, agent, blocker, table, record_id, "queue", lock_reason)
             return {
                 "collision":  True,
                 "policy":     "queue",
                 "agent":      _serialize(agent),
                 "lock_reason": lock_reason,
-                "message":    f"'{agent.name}' queued for {table} #{record_id} — waiting for '{blocker.name}' to release.",
+                "message":    f"'{agent.name}' queued for {table} #{record_id} — awaiting release or retry after '{blocker.name}' finishes.",
+                "audit_id":   audit["id"],
             }
 
         else:
@@ -225,6 +229,7 @@ def claim_record(db: Session, agent_id: int, table: str, record_id: int) -> dict
             blocker.lock_reason = lock_reason
 
             db.commit()
+            audit = _record_collision(db, agent, blocker, table, record_id, "lock", lock_reason)
             return {
                 "collision":     True,
                 "policy":        "lock",
@@ -232,6 +237,7 @@ def claim_record(db: Session, agent_id: int, table: str, record_id: int) -> dict
                 "lock_reason":   lock_reason,
                 "table":         table,
                 "record_id":     record_id,
+                "audit_id":      audit["id"],
             }
 
     # ── No collision — grant the claim ─────────────────────────────────────────
@@ -303,6 +309,40 @@ def simulate_collision(db: Session, agent_id_1: int, agent_id_2: int, table: str
     result = claim_record(db, a2.id, table, record_id)
 
     return result
+
+
+def _record_collision(
+    db: Session,
+    agent: RegisteredAgent,
+    blocker: RegisteredAgent,
+    table: str,
+    record_id: int,
+    policy: str,
+    reason: str,
+) -> dict:
+    """Write one immutable audit event for every collision policy outcome."""
+    from core.auditor import write_audit_event
+
+    event_type = {
+        "lock": "COLLISION_LOCK",
+        "queue": "COLLISION_QUEUE",
+        "skip": "COLLISION_SKIP",
+    }[policy]
+    outcome = (
+        f"Collision {policy}: '{agent.name}' encountered '{blocker.name}' on "
+        f"{table} record #{record_id}."
+    )
+    return write_audit_event(
+        db=db,
+        event_type=event_type,
+        department=agent.department or "Unassigned",
+        routing_decision="COLLISION",
+        routing_reason=reason,
+        prompt_payload=f"{table} record #{record_id}",
+        model_tier=None,
+        agent_id=agent.id,
+        decision_outcome=outcome,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

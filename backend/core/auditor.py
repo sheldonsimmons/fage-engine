@@ -47,8 +47,10 @@ def classify_risk(event_type: str, routing_decision: str, matched_keywords: list
         return "critical"   # blocked PII/sensitive data is always critical
     if kw_set & critical_keywords:
         return "critical"
-    if event_type == "LOCK":
+    if event_type in ("LOCK", "COLLISION_LOCK"):
         return "high"
+    if event_type in ("COLLISION_QUEUE", "COLLISION_SKIP"):
+        return "medium"
     if kw_set & high_keywords or routing_decision == "THROTTLED":
         return "high"
     if routing_decision == "COMPLEX":
@@ -103,13 +105,30 @@ def _build_rationale(
     cap      = _fmt(context.get("budget_cap_usd"),   ".2f")
     used_pct = _fmt(context.get("budget_used_pct"),  ".1f")
 
-    if event_type == "LOCK":
+    if event_type in ("LOCK", "COLLISION_LOCK"):
         return (
             f"CONCURRENCY LOCK TRIGGERED. Two agents simultaneously attempted to write "
             f"the same database record in the {department} department. "
             f"The Traffic Cop locked both agents to prevent data corruption. "
             f"No data was written. A supervisor must manually release the locks after reviewing "
             f"which agent should proceed first."
+        )
+
+    if event_type == "COLLISION_QUEUE":
+        return (
+            f"CONCURRENCY COLLISION QUEUED. Two agents simultaneously attempted to write "
+            f"the same database record in the {department} department. "
+            f"The requesting agent was placed in the queue without interrupting the agent "
+            f"that already held the record. The queued operation requires a later release "
+            f"or retry before it can proceed. Collision detail: {routing_reason}"
+        )
+
+    if event_type == "COLLISION_SKIP":
+        return (
+            f"CONCURRENCY COLLISION SKIPPED. Two agents simultaneously attempted to write "
+            f"the same database record in the {department} department. "
+            f"The requesting agent abandoned its operation, while the agent that already "
+            f"held the record continued without interruption. Collision detail: {routing_reason}"
         )
 
     if routing_decision == "THROTTLED":
