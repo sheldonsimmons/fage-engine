@@ -6,7 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Executive Summary</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
   <script src="/js/chart.umd.min.js"></script>
+  <script src="/js/chart-theme.js"></script>
   <style>
     /* ── Executive landing layout ─────────────────────────────────────────────── */
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-base); }
@@ -1374,8 +1376,9 @@
       .trial-test-grid { grid-template-columns: 1fr; }
     }
   </style>
+  <link rel="stylesheet" href="css/pages/executive-dashboard.css" />
 </head>
-<body>
+<body class="cp-executive-page">
 
 <!-- ── Trial Banner (shown only when a trial workspace is active) ─────────────── -->
 <div id="trialBanner" style="display:none;align-items:center;justify-content:space-between;

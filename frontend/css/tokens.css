@@ -1,0 +1,41 @@
+/* CostPilot design tokens
+   Shared semantic values for incremental page migrations. Existing variables
+   remain available so current pages and JavaScript-generated markup keep working. */
+:root {
+  --cp-color-canvas: #0b0f14;
+  --cp-color-surface-1: #111820;
+  --cp-color-surface-2: #17202a;
+  --cp-color-surface-raised: #1b2530;
+  --cp-color-border: #293442;
+  --cp-color-border-strong: #3a4858;
+  --cp-color-text: #edf2f7;
+  --cp-color-text-secondary: #a7b2c0;
+  --cp-color-text-muted: #748192;
+
+  --cp-color-primary: #4c9aff;
+  --cp-color-positive: #39b980;
+  --cp-color-warning: #e5a83b;
+  --cp-color-danger: #ef6461;
+  --cp-color-info: #8d7cf6;
+
+  --cp-space-1: 4px;
+  --cp-space-2: 8px;
+  --cp-space-3: 12px;
+  --cp-space-4: 16px;
+  --cp-space-5: 20px;
+  --cp-space-6: 24px;
+  --cp-space-8: 32px;
+  --cp-space-10: 40px;
+
+  --cp-radius-sm: 6px;
+  --cp-radius-md: 9px;
+  --cp-radius-lg: 12px;
+  --cp-shadow-focus: 0 0 0 3px rgba(76, 154, 255, 0.18);
+  --cp-shadow-raised: 0 10px 28px rgba(0, 0, 0, 0.16);
+
+  --cp-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --cp-font-mono: "SF Mono", "Fira Code", "Consolas", monospace;
+  --cp-content-max: 1600px;
+  --cp-control-height: 36px;
+  --cp-transition-fast: 140ms ease;
+}

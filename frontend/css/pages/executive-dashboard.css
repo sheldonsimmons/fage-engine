@@ -1,0 +1,247 @@
+/* Executive dashboard modernization layer
+   Scoped to .cp-executive-page so no other CostPilot page is affected. */
+
+.cp-executive-page {
+  --bg-base: var(--cp-color-canvas);
+  --bg-panel: var(--cp-color-surface-1);
+  --bg-input: var(--cp-color-surface-2);
+  --border: var(--cp-color-border);
+  --text-primary: var(--cp-color-text);
+  --text-muted: var(--cp-color-text-secondary);
+  --accent: var(--cp-color-primary);
+  --accent-green: var(--cp-color-positive);
+  --accent-yellow: var(--cp-color-warning);
+  --accent-red: var(--cp-color-danger);
+  --accent-purple: var(--cp-color-info);
+  font-family: var(--cp-font-sans);
+  background:
+    radial-gradient(circle at 50% -20%, rgba(76, 154, 255, 0.06), transparent 34%),
+    var(--cp-color-canvas);
+}
+
+.cp-executive-page .exec-header {
+  min-height: 64px;
+  height: auto;
+  padding: 10px clamp(20px, 2.2vw, 36px);
+  gap: var(--cp-space-5);
+  border-bottom-color: var(--cp-color-border);
+  background: rgba(17, 24, 32, 0.96);
+  backdrop-filter: blur(12px);
+  position: relative;
+  z-index: 20;
+}
+
+.cp-executive-page .exec-header-left {
+  gap: var(--cp-space-5);
+}
+
+.cp-executive-page .exec-logo-img {
+  max-height: 38px;
+}
+
+.cp-executive-page .exec-tagline {
+  color: var(--cp-color-text-muted);
+  letter-spacing: 0.1em;
+}
+
+.cp-executive-page .exec-header-right {
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cp-executive-page .exec-header-right::-webkit-scrollbar {
+  display: none;
+}
+
+.cp-executive-page .nav-link {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 6px 10px;
+  color: var(--cp-color-text-secondary);
+  border-color: transparent;
+  border-radius: var(--cp-radius-sm);
+  transition:
+    color var(--cp-transition-fast),
+    background-color var(--cp-transition-fast),
+    border-color var(--cp-transition-fast);
+}
+
+.cp-executive-page .nav-link:hover {
+  color: var(--cp-color-text);
+  background: var(--cp-color-surface-2);
+  border-color: var(--cp-color-border);
+}
+
+.cp-executive-page .nav-link:focus-visible,
+.cp-executive-page button:focus-visible,
+.cp-executive-page select:focus-visible,
+.cp-executive-page input:focus-visible,
+.cp-executive-page textarea:focus-visible,
+.cp-executive-page a:focus-visible {
+  outline: none;
+  box-shadow: var(--cp-shadow-focus);
+}
+
+.cp-executive-page .exec-body {
+  padding: clamp(20px, 2.2vw, 36px) clamp(20px, 2.5vw, 44px) 48px;
+  scrollbar-color: var(--cp-color-border-strong) transparent;
+}
+
+.cp-executive-page .exec-body > * {
+  width: min(100%, var(--cp-content-max));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.cp-executive-page .exec-filter-card,
+.cp-executive-page .hero-card,
+.cp-executive-page .exec-action-strip,
+.cp-executive-page .usage-card,
+.cp-executive-page .burn-card,
+.cp-executive-page .spend-visual-card,
+.cp-executive-page .recommendation-card,
+.cp-executive-page .source-tile,
+.cp-executive-page .exec-kpi-card,
+.cp-executive-page .exec-insight-card,
+.cp-executive-page .annual-savings-proof-card {
+  border-color: var(--cp-color-border);
+  border-radius: var(--cp-radius-md);
+  background-color: var(--cp-color-surface-1);
+  box-shadow: none;
+}
+
+.cp-executive-page .hero-card:hover,
+.cp-executive-page .spend-visual-card:hover,
+.cp-executive-page .exec-kpi-card:hover {
+  border-color: var(--cp-color-border-strong);
+}
+
+.cp-executive-page .exec-filter-card {
+  padding: var(--cp-space-4);
+  margin-bottom: var(--cp-space-5);
+}
+
+.cp-executive-page .exec-filter-head {
+  margin-bottom: var(--cp-space-3);
+}
+
+.cp-executive-page .exec-filter-title,
+.cp-executive-page .chart-label,
+.cp-executive-page .burn-label,
+.cp-executive-page .usage-label,
+.cp-executive-page .exec-action-kicker {
+  color: var(--cp-color-text-secondary);
+  letter-spacing: 0.085em;
+}
+
+.cp-executive-page .exec-filter,
+.cp-executive-page .exec-filter-clear,
+.cp-executive-page .trial-test-input,
+.cp-executive-page .trial-test-textarea {
+  min-height: var(--cp-control-height);
+  border-color: var(--cp-color-border);
+  border-radius: var(--cp-radius-sm);
+  background: var(--cp-color-surface-2);
+  color: var(--cp-color-text);
+  transition:
+    border-color var(--cp-transition-fast),
+    background-color var(--cp-transition-fast);
+}
+
+.cp-executive-page .exec-filter:hover,
+.cp-executive-page .exec-filter-clear:hover {
+  border-color: var(--cp-color-border-strong);
+}
+
+.cp-executive-page .exec-action-strip {
+  padding: var(--cp-space-4);
+}
+
+.cp-executive-page .exec-action-card,
+.cp-executive-page .savings-compare-card,
+.cp-executive-page .savings-proof {
+  border-radius: var(--cp-radius-sm);
+  box-shadow: none;
+}
+
+.cp-executive-page .hero-number,
+.cp-executive-page .annual-savings-value,
+.cp-executive-page .savings-compare-value,
+.cp-executive-page .usage-value,
+.cp-executive-page .burn-value,
+.cp-executive-page .exec-kpi-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+
+.cp-executive-page .chart-canvas-wrap {
+  border-radius: var(--cp-radius-sm);
+}
+
+.cp-executive-page table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.cp-executive-page th {
+  color: var(--cp-color-text-secondary);
+  background: var(--cp-color-surface-2);
+  font-size: 10px;
+  letter-spacing: 0.075em;
+}
+
+.cp-executive-page td {
+  border-color: var(--cp-color-border);
+}
+
+.cp-executive-page tbody tr {
+  transition: background-color var(--cp-transition-fast);
+}
+
+.cp-executive-page tbody tr:hover {
+  background: rgba(76, 154, 255, 0.045);
+}
+
+.cp-executive-page .exec-footer {
+  min-height: 58px;
+  height: auto;
+  padding: 10px clamp(20px, 2.2vw, 36px);
+  border-top-color: var(--cp-color-border);
+  background: var(--cp-color-surface-1);
+}
+
+.cp-executive-page .btn-operate {
+  border-radius: var(--cp-radius-sm);
+  background: var(--cp-color-positive);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-executive-page *,
+  .cp-executive-page *::before,
+  .cp-executive-page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 1180px) and (min-width: 768px) {
+  .cp-executive-page .exec-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cp-executive-page .exec-header-right {
+    width: 100%;
+    padding-bottom: 2px;
+  }
+
+  .cp-executive-page .exec-filter-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
