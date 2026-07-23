@@ -173,34 +173,58 @@ async function renderTodayTierSplit(d = {}) {
 // ── Agent Efficiency Rank ─────────────────────────────────────────────────────
 
 async function renderAgentEfficiency() {
-  const tbody = document.getElementById("agentEffBody2");
-  if (!tbody) return;
+  const leaderboard = document.getElementById("agentEffBody2");
+  if (!leaderboard) return;
   try {
     const now  = new Date();
     const from = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString();
     const data = await apiGet(`/api/reports/agent-activity?date_from=${from}&date_to=${now.toISOString()}`);
-    const agents = (data.agents || []).sort((a, b) => (b.cost_usd || 0) - (a.cost_usd || 0));
+    const agents = (data.agents || [])
+      .map(agent => ({
+        ...agent,
+        economy_pct: Math.max(0, Math.min(100, 100 - (agent.flagship_pct || 0))),
+      }))
+      .sort((a, b) =>
+        b.economy_pct - a.economy_pct ||
+        (b.tokens_saved || 0) - (a.tokens_saved || 0) ||
+        (b.calls || 0) - (a.calls || 0)
+      );
     if (!agents.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="placeholder">No agent activity yet.</td></tr>`;
+      leaderboard.innerHTML = `<div class="placeholder">No agent activity yet.</div>`;
       return;
     }
-    tbody.innerHTML = agents.map(a => {
+    leaderboard.innerHTML = agents.map((a, index) => {
       const dept   = displayDeptName(a.display_department || a.department || "—");
-      const econ   = 100 - (a.flagship_pct || 0);
+      const econ   = a.economy_pct;
       const econColor = econ >= 70 ? "var(--accent-green)" : econ < 40 ? "var(--accent-red)" : "var(--accent-yellow)";
-      return `<tr>
-        <td style="font-weight:600">${a.display_name || a.name}</td>
-        <td style="font-size:11px;color:var(--accent);font-weight:700">${(a.platform||"—").toUpperCase()}</td>
-        <td style="font-size:11px">${dept}</td>
-        <td>${(a.calls||0).toLocaleString()}</td>
-        <td style="font-family:var(--font-mono);font-size:11px;color:var(--accent-red)">$${(a.cost_usd||0).toFixed(4)}</td>
-        <td style="font-family:var(--font-mono);font-size:11px">$${(a.avg_cost_usd||0).toFixed(5)}</td>
-        <td style="color:${econColor};font-weight:700">${econ.toFixed(0)}%</td>
-        <td style="color:var(--accent-green);font-size:11px">${(a.tokens_saved||0).toLocaleString()}</td>
-      </tr>`;
+      const review = econ < 40 ? `<span class="efficiency-review">Needs review</span>` : "";
+      return `<article class="efficiency-rank-card">
+        <div class="efficiency-rank-number">${index + 1}</div>
+        <div class="efficiency-rank-main">
+          <div class="efficiency-rank-title">
+            <div>
+              <strong>${a.display_name || a.name}</strong>
+              <span>${dept} · ${(a.platform || "—").toUpperCase()}</span>
+            </div>
+            ${review}
+          </div>
+          <div class="efficiency-progress-row">
+            <div class="efficiency-progress" aria-label="${econ.toFixed(0)} percent economy routing">
+              <span style="width:${econ}%;background:${econColor}"></span>
+            </div>
+            <strong style="color:${econColor}">${econ.toFixed(0)}%</strong>
+          </div>
+        </div>
+        <div class="efficiency-rank-stats">
+          <div><strong>${(a.calls || 0).toLocaleString()}</strong><span>Calls</span></div>
+          <div><strong>$${(a.cost_usd || 0).toFixed(2)}</strong><span>Total cost</span></div>
+          <div><strong>$${(a.avg_cost_usd || 0).toFixed(4)}</strong><span>Avg / call</span></div>
+          <div><strong>${(a.tokens_saved || 0).toLocaleString()}</strong><span>Tokens pruned</span></div>
+        </div>
+      </article>`;
     }).join("");
   } catch(e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="placeholder" style="color:var(--accent-red)">${e.message}</td></tr>`;
+    leaderboard.innerHTML = `<div class="placeholder" style="color:var(--accent-red)">${e.message}</div>`;
   }
 }
 

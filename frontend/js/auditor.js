@@ -41,7 +41,7 @@ async function loadAuditLog() {
     if (openRationaleId) {
       const row = document.getElementById(`rationale-${openRationaleId}`);
       if (row) {
-        row.style.display = "table-row";
+        row.style.display = "block";
         // Re-populate content since the table was re-rendered
         fetchRationaleContent(openRationaleId);
       } else {
@@ -50,7 +50,7 @@ async function loadAuditLog() {
     }
   } catch (err) {
     document.getElementById("auditTableBody").innerHTML =
-      `<tr><td colspan="6" class="placeholder" style="color:var(--accent-red)">Failed to load audit log: ${err.message}</td></tr>`;
+      `<div class="placeholder" style="color:var(--accent-red)">Failed to load audit log: ${err.message}</div>`;
   }
 }
 
@@ -125,7 +125,7 @@ function renderAuditTable(events) {
   const tbody = document.getElementById("auditTableBody");
   if (!events.length) {
     tbody.innerHTML =
-      '<tr><td colspan="7" class="placeholder">No audit events yet — run a COMPLEX or THROTTLED routing call to generate entries.</td></tr>';
+      '<div class="placeholder">No audit events yet — run a COMPLEX or THROTTLED routing call to generate entries.</div>';
     return;
   }
 
@@ -142,30 +142,32 @@ function renderAuditTable(events) {
     const riskClass  = `badge-${e.risk_level || "low"}`;
     const outcome    = e.decision_outcome || "—";
     const isBlocked  = outcome.toLowerCase().includes("blocked");
-    const rowClass   = isBlocked ? "audit-row row-blocked" : "audit-row";
-    const blockedIcon = isBlocked ? "🛡 " : "";
+    const rowClass   = isBlocked ? "audit-event row-blocked" : "audit-event";
 
     // Normalize tier display name
     const tierLabel = e.model_tier ? normaliseTierName(e.model_tier) : "—";
     const tierBadgeClass = getTierBadgeClassByName(e.model_tier || "");
 
     return `
-      <tr class="${rowClass}" id="audit-entry-${e.id}" onclick="toggleRationale(${e.id})" style="cursor:pointer" title="Click to expand rationale & payload">
-        <td style="font-family:var(--font-mono); font-size:11px">${ts}</td>
-        <td><span class="badge ${isBlocked ? 'badge-critical' : 'badge-scout'}">${isBlocked ? "🛡 BLOCKED" : e.event_type}</span></td>
-        <td style="font-weight:600;color:var(--accent);font-size:11px">${e.display_agent_name || e.agent_name || "—"}</td>
-        <td>${e.display_department || e.department}</td>
-        <td><span class="badge ${tierBadgeClass}">${tierLabel}</span></td>
-        <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
-        <td style="font-size:11px; color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}; font-weight:${isBlocked ? '600' : 'normal'}">${blockedIcon}${outcome}</td>
-      </tr>
-      <tr class="rationale-row" id="rationale-${e.id}" style="display:none">
-        <td colspan="7">
-          <div class="rationale-box" id="rationale-content-${e.id}">
-            <span style="color:var(--text-muted)">Loading rationale...</span>
+      <article class="${rowClass}" id="audit-entry-${e.id}" onclick="toggleRationale(${e.id})" title="Click to expand rationale and payload">
+        <div class="audit-event-marker" aria-hidden="true"></div>
+        <div class="audit-event-time">${ts}</div>
+        <div class="audit-event-main">
+          <div class="audit-event-title">
+            <strong>${e.display_agent_name || e.agent_name || "Unlinked request"}</strong>
+            <span class="badge ${isBlocked ? 'badge-critical' : 'badge-scout'}">${isBlocked ? "BLOCKED" : e.event_type}</span>
+            <span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()} RISK</span>
           </div>
-        </td>
-      </tr>
+          <div class="audit-event-context">${e.display_department || e.department} · <span class="badge ${tierBadgeClass}">${tierLabel}</span></div>
+          <div class="audit-event-outcome${isBlocked ? " blocked" : ""}">${outcome}</div>
+        </div>
+        <div class="audit-event-open" aria-hidden="true">›</div>
+      </article>
+      <div class="rationale-row" id="rationale-${e.id}" style="display:none">
+        <div class="rationale-box" id="rationale-content-${e.id}">
+          <span style="color:var(--text-muted)">Loading rationale...</span>
+        </div>
+      </div>
     `;
   }).join("");
 }
@@ -260,7 +262,7 @@ async function toggleRationale(eventId) {
   }
 
   openRationaleId = eventId;
-  row.style.display = "table-row";
+  row.style.display = "block";
   await fetchRationaleContent(eventId);
 }
 
