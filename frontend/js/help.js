@@ -54,7 +54,7 @@ const HELP_CONTENT = {
   },
   eventStreamPanel: {
     title: "Governance Event Stream",
-    body:  "This is the live feed of CostPilot decisions. It shows routine routing, complex routing, pruning, throttling, and blocked requests as they happen, with filters for event type, department, and search.",
+    body:  "This is the live operational view of CostPilot decisions. Repetitive routine activity is grouped to reduce noise, while blocks, throttles, collisions, and high-capability routing remain individually visible. Open an event to inspect its audit evidence.",
   },
   prunerPanel: {
     title: "Context-Pruning Sweeper",
@@ -131,7 +131,7 @@ const TOUR_STEPS = [
   {
     target:   "eventStreamSection",
     title:    "Governance Event Stream",
-    body:     "Live feed of every governance event across all departments — blocks, escalations, throttles, and routine calls. Filter by type or department. This is your real-time view of everything CostPilot is doing right now.",
+    body:     "See what CostPilot is doing right now without reading the full Audit Log. Routine activity is summarized, important exceptions stay prominent, and every event opens to its recorded evidence.",
     position: "left",
     last:     true,
   },
