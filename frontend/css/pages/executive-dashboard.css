@@ -394,6 +394,456 @@
     );
 }
 
+/* Executive glance: the visible scorecard. Legacy dashboard sections remain in
+   the DOM so their established calculations and drill-downs stay available. */
+.cp-executive-page .hero-row,
+.cp-executive-page #execCustomizeBar,
+.cp-executive-page #execLayoutZone {
+  display: none !important;
+}
+
+.cp-executive-page .exec-action-strip.clear {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding-block: 10px;
+}
+
+.cp-executive-page .exec-action-strip.clear .exec-action-grid {
+  display: none;
+}
+
+.cp-executive-page .exec-action-strip.clear .exec-action-title {
+  font-size: 12px;
+}
+
+.cp-executive-page .exec-footer {
+  justify-content: flex-end;
+}
+
+.cp-executive-page .exec-footer .footer-stats {
+  display: none;
+}
+
+.cp-executive-page .exec-glance {
+  display: grid;
+  gap: 14px;
+}
+
+.cp-executive-page .exec-glance-kpis {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.cp-executive-page .exec-glance-kpi,
+.cp-executive-page .exec-glance-panel {
+  background: var(--cp-color-surface-1);
+  border: 1px solid var(--cp-color-border);
+  border-radius: var(--cp-radius-md);
+  box-shadow: none;
+}
+
+.cp-executive-page .exec-glance-kpi {
+  min-width: 0;
+  padding: 14px 15px;
+}
+
+.cp-executive-page .exec-glance-kpi.positive {
+  border-top: 3px solid var(--cp-color-positive);
+}
+
+.cp-executive-page .exec-glance-kpi.warning {
+  border-top: 3px dashed var(--cp-color-warning);
+}
+
+.cp-executive-page .exec-glance-kpi.critical {
+  border: 3px double var(--cp-color-danger);
+}
+
+.cp-executive-page .exec-glance-kpi-label {
+  color: var(--cp-color-text-secondary);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.cp-executive-page .exec-glance-kpi-value {
+  color: var(--cp-color-text);
+  font-family: var(--cp-font-mono);
+  font-size: clamp(22px, 2vw, 29px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+  letter-spacing: -.04em;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-executive-page .exec-glance-kpi.positive .exec-glance-kpi-value {
+  color: var(--cp-color-positive);
+}
+
+.cp-executive-page .exec-glance-kpi-sub {
+  color: var(--cp-color-text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+  margin-top: 7px;
+  min-height: 24px;
+}
+
+.cp-executive-page .exec-glance-budget-track {
+  background: var(--cp-color-surface-2);
+  border-radius: 99px;
+  height: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.cp-executive-page .exec-glance-budget-track > div {
+  background: var(--cp-color-positive);
+  height: 100%;
+  transition: width .25s ease;
+  width: 0;
+}
+
+.cp-executive-page .exec-glance-primary,
+.cp-executive-page .exec-glance-breakdowns {
+  display: grid;
+  gap: 14px;
+}
+
+.cp-executive-page .exec-glance-primary {
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, .65fr);
+}
+
+.cp-executive-page .exec-glance-breakdowns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cp-executive-page .exec-glance-panel {
+  min-width: 0;
+  padding: 16px 18px;
+}
+
+.cp-executive-page .exec-glance-panel-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.cp-executive-page .exec-glance-panel h2 {
+  color: var(--cp-color-text);
+  font-size: 13px;
+  margin: 0 0 4px;
+}
+
+.cp-executive-page .exec-glance-panel p {
+  color: var(--cp-color-text-muted);
+  font-size: 9px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.cp-executive-page .exec-glance-panel-head > a {
+  color: var(--cp-color-primary);
+  font-size: 9px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cp-executive-page .exec-glance-chart-wrap {
+  height: 238px;
+  position: relative;
+}
+
+.cp-executive-page .exec-glance-chart-legend {
+  align-items: center;
+  color: var(--cp-color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 8px;
+  gap: 10px;
+}
+
+.cp-executive-page .exec-glance-chart-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.cp-executive-page .exec-glance-chart-legend i {
+  display: inline-block;
+  height: 7px;
+  width: 14px;
+}
+
+.cp-executive-page .exec-glance-chart-legend i.actual {
+  background: var(--cp-color-primary);
+}
+
+.cp-executive-page .exec-glance-chart-legend i.baseline {
+  border-top: 2px dashed var(--cp-color-text-secondary);
+}
+
+.cp-executive-page .exec-glance-donut-wrap {
+  height: 150px;
+  margin: 0 auto 9px;
+  max-width: 210px;
+  position: relative;
+}
+
+.cp-executive-page .exec-glance-donut-center {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  justify-content: center;
+  pointer-events: none;
+  position: absolute;
+}
+
+.cp-executive-page .exec-glance-donut-center strong {
+  color: var(--cp-color-text);
+  font-family: var(--cp-font-mono);
+  font-size: 17px;
+}
+
+.cp-executive-page .exec-glance-donut-center span {
+  color: var(--cp-color-text-muted);
+  font-size: 8px;
+}
+
+.cp-executive-page .exec-glance-savings-list {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cp-executive-page .exec-glance-savings-row {
+  align-items: center;
+  color: var(--cp-color-text-secondary);
+  display: grid;
+  font-size: 8px;
+  gap: 5px;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+}
+
+.cp-executive-page .exec-glance-savings-row i {
+  background: var(--swatch);
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+.cp-executive-page .exec-glance-savings-row:nth-child(2) i {
+  border-radius: 1px;
+}
+
+.cp-executive-page .exec-glance-savings-row:nth-child(3) i {
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+.cp-executive-page .exec-glance-savings-row:nth-child(4) i {
+  border-radius: 1px;
+  outline: 1px double var(--cp-color-danger);
+}
+
+.cp-executive-page .exec-glance-savings-row strong {
+  color: var(--cp-color-text);
+  font-family: var(--cp-font-mono);
+  font-weight: 700;
+}
+
+.cp-executive-page .exec-glance-model-bars,
+.cp-executive-page .exec-glance-concentration {
+  display: grid;
+  gap: 11px;
+}
+
+.cp-executive-page .exec-glance-bar-meta {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.cp-executive-page .exec-glance-bar-meta strong {
+  color: var(--cp-color-text);
+  font-size: 10px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-executive-page .exec-glance-bar-meta span {
+  color: var(--cp-color-text);
+  font-family: var(--cp-font-mono);
+  font-size: 9px;
+}
+
+.cp-executive-page .exec-glance-bar-track {
+  background: var(--cp-color-surface-2);
+  border-radius: 3px;
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+}
+
+.cp-executive-page .exec-glance-bar-input {
+  background: var(--cp-color-primary);
+}
+
+.cp-executive-page .exec-glance-bar-output {
+  background: var(--cp-color-warning);
+}
+
+.cp-executive-page .exec-glance-bar-unknown {
+  background: var(--cp-color-text-muted);
+}
+
+.cp-executive-page .exec-glance-bar-caption {
+  color: var(--cp-color-text-muted);
+  display: flex;
+  font-size: 8px;
+  gap: 9px;
+  margin-top: 4px;
+}
+
+.cp-executive-page .exec-glance-bar-caption .input::before,
+.cp-executive-page .exec-glance-bar-caption .output::before {
+  content: "";
+  display: inline-block;
+  height: 5px;
+  margin-right: 4px;
+  width: 5px;
+}
+
+.cp-executive-page .exec-glance-bar-caption .input::before {
+  background: var(--cp-color-primary);
+}
+
+.cp-executive-page .exec-glance-bar-caption .output::before {
+  background: var(--cp-color-warning);
+}
+
+.cp-executive-page .exec-glance-concentration .exec-glance-bar-track > div {
+  background: var(--cp-color-primary);
+}
+
+.cp-executive-page .exec-glance-switch {
+  background: var(--cp-color-surface-2);
+  border: 1px solid var(--cp-color-border);
+  border-radius: var(--cp-radius-sm);
+  display: flex;
+  padding: 2px;
+}
+
+.cp-executive-page .exec-glance-switch button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--cp-color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 5px 7px;
+}
+
+.cp-executive-page .exec-glance-switch button.active {
+  background: rgba(76, 154, 255, .12);
+  color: var(--cp-color-primary);
+}
+
+.cp-executive-page .exec-glance-table-wrap {
+  overflow-x: auto;
+}
+
+.cp-executive-page .exec-glance-table-wrap table {
+  width: 100%;
+}
+
+.cp-executive-page .exec-glance-table-wrap th,
+.cp-executive-page .exec-glance-table-wrap td {
+  border-bottom: 1px solid var(--cp-color-border);
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.cp-executive-page .exec-glance-table-wrap th {
+  font-size: 8px;
+}
+
+.cp-executive-page .exec-glance-table-wrap td {
+  color: var(--cp-color-text-secondary);
+  font-size: 9px;
+}
+
+.cp-executive-page .exec-glance-table-wrap td:first-child {
+  color: var(--cp-color-text);
+  font-weight: 750;
+}
+
+.cp-executive-page .exec-glance-table-wrap td:nth-child(n+3):nth-child(-n+5) {
+  font-family: var(--cp-font-mono);
+}
+
+.cp-executive-page .exec-glance-signal {
+  border: 1px solid var(--cp-color-border);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.cp-executive-page .exec-glance-signal.watch {
+  border-style: dashed;
+  color: var(--cp-color-warning);
+}
+
+.cp-executive-page .exec-glance-empty {
+  color: var(--cp-color-text-muted);
+  font-size: 9px;
+  padding: 20px 0;
+}
+
+@media (max-width: 1100px) {
+  .cp-executive-page .exec-glance-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cp-executive-page .exec-glance-primary,
+  .cp-executive-page .exec-glance-breakdowns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .cp-executive-page .exec-glance-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cp-executive-page .exec-glance-panel-head {
+    flex-direction: column;
+  }
+
+  .cp-executive-page .exec-glance-savings-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Manual chart legend mirrors the actual line and point styles. */
 .cp-executive-page .chart-legend-dot.baseline {
   width: 20px;
