@@ -607,6 +607,11 @@ function renderAgentlakeCompactList(elementId, rows, formatter, emptyMessage) {
 function renderAgentlakeDepartments(agents) {
   const container = document.getElementById("agentlakeDepartmentGroups");
   if (!container) return;
+  const openDepartments = new Set(
+    [...container.querySelectorAll(".agentlake-dept-group[open]")]
+      .map(group => group.dataset.department)
+      .filter(Boolean)
+  );
   const spendById = new Map(_agentSpend.map(row => [row.agent_id, row]));
   const groups = new Map();
   agents.forEach(agent => {
@@ -619,7 +624,7 @@ function renderAgentlakeDepartments(agents) {
     .map(([department, rows]) => {
       const attention = rows.filter(agent => ["locked", "queued"].includes(effectiveAgentStatus(agent))).length;
       const requests = rows.reduce((sum, agent) => sum + Number(spendById.get(agent.id)?.call_count || 0), 0);
-      return `<details class="agentlake-dept-group">
+      return `<details class="agentlake-dept-group" data-department="${agentlakeEscape(department)}"${openDepartments.has(department) ? " open" : ""}>
         <summary>
           <span class="agentlake-dept-name">${agentlakeEscape(department)}</span>
           <span class="agentlake-dept-stat">${rows.length} agents</span>
