@@ -3032,7 +3032,7 @@ function visibleBudget(data, events) {
   return {
     pct: d.overall_budget_pct || 0,
     cap: d.total_cap_usd || 0,
-    spend: d.spend_month_usd || d.total_spend_usd || 0,
+    spend: d.total_spend_usd ?? d.spend_month_usd ?? 0,
     count: budgets.length || 0,
   };
 }
