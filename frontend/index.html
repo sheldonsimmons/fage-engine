@@ -3096,9 +3096,7 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, unreview
   const acknowledgeButton = document.getElementById("execAcknowledgeBlockedButton");
   if (acknowledgeButton) {
     acknowledgeButton.hidden = blockedReviewCount <= 0;
-    acknowledgeButton.textContent = blockedReviewCount > 0
-      ? `✓ Mark ${fmtNum(blockedReviewCount)} blocked reviewed`
-      : "✓ Mark blocked reviewed";
+    acknowledgeButton.textContent = "✓ Mark all blocked reviewed";
   }
 
   const title = overCap.length
