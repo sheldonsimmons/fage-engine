@@ -278,6 +278,225 @@ body {
 }
 
 /* ── Agent Card Grid (live status view) ──────────────────────────────────────── */
+.agentlake-view-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.agentlake-view-description {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.agentlake-tabs {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-base);
+}
+.agentlake-tab {
+  appearance: none;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 11px;
+}
+.agentlake-tab:hover { color: var(--text-primary); }
+.agentlake-tab.active {
+  background: rgba(88, 166, 255, 0.13);
+  color: var(--accent);
+}
+.agentlake-view[hidden] { display: none !important; }
+.agentlake-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 12px;
+}
+.agentlake-metric {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-base);
+  padding: 11px 13px;
+}
+.agentlake-metric-value {
+  color: var(--text-primary);
+  display: block;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.agentlake-metric-label {
+  color: var(--text-muted);
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  margin-top: 5px;
+  text-transform: uppercase;
+}
+.agentlake-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.agentlake-summary-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+  min-width: 0;
+  padding: 13px;
+}
+.agentlake-summary-head {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.agentlake-summary-head h3 {
+  color: var(--text-primary);
+  font-size: 12px;
+  margin: 0 0 3px;
+}
+.agentlake-summary-head p {
+  color: var(--text-muted);
+  font-size: 9px;
+  margin: 0;
+}
+.agentlake-count-badge {
+  background: rgba(248, 81, 73, .12);
+  border: 1px solid rgba(248, 81, 73, .35);
+  border-radius: 999px;
+  color: var(--accent-red);
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 20px;
+  padding: 2px 7px;
+  text-align: center;
+}
+.agentlake-compact-list {
+  display: flex;
+  flex-direction: column;
+}
+.agentlake-compact-row {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 9px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 39px;
+  padding: 7px 1px;
+}
+.agentlake-compact-row:first-child { border-top: 0; }
+.agentlake-row-name {
+  color: var(--text-primary);
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agentlake-row-meta {
+  color: var(--text-muted);
+  display: block;
+  font-size: 9px;
+  margin-top: 2px;
+}
+.agentlake-row-value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.agentlake-empty {
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 12px 1px;
+}
+.agentlake-never-used {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 10px;
+  justify-content: space-between;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+.agentlake-never-used:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.agentlake-never-used:disabled {
+  cursor: default;
+  opacity: .55;
+}
+.agentlake-never-used strong {
+  color: var(--text-primary);
+  font-size: 17px;
+  margin-right: 3px;
+}
+.agentlake-department-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.agentlake-dept-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+.agentlake-dept-group summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  font-size: 11px;
+  font-weight: 750;
+  gap: 10px;
+  grid-template-columns: minmax(120px, 1fr) auto auto auto;
+  list-style: none;
+  padding: 11px 13px;
+}
+.agentlake-dept-group summary::-webkit-details-marker { display: none; }
+.agentlake-dept-group summary::before {
+  color: var(--text-muted);
+  content: "›";
+  font-size: 17px;
+  margin-right: 7px;
+}
+.agentlake-dept-group[open] summary::before { transform: rotate(90deg); }
+.agentlake-dept-name { display: flex; align-items: center; }
+.agentlake-dept-stat {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+.agentlake-dept-agents {
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
 .agent-card-grid-6 {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -357,6 +576,21 @@ body {
   border-color: var(--accent);
   color: var(--text-primary);
   outline: none;
+}
+@media (max-width: 900px) {
+  .agentlake-view-head { align-items: stretch; flex-direction: column; }
+  .agentlake-tabs { align-self: flex-start; }
+  .agentlake-summary-metrics,
+  .agentlake-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .agentlake-dept-agents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .agentlake-tabs { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+  .agentlake-summary-metrics,
+  .agentlake-overview-grid,
+  .agentlake-dept-agents { grid-template-columns: 1fr; }
+  .agentlake-dept-group summary { grid-template-columns: 1fr auto; }
+  .agentlake-dept-stat:nth-last-child(-n+2) { display: none; }
 }
 
 /* Live ops strip section labels */

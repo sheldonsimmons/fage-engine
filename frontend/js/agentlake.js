@@ -431,6 +431,9 @@ function scheduleAgentPoll(agents) {
 // ── Dashboard Agentlake Filters ───────────────────────────────────────────────
 
 let _allAgents = []; // cache for client-side filtering
+let _agentSpend = [];
+let _agentSpendLoadedAt = 0;
+let _agentlakeView = "overview";
 
 // Whether to include archived agents in the table (toggled by supervisor)
 let _showArchived = false;
@@ -449,8 +452,10 @@ async function loadAgents() {
     const url = _showArchived ? "/api/agents?include_archived=true" : "/api/agents";
     const agents = await apiGet(url);
     _allAgents = agents;
+    await loadAgentlakeSpend();
     populateAgentCardFilters(agents.filter(a => !a.archived));
     applyAgentCardFilters();
+    renderAgentlakeViews();
     updateKpiAgents(agents.filter(a => !a.archived));
     populatePlatformFilter(agents);
     populateDeptFilter(agents);
@@ -461,6 +466,181 @@ async function loadAgents() {
       `<tr><td colspan="8" class="placeholder" style="color:var(--accent-red)">Failed to load agents: ${err.message}</td></tr>`;
     scheduleAgentPoll([]);
   }
+}
+
+async function loadAgentlakeSpend() {
+  const stale = Date.now() - _agentSpendLoadedAt > 30000;
+  if (!stale) return;
+  try {
+    _agentSpend = await apiGet("/api/agents/spend");
+    _agentSpendLoadedAt = Date.now();
+  } catch (error) {
+    console.warn("Agent spend summary unavailable:", error);
+  }
+}
+
+function agentlakeEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[char]);
+}
+
+function agentlakeLastUsed(iso) {
+  if (!iso) return "Never";
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+  });
+}
+
+function setAgentlakeView(view) {
+  _agentlakeView = ["overview", "departments", "all"].includes(view) ? view : "overview";
+  const config = {
+    overview: {
+      panel: "agentlakeOverview", tab: "agentlakeTabOverview",
+      description: "Operational summary of the agents that need attention or are being used."
+    },
+    departments: {
+      panel: "agentlakeDepartments", tab: "agentlakeTabDepartments",
+      description: "Browse the registry in smaller, collapsible department groups."
+    },
+    all: {
+      panel: "agentlakeAllAgents", tab: "agentlakeTabAll",
+      description: "Complete agent registry with the existing filters and live-status cards."
+    }
+  };
+  Object.values(config).forEach(item => {
+    const panel = document.getElementById(item.panel);
+    const tab = document.getElementById(item.tab);
+    if (panel) panel.hidden = item !== config[_agentlakeView];
+    if (tab) {
+      const selected = item === config[_agentlakeView];
+      tab.classList.toggle("active", selected);
+      tab.setAttribute("aria-selected", String(selected));
+    }
+  });
+  const description = document.getElementById("agentlakeViewDescription");
+  if (description) description.textContent = config[_agentlakeView].description;
+}
+
+function showNeverUsedAgents() {
+  setAgentlakeView("all");
+  clearAgentCardFilters();
+  const neverUsedIds = new Set(_agentSpend.filter(row => !row.call_count).map(row => row.agent_id));
+  const activeAgents = _allAgents.filter(agent => !agent.archived && neverUsedIds.has(agent.id));
+  renderAgentCards(activeAgents, _allAgents.filter(agent => !agent.archived).length);
+  const count = document.getElementById("agentCardFilterCount");
+  if (count) count.textContent = `Showing ${activeAgents.length} never-used agents`;
+}
+
+function renderAgentlakeViews() {
+  const agents = _allAgents.filter(agent => !agent.archived);
+  const attention = agents.filter(agent => ["locked", "queued"].includes(effectiveAgentStatus(agent)));
+  const active = agents.filter(agent => effectiveAgentStatus(agent) === "active");
+  const usedRows = _agentSpend.filter(row => row.call_count > 0);
+  const neverUsed = _agentSpend.filter(row => !row.call_count);
+
+  const metrics = document.getElementById("agentlakeSummaryMetrics");
+  if (metrics) {
+    metrics.innerHTML = [
+      [agents.length, "Registered"],
+      [active.length, "Active now"],
+      [attention.length, "Need attention"],
+      [neverUsed.length, "Never used"]
+    ].map(([value, label]) => `
+      <div class="agentlake-metric">
+        <span class="agentlake-metric-value">${Number(value).toLocaleString()}</span>
+        <span class="agentlake-metric-label">${label}</span>
+      </div>`).join("");
+  }
+
+  const attentionCount = document.getElementById("agentlakeAttentionCount");
+  if (attentionCount) attentionCount.textContent = attention.length;
+  renderAgentlakeCompactList("agentlakeAttentionList", attention.slice(0, 5), agent => ({
+    name: displayAgentName(agent),
+    meta: `${displayAgentDept(agent)} · ${agent.source_platform || "Custom"}`,
+    value: effectiveAgentStatus(agent).toUpperCase()
+  }), "No agents need attention.");
+
+  const recent = [...agents]
+    .filter(agent => agent.last_used_at)
+    .sort((a, b) => new Date(b.last_used_at) - new Date(a.last_used_at))
+    .slice(0, 5);
+  renderAgentlakeCompactList("agentlakeRecentList", recent, agent => ({
+    name: displayAgentName(agent),
+    meta: `${displayAgentDept(agent)} · ${agent.source_platform || "Custom"}`,
+    value: agentlakeLastUsed(agent.last_used_at)
+  }), "No agent activity has been recorded.");
+
+  renderAgentlakeCompactList("agentlakeSpendList", usedRows.slice(0, 5), row => ({
+    name: row.display_name || row.agent_name,
+    meta: `${Number(row.call_count).toLocaleString()} requests · ${row.display_department || row.department || "—"}`,
+    value: `$${Number(row.total_cost_usd || 0).toFixed(2)}`
+  }), "No attributed agent spending yet.");
+
+  const neverCount = document.getElementById("agentlakeNeverUsedCount");
+  if (neverCount) neverCount.textContent = neverUsed.length.toLocaleString();
+  const neverButton = document.getElementById("agentlakeNeverUsedButton");
+  if (neverButton) neverButton.disabled = neverUsed.length === 0;
+
+  renderAgentlakeDepartments(agents);
+}
+
+function renderAgentlakeCompactList(elementId, rows, formatter, emptyMessage) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  if (!rows.length) {
+    element.innerHTML = `<div class="agentlake-empty">${agentlakeEscape(emptyMessage)}</div>`;
+    return;
+  }
+  element.innerHTML = rows.map(row => {
+    const data = formatter(row);
+    return `<div class="agentlake-compact-row">
+      <div>
+        <span class="agentlake-row-name">${agentlakeEscape(data.name)}</span>
+        <span class="agentlake-row-meta">${agentlakeEscape(data.meta)}</span>
+      </div>
+      <span class="agentlake-row-value">${agentlakeEscape(data.value)}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderAgentlakeDepartments(agents) {
+  const container = document.getElementById("agentlakeDepartmentGroups");
+  if (!container) return;
+  const spendById = new Map(_agentSpend.map(row => [row.agent_id, row]));
+  const groups = new Map();
+  agents.forEach(agent => {
+    const department = displayAgentDept(agent) || "Unassigned";
+    if (!groups.has(department)) groups.set(department, []);
+    groups.get(department).push(agent);
+  });
+  container.innerHTML = [...groups.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([department, rows]) => {
+      const attention = rows.filter(agent => ["locked", "queued"].includes(effectiveAgentStatus(agent))).length;
+      const requests = rows.reduce((sum, agent) => sum + Number(spendById.get(agent.id)?.call_count || 0), 0);
+      return `<details class="agentlake-dept-group">
+        <summary>
+          <span class="agentlake-dept-name">${agentlakeEscape(department)}</span>
+          <span class="agentlake-dept-stat">${rows.length} agents</span>
+          <span class="agentlake-dept-stat">${requests.toLocaleString()} requests</span>
+          <span class="agentlake-dept-stat">${attention ? `${attention} need attention` : "No issues"}</span>
+        </summary>
+        <div class="agentlake-dept-agents">
+          ${rows.map(agent => {
+            const status = effectiveAgentStatus(agent);
+            return `<div class="agent-status-card status-${status}">
+              <div class="asc-name">${agentlakeEscape(displayAgentName(agent))}</div>
+              <div class="asc-dept">${agentlakeEscape(agent.source_platform || "Custom")}</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
+                <span class="asc-last">${agentlakeEscape(agentlakeLastUsed(agent.last_used_at))}</span>
+                <span class="badge ${status === "active" ? "badge-active" : status === "idle" ? "badge-idle" : "badge-locked"}" style="font-size:9px;padding:1px 6px">${status.toUpperCase()}</span>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
+      </details>`;
+    }).join("") || '<p class="placeholder">No agents registered yet.</p>';
 }
 
 function setSelectOptions(selectId, options, defaultLabel, selectedValue = "") {

@@ -5,7 +5,7 @@
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Operate</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260607-v328" />
+  <link rel="stylesheet" href="css/styles.css?v=20260723-v437" />
   <link rel="stylesheet" href="css/demo.css" />
   <style>
     /* ── Live-style layout override ──────────────────────────────────────────── */
@@ -284,30 +284,83 @@
         </div>
         <div id="agentBudgetBody" class="dash-sec-body">
 
-          <div class="sec-sub-label">Agentlake Registry — Live Status</div>
-          <div class="agent-card-filterbar" aria-label="Agentlake live status filters">
-            <div class="agent-card-filter-meta">
-              <span id="agentCardFilterCount">Showing all agents</span>
+          <div class="agentlake-view-head">
+            <div>
+              <div class="sec-sub-label" style="margin-bottom:4px">Agentlake Registry</div>
+              <div class="agentlake-view-description" id="agentlakeViewDescription">
+                Operational summary of the agents that need attention or are being used.
+              </div>
             </div>
-            <div class="agent-card-filter-controls">
-              <select id="agentCardFilterDept" class="agent-filter-select" onchange="applyAgentCardFilters()">
-                <option value="">All Departments</option>
-              </select>
-              <select id="agentCardFilterPlatform" class="agent-filter-select" onchange="applyAgentCardFilters()">
-                <option value="">All Platforms</option>
-              </select>
-              <select id="agentCardFilterStatus" class="agent-filter-select" onchange="applyAgentCardFilters()">
-                <option value="">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="idle">Idle</option>
-                <option value="queued">Queued</option>
-                <option value="locked">Locked</option>
-              </select>
-              <input id="agentCardFilterSearch" class="agent-filter-search agent-card-search" type="search" placeholder="Search agents..." oninput="applyAgentCardFilters()" />
-              <button type="button" class="agent-card-clear-btn" onclick="clearAgentCardFilters()">Clear</button>
+            <div class="agentlake-tabs" role="tablist" aria-label="Agentlake views">
+              <button id="agentlakeTabOverview" class="agentlake-tab active" type="button" role="tab" aria-selected="true" aria-controls="agentlakeOverview" onclick="setAgentlakeView('overview')">Overview</button>
+              <button id="agentlakeTabDepartments" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeDepartments" onclick="setAgentlakeView('departments')">By Department</button>
+              <button id="agentlakeTabAll" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeAllAgents" onclick="setAgentlakeView('all')">All Agents</button>
             </div>
           </div>
-          <div id="agentCardGrid" class="agent-card-grid-6" style="margin-bottom:20px"></div>
+
+          <div id="agentlakeOverview" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabOverview">
+            <div id="agentlakeSummaryMetrics" class="agentlake-summary-metrics" aria-live="polite"></div>
+            <div class="agentlake-overview-grid">
+              <section class="agentlake-summary-panel">
+                <div class="agentlake-summary-head">
+                  <div><h3>Needs attention</h3><p>Locked or queued agents requiring review.</p></div>
+                  <span id="agentlakeAttentionCount" class="agentlake-count-badge">0</span>
+                </div>
+                <div id="agentlakeAttentionList" class="agentlake-compact-list"></div>
+              </section>
+              <section class="agentlake-summary-panel">
+                <div class="agentlake-summary-head">
+                  <div><h3>Recently active</h3><p>Agents with the most recent activity.</p></div>
+                </div>
+                <div id="agentlakeRecentList" class="agentlake-compact-list"></div>
+              </section>
+              <section class="agentlake-summary-panel">
+                <div class="agentlake-summary-head">
+                  <div><h3>Highest spend</h3><p>Top agents by attributed AI cost.</p></div>
+                </div>
+                <div id="agentlakeSpendList" class="agentlake-compact-list"></div>
+              </section>
+              <section class="agentlake-summary-panel">
+                <div class="agentlake-summary-head">
+                  <div><h3>Registry cleanup</h3><p>Agents that have not generated a request.</p></div>
+                </div>
+                <button id="agentlakeNeverUsedButton" class="agentlake-never-used" type="button" onclick="showNeverUsedAgents()">
+                  <span><strong id="agentlakeNeverUsedCount">0</strong> agents have never been used</span>
+                  <span>View agents →</span>
+                </button>
+              </section>
+            </div>
+          </div>
+
+          <div id="agentlakeDepartments" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabDepartments" hidden>
+            <div id="agentlakeDepartmentGroups" class="agentlake-department-groups"></div>
+          </div>
+
+          <div id="agentlakeAllAgents" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabAll" hidden>
+            <div class="agent-card-filterbar" aria-label="Agentlake live status filters">
+              <div class="agent-card-filter-meta">
+                <span id="agentCardFilterCount">Showing all agents</span>
+              </div>
+              <div class="agent-card-filter-controls">
+                <select id="agentCardFilterDept" class="agent-filter-select" onchange="applyAgentCardFilters()">
+                  <option value="">All Departments</option>
+                </select>
+                <select id="agentCardFilterPlatform" class="agent-filter-select" onchange="applyAgentCardFilters()">
+                  <option value="">All Platforms</option>
+                </select>
+                <select id="agentCardFilterStatus" class="agent-filter-select" onchange="applyAgentCardFilters()">
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="idle">Idle</option>
+                  <option value="queued">Queued</option>
+                  <option value="locked">Locked</option>
+                </select>
+                <input id="agentCardFilterSearch" class="agent-filter-search agent-card-search" type="search" placeholder="Search agents..." oninput="applyAgentCardFilters()" />
+                <button type="button" class="agent-card-clear-btn" onclick="clearAgentCardFilters()">Clear</button>
+              </div>
+            </div>
+            <div id="agentCardGrid" class="agent-card-grid-6" style="margin-bottom:20px"></div>
+          </div>
 
           <div class="sec-sub-label">Department Budget Utilization</div>
           <div id="liveBudgetBars" style="margin-bottom:16px"></div>
@@ -631,7 +684,7 @@
 <script src="js/tier-utils.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/budget.js"></script>
-<script src="js/agentlake.js?v=20260606-v323"></script>
+<script src="js/agentlake.js?v=20260723-v437"></script>
 <script src="js/timeseries.js"></script>
 <script src="js/auditor.js?v=20260607-v328"></script>
 <script src="js/event_stream.js?v=20260606-v325"></script>
