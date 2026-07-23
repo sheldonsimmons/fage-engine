@@ -1377,7 +1377,7 @@
       .trial-test-grid { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260723-v445" />
+  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260723-v447" />
 </head>
 <body class="cp-executive-page">
 
@@ -1555,7 +1555,11 @@
         <div class="exec-action-kicker">Action Required</div>
         <div class="exec-action-title" id="execActionTitle">Checking CostPilot signals</div>
       </div>
-      <div class="exec-action-badge badge-green" id="execActionBadge">✓ Healthy</div>
+      <div class="exec-action-head-actions">
+        <button class="exec-action-review-btn" id="execAcknowledgeBlockedButton" type="button"
+          onclick="acknowledgeBlockedEvents()" hidden>✓ Mark blocked reviewed</button>
+        <div class="exec-action-badge badge-green" id="execActionBadge">✓ Healthy</div>
+      </div>
     </div>
     <div class="exec-action-grid">
       <div class="exec-action-card green" id="execActionBudgetCard">
@@ -3071,14 +3075,15 @@ function setClassById(id, baseClass, tone) {
   el.className = `${baseClass}${tone ? ` ${tone}` : ""}`;
 }
 
-function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisionCount, collisionBreakdown }) {
+function updateExecActionStrip({ data, budget, topDriver, blockedCount, unreviewedBlockedCount, collisionCount, collisionBreakdown }) {
   const strip = document.getElementById("execActionStrip");
   if (!strip) return;
 
   const rows = departmentBudgetRows(data, budget);
   const overCap = rows.filter(row => row.cap > 0 && row.pct >= 100);
   const nearCap = rows.filter(row => row.cap > 0 && row.pct >= 80 && row.pct < 100);
-  const incidents = Number(blockedCount || 0) + Number(collisionCount || 0);
+  const blockedReviewCount = Number(unreviewedBlockedCount || 0);
+  const incidents = blockedReviewCount + Number(collisionCount || 0);
   const needsAction = overCap.length > 0 || incidents > 0;
   const isWarning = !needsAction && nearCap.length > 0;
 
@@ -3087,6 +3092,13 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
   if (badge) {
     badge.textContent = needsAction ? "× Action needed" : isWarning ? "! Watch" : "✓ Healthy";
     badge.className = `exec-action-badge ${needsAction ? "badge-red" : isWarning ? "badge-yellow" : "badge-green"}`;
+  }
+  const acknowledgeButton = document.getElementById("execAcknowledgeBlockedButton");
+  if (acknowledgeButton) {
+    acknowledgeButton.hidden = blockedReviewCount <= 0;
+    acknowledgeButton.textContent = blockedReviewCount > 0
+      ? `✓ Mark ${fmtNum(blockedReviewCount)} blocked reviewed`
+      : "✓ Mark blocked reviewed";
   }
 
   const title = overCap.length
@@ -3167,8 +3179,8 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
   setText(
     "execActionRiskSub",
     incidents
-      ? `${fmtNum(blockedCount || 0)} blocked requests · ${collisionBreakdownText(collisionBreakdown)}`
-      : "No blocked or collision events in this view."
+      ? `${fmtNum(blockedReviewCount)} unreviewed blocked · ${collisionBreakdownText(collisionBreakdown)}`
+      : `${fmtNum(blockedCount || 0)} blocked this period · 0 awaiting review`
   );
 
   const actionTone = overCap.length || incidents ? "red" : nearCap.length ? "yellow" : "green";
@@ -3179,7 +3191,6 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
     if (names.length === 2) return names.join(" and ");
     return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
   };
-  const blockedReviewCount = Number(blockedCount || 0);
   const collisionReviewCount = Number(collisionCount || 0);
   const recommendedTitle = overCap.length
     ? blockedReviewCount
@@ -3219,6 +3230,38 @@ function updateExecActionStrip({ data, budget, topDriver, blockedCount, collisio
 
   setText("execActionDriverTitle", recommendedTitle);
   setText("execActionDriverSub", recommendedSteps.join(" "));
+}
+
+async function acknowledgeBlockedEvents() {
+  const button = document.getElementById("execAcknowledgeBlockedButton");
+  const unreviewed = (execData?.audits || []).filter(event => {
+    const reviewedThrough = Number(execData?.reviewStatus?.reviewed_through_id || 0);
+    return isBlockedEvent(event) && Number(event.id || 0) > reviewedThrough;
+  });
+  if (!unreviewed.length) return;
+  if (!window.confirm(`Mark ${unreviewed.length.toLocaleString()} blocked request${unreviewed.length === 1 ? "" : "s"} as reviewed? The audit records will be preserved.`)) return;
+
+  const reviewer = localStorage.getItem("cp_user_email")
+    || localStorage.getItem("cp_trial_email")
+    || localStorage.getItem("cp_user_name")
+    || localStorage.getItem("cp_trial_name")
+    || "Executive dashboard user";
+  const throughEventId = Math.max(...unreviewed.map(event => Number(event.id || 0)));
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving review…";
+  }
+  try {
+    execData.reviewStatus = await apiPost("/api/audit/acknowledge-blocked", {
+      reviewer,
+      through_event_id: throughEventId,
+    });
+    renderExec(execData);
+  } catch (error) {
+    window.alert(`Could not mark blocked requests reviewed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function workspaceDepartmentCount(data, events) {
@@ -4108,7 +4151,7 @@ function renderExecutiveGlance(events, data, context) {
   setText("execGlanceRequests", fmtNum(context.totalCalls));
   setText("execGlanceRequestsSub", `${context.routingPct}% served by lower-cost tiers`);
   setText("execGlanceRisk", fmtNum(context.controlsCount));
-  setText("execGlanceRiskSub", `${fmtNum(context.blockedCount)} blocked · ${fmtNum(context.collisionCount)} collision · ${fmtNum(context.throttleCount)} budget`);
+  setText("execGlanceRiskSub", `${fmtNum(context.blockedCount)} blocked · ${fmtNum(context.unreviewedBlockedCount)} awaiting review`);
 
   const budgetCard = document.getElementById("execGlanceBudgetCard");
   if (budgetCard) budgetCard.className = `exec-glance-kpi ${context.budget.pct >= 100 ? "critical" : context.budget.pct >= 80 ? "warning" : ""}`;
@@ -4118,7 +4161,7 @@ function renderExecutiveGlance(events, data, context) {
     budgetBar.style.background = context.budget.pct >= 100 ? "var(--cp-color-danger)" : context.budget.pct >= 80 ? "var(--cp-color-warning)" : "var(--cp-color-positive)";
   }
   const riskCard = document.getElementById("execGlanceRiskCard");
-  if (riskCard) riskCard.className = `exec-glance-kpi ${context.blockedCount + context.collisionCount > 0 ? "critical" : context.throttleCount > 0 ? "warning" : ""}`;
+  if (riskCard) riskCard.className = `exec-glance-kpi ${context.unreviewedBlockedCount + context.collisionCount > 0 ? "critical" : context.throttleCount > 0 ? "warning" : ""}`;
 
   renderExecGlanceTrend(events);
   renderExecGlanceSavings({
@@ -4162,6 +4205,10 @@ function renderExec(data) {
   const blockedCount = hasFilters
     ? filteredSavings.blockedCount
     : d.blocked_count || 0;
+  const reviewedThroughId = Number(data.reviewStatus?.reviewed_through_id || 0);
+  const unreviewedBlockedCount = events.filter(event =>
+    isBlockedEvent(event) && Number(event.id || 0) > reviewedThroughId
+  ).length;
   const collisionBreakdown = hasFilters
     ? collisionBreakdownForEvents(events)
     : {
@@ -4269,6 +4316,7 @@ function renderExec(data) {
     budget,
     controlsCount,
     blockedCount,
+    unreviewedBlockedCount,
     collisionCount,
     throttleCount,
     routingSaved,
@@ -4277,7 +4325,15 @@ function renderExec(data) {
     blockedSaved,
     drivers,
   });
-  updateExecActionStrip({ data, budget, topDriver, blockedCount, collisionCount, collisionBreakdown });
+  updateExecActionStrip({
+    data,
+    budget,
+    topDriver,
+    blockedCount,
+    unreviewedBlockedCount,
+    collisionCount,
+    collisionBreakdown,
+  });
   setText("execHeroTopDriverValue", topDriver ? topDriver.agent : "No driver yet");
   setText(
     "execHeroTopDriverSub",
@@ -4483,7 +4539,7 @@ function renderExec(data) {
 
 async function loadExec() {
   try {
-    const [dashboard, timeseries, audits, agents, models] = await Promise.all([
+    const [dashboard, timeseries, audits, agents, models, reviewStatus] = await Promise.all([
       apiGet("/api/dashboard"),
       apiGet("/api/timeseries?days=180"),
       apiGet("/api/audit?limit=5000"),
@@ -4492,8 +4548,12 @@ async function loadExec() {
         console.warn("Model registry load failed; using tier labels:", err.message);
         return [];
       }),
+      apiGet("/api/audit/review-status").catch(err => {
+        console.warn("Blocked review status load failed:", err.message);
+        return { reviewed_through_id: 0, unreviewed_blocked_count: 0 };
+      }),
     ]);
-    execData = { dashboard, timeseries, audits, agents, models };
+    execData = { dashboard, timeseries, audits, agents, models, reviewStatus };
     populateExecFilters(execData);
     renderExec(execData);
     updateTrialStartCard(await loadTrialScopedExecData(execData));

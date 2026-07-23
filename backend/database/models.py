@@ -204,6 +204,16 @@ class AuditEvent(Base):
     work_item = relationship("WorkItem", back_populates="audit_events")
 
 
+class AuditReviewState(Base):
+    """Mutable review checkpoint kept separate from immutable audit events."""
+    __tablename__ = "audit_review_states"
+
+    scope_key           = Column(String, primary_key=True, default="global")
+    reviewed_through_id = Column(Integer, nullable=False, default=0)
+    reviewer            = Column(String, nullable=True)
+    reviewed_at         = Column(DateTime, nullable=True)
+
+
 class ModelRegistry(Base):
     """
     Company-registered AI models with tier classification and cost rates.

@@ -417,6 +417,39 @@
   font-size: 12px;
 }
 
+.cp-executive-page .exec-action-head-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.cp-executive-page .exec-action-review-btn {
+  background: transparent;
+  border: 1px solid var(--cp-color-danger);
+  border-radius: 999px;
+  color: var(--cp-color-danger);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .045em;
+  min-height: 30px;
+  padding: 0 11px;
+}
+
+.cp-executive-page .exec-action-review-btn:hover {
+  background: rgba(248, 81, 73, .1);
+}
+
+.cp-executive-page .exec-action-review-btn:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+.cp-executive-page .exec-action-review-btn[hidden] {
+  display: none;
+}
+
 .cp-executive-page .exec-footer {
   justify-content: flex-end;
 }
