@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import DepartmentBudget, TokenTransaction, RegisteredAgent
+from database.models import DepartmentBudget, TokenTransaction, RegisteredAgent, WorkItem
 from core.router import route
 from core.auditor import write_audit_event
 from core.keywords import check_terms
@@ -34,6 +34,7 @@ class RouteRequest(BaseModel):
     min_tokens:             int  = 3               # Skip routing if pruned payload is below this token count (catches truly empty Salesforce on-create fires)
     is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
     payload_type:           str  = "text"          # "text" = full pruning pipeline | "code" = skip pruner, secrets detection only | "transcript" = voice guard path
+    work_item_id:           Optional[str] = None    # Public project/matter/engagement ID; optional for backward compatibility
 
 
 class RouteResponse(BaseModel):
@@ -58,6 +59,8 @@ class RouteResponse(BaseModel):
     sensitive_term_triggered:   bool = False
     sensitive_term_action:      Optional[str] = None
     sensitive_term_matches:     List[str] = []
+    work_item_id:               Optional[str] = None
+    work_item_name:             Optional[str] = None
 
 
 def _resolve_department(db: Session, req: RouteRequest) -> str:
@@ -90,6 +93,23 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       6. Record transaction and update department spend in the DB
     """
     department = _resolve_department(db, req)
+
+    # ── Resolve optional project/matter/engagement context ───────────────────
+    work_item = None
+    if req.work_item_id:
+        public_id = req.work_item_id.strip()
+        work_item = db.query(WorkItem).filter(WorkItem.external_id == public_id).first()
+        if not work_item and public_id.isdigit():
+            work_item = db.query(WorkItem).filter(WorkItem.id == int(public_id)).first()
+        if not work_item:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"Work item '{public_id}' was not found")
+        if work_item.status != "active":
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=409,
+                detail=f"Work item '{work_item.external_id}' is {work_item.status} and cannot receive new requests",
+            )
 
     # ── Resolve or auto-register agent FIRST ─────────────────────────────────
     # Agent resolution runs before pruning so the agent's pruning_enabled
@@ -169,6 +189,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             matched_keywords = [m["term"] for m in term_result["matches"]],
             cost_usd         = 0.0,
             decision_outcome = "Request blocked by sensitive term policy",
+            work_item        = work_item,
         )
         from fastapi import HTTPException
         raise HTTPException(
@@ -204,6 +225,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             budget_used_pct          = 0.0,
             budget_remaining_usd     = 0.0,
             was_throttled            = False,
+            work_item_id             = work_item.external_id if work_item else None,
+            work_item_name           = work_item.name if work_item else None,
         )
 
     # Check throttle status from the department budget table
@@ -239,6 +262,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             department      = department,
             source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
             agent_id        = agent.id if agent else req.agent_id,
+            work_item_id    = work_item.id if work_item else None,
             model_tier      = result["model_tier"],
             input_tokens   = result["input_tokens"],
             output_tokens  = result["output_tokens"],
@@ -323,6 +347,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 output_tokens    = result.get("output_tokens", 0),
                 usage_source     = result.get("usage_source", "estimated"),
                 raw_payload      = _raw_to_store,
+                work_item        = work_item,
             )
         except Exception:
             pass  # Never let audit write failure break the routing response
@@ -356,4 +381,6 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         sensitive_term_triggered  = term_result["triggered"],
         sensitive_term_action     = term_result.get("action"),
         sensitive_term_matches    = [m["term"] for m in term_result.get("matches", [])],
+        work_item_id              = work_item.external_id if work_item else None,
+        work_item_name            = work_item.name if work_item else None,
     )

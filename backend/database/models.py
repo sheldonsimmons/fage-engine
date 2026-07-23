@@ -112,6 +112,45 @@ class DepartmentBudget(Base):
     archived          = Column(Boolean,  nullable=True, default=False)  # soft-hide stale departments without deleting history
 
 
+class WorkAccount(Base):
+    """Optional customer, client, or business-unit parent for attributed work."""
+    __tablename__ = "work_accounts"
+
+    id          = Column(Integer,  primary_key=True, index=True)
+    external_id = Column(String,   nullable=False, unique=True, index=True)
+    name        = Column(String,   nullable=False)
+    department  = Column(String,   nullable=True)
+    status      = Column(String,   nullable=False, default="active")
+    workspace_id = Column(String,  nullable=True, index=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    work_items = relationship("WorkItem", back_populates="account")
+
+
+class WorkItem(Base):
+    """A project, matter, engagement, case, claim, or other unit of work."""
+    __tablename__ = "work_items"
+
+    id                 = Column(Integer,  primary_key=True, index=True)
+    external_id        = Column(String,   nullable=False, unique=True, index=True)
+    name               = Column(String,   nullable=False)
+    account_id         = Column(Integer,  ForeignKey("work_accounts.id"), nullable=True)
+    owner              = Column(String,   nullable=True)
+    department         = Column(String,   nullable=True)
+    status             = Column(String,   nullable=False, default="active")
+    monthly_ai_budget  = Column(Float,    nullable=True)
+    cost_treatment     = Column(String,   nullable=False, default="unspecified")
+    source_platform    = Column(String,   nullable=True, default="CostPilot")
+    workspace_id       = Column(String,   nullable=True, index=True)
+    created_at         = Column(DateTime, default=datetime.utcnow)
+    updated_at         = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    account            = relationship("WorkAccount", back_populates="work_items")
+    token_transactions = relationship("TokenTransaction", back_populates="work_item")
+    audit_events       = relationship("AuditEvent", back_populates="work_item")
+
+
 class TokenTransaction(Base):
     """
     A single AI model call — records cost, tier, routing reason, and pruning savings.
@@ -123,6 +162,7 @@ class TokenTransaction(Base):
     department      = Column(String,   nullable=False)
     source_platform = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     agent_id        = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
+    work_item_id    = Column(Integer,  ForeignKey("work_items.id"), nullable=True, index=True)
     model_tier      = Column(String,   nullable=False)    # micro | flagship
     input_tokens   = Column(Integer,  nullable=False)
     output_tokens  = Column(Integer,  nullable=False)
@@ -134,6 +174,7 @@ class TokenTransaction(Base):
     tokens_saved   = Column(Integer,  default=0)
 
     agent = relationship("RegisteredAgent", back_populates="token_transactions")
+    work_item = relationship("WorkItem", back_populates="token_transactions")
 
 
 class AuditEvent(Base):
@@ -146,6 +187,7 @@ class AuditEvent(Base):
     id               = Column(Integer,  primary_key=True, index=True)
     event_type       = Column(String,   nullable=False)   # ROUTING | THROTTLE | LOCK | DECISION
     agent_id         = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
+    work_item_id     = Column(Integer,  ForeignKey("work_items.id"), nullable=True, index=True)
     department       = Column(String,   nullable=False)
     model_tier       = Column(String,   nullable=True)
     context_snapshot = Column(Text,     nullable=True)    # JSON string — frozen system state
@@ -159,6 +201,7 @@ class AuditEvent(Base):
     timestamp        = Column(DateTime, default=datetime.utcnow)
 
     agent = relationship("RegisteredAgent", back_populates="audit_events")
+    work_item = relationship("WorkItem", back_populates="audit_events")
 
 
 class ModelRegistry(Base):

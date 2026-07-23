@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Work Attribution</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <style>
+    body { min-height:100vh; background:var(--bg-base); color:var(--text-primary); }
+    .wa-header {
+      height:58px; padding:0 24px; display:flex; align-items:center; justify-content:space-between;
+      border-bottom:1px solid var(--border); background:var(--bg-panel);
+    }
+    .wa-brand { display:flex; align-items:center; gap:14px; }
+    .wa-logo { width:210px; max-height:38px; object-fit:contain; object-position:left center; }
+    .wa-nav { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .wa-nav a {
+      color:var(--text-muted); text-decoration:none; border:1px solid var(--border);
+      border-radius:6px; padding:6px 10px; font-size:11px;
+    }
+    .wa-nav a:hover, .wa-nav a.active { color:var(--text-primary); border-color:var(--accent); }
+    .wa-main { max-width:1180px; margin:0 auto; padding:28px 24px 48px; }
+    .wa-eyebrow { color:var(--accent); text-transform:uppercase; letter-spacing:.1em; font-size:10px; font-weight:800; }
+    .wa-title { font-size:28px; margin:7px 0 5px; }
+    .wa-subtitle { color:var(--text-muted); font-size:13px; max-width:700px; line-height:1.5; }
+    .wa-steps {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:22px 0;
+    }
+    .wa-step {
+      border:1px solid var(--border); border-radius:8px; background:var(--bg-panel);
+      padding:12px 14px; display:flex; gap:10px; align-items:center;
+    }
+    .wa-step-number {
+      width:25px; height:25px; display:grid; place-items:center; flex:0 0 auto;
+      border-radius:50%; background:rgba(88,166,255,.12); color:var(--accent); font-weight:800;
+    }
+    .wa-step strong { font-size:12px; display:block; }
+    .wa-step span { color:var(--text-muted); font-size:10px; }
+    .wa-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(360px,.85fr); gap:16px; }
+    .wa-card { background:var(--bg-panel); border:1px solid var(--border); border-radius:10px; padding:18px; }
+    .wa-card-title { font-size:16px; margin:0; }
+    .wa-card-sub { color:var(--text-muted); font-size:11px; margin:4px 0 16px; line-height:1.45; }
+    .wa-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+    .wa-field { display:flex; flex-direction:column; gap:5px; }
+    .wa-field.full { grid-column:1 / -1; }
+    .wa-field label { font-size:10px; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .wa-input {
+      width:100%; box-sizing:border-box; color:var(--text-primary); background:var(--bg-base);
+      border:1px solid var(--border); border-radius:6px; padding:9px 10px; font:inherit; font-size:12px;
+    }
+    textarea.wa-input { min-height:112px; resize:vertical; line-height:1.45; }
+    .wa-input:focus { outline:2px solid rgba(88,166,255,.25); border-color:var(--accent); }
+    .wa-actions { display:flex; align-items:center; gap:10px; margin-top:14px; }
+    .wa-primary {
+      border:1px solid var(--accent); background:var(--accent); color:#07111f;
+      font-weight:800; border-radius:6px; padding:9px 14px; cursor:pointer;
+    }
+    .wa-primary:hover { filter:brightness(1.08); }
+    .wa-primary:disabled { opacity:.55; cursor:not-allowed; }
+    .wa-status { color:var(--text-muted); font-size:11px; }
+    .wa-status.error { color:var(--accent-red); }
+    .wa-success {
+      display:none; margin-top:14px; padding:12px; border:1px solid rgba(63,185,80,.45);
+      border-radius:7px; background:rgba(63,185,80,.07); font-size:12px; line-height:1.55;
+    }
+    .wa-success strong { color:var(--accent-green); }
+    .wa-list-card { margin-top:16px; }
+    .wa-list-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .wa-stats { display:flex; gap:14px; color:var(--text-muted); font-size:11px; }
+    .wa-stats strong { color:var(--text-primary); }
+    .wa-table-wrap { overflow-x:auto; }
+    .wa-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .wa-table th {
+      text-align:left; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em;
+      font-size:9px; padding:9px 10px; border-bottom:1px solid var(--border);
+    }
+    .wa-table td { padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    .wa-table tr:last-child td { border-bottom:0; }
+    .wa-project-name { font-weight:750; }
+    .wa-project-id { color:var(--text-muted); font-family:var(--font-mono); font-size:10px; margin-top:3px; }
+    .wa-badge {
+      display:inline-block; border:1px solid rgba(63,185,80,.45); color:var(--accent-green);
+      border-radius:999px; padding:2px 7px; font-size:9px; font-weight:800; text-transform:uppercase;
+    }
+    .wa-empty { color:var(--text-muted); text-align:center; padding:22px !important; }
+    @media (max-width:820px) {
+      .wa-header { height:auto; padding:12px 16px; align-items:flex-start; gap:12px; }
+      .wa-logo { width:160px; }
+      .wa-nav { justify-content:flex-end; }
+      .wa-main { padding:20px 14px 36px; }
+      .wa-grid, .wa-steps { grid-template-columns:1fr; }
+      .wa-form-grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="wa-header">
+    <div class="wa-brand">
+      <img src="/assets/costpilot-logo-transparent.svg" class="wa-logo" alt="CostPilot" />
+    </div>
+    <nav class="wa-nav" aria-label="Primary navigation">
+      <a href="/index.html">Executive</a>
+      <a href="/operate.html">Operate</a>
+      <a href="/work-items.html" class="active">Work Attribution</a>
+      <a href="/onboarding.html">Connect &amp; Setup</a>
+    </nav>
+  </header>
+
+  <main class="wa-main">
+    <div class="wa-eyebrow">Work Attribution · Quick Start</div>
+    <h1 class="wa-title">Connect AI spending to real work.</h1>
+    <p class="wa-subtitle">
+      Create a project, send one request, and CostPilot will record the model and cost against that project.
+      Existing requests without a project still work.
+    </p>
+
+    <div class="wa-steps" aria-label="Quick-start steps">
+      <div class="wa-step"><div class="wa-step-number">1</div><div><strong>Create a project</strong><span>Only the name is required.</span></div></div>
+      <div class="wa-step"><div class="wa-step-number">2</div><div><strong>Send a request</strong><span>Select the project before routing.</span></div></div>
+      <div class="wa-step"><div class="wa-step-number">3</div><div><strong>See the cost</strong><span>CostPilot saves the attribution.</span></div></div>
+    </div>
+
+    <div class="wa-grid">
+      <section class="wa-card" aria-labelledby="createProjectTitle">
+        <h2 class="wa-card-title" id="createProjectTitle">Create a project</h2>
+        <p class="wa-card-sub">Start with a name. The owner, ID, budget, and department can be added now or later.</p>
+        <form id="waCreateForm">
+          <div class="wa-form-grid">
+            <div class="wa-field full">
+              <label for="waProjectName">Project name *</label>
+              <input class="wa-input" id="waProjectName" required maxlength="200" placeholder="Acme Website Redesign" />
+            </div>
+            <div class="wa-field">
+              <label for="waProjectOwner">Owner</label>
+              <input class="wa-input" id="waProjectOwner" maxlength="200" placeholder="Sarah Johnson" />
+            </div>
+            <div class="wa-field">
+              <label for="waProjectExternalId">Project ID</label>
+              <input class="wa-input" id="waProjectExternalId" maxlength="120" placeholder="Generated automatically" />
+            </div>
+            <div class="wa-field">
+              <label for="waProjectDept">Department</label>
+              <select class="wa-input" id="waProjectDept">
+                <option value="">Choose later</option>
+                <option>Support</option><option>Sales</option><option>Marketing</option>
+                <option>Operations</option><option>Engineering</option><option>Finance</option>
+              </select>
+            </div>
+            <div class="wa-field">
+              <label for="waProjectBudget">Monthly AI budget</label>
+              <input class="wa-input" id="waProjectBudget" type="number" min="0" step="0.01" placeholder="Optional" />
+            </div>
+          </div>
+          <div class="wa-actions">
+            <button class="wa-primary" id="waCreateButton" type="submit">Create Project</button>
+            <span class="wa-status" id="waCreateStatus"></span>
+          </div>
+        </form>
+        <div class="wa-success" id="waCreateSuccess"></div>
+      </section>
+
+      <section class="wa-card" aria-labelledby="testRequestTitle">
+        <h2 class="wa-card-title" id="testRequestTitle">Send an attributed request</h2>
+        <p class="wa-card-sub">This is a real governed request. Its cost will appear under the selected project.</p>
+        <form id="waRouteForm">
+          <div class="wa-form-grid">
+            <div class="wa-field full">
+              <label for="waRouteProject">What project are you working on? *</label>
+              <select class="wa-input" id="waRouteProject" required>
+                <option value="">Create or select a project</option>
+              </select>
+            </div>
+            <div class="wa-field full">
+              <label for="waRouteDepartment">Department</label>
+              <select class="wa-input" id="waRouteDepartment">
+                <option>Support</option><option>Sales</option><option>Marketing</option>
+                <option>Operations</option><option>Engineering</option><option>Finance</option>
+              </select>
+            </div>
+            <div class="wa-field full">
+              <label for="waRouteText">AI request *</label>
+              <textarea class="wa-input" id="waRouteText" required placeholder="Summarize these customer interviews and identify the most common concerns."></textarea>
+            </div>
+          </div>
+          <div class="wa-actions">
+            <button class="wa-primary" id="waRouteButton" type="submit">Send Request</button>
+            <span class="wa-status" id="waRouteStatus"></span>
+          </div>
+        </form>
+        <div class="wa-success" id="waRouteResult"></div>
+      </section>
+    </div>
+
+    <section class="wa-card wa-list-card" aria-labelledby="projectListTitle">
+      <div class="wa-list-head">
+        <div>
+          <h2 class="wa-card-title" id="projectListTitle">Projects</h2>
+          <p class="wa-card-sub" style="margin-bottom:0">AI requests and spending attributed to each project.</p>
+        </div>
+        <div class="wa-stats">
+          <span><strong id="waProjectCount">0</strong> projects</span>
+          <span><strong id="waAttributedSpend">$0.00</strong> attributed</span>
+        </div>
+      </div>
+      <div class="wa-table-wrap">
+        <table class="wa-table">
+          <thead><tr><th>Project</th><th>Owner</th><th>Department</th><th>Requests</th><th>Spend</th><th>Status</th></tr></thead>
+          <tbody id="waProjectRows"><tr><td colspan="6" class="wa-empty">Loading projects…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    let waItems = [];
+
+    function waEscape(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[char]);
+    }
+
+    function waMoney(value) {
+      return "$" + Number(value || 0).toFixed(2);
+    }
+
+    function waSetStatus(id, message, isError = false) {
+      const element = document.getElementById(id);
+      element.textContent = message || "";
+      element.classList.toggle("error", isError);
+    }
+
+    async function waLoadProjects(preselectId = "") {
+      try {
+        waItems = await apiGet("/api/work-items");
+        const active = waItems.filter(item => item.status === "active");
+        const select = document.getElementById("waRouteProject");
+        const current = preselectId || select.value;
+        select.innerHTML = '<option value="">Select a project</option>' + active.map(item =>
+          `<option value="${waEscape(item.external_id)}">${waEscape(item.name)} · ${waEscape(item.external_id)}</option>`
+        ).join("");
+        if ([...select.options].some(option => option.value === current)) select.value = current;
+
+        document.getElementById("waProjectCount").textContent = waItems.length.toLocaleString();
+        document.getElementById("waAttributedSpend").textContent = waMoney(
+          waItems.reduce((sum, item) => sum + Number(item.spend_usd || 0), 0)
+        );
+        document.getElementById("waProjectRows").innerHTML = waItems.length ? waItems.map(item => `
+          <tr>
+            <td><div class="wa-project-name">${waEscape(item.name)}</div><div class="wa-project-id">${waEscape(item.external_id)}</div></td>
+            <td>${waEscape(item.owner || "—")}</td>
+            <td>${waEscape(item.department || "—")}</td>
+            <td>${Number(item.request_count || 0).toLocaleString()}</td>
+            <td>${waMoney(item.spend_usd)}</td>
+            <td><span class="wa-badge">${waEscape(item.status)}</span></td>
+          </tr>
+        `).join("") : '<tr><td colspan="6" class="wa-empty">No projects yet. Create the first one above.</td></tr>';
+      } catch (error) {
+        document.getElementById("waProjectRows").innerHTML =
+          `<tr><td colspan="6" class="wa-empty">Could not load projects: ${waEscape(error.message)}</td></tr>`;
+      }
+    }
+
+    document.getElementById("waCreateForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const button = document.getElementById("waCreateButton");
+      const budgetValue = document.getElementById("waProjectBudget").value;
+      const body = {
+        name: document.getElementById("waProjectName").value.trim(),
+        owner: document.getElementById("waProjectOwner").value.trim() || null,
+        external_id: document.getElementById("waProjectExternalId").value.trim() || null,
+        department: document.getElementById("waProjectDept").value || null,
+        monthly_ai_budget: budgetValue === "" ? null : Number(budgetValue),
+      };
+      button.disabled = true;
+      waSetStatus("waCreateStatus", "Creating…");
+      try {
+        const item = await apiPost("/api/work-items", body);
+        document.getElementById("waCreateForm").reset();
+        const success = document.getElementById("waCreateSuccess");
+        success.innerHTML = `<strong>Project created.</strong><br>${waEscape(item.name)} · ${waEscape(item.external_id)} is ready for AI requests.`;
+        success.style.display = "block";
+        waSetStatus("waCreateStatus", "");
+        await waLoadProjects(item.external_id);
+        document.getElementById("waRouteText").focus();
+      } catch (error) {
+        waSetStatus("waCreateStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById("waRouteProject").addEventListener("change", event => {
+      const item = waItems.find(project => project.external_id === event.target.value);
+      if (item?.department) document.getElementById("waRouteDepartment").value = item.department;
+    });
+
+    document.getElementById("waRouteForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const button = document.getElementById("waRouteButton");
+      const projectId = document.getElementById("waRouteProject").value;
+      button.disabled = true;
+      waSetStatus("waRouteStatus", "Routing…");
+      document.getElementById("waRouteResult").style.display = "none";
+      try {
+        const result = await apiPost("/api/route", {
+          text: document.getElementById("waRouteText").value.trim(),
+          department: document.getElementById("waRouteDepartment").value,
+          work_item_id: projectId,
+          agent_name: "Work Attribution Test",
+          source_platform: "CostPilot",
+          auto_prune: true,
+        });
+        const receipt = document.getElementById("waRouteResult");
+        receipt.innerHTML = `
+          <strong>Request attributed successfully.</strong><br>
+          Project: ${waEscape(result.work_item_name)} · ${waEscape(result.work_item_id)}<br>
+          Model: ${waEscape(result.model_name)}<br>
+          Cost: $${Number(result.cost_usd || 0).toFixed(6)}
+        `;
+        receipt.style.display = "block";
+        waSetStatus("waRouteStatus", "");
+        await waLoadProjects(projectId);
+      } catch (error) {
+        waSetStatus("waRouteStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    waLoadProjects();
+  </script>
+</body>
+</html>

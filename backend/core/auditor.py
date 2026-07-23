@@ -223,6 +223,7 @@ def write_audit_event(
     output_tokens:    int       = None,
     usage_source:     str       = None,
     raw_payload:      str       = None,   # original text before pruning (None = not logged)
+    work_item                    = None,   # optional WorkItem ORM record
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
@@ -241,6 +242,10 @@ def write_audit_event(
         context["output_tokens"] = output_tokens
     if usage_source:
         context["usage_source"] = usage_source
+    if work_item:
+        context["work_item_id"] = work_item.external_id
+        context["work_item_name"] = work_item.name
+        context["work_item_internal_id"] = work_item.id
     risk_level = classify_risk(event_type, routing_decision, matched_keywords)
     rationale  = _build_rationale(
         event_type, routing_decision, routing_reason,
@@ -251,6 +256,7 @@ def write_audit_event(
     event = AuditEvent(
         event_type       = event_type,
         agent_id         = agent_id,
+        work_item_id     = work_item.id if work_item else None,
         department       = department,
         model_tier       = model_tier,
         context_snapshot = json.dumps(context),
@@ -273,6 +279,8 @@ def write_audit_event(
         "event_type":       event_type,
         "department":       department,
         "agent_id":         agent_id,
+        "work_item_id":     work_item.external_id if work_item else None,
+        "work_item_name":   work_item.name if work_item else None,
         "model_tier":       model_tier,
         "routing_decision": routing_decision,
         "risk_level":       risk_level,
@@ -289,6 +297,8 @@ def write_audit_event(
         "id":               event.id,
         "event_type":       event_type,
         "department":       department,
+        "work_item_id":     work_item.external_id if work_item else None,
+        "work_item_name":   work_item.name if work_item else None,
         "model_tier":       model_tier,
         "risk_level":       risk_level,
         "decision_outcome": decision_outcome,
@@ -358,6 +368,7 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         context = {}
 
     agent = getattr(e, "agent", None)
+    work_item = getattr(e, "work_item", None)
     cost_usd = _extract_cost_usd(e)
     display_dept = _display_department(e.department)
     display_agent = None
@@ -387,6 +398,8 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "agent_name":       agent.name if agent else None,
         "display_agent_name": display_agent,
         "source_platform":  agent.source_platform if agent else None,
+        "work_item_id":     work_item.external_id if work_item else context.get("work_item_id"),
+        "work_item_name":   work_item.name if work_item else context.get("work_item_name"),
         "model_tier":       e.model_tier,
         "risk_level":       e.risk_level,
         "decision_outcome": e.decision_outcome,

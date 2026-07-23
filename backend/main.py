@@ -86,6 +86,14 @@ def _run_migrations():
             ensure_column(conn, "token_transactions", "usage_source", "VARCHAR DEFAULT 'estimated'")
         except Exception:
             pass
+        try:
+            ensure_column(conn, "token_transactions", "work_item_id", "INTEGER REFERENCES work_items(id)")
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "audit_events", "work_item_id", "INTEGER REFERENCES work_items(id)")
+        except Exception:
+            pass
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount
@@ -329,6 +337,10 @@ app.include_router(routes_pruner.router, prefix="/api/prune", tags=["Pruner"])
 # Step 3 — Token Router & Model Cascader
 from api import routes_router
 app.include_router(routes_router.router, prefix="/api/route", tags=["Router"])
+
+# Work Attribution — projects, matters, engagements, cases, and claims
+from api import routes_work_items
+app.include_router(routes_work_items.router, prefix="/api/work-items", tags=["Work Attribution"])
 
 # Step 4 — Budget Allocator & Throttle
 from api import routes_budget
