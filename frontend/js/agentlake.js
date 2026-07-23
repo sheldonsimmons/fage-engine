@@ -100,6 +100,11 @@ function renderAgentTable(agents) {
     alertBox.style.display = "none";
   }
 
+  if (document.body.classList.contains("admin-page")) {
+    renderAdminAgentTable(agents, tbody);
+    return;
+  }
+
   if (!agents.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="placeholder">No agents registered.</td></tr>';
     return;
@@ -207,6 +212,132 @@ function renderAgentTable(agents) {
       </tr>
     `;
   }).join("");
+}
+
+let _adminSelectedAgentId = null;
+
+function renderAdminAgentTable(agents, tbody) {
+  if (!agents.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No agents registered.</td></tr>';
+    closeAdminAgentDrawer();
+    return;
+  }
+
+  tbody.innerHTML = agents.map(agent => {
+    const status = effectiveAgentStatus(agent);
+    const badgeClass = status === "active" ? "badge-active"
+      : status === "idle" ? "badge-idle"
+      : "badge-locked";
+    const lastActive = agent.last_used_at
+      ? new Date(agent.last_used_at).toLocaleString("en-US", {
+          month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+        })
+      : "Never";
+    return `<tr id="agent-row-${agent.id}" class="admin-agent-row${_adminSelectedAgentId === agent.id ? " selected" : ""}"
+        onclick="openAdminAgentDrawer(${agent.id})">
+      <td>
+        <strong>${displayAgentName(agent)}</strong>
+        <span class="admin-agent-secondary">${agent.target_table || "No target configured"}</span>
+      </td>
+      <td>${displayAgentDept(agent)}</td>
+      <td>${agent.source_platform || "Custom"}</td>
+      <td><span class="badge ${badgeClass}">${status.toUpperCase()}</span></td>
+      <td class="admin-agent-last">${lastActive}</td>
+      <td><button type="button" class="btn-cap" onclick="event.stopPropagation();openAdminAgentDrawer(${agent.id})">Manage</button></td>
+    </tr>`;
+  }).join("");
+
+  if (_adminSelectedAgentId) {
+    const selected = agents.find(agent => agent.id === _adminSelectedAgentId);
+    if (selected) renderAdminAgentDrawer(selected);
+    else closeAdminAgentDrawer();
+  }
+}
+
+function openAdminAgentDrawer(agentId) {
+  const agent = _allAgents.find(item => item.id === agentId);
+  if (!agent) return;
+  _adminSelectedAgentId = agentId;
+  document.querySelectorAll(".admin-agent-row").forEach(row => row.classList.remove("selected"));
+  document.getElementById(`agent-row-${agentId}`)?.classList.add("selected");
+  renderAdminAgentDrawer(agent);
+}
+
+function closeAdminAgentDrawer() {
+  _adminSelectedAgentId = null;
+  document.getElementById("adminAgentDrawer")?.classList.remove("open");
+  document.getElementById("adminAgentDrawerBackdrop")?.classList.remove("open");
+  document.querySelectorAll(".admin-agent-row").forEach(row => row.classList.remove("selected"));
+}
+
+function renderAdminAgentDrawer(agent) {
+  const drawer = document.getElementById("adminAgentDrawer");
+  const backdrop = document.getElementById("adminAgentDrawerBackdrop");
+  const content = document.getElementById("adminAgentDrawerContent");
+  if (!drawer || !backdrop || !content) return;
+
+  const status = effectiveAgentStatus(agent);
+  const minTier = agent.min_tier || 1;
+  const maxTier = agent.max_tier || 4;
+  const pruningOn = agent.pruning_enabled !== false;
+  const target = agent.target_table
+    ? `${agent.target_table}${agent.target_record_id ? ` #${agent.target_record_id}` : ""}`
+    : "Not configured";
+  const policy = agent.collision_policy === "queue" ? "Queue"
+    : agent.collision_policy === "skip" ? "Skip"
+    : "Lock";
+  const tierOptions = current => [1, 2, 3, 4].map(value =>
+    `<option value="${value}" ${value === current ? "selected" : ""}>${getTierName(value)}</option>`
+  ).join("");
+  const actionButton = ["locked", "active", "queued"].includes(status)
+    ? `<button class="btn-release" onclick="releaseAgent(${agent.id});closeAdminAgentDrawer()">Release Agent</button>`
+    : agent.archived
+      ? `<button class="btn-deregister admin-restore" onclick="unarchiveAgent(${agent.id}, '${jsString(displayAgentName(agent))}');closeAdminAgentDrawer()">Restore Agent</button>`
+      : `<button class="btn-deregister" onclick="archiveAgent(${agent.id}, '${jsString(displayAgentName(agent))}');closeAdminAgentDrawer()">Archive Agent</button>`;
+
+  content.innerHTML = `
+    <div class="admin-drawer-kicker">Agent management</div>
+    <div class="admin-drawer-title-row">
+      <div>
+        <h2>${displayAgentName(agent)}</h2>
+        <p>${displayAgentDept(agent)} · ${agent.source_platform || "Custom"}</p>
+      </div>
+      <span class="badge ${status === "active" ? "badge-active" : status === "idle" ? "badge-idle" : "badge-locked"}">${status.toUpperCase()}</span>
+    </div>
+    <div class="admin-drawer-section">
+      <h3>Connection</h3>
+      <div class="admin-detail-grid">
+        <div><span>Target</span><strong>${target}</strong></div>
+        <div><span>Permissions</span><strong>${agent.permissions || "—"}</strong></div>
+        <div><span>Collision policy</span><strong>${policy}</strong></div>
+        <div><span>Last active</span><strong>${agent.last_used_at ? new Date(agent.last_used_at).toLocaleString() : "Never"}</strong></div>
+      </div>
+    </div>
+    <div class="admin-drawer-section">
+      <h3>Routing controls</h3>
+      <div class="admin-routing-controls">
+        <label>Minimum tier<select id="min-tier-${agent.id}" onchange="saveTierBounds(${agent.id})">${tierOptions(minTier)}</select></label>
+        <label>Maximum tier<select id="max-tier-${agent.id}" onchange="saveTierBounds(${agent.id})">${tierOptions(maxTier)}</select></label>
+      </div>
+      <button type="button" class="admin-secondary-btn"
+        onclick="applyTierBoundsToDepartment(${agent.id}, '${jsString(agent.department || "")}', '${jsString(displayAgentDept(agent))}')">
+        Apply these bounds to ${displayAgentDept(agent)}
+      </button>
+    </div>
+    <div class="admin-drawer-section">
+      <h3>Context pruning</h3>
+      <div class="admin-pruning-row">
+        <div><strong>${pruningOn ? "Enabled" : "Disabled"}</strong><span>${pruningOn ? "CostPilot removes unnecessary context before routing." : "Requests are sent without context pruning."}</span></div>
+        <button id="prune-btn-${agent.id}" class="admin-toggle-btn ${pruningOn ? "on" : ""}"
+          onclick="toggleAgentPruning(${agent.id}, ${pruningOn})">${pruningOn ? "ON" : "OFF"}</button>
+      </div>
+    </div>
+    <div class="admin-drawer-actions">
+      <button class="admin-secondary-btn" onclick="renameAgent(${agent.id}, '${jsString(displayAgentName(agent))}')">Rename</button>
+      ${actionButton}
+    </div>`;
+  drawer.classList.add("open");
+  backdrop.classList.add("open");
 }
 
 /** Save tier bounds for an agent — called on dropdown change */
@@ -337,6 +468,13 @@ async function toggleAgentPruning(agentId, currentlyOn) {
     if (row) {
       row.style.outline = `1px solid ${newState ? "var(--accent-green)" : "var(--border)"}`;
       setTimeout(() => { row.style.outline = ""; }, 800);
+    }
+    if (document.body.classList.contains("admin-page")) {
+      const agent = _allAgents.find(item => item.id === agentId);
+      if (agent) {
+        agent.pruning_enabled = newState;
+        renderAdminAgentDrawer(agent);
+      }
     }
   } catch (err) {
     alert("Failed to update pruning setting: " + err.message);
