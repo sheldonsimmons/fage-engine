@@ -14,8 +14,10 @@ const _RR_PROTECTED = new Set(["fraud", "breach", "gdpr", "hipaa"]);
 async function loadRoutingRules() {
   try {
     const cfg = await apiGet("/api/routing-config");
+    window.POLICY_ROUTING_CONFIG = cfg;
     _rrRenderSlider(cfg);
     _rrRenderKeywords(cfg);
+    if (typeof updatePolicyOverview === "function") updatePolicyOverview();
   } catch (e) {
     console.warn("Routing config load failed:", e.message);
   }
@@ -60,9 +62,11 @@ async function saveThreshold() {
   status.textContent = "Saving...";
   status.style.color = "var(--text-muted)";
   try {
-    await apiPatch("/api/routing-config/threshold", { threshold: val });
+    const cfg = await apiPatch("/api/routing-config/threshold", { threshold: val });
+    window.POLICY_ROUTING_CONFIG = cfg;
     status.textContent = `✓ Saved — payloads over ${val} tokens will escalate (with a keyword match)`;
     status.style.color = "var(--accent-green)";
+    if (typeof updatePolicyOverview === "function") updatePolicyOverview();
     setTimeout(() => status.textContent = "", 4000);
   } catch (e) {
     status.textContent = "Error: " + e.message;
@@ -85,10 +89,12 @@ async function addRoutingKeyword() {
   status.style.color = "var(--text-muted)";
   try {
     const cfg = await apiPost("/api/routing-config/keywords", { keyword: kw });
+    window.POLICY_ROUTING_CONFIG = cfg;
     input.value        = "";
     status.textContent = `✓ "${kw}" added.`;
     status.style.color = "var(--accent-green)";
     _rrRenderKeywords(cfg);
+    if (typeof updatePolicyOverview === "function") updatePolicyOverview();
     setTimeout(() => status.textContent = "", 3000);
   } catch (e) {
     status.textContent = e.message.includes("409") ? `"${kw}" already exists.` : "Error: " + e.message;
@@ -102,9 +108,11 @@ async function removeRoutingKeyword(kw) {
   const status = document.getElementById("rrKeywordStatus");
   try {
     const cfg = await apiDelete(`/api/routing-config/keywords/${encodeURIComponent(kw)}`);
+    window.POLICY_ROUTING_CONFIG = cfg;
     status.textContent = `✓ "${kw}" removed.`;
     status.style.color = "var(--accent-green)";
     _rrRenderKeywords(cfg);
+    if (typeof updatePolicyOverview === "function") updatePolicyOverview();
     setTimeout(() => status.textContent = "", 3000);
   } catch (e) {
     status.textContent = e.message.includes("403")

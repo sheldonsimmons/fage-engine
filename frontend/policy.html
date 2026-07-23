@@ -5,7 +5,7 @@
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Policy &amp; Rules</title>
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=20260723-v441" />
   <style>
     .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
       border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
@@ -13,48 +13,79 @@
     .header-nav-link:hover { color: var(--text-primary); border-color: var(--accent); }
     .header-nav-link.active { color: var(--accent); border-color: var(--accent); }
 
-    /* Two-column layout */
-    .policy-layout {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0;
-      height: calc(100vh - 57px);
-      overflow: hidden;
-    }
-    .policy-col {
-      display: flex;
-      flex-direction: column;
-      border-right: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .policy-col:last-child { border-right: none; }
-
-    .policy-col-header {
-      padding: 18px 24px 14px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .policy-col-title {
-      font-size: 13px; font-weight: 700; color: var(--text-primary);
-      display: flex; align-items: center; gap: 10px;
-    }
-    .policy-col-sub {
-      font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.5;
-    }
-    .policy-col-body {
-      flex: 1; overflow-y: auto; padding: 20px 24px;
-    }
-    .policy-col-body::-webkit-scrollbar { width: 4px; }
-    .policy-col-body::-webkit-scrollbar-track { background: transparent; }
-    .policy-col-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    /* Routing Rules styles (inline since routing_rules.js uses existing IDs) */
-    .rr-section { margin-bottom: 28px; }
+    body { min-height:100vh; background:var(--bg-base); }
+    .policy-page-heading { background:var(--bg-panel); border-bottom:1px solid var(--border); padding:14px 24px 12px; }
+    .policy-page-heading h1 { font-size:16px; margin:0 0 3px; }
+    .policy-page-heading p { color:var(--text-muted); font-size:11px; margin:0; }
+    .policy-tabs { background:var(--bg-panel); border-bottom:1px solid var(--border); display:flex; gap:3px; overflow-x:auto; padding:9px 24px; }
+    .policy-tab { background:transparent; border:0; border-radius:6px; color:var(--text-muted); cursor:pointer; font:inherit; font-size:11px; font-weight:700; padding:7px 12px; white-space:nowrap; }
+    .policy-tab:hover { color:var(--text-primary); }
+    .policy-tab.active { background:rgba(88,166,255,.13); color:var(--accent); }
+    .policy-main { box-sizing:border-box; margin:0 auto; max-width:1180px; padding:24px; width:100%; }
+    .policy-panel[hidden] { display:none !important; }
+    .policy-panel-heading { align-items:flex-end; display:flex; justify-content:space-between; gap:14px; margin-bottom:16px; }
+    .policy-panel-heading h2 { font-size:18px; margin:0 0 4px; }
+    .policy-panel-heading p { color:var(--text-muted); font-size:11px; margin:0; max-width:700px; }
+    .policy-summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+    .policy-summary-card { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:15px; }
+    .policy-summary-card strong { display:block; font-size:22px; }
+    .policy-summary-card span { color:var(--text-muted); display:block; font-size:9px; font-weight:700; letter-spacing:.07em; margin-top:5px; text-transform:uppercase; }
+    .policy-overview-grid { display:grid; grid-template-columns:1.25fr .75fr; gap:12px; }
+    .policy-card { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:17px; }
+    .policy-card h3 { font-size:12px; margin:0 0 4px; }
+    .policy-card > p { color:var(--text-muted); font-size:10px; margin:0 0 14px; }
+    .policy-flow { display:flex; flex-direction:column; }
+    .policy-flow-row { align-items:center; border-top:1px solid var(--border); display:grid; gap:10px; grid-template-columns:24px minmax(0,1fr) auto; padding:11px 0; }
+    .policy-flow-row:first-child { border-top:0; }
+    .policy-flow-number { background:rgba(88,166,255,.12); border-radius:50%; color:var(--accent); display:grid; font-size:9px; font-weight:800; height:22px; place-items:center; width:22px; }
+    .policy-flow-row strong { display:block; font-size:10px; }
+    .policy-flow-row span { color:var(--text-muted); display:block; font-size:9px; margin-top:3px; }
+    .policy-flow-result { border:1px solid var(--border); border-radius:999px; color:var(--text-muted); font-size:8px; font-weight:750; padding:3px 7px; text-transform:uppercase; }
+    .policy-action-list { display:grid; gap:8px; }
+    .policy-action-list button { align-items:center; background:var(--bg-base); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); cursor:pointer; display:flex; font:inherit; font-size:10px; font-weight:650; justify-content:space-between; padding:10px; text-align:left; }
+    .policy-action-list button:hover { border-color:var(--accent); color:var(--accent); }
+    .routing-rule-grid { display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); gap:12px; }
+    .rr-section { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; margin:0; padding:17px; }
     .rr-section-label {
       font-size: 10px; font-weight: 700; text-transform: uppercase;
       letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 12px;
       padding-bottom: 8px; border-bottom: 1px solid var(--border);
     }
+    .routing-decision-preview { background:var(--bg-base); border:1px solid var(--border); border-radius:7px; margin-top:16px; overflow:hidden; }
+    .routing-decision-row { align-items:center; border-top:1px solid var(--border); display:flex; justify-content:space-between; gap:12px; padding:10px 12px; }
+    .routing-decision-row:first-child { border-top:0; }
+    .routing-decision-row span { color:var(--text-muted); font-size:9px; }
+    .routing-decision-row strong { font-size:9px; }
+    .policy-library-toolbar { align-items:center; display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+    .policy-library-toolbar .agent-filter-search { flex:1; min-width:220px; }
+    .policy-library-wrap { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; overflow:hidden; padding:14px; }
+    .policy-drawer-backdrop { background:rgba(0,0,0,.5); inset:0; opacity:0; pointer-events:none; position:fixed; transition:opacity .2s; z-index:399; }
+    .policy-drawer-backdrop.open { opacity:1; pointer-events:auto; }
+    .policy-drawer { background:var(--bg-panel); border-left:1px solid var(--border); bottom:0; box-shadow:-16px 0 35px rgba(0,0,0,.35); max-width:92vw; overflow-y:auto; padding:22px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .22s; width:410px; z-index:400; }
+    .policy-drawer.open { transform:translateX(0); }
+    .policy-drawer-close { background:transparent; border:1px solid var(--border); border-radius:5px; color:var(--text-muted); cursor:pointer; font-size:18px; height:30px; position:absolute; right:16px; top:16px; width:30px; }
+    .policy-drawer h2 { font-size:18px; margin:8px 40px 4px 0; }
+    .policy-drawer > p { color:var(--text-muted); font-size:10px; line-height:1.5; margin:0 0 20px; }
+    .policy-drawer .kw-add-row { display:grid; grid-template-columns:1fr; gap:12px; }
+    .policy-drawer .kw-field-btn { margin-top:4px; }
+    .policy-test-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(330px,.8fr); gap:12px; }
+    .policy-test-input { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:17px; }
+    .policy-test-input textarea { background:var(--bg-base); border:1px solid var(--border); border-radius:6px; box-sizing:border-box; color:var(--text-primary); font:inherit; font-size:12px; line-height:1.5; min-height:220px; padding:11px; resize:vertical; width:100%; }
+    .policy-test-input textarea:focus { border-color:var(--accent); outline:none; }
+    .policy-test-actions { align-items:center; display:flex; gap:10px; margin-top:10px; }
+    .policy-test-result { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; min-height:260px; padding:17px; }
+    .policy-test-empty { color:var(--text-muted); display:grid; font-size:11px; min-height:220px; place-items:center; text-align:center; }
+    .policy-result-outcome { border:1px solid var(--border); border-radius:7px; margin:12px 0; padding:13px; }
+    .policy-result-outcome strong { display:block; font-size:17px; }
+    .policy-result-outcome span { color:var(--text-muted); display:block; font-size:9px; margin-top:4px; }
+    .policy-match-row { border-top:1px solid var(--border); padding:9px 0; }
+    .policy-match-row strong { display:block; font-size:10px; }
+    .policy-match-row span { color:var(--text-muted); display:block; font-size:9px; margin-top:3px; }
+    @media (max-width:850px) {
+      .policy-summary-grid { grid-template-columns:repeat(2,1fr); }
+      .policy-overview-grid, .routing-rule-grid, .policy-test-grid { grid-template-columns:1fr; }
+    }
+    @media (max-width:520px) { .policy-summary-grid { grid-template-columns:1fr; } .policy-main { padding:16px; } }
   </style>
 </head>
 <body>
@@ -77,51 +108,72 @@
   </div>
 </header>
 
-<!-- ── Two-column layout ──────────────────────────────────────────────────── -->
-<div class="policy-layout">
+<div class="policy-page-heading">
+  <h1>Policy &amp; Rules</h1>
+  <p>Define how CostPilot classifies, protects, and routes every AI request.</p>
+</div>
+<nav class="policy-tabs" role="tablist" aria-label="Policy sections">
+  <button id="policyTabOverviewButton" class="policy-tab active" role="tab" aria-selected="true" onclick="setPolicyTab('overview')">Overview</button>
+  <button id="policyTabRoutingButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('routing')">Routing Rules</button>
+  <button id="policyTabTermsButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('terms')">Sensitive Terms</button>
+  <button id="policyTabTestButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('test')">Test Policy</button>
+</nav>
 
-  <!-- ── LEFT: Routing Rules ──────────────────────────────────────────────── -->
-  <div class="policy-col">
-    <div class="policy-col-header">
-      <div class="policy-col-title">
-        <span>⚡</span> Routing Rules
-        <span style="font-size:10px;font-weight:400;color:var(--text-muted);padding:2px 8px;
-          border:1px solid var(--border);border-radius:4px">Complexity Engine</span>
-      </div>
-      <div class="policy-col-sub">Controls when payloads are escalated to higher model tiers — adjust the token threshold and add or remove complexity keywords.</div>
+<main class="policy-main">
+  <section id="policyTabOverview" class="policy-panel">
+    <div class="policy-panel-heading"><div><h2>Current policy</h2><p>Understand the decision order CostPilot applies before any request reaches an AI model.</p></div></div>
+    <div id="policySummaryGrid" class="policy-summary-grid">
+      <div class="policy-summary-card"><strong>—</strong><span>Token threshold</span></div>
+      <div class="policy-summary-card"><strong>—</strong><span>Complexity keywords</span></div>
+      <div class="policy-summary-card"><strong>—</strong><span>Sensitive terms</span></div>
+      <div class="policy-summary-card"><strong>—</strong><span>Blocking rules</span></div>
     </div>
-    <div class="policy-col-body">
+    <div class="policy-overview-grid">
+      <div class="policy-card">
+        <h3>How a request is evaluated</h3><p>Rules run in this order. The strongest applicable protection wins.</p>
+        <div class="policy-flow">
+          <div class="policy-flow-row"><span class="policy-flow-number">1</span><div><strong>PII and sensitive-term protection</strong><span>Block, flag, or force Tier 4 based on the matching term.</span></div><span class="policy-flow-result">Protect</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">2</span><div><strong>Complexity scoring</strong><span>Evaluate whole-term keyword matches and estimated request length.</span></div><span class="policy-flow-result">Classify</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">3</span><div><strong>Budget and agent limits</strong><span>Apply department throttling and the agent’s allowed tier range.</span></div><span class="policy-flow-result">Constrain</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">4</span><div><strong>Approved model selection</strong><span>Choose the registered default model for the final tier.</span></div><span class="policy-flow-result">Route</span></div>
+        </div>
+      </div>
+      <div class="policy-card">
+        <h3>Policy actions</h3><p>Open the policy area you want to review or change.</p>
+        <div class="policy-action-list">
+          <button onclick="setPolicyTab('routing')">Change routing threshold <span>→</span></button>
+          <button onclick="setPolicyTab('routing')">Manage complexity keywords <span>→</span></button>
+          <button onclick="setPolicyTab('terms')">Manage sensitive terms <span>→</span></button>
+          <button onclick="setPolicyTab('test')">Test a sample request <span>→</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      <!-- Token Threshold -->
+  <section id="policyTabRouting" class="policy-panel" hidden>
+    <div class="policy-panel-heading"><div><h2>Routing rules</h2><p>Control how request length and complexity keywords map to CostPilot model tiers.</p></div></div>
+    <div class="routing-rule-grid">
       <div class="rr-section">
         <div class="rr-section-label">Token Routing Threshold</div>
-        <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">
-          Payloads that exceed this token count <em>and</em> contain a complexity keyword are escalated to the <strong>Advisor</strong> model tier. Payloads that match only one condition route to <strong>Analyst</strong>.
-        </p>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">The threshold is one complexity signal. A keyword match is the other.</p>
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
-          <input type="range" id="rrThresholdSlider" min="150" max="2000" step="50" value="500"
-                 style="flex:1;accent-color:var(--accent-blue)" />
-          <span id="rrThresholdValue"
-            style="font-size:20px;font-weight:700;color:var(--accent-blue);min-width:44px;text-align:right;font-family:var(--font-mono)">500</span>
+          <input type="range" id="rrThresholdSlider" min="150" max="2000" step="50" value="500" style="flex:1;accent-color:var(--accent-blue)" />
+          <span id="rrThresholdValue" style="font-size:20px;font-weight:700;color:var(--accent-blue);min-width:44px;text-align:right;font-family:var(--font-mono)">500</span>
           <span style="font-size:12px;color:var(--text-muted)">tokens</span>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:14px">
-          <span>150 — aggressive escalation</span>
-          <span>2000 — minimal escalation</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <button class="btn-primary" onclick="saveThreshold()">Save Threshold</button>
-          <span id="rrThresholdStatus" style="font-size:12px"></span>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:14px"><span>150 — escalate more</span><span>2000 — escalate less</span></div>
+        <button class="btn-primary" onclick="saveThreshold()">Save Threshold</button>
+        <span id="rrThresholdStatus" style="font-size:12px;margin-left:8px"></span>
+        <div class="routing-decision-preview">
+          <div class="routing-decision-row"><span>No signal matched</span><strong id="policyTier1Label">Tier 1 · Scout</strong></div>
+          <div class="routing-decision-row"><span>Length or keyword matched</span><strong id="policyTier2Label">Tier 2 · Analyst</strong></div>
+          <div class="routing-decision-row"><span>Length and keyword matched</span><strong id="policyTier3Label">Tier 3 · Advisor</strong></div>
+          <div class="routing-decision-row"><span>Sensitive-term escalation</span><strong id="policyTier4Label">Tier 4 · Strategist</strong></div>
         </div>
       </div>
-
-      <!-- Complexity Keywords -->
       <div class="rr-section">
         <div class="rr-section-label">Complexity Keywords</div>
-        <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">
-          When any keyword below appears in a payload it triggers MODERATE or COMPLEX routing.
-          🔒 keywords are core compliance terms that cannot be removed.
-        </p>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">Keywords use whole-term matching. For example, “NDA” does not match “Monday.” Locked terms are required by the core policy.</p>
         <div id="rrKeywordList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="text" id="rrNewKeyword" class="input-field" placeholder="Add keyword…" style="max-width:220px" />
@@ -129,94 +181,220 @@
         </div>
         <div id="rrKeywordStatus" style="margin-top:8px;font-size:12px"></div>
       </div>
-
     </div>
-  </div>
+  </section>
 
-  <!-- ── RIGHT: Sensitive Term Library ────────────────────────────────────── -->
-  <div class="policy-col">
-    <div class="policy-col-header">
-      <div class="policy-col-title">
-        <span>🛡</span> Sensitive Term Library
-        <span style="font-size:10px;font-weight:400;color:var(--text-muted);padding:2px 8px;
-          border:1px solid var(--border);border-radius:4px">Compliance Guard</span>
-      </div>
-      <div class="policy-col-sub">Words or phrases that trigger special handling — block PII before it reaches any AI model, escalate legal or HR content to senior models, or flag for audit review.</div>
+  <section id="policyTabTerms" class="policy-panel" hidden>
+    <div class="policy-panel-heading">
+      <div><h2>Sensitive term library</h2><p>Flag, escalate, or block requests when protected words and phrases are detected.</p></div>
+      <button class="btn-primary" onclick="openPolicyTermDrawer()">+ Add Term</button>
     </div>
-    <div class="policy-col-body">
-
-      <!-- Add term form -->
-      <div class="rr-section">
-        <div class="rr-section-label">Add Term</div>
-        <div class="kw-add-form">
-          <div class="kw-add-row">
-            <div class="kw-field">
-              <label class="field-label">Term or Phrase</label>
-              <input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" />
-            </div>
-            <div class="kw-field">
-              <label class="field-label">Category</label>
-              <select id="kwCategory" class="reg-input">
-                <option value="legal">Legal</option>
-                <option value="hipaa">HIPAA / Health</option>
-                <option value="financial">Financial</option>
-                <option value="hr">HR</option>
-                <option value="custom" selected>Custom</option>
-              </select>
-            </div>
-            <div class="kw-field">
-              <label class="field-label">Action</label>
-              <select id="kwAction" class="reg-input">
-                <option value="flag">Flag — mark high-risk in audit log</option>
-                <option value="escalate" selected>Escalate — force flagship model</option>
-                <option value="block">Block — reject request entirely</option>
-              </select>
-            </div>
-            <div class="kw-field kw-field-btn">
-              <label class="field-label">&nbsp;</label>
-              <button class="btn-primary" onclick="addKeyword()">+ Add Term</button>
-            </div>
-          </div>
-          <div id="kwStatus" class="register-status" style="margin-top:6px"></div>
-        </div>
-      </div>
-
-      <!-- Term table -->
-      <div class="rr-section">
-        <div class="rr-section-label">Active Terms</div>
-        <table class="kw-table" id="kwTable">
-          <thead>
-            <tr>
-              <th>Term</th>
-              <th>Category</th>
-              <th>Action</th>
-              <th>Scope</th>
-              <th>Remove</th>
-            </tr>
-          </thead>
-          <tbody id="kwTableBody">
-            <tr><td colspan="5" class="placeholder">Loading terms...</td></tr>
-          </tbody>
-        </table>
-      </div>
-
+    <div class="policy-library-toolbar">
+      <input id="policyTermSearch" class="agent-filter-search" type="search" placeholder="Search sensitive terms..." oninput="renderKeywordTable()" />
+      <select id="policyCategoryFilter" class="agent-filter-select" onchange="renderKeywordTable()"><option value="">All Categories</option><option value="legal">Legal</option><option value="hipaa">HIPAA / Health</option><option value="financial">Financial</option><option value="hr">HR</option><option value="custom">Custom</option></select>
+      <select id="policyActionFilter" class="agent-filter-select" onchange="renderKeywordTable()"><option value="">All Actions</option><option value="flag">Flag</option><option value="escalate">Escalate</option><option value="block">Block</option></select>
+      <button class="btn-secondary" onclick="clearPolicyTermFilters()">Clear</button>
     </div>
-  </div>
+    <div class="policy-library-wrap">
+      <table class="kw-table" id="kwTable">
+        <thead><tr><th>Term</th><th>Category</th><th>Action</th><th>Scope</th><th>Remove</th></tr></thead>
+        <tbody id="kwTableBody"><tr><td colspan="5" class="placeholder">Loading terms...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
 
-</div><!-- end policy-layout -->
+  <section id="policyTabTest" class="policy-panel" hidden>
+    <div class="policy-panel-heading"><div><h2>Test policy</h2><p>Preview the expected policy outcome without sending an AI request or writing an audit event.</p></div></div>
+    <div class="policy-test-grid">
+      <div class="policy-test-input">
+        <label class="field-label" for="policyTestText">Sample AI request</label>
+        <textarea id="policyTestText" placeholder="Paste a sample request here. CostPilot will check it against the currently loaded routing and sensitive-term policies."></textarea>
+        <div class="policy-test-actions"><button class="btn-primary" onclick="runPolicyTest()">Evaluate Request</button><span id="policyTestEstimate" style="color:var(--text-muted);font-size:10px"></span></div>
+      </div>
+      <div id="policyTestResult" class="policy-test-result"><div class="policy-test-empty">Enter a sample request to preview its policy outcome.</div></div>
+    </div>
+  </section>
+</main>
+
+<div id="policyTermDrawerBackdrop" class="policy-drawer-backdrop" onclick="closePolicyTermDrawer()"></div>
+<aside id="policyTermDrawer" class="policy-drawer" aria-label="Add sensitive term">
+  <button class="policy-drawer-close" onclick="closePolicyTermDrawer()" aria-label="Close add term form">×</button>
+  <h2>Add sensitive term</h2>
+  <p>Choose the enforcement action carefully. Blocking prevents the request from reaching any AI provider.</p>
+  <div class="kw-add-form"><div class="kw-add-row">
+    <div class="kw-field"><label class="field-label">Term or Phrase</label><input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" /></div>
+    <div class="kw-field"><label class="field-label">Category</label><select id="kwCategory" class="reg-input"><option value="legal">Legal</option><option value="hipaa">HIPAA / Health</option><option value="financial">Financial</option><option value="hr">HR</option><option value="custom" selected>Custom</option></select></div>
+    <div class="kw-field"><label class="field-label">Action</label><select id="kwAction" class="reg-input"><option value="flag">Flag — allow and mark high-risk</option><option value="escalate" selected>Escalate — force Tier 4</option><option value="block">Block — reject before any AI provider</option></select></div>
+    <div class="kw-field kw-field-btn"><button class="btn-primary" onclick="addKeyword()">+ Add Term</button></div>
+    <div id="kwStatus" class="register-status"></div>
+  </div></div>
+</aside>
 
 <script src="js/api.js"></script>
 <script src="js/tier-utils.js"></script>
-<script src="js/routing_rules.js"></script>
-<script src="js/keywords.js"></script>
+<script src="js/routing_rules.js?v=20260723-v441"></script>
+<script src="js/keywords.js?v=20260723-v441"></script>
 <script src="js/help.js"></script>
 <script>
+const POLICY_TABS = ["overview", "routing", "terms", "test"];
+
+function setPolicyTab(tab) {
+  const selected = POLICY_TABS.includes(tab) ? tab : "overview";
+  POLICY_TABS.forEach(name => {
+    const cap = name[0].toUpperCase() + name.slice(1);
+    const panel = document.getElementById(`policyTab${cap}`);
+    const button = document.getElementById(`policyTab${cap}Button`);
+    if (panel) panel.hidden = name !== selected;
+    if (button) {
+      const active = name === selected;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    }
+  });
+  history.replaceState(null, "", `#${selected}`);
+}
+
+function policyTierName(number) {
+  return window.POLICY_ROUTING_CONFIG?.tier_names?.[String(number)]
+    || window.TIER_NAMES?.[number]
+    || `Tier ${number}`;
+}
+
+function updatePolicyOverview() {
+  const cfg = window.POLICY_ROUTING_CONFIG || {};
+  const terms = window.POLICY_SENSITIVE_TERMS || [];
+  const summary = document.getElementById("policySummaryGrid");
+  if (summary) {
+    const values = [
+      [`${Number(cfg.complexity_token_threshold || 0).toLocaleString()}`, "Token threshold"],
+      [(cfg.complexity_keywords || []).length, "Complexity keywords"],
+      [terms.length, "Sensitive terms"],
+      [terms.filter(term => term.action === "block").length, "Blocking rules"]
+    ];
+    summary.innerHTML = values.map(([value, label]) =>
+      `<div class="policy-summary-card"><strong>${value}</strong><span>${label}</span></div>`
+    ).join("");
+  }
+  [1, 2, 3, 4].forEach(number => {
+    const element = document.getElementById(`policyTier${number}Label`);
+    if (element) element.textContent = `Tier ${number} · ${policyTierName(number)}`;
+  });
+}
+
+function openPolicyTermDrawer() {
+  document.getElementById("policyTermDrawer")?.classList.add("open");
+  document.getElementById("policyTermDrawerBackdrop")?.classList.add("open");
+  setTimeout(() => document.getElementById("kwTerm")?.focus(), 100);
+}
+
+function closePolicyTermDrawer() {
+  document.getElementById("policyTermDrawer")?.classList.remove("open");
+  document.getElementById("policyTermDrawerBackdrop")?.classList.remove("open");
+}
+
+function clearPolicyTermFilters() {
+  ["policyTermSearch", "policyCategoryFilter", "policyActionFilter"].forEach(id => {
+    const element = document.getElementById(id);
+    if (element) element.value = "";
+  });
+  renderKeywordTable();
+}
+
+function policyEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character]);
+}
+
+function policyTermMatches(term, text) {
+  const escaped = String(term || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!escaped) return false;
+  return new RegExp(`(^|[^A-Za-z0-9])${escaped}([^A-Za-z0-9]|$)`, "i").test(text);
+}
+
+async function runPolicyTest() {
+  const text = document.getElementById("policyTestText").value.trim();
+  const result = document.getElementById("policyTestResult");
+  const estimate = document.getElementById("policyTestEstimate");
+  if (!text) {
+    result.innerHTML = '<div class="policy-test-empty">Enter a sample request first.</div>';
+    return;
+  }
+  try {
+    if (!window.POLICY_ROUTING_CONFIG || !window.POLICY_SENSITIVE_TERMS) {
+      const [cfg, terms] = await Promise.all([apiGet("/api/routing-config"), apiGet("/api/keywords")]);
+      window.POLICY_ROUTING_CONFIG = cfg;
+      window.POLICY_SENSITIVE_TERMS = terms;
+    }
+    const cfg = window.POLICY_ROUTING_CONFIG;
+    const terms = window.POLICY_SENSITIVE_TERMS || [];
+    const tokenCount = Math.max(1, Math.floor(text.length / 4));
+    const overThreshold = tokenCount > Number(cfg.complexity_token_threshold || 500);
+    const complexityMatches = (cfg.complexity_keywords || []).filter(keyword => policyTermMatches(keyword, text));
+    const sensitiveMatches = terms.filter(term => policyTermMatches(term.term, text));
+    const blocking = sensitiveMatches.filter(term => term.action === "block");
+    const escalating = sensitiveMatches.filter(term => term.action === "escalate");
+    const flagged = sensitiveMatches.filter(term => term.action === "flag");
+
+    let tier = 1;
+    let decision = "ROUTINE";
+    let explanation = "No configured complexity or sensitive-term rule matched.";
+    if (blocking.length) {
+      tier = 0;
+      decision = "BLOCKED";
+      explanation = "A blocking sensitive-term rule prevents this request from reaching any AI provider.";
+    } else if (escalating.length) {
+      tier = 4;
+      decision = "SENSITIVE ESCALATION";
+      explanation = "A sensitive-term escalation rule forces the request to Tier 4.";
+    } else if (overThreshold && complexityMatches.length) {
+      tier = 3;
+      decision = "COMPLEX";
+      explanation = "The request exceeds the token threshold and matches a complexity keyword.";
+    } else if (overThreshold || complexityMatches.length) {
+      tier = 2;
+      decision = "MODERATE";
+      explanation = overThreshold ? "The request exceeds the token threshold." : "The request matches a complexity keyword.";
+    }
+    if (flagged.length && tier > 0) explanation += " A flag rule also marks the request high-risk for audit review.";
+
+    estimate.textContent = `Estimated ${tokenCount.toLocaleString()} tokens · read-only preview`;
+    const outcomeColor = decision === "BLOCKED" ? "var(--accent-red)"
+      : tier >= 3 ? "var(--accent-yellow)"
+      : tier === 2 ? "var(--accent)"
+      : "var(--accent-green)";
+    const matches = [
+      ...blocking.map(term => ({ name: term.term, detail: `${term.category} · Block` })),
+      ...escalating.map(term => ({ name: term.term, detail: `${term.category} · Escalate to Tier 4` })),
+      ...flagged.map(term => ({ name: term.term, detail: `${term.category} · Flag for audit` })),
+      ...complexityMatches.map(term => ({ name: term, detail: "Complexity keyword" }))
+    ];
+    result.innerHTML = `
+      <div class="field-label">Expected outcome</div>
+      <div class="policy-result-outcome" style="border-color:${outcomeColor}">
+        <strong style="color:${outcomeColor}">${decision}</strong>
+        <span>${tier ? `Tier ${tier} · ${policyEscape(policyTierName(tier))}` : "No model call"}</span>
+      </div>
+      <p style="color:var(--text-muted);font-size:10px;line-height:1.5">${policyEscape(explanation)}</p>
+      <div class="field-label" style="margin-top:16px">Matched configuration</div>
+      ${matches.length ? matches.map(match => `<div class="policy-match-row"><strong>${policyEscape(match.name)}</strong><span>${policyEscape(match.detail)}</span></div>`).join("") : '<div class="policy-match-row"><span>No configured text rules matched.</span></div>'}
+      <div class="policy-match-row"><strong>${tokenCount.toLocaleString()} estimated tokens</strong><span>${overThreshold ? "Above" : "Below"} the ${Number(cfg.complexity_token_threshold).toLocaleString()} token threshold</span></div>
+      <p style="color:var(--text-muted);font-size:8px;line-height:1.5;margin-top:12px">Preview checks configured text rules only. Provider availability, department budgets, agent limits, and automatic PII detectors are evaluated during live routing.</p>`;
+  } catch (error) {
+    result.innerHTML = `<div class="policy-test-empty" style="color:var(--accent-red)">Could not evaluate policy: ${policyEscape(error.message)}</div>`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const requested = location.hash.replace("#", "");
+  setPolicyTab(POLICY_TABS.includes(requested) ? requested : "overview");
+});
+
 window.PAGE_TOUR_STEPS = [
-  { target:"rrThresholdSlider", title:"Complexity Threshold",   body:"This slider sets the token count at which CostPilot considers a payload 'complex' and routes it to a flagship model. Raise it to escalate less, lower it to escalate more.",          position:"bottom" },
-  { target:"rrKeywordList",     title:"Complexity Keywords",     body:"Any payload containing these words is automatically escalated to the flagship model tier, regardless of token count. Add legal, compliance, or domain-specific trigger words.",   position:"bottom" },
-  { target:"kwTerm",            title:"Add Sensitive Term",      body:"Add a word or phrase your company flags as sensitive. When CostPilot detects it in a payload, the action you choose — escalate or block — is enforced on every matching request.",    position:"bottom" },
-  { target:"kwAction",          title:"Escalate vs. Block",      body:"Escalate routes the request to a flagship model and flags it in the audit log. Block rejects it entirely — zero tokens consumed, full audit record created.",                    position:"bottom" },
-  { target:"kwTable",           title:"Sensitive Term Library",  body:"Your full active term library. Every term here is checked against every incoming payload in real time. Edit or remove terms at any time — changes take effect immediately.", position:"top", last:true },
+  { target:"policyTabOverviewButton", title:"Policy Overview", body:"Start here to understand the order CostPilot uses to protect, classify, constrain, and route requests.", position:"bottom" },
+  { target:"policyTabRoutingButton", title:"Routing Rules", body:"Configure the token threshold and whole-term complexity keywords used for Tier 1, Tier 2, and Tier 3 routing.", position:"bottom" },
+  { target:"policyTabTermsButton", title:"Sensitive Terms", body:"Manage text rules that flag, force Tier 4 escalation, or block a request before any provider call.", position:"bottom" },
+  { target:"policyTabTestButton", title:"Test Policy", body:"Preview configured text-rule outcomes safely without creating spend, audit records, or provider calls.", position:"bottom", last:true },
 ];
 </script>
 <script src="/js/mobile-guard.js"></script>

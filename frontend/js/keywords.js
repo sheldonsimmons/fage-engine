@@ -25,7 +25,28 @@ async function loadKeywords() {
   const tbody = document.getElementById("kwTableBody");
   try {
     const terms = await apiGet("/api/keywords");
-    if (!terms || terms.length === 0) {
+    window.POLICY_SENSITIVE_TERMS = terms || [];
+    renderKeywordTable(terms || []);
+    if (typeof updatePolicyOverview === "function") updatePolicyOverview();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="placeholder">Error loading terms.</td></tr>`;
+  }
+}
+
+function renderKeywordTable(terms = window.POLICY_SENSITIVE_TERMS || []) {
+  const tbody = document.getElementById("kwTableBody");
+  const search = (document.getElementById("policyTermSearch")?.value || "").trim().toLowerCase();
+  const category = document.getElementById("policyCategoryFilter")?.value || "";
+  const action = document.getElementById("policyActionFilter")?.value || "";
+  const filtered = terms.filter(term => {
+    if (search && !String(term.term || "").toLowerCase().includes(search)) return false;
+    if (category && term.category !== category) return false;
+    if (action && term.action !== action) return false;
+    return true;
+  });
+
+  try {
+    if (!filtered.length) {
       tbody.innerHTML = `<tr><td colspan="5" class="placeholder">No terms yet. Add one above.</td></tr>`;
       return;
     }
@@ -41,7 +62,7 @@ async function loadKeywords() {
       return `<span class="kw-cat">${labels[cat] || cat}</span>`;
     };
 
-    tbody.innerHTML = terms.map(t => {
+    tbody.innerHTML = filtered.map(t => {
       const safeTerm = JSON.stringify(t.term);
       return `
       <tr>
@@ -56,7 +77,7 @@ async function loadKeywords() {
       </tr>
     `}).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="placeholder">Error loading terms.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="placeholder">Error rendering terms.</td></tr>`;
   }
 }
 
@@ -98,6 +119,7 @@ async function addKeyword() {
 
 async function removeKeyword(id, term) {
   const status = document.getElementById("kwStatus");
+  if (!confirm(`Remove the sensitive term "${term}"? This policy change takes effect immediately.`)) return;
   try {
     await apiDelete(`/api/keywords/${id}`);
     status.textContent = `✓ "${term}" removed.`;
