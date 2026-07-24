@@ -16,7 +16,7 @@ from database.models import TokenTransaction, WorkAccount, WorkItem
 
 router = APIRouter()
 
-VALID_STATUSES = {"active", "completed", "archived"}
+VALID_STATUSES = {"active", "on_hold", "completed", "cancelled", "archived"}
 VALID_COST_TREATMENTS = {
     "unspecified",
     "overhead",

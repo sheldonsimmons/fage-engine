@@ -8,6 +8,8 @@ Responsibilities:
   - Allow a supervisor to update a cap or grant a throttle override
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from sqlalchemy import or_
 from sqlalchemy.orm import Session

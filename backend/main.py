@@ -342,6 +342,14 @@ app.include_router(routes_router.router, prefix="/api/route", tags=["Router"])
 from api import routes_work_items
 app.include_router(routes_work_items.router, prefix="/api/work-items", tags=["Work Attribution"])
 
+# Salesforce Agentforce proof — authenticated project attribution + governance
+from api import routes_agentforce
+app.include_router(
+    routes_agentforce.router,
+    prefix="/api/integrations/salesforce/agentforce",
+    tags=["Salesforce Agentforce"],
+)
+
 # Step 4 — Budget Allocator & Throttle
 from api import routes_budget
 app.include_router(routes_budget.router, prefix="/api/budget", tags=["Budget"])

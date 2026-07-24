@@ -1,0 +1,110 @@
+# CostPilot + Salesforce Agentforce proof of concept
+
+This proof connects one Agentforce Apex action to CostPilot. It resolves or
+creates a CostPilot project, runs the existing governance and model-routing
+pipeline, attributes the resulting transaction to that project, and returns a
+structured result to Agentforce.
+
+## Proof scenario
+
+From an Opportunity, ask Agentforce:
+
+> Summarize this opportunity and recommend the next action.
+
+The action sends the Opportunity and project context to CostPilot. Agentforce
+receives:
+
+- allow or block decision;
+- CostPilot-selected model and tier;
+- estimated request cost;
+- project budget remaining;
+- CostPilot transaction tracking ID.
+
+The project and request then appear in CostPilot Work Attribution.
+
+## 1. Configure the CostPilot Named Credential
+
+In the Salesforce sandbox:
+
+1. Open **Setup → Named Credentials**.
+2. Create an External Credential using a named principal suitable for the
+   sandbox proof.
+3. Add the CostPilot workspace secret as the custom request header
+   `X-CostPilot-Key`.
+4. Create a Named Credential:
+   - Label: `CostPilot`
+   - Name: `CostPilot`
+   - URL: `https://fage-engine-21cb49fe4806.herokuapp.com`
+   - External Credential: the credential from step 2
+5. Grant the test user access to the External Credential principal using a
+   permission set.
+
+Do not place the CostPilot key in Apex.
+
+## 2. Set the workspace ID
+
+In `CostPilotAgentforceAction.cls`, replace:
+
+```apex
+REPLACE_WITH_COSTPILOT_WORKSPACE_ID
+```
+
+with the workspace ID shown in CostPilot Connect & Setup. The workspace ID is
+not a secret.
+
+## 3. Deploy the Apex action
+
+From this `agentforce-poc` directory, authenticate the sandbox and deploy:
+
+```bash
+sf org login web --instance-url https://test.salesforce.com --alias costpilot-sandbox
+sf project deploy start --target-org costpilot-sandbox
+sf apex run test --target-org costpilot-sandbox \
+  --tests CostPilotAgentforceActionTest --result-format human --wait 10
+sf org assign permset --target-org costpilot-sandbox \
+  --name CostPilot_Agentforce_User
+```
+
+Also grant the test user access to the External Credential principal. Salesforce
+keeps that credential permission separate from Apex class access.
+
+## 4. Add the action to Agentforce
+
+1. Open **Setup → Agentforce Agents** and open the proof agent in Builder.
+2. Create or open a topic named **CostPilot Project Governance**.
+3. Add an action based on the Apex method
+   **Govern AI Work with CostPilot**.
+4. Allow Agentforce to populate these inputs:
+   - Salesforce Record ID
+   - Task Description
+   - Project External ID
+   - Project Name
+   - Project Owner
+   - Project Status
+   - Monthly AI Budget
+   - Department
+   - Agent Name
+5. Make the result fields available to the agent conversation.
+
+Suggested topic instruction:
+
+> Before completing project-related AI work, call Govern AI Work with
+> CostPilot. Use the current Salesforce record ID. When a project code is
+> available, use it as Project External ID; otherwise leave it blank and
+> CostPilot will use the Salesforce record ID. Do not continue when Allowed is
+> false. Tell the user the selected project, model, estimated cost, and
+> CostPilot tracking ID.
+
+## 5. Validate the proof
+
+Use an Opportunity with a name, owner, active status, and optional project code.
+In Agentforce Preview, request a summary. Confirm:
+
+1. Agentforce calls the CostPilot action.
+2. The response contains `allowed`, project, model, cost, and tracking ID.
+3. The CostPilot Projects page contains the Salesforce project.
+4. Its request count and spend increase.
+5. The CostPilot audit log contains the governed routing decision.
+
+Set Project Status to `On Hold` and repeat. CostPilot should return
+`allowed = false` without creating an AI transaction.
