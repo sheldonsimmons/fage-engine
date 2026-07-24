@@ -170,6 +170,21 @@
     .wa-agent-choice input[type="text"] { padding:6px 7px; font-size:10px; }
     .wa-agent-choice.assigned { border-color:rgba(63,185,80,.35); background:rgba(63,185,80,.04); }
     .wa-team-list { display:grid; gap:7px; margin-bottom:14px; }
+    .wa-people-section {
+      border:1px solid var(--border); border-radius:8px; background:var(--bg-base);
+      padding:14px; margin-bottom:16px;
+    }
+    .wa-people-section h3 { font-size:13px; margin:0 0 3px; }
+    .wa-people-section > p { color:var(--text-muted); font-size:10px; margin:0 0 12px; line-height:1.4; }
+    .wa-people-table { width:100%; border-collapse:collapse; font-size:10px; }
+    .wa-people-table th {
+      color:var(--text-muted); font-size:8px; text-transform:uppercase; letter-spacing:.07em;
+      text-align:left; padding:7px 8px; border-bottom:1px solid var(--border);
+    }
+    .wa-people-table td { padding:9px 8px; border-bottom:1px solid rgba(48,54,61,.65); }
+    .wa-people-table tr:last-child td { border-bottom:0; }
+    .wa-person-name strong { display:block; font-size:11px; }
+    .wa-person-name span { display:block; color:var(--text-muted); font-size:9px; margin-top:2px; }
     .wa-team-row {
       display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:10px;
       border:1px solid var(--border); border-radius:7px; padding:10px;
@@ -387,7 +402,7 @@
       </div>
       <div class="wa-table-wrap">
         <table class="wa-table">
-          <thead><tr><th>Project</th><th>Source</th><th>Owner</th><th>Department</th><th>Agent Team</th><th>Requests</th><th>Monthly Spend</th><th>Budget</th><th>Status</th></tr></thead>
+          <thead><tr><th>Project</th><th>Source</th><th>Owner</th><th>Department</th><th>People / Agents</th><th>Requests</th><th>Monthly Spend</th><th>Budget</th><th>Status</th></tr></thead>
           <tbody id="waProjectRows"><tr><td colspan="9" class="wa-empty">Loading projects…</td></tr></tbody>
         </table>
       </div>
@@ -406,6 +421,11 @@
           </div>
           <button class="wa-secondary" type="button" onclick="waClearTeamSelection()">Close</button>
         </div>
+        <section class="wa-people-section" aria-labelledby="waProjectPeopleTitle">
+          <h3 id="waProjectPeopleTitle">People &amp; token usage</h3>
+          <p>Human users attributed to this project, separate from the AI agents performing the work.</p>
+          <div id="waProjectPeople"></div>
+        </section>
         <div class="wa-team-layout">
           <section class="wa-team-section">
             <h3>Add existing agents</h3>
@@ -620,6 +640,7 @@
     function waRenderAgentTeam() {
       const project = waSelectedProject();
       if (!project) return;
+      waRenderProjectPeople(project);
       const team = project.agent_team || [];
       const assignedById = new Map(
         team.filter(member => member.assignment_status === "assigned")
@@ -651,6 +672,25 @@
             </div>`;
           }).join("")
         : '<div class="wa-empty">No agents assigned or observed for this project.</div>';
+    }
+
+    function waRenderProjectPeople(project) {
+      const people = project.user_team || [];
+      document.getElementById("waProjectPeople").innerHTML = people.length
+        ? `<div class="wa-table-wrap"><table class="wa-people-table">
+            <thead><tr><th>Person</th><th>Role</th><th>Requests</th><th>Input</th><th>Output</th><th>Total tokens</th><th>Cost</th><th>Access</th></tr></thead>
+            <tbody>${people.map(person => `<tr>
+              <td class="wa-person-name"><strong>${waEscape(person.name)}</strong><span>${waEscape(person.email || person.external_id)} · ${waEscape(person.source_platform)}</span></td>
+              <td>${waEscape(person.role || "Unassigned")}</td>
+              <td>${Number(person.call_count || 0).toLocaleString()}</td>
+              <td>${Number(person.input_tokens || 0).toLocaleString()}</td>
+              <td>${Number(person.output_tokens || 0).toLocaleString()}</td>
+              <td>${Number(person.total_tokens || 0).toLocaleString()}</td>
+              <td>${waMoney(person.spend_usd)}</td>
+              <td><span class="wa-team-state ${person.can_use_ai === false ? "unexpected" : "used"}">${person.can_use_ai === false ? "No AI" : waEscape(person.membership_status || person.assignment_status)}</span></td>
+            </tr>`).join("")}</tbody>
+          </table></div>`
+        : '<div class="wa-empty">No human users attributed yet. Salesforce users appear after their first governed request.</div>';
     }
 
     async function waAssignSelectedAgents() {
@@ -714,7 +754,7 @@
             <td>${waEscape(item.source_platform || "CostPilot")}</td>
             <td>${waEscape(item.owner || "—")}</td>
             <td>${waEscape(item.department || "—")}</td>
-            <td>${Number(item.assigned_agent_count || 0).toLocaleString()} assigned</td>
+            <td>${Number(item.assigned_user_count || 0).toLocaleString()} people · ${Number(item.assigned_agent_count || 0).toLocaleString()} agents</td>
             <td>${Number(item.request_count || 0).toLocaleString()}</td>
             <td>${waMoney(item.spend_month_usd)}</td>
             <td>${item.monthly_ai_budget == null ? "—" : waMoney(item.monthly_ai_budget)}</td>

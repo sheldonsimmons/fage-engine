@@ -224,6 +224,7 @@ def write_audit_event(
     usage_source:     str       = None,
     raw_payload:      str       = None,   # original text before pruning (None = not logged)
     work_item                    = None,   # optional WorkItem ORM record
+    work_user                    = None,   # optional human WorkUser ORM record
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
@@ -246,6 +247,12 @@ def write_audit_event(
         context["work_item_id"] = work_item.external_id
         context["work_item_name"] = work_item.name
         context["work_item_internal_id"] = work_item.id
+    if work_user:
+        context["actor_user_id"] = work_user.id
+        context["actor_external_id"] = work_user.external_id
+        context["actor_name"] = work_user.name
+        context["actor_email"] = work_user.email
+        context["actor_source_platform"] = work_user.source_platform
     risk_level = classify_risk(event_type, routing_decision, matched_keywords)
     rationale  = _build_rationale(
         event_type, routing_decision, routing_reason,
@@ -257,6 +264,11 @@ def write_audit_event(
         event_type       = event_type,
         agent_id         = agent_id,
         work_item_id     = work_item.id if work_item else None,
+        work_user_id     = work_user.id if work_user else None,
+        actor_external_id = work_user.external_id if work_user else None,
+        actor_name       = work_user.name if work_user else None,
+        actor_email      = work_user.email if work_user else None,
+        actor_source_platform = work_user.source_platform if work_user else None,
         department       = department,
         model_tier       = model_tier,
         context_snapshot = json.dumps(context),
@@ -281,6 +293,10 @@ def write_audit_event(
         "agent_id":         agent_id,
         "work_item_id":     work_item.external_id if work_item else None,
         "work_item_name":   work_item.name if work_item else None,
+        "actor_external_id": work_user.external_id if work_user else None,
+        "actor_name":       work_user.name if work_user else None,
+        "actor_email":      work_user.email if work_user else None,
+        "actor_source_platform": work_user.source_platform if work_user else None,
         "model_tier":       model_tier,
         "routing_decision": routing_decision,
         "risk_level":       risk_level,
@@ -299,6 +315,8 @@ def write_audit_event(
         "department":       department,
         "work_item_id":     work_item.external_id if work_item else None,
         "work_item_name":   work_item.name if work_item else None,
+        "actor_external_id": work_user.external_id if work_user else None,
+        "actor_name":       work_user.name if work_user else None,
         "model_tier":       model_tier,
         "risk_level":       risk_level,
         "decision_outcome": decision_outcome,
@@ -400,6 +418,11 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "source_platform":  agent.source_platform if agent else None,
         "work_item_id":     work_item.external_id if work_item else context.get("work_item_id"),
         "work_item_name":   work_item.name if work_item else context.get("work_item_name"),
+        "actor_user_id":    getattr(e, "work_user_id", None),
+        "actor_external_id": getattr(e, "actor_external_id", None) or context.get("actor_external_id"),
+        "actor_name":       getattr(e, "actor_name", None) or context.get("actor_name"),
+        "actor_email":      getattr(e, "actor_email", None) or context.get("actor_email"),
+        "actor_source_platform": getattr(e, "actor_source_platform", None) or context.get("actor_source_platform"),
         "model_tier":       e.model_tier,
         "risk_level":       e.risk_level,
         "decision_outcome": e.decision_outcome,

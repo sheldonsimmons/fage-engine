@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Salesforce_User__c</fullName>
+    <label>Salesforce User</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>CostPilot Project Memberships</relationshipLabel>
+    <relationshipName>CostPilot_Project_Memberships</relationshipName>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <type>Lookup</type>
+</CustomField>

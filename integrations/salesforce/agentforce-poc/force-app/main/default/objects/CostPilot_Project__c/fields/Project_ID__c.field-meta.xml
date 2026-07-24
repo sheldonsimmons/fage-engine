@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Project_ID__c</fullName>
+    <description>Stable business identifier sent to CostPilot. If blank, the integration can use the Salesforce record ID.</description>
+    <externalId>true</externalId>
+    <label>Project ID</label>
+    <length>120</length>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

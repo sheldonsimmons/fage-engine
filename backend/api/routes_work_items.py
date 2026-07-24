@@ -13,7 +13,14 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import (
-    AuditEvent, RegisteredAgent, TokenTransaction, WorkAccount, WorkItem, WorkItemAgent
+    AuditEvent,
+    RegisteredAgent,
+    TokenTransaction,
+    WorkAccount,
+    WorkItem,
+    WorkItemAgent,
+    WorkItemUser,
+    WorkUser,
 )
 from core.agentlake import display_agent_name, display_department, infer_platform
 
@@ -86,6 +93,18 @@ class ProjectAgentCreateIn(BaseModel):
     assigned_by: Optional[str] = Field(default=None, max_length=200)
 
 
+class ProjectUserUpsertIn(BaseModel):
+    external_id: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=200)
+    email: Optional[str] = Field(default=None, max_length=320)
+    source_platform: str = Field(default="CostPilot", min_length=1, max_length=120)
+    workspace_id: Optional[str] = Field(default=None, max_length=120)
+    role: str = Field(default="Member", min_length=1, max_length=120)
+    status: str = Field(default="active", max_length=40)
+    can_use_ai: bool = True
+    assigned_by: Optional[str] = Field(default=None, max_length=200)
+
+
 def _clean_external_id(value: Optional[str], prefix: str) -> str:
     if value:
         cleaned = re.sub(r"[^A-Za-z0-9._:-]+", "-", value.strip()).strip("-")
@@ -133,6 +152,7 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
     model_tiers = []
     activity_platforms = []
     agent_team = []
+    user_team = []
     if include_stats:
         month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         request_count, spend_usd, last_activity_at = (
@@ -200,6 +220,7 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
             )
         ]
         agent_team = _project_agent_rows(item, db)
+        user_team = _project_user_rows(item, db)
     budget = item.monthly_ai_budget
     return {
         "id": item.id,
@@ -222,6 +243,9 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "activity_platforms": activity_platforms,
         "assigned_agent_count": sum(1 for row in agent_team if row["assignment_status"] == "assigned"),
         "agent_team": agent_team,
+        "user_count": sum(1 for row in user_team if row["usage_status"] == "used"),
+        "assigned_user_count": sum(1 for row in user_team if row["assignment_status"] == "assigned"),
+        "user_team": user_team,
         "spend_usd": round(float(spend_usd or 0.0), 6),
         "spend_month_usd": round(float(spend_month_usd or 0.0), 6),
         "budget_remaining_usd": (
@@ -317,6 +341,85 @@ def _project_agent_rows(item: WorkItem, db: Session) -> list[dict]:
             "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
             "risk_event_count": int(risk_count),
             "model_tiers": tiers,
+            "assigned_at": assignment.assigned_at.isoformat() if assignment and assignment.assigned_at else None,
+        })
+    return rows
+
+
+def _project_user_rows(item: WorkItem, db: Session) -> list[dict]:
+    assignments = (
+        db.query(WorkItemUser)
+        .filter(WorkItemUser.work_item_id == item.id)
+        .order_by(WorkItemUser.assigned_at, WorkItemUser.id)
+        .all()
+    )
+    assigned_by_user = {assignment.work_user_id: assignment for assignment in assignments}
+    observed_ids = {
+        row[0]
+        for row in db.query(TokenTransaction.work_user_id)
+        .filter(
+            TokenTransaction.work_item_id == item.id,
+            TokenTransaction.work_user_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    }
+    user_ids = set(assigned_by_user) | observed_ids
+    if not user_ids:
+        return []
+
+    users = {
+        user.id: user
+        for user in db.query(WorkUser).filter(WorkUser.id.in_(user_ids)).all()
+    }
+    rows = []
+    for user_id in sorted(user_ids, key=lambda value: (users.get(value).name if users.get(value) else "")):
+        user = users.get(user_id)
+        if not user:
+            continue
+        call_count, input_tokens, output_tokens, spend_usd, last_activity_at = (
+            db.query(
+                func.count(TokenTransaction.id),
+                func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+                func.max(TokenTransaction.timestamp),
+            )
+            .filter(
+                TokenTransaction.work_item_id == item.id,
+                TokenTransaction.work_user_id == user_id,
+            )
+            .one()
+        )
+        agent_count = (
+            db.query(func.count(func.distinct(TokenTransaction.agent_id)))
+            .filter(
+                TokenTransaction.work_item_id == item.id,
+                TokenTransaction.work_user_id == user_id,
+                TokenTransaction.agent_id.isnot(None),
+            )
+            .scalar()
+            or 0
+        )
+        assignment = assigned_by_user.get(user_id)
+        rows.append({
+            "user_id": user.id,
+            "external_id": user.external_id,
+            "name": user.name,
+            "email": user.email,
+            "source_platform": user.source_platform,
+            "role": assignment.role if assignment else None,
+            "membership_status": assignment.status if assignment else None,
+            "can_use_ai": assignment.can_use_ai if assignment else None,
+            "assignment_status": "assigned" if assignment else "unexpected",
+            "usage_status": "used" if int(call_count or 0) > 0 else "never_used",
+            "call_count": int(call_count or 0),
+            "input_tokens": int(input_tokens or 0),
+            "output_tokens": int(output_tokens or 0),
+            "total_tokens": int(input_tokens or 0) + int(output_tokens or 0),
+            "spend_usd": round(float(spend_usd or 0.0), 6),
+            "agent_count": int(agent_count),
+            "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
             "assigned_at": assignment.assigned_at.isoformat() if assignment and assignment.assigned_at else None,
         })
     return rows
@@ -610,3 +713,96 @@ def unassign_project_agent(identifier: str, agent_id: int, db: Session = Depends
     db.delete(assignment)
     db.commit()
     return {"unassigned": True, "agent_id": agent_id, "project_id": item.external_id}
+
+
+@router.get("/{identifier}/users")
+def list_project_users(identifier: str, db: Session = Depends(get_db)):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    return _project_user_rows(item, db)
+
+
+@router.post("/{identifier}/users", status_code=201)
+def upsert_project_user(
+    identifier: str,
+    body: ProjectUserUpsertIn,
+    db: Session = Depends(get_db),
+):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    status = body.status.strip().lower()
+    if status not in {"active", "inactive"}:
+        raise HTTPException(status_code=400, detail="status must be active or inactive")
+    workspace_id = (body.workspace_id or item.workspace_id or "default").strip()
+    platform = body.source_platform.strip()
+    user = (
+        db.query(WorkUser)
+        .filter(
+            WorkUser.workspace_id == workspace_id,
+            WorkUser.source_platform == platform,
+            WorkUser.external_id == body.external_id.strip(),
+        )
+        .first()
+    )
+    if not user:
+        user = WorkUser(
+            workspace_id=workspace_id,
+            source_platform=platform,
+            external_id=body.external_id.strip(),
+            name=body.name.strip(),
+            email=(body.email or "").strip() or None,
+            status="active",
+        )
+        db.add(user)
+        db.flush()
+    else:
+        user.name = body.name.strip()
+        user.email = (body.email or "").strip() or user.email
+
+    membership = (
+        db.query(WorkItemUser)
+        .filter(
+            WorkItemUser.work_item_id == item.id,
+            WorkItemUser.work_user_id == user.id,
+        )
+        .first()
+    )
+    if not membership:
+        membership = WorkItemUser(
+            work_item_id=item.id,
+            work_user_id=user.id,
+            role=body.role.strip(),
+            status=status,
+            can_use_ai=body.can_use_ai,
+            assigned_by=body.assigned_by,
+        )
+        db.add(membership)
+    else:
+        membership.role = body.role.strip()
+        membership.status = status
+        membership.can_use_ai = body.can_use_ai
+        membership.assigned_by = body.assigned_by or membership.assigned_by
+    db.commit()
+    return _project_user_rows(item, db)
+
+
+@router.delete("/{identifier}/users/{user_id}")
+def unassign_project_user(identifier: str, user_id: int, db: Session = Depends(get_db)):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    membership = (
+        db.query(WorkItemUser)
+        .filter(
+            WorkItemUser.work_item_id == item.id,
+            WorkItemUser.work_user_id == user_id,
+        )
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=404, detail="User is not assigned to this project")
+    db.delete(membership)
+    db.commit()
+    return {"unassigned": True, "user_id": user_id, "project_id": item.external_id}

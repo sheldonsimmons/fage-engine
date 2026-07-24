@@ -9,6 +9,12 @@ private class CostPilotAgentforceActionTest {
                 (Map<String, Object>) JSON.deserializeUntyped(request.getBody());
             System.assertEquals('006000000000001AAA', body.get('record_id'));
             System.assertEquals('ACME-2026-041', body.get('project_external_id'));
+            System.assertEquals(UserInfo.getUserId(), body.get('salesforce_user_id'));
+            System.assertEquals(UserInfo.getName(), body.get('salesforce_user_name'));
+            System.assertEquals(UserInfo.getUserEmail(), body.get('salesforce_user_email'));
+            System.assertEquals('Member', body.get('project_member_role'));
+            System.assertEquals('active', body.get('project_member_status'));
+            System.assertEquals(true, body.get('project_member_can_use_ai'));
 
             HttpResponse response = new HttpResponse();
             response.setStatusCode(200);

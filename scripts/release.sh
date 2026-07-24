@@ -64,6 +64,28 @@ with engine.connect() as conn:
         ALTER TABLE audit_events
         ADD COLUMN IF NOT EXISTS matched_keywords_json TEXT
     '''))
+    conn.execute(text('''
+        ALTER TABLE token_transactions
+        ADD COLUMN IF NOT EXISTS work_user_id INTEGER REFERENCES work_users(id)
+    '''))
+    conn.execute(text('''
+        ALTER TABLE token_transactions
+        ADD COLUMN IF NOT EXISTS actor_external_id VARCHAR,
+        ADD COLUMN IF NOT EXISTS actor_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS actor_email VARCHAR,
+        ADD COLUMN IF NOT EXISTS actor_source_platform VARCHAR
+    '''))
+    conn.execute(text('''
+        ALTER TABLE audit_events
+        ADD COLUMN IF NOT EXISTS work_user_id INTEGER REFERENCES work_users(id)
+    '''))
+    conn.execute(text('''
+        ALTER TABLE audit_events
+        ADD COLUMN IF NOT EXISTS actor_external_id VARCHAR,
+        ADD COLUMN IF NOT EXISTS actor_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS actor_email VARCHAR,
+        ADD COLUMN IF NOT EXISTS actor_source_platform VARCHAR
+    '''))
     conn.commit()
 print('   Column migrations applied')
 

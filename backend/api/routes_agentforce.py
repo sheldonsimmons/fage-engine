@@ -31,6 +31,11 @@ class AgentforceGovernRequest(BaseModel):
     agent_name: str = Field(default="Salesforce Agentforce", max_length=200)
     requested_model: Optional[str] = Field(default=None, max_length=120)
     salesforce_user_id: Optional[str] = Field(default=None, max_length=120)
+    salesforce_user_name: Optional[str] = Field(default=None, max_length=200)
+    salesforce_user_email: Optional[str] = Field(default=None, max_length=320)
+    project_member_role: Optional[str] = Field(default="Member", max_length=120)
+    project_member_status: Optional[str] = Field(default="active", max_length=40)
+    project_member_can_use_ai: Optional[bool] = True
 
 
 class AgentforceGovernResponse(BaseModel):
@@ -153,11 +158,20 @@ def govern_agentforce_work(
                 agent_name=body.agent_name.strip() or "Salesforce Agentforce",
                 source_platform="Salesforce Agentforce",
                 work_item_id=project.external_id,
+                actor_external_id=body.salesforce_user_id,
+                actor_name=body.salesforce_user_name,
+                actor_email=body.salesforce_user_email,
+                actor_source_platform="Salesforce",
+                actor_workspace_id=workspace_id,
+                actor_role=body.project_member_role,
+                actor_status=body.project_member_status,
+                actor_can_use_ai=body.project_member_can_use_ai,
+                enforce_project_membership=bool(body.salesforce_user_id),
             ),
             db,
         )
     except HTTPException as exc:
-        if exc.status_code not in (409, 451):
+        if exc.status_code not in (403, 409, 451):
             raise
         detail = exc.detail if isinstance(exc.detail, dict) else {"reason": str(exc.detail)}
         return AgentforceGovernResponse(

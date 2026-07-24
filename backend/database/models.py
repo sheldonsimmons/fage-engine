@@ -151,6 +151,7 @@ class WorkItem(Base):
     token_transactions = relationship("TokenTransaction", back_populates="work_item")
     audit_events       = relationship("AuditEvent", back_populates="work_item")
     agent_assignments  = relationship("WorkItemAgent", back_populates="work_item", cascade="all, delete-orphan")
+    user_assignments   = relationship("WorkItemUser", back_populates="work_item", cascade="all, delete-orphan")
 
 
 class WorkItemAgent(Base):
@@ -172,6 +173,53 @@ class WorkItemAgent(Base):
     agent     = relationship("RegisteredAgent", back_populates="project_assignments")
 
 
+class WorkUser(Base):
+    """A human identity from Salesforce, ServiceNow, HubSpot, or another source."""
+    __tablename__ = "work_users"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "source_platform",
+            "external_id",
+            name="uq_work_user_source_identity",
+        ),
+    )
+
+    id              = Column(Integer, primary_key=True, index=True)
+    workspace_id    = Column(String, nullable=False, default="default", index=True)
+    source_platform = Column(String, nullable=False)
+    external_id     = Column(String, nullable=False, index=True)
+    name            = Column(String, nullable=False)
+    email           = Column(String, nullable=True)
+    status          = Column(String, nullable=False, default="active")
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project_assignments = relationship("WorkItemUser", back_populates="user", cascade="all, delete-orphan")
+    token_transactions  = relationship("TokenTransaction", back_populates="work_user")
+    audit_events        = relationship("AuditEvent", back_populates="work_user")
+
+
+class WorkItemUser(Base):
+    """A human user assigned to a project, matter, engagement, case, or claim."""
+    __tablename__ = "work_item_users"
+    __table_args__ = (
+        UniqueConstraint("work_item_id", "work_user_id", name="uq_work_item_user"),
+    )
+
+    id           = Column(Integer, primary_key=True, index=True)
+    work_item_id = Column(Integer, ForeignKey("work_items.id"), nullable=False, index=True)
+    work_user_id = Column(Integer, ForeignKey("work_users.id"), nullable=False, index=True)
+    role         = Column(String, nullable=False, default="Member")
+    status       = Column(String, nullable=False, default="active")
+    can_use_ai   = Column(Boolean, nullable=False, default=True)
+    assigned_at  = Column(DateTime, default=datetime.utcnow)
+    assigned_by  = Column(String, nullable=True)
+
+    work_item = relationship("WorkItem", back_populates="user_assignments")
+    user      = relationship("WorkUser", back_populates="project_assignments")
+
+
 class TokenTransaction(Base):
     """
     A single AI model call — records cost, tier, routing reason, and pruning savings.
@@ -184,6 +232,11 @@ class TokenTransaction(Base):
     source_platform = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     agent_id        = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
     work_item_id    = Column(Integer,  ForeignKey("work_items.id"), nullable=True, index=True)
+    work_user_id    = Column(Integer,  ForeignKey("work_users.id"), nullable=True, index=True)
+    actor_external_id = Column(String, nullable=True)
+    actor_name      = Column(String, nullable=True)
+    actor_email     = Column(String, nullable=True)
+    actor_source_platform = Column(String, nullable=True)
     model_tier      = Column(String,   nullable=False)    # micro | flagship
     input_tokens   = Column(Integer,  nullable=False)
     output_tokens  = Column(Integer,  nullable=False)
@@ -196,6 +249,7 @@ class TokenTransaction(Base):
 
     agent = relationship("RegisteredAgent", back_populates="token_transactions")
     work_item = relationship("WorkItem", back_populates="token_transactions")
+    work_user = relationship("WorkUser", back_populates="token_transactions")
 
 
 class AuditEvent(Base):
@@ -209,6 +263,11 @@ class AuditEvent(Base):
     event_type       = Column(String,   nullable=False)   # ROUTING | THROTTLE | LOCK | DECISION
     agent_id         = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
     work_item_id     = Column(Integer,  ForeignKey("work_items.id"), nullable=True, index=True)
+    work_user_id     = Column(Integer,  ForeignKey("work_users.id"), nullable=True, index=True)
+    actor_external_id = Column(String, nullable=True)
+    actor_name       = Column(String, nullable=True)
+    actor_email      = Column(String, nullable=True)
+    actor_source_platform = Column(String, nullable=True)
     department       = Column(String,   nullable=False)
     model_tier       = Column(String,   nullable=True)
     context_snapshot = Column(Text,     nullable=True)    # JSON string — frozen system state
@@ -223,6 +282,7 @@ class AuditEvent(Base):
 
     agent = relationship("RegisteredAgent", back_populates="audit_events")
     work_item = relationship("WorkItem", back_populates="audit_events")
+    work_user = relationship("WorkUser", back_populates="audit_events")
 
 
 class AuditReviewState(Base):

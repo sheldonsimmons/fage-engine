@@ -14,7 +14,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import DepartmentBudget, TokenTransaction, RegisteredAgent, WorkItem
+from database.models import (
+    DepartmentBudget,
+    RegisteredAgent,
+    TokenTransaction,
+    WorkItem,
+    WorkItemUser,
+    WorkUser,
+)
 from core.router import route
 from core.auditor import write_audit_event
 from core.keywords import check_terms
@@ -35,6 +42,15 @@ class RouteRequest(BaseModel):
     is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
     payload_type:           str  = "text"          # "text" = full pruning pipeline | "code" = skip pruner, secrets detection only | "transcript" = voice guard path
     work_item_id:           Optional[str] = None    # Public project/matter/engagement ID; optional for backward compatibility
+    actor_external_id:      Optional[str] = None    # Human identity in the source platform
+    actor_name:             Optional[str] = None
+    actor_email:            Optional[str] = None
+    actor_source_platform:  Optional[str] = None
+    actor_workspace_id:     Optional[str] = None
+    actor_role:             Optional[str] = None
+    actor_status:           Optional[str] = None
+    actor_can_use_ai:       Optional[bool] = None
+    enforce_project_membership: bool = False
 
 
 class RouteResponse(BaseModel):
@@ -81,6 +97,95 @@ def _resolve_department(db: Session, req: RouteRequest) -> str:
     return requested
 
 
+def _resolve_work_user(
+    db: Session,
+    req: RouteRequest,
+    work_item: Optional[WorkItem],
+) -> Optional[WorkUser]:
+    """Upsert a platform-neutral human identity and optional project membership."""
+    external_id = (req.actor_external_id or "").strip()
+    if not external_id:
+        return None
+
+    from fastapi import HTTPException
+
+    platform = (req.actor_source_platform or req.source_platform or "Custom").strip() or "Custom"
+    workspace_id = (
+        (req.actor_workspace_id or "").strip()
+        or ((work_item.workspace_id or "").strip() if work_item else "")
+        or "default"
+    )
+    work_user = (
+        db.query(WorkUser)
+        .filter(
+            WorkUser.workspace_id == workspace_id,
+            WorkUser.source_platform == platform,
+            WorkUser.external_id == external_id,
+        )
+        .first()
+    )
+    if not work_user:
+        work_user = WorkUser(
+            workspace_id=workspace_id,
+            source_platform=platform,
+            external_id=external_id,
+            name=(req.actor_name or external_id).strip(),
+            email=(req.actor_email or "").strip() or None,
+            status="active",
+        )
+        db.add(work_user)
+        db.flush()
+    else:
+        if req.actor_name:
+            work_user.name = req.actor_name.strip()
+        if req.actor_email:
+            work_user.email = req.actor_email.strip()
+    if work_user.status != "active":
+        raise HTTPException(status_code=403, detail=f"User {work_user.name} is inactive")
+
+    if work_item:
+        membership = (
+            db.query(WorkItemUser)
+            .filter(
+                WorkItemUser.work_item_id == work_item.id,
+                WorkItemUser.work_user_id == work_user.id,
+            )
+            .first()
+        )
+        if not membership:
+            membership = WorkItemUser(
+                work_item_id=work_item.id,
+                work_user_id=work_user.id,
+                role=(req.actor_role or "Member").strip() or "Member",
+                status=(req.actor_status or "active").strip().lower(),
+                can_use_ai=True if req.actor_can_use_ai is None else req.actor_can_use_ai,
+                assigned_by=platform,
+            )
+            db.add(membership)
+        else:
+            if req.actor_role:
+                membership.role = req.actor_role.strip() or membership.role
+            if req.actor_status:
+                membership.status = req.actor_status.strip().lower()
+            if req.actor_can_use_ai is not None:
+                membership.can_use_ai = req.actor_can_use_ai
+
+    db.commit()
+    db.refresh(work_user)
+    if work_item and req.enforce_project_membership:
+        if membership.status != "active":
+            raise HTTPException(
+                status_code=403,
+                detail=f"User {work_user.name} is not an active member of {work_item.name}",
+            )
+        if not membership.can_use_ai:
+            raise HTTPException(
+                status_code=403,
+                detail=f"User {work_user.name} is not allowed to use AI for {work_item.name}",
+            )
+    return work_user
+
+
 @router.post("", response_model=RouteResponse)
 def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     """
@@ -110,6 +215,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 status_code=409,
                 detail=f"Work item '{work_item.external_id}' is {work_item.status} and cannot receive new requests",
             )
+
+    work_user = _resolve_work_user(db, req, work_item) if not req.is_test else None
 
     # ── Resolve or auto-register agent FIRST ─────────────────────────────────
     # Agent resolution runs before pruning so the agent's pruning_enabled
@@ -190,6 +297,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             cost_usd         = 0.0,
             decision_outcome = "Request blocked by sensitive term policy",
             work_item        = work_item,
+            work_user        = work_user,
         )
         from fastapi import HTTPException
         raise HTTPException(
@@ -263,6 +371,11 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
             agent_id        = agent.id if agent else req.agent_id,
             work_item_id    = work_item.id if work_item else None,
+            work_user_id    = work_user.id if work_user else None,
+            actor_external_id = work_user.external_id if work_user else None,
+            actor_name      = work_user.name if work_user else None,
+            actor_email     = work_user.email if work_user else None,
+            actor_source_platform = work_user.source_platform if work_user else None,
             model_tier      = result["model_tier"],
             input_tokens   = result["input_tokens"],
             output_tokens  = result["output_tokens"],
@@ -348,6 +461,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 usage_source     = result.get("usage_source", "estimated"),
                 raw_payload      = _raw_to_store,
                 work_item        = work_item,
+                work_user        = work_user,
             )
         except Exception:
             pass  # Never let audit write failure break the routing response

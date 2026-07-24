@@ -5,6 +5,14 @@ creates a CostPilot project, runs the existing governance and model-routing
 pipeline, attributes the resulting transaction to that project, and returns a
 structured result to Agentforce.
 
+The Salesforce DX package also creates:
+
+- `CostPilot_Project__c`, the Salesforce project or matter record;
+- `CostPilot_Project_Member__c`, the project-to-Salesforce-user membership;
+- all project, attribution, and optional CostPilot response fields;
+- tabs for projects and project members; and
+- the `CostPilot_Agentforce_User` permission set.
+
 ## Proof scenario
 
 From an Opportunity, ask Agentforce:
@@ -65,10 +73,27 @@ sf org assign permset --target-org costpilot-sandbox \
   --name CostPilot_Agentforce_User
 ```
 
+That single `sf project deploy start` command creates the objects and fields as
+well as deploying the Apex action. There is no manual Object Manager field
+creation.
+
 Also grant the test user access to the External Credential principal. Salesforce
 keeps that credential permission separate from Apex class access.
 
-## 4. Add the action to Agentforce
+## 4. Create the first project and membership
+
+1. Open **App Launcher → CostPilot Projects → New**.
+2. Enter a project name, Project ID, status, department, and monthly AI budget.
+3. Save the project.
+4. Open **CostPilot Project Members → New**.
+5. Select the project and Salesforce user, choose a role, leave Status as
+   `Active`, and keep `Can Use AI` checked.
+
+The membership object supports multiple Salesforce users per project. The Apex
+action automatically sends `UserInfo.getUserId()` on every governed call so
+CostPilot can attribute the transaction to the person who initiated it.
+
+## 5. Add the action to Agentforce
 
 1. Open **Setup → Agentforce Agents** and open the proof agent in Builder.
 2. Create or open a topic named **CostPilot Project Governance**.
@@ -95,7 +120,7 @@ Suggested topic instruction:
 > false. Tell the user the selected project, model, estimated cost, and
 > CostPilot tracking ID.
 
-## 5. Validate the proof
+## 6. Validate the proof
 
 Use an Opportunity with a name, owner, active status, and optional project code.
 In Agentforce Preview, request a summary. Confirm:

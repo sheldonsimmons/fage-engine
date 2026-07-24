@@ -94,6 +94,18 @@ def _run_migrations():
             ensure_column(conn, "audit_events", "work_item_id", "INTEGER REFERENCES work_items(id)")
         except Exception:
             pass
+        for table in ("token_transactions", "audit_events"):
+            for column, definition in (
+                ("work_user_id", "INTEGER REFERENCES work_users(id)"),
+                ("actor_external_id", "VARCHAR"),
+                ("actor_name", "VARCHAR"),
+                ("actor_email", "VARCHAR"),
+                ("actor_source_platform", "VARCHAR"),
+            ):
+                try:
+                    ensure_column(conn, table, column, definition)
+                except Exception:
+                    pass
         try:
             ensure_column(conn, "sensitive_terms", "enabled", "BOOLEAN DEFAULT TRUE")
         except Exception:

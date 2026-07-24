@@ -28,6 +28,7 @@ public with sharing class CostPilotAgentforceAction {
             return output;
         }
 
+        MembershipContext membership = membershipFor(request.recordId);
         HttpRequest httpRequest = new HttpRequest();
         httpRequest.setEndpoint(
             'callout:CostPilot/api/integrations/salesforce/agentforce/' +
@@ -50,7 +51,12 @@ public with sharing class CostPilotAgentforceAction {
             'agent_name'            => String.isBlank(request.agentName)
                 ? 'Salesforce Agentforce' : request.agentName,
             'requested_model'       => request.requestedModel,
-            'salesforce_user_id'    => UserInfo.getUserId()
+            'salesforce_user_id'    => UserInfo.getUserId(),
+            'salesforce_user_name'  => UserInfo.getName(),
+            'salesforce_user_email' => UserInfo.getUserEmail(),
+            'project_member_role'   => membership.role,
+            'project_member_status' => membership.status,
+            'project_member_can_use_ai' => membership.canUseAi
         }));
 
         try {
@@ -81,6 +87,46 @@ public with sharing class CostPilotAgentforceAction {
             output.reason = 'CostPilot could not be reached: ' + exceptionValue.getMessage();
         }
         return output;
+    }
+
+    private static MembershipContext membershipFor(String recordId) {
+        MembershipContext context = new MembershipContext();
+        context.role = 'Member';
+        context.status = 'active';
+        context.canUseAi = true;
+        try {
+            Id typedRecordId = Id.valueOf(recordId);
+            if (typedRecordId.getSObjectType() != CostPilot_Project__c.SObjectType) {
+                return context;
+            }
+            List<CostPilot_Project_Member__c> memberships = [
+                SELECT Role__c, Status__c, Can_Use_AI__c
+                FROM CostPilot_Project_Member__c
+                WHERE Project__c = :typedRecordId
+                  AND Salesforce_User__c = :UserInfo.getUserId()
+                LIMIT 1
+            ];
+            if (memberships.isEmpty()) {
+                context.role = 'Not assigned';
+                context.status = 'inactive';
+                context.canUseAi = false;
+                return context;
+            }
+            CostPilot_Project_Member__c membership = memberships[0];
+            context.role = membership.Role__c;
+            context.status = membership.Status__c;
+            context.canUseAi = membership.Can_Use_AI__c;
+        } catch (Exception ignored) {
+            // Non-project actions remain backward compatible. CostPilot still
+            // receives and records the current Salesforce user identity.
+        }
+        return context;
+    }
+
+    private class MembershipContext {
+        String role;
+        String status;
+        Boolean canUseAi;
     }
 
     private static Decimal decimalValue(Object value) {
