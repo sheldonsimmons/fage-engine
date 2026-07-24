@@ -1588,9 +1588,9 @@
         <div class="exec-glance-kpi-sub" id="execGlanceSpendSub">current filtered period</div>
       </article>
       <article class="exec-glance-kpi positive">
-        <div class="exec-glance-kpi-label">Spend Avoided</div>
+        <div class="exec-glance-kpi-label">Annual Savings</div>
         <div class="exec-glance-kpi-value" id="execGlanceAvoided">—</div>
-        <div class="exec-glance-kpi-sub" id="execGlanceAvoidedSub">— annual pace</div>
+        <div class="exec-glance-kpi-sub" id="execGlanceAvoidedSub">projected from current savings</div>
       </article>
       <article class="exec-glance-kpi" id="execGlanceBudgetCard">
         <div class="exec-glance-kpi-label">Budget Used</div>
@@ -4142,8 +4142,8 @@ function renderExecGlanceDrivers(drivers, actualCost) {
 function renderExecutiveGlance(events, data, context) {
   setText("execGlanceSpend", fmtUsd(context.actualCost));
   setText("execGlanceSpendSub", execHasActiveFilters() ? "selected filtered period" : "all workspace data");
-  setText("execGlanceAvoided", fmtUsd(context.totalAvoided));
-  setText("execGlanceAvoidedSub", `${fmtUsd(context.annualSavings)} annual pace`);
+  setText("execGlanceAvoided", fmtUsd(context.annualSavings));
+  setText("execGlanceAvoidedSub", `${fmtUsd(context.totalAvoided)} avoided in current period`);
   setText("execGlanceBudget", `${Math.round(context.budget.pct || 0)}%`);
   setText("execGlanceBudgetSub", `${fmtUsd(context.budget.spend || 0)} of ${fmtUsd(context.budget.cap || 0)}`);
   setText("execGlanceRequests", fmtNum(context.totalCalls));

@@ -100,15 +100,28 @@ def _account_json(account: WorkAccount) -> dict:
 
 def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> dict:
     spend_usd = 0.0
+    spend_month_usd = 0.0
     request_count = 0
+    last_activity_at = None
     if include_stats:
-        request_count, spend_usd = (
+        month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        request_count, spend_usd, last_activity_at = (
             db.query(
                 func.count(TokenTransaction.id),
                 func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+                func.max(TokenTransaction.timestamp),
             )
             .filter(TokenTransaction.work_item_id == item.id)
             .one()
+        )
+        spend_month_usd = (
+            db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+            .filter(
+                TokenTransaction.work_item_id == item.id,
+                TokenTransaction.timestamp >= month_start,
+            )
+            .scalar()
+            or 0.0
         )
     budget = item.monthly_ai_budget
     return {
@@ -126,11 +139,13 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "workspace_id": item.workspace_id,
         "request_count": int(request_count or 0),
         "spend_usd": round(float(spend_usd or 0.0), 6),
+        "spend_month_usd": round(float(spend_month_usd or 0.0), 6),
         "budget_remaining_usd": (
-            round(float(budget) - float(spend_usd or 0.0), 6)
+            round(float(budget) - float(spend_month_usd or 0.0), 6)
             if budget is not None
             else None
         ),
+        "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
         "created_at": item.created_at.isoformat() if item.created_at else None,
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
     }
@@ -188,6 +203,68 @@ def list_work_items(
         query = query.filter(WorkItem.workspace_id == workspace_id)
     items = query.order_by(WorkItem.status, WorkItem.name).all()
     return [_work_item_json(item, db) for item in items]
+
+
+@router.get("/summary")
+def work_item_summary(
+    workspace_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    item_query = db.query(WorkItem)
+    transaction_query = db.query(TokenTransaction)
+    if workspace_id:
+        item_query = item_query.filter(WorkItem.workspace_id == workspace_id)
+        transaction_query = transaction_query.filter(
+            TokenTransaction.department.like(f"{workspace_id}:%")
+        )
+
+    items = item_query.all()
+    item_ids = [item.id for item in items]
+    total_spend = float(
+        transaction_query.with_entities(
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0)
+        ).scalar()
+        or 0.0
+    )
+    attributed_spend = 0.0
+    if item_ids:
+        attributed_spend = float(
+            db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+            .filter(TokenTransaction.work_item_id.in_(item_ids))
+            .scalar()
+            or 0.0
+        )
+
+    item_rows = [_work_item_json(item, db) for item in items]
+    attention = []
+    for item in item_rows:
+        budget = item.get("monthly_ai_budget")
+        spend_month = float(item.get("spend_month_usd") or 0.0)
+        budget_pct = (spend_month / float(budget) * 100) if budget else 0.0
+        if item["status"] == "on_hold" or budget_pct >= 80:
+            attention.append({
+                "external_id": item["external_id"],
+                "name": item["name"],
+                "status": item["status"],
+                "budget_used_pct": round(budget_pct, 1),
+                "spend_month_usd": spend_month,
+                "monthly_ai_budget": budget,
+            })
+
+    return {
+        "project_count": len(items),
+        "active_project_count": sum(1 for item in items if item.status == "active"),
+        "attributed_spend_usd": round(attributed_spend, 6),
+        "unattributed_spend_usd": round(max(0.0, total_spend - attributed_spend), 6),
+        "attributed_spend_pct": round(
+            (attributed_spend / total_spend * 100) if total_spend else 0.0,
+            1,
+        ),
+        "projects_needing_attention": sorted(
+            attention,
+            key=lambda item: (item["status"] != "on_hold", -item["budget_used_pct"]),
+        ),
+    }
 
 
 @router.post("", status_code=201)
