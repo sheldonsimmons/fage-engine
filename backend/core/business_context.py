@@ -10,6 +10,7 @@ from typing import Optional
 
 
 VALID_CONTEXT_TYPES = {
+    "custom",
     "project",
     "matter",
     "engagement",
@@ -47,6 +48,19 @@ class BusinessContextTemplate:
 
 
 BUSINESS_CONTEXT_TEMPLATES = {
+    "universal_context": BusinessContextTemplate(
+        key="universal_context",
+        name="Universal Business Context",
+        source_platform="Custom",
+        context_type="custom",
+        work_label="Work",
+        customer_label="Customer",
+        source_record_types=(),
+        description=(
+            "Connects AI activity to the customer's own work, customer, user, "
+            "agent, cost, usage, and governance terminology."
+        ),
+    ),
     "salesforce_project": BusinessContextTemplate(
         key="salesforce_project",
         name="Salesforce Project",

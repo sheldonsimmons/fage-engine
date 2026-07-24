@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Setup</title>
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="stylesheet" href="css/onboarding.css" />
+  <link rel="stylesheet" href="css/onboarding.css?v=20260724-business-context-first" />
 </head>
 <body class="onboarding-body">
 
@@ -20,8 +20,88 @@
       <a href="/connect.html" class="conn-back-link" style="margin-left:16px">+ Connect Platform</a>
     </div>
 
+    <main class="ob-business-first" id="obBusinessFirst">
+      <div class="ob-context-eyebrow">Business Context Engine</div>
+      <h1 class="ob-title">What do you call your work?</h1>
+      <p class="ob-subtitle">Tell CostPilot how your business talks. We’ll build the technical template behind the scenes.</p>
+
+      <section class="ob-question-block" id="obWorkQuestion">
+        <div class="ob-choice-grid" id="obWorkChoices">
+          <button type="button" class="ob-choice" data-value="project" onclick="chooseBusinessWork(this)">Projects</button>
+          <button type="button" class="ob-choice" data-value="matter" onclick="chooseBusinessWork(this)">Matters</button>
+          <button type="button" class="ob-choice" data-value="engagement" onclick="chooseBusinessWork(this)">Engagements</button>
+          <button type="button" class="ob-choice" data-value="case" onclick="chooseBusinessWork(this)">Cases</button>
+          <button type="button" class="ob-choice" data-value="ticket" onclick="chooseBusinessWork(this)">Tickets</button>
+          <button type="button" class="ob-choice" data-value="opportunity" onclick="chooseBusinessWork(this)">Opportunities</button>
+          <button type="button" class="ob-choice ob-choice-custom" data-value="custom" onclick="chooseBusinessWork(this)">Use my own term</button>
+        </div>
+        <div class="ob-custom-entry" id="obCustomWorkWrap" hidden>
+          <label class="ob-label" for="obCustomWork">Your name for the work</label>
+          <input class="ob-input" id="obCustomWork" placeholder="e.g. Initiative, Claim, Campaign" oninput="refreshBusinessTemplatePreview()" />
+        </div>
+      </section>
+
+      <section class="ob-question-block" id="obSourceQuestion" hidden>
+        <h2>Where does this work live?</h2>
+        <p>Choose the system CostPilot should connect to.</p>
+        <div class="ob-choice-grid ob-source-choices" id="obSourceChoices">
+          <button type="button" class="ob-choice" data-value="salesforce" data-label="Salesforce" onclick="chooseBusinessSource(this)">Salesforce</button>
+          <button type="button" class="ob-choice" data-value="servicenow" data-label="ServiceNow" onclick="chooseBusinessSource(this)">ServiceNow</button>
+          <button type="button" class="ob-choice" data-value="hubspot" data-label="HubSpot" onclick="chooseBusinessSource(this)">HubSpot</button>
+          <button type="button" class="ob-choice" data-value="dynamics" data-label="Dynamics 365" onclick="chooseBusinessSource(this)">Dynamics 365</button>
+          <button type="button" class="ob-choice" data-value="zendesk" data-label="Zendesk" onclick="chooseBusinessSource(this)">Zendesk</button>
+          <button type="button" class="ob-choice" data-value="costpilot" data-label="CostPilot" onclick="chooseBusinessSource(this)">CostPilot</button>
+          <button type="button" class="ob-choice" data-value="not_sure" data-label="Not sure yet" onclick="chooseBusinessSource(this)">Not sure yet</button>
+          <button type="button" class="ob-choice ob-choice-custom" data-value="custom" onclick="chooseBusinessSource(this)">Another system</button>
+        </div>
+        <div class="ob-custom-entry" id="obCustomSourceWrap" hidden>
+          <label class="ob-label" for="obCustomSource">Your system or platform</label>
+          <input class="ob-input" id="obCustomSource" placeholder="e.g. Monday.com, Clio, an internal app" oninput="refreshBusinessTemplatePreview()" />
+        </div>
+      </section>
+
+      <section class="ob-question-block" id="obDetailsQuestion" hidden>
+        <h2>What do you call the customer?</h2>
+        <p>Choose your language. You can also enter your own term.</p>
+        <div class="ob-choice-grid" id="obCustomerChoices">
+          <button type="button" class="ob-choice" data-value="Customer" onclick="chooseBusinessCustomer(this)">Customer</button>
+          <button type="button" class="ob-choice" data-value="Account" onclick="chooseBusinessCustomer(this)">Account</button>
+          <button type="button" class="ob-choice" data-value="Client" onclick="chooseBusinessCustomer(this)">Client</button>
+          <button type="button" class="ob-choice" data-value="Organization" onclick="chooseBusinessCustomer(this)">Organization</button>
+          <button type="button" class="ob-choice" data-value="None" onclick="chooseBusinessCustomer(this)">No customer</button>
+          <button type="button" class="ob-choice ob-choice-custom" data-value="custom" onclick="chooseBusinessCustomer(this)">Use my own term</button>
+        </div>
+        <div class="ob-custom-entry" id="obCustomCustomerWrap" hidden>
+          <label class="ob-label" for="obCustomCustomer">Your name for the customer</label>
+          <input class="ob-input" id="obCustomCustomer" placeholder="e.g. Patient, Member, Constituent" oninput="refreshBusinessTemplatePreview()" />
+        </div>
+
+        <fieldset class="ob-context-measures ob-business-measures">
+          <legend>What should CostPilot measure?</legend>
+          <label><input type="checkbox" value="cost" checked onchange="refreshBusinessTemplatePreview()" /> Cost</label>
+          <label><input type="checkbox" value="tokens" checked onchange="refreshBusinessTemplatePreview()" /> Tokens</label>
+          <label><input type="checkbox" value="budget" checked onchange="refreshBusinessTemplatePreview()" /> Budget</label>
+          <label><input type="checkbox" value="risk" checked onchange="refreshBusinessTemplatePreview()" /> Risk</label>
+          <label><input type="checkbox" value="profitability" onchange="refreshBusinessTemplatePreview()" /> Margin impact</label>
+        </fieldset>
+      </section>
+
+      <section class="ob-template-preview" id="obTemplatePreview" hidden>
+        <div class="ob-context-eyebrow">Your template</div>
+        <h2 id="obTemplateTitle">Business Context Template</h2>
+        <p id="obTemplateDescription"></p>
+        <div class="ob-template-flow" id="obTemplateFlow"></div>
+      </section>
+
+      <div class="ob-error" id="obBusinessError"></div>
+      <div class="ob-actions">
+        <a class="ob-btn-ghost" href="/operate.html">Do this later</a>
+        <button class="ob-btn-primary" id="obBuildTemplateBtn" onclick="buildBusinessContextTemplate()" disabled>Build My Template →</button>
+      </div>
+    </main>
+
     <!-- Progress bar -->
-    <div class="ob-progress">
+    <div class="ob-progress ob-legacy-onboarding">
       <div class="ob-step active" id="prog-1">1</div>
       <div class="ob-progress-line"></div>
       <div class="ob-step" id="prog-2">2</div>
@@ -34,7 +114,7 @@
       <div class="ob-progress-line" id="prog-line-vg" style="display:none"></div>
       <div class="ob-step" id="prog-6" style="display:none">6</div>
     </div>
-    <div class="ob-step-labels">
+    <div class="ob-step-labels ob-legacy-onboarding">
       <span>Company</span>
       <span>Departments</span>
       <span>Review</span>
@@ -44,7 +124,7 @@
     </div>
 
     <!-- ── Screen 1: Company Setup ───────────────────────────────────────── -->
-    <div class="ob-screen active" id="screen-1">
+    <div class="ob-screen ob-legacy-onboarding active" id="screen-1">
       <h1 class="ob-title">Welcome to CostPilot</h1>
       <p class="ob-subtitle">Let's get your AI governance layer set up. This takes about 2 minutes.</p>
 
@@ -111,7 +191,7 @@
     </div>
 
     <!-- ── Screen 2: Department Setup ───────────────────────────────────── -->
-    <div class="ob-screen" id="screen-2">
+    <div class="ob-screen ob-legacy-onboarding" id="screen-2">
       <h1 class="ob-title">Set Up Your Departments</h1>
       <p class="ob-subtitle">Each department gets its own AI budget cap. Allocate your <span id="budgetLabel">$1,000</span> total budget below.</p>
 
@@ -135,7 +215,7 @@
     </div>
 
     <!-- ── Screen 3: Review ──────────────────────────────────────────────── -->
-    <div class="ob-screen" id="screen-3">
+    <div class="ob-screen ob-legacy-onboarding" id="screen-3">
       <h1 class="ob-title">Review Your Setup</h1>
       <p class="ob-subtitle">Here's what CostPilot will configure for you.</p>
 
@@ -170,7 +250,7 @@
     </div>
 
     <!-- ── Screen 4: Launching ───────────────────────────────────────────── -->
-    <div class="ob-screen" id="screen-4">
+    <div class="ob-screen ob-legacy-onboarding" id="screen-4">
       <div class="ob-launch-wrap">
         <div class="ob-launch-icon">◈</div>
         <h1 class="ob-title" id="launchTitle">Setting up CostPilot...</h1>
@@ -255,7 +335,7 @@
     </div>
 
     <!-- ── Screen 5: Connect a Platform ─────────────────────────────────────── -->
-    <div class="ob-screen" id="screen-5">
+    <div class="ob-screen ob-legacy-onboarding" id="screen-5">
       <h1 class="ob-title">Connect a Platform</h1>
       <p class="ob-subtitle" id="obPlatformSubtitle">Choose the source system that sends text to AI. CostPilot will use that platform's language and generate the matching setup.</p>
 
@@ -401,7 +481,7 @@
           </details>
         </div>
         <div class="ob-actions" style="margin-bottom:0">
-          <button class="ob-btn-ghost" onclick="resetObPlatformScreen(); goToScreen(4)">← Back</button>
+          <button class="ob-btn-ghost" onclick="returnToBusinessContextOnboarding()">← Back</button>
           <button class="ob-btn-primary" onclick="generateObCode()">Generate Setup Code →</button>
         </div>
         <div class="ob-error" id="error-5"></div>
@@ -409,7 +489,7 @@
 
       <!-- Back button before a platform is picked -->
       <div class="ob-actions" id="obPlatBackOnly" style="margin-bottom:0">
-        <button class="ob-btn-ghost" onclick="goToScreen(4)">← Back</button>
+        <button class="ob-btn-ghost" onclick="returnToBusinessContextOnboarding()">← Back</button>
       </div>
 
       <!-- JS populates this entirely after generateObCode() -->
@@ -417,7 +497,7 @@
     </div>
 
     <!-- ── Screen 6: Voice Guard Setup & Demo ──────────────────────────────── -->
-    <div class="ob-screen" id="screen-6">
+    <div class="ob-screen ob-legacy-onboarding" id="screen-6">
       <h1 class="ob-title">🎙 Voice Guard — PII Protection</h1>
       <p class="ob-subtitle">Voice Guard listens to call transcripts and redacts sensitive information before it reaches the AI — or your CRM. Try it live below.</p>
 
@@ -500,7 +580,7 @@
 
   <script src="js/api.js?v=20260606"></script>
   <script src="js/tier-utils.js?v=20260606"></script>
-  <script src="js/onboarding.js?v=20260607-trial-setup"></script>
+  <script src="js/onboarding.js?v=20260724-business-context-first"></script>
   <script src="/js/mobile-guard.js?v=20260606"></script>
 </body>
 </html>

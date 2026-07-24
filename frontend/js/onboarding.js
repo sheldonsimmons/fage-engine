@@ -25,21 +25,243 @@ function goToDashboard() {
   window.location.href = "/operate.html";
 }
 
-// Pre-fill known trial fields on page load
+// Pre-fill known trial fields and restore the business-first onboarding choices.
 document.addEventListener("DOMContentLoaded", () => {
-  if (!IS_TRIAL) return;
-
-  // Pre-fill Screen 1 fields so validation passes when Review is rendered
-  const companyEl = document.getElementById("companyName");
-  const budgetEl  = document.getElementById("totalBudget");
-  const trialCompany = localStorage.getItem("cp_trial_company") || (TRIAL_NAME ? TRIAL_NAME + "'s Company" : "My Company");
-  if (companyEl) companyEl.value = trialCompany;
-  if (budgetEl && !budgetEl.value) budgetEl.value = "550"; // matches trial default dept caps
-  if (TRIAL_PRV) selectProvider(TRIAL_PRV);
-
-  // Skip Screen 1 — go straight to Departments
-  goToScreen(2);
+  if (IS_TRIAL) {
+    // Legacy setup fields remain available to existing helper functions, but
+    // they no longer appear in the primary onboarding experience.
+    const companyEl = document.getElementById("companyName");
+    const budgetEl  = document.getElementById("totalBudget");
+    const trialCompany = localStorage.getItem("cp_trial_company") || (TRIAL_NAME ? TRIAL_NAME + "'s Company" : "My Company");
+    if (companyEl) companyEl.value = trialCompany;
+    if (budgetEl && !budgetEl.value) budgetEl.value = "550";
+    if (TRIAL_PRV) selectProvider(TRIAL_PRV);
+  }
+  restoreBusinessContextOnboarding();
 });
+
+const businessFirstState = {
+  workType: "",
+  source: "",
+  sourceLabel: "",
+  customerLabel: "",
+  built: false,
+};
+
+function _selectBusinessChoice(containerId, selected) {
+  document.querySelectorAll(`#${containerId} .ob-choice`).forEach(button => {
+    button.classList.toggle("selected", button === selected);
+  });
+}
+
+function chooseBusinessWork(button) {
+  _selectBusinessChoice("obWorkChoices", button);
+  businessFirstState.workType = button.dataset.value;
+  businessFirstState.built = false;
+  document.getElementById("obCustomWorkWrap").hidden = button.dataset.value !== "custom";
+  document.getElementById("obSourceQuestion").hidden = false;
+  refreshBusinessTemplatePreview();
+  document.getElementById("obSourceQuestion").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function chooseBusinessSource(button) {
+  _selectBusinessChoice("obSourceChoices", button);
+  businessFirstState.source = button.dataset.value;
+  businessFirstState.sourceLabel = button.dataset.label || "";
+  businessFirstState.built = false;
+  document.getElementById("obCustomSourceWrap").hidden = button.dataset.value !== "custom";
+  document.getElementById("obDetailsQuestion").hidden = false;
+  refreshBusinessTemplatePreview();
+  document.getElementById("obDetailsQuestion").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function chooseBusinessCustomer(button) {
+  _selectBusinessChoice("obCustomerChoices", button);
+  businessFirstState.customerLabel = button.dataset.value;
+  businessFirstState.built = false;
+  document.getElementById("obCustomCustomerWrap").hidden = button.dataset.value !== "custom";
+  refreshBusinessTemplatePreview();
+}
+
+function _businessWorkLabel() {
+  if (businessFirstState.workType === "custom") {
+    return document.getElementById("obCustomWork").value.trim();
+  }
+  const labels = {
+    project: "Project",
+    matter: "Matter",
+    engagement: "Engagement",
+    case: "Case",
+    ticket: "Ticket",
+    opportunity: "Opportunity",
+  };
+  return labels[businessFirstState.workType] || "";
+}
+
+function _businessSourceLabel() {
+  if (businessFirstState.source === "custom") {
+    return document.getElementById("obCustomSource").value.trim();
+  }
+  return businessFirstState.sourceLabel;
+}
+
+function _businessCustomerLabel() {
+  if (businessFirstState.customerLabel === "custom") {
+    return document.getElementById("obCustomCustomer").value.trim();
+  }
+  return businessFirstState.customerLabel;
+}
+
+function _businessMeasures() {
+  return [...document.querySelectorAll(".ob-business-measures input:checked")]
+    .map(input => input.value);
+}
+
+function _businessTemplateKey() {
+  if (businessFirstState.source === "salesforce") return "salesforce_project";
+  if (businessFirstState.source === "servicenow") return "servicenow_case";
+  return "universal_context";
+}
+
+function refreshBusinessTemplatePreview() {
+  const workLabel = _businessWorkLabel();
+  const sourceLabel = _businessSourceLabel();
+  const customerLabel = _businessCustomerLabel();
+  const ready = Boolean(workLabel && sourceLabel && customerLabel);
+  const button = document.getElementById("obBuildTemplateBtn");
+  button.disabled = !ready;
+  if (!businessFirstState.built) {
+    button.textContent = "Build My Template →";
+    document.getElementById("obTemplatePreview").hidden = true;
+    return;
+  }
+  const measures = _businessMeasures();
+  document.getElementById("obTemplateTitle").textContent = `${workLabel} Business Context`;
+  document.getElementById("obTemplateDescription").textContent =
+    `CostPilot will understand ${workLabel.toLowerCase()} activity from ${sourceLabel} using your business language.`;
+  const parts = [
+    workLabel,
+    customerLabel === "None" ? null : customerLabel,
+    "User",
+    "AI agent",
+    ...measures.map(value => value === "profitability" ? "Margin impact" : value.charAt(0).toUpperCase() + value.slice(1)),
+  ].filter(Boolean);
+  document.getElementById("obTemplateFlow").innerHTML = parts
+    .map((part, index) => `${index ? '<span class="ob-flow-arrow">→</span>' : ""}<span>${_obEsc(part)}</span>`)
+    .join("");
+  document.getElementById("obTemplatePreview").hidden = false;
+  button.textContent = businessFirstState.source === "not_sure"
+    ? "Finish Setup →"
+    : `Connect ${sourceLabel} →`;
+}
+
+async function buildBusinessContextTemplate() {
+  if (businessFirstState.built) {
+    openBusinessContextConnection();
+    return;
+  }
+  const workLabel = _businessWorkLabel();
+  const sourceLabel = _businessSourceLabel();
+  const customerLabel = _businessCustomerLabel();
+  const error = document.getElementById("obBusinessError");
+  if (!workLabel || !sourceLabel || !customerLabel) {
+    error.textContent = "Complete the visible custom value before building your template.";
+    return;
+  }
+  error.textContent = "";
+  const canonicalWorkType = businessFirstState.workType === "custom"
+    ? "custom"
+    : businessFirstState.workType;
+  const templateKey = _businessTemplateKey();
+  const templateNames = {
+    salesforce_project: "Salesforce Business Context",
+    servicenow_case: "ServiceNow Business Context",
+    universal_context: `${sourceLabel} Business Context`,
+  };
+  obBusinessContext = {
+    template: templateKey,
+    template_name: templateNames[templateKey],
+    platform: businessFirstState.source,
+    platform_label: sourceLabel,
+    work_type: canonicalWorkType,
+    work_label: workLabel,
+    customer_label: customerLabel,
+    measures: _businessMeasures(),
+  };
+  localStorage.setItem("cp_business_context", JSON.stringify(obBusinessContext));
+  try {
+    await persistObBusinessContext();
+  } catch (persistError) {
+    error.textContent = `Your template is saved on this device, but CostPilot could not sync it yet: ${persistError.message}`;
+  }
+  businessFirstState.built = true;
+  refreshBusinessTemplatePreview();
+  document.getElementById("obTemplatePreview").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function openBusinessContextConnection() {
+  if (businessFirstState.source === "not_sure" || businessFirstState.source === "costpilot") {
+    goToDashboard();
+    return;
+  }
+  let platform = businessFirstState.source;
+  if (platform === "custom") {
+    OB_PLATFORMS.custom = {
+      label: _businessSourceLabel(),
+      kind: "business",
+      objects: ["request", "record", "work_item"],
+      agentDefault: "CostPilot Integration",
+    };
+  }
+  document.body.classList.add("ob-connection-mode");
+  document.querySelectorAll(".ob-screen").forEach(screen => screen.classList.remove("active"));
+  document.getElementById("screen-5").classList.add("active");
+  selectObPlatform(platform);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function returnToBusinessContextOnboarding() {
+  resetObPlatformScreen();
+  document.body.classList.remove("ob-connection-mode");
+  document.querySelectorAll(".ob-screen").forEach(screen => screen.classList.remove("active"));
+  document.getElementById("screen-1").classList.add("active");
+  refreshBusinessTemplatePreview();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function restoreBusinessContextOnboarding() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem("cp_business_context") || "null");
+  } catch (_) {
+    return;
+  }
+  if (!saved?.work_label) return;
+  const standardWork = ["project", "matter", "engagement", "case", "ticket", "opportunity"];
+  const workValue = standardWork.includes(saved.work_type) ? saved.work_type : "custom";
+  const workButton = document.querySelector(`#obWorkChoices [data-value="${workValue}"]`);
+  if (workButton) chooseBusinessWork(workButton);
+  if (workValue === "custom") document.getElementById("obCustomWork").value = saved.work_label;
+
+  const standardSources = ["salesforce", "servicenow", "hubspot", "dynamics", "zendesk", "costpilot", "not_sure"];
+  const sourceValue = standardSources.includes(saved.platform) ? saved.platform : "custom";
+  const sourceButton = document.querySelector(`#obSourceChoices [data-value="${sourceValue}"]`);
+  if (sourceButton) chooseBusinessSource(sourceButton);
+  if (sourceValue === "custom") {
+    document.getElementById("obCustomSource").value = saved.platform_label || saved.platform;
+  }
+
+  const standardCustomers = ["Customer", "Account", "Client", "Organization", "None"];
+  const customerValue = standardCustomers.includes(saved.customer_label) ? saved.customer_label : "custom";
+  const customerButton = document.querySelector(`#obCustomerChoices [data-value="${customerValue}"]`);
+  if (customerButton) chooseBusinessCustomer(customerButton);
+  if (customerValue === "custom") document.getElementById("obCustomCustomer").value = saved.customer_label;
+
+  document.querySelectorAll(".ob-business-measures input").forEach(input => {
+    input.checked = (saved.measures || []).includes(input.value);
+  });
+  refreshBusinessTemplatePreview();
+}
 
 function toggleVoiceGuard() {
   voiceGuardEnabled = !voiceGuardEnabled;
@@ -418,6 +640,17 @@ function configureObBusinessContext(platform) {
   if (!card || cfg?.kind !== "business") {
     if (card) card.hidden = true;
     obBusinessContext = null;
+    return;
+  }
+
+  // The business-first onboarding already collected this language. Keep the
+  // generated integration aligned with it instead of asking the questions a
+  // second time or replacing custom terminology with platform defaults.
+  if (obBusinessContext && obBusinessContext.platform === platform) {
+    card.hidden = true;
+    const objectName = OB_CONTEXT_OBJECTS[platform]?.[obBusinessContext.work_type];
+    const objectInput = document.getElementById("obPlatObject");
+    if (objectInput && objectName) objectInput.value = objectName;
     return;
   }
 

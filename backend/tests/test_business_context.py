@@ -96,9 +96,10 @@ def test_template_catalog_uses_one_universal_contract():
     templates = list_context_templates()
     keys = {template["key"] for template in templates}
 
-    assert {"salesforce_project", "servicenow_case"}.issubset(keys)
+    assert {"universal_context", "salesforce_project", "servicenow_case"}.issubset(keys)
     assert get_context_template("salesforce_project").context_type == "project"
     assert normalize_context_type(None, template_key="servicenow_case") == "case"
+    assert normalize_context_type("custom", template_key="universal_context") == "custom"
 
 
 def test_workspace_saves_business_context_template():
@@ -136,3 +137,41 @@ def test_workspace_saves_business_context_template():
     assert stored["customer_label"] == "Client"
     assert stored["measures"] == ["cost", "tokens"]
     assert _trial_status_payload(account, db)["business_context"] == stored
+
+
+def test_workspace_saves_fully_custom_business_language():
+    db = _session()
+    account = TrialAccount(
+        email="custom-context@example.com",
+        name="Custom Context Tester",
+        api_key_enc="",
+        provider="anthropic",
+        workspace_id="WORKSPACE-CUSTOM-CONTEXT",
+        secret_key="secret",
+        trial_end=datetime.utcnow() + timedelta(days=30),
+        is_active=True,
+    )
+    db.add(account)
+    db.commit()
+
+    result = save_business_context(
+        BusinessContextSetupRequest(
+            workspace_id=account.workspace_id,
+            secret_key="secret",
+            platform="custom",
+            platform_label="Monday.com",
+            template="universal_context",
+            work_type="custom",
+            work_label="Campaign",
+            customer_label="Brand",
+            measures=["cost", "risk"],
+        ),
+        db,
+    )
+
+    stored = json.loads(account.business_context_config_json)
+    assert result["saved"] is True
+    assert stored["platform_label"] == "Monday.com"
+    assert stored["work_type"] == "custom"
+    assert stored["work_label"] == "Campaign"
+    assert stored["customer_label"] == "Brand"

@@ -512,6 +512,7 @@ class BusinessContextSetupRequest(BaseModel):
     workspace_id: str
     secret_key: str
     platform: str
+    platform_label: Optional[str] = None
     template: str
     work_type: str
     work_label: str
@@ -585,6 +586,7 @@ def save_business_context(
     ))
     config = {
         "platform": req.platform.strip().lower(),
+        "platform_label": (req.platform_label or req.platform).strip(),
         "template": template.key,
         "template_name": template.name,
         "work_type": context_type,

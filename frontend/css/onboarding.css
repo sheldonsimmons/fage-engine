@@ -18,6 +18,93 @@
   flex-direction: column;
   gap: 32px;
 }
+.ob-legacy-onboarding { display: none !important; }
+.onboarding-body.ob-connection-mode .ob-business-first { display: none; }
+.onboarding-body.ob-connection-mode #screen-5.ob-legacy-onboarding {
+  display: block !important;
+}
+.ob-business-first {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+}
+.ob-question-block {
+  border-top: 1px solid var(--border);
+  margin-top: 22px;
+  padding-top: 22px;
+}
+.ob-question-block h2,
+.ob-template-preview h2 {
+  color: var(--text-primary);
+  font-size: 16px;
+  margin: 0 0 5px;
+}
+.ob-question-block > p,
+.ob-template-preview > p {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0 0 13px;
+}
+.ob-choice-grid {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ob-choice {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  min-height: 44px;
+  padding: 9px 11px;
+  text-align: left;
+}
+.ob-choice:hover,
+.ob-choice.selected {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, .08);
+}
+.ob-choice-custom { color: var(--accent); }
+.ob-custom-entry {
+  margin-top: 11px;
+}
+.ob-business-measures { margin-bottom: 0; }
+.ob-template-preview {
+  background: linear-gradient(135deg, rgba(88, 166, 255, .09), rgba(63, 185, 80, .04));
+  border: 1px solid rgba(88, 166, 255, .4);
+  border-radius: 10px;
+  margin-top: 22px;
+  padding: 18px;
+}
+.ob-template-flow {
+  color: var(--text-primary);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 7px;
+}
+.ob-template-flow span {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+.ob-template-flow .ob-flow-arrow {
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  padding-inline: 1px;
+}
+.ob-actions .ob-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
 
 /* ── Brand ───────────────────────────────────────────────────────────────────── */
 .ob-brand {
@@ -538,7 +625,8 @@
 @media (max-width: 760px) {
   .ob-shell { max-width: 100%; }
   .ob-provider-grid,
-  .ob-platform-grid {
+  .ob-platform-grid,
+  .ob-choice-grid {
     grid-template-columns: 1fr 1fr !important;
   }
   .ob-sf-row,
