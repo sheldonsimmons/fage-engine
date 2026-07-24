@@ -642,9 +642,16 @@ function agentlakeEscape(value) {
   })[char]);
 }
 
+function agentlakeDate(iso) {
+  if (!iso) return null;
+  const value = String(iso);
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
+  return new Date(hasTimezone ? value : `${value}Z`);
+}
+
 function agentlakeLastUsed(iso) {
   if (!iso) return "Never";
-  return new Date(iso).toLocaleString("en-US", {
+  return agentlakeDate(iso).toLocaleString("en-US", {
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
   });
 }
@@ -770,6 +777,14 @@ function renderAgentlakeProjects() {
   const list = document.getElementById("agentlakeProjectList");
   if (!list) return;
 
+  // Agentlake polls for live status and rebuilds this list frequently. Preserve
+  // the user's expanded project cards across those renders.
+  const openProjects = new Set(
+    [...list.querySelectorAll(".agentlake-project-card[open][data-project-id]")]
+      .map(card => card.dataset.projectId)
+      .filter(Boolean)
+  );
+
   const statusFilter = document.getElementById("agentlakeProjectStatus")?.value || "";
   const search = (document.getElementById("agentlakeProjectSearch")?.value || "").trim().toLowerCase();
   const projects = _agentlakeProjects.filter(project => {
@@ -781,8 +796,8 @@ function renderAgentlakeProjects() {
     ].filter(Boolean).join(" ").toLowerCase();
     return !search || searchable.includes(search);
   }).sort((a, b) => {
-    const activityA = a.last_activity_at ? new Date(a.last_activity_at).getTime() : 0;
-    const activityB = b.last_activity_at ? new Date(b.last_activity_at).getTime() : 0;
+    const activityA = agentlakeDate(a.last_activity_at)?.getTime() || 0;
+    const activityB = agentlakeDate(b.last_activity_at)?.getTime() || 0;
     return activityB - activityA || Number(b.spend_usd || 0) - Number(a.spend_usd || 0);
   });
 
@@ -842,7 +857,11 @@ function renderAgentlakeProjects() {
       : '<span class="agentlake-empty-agent">No agents assigned or observed</span>';
     const tierNames = project.model_tiers?.length ? project.model_tiers.join(", ") : "—";
     return `
-      <details class="agentlake-project-card${risks ? " has-risk" : ""}">
+      <details
+        class="agentlake-project-card${risks ? " has-risk" : ""}"
+        data-project-id="${agentlakeEscape(project.external_id)}"
+        ${openProjects.has(String(project.external_id)) ? "open" : ""}
+      >
         <summary>
           <div class="agentlake-project-identity">
             <span class="agentlake-project-status status-${agentlakeEscape(project.status)}">${agentlakeEscape(agentlakeProjectStatusLabel(project.status))}</span>
