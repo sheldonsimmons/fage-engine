@@ -825,13 +825,21 @@ function renderAgentlakeProjects() {
     const budget = project.monthly_ai_budget == null ? null : Number(project.monthly_ai_budget);
     const budgetPct = budget > 0 ? Math.min(100, monthlySpend / budget * 100) : null;
     const risks = Number(project.risk_event_count || 0);
-    const agents = project.agents || [];
+    const team = project.agent_team || [];
+    const assignedCount = Number(project.assigned_agent_count || 0);
     const platforms = project.activity_platforms?.length
       ? project.activity_platforms
       : [project.source_platform].filter(Boolean);
-    const agentNames = agents.length
-      ? agents.map(agent => agent.name).join(", ")
-      : "No attributed agent activity";
+    const agentTeamRows = team.length
+      ? team.map(member => {
+          const unexpected = member.assignment_status === "unexpected";
+          const state = unexpected ? "Unexpected" : member.usage_status === "used" ? "Used" : "Never used";
+          return `<span class="agentlake-project-agent">
+            <b>${agentlakeEscape(member.display_name || member.name)}</b>
+            <i class="${unexpected ? "unexpected" : member.usage_status === "used" ? "used" : ""}">${agentlakeEscape(state)}</i>
+          </span>`;
+        }).join("")
+      : '<span class="agentlake-empty-agent">No agents assigned or observed</span>';
     const tierNames = project.model_tiers?.length ? project.model_tiers.join(", ") : "—";
     return `
       <details class="agentlake-project-card${risks ? " has-risk" : ""}">
@@ -841,7 +849,7 @@ function renderAgentlakeProjects() {
             <h3>${agentlakeEscape(project.name)}</h3>
             <p>${agentlakeEscape(project.external_id)} · ${agentlakeEscape(project.department || "No department")}</p>
           </div>
-          <div class="agentlake-project-stat"><strong>${Number(project.agent_count || 0).toLocaleString()}</strong><span>agents</span></div>
+          <div class="agentlake-project-stat"><strong>${assignedCount.toLocaleString()}</strong><span>assigned agents</span></div>
           <div class="agentlake-project-stat"><strong>${Number(project.request_count || 0).toLocaleString()}</strong><span>requests</span></div>
           <div class="agentlake-project-stat"><strong>$${spend.toFixed(2)}</strong><span>total spend</span></div>
           <div class="agentlake-project-stat${risks ? " risk" : ""}"><strong>${risks.toLocaleString()}</strong><span>risk events</span></div>
@@ -849,7 +857,7 @@ function renderAgentlakeProjects() {
           <span class="agentlake-project-chevron">›</span>
         </summary>
         <div class="agentlake-project-detail">
-          <div><span>Agents involved</span><strong>${agentlakeEscape(agentNames)}</strong></div>
+          <div><span>Agent team</span><div class="agentlake-project-agent-list">${agentTeamRows}</div></div>
           <div><span>Platforms</span><strong>${agentlakeEscape(platforms.join(", ") || "—")}</strong></div>
           <div><span>Model tiers</span><strong>${agentlakeEscape(tierNames)}</strong></div>
           <div><span>Owner</span><strong>${agentlakeEscape(project.owner || "Unassigned")}</strong></div>

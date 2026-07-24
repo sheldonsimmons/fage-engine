@@ -8,10 +8,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import AuditEvent, RegisteredAgent, TokenTransaction, WorkAccount, WorkItem
+from database.models import (
+    AuditEvent, RegisteredAgent, TokenTransaction, WorkAccount, WorkItem, WorkItemAgent
+)
+from core.agentlake import display_agent_name, display_department, infer_platform
 
 
 router = APIRouter()
@@ -61,6 +65,27 @@ class WorkItemUpdate(BaseModel):
     source_platform: Optional[str] = Field(default=None, max_length=120)
 
 
+class AgentAssignmentIn(BaseModel):
+    agent_id: int
+    role: str = Field(default="Contributor", min_length=1, max_length=120)
+
+
+class AgentAssignmentsIn(BaseModel):
+    assignments: list[AgentAssignmentIn]
+    assigned_by: Optional[str] = Field(default=None, max_length=200)
+
+
+class ProjectAgentCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    department: str = Field(min_length=1, max_length=120)
+    source_platform: Optional[str] = Field(default=None, max_length=120)
+    role: str = Field(default="Contributor", min_length=1, max_length=120)
+    permissions: str = Field(default="read,write", max_length=120)
+    target_table: str = Field(default="records", max_length=120)
+    collision_policy: str = "lock"
+    assigned_by: Optional[str] = Field(default=None, max_length=200)
+
+
 def _clean_external_id(value: Optional[str], prefix: str) -> str:
     if value:
         cleaned = re.sub(r"[^A-Za-z0-9._:-]+", "-", value.strip()).strip("-")
@@ -107,6 +132,7 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
     risk_event_count = 0
     model_tiers = []
     activity_platforms = []
+    agent_team = []
     if include_stats:
         month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         request_count, spend_usd, last_activity_at = (
@@ -173,6 +199,7 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
                 .all()
             )
         ]
+        agent_team = _project_agent_rows(item, db)
     budget = item.monthly_ai_budget
     return {
         "id": item.id,
@@ -193,6 +220,8 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "risk_event_count": int(risk_event_count or 0),
         "model_tiers": model_tiers,
         "activity_platforms": activity_platforms,
+        "assigned_agent_count": sum(1 for row in agent_team if row["assignment_status"] == "assigned"),
+        "agent_team": agent_team,
         "spend_usd": round(float(spend_usd or 0.0), 6),
         "spend_month_usd": round(float(spend_month_usd or 0.0), 6),
         "budget_remaining_usd": (
@@ -204,6 +233,93 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "created_at": item.created_at.isoformat() if item.created_at else None,
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
     }
+
+
+def _project_agent_rows(item: WorkItem, db: Session) -> list[dict]:
+    assignments = (
+        db.query(WorkItemAgent)
+        .filter(WorkItemAgent.work_item_id == item.id)
+        .order_by(WorkItemAgent.assigned_at, WorkItemAgent.id)
+        .all()
+    )
+    assigned_by_agent = {assignment.agent_id: assignment for assignment in assignments}
+    observed_ids = {
+        row[0]
+        for row in db.query(TokenTransaction.agent_id)
+        .filter(
+            TokenTransaction.work_item_id == item.id,
+            TokenTransaction.agent_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    }
+    agent_ids = set(assigned_by_agent) | observed_ids
+    if not agent_ids:
+        return []
+
+    agents = {
+        agent.id: agent
+        for agent in db.query(RegisteredAgent).filter(RegisteredAgent.id.in_(agent_ids)).all()
+    }
+    rows = []
+    for agent_id in sorted(agent_ids, key=lambda value: (agents.get(value).name if agents.get(value) else "")):
+        agent = agents.get(agent_id)
+        if not agent:
+            continue
+        call_count, spend_usd, last_activity_at = (
+            db.query(
+                func.count(TokenTransaction.id),
+                func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+                func.max(TokenTransaction.timestamp),
+            )
+            .filter(
+                TokenTransaction.work_item_id == item.id,
+                TokenTransaction.agent_id == agent_id,
+            )
+            .one()
+        )
+        risk_count = (
+            db.query(func.count(AuditEvent.id))
+            .filter(
+                AuditEvent.work_item_id == item.id,
+                AuditEvent.agent_id == agent_id,
+                func.lower(func.coalesce(AuditEvent.risk_level, "low")).in_(
+                    ("medium", "high", "critical")
+                ),
+            )
+            .scalar()
+            or 0
+        )
+        tiers = [
+            row[0]
+            for row in db.query(TokenTransaction.model_tier)
+            .filter(
+                TokenTransaction.work_item_id == item.id,
+                TokenTransaction.agent_id == agent_id,
+                TokenTransaction.model_tier.isnot(None),
+            )
+            .distinct()
+            .order_by(TokenTransaction.model_tier)
+            .all()
+        ]
+        assignment = assigned_by_agent.get(agent_id)
+        rows.append({
+            "agent_id": agent.id,
+            "name": agent.name,
+            "display_name": display_agent_name(agent.name, agent.department, agent.source_platform),
+            "department": display_department(agent.department),
+            "source_platform": agent.source_platform,
+            "role": assignment.role if assignment else None,
+            "assignment_status": "assigned" if assignment else "unexpected",
+            "usage_status": "used" if int(call_count or 0) > 0 else "never_used",
+            "call_count": int(call_count or 0),
+            "spend_usd": round(float(spend_usd or 0.0), 6),
+            "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
+            "risk_event_count": int(risk_count),
+            "model_tiers": tiers,
+            "assigned_at": assignment.assigned_at.isoformat() if assignment and assignment.assigned_at else None,
+        })
+    return rows
 
 
 def resolve_work_item(db: Session, identifier: str) -> Optional[WorkItem]:
@@ -390,3 +506,107 @@ def archive_work_item(identifier: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(item)
     return _work_item_json(item, db)
+
+
+@router.get("/{identifier}/agents")
+def list_project_agents(identifier: str, db: Session = Depends(get_db)):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    return _project_agent_rows(item, db)
+
+
+@router.post("/{identifier}/agents")
+def assign_project_agents(
+    identifier: str,
+    body: AgentAssignmentsIn,
+    db: Session = Depends(get_db),
+):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    requested_ids = [assignment.agent_id for assignment in body.assignments]
+    agents = db.query(RegisteredAgent).filter(RegisteredAgent.id.in_(requested_ids)).all() if requested_ids else []
+    found_ids = {agent.id for agent in agents}
+    missing = sorted(set(requested_ids) - found_ids)
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Agents not found: {', '.join(map(str, missing))}")
+
+    existing = {
+        assignment.agent_id: assignment
+        for assignment in db.query(WorkItemAgent)
+        .filter(
+            WorkItemAgent.work_item_id == item.id,
+            WorkItemAgent.agent_id.in_(requested_ids),
+        )
+        .all()
+    } if requested_ids else {}
+    for requested in body.assignments:
+        assignment = existing.get(requested.agent_id)
+        if assignment:
+            assignment.role = requested.role.strip() or "Contributor"
+            assignment.status = "assigned"
+        else:
+            db.add(WorkItemAgent(
+                work_item_id=item.id,
+                agent_id=requested.agent_id,
+                role=requested.role.strip() or "Contributor",
+                status="assigned",
+                assigned_by=body.assigned_by,
+            ))
+    db.commit()
+    return _project_agent_rows(item, db)
+
+
+@router.post("/{identifier}/agents/create", status_code=201)
+def create_project_agent(
+    identifier: str,
+    body: ProjectAgentCreateIn,
+    db: Session = Depends(get_db),
+):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    if body.collision_policy not in {"lock", "queue", "skip"}:
+        raise HTTPException(status_code=400, detail="collision_policy must be lock, queue, or skip")
+    agent = RegisteredAgent(
+        name=body.name.strip(),
+        department=body.department.strip(),
+        source_platform=infer_platform(body.name, body.source_platform),
+        permissions=body.permissions,
+        target_table=body.target_table,
+        collision_policy=body.collision_policy,
+        status="idle",
+    )
+    db.add(agent)
+    try:
+        db.flush()
+        db.add(WorkItemAgent(
+            work_item_id=item.id,
+            agent_id=agent.id,
+            role=body.role.strip() or "Contributor",
+            status="assigned",
+            assigned_by=body.assigned_by,
+        ))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"An agent named '{body.name}' is already registered")
+    return _project_agent_rows(item, db)
+
+
+@router.delete("/{identifier}/agents/{agent_id}")
+def unassign_project_agent(identifier: str, agent_id: int, db: Session = Depends(get_db)):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    assignment = (
+        db.query(WorkItemAgent)
+        .filter(WorkItemAgent.work_item_id == item.id, WorkItemAgent.agent_id == agent_id)
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Agent is not assigned to this project")
+    db.delete(assignment)
+    db.commit()
+    return {"unassigned": True, "agent_id": agent_id, "project_id": item.external_id}

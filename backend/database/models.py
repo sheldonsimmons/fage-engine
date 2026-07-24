@@ -12,7 +12,7 @@ Seven tables cover the full POC surface area:
 """
 
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey
+    Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -90,6 +90,7 @@ class RegisteredAgent(Base):
 
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")
+    project_assignments = relationship("WorkItemAgent", back_populates="agent", cascade="all, delete-orphan")
 
 
 class DepartmentBudget(Base):
@@ -149,6 +150,26 @@ class WorkItem(Base):
     account            = relationship("WorkAccount", back_populates="work_items")
     token_transactions = relationship("TokenTransaction", back_populates="work_item")
     audit_events       = relationship("AuditEvent", back_populates="work_item")
+    agent_assignments  = relationship("WorkItemAgent", back_populates="work_item", cascade="all, delete-orphan")
+
+
+class WorkItemAgent(Base):
+    """An agent expected or approved to work on a project."""
+    __tablename__ = "work_item_agents"
+    __table_args__ = (
+        UniqueConstraint("work_item_id", "agent_id", name="uq_work_item_agent"),
+    )
+
+    id          = Column(Integer, primary_key=True, index=True)
+    work_item_id = Column(Integer, ForeignKey("work_items.id"), nullable=False, index=True)
+    agent_id    = Column(Integer, ForeignKey("registered_agents.id"), nullable=False, index=True)
+    role        = Column(String, nullable=False, default="Contributor")
+    status      = Column(String, nullable=False, default="assigned")
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    assigned_by = Column(String, nullable=True)
+
+    work_item = relationship("WorkItem", back_populates="agent_assignments")
+    agent     = relationship("RegisteredAgent", back_populates="project_assignments")
 
 
 class TokenTransaction(Base):

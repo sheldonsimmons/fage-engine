@@ -145,13 +145,60 @@
       display:inline-block; border:1px solid rgba(63,185,80,.45); color:var(--accent-green);
       border-radius:999px; padding:2px 7px; font-size:9px; font-weight:800; text-transform:uppercase;
     }
+    .wa-team-card { margin-top:16px; }
+    .wa-team-head {
+      display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+      margin-bottom:14px;
+    }
+    .wa-team-project {
+      color:var(--accent); font-family:var(--font-mono); font-size:10px; margin-top:5px;
+    }
+    .wa-team-layout { display:grid; grid-template-columns:1.2fr .8fr; gap:16px; }
+    .wa-team-section {
+      border:1px solid var(--border); border-radius:8px; background:var(--bg-base); padding:14px;
+    }
+    .wa-team-section h3 { font-size:13px; margin:0 0 3px; }
+    .wa-team-section > p { color:var(--text-muted); font-size:10px; margin:0 0 12px; line-height:1.4; }
+    .wa-agent-picker { display:grid; gap:7px; max-height:280px; overflow:auto; }
+    .wa-agent-choice {
+      display:grid; grid-template-columns:auto minmax(0,1fr) 130px; align-items:center; gap:9px;
+      border:1px solid var(--border); border-radius:7px; padding:9px; cursor:pointer;
+    }
+    .wa-agent-choice:hover { border-color:var(--accent); }
+    .wa-agent-choice strong { display:block; font-size:11px; }
+    .wa-agent-choice span { color:var(--text-muted); display:block; font-size:9px; margin-top:2px; }
+    .wa-agent-choice input[type="text"] { padding:6px 7px; font-size:10px; }
+    .wa-agent-choice.assigned { border-color:rgba(63,185,80,.35); background:rgba(63,185,80,.04); }
+    .wa-team-list { display:grid; gap:7px; margin-bottom:14px; }
+    .wa-team-row {
+      display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:10px;
+      border:1px solid var(--border); border-radius:7px; padding:10px;
+    }
+    .wa-team-row strong { display:block; font-size:11px; }
+    .wa-team-row small { color:var(--text-muted); display:block; font-size:9px; margin-top:3px; }
+    .wa-team-state {
+      border:1px solid var(--border); border-radius:999px; padding:2px 7px;
+      color:var(--text-muted); font-size:8px; font-weight:800; text-transform:uppercase;
+    }
+    .wa-team-state.used { border-color:rgba(63,185,80,.4); color:var(--accent-green); }
+    .wa-team-state.unexpected { border-color:rgba(248,81,73,.45); color:var(--accent-red); }
+    .wa-remove {
+      border:0; background:transparent; color:var(--text-muted); cursor:pointer; font-size:10px;
+    }
+    .wa-remove:hover { color:var(--accent-red); }
+    .wa-quick-create { border-top:1px solid var(--border); margin-top:14px; padding-top:14px; }
+    .wa-quick-create h3 { margin-bottom:10px; }
+    .wa-team-placeholder {
+      color:var(--text-muted); padding:26px; text-align:center; border:1px dashed var(--border);
+      border-radius:8px; font-size:11px;
+    }
     .wa-empty { color:var(--text-muted); text-align:center; padding:22px !important; }
     @media (max-width:820px) {
       .wa-header { height:auto; padding:12px 16px; align-items:flex-start; gap:12px; }
       .wa-logo { width:160px; }
       .wa-nav { justify-content:flex-end; }
       .wa-main { padding:20px 14px 36px; }
-      .wa-grid, .wa-steps, .wa-overview-panels, .wa-connection-grid { grid-template-columns:1fr; }
+      .wa-grid, .wa-steps, .wa-overview-panels, .wa-connection-grid, .wa-team-layout { grid-template-columns:1fr; }
       .wa-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .wa-form-grid { grid-template-columns:1fr; }
     }
@@ -340,9 +387,74 @@
       </div>
       <div class="wa-table-wrap">
         <table class="wa-table">
-          <thead><tr><th>Project</th><th>Source</th><th>Owner</th><th>Department</th><th>Requests</th><th>Monthly Spend</th><th>Budget</th><th>Status</th></tr></thead>
-          <tbody id="waProjectRows"><tr><td colspan="8" class="wa-empty">Loading projects…</td></tr></tbody>
+          <thead><tr><th>Project</th><th>Source</th><th>Owner</th><th>Department</th><th>Agent Team</th><th>Requests</th><th>Monthly Spend</th><th>Budget</th><th>Status</th></tr></thead>
+          <tbody id="waProjectRows"><tr><td colspan="9" class="wa-empty">Loading projects…</td></tr></tbody>
         </table>
+      </div>
+    </section>
+
+    <section class="wa-card wa-team-card" id="waAgentTeamCard" aria-labelledby="waAgentTeamTitle">
+      <div id="waTeamPlaceholder" class="wa-team-placeholder">
+        Select a project above to build and manage its agent team.
+      </div>
+      <div id="waTeamWorkspace" hidden>
+        <div class="wa-team-head">
+          <div>
+            <h2 class="wa-card-title" id="waAgentTeamTitle">Agent Team</h2>
+            <p class="wa-card-sub" style="margin-bottom:0">Assign multiple AgentLake agents and compare expected activity with actual usage.</p>
+            <div class="wa-team-project" id="waTeamProjectLabel"></div>
+          </div>
+          <button class="wa-secondary" type="button" onclick="waClearTeamSelection()">Close</button>
+        </div>
+        <div class="wa-team-layout">
+          <section class="wa-team-section">
+            <h3>Add existing agents</h3>
+            <p>Select as many registered agents as this project needs. An agent may belong to more than one project.</p>
+            <div id="waAgentPicker" class="wa-agent-picker"></div>
+            <div class="wa-actions">
+              <button class="wa-primary" id="waAssignAgentsButton" type="button" onclick="waAssignSelectedAgents()">Add Selected Agents</button>
+              <span class="wa-status" id="waAssignStatus"></span>
+            </div>
+          </section>
+          <section class="wa-team-section">
+            <h3>Current team</h3>
+            <p>Assigned agents are expected here. Unexpected means an unassigned agent has already used this project.</p>
+            <div id="waCurrentTeam" class="wa-team-list"></div>
+            <form id="waCreateAgentForm" class="wa-quick-create">
+              <h3>Create and assign an agent</h3>
+              <div class="wa-form-grid">
+                <div class="wa-field full">
+                  <label for="waAgentName">Agent name *</label>
+                  <input class="wa-input" id="waAgentName" required maxlength="200" placeholder="Contract Review Agent" />
+                </div>
+                <div class="wa-field">
+                  <label for="waAgentRole">Project role</label>
+                  <input class="wa-input" id="waAgentRole" maxlength="120" value="Contributor" />
+                </div>
+                <div class="wa-field">
+                  <label for="waAgentDepartment">Department *</label>
+                  <input class="wa-input" id="waAgentDepartment" required maxlength="120" placeholder="Legal" />
+                </div>
+                <div class="wa-field">
+                  <label for="waAgentPlatform">Platform</label>
+                  <input class="wa-input" id="waAgentPlatform" maxlength="120" placeholder="Salesforce" />
+                </div>
+                <div class="wa-field">
+                  <label for="waAgentCollision">Collision policy</label>
+                  <select class="wa-input" id="waAgentCollision">
+                    <option value="lock">Lock</option>
+                    <option value="queue">Queue</option>
+                    <option value="skip">Skip</option>
+                  </select>
+                </div>
+              </div>
+              <div class="wa-actions">
+                <button class="wa-primary" id="waCreateAgentButton" type="submit">Create &amp; Assign</button>
+                <span class="wa-status" id="waCreateAgentStatus"></span>
+              </div>
+            </form>
+          </section>
+        </div>
       </div>
     </section>
     </section>
@@ -399,6 +511,8 @@
   <script>
     let waItems = [];
     let waSummary = null;
+    let waAgents = [];
+    let waSelectedProjectId = "";
 
     function waShowView(viewName) {
       ["overview", "projects", "connections"].forEach(name => {
@@ -479,11 +593,108 @@
       element.classList.toggle("error", isError);
     }
 
-    async function waLoadProjects(preselectId = "") {
+    function waSelectedProject() {
+      return waItems.find(item => item.external_id === waSelectedProjectId);
+    }
+
+    function waClearTeamSelection() {
+      waSelectedProjectId = "";
+      document.getElementById("waTeamPlaceholder").hidden = false;
+      document.getElementById("waTeamWorkspace").hidden = true;
+    }
+
+    function waSelectProject(projectId) {
+      waSelectedProjectId = projectId;
+      const project = waSelectedProject();
+      if (!project) return waClearTeamSelection();
+      document.getElementById("waTeamPlaceholder").hidden = true;
+      document.getElementById("waTeamWorkspace").hidden = false;
+      document.getElementById("waTeamProjectLabel").textContent = `${project.name} · ${project.external_id}`;
+      if (!document.getElementById("waAgentDepartment").value && project.department) {
+        document.getElementById("waAgentDepartment").value = project.department;
+      }
+      waRenderAgentTeam();
+      document.getElementById("waAgentTeamCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function waRenderAgentTeam() {
+      const project = waSelectedProject();
+      if (!project) return;
+      const team = project.agent_team || [];
+      const assignedById = new Map(
+        team.filter(member => member.assignment_status === "assigned")
+          .map(member => [member.agent_id, member])
+      );
+      document.getElementById("waAgentPicker").innerHTML = waAgents.length
+        ? waAgents.map(agent => {
+            const assignment = assignedById.get(agent.id);
+            return `<label class="wa-agent-choice${assignment ? " assigned" : ""}">
+              <input type="checkbox" data-agent-pick="${agent.id}" ${assignment ? "checked" : ""} />
+              <span><strong>${waEscape(agent.display_name || agent.name)}</strong><span>${waEscape(agent.display_department || agent.department)} · ${waEscape(agent.source_platform || "Custom")}</span></span>
+              <input class="wa-input" type="text" data-agent-role="${agent.id}" value="${waEscape(assignment?.role || "Contributor")}" maxlength="120" aria-label="Project role for ${waEscape(agent.display_name || agent.name)}" />
+            </label>`;
+          }).join("")
+        : '<div class="wa-empty">No registered agents yet. Create one on the right.</div>';
+
+      document.getElementById("waCurrentTeam").innerHTML = team.length
+        ? team.map(member => {
+            const unexpected = member.assignment_status === "unexpected";
+            const state = unexpected ? "Unexpected" : member.usage_status === "used" ? "Used" : "Never used";
+            const stateClass = unexpected ? "unexpected" : member.usage_status === "used" ? "used" : "";
+            return `<div class="wa-team-row">
+              <div>
+                <strong>${waEscape(member.display_name || member.name)}</strong>
+                <small>${waEscape(member.role || "Not assigned")} · ${waEscape(member.source_platform || "Custom")} · ${Number(member.call_count || 0).toLocaleString()} requests · ${waMoney(member.spend_usd)}</small>
+              </div>
+              <span class="wa-team-state ${stateClass}">${waEscape(state)}</span>
+              ${unexpected ? '<span></span>' : `<button class="wa-remove" type="button" onclick="waUnassignAgent(${member.agent_id})">Remove</button>`}
+            </div>`;
+          }).join("")
+        : '<div class="wa-empty">No agents assigned or observed for this project.</div>';
+    }
+
+    async function waAssignSelectedAgents() {
+      const project = waSelectedProject();
+      if (!project) return;
+      const assignments = [...document.querySelectorAll("[data-agent-pick]:checked")].map(input => ({
+        agent_id: Number(input.dataset.agentPick),
+        role: document.querySelector(`[data-agent-role="${input.dataset.agentPick}"]`)?.value.trim() || "Contributor"
+      }));
+      if (!assignments.length) {
+        waSetStatus("waAssignStatus", "Select at least one agent.", true);
+        return;
+      }
+      const button = document.getElementById("waAssignAgentsButton");
+      button.disabled = true;
+      waSetStatus("waAssignStatus", "Assigning…");
       try {
-        [waItems, waSummary] = await Promise.all([
+        await apiPost(`/api/work-items/${encodeURIComponent(project.external_id)}/agents`, { assignments });
+        waSetStatus("waAssignStatus", `${assignments.length} agent${assignments.length === 1 ? "" : "s"} assigned.`);
+        await waLoadProjects(project.external_id, true);
+      } catch (error) {
+        waSetStatus("waAssignStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function waUnassignAgent(agentId) {
+      const project = waSelectedProject();
+      if (!project) return;
+      try {
+        await apiDelete(`/api/work-items/${encodeURIComponent(project.external_id)}/agents/${agentId}`);
+        await waLoadProjects(project.external_id, true);
+      } catch (error) {
+        waSetStatus("waAssignStatus", error.message, true);
+      }
+    }
+
+    async function waLoadProjects(preselectId = "", keepTeam = false) {
+      try {
+        [waItems, waSummary, waAgents] = await Promise.all([
           apiGet("/api/work-items"),
           apiGet("/api/work-items/summary"),
+          apiGet("/api/agents"),
         ]);
         const active = waItems.filter(item => item.status === "active");
         const select = document.getElementById("waRouteProject");
@@ -498,18 +709,20 @@
           waItems.reduce((sum, item) => sum + Number(item.spend_usd || 0), 0)
         );
         document.getElementById("waProjectRows").innerHTML = waItems.length ? waItems.map(item => `
-          <tr data-project-id="${waEscape(item.external_id)}">
+          <tr data-project-id="${waEscape(item.external_id)}" onclick="waSelectProject('${waEscape(item.external_id)}')">
             <td><div class="wa-project-name">${waEscape(item.name)}</div><div class="wa-project-id">${waEscape(item.external_id)}</div></td>
             <td>${waEscape(item.source_platform || "CostPilot")}</td>
             <td>${waEscape(item.owner || "—")}</td>
             <td>${waEscape(item.department || "—")}</td>
+            <td>${Number(item.assigned_agent_count || 0).toLocaleString()} assigned</td>
             <td>${Number(item.request_count || 0).toLocaleString()}</td>
             <td>${waMoney(item.spend_month_usd)}</td>
             <td>${item.monthly_ai_budget == null ? "—" : waMoney(item.monthly_ai_budget)}</td>
             <td><span class="wa-badge">${waEscape(waStatus(item.status))}</span></td>
           </tr>
-        `).join("") : '<tr><td colspan="8" class="wa-empty">No projects yet. Create the first one above.</td></tr>';
+        `).join("") : '<tr><td colspan="9" class="wa-empty">No projects yet. Create the first one above.</td></tr>';
         waRenderOverview();
+        if (keepTeam && waSelectedProjectId) waSelectProject(waSelectedProjectId);
       } catch (error) {
         document.getElementById("waProjectRows").innerHTML =
           `<tr><td colspan="8" class="wa-empty">Could not load projects: ${waEscape(error.message)}</td></tr>`;
@@ -580,6 +793,33 @@
         await waLoadProjects(projectId);
       } catch (error) {
         waSetStatus("waRouteStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById("waCreateAgentForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const project = waSelectedProject();
+      if (!project) return;
+      const button = document.getElementById("waCreateAgentButton");
+      button.disabled = true;
+      waSetStatus("waCreateAgentStatus", "Creating…");
+      try {
+        await apiPost(`/api/work-items/${encodeURIComponent(project.external_id)}/agents/create`, {
+          name: document.getElementById("waAgentName").value.trim(),
+          role: document.getElementById("waAgentRole").value.trim() || "Contributor",
+          department: document.getElementById("waAgentDepartment").value.trim(),
+          source_platform: document.getElementById("waAgentPlatform").value.trim() || null,
+          collision_policy: document.getElementById("waAgentCollision").value,
+        });
+        document.getElementById("waCreateAgentForm").reset();
+        document.getElementById("waAgentRole").value = "Contributor";
+        if (project.department) document.getElementById("waAgentDepartment").value = project.department;
+        waSetStatus("waCreateAgentStatus", "Agent created and assigned.");
+        await waLoadProjects(project.external_id, true);
+      } catch (error) {
+        waSetStatus("waCreateAgentStatus", error.message, true);
       } finally {
         button.disabled = false;
       }
