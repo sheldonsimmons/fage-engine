@@ -41,8 +41,8 @@ const HELP_CONTENT = {
     body:  "Every AI agent connected to CostPilot appears here automatically on first use. The Traffic Cop monitors all agents in real time — if two agents try to update the same record simultaneously, CostPilot detects the collision and locks both until a supervisor resolves it. No data corruption, no silent overwrites.",
   },
   agentEfficiencyPanel: {
-    title: "Agent Efficiency Rank",
-    body:  "This ranks agents by usage, cost, routing efficiency, and pruning performance. It helps identify which agents are driving spend, which ones are being routed to lower-cost tiers, and which ones are producing the most context-pruning savings.",
+    title: "Agent Usage",
+    body:  "This shows which registered agents are actively used, occasionally used, inactive, or have never run. Switch views to find the most-used, least-used, unused, highest-cost, or recently active agents. Economy routing and pruning remain available as secondary efficiency signals.",
   },
   routingInsightsPanel: {
     title: "Routing Insights",

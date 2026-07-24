@@ -11,11 +11,13 @@ GET /api/reports/agent-activity
     agent_id    — integer, filter to one agent
     model_tier  — micro | flagship
     days        — integer (default 30)
+    include_unused — include registered agents with zero calls in the period
 """
 
 from datetime import datetime, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -34,6 +36,7 @@ def get_agent_activity(
     date_from:  Optional[str] = Query(None),
     date_to:    Optional[str] = Query(None),
     days:       int           = Query(30),
+    include_unused: bool      = Query(False),
     db: Session = Depends(get_db),
 ):
     # Prefer explicit date_from/date_to; fall back to days
@@ -71,6 +74,10 @@ def get_agent_activity(
 
     # ── Load matching agents ────────────────────────────────────────────────────
     agent_q = db.query(RegisteredAgent)
+    if include_unused:
+        agent_q = agent_q.filter(
+            or_(RegisteredAgent.archived == False, RegisteredAgent.archived.is_(None))
+        )
     if agent_id:
         agent_q = agent_q.filter(RegisteredAgent.id == agent_id)
     if platform:
@@ -95,7 +102,7 @@ def get_agent_activity(
     agent_rows = []
     for ag in agents:
         txs = by_agent.get(ag.id, [])
-        if not txs:
+        if not txs and not include_unused:
             continue
 
         total_calls    = len(txs)
@@ -104,7 +111,15 @@ def get_agent_activity(
         flagship_calls = sum(1 for t in txs if t.model_tier not in ECONOMY)
         pruned_calls   = sum(1 for t in txs if t.was_pruned)
         tokens_saved   = sum(t.tokens_saved or 0 for t in txs)
-        last_active    = max(t.timestamp for t in txs)
+        last_active    = max((t.timestamp for t in txs), default=ag.last_used_at)
+        if include_unused and not txs and not last_active:
+            last_active = (
+                db.query(TokenTransaction.timestamp)
+                .filter(TokenTransaction.agent_id == ag.id)
+                .order_by(TokenTransaction.timestamp.desc())
+                .limit(1)
+                .scalar()
+            )
 
         # Sort transactions newest-first for the call log
         sorted_txs = sorted(txs, key=lambda t: t.timestamp, reverse=True)
@@ -124,7 +139,7 @@ def get_agent_activity(
             "flagship_pct":  round(flagship_calls / total_calls * 100, 1) if total_calls else 0,
             "pruned_pct":    round(pruned_calls   / total_calls * 100, 1) if total_calls else 0,
             "tokens_saved":  tokens_saved,
-            "last_active":   last_active.isoformat(),
+            "last_active":   last_active.isoformat() if last_active else None,
             "transactions":  [_serialize_tx(t) for t in sorted_txs[:100]],  # cap at 100
         })
 

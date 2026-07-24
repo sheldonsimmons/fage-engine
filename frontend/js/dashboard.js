@@ -170,7 +170,174 @@ async function renderTodayTierSplit(d = {}) {
   }
 }
 
-// ── Agent Efficiency Rank ─────────────────────────────────────────────────────
+// ── Agent Usage ───────────────────────────────────────────────────────────────
+
+let agentUsageView = "most_used";
+let agentUsageRows = [];
+
+function agentUsageEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]);
+}
+
+function agentUsageTimestamp(value) {
+  if (!value) return 0;
+  const text = String(value);
+  const timestamp = new Date(text.endsWith("Z") ? text : `${text}Z`).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function agentUsageRelativeTime(value) {
+  const timestamp = agentUsageTimestamp(value);
+  if (!timestamp) return "Never";
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(elapsed / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
+function agentUsageStatus(agent) {
+  const lastActive = agentUsageTimestamp(agent.last_active);
+  if (Number(agent.calls || 0) > 0) {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return lastActive >= sevenDaysAgo
+      ? { key: "active", label: "Active" }
+      : { key: "occasional", label: "Occasional" };
+  }
+  return lastActive
+    ? { key: "inactive", label: "Inactive" }
+    : { key: "never", label: "Never used" };
+}
+
+function filteredAgentUsageRows() {
+  const department = String(document.getElementById("agentUsageFilterDept")?.value || "").toLowerCase();
+  const platform = String(document.getElementById("agentUsageFilterPlatform")?.value || "").toLowerCase();
+  const search = String(document.getElementById("agentUsageFilterSearch")?.value || "").trim().toLowerCase();
+  const rows = agentUsageRows.filter(agent => {
+    const agentDepartment = displayDeptName(agent.display_department || agent.department || "").toLowerCase();
+    const agentPlatform = String(agent.platform || "").toLowerCase();
+    const agentName = String(agent.display_name || agent.name || "").toLowerCase();
+    return (!department || agentDepartment === department)
+      && (!platform || agentPlatform === platform)
+      && (!search || `${agentName} ${agentDepartment} ${agentPlatform}`.includes(search));
+  });
+  if (agentUsageView === "unused") {
+    return rows
+      .filter(agent => Number(agent.calls || 0) === 0)
+      .sort((a, b) => agentUsageTimestamp(b.last_active) - agentUsageTimestamp(a.last_active));
+  }
+  if (agentUsageView === "least_used") {
+    return rows
+      .filter(agent => Number(agent.calls || 0) > 0)
+      .sort((a, b) => Number(a.calls || 0) - Number(b.calls || 0));
+  }
+  if (agentUsageView === "highest_cost") {
+    return rows.sort((a, b) => Number(b.cost_usd || 0) - Number(a.cost_usd || 0));
+  }
+  if (agentUsageView === "recent") {
+    return rows.sort((a, b) => agentUsageTimestamp(b.last_active) - agentUsageTimestamp(a.last_active));
+  }
+  if (agentUsageView === "all") {
+    return rows.sort((a, b) =>
+      String(a.display_name || a.name || "").localeCompare(String(b.display_name || b.name || ""))
+    );
+  }
+  return rows.sort((a, b) =>
+    Number(b.calls || 0) - Number(a.calls || 0) ||
+    agentUsageTimestamp(b.last_active) - agentUsageTimestamp(a.last_active)
+  );
+}
+
+function populateAgentUsageFilters() {
+  const setOptions = (id, values, emptyLabel) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const selected = select.value;
+    select.innerHTML = `<option value="">${emptyLabel}</option>`
+      + values.map(value => `<option value="${agentUsageEscape(value)}">${agentUsageEscape(value)}</option>`).join("");
+    if ([...select.options].some(option => option.value === selected)) select.value = selected;
+  };
+  const departments = [...new Set(agentUsageRows
+    .map(agent => displayDeptName(agent.display_department || agent.department || ""))
+    .filter(Boolean))].sort();
+  const platforms = [...new Set(agentUsageRows
+    .map(agent => String(agent.platform || "").trim())
+    .filter(Boolean))].sort();
+  setOptions("agentUsageFilterDept", departments, "All Departments");
+  setOptions("agentUsageFilterPlatform", platforms, "All Platforms");
+}
+
+function applyAgentUsageFilters() {
+  renderAgentUsageRows();
+}
+
+function renderAgentUsageRows() {
+  const leaderboard = document.getElementById("agentEffBody2");
+  if (!leaderboard) return;
+  const rows = filteredAgentUsageRows();
+  const totalCalls = agentUsageRows.reduce((sum, agent) => sum + Number(agent.calls || 0), 0);
+  if (!rows.length) {
+    const message = agentUsageView === "unused"
+      ? "Every registered agent has recorded usage."
+      : "No agents match this usage view.";
+    leaderboard.innerHTML = `<div class="placeholder">${message}</div>`;
+    return;
+  }
+
+  leaderboard.innerHTML = rows.map(agent => {
+    const calls = Number(agent.calls || 0);
+    const share = totalCalls > 0 ? calls / totalCalls * 100 : 0;
+    const economyPct = Math.max(0, Math.min(100, 100 - Number(agent.flagship_pct || 0)));
+    const status = agentUsageStatus(agent);
+    const dept = displayDeptName(agent.display_department || agent.department || "—");
+    const name = agent.display_name || agent.name || "Unnamed agent";
+    const shareWidth = calls > 0 ? Math.max(2, Math.min(100, share)) : 0;
+    return `<article class="agent-usage-card">
+      <div class="agent-usage-identity">
+        <div>
+          <strong>${agentUsageEscape(name)}</strong>
+          <small>${agentUsageEscape(dept)} · ${agentUsageEscape((agent.platform || "—").toUpperCase())}</small>
+        </div>
+        <span class="agent-usage-status ${status.key}">${status.label}</span>
+      </div>
+      <div>
+        <div class="agent-usage-share-label">
+          <span>Share of agent traffic</span>
+          <strong>${share.toFixed(1)}%</strong>
+        </div>
+        <div class="agent-usage-share-track" aria-label="${share.toFixed(1)} percent of agent traffic">
+          <span style="width:${shareWidth}%"></span>
+        </div>
+        <div class="agent-usage-secondary">
+          <span>${economyPct.toFixed(0)}% economy routing</span>
+          <span>${Number(agent.tokens_saved || 0).toLocaleString()} tokens pruned</span>
+        </div>
+      </div>
+      <div class="agent-usage-stats">
+        <div><strong>${calls.toLocaleString()}</strong><span>Calls</span></div>
+        <div><strong>${share.toFixed(1)}%</strong><span>Traffic share</span></div>
+        <div><strong>${agentUsageRelativeTime(agent.last_active)}</strong><span>Last used</span></div>
+        <div><strong>$${Number(agent.cost_usd || 0).toFixed(2)}</strong><span>Total cost</span></div>
+        <div><strong>$${Number(agent.avg_cost_usd || 0).toFixed(4)}</strong><span>Avg / call</span></div>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+function setAgentUsageView(view) {
+  agentUsageView = view;
+  document.querySelectorAll("[data-usage-view]").forEach(button => {
+    button.classList.toggle("active", button.dataset.usageView === view);
+  });
+  renderAgentUsageRows();
+}
 
 async function renderAgentEfficiency() {
   const leaderboard = document.getElementById("agentEffBody2");
@@ -178,51 +345,30 @@ async function renderAgentEfficiency() {
   try {
     const now  = new Date();
     const from = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString();
-    const data = await apiGet(`/api/reports/agent-activity?date_from=${from}&date_to=${now.toISOString()}`);
-    const agents = (data.agents || [])
-      .map(agent => ({
-        ...agent,
-        economy_pct: Math.max(0, Math.min(100, 100 - (agent.flagship_pct || 0))),
-      }))
-      .sort((a, b) =>
-        b.economy_pct - a.economy_pct ||
-        (b.tokens_saved || 0) - (a.tokens_saved || 0) ||
-        (b.calls || 0) - (a.calls || 0)
-      );
-    if (!agents.length) {
-      leaderboard.innerHTML = `<div class="placeholder">No agent activity yet.</div>`;
-      return;
-    }
-    leaderboard.innerHTML = agents.map((a, index) => {
-      const dept   = displayDeptName(a.display_department || a.department || "—");
-      const econ   = a.economy_pct;
-      const econColor = econ >= 70 ? "var(--accent-green)" : econ < 40 ? "var(--accent-red)" : "var(--accent-yellow)";
-      const review = econ < 40 ? `<span class="efficiency-review">Needs review</span>` : "";
-      return `<article class="efficiency-rank-card">
-        <div class="efficiency-rank-number">${index + 1}</div>
-        <div class="efficiency-rank-main">
-          <div class="efficiency-rank-title">
-            <div>
-              <strong>${a.display_name || a.name}</strong>
-              <span>${dept} · ${(a.platform || "—").toUpperCase()}</span>
-            </div>
-            ${review}
-          </div>
-          <div class="efficiency-progress-row">
-            <div class="efficiency-progress" aria-label="${econ.toFixed(0)} percent economy routing">
-              <span style="width:${econ}%;background:${econColor}"></span>
-            </div>
-            <strong style="color:${econColor}">${econ.toFixed(0)}%</strong>
-          </div>
-        </div>
-        <div class="efficiency-rank-stats">
-          <div><strong>${(a.calls || 0).toLocaleString()}</strong><span>Calls</span></div>
-          <div><strong>$${(a.cost_usd || 0).toFixed(2)}</strong><span>Total cost</span></div>
-          <div><strong>$${(a.avg_cost_usd || 0).toFixed(4)}</strong><span>Avg / call</span></div>
-          <div><strong>${(a.tokens_saved || 0).toLocaleString()}</strong><span>Tokens pruned</span></div>
-        </div>
-      </article>`;
-    }).join("");
+    const path = `/api/reports/agent-activity?date_from=${encodeURIComponent(from)}`
+      + `&date_to=${encodeURIComponent(now.toISOString())}&include_unused=true`;
+    const data = await apiGet(path);
+    agentUsageRows = data.agents || [];
+    populateAgentUsageFilters();
+
+    const used = agentUsageRows.filter(agent => Number(agent.calls || 0) > 0).length;
+    const inactive = agentUsageRows.filter(agent => {
+      const status = agentUsageStatus(agent);
+      return status.key === "inactive";
+    }).length;
+    const never = agentUsageRows.filter(agent => agentUsageStatus(agent).key === "never").length;
+    const registered = agentUsageRows.length;
+    const adoption = registered > 0 ? used / registered * 100 : 0;
+    const setUsageText = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    };
+    setUsageText("agentUsageRegistered", registered.toLocaleString());
+    setUsageText("agentUsageUsed", used.toLocaleString());
+    setUsageText("agentUsageInactive", inactive.toLocaleString());
+    setUsageText("agentUsageNever", never.toLocaleString());
+    setUsageText("agentUsageAdoption", `${adoption.toFixed(0)}%`);
+    renderAgentUsageRows();
   } catch(e) {
     leaderboard.innerHTML = `<div class="placeholder" style="color:var(--accent-red)">${e.message}</div>`;
   }

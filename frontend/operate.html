@@ -5,7 +5,7 @@
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Operate</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260723-v443" />
+  <link rel="stylesheet" href="css/styles.css?v=20260724-v450" />
   <link rel="stylesheet" href="css/demo.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260723-v442" />
   <style>
@@ -516,23 +516,47 @@
         <span id="routingBlockedBtn"></span><span id="routingFeedChevron"></span>
       </div>
 
-      <!-- ── Agent Efficiency Rank ───────────────────────────────────────────── -->
+      <!-- ── Agent Usage ──────────────────────────────────────────────────────── -->
       <div class="dp-wrap dash-section" data-panel-id="agent-efficiency" id="agentEfficiencySection">
         <div class="dash-sec-head" onclick="togglePanel('agentEffBody','agentEffChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Agent Efficiency Rank
+          <span>▸ Agent Usage
             <span class="help-icon" data-help="agentEfficiencyPanel" onclick="event.stopPropagation();showHelp('agentEfficiencyPanel')">?</span>
           </span>
-          <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">compare agent cost, routing, and pruning performance</span>
+          <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">see what is being used, what is inactive, and what has never run</span>
           <span class="sec-right"><span class="sec-chev" id="agentEffChevron">▾</span></span>
         </div>
         <div id="agentEffBody" class="dash-sec-body">
-          <div class="efficiency-leaderboard-head">
+          <div class="agent-usage-head">
             <div>
-              <strong>30-day efficiency leaderboard</strong>
-              <span>Higher economy routing means more work used approved lower-cost models.</span>
+              <strong>30-day agent usage</strong>
+              <span>Current adoption and activity across every registered agent.</span>
             </div>
-            <div class="efficiency-legend"><span></span> Economy routing</div>
+            <div class="agent-usage-views" role="group" aria-label="Agent usage view">
+              <button class="active" type="button" data-usage-view="most_used" onclick="setAgentUsageView('most_used')">Most Used</button>
+              <button type="button" data-usage-view="least_used" onclick="setAgentUsageView('least_used')">Least Used</button>
+              <button type="button" data-usage-view="unused" onclick="setAgentUsageView('unused')">Unused</button>
+              <button type="button" data-usage-view="highest_cost" onclick="setAgentUsageView('highest_cost')">Highest Cost</button>
+              <button type="button" data-usage-view="recent" onclick="setAgentUsageView('recent')">Recently Active</button>
+              <button type="button" data-usage-view="all" onclick="setAgentUsageView('all')">All Agents</button>
+            </div>
+          </div>
+          <div class="agent-usage-filterbar" aria-label="Agent usage filters">
+            <select class="agent-filter-select" id="agentUsageFilterDept" onchange="applyAgentUsageFilters()">
+              <option value="">All Departments</option>
+            </select>
+            <select class="agent-filter-select" id="agentUsageFilterPlatform" onchange="applyAgentUsageFilters()">
+              <option value="">All Platforms</option>
+            </select>
+            <input class="agent-filter-search" id="agentUsageFilterSearch" type="search"
+              placeholder="Search agents…" oninput="applyAgentUsageFilters()" />
+          </div>
+          <div class="agent-usage-summary" aria-label="Agent adoption summary">
+            <div><strong id="agentUsageRegistered">—</strong><span>Registered</span></div>
+            <div><strong id="agentUsageUsed">—</strong><span>Used in 30 days</span></div>
+            <div><strong id="agentUsageInactive">—</strong><span>Inactive</span></div>
+            <div><strong id="agentUsageNever">—</strong><span>Never used</span></div>
+            <div><strong id="agentUsageAdoption">—</strong><span>30-day adoption</span></div>
           </div>
           <div id="agentEffBody2" class="efficiency-leaderboard">
             <div class="placeholder">Loading...</div>
@@ -677,13 +701,13 @@
 <script src="/js/Sortable.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/tier-utils.js"></script>
-<script src="js/dashboard.js?v=20260723-v439"></script>
+<script src="js/dashboard.js?v=20260724-v450"></script>
 <script src="js/budget.js"></script>
 <script src="js/agentlake.js?v=20260723-v438"></script>
 <script src="js/timeseries.js"></script>
 <script src="js/auditor.js?v=20260723-v439"></script>
 <script src="js/event_stream.js?v=20260723-v443"></script>
-<script src="js/help.js?v=20260723-v443"></script>
+<script src="js/help.js?v=20260724-v450"></script>
 <script>
 function toggleToolsMenu(e) {
   e.stopPropagation();
