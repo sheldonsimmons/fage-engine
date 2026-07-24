@@ -295,6 +295,7 @@
             <div class="agentlake-tabs" role="tablist" aria-label="Agentlake views">
               <button id="agentlakeTabOverview" class="agentlake-tab active" type="button" role="tab" aria-selected="true" aria-controls="agentlakeOverview" onclick="setAgentlakeView('overview')">Overview</button>
               <button id="agentlakeTabDepartments" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeDepartments" onclick="setAgentlakeView('departments')">By Department</button>
+              <button id="agentlakeTabProjects" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeProjects" onclick="setAgentlakeView('projects')">Projects</button>
               <button id="agentlakeTabAll" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeAllAgents" onclick="setAgentlakeView('all')">All Agents</button>
             </div>
           </div>
@@ -335,6 +336,29 @@
 
           <div id="agentlakeDepartments" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabDepartments" hidden>
             <div id="agentlakeDepartmentGroups" class="agentlake-department-groups"></div>
+          </div>
+
+          <div id="agentlakeProjects" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabProjects" hidden>
+            <div id="agentlakeProjectMetrics" class="agentlake-summary-metrics" aria-live="polite"></div>
+            <div class="agentlake-project-filterbar">
+              <span id="agentlakeProjectCount">Showing all projects</span>
+              <div>
+                <select id="agentlakeProjectStatus" class="agent-filter-select" onchange="renderAgentlakeProjects()">
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <input id="agentlakeProjectSearch" class="agent-filter-search agent-card-search" type="search"
+                       placeholder="Search projects..." oninput="renderAgentlakeProjects()" />
+                <button type="button" class="agent-card-clear-btn" onclick="clearAgentlakeProjectFilters()">Clear</button>
+              </div>
+            </div>
+            <div id="agentlakeProjectList" class="agentlake-project-list">
+              <p class="placeholder">Loading projects...</p>
+            </div>
           </div>
 
           <div id="agentlakeAllAgents" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabAll" hidden>
@@ -703,7 +727,7 @@
 <script src="js/tier-utils.js"></script>
 <script src="js/dashboard.js?v=20260724-v450"></script>
 <script src="js/budget.js"></script>
-<script src="js/agentlake.js?v=20260723-v438"></script>
+<script src="js/agentlake.js?v=20260724-v451"></script>
 <script src="js/timeseries.js"></script>
 <script src="js/auditor.js?v=20260723-v439"></script>
 <script src="js/event_stream.js?v=20260723-v443"></script>

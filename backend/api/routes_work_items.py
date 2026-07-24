@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import TokenTransaction, WorkAccount, WorkItem
+from database.models import AuditEvent, RegisteredAgent, TokenTransaction, WorkAccount, WorkItem
 
 
 router = APIRouter()
@@ -103,6 +103,10 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
     spend_month_usd = 0.0
     request_count = 0
     last_activity_at = None
+    agent_rows = []
+    risk_event_count = 0
+    model_tiers = []
+    activity_platforms = []
     if include_stats:
         month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         request_count, spend_usd, last_activity_at = (
@@ -123,6 +127,52 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
             .scalar()
             or 0.0
         )
+        agent_rows = (
+            db.query(RegisteredAgent.id, RegisteredAgent.name)
+            .join(TokenTransaction, TokenTransaction.agent_id == RegisteredAgent.id)
+            .filter(TokenTransaction.work_item_id == item.id)
+            .distinct()
+            .order_by(RegisteredAgent.name)
+            .all()
+        )
+        risk_event_count = (
+            db.query(func.count(AuditEvent.id))
+            .filter(
+                AuditEvent.work_item_id == item.id,
+                func.lower(func.coalesce(AuditEvent.risk_level, "low")).in_(
+                    ("medium", "high", "critical")
+                ),
+            )
+            .scalar()
+            or 0
+        )
+        model_tiers = [
+            row[0]
+            for row in (
+                db.query(TokenTransaction.model_tier)
+                .filter(
+                    TokenTransaction.work_item_id == item.id,
+                    TokenTransaction.model_tier.isnot(None),
+                )
+                .distinct()
+                .order_by(TokenTransaction.model_tier)
+                .all()
+            )
+        ]
+        activity_platforms = [
+            row[0]
+            for row in (
+                db.query(TokenTransaction.source_platform)
+                .filter(
+                    TokenTransaction.work_item_id == item.id,
+                    TokenTransaction.source_platform.isnot(None),
+                    TokenTransaction.source_platform != "",
+                )
+                .distinct()
+                .order_by(TokenTransaction.source_platform)
+                .all()
+            )
+        ]
     budget = item.monthly_ai_budget
     return {
         "id": item.id,
@@ -138,6 +188,11 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "source_platform": item.source_platform,
         "workspace_id": item.workspace_id,
         "request_count": int(request_count or 0),
+        "agent_count": len(agent_rows),
+        "agents": [{"id": row.id, "name": row.name} for row in agent_rows],
+        "risk_event_count": int(risk_event_count or 0),
+        "model_tiers": model_tiers,
+        "activity_platforms": activity_platforms,
         "spend_usd": round(float(spend_usd or 0.0), 6),
         "spend_month_usd": round(float(spend_month_usd or 0.0), 6),
         "budget_remaining_usd": (

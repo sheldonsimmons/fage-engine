@@ -496,6 +496,150 @@ body {
   gap: 8px;
   padding: 10px;
 }
+.agentlake-project-filterbar {
+  align-items: center;
+  color: var(--text-muted);
+  display: flex;
+  font-size: 10px;
+  font-weight: 700;
+  justify-content: space-between;
+  letter-spacing: .06em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+.agentlake-project-filterbar > div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+.agentlake-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.agentlake-project-card {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.agentlake-project-card.has-risk { border-left: 3px solid var(--accent-red); }
+.agentlake-project-card summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(70px, .55fr)) minmax(110px, .7fr) 16px;
+  list-style: none;
+  padding: 13px 14px;
+}
+.agentlake-project-card summary::-webkit-details-marker { display: none; }
+.agentlake-project-identity { min-width: 0; }
+.agentlake-project-identity h3 {
+  color: var(--text-primary);
+  font-size: 12px;
+  margin: 5px 0 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agentlake-project-identity p {
+  color: var(--text-muted);
+  font-size: 9px;
+  margin: 0;
+}
+.agentlake-project-status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  padding: 2px 6px;
+  text-transform: uppercase;
+}
+.agentlake-project-status.status-active {
+  border-color: rgba(63, 185, 80, .45);
+  color: var(--accent-green);
+}
+.agentlake-project-status.status-on_hold,
+.agentlake-project-status.needs-attribution {
+  border-color: rgba(210, 153, 34, .5);
+  color: var(--accent-yellow);
+}
+.agentlake-project-stat strong,
+.agentlake-project-last strong {
+  color: var(--text-primary);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.agentlake-project-stat span,
+.agentlake-project-last span {
+  color: var(--text-muted);
+  display: block;
+  font-size: 8px;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+.agentlake-project-stat.risk strong { color: var(--accent-red); }
+.agentlake-project-chevron {
+  color: var(--text-muted);
+  font-size: 20px;
+  transition: transform .15s ease;
+}
+.agentlake-project-card[open] .agentlake-project-chevron { transform: rotate(90deg); }
+.agentlake-project-detail {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1.4fr repeat(3, 1fr) 1.2fr auto;
+  padding: 12px 14px;
+}
+.agentlake-project-detail > div > span {
+  color: var(--text-muted);
+  display: block;
+  font-size: 8px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.agentlake-project-detail > div > strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.agentlake-project-detail > a,
+.agentlake-project-link {
+  align-self: center;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.agentlake-project-budget > div {
+  background: var(--bg-raised);
+  border-radius: 999px;
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.agentlake-project-budget i {
+  background: var(--accent);
+  display: block;
+  height: 100%;
+}
+.agentlake-project-unattributed {
+  align-items: center;
+  border-color: rgba(210, 153, 34, .45);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  padding: 13px 14px;
+}
 
 .agent-card-grid-6 {
   display: grid;
@@ -583,14 +727,28 @@ body {
   .agentlake-summary-metrics,
   .agentlake-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .agentlake-dept-agents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .agentlake-project-card summary { grid-template-columns: minmax(200px, 1.5fr) repeat(3, .6fr) 16px; }
+  .agentlake-project-stat:nth-of-type(4),
+  .agentlake-project-last { display: none; }
+  .agentlake-project-detail { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 560px) {
-  .agentlake-tabs { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+  .agentlake-tabs { display: grid; grid-template-columns: repeat(2, 1fr); width: 100%; }
   .agentlake-summary-metrics,
   .agentlake-overview-grid,
   .agentlake-dept-agents { grid-template-columns: 1fr; }
   .agentlake-dept-group summary { grid-template-columns: 1fr auto; }
   .agentlake-dept-stat:nth-last-child(-n+2) { display: none; }
+  .agentlake-project-filterbar { align-items: stretch; flex-direction: column; }
+  .agentlake-project-filterbar > div { align-items: stretch; flex-direction: column; }
+  .agentlake-project-filterbar select,
+  .agentlake-project-filterbar input,
+  .agentlake-project-filterbar button { width: 100%; }
+  .agentlake-project-card summary { grid-template-columns: 1fr auto; }
+  .agentlake-project-stat,
+  .agentlake-project-last { display: none; }
+  .agentlake-project-detail { grid-template-columns: 1fr; }
+  .agentlake-project-unattributed { grid-template-columns: 1fr; }
 }
 
 /* Live ops strip section labels */

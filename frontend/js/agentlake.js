@@ -572,6 +572,9 @@ let _allAgents = []; // cache for client-side filtering
 let _agentSpend = [];
 let _agentSpendLoadedAt = 0;
 let _agentlakeView = "overview";
+let _agentlakeProjects = [];
+let _agentlakeProjectSummary = {};
+let _agentlakeProjectsLoadedAt = 0;
 
 // Whether to include archived agents in the table (toggled by supervisor)
 let _showArchived = false;
@@ -590,7 +593,7 @@ async function loadAgents() {
     const url = _showArchived ? "/api/agents?include_archived=true" : "/api/agents";
     const agents = await apiGet(url);
     _allAgents = agents;
-    await loadAgentlakeSpend();
+    await Promise.all([loadAgentlakeSpend(), loadAgentlakeProjects()]);
     populateAgentCardFilters(agents.filter(a => !a.archived));
     applyAgentCardFilters();
     renderAgentlakeViews();
@@ -617,6 +620,22 @@ async function loadAgentlakeSpend() {
   }
 }
 
+async function loadAgentlakeProjects() {
+  const stale = Date.now() - _agentlakeProjectsLoadedAt > 30000;
+  if (!stale) return;
+  try {
+    const [projects, summary] = await Promise.all([
+      apiGet("/api/work-items"),
+      apiGet("/api/work-items/summary")
+    ]);
+    _agentlakeProjects = Array.isArray(projects) ? projects : [];
+    _agentlakeProjectSummary = summary || {};
+    _agentlakeProjectsLoadedAt = Date.now();
+  } catch (error) {
+    console.warn("AgentLake project summary unavailable:", error);
+  }
+}
+
 function agentlakeEscape(value) {
   return String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -631,7 +650,7 @@ function agentlakeLastUsed(iso) {
 }
 
 function setAgentlakeView(view) {
-  _agentlakeView = ["overview", "departments", "all"].includes(view) ? view : "overview";
+  _agentlakeView = ["overview", "departments", "projects", "all"].includes(view) ? view : "overview";
   const config = {
     overview: {
       panel: "agentlakeOverview", tab: "agentlakeTabOverview",
@@ -640,6 +659,10 @@ function setAgentlakeView(view) {
     departments: {
       panel: "agentlakeDepartments", tab: "agentlakeTabDepartments",
       description: "Browse the registry in smaller, collapsible department groups."
+    },
+    projects: {
+      panel: "agentlakeProjects", tab: "agentlakeTabProjects",
+      description: "Monitor which projects are using AI, which agents are involved, and where spend or risk needs attention."
     },
     all: {
       panel: "agentlakeAllAgents", tab: "agentlakeTabAll",
@@ -658,6 +681,7 @@ function setAgentlakeView(view) {
   });
   const description = document.getElementById("agentlakeViewDescription");
   if (description) description.textContent = config[_agentlakeView].description;
+  if (_agentlakeView === "projects") renderAgentlakeProjects();
 }
 
 function showNeverUsedAgents() {
@@ -721,6 +745,126 @@ function renderAgentlakeViews() {
   if (neverButton) neverButton.disabled = neverUsed.length === 0;
 
   renderAgentlakeDepartments(agents);
+  renderAgentlakeProjects();
+}
+
+function agentlakeProjectStatusLabel(status) {
+  return {
+    active: "Active",
+    on_hold: "On hold",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    archived: "Archived"
+  }[status] || "Unknown";
+}
+
+function clearAgentlakeProjectFilters() {
+  const status = document.getElementById("agentlakeProjectStatus");
+  const search = document.getElementById("agentlakeProjectSearch");
+  if (status) status.value = "";
+  if (search) search.value = "";
+  renderAgentlakeProjects();
+}
+
+function renderAgentlakeProjects() {
+  const list = document.getElementById("agentlakeProjectList");
+  if (!list) return;
+
+  const statusFilter = document.getElementById("agentlakeProjectStatus")?.value || "";
+  const search = (document.getElementById("agentlakeProjectSearch")?.value || "").trim().toLowerCase();
+  const projects = _agentlakeProjects.filter(project => {
+    if (statusFilter && project.status !== statusFilter) return false;
+    const searchable = [
+      project.name, project.external_id, project.account_name, project.owner,
+      project.department, project.source_platform,
+      ...(project.agents || []).map(agent => agent.name)
+    ].filter(Boolean).join(" ").toLowerCase();
+    return !search || searchable.includes(search);
+  }).sort((a, b) => {
+    const activityA = a.last_activity_at ? new Date(a.last_activity_at).getTime() : 0;
+    const activityB = b.last_activity_at ? new Date(b.last_activity_at).getTime() : 0;
+    return activityB - activityA || Number(b.spend_usd || 0) - Number(a.spend_usd || 0);
+  });
+
+  const totalProjects = Number(_agentlakeProjectSummary.project_count || _agentlakeProjects.length);
+  const activeProjects = Number(_agentlakeProjectSummary.active_project_count || 0);
+  const attributedPct = Number(_agentlakeProjectSummary.attributed_spend_pct || 0);
+  const riskProjects = _agentlakeProjects.filter(project => Number(project.risk_event_count || 0) > 0).length;
+  const metrics = document.getElementById("agentlakeProjectMetrics");
+  if (metrics) {
+    metrics.innerHTML = [
+      [totalProjects, "Projects"],
+      [activeProjects, "Active"],
+      [`${attributedPct.toFixed(1)}%`, "Spend attributed"],
+      [riskProjects, "With risk events"]
+    ].map(([value, label]) => `
+      <div class="agentlake-metric">
+        <span class="agentlake-metric-value">${agentlakeEscape(value)}</span>
+        <span class="agentlake-metric-label">${agentlakeEscape(label)}</span>
+      </div>`).join("");
+  }
+
+  const count = document.getElementById("agentlakeProjectCount");
+  if (count) count.textContent = `Showing ${projects.length} of ${_agentlakeProjects.length} projects`;
+
+  const unattributedSpend = Number(_agentlakeProjectSummary.unattributed_spend_usd || 0);
+  const unattributed = !statusFilter && !search && unattributedSpend > 0 ? `
+    <section class="agentlake-project-card agentlake-project-unattributed">
+      <div class="agentlake-project-identity">
+        <span class="agentlake-project-status needs-attribution">Needs attribution</span>
+        <h3>Unattributed AI activity</h3>
+        <p>Usage that has not been linked to a project.</p>
+      </div>
+      <div class="agentlake-project-stat"><strong>$${unattributedSpend.toFixed(2)}</strong><span>unattributed spend</span></div>
+      <a class="agentlake-project-link" href="/work-items.html">Review attribution →</a>
+    </section>` : "";
+
+  const cards = projects.map(project => {
+    const spend = Number(project.spend_usd || 0);
+    const monthlySpend = Number(project.spend_month_usd || 0);
+    const budget = project.monthly_ai_budget == null ? null : Number(project.monthly_ai_budget);
+    const budgetPct = budget > 0 ? Math.min(100, monthlySpend / budget * 100) : null;
+    const risks = Number(project.risk_event_count || 0);
+    const agents = project.agents || [];
+    const platforms = project.activity_platforms?.length
+      ? project.activity_platforms
+      : [project.source_platform].filter(Boolean);
+    const agentNames = agents.length
+      ? agents.map(agent => agent.name).join(", ")
+      : "No attributed agent activity";
+    const tierNames = project.model_tiers?.length ? project.model_tiers.join(", ") : "—";
+    return `
+      <details class="agentlake-project-card${risks ? " has-risk" : ""}">
+        <summary>
+          <div class="agentlake-project-identity">
+            <span class="agentlake-project-status status-${agentlakeEscape(project.status)}">${agentlakeEscape(agentlakeProjectStatusLabel(project.status))}</span>
+            <h3>${agentlakeEscape(project.name)}</h3>
+            <p>${agentlakeEscape(project.external_id)} · ${agentlakeEscape(project.department || "No department")}</p>
+          </div>
+          <div class="agentlake-project-stat"><strong>${Number(project.agent_count || 0).toLocaleString()}</strong><span>agents</span></div>
+          <div class="agentlake-project-stat"><strong>${Number(project.request_count || 0).toLocaleString()}</strong><span>requests</span></div>
+          <div class="agentlake-project-stat"><strong>$${spend.toFixed(2)}</strong><span>total spend</span></div>
+          <div class="agentlake-project-stat${risks ? " risk" : ""}"><strong>${risks.toLocaleString()}</strong><span>risk events</span></div>
+          <div class="agentlake-project-last"><strong>${agentlakeEscape(agentlakeLastUsed(project.last_activity_at))}</strong><span>last activity</span></div>
+          <span class="agentlake-project-chevron">›</span>
+        </summary>
+        <div class="agentlake-project-detail">
+          <div><span>Agents involved</span><strong>${agentlakeEscape(agentNames)}</strong></div>
+          <div><span>Platforms</span><strong>${agentlakeEscape(platforms.join(", ") || "—")}</strong></div>
+          <div><span>Model tiers</span><strong>${agentlakeEscape(tierNames)}</strong></div>
+          <div><span>Owner</span><strong>${agentlakeEscape(project.owner || "Unassigned")}</strong></div>
+          <div class="agentlake-project-budget">
+            <span>Monthly budget</span>
+            <strong>${budget == null ? "Not set" : `$${monthlySpend.toFixed(2)} of $${budget.toFixed(2)}`}</strong>
+            ${budgetPct == null ? "" : `<div><i style="width:${budgetPct.toFixed(1)}%"></i></div>`}
+          </div>
+          <a href="/work-items.html">Manage project →</a>
+        </div>
+      </details>`;
+  }).join("");
+
+  list.innerHTML = unattributed + cards ||
+    '<div class="agentlake-empty">No projects match these filters. Create or connect projects from the Projects page.</div>';
 }
 
 function renderAgentlakeCompactList(elementId, rows, formatter, emptyMessage) {
