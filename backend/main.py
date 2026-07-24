@@ -142,6 +142,7 @@ def _run_migrations():
             ("trial_spend_cap_usd", "FLOAT DEFAULT 10.0"),
             ("requested_plan", "VARCHAR"),
             ("upgrade_requested_at", "TIMESTAMP"),
+            ("business_context_config_json", "TEXT"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE trial_accounts ADD COLUMN {col} {defn}"))

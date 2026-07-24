@@ -16,8 +16,9 @@ import csv
 import uuid
 import httpx
 from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -46,6 +47,19 @@ def _workspace_usage(db: Session, workspace_id: str) -> dict:
     return {"calls": total_calls, "spend_usd": total_spend}
 
 
+def _business_context_config(account: TrialAccount):
+    import json
+
+    try:
+        return (
+            json.loads(account.business_context_config_json)
+            if account.business_context_config_json
+            else None
+        )
+    except (TypeError, ValueError):
+        return None
+
+
 def _trial_status_payload(account: TrialAccount, db: Session) -> dict:
     now = datetime.utcnow()
     days_remaining = max(0, (account.trial_end - now).days)
@@ -63,6 +77,7 @@ def _trial_status_payload(account: TrialAccount, db: Session) -> dict:
         "provider": account.provider,
         "platform": account.platform,
         "setup_complete": bool(account.setup_complete),
+        "business_context": _business_context_config(account),
         "plan": account.plan,
         "requested_plan": account.requested_plan,
         "upgrade_requested_at": account.upgrade_requested_at.isoformat() if account.upgrade_requested_at else None,
@@ -278,12 +293,12 @@ class RegisterTrialRequest(BaseModel):
 
 
 class UpgradeRequest(BaseModel):
-    workspace_id: str | None = None
-    email: str | None = None
+    workspace_id: Optional[str] = None
+    email: Optional[str] = None
     plan: str
-    company: str | None = None
-    name: str | None = None
-    note: str | None = None
+    company: Optional[str] = None
+    name: Optional[str] = None
+    note: Optional[str] = None
 
 @router.post("/register")
 def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
@@ -492,6 +507,17 @@ class SetupDepartmentsRequest(BaseModel):
     departments:  list
     platform:     str = "other"
 
+
+class BusinessContextSetupRequest(BaseModel):
+    workspace_id: str
+    secret_key: str
+    platform: str
+    template: str
+    work_type: str
+    work_label: str
+    customer_label: str
+    measures: list[str] = Field(default_factory=list)
+
 @router.post("/setup-departments")
 def setup_departments(req: SetupDepartmentsRequest, db: Session = Depends(get_db)):
     from database.models import DepartmentBudget
@@ -525,6 +551,51 @@ def setup_departments(req: SetupDepartmentsRequest, db: Session = Depends(get_db
     db.commit()
 
     return {"created": created, "platform": req.platform, "setup_complete": True}
+
+
+@router.post("/business-context")
+def save_business_context(
+    req: BusinessContextSetupRequest,
+    db: Session = Depends(get_db),
+):
+    import json
+
+    from core.business_context import get_context_template, normalize_context_type
+
+    account = db.query(TrialAccount).filter_by(workspace_id=req.workspace_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    if account.secret_key != req.secret_key:
+        raise HTTPException(status_code=401, detail="Invalid secret key.")
+    template = get_context_template(req.template)
+    if not template:
+        raise HTTPException(status_code=400, detail="Unknown Business Context template.")
+    try:
+        context_type = normalize_context_type(
+            req.work_type,
+            template_key=req.template,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    allowed_measures = {"cost", "tokens", "budget", "risk", "profitability"}
+    measures = list(dict.fromkeys(
+        measure.strip().lower()
+        for measure in req.measures
+        if measure.strip().lower() in allowed_measures
+    ))
+    config = {
+        "platform": req.platform.strip().lower(),
+        "template": template.key,
+        "template_name": template.name,
+        "work_type": context_type,
+        "work_label": req.work_label.strip() or template.work_label,
+        "customer_label": req.customer_label.strip() or template.customer_label,
+        "measures": measures,
+    }
+    account.platform = config["platform"]
+    account.business_context_config_json = json.dumps(config)
+    db.commit()
+    return {"saved": True, "business_context": config}
 
 
 # ── 5. First Call Detection ───────────────────────────────────────────────────

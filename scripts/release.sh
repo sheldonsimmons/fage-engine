@@ -41,6 +41,10 @@ with engine.connect() as conn:
         ADD COLUMN IF NOT EXISTS upgrade_requested_at TIMESTAMP
     '''))
     conn.execute(text('''
+        ALTER TABLE trial_accounts
+        ADD COLUMN IF NOT EXISTS business_context_config_json TEXT
+    '''))
+    conn.execute(text('''
         ALTER TABLE department_budgets
         ADD COLUMN IF NOT EXISTS throttle_tier INTEGER DEFAULT 1
     '''))

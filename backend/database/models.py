@@ -449,6 +449,7 @@ class TrialAccount(Base):
     secret_key   = Column(String,   nullable=True)           # sk-cp-xxx — authenticates proxy calls
     platform     = Column(String,   nullable=True)           # salesforce | servicenow | hubspot | python | nodejs | java | ruby | other
     setup_complete = Column(Boolean, default=False)          # True after getting-started wizard finished
+    business_context_config_json = Column(Text, nullable=True)
     trial_start  = Column(DateTime, default=datetime.utcnow)
     trial_end    = Column(DateTime, nullable=False)
     plan         = Column(String,   default="trial")         # trial | starter | growth | business | enterprise

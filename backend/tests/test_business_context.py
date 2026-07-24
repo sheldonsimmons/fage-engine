@@ -1,11 +1,19 @@
+from datetime import datetime, timedelta
+import json
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.routes_agentforce import AgentforceGovernRequest, _resolve_or_create_project
+from api.routes_trial import (
+    BusinessContextSetupRequest,
+    _trial_status_payload,
+    save_business_context,
+)
 from api.routes_work_items import _work_item_json, list_context_templates
 from core.business_context import get_context_template, normalize_context_type
 from database.db import Base
-from database.models import WorkAccount, WorkItem
+from database.models import TrialAccount, WorkAccount, WorkItem
 
 
 def _session():
@@ -91,3 +99,40 @@ def test_template_catalog_uses_one_universal_contract():
     assert {"salesforce_project", "servicenow_case"}.issubset(keys)
     assert get_context_template("salesforce_project").context_type == "project"
     assert normalize_context_type(None, template_key="servicenow_case") == "case"
+
+
+def test_workspace_saves_business_context_template():
+    db = _session()
+    account = TrialAccount(
+        email="context@example.com",
+        name="Context Tester",
+        api_key_enc="",
+        provider="anthropic",
+        workspace_id="WORKSPACE-CONTEXT",
+        secret_key="secret",
+        trial_end=datetime.utcnow() + timedelta(days=30),
+        is_active=True,
+    )
+    db.add(account)
+    db.commit()
+
+    result = save_business_context(
+        BusinessContextSetupRequest(
+            workspace_id=account.workspace_id,
+            secret_key="secret",
+            platform="salesforce",
+            template="salesforce_project",
+            work_type="matter",
+            work_label="Matter",
+            customer_label="Client",
+            measures=["cost", "tokens", "cost", "not-supported"],
+        ),
+        db,
+    )
+
+    stored = json.loads(account.business_context_config_json)
+    assert result["saved"] is True
+    assert stored["work_type"] == "matter"
+    assert stored["customer_label"] == "Client"
+    assert stored["measures"] == ["cost", "tokens"]
+    assert _trial_status_payload(account, db)["business_context"] == stored

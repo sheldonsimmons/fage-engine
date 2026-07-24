@@ -475,6 +475,15 @@ function updateObBusinessContext(setObjectDefault = false) {
   result.innerHTML = `<strong>${template.name} selected.</strong> CostPilot will connect each ${obBusinessContext.work_label.toLowerCase()} to its ${customerLabel.toLowerCase()}, user, agent, ${measures.length ? measures.join(", ") : "business activity"}, and source record.`;
 }
 
+async function persistObBusinessContext() {
+  if (!IS_TRIAL || !obBusinessContext) return;
+  await apiPost("/api/trial/business-context", {
+    workspace_id: TRIAL_WS,
+    secret_key: TRIAL_SK,
+    ...obBusinessContext,
+  });
+}
+
 const OB_PLATFORM_COPY = {
   salesforce: {
     objectLabel: "Salesforce Object API Name",
@@ -1145,7 +1154,7 @@ function obCopyCode(id) {
   });
 }
 
-function generateObCode() {
+async function generateObCode() {
   const err = document.getElementById("error-5");
   if (!obSelectedPlatform) { err.textContent = "Select a platform first."; return; }
   err.textContent = "";
@@ -1165,6 +1174,11 @@ function generateObCode() {
     if (badObject) { err.textContent = "Enter a valid Salesforce object API name, like Case or Custom_Request__c."; return; }
     if (badField) { err.textContent = `Check the Salesforce field API name: ${badField.name}`; return; }
     if (badReturnField) { err.textContent = `Check the Salesforce return field API name: ${badReturnField.name}`; return; }
+  }
+  try {
+    await persistObBusinessContext();
+  } catch (error) {
+    err.textContent = `Setup code is ready, but CostPilot could not save the Business Context template: ${error.message}`;
   }
   const fns    = {
     salesforce:_genSalesforce,
