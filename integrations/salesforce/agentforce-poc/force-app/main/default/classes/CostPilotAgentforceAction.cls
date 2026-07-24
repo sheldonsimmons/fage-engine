@@ -2,7 +2,7 @@ public with sharing class CostPilotAgentforceAction {
     // Non-secret workspace identifier. The API key belongs in the CostPilot
     // Named Credential as an X-CostPilot-Key custom header.
     @TestVisible
-    private static String workspaceId = 'REPLACE_WITH_COSTPILOT_WORKSPACE_ID';
+    private static String workspaceId = '4BE43240A6674314';
 
     @InvocableMethod(
         label='Govern AI Work with CostPilot'

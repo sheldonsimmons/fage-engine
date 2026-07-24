@@ -49,16 +49,11 @@ In the Salesforce sandbox:
 
 Do not place the CostPilot key in Apex.
 
-## 2. Set the workspace ID
+## 2. Confirm the workspace ID
 
-In `CostPilotAgentforceAction.cls`, replace:
-
-```apex
-REPLACE_WITH_COSTPILOT_WORKSPACE_ID
-```
-
-with the workspace ID shown in CostPilot Connect & Setup. The workspace ID is
-not a secret.
+`CostPilotAgentforceAction.cls` is configured for the internal proof workspace
+`4BE43240A6674314`. The workspace ID is not a secret. Change it only when
+connecting this package to a different CostPilot workspace.
 
 ## 3. Deploy the Apex action
 
