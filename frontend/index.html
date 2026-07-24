@@ -1377,7 +1377,7 @@
       .trial-test-grid { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260723-v447" />
+  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260724-v453" />
 </head>
 <body class="cp-executive-page">
 
@@ -1649,11 +1649,19 @@
       <article class="exec-glance-panel">
         <div class="exec-glance-panel-head">
           <div>
-            <h2>Input vs. output cost by model</h2>
-            <p>Real model names ranked by spend; token-based splits are estimated when providers report only total cost.</p>
+            <h2>Model cost and usage</h2>
+            <p id="execGlanceModelDescription">Real model names ranked by spend; token-based splits are estimated when providers report only total cost.</p>
           </div>
-          <a href="/models.html">Model registry →</a>
+          <div class="exec-glance-panel-actions">
+            <div class="exec-glance-switch" role="group" aria-label="Model metric view">
+              <button class="active" id="execGlanceModelSpendButton" type="button" onclick="setExecGlanceModelView('spend')">Spend</button>
+              <button id="execGlanceModelRequestsButton" type="button" onclick="setExecGlanceModelView('requests')">Requests</button>
+              <button id="execGlanceModelAverageButton" type="button" onclick="setExecGlanceModelView('average')">Avg / request</button>
+            </div>
+            <a href="/models.html">Model registry →</a>
+          </div>
         </div>
+        <div class="exec-glance-model-insight" id="execGlanceModelInsight"></div>
         <div class="exec-glance-model-bars" id="execGlanceModelBars"></div>
       </article>
 
@@ -2275,6 +2283,8 @@ function fmtNum(v) {
 const EXEC_FILTER_KEY = "costpilot_exec_filters";
 const EXEC_LAYOUT_KEY = "costpilot_exec_layout_v2";
 let execData = null;
+let execGlanceModelView = "spend";
+let execGlanceModelRowsCache = [];
 function defaultExecFilters() {
   return { dept: "", platform: "", agent: "", range: "30", tier: "", risk: "", businessUnit: "", model: "" };
 }
@@ -4054,30 +4064,72 @@ function execGlanceModelRows(events, data) {
 function renderExecGlanceModels(events, data) {
   const container = document.getElementById("execGlanceModelBars");
   if (!container) return;
-  const rows = execGlanceModelRows(events, data).slice(0, 5);
+  if (events && data) execGlanceModelRowsCache = execGlanceModelRows(events, data);
+  const allRows = execGlanceModelRowsCache;
+  const metric = row => execGlanceModelView === "requests"
+    ? row.calls
+    : execGlanceModelView === "average"
+      ? (row.calls ? row.total / row.calls : 0)
+      : row.total;
+  const rows = [...allRows].sort((a, b) => metric(b) - metric(a)).slice(0, 5);
   if (!rows.length) {
     container.innerHTML = '<div class="exec-glance-empty">Model cost appears after governed requests record model usage.</div>';
+    const insight = document.getElementById("execGlanceModelInsight");
+    if (insight) insight.textContent = "";
     return;
   }
-  const max = Math.max(...rows.map(row => row.total), .000001);
+  const max = Math.max(...rows.map(metric), .000001);
+  const totalSpend = allRows.reduce((sum, row) => sum + row.total, 0);
+  const totalCalls = allRows.reduce((sum, row) => sum + row.calls, 0);
+  const topSpend = [...allRows].sort((a, b) => b.total - a.total)[0];
+  const spendShare = totalSpend > 0 ? Math.round(topSpend.total / totalSpend * 100) : 0;
+  const callShare = totalCalls > 0 ? Math.round(topSpend.calls / totalCalls * 100) : 0;
+  const insight = document.getElementById("execGlanceModelInsight");
+  if (insight) {
+    insight.innerHTML = `<strong>Cost concentration:</strong> ${escapeHtml(topSpend.label)} represents ${spendShare}% of model spend and ${callShare}% of requests.`;
+  }
+  const descriptions = {
+    spend: "Real model names ranked by spend; token-based splits are estimated when providers report only total cost.",
+    requests: "Request volume by model, regardless of the price of each call.",
+    average: "Average recorded cost per request, highlighting the most expensive model paths."
+  };
+  setText("execGlanceModelDescription", descriptions[execGlanceModelView]);
+  ["spend", "requests", "average"].forEach(view => {
+    const suffix = view === "average" ? "Average" : view.charAt(0).toUpperCase() + view.slice(1);
+    document.getElementById(`execGlanceModel${suffix}Button`)?.classList.toggle("active", execGlanceModelView === view);
+  });
   container.innerHTML = rows.map(row => {
-    const inputWidth = (row.input / max) * 100;
-    const outputWidth = (row.output / max) * 100;
-    const unknownWidth = (row.unknown / max) * 100;
+    const value = metric(row);
+    const inputWidth = execGlanceModelView === "spend" ? (row.input / max) * 100 : 0;
+    const outputWidth = execGlanceModelView === "spend" ? (row.output / max) * 100 : 0;
+    const unknownWidth = execGlanceModelView === "spend" ? (row.unknown / max) * 100 : 0;
+    const metricWidth = execGlanceModelView === "spend" ? 0 : (value / max) * 100;
+    const valueLabel = execGlanceModelView === "requests"
+      ? `${fmtNum(row.calls)} requests`
+      : execGlanceModelView === "average"
+        ? `${fmtUsd(value)} / request`
+        : fmtUsd(row.total);
+    const caption = execGlanceModelView === "spend"
+      ? `<span class="input">Input ${fmtUsd(row.input)}</span><span class="output">Output ${fmtUsd(row.output)}</span><span>${fmtNum(row.calls)} requests</span>`
+      : execGlanceModelView === "requests"
+        ? `<span>${fmtUsd(row.total)} total spend</span><span>${fmtUsd(row.calls ? row.total / row.calls : 0)} average per request</span>`
+        : `<span>${fmtNum(row.calls)} requests</span><span>${fmtUsd(row.total)} total spend</span>`;
     return `<div class="exec-glance-bar-row">
-      <div class="exec-glance-bar-meta"><strong title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</strong><span>${fmtUsd(row.total)}</span></div>
-      <div class="exec-glance-bar-track" title="${escapeHtml(row.label)}: ${fmtUsd(row.total)} total">
+      <div class="exec-glance-bar-meta"><strong title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</strong><span>${valueLabel}</span></div>
+      <div class="exec-glance-bar-track" title="${escapeHtml(row.label)}: ${valueLabel}">
         <div class="exec-glance-bar-input" style="width:${inputWidth}%"></div>
         <div class="exec-glance-bar-output" style="width:${outputWidth}%"></div>
         <div class="exec-glance-bar-unknown" style="width:${unknownWidth}%"></div>
+        <div class="exec-glance-bar-metric ${execGlanceModelView}" style="width:${metricWidth}%"></div>
       </div>
-      <div class="exec-glance-bar-caption">
-        <span class="input">Input ${fmtUsd(row.input)}</span>
-        <span class="output">Output ${fmtUsd(row.output)}</span>
-        <span>${fmtNum(row.calls)} requests</span>
-      </div>
+      <div class="exec-glance-bar-caption">${caption}</div>
     </div>`;
   }).join("");
+}
+
+function setExecGlanceModelView(view) {
+  execGlanceModelView = ["spend", "requests", "average"].includes(view) ? view : "spend";
+  renderExecGlanceModels();
 }
 
 function execProjectLabel(event) {

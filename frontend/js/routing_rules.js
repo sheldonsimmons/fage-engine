@@ -7,8 +7,6 @@
  * DELETE /api/routing-config/keywords/{keyword} — remove keyword
  */
 
-const _RR_PROTECTED = new Set(["fraud", "breach", "gdpr", "hipaa"]);
-
 // ── Load & render ─────────────────────────────────────────────────────────────
 
 async function loadRoutingRules() {
@@ -35,8 +33,6 @@ function _rrRenderKeywords(cfg) {
   const container = document.getElementById("rrKeywordList");
   if (!container) return;
 
-  const serverProtected = new Set(cfg.protected_keywords || []);
-  const allProtected    = new Set([..._RR_PROTECTED, ...serverProtected]);
   const kws             = cfg.complexity_keywords || [];
 
   if (kws.length === 0) {
@@ -45,10 +41,9 @@ function _rrRenderKeywords(cfg) {
   }
 
   container.innerHTML = kws.map(kw => {
-    const locked = allProtected.has(kw);
-    return `<span class="rr-kw-chip${locked ? " rr-kw-locked" : ""}">
-      ${locked ? "🔒 " : ""}<code>${kw}</code>
-      ${locked ? "" : `<button class="rr-kw-remove" onclick="removeRoutingKeyword('${kw.replace(/'/g, "\\'")}')">✕</button>`}
+    return `<span class="rr-kw-chip">
+      <code>${kw}</code>
+      <button class="rr-kw-remove" onclick="removeRoutingKeyword('${kw.replace(/'/g, "\\'")}')">✕</button>
     </span>`;
   }).join("");
 }
@@ -115,9 +110,7 @@ async function removeRoutingKeyword(kw) {
     if (typeof updatePolicyOverview === "function") updatePolicyOverview();
     setTimeout(() => status.textContent = "", 3000);
   } catch (e) {
-    status.textContent = e.message.includes("403")
-      ? `"${kw}" is a protected keyword and cannot be removed.`
-      : "Error: " + e.message;
+    status.textContent = "Error: " + e.message;
     status.style.color = "var(--accent-red)";
   }
 }

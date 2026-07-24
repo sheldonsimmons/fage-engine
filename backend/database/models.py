@@ -292,6 +292,9 @@ class SensitiveTerm(Base):
     category   = Column(String,   default="custom")   # legal | hipaa | financial | hr | custom
     action     = Column(String,   default="flag")      # flag | escalate | block
     department = Column(String,   nullable=True)       # None = global (all departments)
+    enabled    = Column(Boolean,  nullable=False, default=True)
+    is_recommended = Column(Boolean, nullable=False, default=False)
+    deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

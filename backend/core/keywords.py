@@ -11,6 +11,7 @@ Default terms are seeded on first use if the table is empty.
 """
 
 import re
+from datetime import datetime
 from sqlalchemy.orm import Session
 from database.models import SensitiveTerm
 
@@ -92,20 +93,6 @@ DEFAULT_TERMS = [
     {"term": "pwd=",             "category": "code",       "action": "block"},
 ]
 
-PROTECTED_TERMS = {
-    "ssn",
-    "social security",
-    "social security number",
-    "credit card",
-    "card number",
-    "cvv",
-    "routing number",
-    "bank account",
-    "passport number",
-    "date of birth",
-}
-
-
 def term_matches_text(term: str, text: str) -> bool:
     """Return True only when a configured term appears as a complete term."""
     normalized_term = (term or "").strip()
@@ -117,13 +104,6 @@ def term_matches_text(term: str, text: str) -> bool:
     pattern = rf"(?<!\w){re.escape(normalized_term)}(?!\w)"
     return re.search(pattern, text or "", flags=re.IGNORECASE) is not None
 
-
-def _is_protected_default(term: dict) -> bool:
-    return term["term"].lower() in PROTECTED_TERMS and term["action"] == "block"
-
-
-def _is_protected_term(obj: SensitiveTerm) -> bool:
-    return obj.term.lower() in PROTECTED_TERMS and obj.action == "block"
 
 # ── PII regex patterns (detect actual numbers, not just keywords) ─────────────
 
@@ -210,20 +190,23 @@ PII_PATTERNS = [
 def seed_defaults(db: Session):
     """Seed defaults without undoing user removals.
 
-    On an empty install, add the full starter library. On an existing install,
-    only restore protected PII blocker terms. This keeps critical safety terms
-    available while allowing admins to remove non-protected defaults such as
-    "audit" without seeing them reappear on refresh or restart.
+    On an empty install, add the recommended starter library. Once any term
+    record exists, administrator choices remain authoritative. Deleted defaults
+    return only through the explicit restore-defaults action.
     """
-    existing = {t.term for t in db.query(SensitiveTerm).all()}
-    terms_to_seed = DEFAULT_TERMS if not existing else [
-        t for t in DEFAULT_TERMS if _is_protected_default(t)
-    ]
+    existing_rows = {t.term: t for t in db.query(SensitiveTerm).all()}
+    existing = set(existing_rows)
+    terms_to_seed = DEFAULT_TERMS if not existing else []
     added = False
     for t in terms_to_seed:
         if t["term"] not in existing:
-            db.add(SensitiveTerm(**t))
+            db.add(SensitiveTerm(**t, enabled=True, is_recommended=True))
             existing.add(t["term"])
+            added = True
+    default_names = {item["term"] for item in DEFAULT_TERMS}
+    for term, row in existing_rows.items():
+        if term in default_names and not row.is_recommended:
+            row.is_recommended = True
             added = True
     if added:
         db.commit()
@@ -257,6 +240,8 @@ def check_terms(db: Session, text: str, department: str = None,
 
     # ── Keyword matches ───────────────────────────────────────────────────────
     query = db.query(SensitiveTerm).filter(
+        SensitiveTerm.enabled.is_(True),
+        SensitiveTerm.deleted_at.is_(None),
         (SensitiveTerm.department == None) |
         (SensitiveTerm.department == department)
     )
@@ -320,44 +305,97 @@ def check_terms(db: Session, text: str, department: str = None,
 
 def get_all_terms(db: Session):
     seed_defaults(db)
-    return db.query(SensitiveTerm).order_by(SensitiveTerm.category, SensitiveTerm.term).all()
+    return (
+        db.query(SensitiveTerm)
+        .filter(SensitiveTerm.deleted_at.is_(None))
+        .order_by(SensitiveTerm.category, SensitiveTerm.term)
+        .all()
+    )
 
 
 def add_term(db: Session, term: str, category: str, action: str, department: str = None) -> SensitiveTerm:
-    existing = db.query(SensitiveTerm).filter(SensitiveTerm.term == term.lower()).first()
-    if existing:
+    normalized = term.lower().strip()
+    existing = db.query(SensitiveTerm).filter(SensitiveTerm.term == normalized).first()
+    if existing and existing.deleted_at is None:
         raise ValueError(f"Term '{term}' already exists.")
-    obj = SensitiveTerm(
-        term=term.lower().strip(),
-        category=category,
-        action=action,
-        department=department or None,
-    )
-    db.add(obj)
+    if existing:
+        obj = existing
+        obj.category = category
+        obj.action = action
+        obj.department = department or None
+        obj.enabled = True
+        obj.is_recommended = normalized in {item["term"] for item in DEFAULT_TERMS}
+        obj.deleted_at = None
+    else:
+        obj = SensitiveTerm(
+            term=normalized,
+            category=category,
+            action=action,
+            department=department or None,
+            enabled=True,
+            is_recommended=False,
+        )
+        db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
 
 def delete_term(db: Session, term_id: int) -> bool:
-    obj = db.query(SensitiveTerm).filter(SensitiveTerm.id == term_id).first()
+    obj = db.query(SensitiveTerm).filter(
+        SensitiveTerm.id == term_id,
+        SensitiveTerm.deleted_at.is_(None),
+    ).first()
     if not obj:
         return False
-    if _is_protected_term(obj):
-        raise PermissionError(f"'{obj.term}' is a protected PII blocker and cannot be removed.")
-    db.delete(obj)
+    obj.enabled = False
+    obj.deleted_at = datetime.utcnow()
     db.commit()
     return True
 
 
-def update_term(db: Session, term_id: int, action: str = None, category: str = None) -> SensitiveTerm:
-    obj = db.query(SensitiveTerm).filter(SensitiveTerm.id == term_id).first()
+def update_term(
+    db: Session,
+    term_id: int,
+    action: str = None,
+    category: str = None,
+    enabled: bool = None,
+) -> SensitiveTerm:
+    obj = db.query(SensitiveTerm).filter(
+        SensitiveTerm.id == term_id,
+        SensitiveTerm.deleted_at.is_(None),
+    ).first()
     if not obj:
         raise ValueError(f"Term ID {term_id} not found.")
     if action:
         obj.action = action
     if category:
         obj.category = category
+    if enabled is not None:
+        obj.enabled = enabled
     db.commit()
     db.refresh(obj)
     return obj
+
+
+def restore_defaults(db: Session) -> list[SensitiveTerm]:
+    existing = {row.term: row for row in db.query(SensitiveTerm).all()}
+    for default in DEFAULT_TERMS:
+        obj = existing.get(default["term"])
+        if obj:
+            obj.category = default["category"]
+            obj.action = default["action"]
+            obj.department = None
+            obj.enabled = True
+            obj.is_recommended = True
+            obj.deleted_at = None
+        else:
+            obj = SensitiveTerm(
+                **default,
+                enabled=True,
+                is_recommended=True,
+            )
+            db.add(obj)
+            existing[default["term"]] = obj
+    db.commit()
+    return get_all_terms(db)

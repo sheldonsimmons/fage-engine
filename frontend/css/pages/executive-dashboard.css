@@ -700,6 +700,23 @@
   display: grid;
   gap: 11px;
 }
+.cp-executive-page .exec-glance-panel-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.cp-executive-page .exec-glance-model-insight {
+  background: rgba(88, 166, 255, .06);
+  border: 1px solid rgba(88, 166, 255, .22);
+  border-radius: 6px;
+  color: var(--cp-color-text-secondary);
+  font-size: 8px;
+  line-height: 1.45;
+  margin-bottom: 11px;
+  padding: 7px 9px;
+}
+.cp-executive-page .exec-glance-model-insight strong { color: var(--cp-color-text); }
 
 .cp-executive-page .exec-glance-bar-meta {
   align-items: center;
@@ -742,6 +759,13 @@
 
 .cp-executive-page .exec-glance-bar-unknown {
   background: var(--cp-color-text-muted);
+}
+.cp-executive-page .exec-glance-bar-metric {
+  background: var(--cp-color-primary);
+  height: 100%;
+}
+.cp-executive-page .exec-glance-bar-metric.average {
+  background: var(--cp-color-warning);
 }
 
 .cp-executive-page .exec-glance-bar-caption {

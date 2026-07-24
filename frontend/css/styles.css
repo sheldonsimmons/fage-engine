@@ -1654,13 +1654,29 @@ body {
   vertical-align: middle;
 }
 .kw-table tr:last-child td { border-bottom: none; }
+.kw-disabled-row { opacity: .58; }
 .kw-term-cell { font-family: var(--font-mono); }
 .kw-term {
   background: var(--bg-input); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 7px; font-size: 12px; color: var(--accent-green);
 }
 .kw-cat { font-size: 11px; color: var(--text-muted); }
+.kw-recommended {
+  color: var(--text-muted); display:block; font-family:var(--font-sans);
+  font-size:8px; font-weight:700; margin-top:5px; text-transform:uppercase;
+}
 .kw-scope { font-size: 11px; color: var(--text-muted); }
+.kw-action-select {
+  background:var(--bg-input); border:1px solid var(--border); border-radius:5px;
+  color:var(--text-primary); font-size:10px; padding:5px 7px;
+}
+.kw-toggle {
+  background:rgba(139,148,158,.08); border:1px solid var(--border); border-radius:999px;
+  color:var(--text-muted); cursor:pointer; font-size:9px; font-weight:800; padding:3px 8px;
+}
+.kw-toggle.enabled {
+  background:rgba(63,185,80,.1); border-color:rgba(63,185,80,.4); color:var(--accent-green);
+}
 .kw-badge {
   display: inline-block; padding: 2px 8px; border-radius: 10px;
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;

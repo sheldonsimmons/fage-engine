@@ -61,7 +61,11 @@ async function apiPatch(path, body) {
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!response.ok) throw new Error(`PATCH ${path} failed: ${response.status}`);
+  if (!response.ok) {
+    let detail = `PATCH ${path} failed: ${response.status}`;
+    try { const payload = await response.json(); detail = payload.detail || payload.message || detail; } catch (_) {}
+    throw new Error(detail);
+  }
   return response.json();
 }
 
@@ -72,7 +76,11 @@ async function apiPatch(path, body) {
  */
 async function apiDelete(path) {
   const response = await fetch(`${CostPilot_API}${path}`, { method: "DELETE" });
-  if (!response.ok) throw new Error(`DELETE ${path} failed: ${response.status}`);
+  if (!response.ok) {
+    let detail = `DELETE ${path} failed: ${response.status}`;
+    try { const payload = await response.json(); detail = payload.detail || payload.message || detail; } catch (_) {}
+    throw new Error(detail);
+  }
   return response.json();
 }
 

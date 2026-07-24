@@ -94,6 +94,18 @@ def _run_migrations():
             ensure_column(conn, "audit_events", "work_item_id", "INTEGER REFERENCES work_items(id)")
         except Exception:
             pass
+        try:
+            ensure_column(conn, "sensitive_terms", "enabled", "BOOLEAN DEFAULT TRUE")
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "sensitive_terms", "is_recommended", "BOOLEAN DEFAULT FALSE")
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "sensitive_terms", "deleted_at", "TIMESTAMP")
+        except Exception:
+            pass
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount
@@ -210,26 +222,11 @@ def _seed_on_startup():
             dict(term="my diagnosis",         category="hipaa",     action="block"),
             dict(term="medical record",       category="hipaa",     action="block"),
         ]
-        PROTECTED_SEED_TERMS = {
-            "ssn",
-            "social security",
-            "social security number",
-            "credit card",
-            "card number",
-            "cvv",
-            "routing number",
-            "bank account",
-            "passport number",
-            "date of birth",
-        }
         existing_terms = {row.term for row in db.query(SensitiveTerm).all()}
-        terms_to_seed = SEED_TERMS if not existing_terms else [
-            t for t in SEED_TERMS
-            if t["term"] in PROTECTED_SEED_TERMS and t["action"] == "block"
-        ]
+        terms_to_seed = SEED_TERMS if not existing_terms else []
         for t in terms_to_seed:
             if t["term"] not in existing_terms:
-                db.add(SensitiveTerm(**t))
+                db.add(SensitiveTerm(**t, enabled=True, is_recommended=True))
                 existing_terms.add(t["term"])
 
         # ── Routing Config (single-row settings) ──

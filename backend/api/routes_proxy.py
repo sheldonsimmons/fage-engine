@@ -88,6 +88,8 @@ def _check_sensitive_terms(text: str, db, department: str = None) -> dict:
     Strongest action wins: block > escalate > flag > none.
     """
     terms = db.query(SensitiveTerm).filter(
+        SensitiveTerm.enabled.is_(True),
+        SensitiveTerm.deleted_at.is_(None),
         (SensitiveTerm.department == None) | (SensitiveTerm.department == department)
     ).all()
     matched_flag = []
@@ -111,19 +113,18 @@ def _check_sensitive_terms(text: str, db, department: str = None) -> dict:
 
 
 def _get_keywords(db) -> list:
-    """Merge DB routing config keywords with defaults — both always apply."""
+    """Use the administrator's configured keyword list as the source of truth."""
     try:
         from core.routing_config import get_routing_config
         cfg = get_routing_config(db)
-        db_kws = cfg.complexity_keywords or []
-        return list(set(COMPLEXITY_KEYWORDS_DEFAULT + db_kws))
+        return cfg.complexity_keywords
     except Exception:
         return COMPLEXITY_KEYWORDS_DEFAULT
 
 
 def _complexity_check(messages: list, token_count: int, keywords: list = None) -> tuple:
     """Check ORIGINAL (unpruned) messages — keywords must not be stripped before detection."""
-    kws  = keywords or COMPLEXITY_KEYWORDS_DEFAULT
+    kws  = keywords if keywords is not None else COMPLEXITY_KEYWORDS_DEFAULT
     text = " ".join(
         m.get("content", "") if isinstance(m.get("content"), str)
         else " ".join(b.get("text", "") for b in m.get("content", []) if isinstance(b, dict))

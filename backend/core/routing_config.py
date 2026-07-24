@@ -5,7 +5,7 @@ Provides get/set for the single RoutingConfig row that controls:
   - complexity_token_threshold  (int, 150–2000)
   - complexity_keywords         (list of strings)
 
-Protected keywords can never be removed.
+The starter keywords are recommendations; administrators can remove any of them.
 """
 
 import json
@@ -13,8 +13,8 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from database.models import RoutingConfig
 
-# These keywords can never be removed — core compliance safeguards
-PROTECTED_KEYWORDS = frozenset(["fraud", "breach", "gdpr", "hipaa"])
+# Kept for response compatibility with older frontends. No keywords are locked.
+PROTECTED_KEYWORDS = frozenset()
 
 
 def get_routing_config(db: Session) -> RoutingConfig:
@@ -63,10 +63,8 @@ def add_keyword(db: Session, keyword: str) -> RoutingConfig:
 
 
 def remove_keyword(db: Session, keyword: str) -> RoutingConfig:
-    """Remove a keyword. Raises PermissionError if protected."""
+    """Remove a configured complexity keyword."""
     kw = keyword.strip().lower()
-    if kw in PROTECTED_KEYWORDS:
-        raise PermissionError(f"'{kw}' is a protected keyword and cannot be removed.")
     cfg = get_routing_config(db)
     kws = cfg.complexity_keywords
     if kw not in kws:

@@ -185,9 +185,17 @@ def risk_report(days: int = Query(30, ge=1, le=365),
     ]
 
     # Term library stats
-    term_count = db.query(func.count(SensitiveTerm.id)).scalar() or 0
-    block_terms = db.query(func.count(SensitiveTerm.id)).filter_by(action="block").scalar() or 0
-    escalate_terms = db.query(func.count(SensitiveTerm.id)).filter_by(action="escalate").scalar() or 0
+    active_terms = (
+        SensitiveTerm.enabled.is_(True),
+        SensitiveTerm.deleted_at.is_(None),
+    )
+    term_count = db.query(func.count(SensitiveTerm.id)).filter(*active_terms).scalar() or 0
+    block_terms = db.query(func.count(SensitiveTerm.id)).filter(
+        *active_terms, SensitiveTerm.action == "block"
+    ).scalar() or 0
+    escalate_terms = db.query(func.count(SensitiveTerm.id)).filter(
+        *active_terms, SensitiveTerm.action == "escalate"
+    ).scalar() or 0
 
     return {
         "period_days":     days,

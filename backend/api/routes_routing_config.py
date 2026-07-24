@@ -78,8 +78,6 @@ def create_keyword(body: KeywordRequest, db: Session = Depends(get_db)):
 def delete_keyword(keyword: str, db: Session = Depends(get_db)):
     try:
         return _out(remove_keyword(db, keyword))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
