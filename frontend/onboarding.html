@@ -320,6 +320,42 @@
           </div>
           <button type="button" class="ob-btn-ghost" onclick="resetObPlatformScreen()" style="font-size:12px;padding:7px 14px">Change</button>
         </div>
+        <section class="ob-context-card" id="obBusinessContextCard" hidden>
+          <div class="ob-context-eyebrow">Business Context Engine</div>
+          <h2>What should CostPilot understand about this work?</h2>
+          <p>Answer in business language. CostPilot selects the template and builds the technical mapping behind the scenes.</p>
+          <div class="ob-context-questions">
+            <div class="ob-field">
+              <label class="ob-label" for="obContextWorkType">What do you call the work you deliver?</label>
+              <select id="obContextWorkType" class="ob-input" onchange="updateObBusinessContext()">
+                <option value="project">Project</option>
+                <option value="matter">Matter</option>
+                <option value="engagement">Engagement</option>
+                <option value="case">Case</option>
+                <option value="ticket">Ticket</option>
+                <option value="opportunity">Opportunity</option>
+              </select>
+            </div>
+            <div class="ob-field">
+              <label class="ob-label" for="obContextCustomerLabel">What do you call the customer?</label>
+              <select id="obContextCustomerLabel" class="ob-input" onchange="updateObBusinessContext()">
+                <option value="Customer">Customer</option>
+                <option value="Account">Account</option>
+                <option value="Client">Client</option>
+                <option value="Organization">Organization</option>
+              </select>
+            </div>
+          </div>
+          <fieldset class="ob-context-measures">
+            <legend>What do you want to measure?</legend>
+            <label><input type="checkbox" value="cost" checked onchange="updateObBusinessContext()" /> Cost</label>
+            <label><input type="checkbox" value="tokens" checked onchange="updateObBusinessContext()" /> Tokens</label>
+            <label><input type="checkbox" value="budget" checked onchange="updateObBusinessContext()" /> Budget</label>
+            <label><input type="checkbox" value="risk" checked onchange="updateObBusinessContext()" /> Risk</label>
+            <label><input type="checkbox" value="profitability" onchange="updateObBusinessContext()" /> Margin impact</label>
+          </fieldset>
+          <div class="ob-context-result" id="obContextResult"></div>
+        </section>
         <div class="ob-form" style="margin-bottom:20px">
           <div class="ob-field">
             <label class="ob-label" id="obObjectLabel">Object / Record Type</label>
@@ -337,6 +373,9 @@
             </div>
           </div>
 
+          <details class="ob-advanced-mapping">
+            <summary>Advanced field mapping <span>Optional — CostPilot has already selected sensible defaults</span></summary>
+            <div class="ob-advanced-mapping-body">
           <!-- Field entry — which fields to send to AI -->
           <div class="ob-field">
             <label class="ob-label" id="obFieldsLabel">
@@ -358,6 +397,8 @@
             <button type="button" id="obAddReturnFieldBtn" class="ob-btn-ghost" onclick="addObReturnField()" style="font-size:12px;padding:6px 14px">+ Add Return Field</button>
             <div id="obReturnFieldsHint" style="font-size:11px;color:var(--text-muted,#8b949e);margin-top:6px;line-height:1.5"></div>
           </div>
+            </div>
+          </details>
         </div>
         <div class="ob-actions" style="margin-bottom:0">
           <button class="ob-btn-ghost" onclick="resetObPlatformScreen(); goToScreen(4)">← Back</button>

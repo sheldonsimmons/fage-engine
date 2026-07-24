@@ -332,14 +332,14 @@ function goToPlatformScreen() {
     // Hide tile grid — platform already chosen on Screen 4
     document.querySelectorAll("#screen-5 .ob-platform-group").forEach(group => { group.style.display = "none"; });
     document.getElementById("obPlatBackOnly").style.display = "none";
-    // Pre-fill and auto-generate code
+    // Pre-fill the recommended setup. The user confirms the business context
+    // before CostPilot generates platform-specific instructions.
     selectObPlatform(selectedLaunchPlatform);
     // Auto-pick first department from user's setup
     const userDepts = departments.filter(d => d.name.trim());
     if (userDepts.length > 0) {
       document.getElementById("obPlatDept").value = userDepts[0].name;
     }
-    generateObCode();
   }
 }
 
@@ -349,6 +349,7 @@ function resetObPlatformScreen() {
   document.getElementById("obPlatConfig").style.display  = "none";
   document.getElementById("obPlatBackOnly").style.display = "";
   document.getElementById("obPlatOutput").style.display  = "none";
+  document.getElementById("obBusinessContextCard").hidden = true;
   const selectedSummary = document.getElementById("obSelectedPlatformSummary");
   if (selectedSummary) selectedSummary.style.display = "none";
   selectedLaunchPlatform = null;
@@ -361,8 +362,8 @@ function resetObPlatformScreen() {
 const CostPilot_URL = "https://fage-engine-21cb49fe4806.herokuapp.com";
 
 const OB_PLATFORMS = {
-  salesforce: { label: "Salesforce",    kind: "business", objects: ["Case","Lead","Opportunity","Contact","Account","Task"],    agentDefault: "SF-CaseBot"    },
-  servicenow: { label: "ServiceNow",    kind: "business", objects: ["incident","sc_request","problem","change_request","task"], agentDefault: "SN-IncidentBot" },
+  salesforce: { label: "Salesforce",    kind: "business", objects: ["CostPilot_Project__c","Case","Opportunity","Lead","Contact","Account","Task"], agentDefault: "Salesforce Agentforce" },
+  servicenow: { label: "ServiceNow",    kind: "business", objects: ["sn_customerservice_case","incident","pm_project","sc_request","problem","change_request","task"], agentDefault: "SN-IncidentBot" },
   hubspot:    { label: "HubSpot",       kind: "business", objects: ["contacts","deals","tickets","companies","tasks"],          agentDefault: "HS-TicketBot"  },
   dynamics:   { label: "Dynamics 365",  kind: "business", objects: ["incident","lead","opportunity","contact","account"],       agentDefault: "D365-CaseBot"  },
   zendesk:    { label: "Zendesk",       kind: "business", objects: ["ticket","user","organization","request"],                  agentDefault: "ZD-TicketBot"  },
@@ -375,6 +376,104 @@ const OB_PLATFORMS = {
 
 let obSelectedPlatform = null;
 let _obLastPlatform = null;
+let obBusinessContext = null;
+
+const OB_CONTEXT_TEMPLATES = {
+  salesforce: {
+    key: "salesforce_project",
+    name: "Salesforce Project",
+    defaultWorkType: "project",
+    defaultCustomerLabel: "Account",
+  },
+  servicenow: {
+    key: "servicenow_case",
+    name: "ServiceNow Case",
+    defaultWorkType: "case",
+    defaultCustomerLabel: "Account",
+  },
+};
+
+const OB_CONTEXT_OBJECTS = {
+  salesforce: {
+    project: "CostPilot_Project__c",
+    matter: "Matter__c",
+    engagement: "Engagement__c",
+    case: "Case",
+    ticket: "Case",
+    opportunity: "Opportunity",
+  },
+  servicenow: {
+    project: "pm_project",
+    matter: "u_matter",
+    engagement: "u_engagement",
+    case: "sn_customerservice_case",
+    ticket: "incident",
+    opportunity: "u_opportunity",
+  },
+};
+
+function configureObBusinessContext(platform) {
+  const card = document.getElementById("obBusinessContextCard");
+  const cfg = OB_PLATFORMS[platform];
+  if (!card || cfg?.kind !== "business") {
+    if (card) card.hidden = true;
+    obBusinessContext = null;
+    return;
+  }
+
+  card.hidden = false;
+  const template = OB_CONTEXT_TEMPLATES[platform] || {
+    key: "universal_context",
+    name: `${cfg.label} Business Context`,
+    defaultWorkType: "project",
+    defaultCustomerLabel: "Customer",
+  };
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem("cp_business_context") || "null");
+  } catch (_) {
+    saved = null;
+  }
+  const workType = saved?.platform === platform
+    ? saved.work_type
+    : template.defaultWorkType;
+  const customerLabel = saved?.platform === platform
+    ? saved.customer_label
+    : template.defaultCustomerLabel;
+  document.getElementById("obContextWorkType").value = workType;
+  document.getElementById("obContextCustomerLabel").value = customerLabel;
+  updateObBusinessContext(true);
+}
+
+function updateObBusinessContext(setObjectDefault = false) {
+  if (!obSelectedPlatform || OB_PLATFORMS[obSelectedPlatform]?.kind !== "business") return;
+  const template = OB_CONTEXT_TEMPLATES[obSelectedPlatform] || {
+    key: "universal_context",
+    name: `${OB_PLATFORMS[obSelectedPlatform].label} Business Context`,
+  };
+  const workType = document.getElementById("obContextWorkType").value;
+  const customerLabel = document.getElementById("obContextCustomerLabel").value;
+  const measures = [...document.querySelectorAll(".ob-context-measures input:checked")]
+    .map(input => input.value);
+  obBusinessContext = {
+    template: template.key,
+    template_name: template.name,
+    platform: obSelectedPlatform,
+    work_type: workType,
+    work_label: workType.charAt(0).toUpperCase() + workType.slice(1),
+    customer_label: customerLabel,
+    measures,
+  };
+  localStorage.setItem("cp_business_context", JSON.stringify(obBusinessContext));
+
+  const objectName = OB_CONTEXT_OBJECTS[obSelectedPlatform]?.[workType];
+  const objectInput = document.getElementById("obPlatObject");
+  if (objectInput && objectName && (setObjectDefault || !objectInput.value)) {
+    objectInput.value = objectName;
+  }
+  const result = document.getElementById("obContextResult");
+  result.innerHTML = `<strong>${template.name} selected.</strong> CostPilot will connect each ${obBusinessContext.work_label.toLowerCase()} to its ${customerLabel.toLowerCase()}, user, agent, ${measures.length ? measures.join(", ") : "business activity"}, and source record.`;
+}
 
 const OB_PLATFORM_COPY = {
   salesforce: {
@@ -540,6 +639,7 @@ function selectObPlatform(platform) {
   // Set default fields and hint for this platform
   _initObFields(platform);
   _initObReturnFields(platform);
+  configureObBusinessContext(platform);
 }
 
 // ── Field entry management ────────────────────────────────────────────────────
@@ -868,6 +968,25 @@ function _platformMappingHtml(platform, obj, fields, returnFields = [], extraRow
   </div>`;
 }
 
+function _businessContextSummaryHtml() {
+  if (!obBusinessContext) return "";
+  const measures = obBusinessContext.measures.length
+    ? obBusinessContext.measures.join(", ")
+    : "No measures selected";
+  return `<div class="ob-code-section" style="margin-top:20px">
+    <div class="ob-code-header">
+      <span class="ob-code-label">Business Context Template</span>
+      <span class="ob-code-hint">CostPilot uses this business definition across users, agents, routing, and reporting.</span>
+    </div>
+    <div class="ob-flow-steps">
+      <div class="ob-flow-step"><span class="ob-flow-num">✓</span><div>
+        <strong>${_obEsc(obBusinessContext.template_name)}</strong><br/>
+        Work: ${_obEsc(obBusinessContext.work_label)} · Customer: ${_obEsc(obBusinessContext.customer_label)} · Measures: ${_obEsc(measures)}
+      </div></div>
+    </div>
+  </div>`;
+}
+
 function _returnSourceLabel(source) {
   const labels = {
     response: "AI Response",
@@ -1059,7 +1178,8 @@ function generateObCode() {
     ruby:_genRuby,
     rest:_genRest,
   };
-  const html   = (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields);
+  const html   = _businessContextSummaryHtml()
+    + (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields);
   const out   = document.getElementById("obPlatOutput");
   out.innerHTML = html;
   out.style.display = "block";
