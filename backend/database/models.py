@@ -144,6 +144,10 @@ class WorkItem(Base):
     cost_treatment     = Column(String,   nullable=False, default="unspecified")
     source_platform    = Column(String,   nullable=True, default="CostPilot")
     workspace_id       = Column(String,   nullable=True, index=True)
+    context_type       = Column(String,   nullable=False, default="project")
+    context_template   = Column(String,   nullable=True)
+    source_record_type = Column(String,   nullable=True)
+    source_record_id   = Column(String,   nullable=True, index=True)
     created_at         = Column(DateTime, default=datetime.utcnow)
     updated_at         = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

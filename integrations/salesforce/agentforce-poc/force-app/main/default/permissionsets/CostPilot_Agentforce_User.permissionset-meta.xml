@@ -7,6 +7,11 @@
     <description>Allows an Agentforce proof user to manage CostPilot projects and members and run the CostPilot governance action.</description>
     <fieldPermissions>
         <editable>true</editable>
+        <field>CostPilot_Project__c.Account__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>CostPilot_Project__c.CostPilot_Decision__c</field>
         <readable>true</readable>
     </fieldPermissions>

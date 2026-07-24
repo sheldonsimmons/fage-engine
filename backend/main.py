@@ -106,6 +106,16 @@ def _run_migrations():
                     ensure_column(conn, table, column, definition)
                 except Exception:
                     pass
+        for column, definition in (
+            ("context_type", "VARCHAR DEFAULT 'project' NOT NULL"),
+            ("context_template", "VARCHAR"),
+            ("source_record_type", "VARCHAR"),
+            ("source_record_id", "VARCHAR"),
+        ):
+            try:
+                ensure_column(conn, "work_items", column, definition)
+            except Exception:
+                pass
         try:
             ensure_column(conn, "sensitive_terms", "enabled", "BOOLEAN DEFAULT TRUE")
         except Exception:

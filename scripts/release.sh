@@ -86,6 +86,13 @@ with engine.connect() as conn:
         ADD COLUMN IF NOT EXISTS actor_email VARCHAR,
         ADD COLUMN IF NOT EXISTS actor_source_platform VARCHAR
     '''))
+    conn.execute(text('''
+        ALTER TABLE work_items
+        ADD COLUMN IF NOT EXISTS context_type VARCHAR DEFAULT 'project' NOT NULL,
+        ADD COLUMN IF NOT EXISTS context_template VARCHAR,
+        ADD COLUMN IF NOT EXISTS source_record_type VARCHAR,
+        ADD COLUMN IF NOT EXISTS source_record_id VARCHAR
+    '''))
     conn.commit()
 print('   Column migrations applied')
 

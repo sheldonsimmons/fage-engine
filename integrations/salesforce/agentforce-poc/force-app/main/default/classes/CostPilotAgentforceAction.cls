@@ -56,7 +56,12 @@ public with sharing class CostPilotAgentforceAction {
             'salesforce_user_email' => UserInfo.getUserEmail(),
             'project_member_role'   => membership.role,
             'project_member_status' => membership.status,
-            'project_member_can_use_ai' => membership.canUseAi
+            'project_member_can_use_ai' => membership.canUseAi,
+            'context_type'          => 'project',
+            'context_template'      => 'salesforce_project',
+            'source_record_type'    => recordTypeName(request.recordId),
+            'customer_external_id'  => membership.accountId,
+            'customer_name'         => membership.accountName
         }));
 
         try {
@@ -100,7 +105,8 @@ public with sharing class CostPilotAgentforceAction {
                 return context;
             }
             List<CostPilot_Project_Member__c> memberships = [
-                SELECT Role__c, Status__c, Can_Use_AI__c
+                SELECT Role__c, Status__c, Can_Use_AI__c,
+                       Project__r.Account__c, Project__r.Account__r.Name
                 FROM CostPilot_Project_Member__c
                 WHERE Project__c = :typedRecordId
                   AND Salesforce_User__c = :UserInfo.getUserId()
@@ -116,6 +122,9 @@ public with sharing class CostPilotAgentforceAction {
             context.role = membership.Role__c;
             context.status = membership.Status__c;
             context.canUseAi = membership.Can_Use_AI__c;
+            context.accountId = membership.Project__r.Account__c;
+            context.accountName = membership.Project__r.Account__r == null
+                ? null : membership.Project__r.Account__r.Name;
         } catch (Exception ignored) {
             // Non-project actions remain backward compatible. CostPilot still
             // receives and records the current Salesforce user identity.
@@ -123,10 +132,20 @@ public with sharing class CostPilotAgentforceAction {
         return context;
     }
 
+    private static String recordTypeName(String recordId) {
+        try {
+            return Id.valueOf(recordId).getSObjectType().getDescribe().getName();
+        } catch (Exception ignored) {
+            return 'CostPilot_Project__c';
+        }
+    }
+
     private class MembershipContext {
         String role;
         String status;
         Boolean canUseAi;
+        String accountId;
+        String accountName;
     }
 
     private static Decimal decimalValue(Object value) {

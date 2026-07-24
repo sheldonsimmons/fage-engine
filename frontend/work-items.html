@@ -418,6 +418,7 @@
             <h2 class="wa-card-title" id="waAgentTeamTitle">Agent Team</h2>
             <p class="wa-card-sub" style="margin-bottom:0">Assign multiple AgentLake agents and compare expected activity with actual usage.</p>
             <div class="wa-team-project" id="waTeamProjectLabel"></div>
+            <div class="wa-project-id" id="waTeamContextLabel"></div>
           </div>
           <button class="wa-secondary" type="button" onclick="waClearTeamSelection()">Close</button>
         </div>
@@ -630,6 +631,13 @@
       document.getElementById("waTeamPlaceholder").hidden = true;
       document.getElementById("waTeamWorkspace").hidden = false;
       document.getElementById("waTeamProjectLabel").textContent = `${project.name} · ${project.external_id}`;
+      const context = project.business_context || {};
+      const source = context.source || {};
+      document.getElementById("waTeamContextLabel").textContent = [
+        context.work_label || "Project",
+        context.customer?.name ? `Customer: ${context.customer.name}` : "",
+        source.platform ? `Source: ${source.platform}${source.record_type ? ` / ${source.record_type}` : ""}` : ""
+      ].filter(Boolean).join(" · ");
       if (!document.getElementById("waAgentDepartment").value && project.department) {
         document.getElementById("waAgentDepartment").value = project.department;
       }
@@ -751,7 +759,7 @@
         document.getElementById("waProjectRows").innerHTML = waItems.length ? waItems.map(item => `
           <tr data-project-id="${waEscape(item.external_id)}" onclick="waSelectProject('${waEscape(item.external_id)}')">
             <td><div class="wa-project-name">${waEscape(item.name)}</div><div class="wa-project-id">${waEscape(item.external_id)}</div></td>
-            <td>${waEscape(item.source_platform || "CostPilot")}</td>
+            <td>${waEscape(item.business_context?.work_label || "Project")} · ${waEscape(item.source_platform || "CostPilot")}</td>
             <td>${waEscape(item.owner || "—")}</td>
             <td>${waEscape(item.department || "—")}</td>
             <td>${Number(item.assigned_user_count || 0).toLocaleString()} people · ${Number(item.assigned_agent_count || 0).toLocaleString()} agents</td>

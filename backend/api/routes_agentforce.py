@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 
 from api.routes_proxy import _get_account
 from api.routes_router import RouteRequest, route_payload
+from core.business_context import normalize_context_type
 from database.db import get_db
-from database.models import TokenTransaction, WorkItem
+from database.models import TokenTransaction, WorkAccount, WorkItem
 
 
 router = APIRouter()
@@ -36,6 +37,11 @@ class AgentforceGovernRequest(BaseModel):
     project_member_role: Optional[str] = Field(default="Member", max_length=120)
     project_member_status: Optional[str] = Field(default="active", max_length=40)
     project_member_can_use_ai: Optional[bool] = True
+    context_type: str = Field(default="project", max_length=40)
+    context_template: str = Field(default="salesforce_project", max_length=120)
+    source_record_type: str = Field(default="CostPilot_Project__c", max_length=120)
+    customer_external_id: Optional[str] = Field(default=None, max_length=120)
+    customer_name: Optional[str] = Field(default=None, max_length=200)
 
 
 class AgentforceGovernResponse(BaseModel):
@@ -83,7 +89,15 @@ def _resolve_or_create_project(
             detail="That project identifier belongs to a different CostPilot workspace.",
         )
 
+    account = _resolve_customer(db, workspace_id, body)
     status = _normalized_project_status(body.project_status)
+    try:
+        context_type = normalize_context_type(
+            body.context_type,
+            template_key=body.context_template,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     valid_statuses = {"active", "on_hold", "completed", "cancelled", "archived"}
     if status not in valid_statuses:
         raise HTTPException(
@@ -102,6 +116,12 @@ def _resolve_or_create_project(
         project.status = status
         project.source_platform = "Salesforce"
         project.workspace_id = workspace_id
+        project.context_type = context_type
+        project.context_template = body.context_template
+        project.source_record_type = body.source_record_type
+        project.source_record_id = body.record_id.strip()
+        if account:
+            project.account_id = account.id
     else:
         project = WorkItem(
             external_id=external_id,
@@ -113,12 +133,49 @@ def _resolve_or_create_project(
             cost_treatment="unspecified",
             source_platform="Salesforce",
             workspace_id=workspace_id,
+            context_type=context_type,
+            context_template=body.context_template,
+            source_record_type=body.source_record_type,
+            source_record_id=body.record_id.strip(),
+            account_id=account.id if account else None,
         )
         db.add(project)
 
     db.commit()
     db.refresh(project)
     return project
+
+
+def _resolve_customer(
+    db: Session,
+    workspace_id: str,
+    body: AgentforceGovernRequest,
+) -> Optional[WorkAccount]:
+    external_id = (body.customer_external_id or "").strip()
+    name = (body.customer_name or "").strip()
+    if not external_id and not name:
+        return None
+    external_id = external_id or f"SF-CUSTOMER-{name.lower().replace(' ', '-')}"
+    account = db.query(WorkAccount).filter(WorkAccount.external_id == external_id).first()
+    if account and account.workspace_id not in (None, workspace_id):
+        raise HTTPException(
+            status_code=409,
+            detail="That customer identifier belongs to a different CostPilot workspace.",
+        )
+    if not account:
+        account = WorkAccount(
+            external_id=external_id,
+            name=name or external_id,
+            department=body.department.strip() or None,
+            status="active",
+            workspace_id=workspace_id,
+        )
+        db.add(account)
+        db.flush()
+    else:
+        account.name = name or account.name
+        account.workspace_id = workspace_id
+    return account
 
 
 @router.post(

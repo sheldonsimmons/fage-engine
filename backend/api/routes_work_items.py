@@ -23,6 +23,11 @@ from database.models import (
     WorkUser,
 )
 from core.agentlake import display_agent_name, display_department, infer_platform
+from core.business_context import (
+    BUSINESS_CONTEXT_TEMPLATES,
+    business_context_json,
+    normalize_context_type,
+)
 
 
 router = APIRouter()
@@ -58,6 +63,10 @@ class WorkItemIn(BaseModel):
     cost_treatment: str = "unspecified"
     source_platform: Optional[str] = Field(default="CostPilot", max_length=120)
     workspace_id: Optional[str] = Field(default=None, max_length=120)
+    context_type: str = Field(default="project", max_length=40)
+    context_template: Optional[str] = Field(default=None, max_length=120)
+    source_record_type: Optional[str] = Field(default=None, max_length=120)
+    source_record_id: Optional[str] = Field(default=None, max_length=120)
 
 
 class WorkItemUpdate(BaseModel):
@@ -70,6 +79,10 @@ class WorkItemUpdate(BaseModel):
     monthly_ai_budget: Optional[float] = Field(default=None, ge=0)
     cost_treatment: Optional[str] = None
     source_platform: Optional[str] = Field(default=None, max_length=120)
+    context_type: Optional[str] = Field(default=None, max_length=40)
+    context_template: Optional[str] = Field(default=None, max_length=120)
+    source_record_type: Optional[str] = Field(default=None, max_length=120)
+    source_record_id: Optional[str] = Field(default=None, max_length=120)
 
 
 class AgentAssignmentIn(BaseModel):
@@ -235,6 +248,11 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "cost_treatment": item.cost_treatment,
         "source_platform": item.source_platform,
         "workspace_id": item.workspace_id,
+        "context_type": item.context_type or "project",
+        "context_template": item.context_template,
+        "source_record_type": item.source_record_type,
+        "source_record_id": item.source_record_id,
+        "business_context": business_context_json(item),
         "request_count": int(request_count or 0),
         "agent_count": len(agent_rows),
         "agents": [{"id": row.id, "name": row.name} for row in agent_rows],
@@ -447,6 +465,12 @@ def list_accounts(
     return [_account_json(account) for account in query.order_by(WorkAccount.name).all()]
 
 
+@router.get("/context-templates")
+def list_context_templates():
+    """Templates translate platform records into the universal context contract."""
+    return [template.as_dict() for template in BUSINESS_CONTEXT_TEMPLATES.values()]
+
+
 @router.post("/accounts", status_code=201)
 def create_account(body: AccountIn, db: Session = Depends(get_db)):
     _validate_status(body.status)
@@ -545,14 +569,22 @@ def work_item_summary(
 def create_work_item(body: WorkItemIn, db: Session = Depends(get_db)):
     _validate_status(body.status)
     _validate_cost_treatment(body.cost_treatment)
+    try:
+        context_type = normalize_context_type(
+            body.context_type,
+            template_key=body.context_template,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     external_id = _clean_external_id(body.external_id, "PROJECT")
     if db.query(WorkItem).filter(WorkItem.external_id == external_id).first():
         raise HTTPException(status_code=409, detail="A work item with that external_id already exists")
     if body.account_id and not db.query(WorkAccount).filter(WorkAccount.id == body.account_id).first():
         raise HTTPException(status_code=404, detail="Account not found")
     item = WorkItem(
-        **body.model_dump(exclude={"external_id"}),
+        **body.model_dump(exclude={"external_id", "context_type"}),
         external_id=external_id,
+        context_type=context_type,
     )
     db.add(item)
     db.commit()
@@ -578,6 +610,14 @@ def update_work_item(identifier: str, body: WorkItemUpdate, db: Session = Depend
         _validate_status(changes["status"])
     if "cost_treatment" in changes:
         _validate_cost_treatment(changes["cost_treatment"])
+    if "context_type" in changes or "context_template" in changes:
+        try:
+            changes["context_type"] = normalize_context_type(
+                changes.get("context_type", item.context_type),
+                template_key=changes.get("context_template", item.context_template),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     if "external_id" in changes:
         changes["external_id"] = _clean_external_id(changes["external_id"], "PROJECT")
         duplicate = (
