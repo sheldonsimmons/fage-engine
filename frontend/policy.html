@@ -97,6 +97,51 @@
     .policy-library-toolbar { align-items:center; display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
     .policy-library-toolbar .agent-filter-search { flex:1; min-width:220px; }
     .policy-library-wrap { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; overflow:hidden; padding:14px; }
+    .pruning-policy-grid { display:grid; gap:12px; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); }
+    .pruning-lanes { display:grid; gap:8px; }
+    .pruning-lane {
+      align-items:flex-start; background:var(--bg-base); border:1px solid var(--border);
+      border-radius:7px; display:grid; gap:10px; grid-template-columns:72px minmax(0,1fr); padding:10px;
+    }
+    .pruning-lane strong { color:var(--accent); font-size:9px; text-transform:uppercase; }
+    .pruning-lane span { color:var(--text-muted); font-size:9px; line-height:1.45; }
+    .pruning-filter-list { display:flex; flex-wrap:wrap; gap:6px; }
+    .pruning-filter {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:999px;
+      color:var(--text-muted); font-size:8px; padding:5px 8px;
+    }
+    .pruning-agent-table { border-collapse:collapse; width:100%; }
+    .pruning-agent-table th, .pruning-agent-table td {
+      border-top:1px solid var(--border); font-size:9px; padding:9px 7px; text-align:left;
+    }
+    .pruning-agent-table th { color:var(--text-muted); font-size:8px; text-transform:uppercase; }
+    .pruning-agent-table tr:first-child th { border-top:0; }
+    .pruning-toggle {
+      background:transparent; border:1px solid var(--border); border-radius:999px;
+      color:var(--text-muted); cursor:pointer; font:inherit; font-size:8px; font-weight:800; padding:4px 8px;
+    }
+    .pruning-toggle.on { border-color:var(--accent-green); color:var(--accent-green); }
+    .pruning-preview-grid { display:grid; gap:10px; grid-template-columns:1fr 1fr; }
+    .pruning-preview-grid textarea {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:6px; box-sizing:border-box;
+      color:var(--text-primary); font:inherit; font-size:10px; line-height:1.45; min-height:190px; padding:10px; resize:vertical; width:100%;
+    }
+    .pruning-preview-output {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:6px;
+      box-sizing:border-box; color:var(--text-primary); font-size:10px; line-height:1.45;
+      min-height:190px; overflow:auto; padding:10px; white-space:pre-wrap;
+    }
+    .pruning-preview-controls { align-items:center; display:flex; flex-wrap:wrap; gap:8px; margin:9px 0; }
+    .pruning-preview-controls select {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:5px;
+      color:var(--text-primary); font:inherit; font-size:9px; padding:7px;
+    }
+    .pruning-preview-controls label { align-items:center; color:var(--text-muted); display:flex; font-size:9px; gap:5px; }
+    .pruning-preview-stats { display:grid; gap:7px; grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:10px; }
+    .pruning-preview-stat { background:var(--bg-base); border:1px solid var(--border); border-radius:6px; padding:9px; }
+    .pruning-preview-stat strong { display:block; font-size:12px; }
+    .pruning-preview-stat span { color:var(--text-muted); display:block; font-size:7px; margin-top:3px; text-transform:uppercase; }
+    .pruning-decision { border-left:3px solid var(--accent); color:var(--text-muted); font-size:9px; line-height:1.45; margin-top:10px; padding:7px 9px; }
     .policy-detector-note {
       background:rgba(88,166,255,.06); border:1px solid rgba(88,166,255,.25);
       border-radius:8px; color:var(--text-muted); font-size:10px; line-height:1.5;
@@ -134,10 +179,14 @@
     .policy-match-row span { color:var(--text-muted); display:block; font-size:9px; margin-top:3px; }
     @media (max-width:850px) {
       .policy-summary-grid { grid-template-columns:repeat(3,1fr); }
-      .policy-overview-grid, .routing-rule-grid, .policy-test-grid { grid-template-columns:1fr; }
+      .policy-overview-grid, .routing-rule-grid, .policy-test-grid, .pruning-policy-grid { grid-template-columns:1fr; }
       .policy-outcomes { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .pruning-preview-grid { grid-template-columns:1fr; }
     }
-    @media (max-width:520px) { .policy-summary-grid { grid-template-columns:1fr; } .policy-main { padding:16px; } }
+    @media (max-width:520px) {
+      .policy-summary-grid, .pruning-preview-stats { grid-template-columns:1fr; }
+      .policy-main { padding:16px; }
+    }
   </style>
 </head>
 <body>
@@ -166,6 +215,7 @@
 </div>
 <nav class="policy-tabs" role="tablist" aria-label="Policy sections">
   <button id="policyTabOverviewButton" class="policy-tab active" role="tab" aria-selected="true" onclick="setPolicyTab('overview')">Overview</button>
+  <button id="policyTabPruningButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('pruning')">Pruning Policy</button>
   <button id="policyTabRoutingButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('routing')">Routing Rules</button>
   <button id="policyTabTermsButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('terms')">Sensitive Terms</button>
   <button id="policyTabTestButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('test')">Test Policy</button>
@@ -217,6 +267,68 @@
         <div class="policy-outcome block"><strong>Block</strong><span>Stop before any provider call because a protection or access rule requires it.</span></div>
       </div>
     </div>
+  </section>
+
+  <section id="policyTabPruning" class="policy-panel" hidden>
+    <div class="policy-panel-heading">
+      <div><h2>Pruning policy</h2><p>See when the existing algorithm runs, manage supported agent overrides, and compare its output safely.</p></div>
+      <span class="policy-flow-result">Algorithm unchanged</span>
+    </div>
+    <div class="policy-detector-note">
+      <strong>Protection boundary:</strong>
+      sensitive-term and automatic PII checks run against the original request before pruning. Code bypasses pruning to preserve its structure. Text pruning targets only the existing noise patterns listed below; this page does not add, remove, or reorder any cleaning rule.
+    </div>
+    <div class="policy-summary-grid">
+      <div class="policy-summary-card"><strong id="pruningDefaultStatus">—</strong><span>Request default</span></div>
+      <div class="policy-summary-card"><strong id="pruningEnabledAgents">—</strong><span>Agents enabled</span></div>
+      <div class="policy-summary-card"><strong id="pruningDisabledAgents">—</strong><span>Agent overrides off</span></div>
+      <div class="policy-summary-card"><strong id="pruningMinimumTokens">—</strong><span>Minimum useful tokens</span></div>
+      <div class="policy-summary-card"><strong>Code</strong><span>Automatic bypass lane</span></div>
+      <div class="policy-summary-card"><strong>Read only</strong><span>Cleaning algorithm</span></div>
+    </div>
+    <div class="pruning-policy-grid">
+      <section class="policy-card">
+        <h3>Runtime behavior</h3>
+        <p>These lanes describe existing routing behavior. They do not replace or modify the pruning algorithm.</p>
+        <div id="pruningLaneList" class="pruning-lanes"><div class="policy-test-empty">Loading pruning policy…</div></div>
+        <h3 style="margin-top:16px">Existing cleaning stages</h3>
+        <p>Stages run only when pruning is applied.</p>
+        <div id="pruningFilterList" class="pruning-filter-list"></div>
+      </section>
+      <section class="policy-card">
+        <h3>Agent overrides</h3>
+        <p>The request default is on. An agent-level off setting bypasses pruning without changing the algorithm for anyone else.</p>
+        <div class="policy-library-wrap" style="padding:0;max-height:360px;overflow:auto">
+          <table class="pruning-agent-table">
+            <thead><tr><th>Agent</th><th>Department / Platform</th><th>Pruning</th></tr></thead>
+            <tbody id="pruningAgentRows"><tr><td colspan="3" class="placeholder">Loading agents…</td></tr></tbody>
+          </table>
+        </div>
+        <div id="pruningAgentStatus" style="font-size:9px;margin-top:8px"></div>
+      </section>
+    </div>
+    <section class="policy-card" style="margin-top:12px">
+      <h3>Compare before and after</h3>
+      <p>This preview calls the current pruning engine directly. It creates no AI call, spend, transaction, or audit event.</p>
+      <div class="pruning-preview-controls">
+        <select id="pruningPreviewLane" aria-label="Preview payload lane">
+          <option value="auto">Auto-detect payload</option>
+          <option value="text">Text</option>
+          <option value="code">Code — bypass</option>
+          <option value="transcript">Transcript</option>
+        </select>
+        <label><input id="pruningPreviewEnabled" type="checkbox" checked /> Simulate pruning enabled</label>
+        <button class="btn-secondary" type="button" onclick="loadPruningExample('email')">Messy email example</button>
+        <button class="btn-secondary" type="button" onclick="loadPruningExample('code')">Code example</button>
+        <button class="btn-primary" type="button" onclick="runPruningPreview()">Compare</button>
+      </div>
+      <div class="pruning-preview-grid">
+        <div><label class="field-label" for="pruningPreviewInput">Original input</label><textarea id="pruningPreviewInput" placeholder="Paste a raw email, ticket, transcript, or code sample."></textarea></div>
+        <div><div class="field-label">What CostPilot would send</div><div id="pruningPreviewOutput" class="pruning-preview-output">Run a comparison to see the unchanged algorithm’s output.</div></div>
+      </div>
+      <div id="pruningPreviewStats" class="pruning-preview-stats" hidden></div>
+      <div id="pruningPreviewDecision" class="pruning-decision" hidden></div>
+    </section>
   </section>
 
   <section id="policyTabRouting" class="policy-panel" hidden>
@@ -317,7 +429,8 @@
 <script src="js/keywords.js?v=20260724-v453"></script>
 <script src="js/help.js"></script>
 <script>
-const POLICY_TABS = ["overview", "routing", "terms", "test"];
+const POLICY_TABS = ["overview", "pruning", "routing", "terms", "test"];
+let policyPruningAgents = [];
 
 function setPolicyTab(tab) {
   const selected = POLICY_TABS.includes(tab) ? tab : "overview";
@@ -393,6 +506,115 @@ function policyTermMatches(term, text) {
   const escaped = String(term || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (!escaped) return false;
   return new RegExp(`(^|[^A-Za-z0-9])${escaped}([^A-Za-z0-9]|$)`, "i").test(text);
+}
+
+async function loadPruningPolicy() {
+  const agentRows = document.getElementById("pruningAgentRows");
+  try {
+    const [policy, agents] = await Promise.all([
+      apiGet("/api/prune/policy"),
+      apiGet("/api/agents"),
+    ]);
+    policyPruningAgents = (agents || []).filter(agent => !agent.archived);
+    const enabled = policyPruningAgents.filter(agent => agent.pruning_enabled !== false).length;
+    const disabled = policyPruningAgents.length - enabled;
+    document.getElementById("pruningDefaultStatus").textContent = policy.request_default_enabled ? "On" : "Off";
+    document.getElementById("pruningEnabledAgents").textContent = enabled.toLocaleString();
+    document.getElementById("pruningDisabledAgents").textContent = disabled.toLocaleString();
+    document.getElementById("pruningMinimumTokens").textContent = Number(policy.minimum_useful_tokens || 0).toLocaleString();
+    document.getElementById("pruningLaneList").innerHTML = (policy.lanes || []).map(lane => `
+      <div class="pruning-lane"><strong>${policyEscape(lane.type)} · ${policyEscape(lane.behavior)}</strong><span>${policyEscape(lane.description)}</span></div>
+    `).join("");
+    document.getElementById("pruningFilterList").innerHTML = (policy.filters || []).map(filter =>
+      `<span class="pruning-filter">${policyEscape(filter)}</span>`
+    ).join("");
+    agentRows.innerHTML = policyPruningAgents.length ? policyPruningAgents.map(agent => `
+      <tr>
+        <td><strong>${policyEscape(agent.display_name || agent.name)}</strong></td>
+        <td>${policyEscape(agent.display_department || agent.department || "—")} · ${policyEscape(agent.source_platform || "Custom")}</td>
+        <td><button type="button" class="pruning-toggle ${agent.pruning_enabled !== false ? "on" : ""}"
+          onclick="togglePolicyAgentPruning(${agent.id}, ${agent.pruning_enabled !== false})">
+          ${agent.pruning_enabled !== false ? "Enabled" : "Disabled"}
+        </button></td>
+      </tr>`).join("") : '<tr><td colspan="3" class="placeholder">No registered agents.</td></tr>';
+  } catch (error) {
+    agentRows.innerHTML = `<tr><td colspan="3" class="placeholder">Could not load pruning policy: ${policyEscape(error.message)}</td></tr>`;
+  }
+}
+
+async function togglePolicyAgentPruning(agentId, currentlyEnabled) {
+  const agent = policyPruningAgents.find(item => item.id === agentId);
+  const agentName = agent?.display_name || agent?.name || `Agent ${agentId}`;
+  const next = !currentlyEnabled;
+  if (!confirm(`${next ? "Enable" : "Disable"} pruning for ${agentName}?\\n\\nThis changes only this agent's supported override. The pruning algorithm is not modified.`)) return;
+  const status = document.getElementById("pruningAgentStatus");
+  try {
+    await apiPatch(`/api/agents/${agentId}/pruning`, { enabled: next });
+    status.textContent = `${agentName}: pruning ${next ? "enabled" : "disabled"}.`;
+    status.style.color = "var(--accent-green)";
+    await loadPruningPolicy();
+  } catch (error) {
+    status.textContent = `Could not update ${agentName}: ${error.message}`;
+    status.style.color = "var(--accent-red)";
+  }
+}
+
+function loadPruningExample(type) {
+  const input = document.getElementById("pruningPreviewInput");
+  if (type === "code") {
+    document.getElementById("pruningPreviewLane").value = "auto";
+    input.value = "def calculate_total(items):\\n    return sum(item.price for item in items)\\n";
+  } else {
+    document.getElementById("pruningPreviewLane").value = "text";
+    input.value = `<p>Please summarize the customer's billing concern and recommended next action.</p>
+
+Thanks,
+Jordan Smith
+Support Manager
+Acme Corporation
+
+-----Original Message-----
+From: customer@example.com
+Sent: Yesterday
+To: support@example.com
+Subject: Previous reply
+This older reply-chain content should not be sent again.
+
+CONFIDENTIALITY NOTICE: This message may contain privileged information intended only for the recipient.`;
+  }
+  runPruningPreview();
+}
+
+async function runPruningPreview() {
+  const input = document.getElementById("pruningPreviewInput").value;
+  const output = document.getElementById("pruningPreviewOutput");
+  if (!input.trim()) {
+    output.textContent = "Enter or load a sample first.";
+    return;
+  }
+  output.textContent = "Comparing…";
+  try {
+    const result = await apiPost("/api/prune/preview", {
+      text: input,
+      payload_type: document.getElementById("pruningPreviewLane").value,
+      pruning_enabled: document.getElementById("pruningPreviewEnabled").checked,
+    });
+    output.textContent = result.cleaned_text;
+    const stats = document.getElementById("pruningPreviewStats");
+    stats.hidden = false;
+    stats.innerHTML = [
+      [Number(result.raw_tokens || 0).toLocaleString(), "Original tokens"],
+      [Number(result.clean_tokens || 0).toLocaleString(), "Tokens sent"],
+      [Number(result.tokens_saved || 0).toLocaleString(), "Tokens removed"],
+      [`${Number(result.compression_pct || 0).toFixed(1)}%`, "Compression"],
+    ].map(([value, label]) => `<div class="pruning-preview-stat"><strong>${policyEscape(value)}</strong><span>${policyEscape(label)}</span></div>`).join("");
+    const decision = document.getElementById("pruningPreviewDecision");
+    decision.hidden = false;
+    decision.innerHTML = `<strong>${policyEscape(String(result.decision || "").toUpperCase())}</strong> · ${policyEscape(result.reason)}
+      ${result.filters_applied?.length ? `<br>Stages used: ${result.filters_applied.map(policyEscape).join(", ")}` : ""}`;
+  } catch (error) {
+    output.textContent = `Could not run comparison: ${error.message}`;
+  }
 }
 
 async function loadPolicyExample(type) {
@@ -529,10 +751,12 @@ async function runPolicyTest() {
 document.addEventListener("DOMContentLoaded", () => {
   const requested = location.hash.replace("#", "");
   setPolicyTab(POLICY_TABS.includes(requested) ? requested : "overview");
+  loadPruningPolicy();
 });
 
 window.PAGE_TOUR_STEPS = [
   { target:"policyTabOverviewButton", title:"Policy Overview", body:"Start here to understand the order CostPilot uses to protect, classify, constrain, and route requests.", position:"bottom" },
+  { target:"policyTabPruningButton", title:"Pruning Policy", body:"See existing pruning lanes, manage supported agent overrides, and compare the unchanged algorithm's before-and-after output.", position:"bottom" },
   { target:"policyTabRoutingButton", title:"Routing Rules", body:"Configure the token threshold and whole-term complexity keywords used for Tier 1, Tier 2, and Tier 3 routing.", position:"bottom" },
   { target:"policyTabTermsButton", title:"Sensitive Terms", body:"Manage text rules that flag, force Tier 4 escalation, or block a request before any provider call.", position:"bottom" },
   { target:"policyTabTestButton", title:"Test Policy", body:"Preview configured text-rule outcomes safely without creating spend, audit records, or provider calls.", position:"bottom", last:true },
