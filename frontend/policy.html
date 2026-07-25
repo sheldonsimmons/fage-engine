@@ -27,7 +27,7 @@
     .policy-panel-heading { align-items:flex-end; display:flex; justify-content:space-between; gap:14px; margin-bottom:16px; }
     .policy-panel-heading h2 { font-size:18px; margin:0 0 4px; }
     .policy-panel-heading p { color:var(--text-muted); font-size:11px; margin:0; max-width:700px; }
-    .policy-summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+    .policy-summary-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
     .policy-summary-card { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:15px; }
     .policy-summary-card strong { display:block; font-size:22px; }
     .policy-summary-card span { color:var(--text-muted); display:block; font-size:9px; font-weight:700; letter-spacing:.07em; margin-top:5px; text-transform:uppercase; }
@@ -45,6 +45,43 @@
     .policy-action-list { display:grid; gap:8px; }
     .policy-action-list button { align-items:center; background:var(--bg-base); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); cursor:pointer; display:flex; font:inherit; font-size:10px; font-weight:650; justify-content:space-between; padding:10px; text-align:left; }
     .policy-action-list button:hover { border-color:var(--accent); color:var(--accent); }
+    .policy-action-list a {
+      align-items:center; background:var(--bg-base); border:1px solid var(--border); border-radius:6px;
+      color:var(--text-primary); display:flex; font-size:10px; font-weight:650; justify-content:space-between;
+      padding:10px; text-align:left; text-decoration:none;
+    }
+    .policy-action-list a:hover { border-color:var(--accent); color:var(--accent); }
+    .policy-outcomes {
+      display:grid; gap:8px; grid-template-columns:repeat(5,minmax(0,1fr)); margin-top:12px;
+    }
+    .policy-outcome {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:7px; padding:11px;
+    }
+    .policy-outcome strong { display:block; font-size:10px; }
+    .policy-outcome span { color:var(--text-muted); display:block; font-size:8px; line-height:1.4; margin-top:4px; }
+    .policy-outcome.allow { border-top:2px solid var(--accent-green); }
+    .policy-outcome.route { border-top:2px solid var(--accent); }
+    .policy-outcome.queue { border-top:2px dashed var(--accent-yellow); }
+    .policy-outcome.skip, .policy-outcome.block { border-top:2px solid var(--accent-red); }
+    .policy-test-trace { display:grid; gap:6px; margin-top:13px; }
+    .policy-trace-row {
+      align-items:flex-start; border-top:1px solid var(--border); display:grid;
+      gap:9px; grid-template-columns:20px minmax(0,1fr) auto; padding:8px 0;
+    }
+    .policy-trace-row:first-child { border-top:0; }
+    .policy-trace-number {
+      background:rgba(88,166,255,.12); border-radius:50%; color:var(--accent);
+      display:grid; font-size:8px; font-weight:800; height:19px; place-items:center; width:19px;
+    }
+    .policy-trace-row strong { display:block; font-size:9px; }
+    .policy-trace-row span { color:var(--text-muted); display:block; font-size:8px; line-height:1.4; margin-top:2px; }
+    .policy-trace-state {
+      border:1px solid var(--border); border-radius:999px; font-size:7px !important;
+      font-weight:800; margin:0 !important; padding:3px 6px; text-transform:uppercase; white-space:nowrap;
+    }
+    .policy-trace-state.clear { color:var(--accent-green); }
+    .policy-trace-state.review { color:var(--accent-yellow); }
+    .policy-trace-state.stop { color:var(--accent-red); }
     .routing-rule-grid { display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); gap:12px; }
     .rr-section { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; margin:0; padding:17px; }
     .rr-section-label {
@@ -80,6 +117,13 @@
     .policy-test-input textarea { background:var(--bg-base); border:1px solid var(--border); border-radius:6px; box-sizing:border-box; color:var(--text-primary); font:inherit; font-size:12px; line-height:1.5; min-height:220px; padding:11px; resize:vertical; width:100%; }
     .policy-test-input textarea:focus { border-color:var(--accent); outline:none; }
     .policy-test-actions { align-items:center; display:flex; gap:10px; margin-top:10px; }
+    .policy-test-examples { align-items:center; display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+    .policy-test-examples span { color:var(--text-muted); font-size:8px; font-weight:750; text-transform:uppercase; }
+    .policy-test-examples button {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:999px;
+      color:var(--text-muted); cursor:pointer; font:inherit; font-size:8px; padding:4px 8px;
+    }
+    .policy-test-examples button:hover { border-color:var(--accent); color:var(--accent); }
     .policy-test-result { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; min-height:260px; padding:17px; }
     .policy-test-empty { color:var(--text-muted); display:grid; font-size:11px; min-height:220px; place-items:center; text-align:center; }
     .policy-result-outcome { border:1px solid var(--border); border-radius:7px; margin:12px 0; padding:13px; }
@@ -89,8 +133,9 @@
     .policy-match-row strong { display:block; font-size:10px; }
     .policy-match-row span { color:var(--text-muted); display:block; font-size:9px; margin-top:3px; }
     @media (max-width:850px) {
-      .policy-summary-grid { grid-template-columns:repeat(2,1fr); }
+      .policy-summary-grid { grid-template-columns:repeat(3,1fr); }
       .policy-overview-grid, .routing-rule-grid, .policy-test-grid { grid-template-columns:1fr; }
+      .policy-outcomes { grid-template-columns:repeat(2,minmax(0,1fr)); }
     }
     @media (max-width:520px) { .policy-summary-grid { grid-template-columns:1fr; } .policy-main { padding:16px; } }
   </style>
@@ -117,7 +162,7 @@
 
 <div class="policy-page-heading">
   <h1>Policy &amp; Rules</h1>
-  <p>Define how CostPilot classifies, protects, and routes every AI request.</p>
+  <p>Control what CostPilot may remove, protect, route, constrain, queue, skip, or block.</p>
 </div>
 <nav class="policy-tabs" role="tablist" aria-label="Policy sections">
   <button id="policyTabOverviewButton" class="policy-tab active" role="tab" aria-selected="true" onclick="setPolicyTab('overview')">Overview</button>
@@ -128,31 +173,48 @@
 
 <main class="policy-main">
   <section id="policyTabOverview" class="policy-panel">
-    <div class="policy-panel-heading"><div><h2>Current policy</h2><p>Understand the decision order CostPilot applies before any request reaches an AI model.</p></div></div>
+    <div class="policy-panel-heading"><div><h2>How CostPilot decides</h2><p>Follow the controls from business context through the final model call and recorded outcome.</p></div></div>
     <div id="policySummaryGrid" class="policy-summary-grid">
       <div class="policy-summary-card"><strong>—</strong><span>Token threshold</span></div>
       <div class="policy-summary-card"><strong>—</strong><span>Complexity keywords</span></div>
       <div class="policy-summary-card"><strong>—</strong><span>Sensitive terms</span></div>
       <div class="policy-summary-card"><strong>—</strong><span>Blocking rules</span></div>
+      <div class="policy-summary-card"><strong>6</strong><span>Decision stages</span></div>
+      <div class="policy-summary-card"><strong>5</strong><span>Possible outcomes</span></div>
     </div>
     <div class="policy-overview-grid">
       <div class="policy-card">
-        <h3>How a request is evaluated</h3><p>Rules run in this order. The strongest applicable protection wins.</p>
+        <h3>Request decision order</h3><p>Each stage narrows what CostPilot is permitted to do. A stop outcome prevents the model call.</p>
         <div class="policy-flow">
-          <div class="policy-flow-row"><span class="policy-flow-number">1</span><div><strong>PII and sensitive-term protection</strong><span>Block, flag, or force Tier 4 based on the matching term.</span></div><span class="policy-flow-result">Protect</span></div>
-          <div class="policy-flow-row"><span class="policy-flow-number">2</span><div><strong>Complexity scoring</strong><span>Evaluate whole-term keyword matches and estimated request length.</span></div><span class="policy-flow-result">Classify</span></div>
-          <div class="policy-flow-row"><span class="policy-flow-number">3</span><div><strong>Budget and agent limits</strong><span>Apply department throttling and the agent’s allowed tier range.</span></div><span class="policy-flow-result">Constrain</span></div>
-          <div class="policy-flow-row"><span class="policy-flow-number">4</span><div><strong>Approved model selection</strong><span>Choose the registered default model for the final tier.</span></div><span class="policy-flow-result">Route</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">1</span><div><strong>Resolve business context and access</strong><span>Identify the project, department, human user, and agent; inactive work or unauthorized users stop here.</span></div><span class="policy-flow-result">Identify</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">2</span><div><strong>Protect sensitive information</strong><span>Automatic detectors and enabled terms may flag, force Tier 4, or block before any provider call.</span></div><span class="policy-flow-result">Protect</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">3</span><div><strong>Prune unnecessary context</strong><span>When enabled for the payload and agent, remove redundant text and stop payloads that become effectively empty.</span></div><span class="policy-flow-result">Optimize</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">4</span><div><strong>Classify complexity and apply limits</strong><span>Evaluate request length and whole-term keywords, then apply department budget throttles and agent tier limits.</span></div><span class="policy-flow-result">Constrain</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">5</span><div><strong>Select an approved model</strong><span>Choose the enabled default model for the permitted tier and calculate the governed cost.</span></div><span class="policy-flow-result">Route</span></div>
+          <div class="policy-flow-row"><span class="policy-flow-number">6</span><div><strong>Coordinate agents and record the decision</strong><span>AgentLake applies lock, queue, or skip when agents collide; CostPilot records the final outcome for audit.</span></div><span class="policy-flow-result">Record</span></div>
         </div>
       </div>
       <div class="policy-card">
-        <h3>Policy actions</h3><p>Open the policy area you want to review or change.</p>
+        <h3>Where controls are managed</h3><p>Govern owns policy logic; linked pages own budgets, models, and agent settings.</p>
         <div class="policy-action-list">
           <button onclick="setPolicyTab('routing')">Change routing threshold <span>→</span></button>
-          <button onclick="setPolicyTab('routing')">Manage complexity keywords <span>→</span></button>
           <button onclick="setPolicyTab('terms')">Manage sensitive terms <span>→</span></button>
           <button onclick="setPolicyTab('test')">Test a sample request <span>→</span></button>
+          <a href="/admin.html">Department budgets and limits <span>→</span></a>
+          <a href="/models.html">Approved models and defaults <span>→</span></a>
+          <a href="/operate.html">Agent collision settings and activity <span>→</span></a>
         </div>
+      </div>
+    </div>
+    <div class="policy-card" style="margin-top:12px">
+      <h3>Possible governed outcomes</h3>
+      <p>Color is supporting information only; every outcome is also named and explained.</p>
+      <div class="policy-outcomes">
+        <div class="policy-outcome allow"><strong>Allow</strong><span>Proceed using the selected approved model.</span></div>
+        <div class="policy-outcome route"><strong>Reroute</strong><span>Use a different tier because complexity, sensitivity, or budget requires it.</span></div>
+        <div class="policy-outcome queue"><strong>Queue</strong><span>Wait because another agent currently owns the target work.</span></div>
+        <div class="policy-outcome skip"><strong>Skip</strong><span>Do not repeat work already being handled by another agent.</span></div>
+        <div class="policy-outcome block"><strong>Block</strong><span>Stop before any provider call because a protection or access rule requires it.</span></div>
       </div>
     </div>
   </section>
@@ -223,6 +285,11 @@
       <div class="policy-test-input">
         <label class="field-label" for="policyTestText">Sample AI request</label>
         <textarea id="policyTestText" placeholder="Paste a sample request here. CostPilot will check it against the currently loaded routing and sensitive-term policies."></textarea>
+        <div class="policy-test-examples"><span>Try an example</span>
+          <button type="button" onclick="loadPolicyExample('routine')">Routine</button>
+          <button type="button" onclick="loadPolicyExample('complex')">Complex</button>
+          <button type="button" onclick="loadPolicyExample('protected')">Protected</button>
+        </div>
         <div class="policy-test-actions"><button class="btn-primary" onclick="runPolicyTest()">Evaluate Request</button><span id="policyTestEstimate" style="color:var(--text-muted);font-size:10px"></span></div>
       </div>
       <div id="policyTestResult" class="policy-test-result"><div class="policy-test-empty">Enter a sample request to preview its policy outcome.</div></div>
@@ -283,7 +350,9 @@ function updatePolicyOverview() {
       [`${Number(cfg.complexity_token_threshold || 0).toLocaleString()}`, "Token threshold"],
       [(cfg.complexity_keywords || []).length, "Complexity keywords"],
       [terms.length, "Sensitive terms"],
-      [terms.filter(term => term.action === "block").length, "Blocking rules"]
+      [terms.filter(term => term.action === "block").length, "Blocking rules"],
+      [6, "Decision stages"],
+      [5, "Possible outcomes"]
     ];
     summary.innerHTML = values.map(([value, label]) =>
       `<div class="policy-summary-card"><strong>${value}</strong><span>${label}</span></div>`
@@ -326,6 +395,35 @@ function policyTermMatches(term, text) {
   return new RegExp(`(^|[^A-Za-z0-9])${escaped}([^A-Za-z0-9]|$)`, "i").test(text);
 }
 
+async function loadPolicyExample(type) {
+  if (!window.POLICY_ROUTING_CONFIG || !window.POLICY_SENSITIVE_TERMS) {
+    try {
+      const [cfg, terms] = await Promise.all([apiGet("/api/routing-config"), apiGet("/api/keywords")]);
+      window.POLICY_ROUTING_CONFIG = cfg;
+      window.POLICY_SENSITIVE_TERMS = terms;
+    } catch (error) {
+      document.getElementById("policyTestResult").innerHTML =
+        `<div class="policy-test-empty" style="color:var(--accent-red)">Could not load examples: ${policyEscape(error.message)}</div>`;
+      return;
+    }
+  }
+  const cfg = window.POLICY_ROUTING_CONFIG || {};
+  const terms = (window.POLICY_SENSITIVE_TERMS || []).filter(term => term.enabled !== false);
+  const complexity = (cfg.complexity_keywords || [])[0] || "analyze";
+  const protectedTerm = terms.find(term => term.action === "block")
+    || terms.find(term => term.action === "escalate")
+    || terms[0];
+  const examples = {
+    routine: "Summarize this customer update in three bullet points.",
+    complex: `Please ${complexity} the operating plan, compare the alternatives, and recommend the strongest option.`,
+    protected: protectedTerm
+      ? `Review this request involving ${protectedTerm.term} and explain the applicable policy.`
+      : "Review this request containing restricted information and explain the applicable policy.",
+  };
+  document.getElementById("policyTestText").value = examples[type] || examples.routine;
+  runPolicyTest();
+}
+
 async function runPolicyTest() {
   const text = document.getElementById("policyTestText").value.trim();
   const result = document.getElementById("policyTestResult");
@@ -351,29 +449,34 @@ async function runPolicyTest() {
     const flagged = sensitiveMatches.filter(term => term.action === "flag");
 
     let tier = 1;
-    let decision = "ROUTINE";
+    let decision = "ALLOW";
+    let classification = "Routine";
     let explanation = "No configured complexity or sensitive-term rule matched.";
     if (blocking.length) {
       tier = 0;
-      decision = "BLOCKED";
+      decision = "BLOCK";
+      classification = "Stopped";
       explanation = "A blocking sensitive-term rule prevents this request from reaching any AI provider.";
     } else if (escalating.length) {
       tier = 4;
-      decision = "SENSITIVE ESCALATION";
+      decision = "REROUTE";
+      classification = "Sensitive escalation";
       explanation = "A sensitive-term escalation rule forces the request to Tier 4.";
     } else if (overThreshold && complexityMatches.length) {
       tier = 3;
-      decision = "COMPLEX";
+      decision = "REROUTE";
+      classification = "Complex";
       explanation = "The request exceeds the token threshold and matches a complexity keyword.";
     } else if (overThreshold || complexityMatches.length) {
       tier = 2;
-      decision = "MODERATE";
+      decision = "REROUTE";
+      classification = "Moderate";
       explanation = overThreshold ? "The request exceeds the token threshold." : "The request matches a complexity keyword.";
     }
     if (flagged.length && tier > 0) explanation += " A flag rule also marks the request high-risk for audit review.";
 
     estimate.textContent = `Estimated ${tokenCount.toLocaleString()} tokens · read-only preview`;
-    const outcomeColor = decision === "BLOCKED" ? "var(--accent-red)"
+    const outcomeColor = decision === "BLOCK" ? "var(--accent-red)"
       : tier >= 3 ? "var(--accent-yellow)"
       : tier === 2 ? "var(--accent)"
       : "var(--accent-green)";
@@ -383,17 +486,41 @@ async function runPolicyTest() {
       ...flagged.map(term => ({ name: term.term, detail: `${term.category} · Flag for audit` })),
       ...complexityMatches.map(term => ({ name: term, detail: "Complexity keyword" }))
     ];
+    const protectState = blocking.length
+      ? ["Stopped", "stop", `Blocked by ${blocking.map(term => term.term).join(", ")}`]
+      : sensitiveMatches.length
+        ? ["Applied", "review", `${sensitiveMatches.length} configured sensitive-term rule${sensitiveMatches.length === 1 ? "" : "s"} matched`]
+        : ["Clear", "clear", "No configured sensitive-term rule matched"];
+    const complexityState = overThreshold || complexityMatches.length
+      ? ["Applied", "review", `${classification} classification`]
+      : ["Routine", "clear", "Below threshold with no complexity keyword"];
+    const trace = [
+      ["Access & context", "Runtime", "Project membership, work status, user access, and agent identity are checked during live routing.", "review"],
+      ["Sensitive protection", protectState[0], protectState[2], protectState[1]],
+      ["Context pruning", "Runtime", "The live router applies the payload type and agent pruning setting before model selection.", "review"],
+      ["Complexity & limits", complexityState[0], `${complexityState[2]}; department budget and agent limits are checked live.`, complexityState[1]],
+      ["Approved model", tier ? `Tier ${tier}` : "No call", tier ? `${policyTierName(tier)} is the expected tier before live availability checks.` : "The request stops before model selection.", tier ? "clear" : "stop"],
+      ["Collision & audit", "Runtime", "AgentLake applies lock, queue, or skip during coordinated work; live decisions are then written to audit.", "review"],
+    ];
     result.innerHTML = `
       <div class="field-label">Expected outcome</div>
       <div class="policy-result-outcome" style="border-color:${outcomeColor}">
         <strong style="color:${outcomeColor}">${decision}</strong>
-        <span>${tier ? `Tier ${tier} · ${policyEscape(policyTierName(tier))}` : "No model call"}</span>
+        <span>${policyEscape(classification)} · ${tier ? `Tier ${tier} · ${policyEscape(policyTierName(tier))}` : "No model call"}</span>
       </div>
       <p style="color:var(--text-muted);font-size:10px;line-height:1.5">${policyEscape(explanation)}</p>
+      <div class="field-label" style="margin-top:16px">Decision trace</div>
+      <div class="policy-test-trace">${trace.map(([name, state, detail, stateClass], index) => `
+        <div class="policy-trace-row">
+          <span class="policy-trace-number">${index + 1}</span>
+          <div><strong>${policyEscape(name)}</strong><span>${policyEscape(detail)}</span></div>
+          <span class="policy-trace-state ${policyEscape(stateClass)}">${policyEscape(state)}</span>
+        </div>`).join("")}
+      </div>
       <div class="field-label" style="margin-top:16px">Matched configuration</div>
       ${matches.length ? matches.map(match => `<div class="policy-match-row"><strong>${policyEscape(match.name)}</strong><span>${policyEscape(match.detail)}</span></div>`).join("") : '<div class="policy-match-row"><span>No configured text rules matched.</span></div>'}
       <div class="policy-match-row"><strong>${tokenCount.toLocaleString()} estimated tokens</strong><span>${overThreshold ? "Above" : "Below"} the ${Number(cfg.complexity_token_threshold).toLocaleString()} token threshold</span></div>
-      <p style="color:var(--text-muted);font-size:8px;line-height:1.5;margin-top:12px">Preview checks configured text rules only. Provider availability, department budgets, agent limits, and automatic PII detectors are evaluated during live routing.</p>`;
+      <p style="color:var(--text-muted);font-size:8px;line-height:1.5;margin-top:12px">Read-only preview: configured text rules and estimated length are evaluated here. Automatic PII detectors, pruning, access, budgets, model availability, and agent collisions remain runtime checks and are labeled above.</p>`;
   } catch (error) {
     result.innerHTML = `<div class="policy-test-empty" style="color:var(--accent-red)">Could not evaluate policy: ${policyEscape(error.message)}</div>`;
   }
