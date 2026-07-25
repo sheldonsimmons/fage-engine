@@ -466,7 +466,7 @@
 .cp-executive-page .exec-glance-kpis {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .cp-executive-page .exec-glance-kpi,
@@ -484,6 +484,10 @@
 
 .cp-executive-page .exec-glance-kpi.positive {
   border-top: 3px solid var(--cp-color-positive);
+}
+
+.cp-executive-page .exec-glance-kpi.optimization {
+  border-top: 3px solid var(--cp-color-primary);
 }
 
 .cp-executive-page .exec-glance-kpi.warning {
@@ -520,6 +524,10 @@
   color: var(--cp-color-positive);
 }
 
+.cp-executive-page .exec-glance-kpi.optimization .exec-glance-kpi-value {
+  color: var(--cp-color-primary);
+}
+
 .cp-executive-page .exec-glance-kpi-sub {
   color: var(--cp-color-text-muted);
   font-size: 9px;
@@ -528,7 +536,8 @@
   min-height: 24px;
 }
 
-.cp-executive-page .exec-glance-budget-track {
+.cp-executive-page .exec-glance-budget-track,
+.cp-executive-page .exec-glance-pruning-track {
   background: var(--cp-color-surface-2);
   border-radius: 99px;
   height: 4px;
@@ -536,11 +545,16 @@
   overflow: hidden;
 }
 
-.cp-executive-page .exec-glance-budget-track > div {
+.cp-executive-page .exec-glance-budget-track > div,
+.cp-executive-page .exec-glance-pruning-track > div {
   background: var(--cp-color-positive);
   height: 100%;
   transition: width .25s ease;
   width: 0;
+}
+
+.cp-executive-page .exec-glance-pruning-track > div {
+  background: var(--cp-color-primary);
 }
 
 .cp-executive-page .exec-glance-primary,
@@ -675,16 +689,16 @@
   width: 7px;
 }
 
-.cp-executive-page .exec-glance-savings-row:nth-child(2) i {
+.cp-executive-page .exec-glance-savings-row.pruning i {
   border-radius: 1px;
 }
 
-.cp-executive-page .exec-glance-savings-row:nth-child(3) i {
+.cp-executive-page .exec-glance-savings-row.budget i {
   border-radius: 1px;
   transform: rotate(45deg);
 }
 
-.cp-executive-page .exec-glance-savings-row:nth-child(4) i {
+.cp-executive-page .exec-glance-savings-row.blocked i {
   border-radius: 1px;
   outline: 1px double var(--cp-color-danger);
 }

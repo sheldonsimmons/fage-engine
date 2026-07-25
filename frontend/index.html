@@ -1377,7 +1377,7 @@
       .trial-test-grid { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260724-v453" />
+  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260725-v454" />
 </head>
 <body class="cp-executive-page">
 
@@ -1592,6 +1592,12 @@
         <div class="exec-glance-kpi-value" id="execGlanceAvoided">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceAvoidedSub">projected from current savings</div>
       </article>
+      <article class="exec-glance-kpi optimization" id="execGlancePruningCard">
+        <div class="exec-glance-kpi-label">Tokens Pruned</div>
+        <div class="exec-glance-kpi-value" id="execGlancePruningTokens">—</div>
+        <div class="exec-glance-kpi-sub" id="execGlancePruningSub">removed before model calls</div>
+        <div class="exec-glance-pruning-track" aria-hidden="true"><div id="execGlancePruningBar"></div></div>
+      </article>
       <article class="exec-glance-kpi" id="execGlanceBudgetCard">
         <div class="exec-glance-kpi-label">Budget Used</div>
         <div class="exec-glance-kpi-value" id="execGlanceBudget">—</div>
@@ -1633,6 +1639,7 @@
             <h2>Savings mix</h2>
             <p>How CostPilot prevented unnecessary spend.</p>
           </div>
+          <a href="/reports.html">Savings report →</a>
         </div>
         <div class="exec-glance-donut-wrap">
           <canvas id="execGlanceSavingsChart" role="img" aria-label="Savings by routing, pruning, budget controls, and blocked requests"></canvas>
@@ -1686,7 +1693,7 @@
           <h2>Top cost drivers</h2>
           <p>The five agents creating the most cost in the selected executive view.</p>
         </div>
-        <a href="/reports.html">Open detailed reports →</a>
+        <a href="/operate.html">Open AgentLake →</a>
       </div>
       <div class="exec-glance-table-wrap">
         <table>
@@ -3996,17 +4003,17 @@ function renderExecGlanceSavings(values) {
   const canvas = document.getElementById("execGlanceSavingsChart");
   const list = document.getElementById("execGlanceSavingsList");
   const rows = [
-    { label: "Routing", value: values.routing, color: "#2ea043" },
-    { label: "Pruning", value: values.pruning, color: "#4c9aff" },
-    { label: "Budget controls", value: values.throttle, color: "#d29922" },
-    { label: "Blocked requests", value: values.blocked, color: "#f85149" },
+    { key: "pruning", label: "Pruning", value: values.pruning, color: "#4c9aff" },
+    { key: "routing", label: "Routing", value: values.routing, color: "#2ea043" },
+    { key: "budget", label: "Budget controls", value: values.throttle, color: "#d29922" },
+    { key: "blocked", label: "Blocked requests", value: values.blocked, color: "#f85149" },
   ];
   const total = rows.reduce((sum, row) => sum + Number(row.value || 0), 0);
   setText("execGlanceSavingsTotal", fmtUsd(total));
   if (list) {
     list.innerHTML = rows.map(row => {
       const pct = total > 0 ? Math.round((row.value / total) * 100) : 0;
-      return `<div class="exec-glance-savings-row" style="--swatch:${row.color}">
+      return `<div class="exec-glance-savings-row ${row.key}" style="--swatch:${row.color}">
         <i aria-hidden="true"></i><span>${escapeHtml(row.label)} · ${pct}%</span><strong>${fmtUsd(row.value)}</strong>
       </div>`;
     }).join("");
@@ -4196,10 +4203,17 @@ function renderExecutiveGlance(events, data, context) {
   setText("execGlanceSpendSub", execHasActiveFilters() ? "selected filtered period" : "all workspace data");
   setText("execGlanceAvoided", fmtUsd(context.annualSavings));
   setText("execGlanceAvoidedSub", `${fmtUsd(context.totalAvoided)} avoided in current period`);
+  setText("execGlancePruningTokens", fmtNum(context.pruneStats.saved));
+  setText(
+    "execGlancePruningSub",
+    context.pruneStats.saved > 0
+      ? `${context.pruneStats.pct}% of input context removed · ${fmtUsd(context.pruningSaved)} avoided`
+      : "no removable prompt waste in this view"
+  );
   setText("execGlanceBudget", `${Math.round(context.budget.pct || 0)}%`);
   setText("execGlanceBudgetSub", `${fmtUsd(context.budget.spend || 0)} of ${fmtUsd(context.budget.cap || 0)}`);
   setText("execGlanceRequests", fmtNum(context.totalCalls));
-  setText("execGlanceRequestsSub", `${context.routingPct}% served by lower-cost tiers`);
+  setText("execGlanceRequestsSub", "evaluated before model execution");
   setText("execGlanceRisk", fmtNum(context.controlsCount));
   setText("execGlanceRiskSub", `${fmtNum(context.blockedCount)} blocked · ${fmtNum(context.unreviewedBlockedCount)} awaiting review`);
 
@@ -4212,6 +4226,8 @@ function renderExecutiveGlance(events, data, context) {
   }
   const riskCard = document.getElementById("execGlanceRiskCard");
   if (riskCard) riskCard.className = `exec-glance-kpi ${context.unreviewedBlockedCount + context.collisionCount > 0 ? "critical" : context.throttleCount > 0 ? "warning" : ""}`;
+  const pruningBar = document.getElementById("execGlancePruningBar");
+  if (pruningBar) pruningBar.style.width = `${Math.max(0, Math.min(100, context.pruneStats.pct || 0))}%`;
 
   renderExecGlanceTrend(events);
   renderExecGlanceSavings({
@@ -4279,6 +4295,8 @@ function renderExec(data) {
   const annualSavings = hasFilters ? totalAvoided * 12 : (d.projected_annual_savings || 0);
   const budget = visibleBudget(data, events);
   const pruningTokens = hasFilters ? filteredSavings.tokensSaved : (d.tokens_saved_total || 0);
+  const tokenVolume = events.reduce((sum, e) => sum + eventTokenVolume(e), 0);
+  const pruneStats = pruningTokenStats(events, pruningTokens, tokenVolume);
   const withoutCostPilot = actualCost + totalAvoided;
   const controlsCount = blockedCount + throttleCount + collisionCount;
 
@@ -4371,6 +4389,7 @@ function renderExec(data) {
     throttleCount,
     routingSaved,
     pruningSaved,
+    pruneStats,
     throttleSaved,
     blockedSaved,
     drivers,
@@ -4401,7 +4420,6 @@ function renderExec(data) {
   const today = localIsoDate();
   const todayEvents = events.filter(e => eventIsoDay(e) === today);
   const sevenDayEvents = eventsSince(events, 7);
-  const tokenVolume = events.reduce((sum, e) => sum + eventTokenVolume(e), 0);
   const todayCost = totalEventCost(todayEvents);
   const sevenDayCost = totalEventCost(sevenDayEvents);
   const sevenDayActiveDays = new Set(sevenDayEvents.map(eventIsoDay).filter(Boolean)).size;
@@ -4473,7 +4491,6 @@ function renderExec(data) {
     setText("execRecBudgetTitle", `${budgetScope} budget is healthy`);
     setText("execRecBudgetCopy", `${Math.round(budget.pct)}% of budget is used. Spend is currently under the configured cap.`);
   }
-  const pruneStats = pruningTokenStats(events, pruningTokens, tokenVolume);
   renderPruningVisual(pruneStats);
   if (pruningTokens > 0) {
     setText("execRecWasteTitle", `${fmtNum(pruningTokens)} tokens removed`);
