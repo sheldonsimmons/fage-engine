@@ -159,6 +159,9 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
     spend_usd = 0.0
     spend_month_usd = 0.0
     request_count = 0
+    input_tokens = 0
+    output_tokens = 0
+    tokens_saved = 0
     last_activity_at = None
     agent_rows = []
     risk_event_count = 0
@@ -168,9 +171,12 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
     user_team = []
     if include_stats:
         month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        request_count, spend_usd, last_activity_at = (
+        request_count, input_tokens, output_tokens, tokens_saved, spend_usd, last_activity_at = (
             db.query(
                 func.count(TokenTransaction.id),
+                func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
                 func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
                 func.max(TokenTransaction.timestamp),
             )
@@ -254,6 +260,10 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "source_record_id": item.source_record_id,
         "business_context": business_context_json(item),
         "request_count": int(request_count or 0),
+        "input_tokens": int(input_tokens or 0),
+        "output_tokens": int(output_tokens or 0),
+        "tokens_saved": int(tokens_saved or 0),
+        "total_tokens": int(input_tokens or 0) + int(output_tokens or 0),
         "agent_count": len(agent_rows),
         "agents": [{"id": row.id, "name": row.name} for row in agent_rows],
         "risk_event_count": int(risk_event_count or 0),
@@ -308,9 +318,10 @@ def _project_agent_rows(item: WorkItem, db: Session) -> list[dict]:
         agent = agents.get(agent_id)
         if not agent:
             continue
-        call_count, spend_usd, last_activity_at = (
+        call_count, tokens_saved, spend_usd, last_activity_at = (
             db.query(
                 func.count(TokenTransaction.id),
+                func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
                 func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
                 func.max(TokenTransaction.timestamp),
             )
@@ -355,6 +366,7 @@ def _project_agent_rows(item: WorkItem, db: Session) -> list[dict]:
             "assignment_status": "assigned" if assignment else "unexpected",
             "usage_status": "used" if int(call_count or 0) > 0 else "never_used",
             "call_count": int(call_count or 0),
+            "tokens_saved": int(tokens_saved or 0),
             "spend_usd": round(float(spend_usd or 0.0), 6),
             "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
             "risk_event_count": int(risk_count),
@@ -395,11 +407,12 @@ def _project_user_rows(item: WorkItem, db: Session) -> list[dict]:
         user = users.get(user_id)
         if not user:
             continue
-        call_count, input_tokens, output_tokens, spend_usd, last_activity_at = (
+        call_count, input_tokens, output_tokens, tokens_saved, spend_usd, last_activity_at = (
             db.query(
                 func.count(TokenTransaction.id),
                 func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
                 func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
                 func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
                 func.max(TokenTransaction.timestamp),
             )
@@ -435,6 +448,7 @@ def _project_user_rows(item: WorkItem, db: Session) -> list[dict]:
             "input_tokens": int(input_tokens or 0),
             "output_tokens": int(output_tokens or 0),
             "total_tokens": int(input_tokens or 0) + int(output_tokens or 0),
+            "tokens_saved": int(tokens_saved or 0),
             "spend_usd": round(float(spend_usd or 0.0), 6),
             "agent_count": int(agent_count),
             "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
@@ -539,7 +553,21 @@ def work_item_summary(
         budget = item.get("monthly_ai_budget")
         spend_month = float(item.get("spend_month_usd") or 0.0)
         budget_pct = (spend_month / float(budget) * 100) if budget else 0.0
-        if item["status"] == "on_hold" or budget_pct >= 80:
+        unexpected_agents = sum(
+            1 for member in item.get("agent_team", [])
+            if member.get("assignment_status") == "unexpected"
+        )
+        risk_events = int(item.get("risk_event_count") or 0)
+        signals = []
+        if item["status"] == "on_hold":
+            signals.append("on_hold")
+        if budget_pct >= 80:
+            signals.append("budget")
+        if risk_events:
+            signals.append("risk")
+        if unexpected_agents:
+            signals.append("unexpected_agents")
+        if signals:
             attention.append({
                 "external_id": item["external_id"],
                 "name": item["name"],
@@ -547,6 +575,9 @@ def work_item_summary(
                 "budget_used_pct": round(budget_pct, 1),
                 "spend_month_usd": spend_month,
                 "monthly_ai_budget": budget,
+                "risk_event_count": risk_events,
+                "unexpected_agent_count": unexpected_agents,
+                "signals": signals,
             })
 
     return {
@@ -558,6 +589,7 @@ def work_item_summary(
             (attributed_spend / total_spend * 100) if total_spend else 0.0,
             1,
         ),
+        "tokens_saved": sum(int(item.get("tokens_saved") or 0) for item in item_rows),
         "projects_needing_attention": sorted(
             attention,
             key=lambda item: (item["status"] != "on_hold", -item["budget_used_pct"]),

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CostPilot — Projects</title>
+  <title>CostPilot — Work Attribution</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260723-v442" />
@@ -38,7 +38,7 @@
     .wa-tab.active { color:var(--accent); background:rgba(88,166,255,.12); }
     .wa-view[hidden] { display:none; }
     .wa-overview-grid {
-      display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-bottom:16px;
+      display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:16px;
     }
     .wa-kpi {
       min-height:105px; box-sizing:border-box; padding:15px; border:1px solid var(--border);
@@ -51,12 +51,16 @@
     .wa-kpi-value { margin-top:10px; font-size:24px; font-weight:850; letter-spacing:-.03em; }
     .wa-kpi-sub { margin-top:5px; color:var(--text-muted); font-size:10px; line-height:1.35; }
     .wa-kpi.positive { border-top:3px solid var(--accent-green); }
+    .wa-kpi.optimization { border-top:3px solid var(--accent); }
+    .wa-kpi.warning { border-top:3px dashed var(--accent-yellow); }
     .wa-overview-panels { display:grid; grid-template-columns:1.15fr .85fr; gap:16px; }
     .wa-attention-list, .wa-source-list { display:grid; gap:8px; }
     .wa-attention-row, .wa-source-row {
       display:flex; align-items:center; justify-content:space-between; gap:14px;
       padding:11px 12px; border:1px solid var(--border); border-radius:7px; background:var(--bg-base);
     }
+    .wa-attention-row { cursor:pointer; }
+    .wa-attention-row:hover { border-color:var(--accent); background:rgba(77,163,255,.05); }
     .wa-attention-row strong, .wa-source-row strong { display:block; font-size:12px; }
     .wa-attention-row span, .wa-source-row span { color:var(--text-muted); font-size:10px; }
     .wa-attention-value { color:var(--accent-yellow); font-size:11px; font-weight:800; white-space:nowrap; }
@@ -208,6 +212,31 @@
       border-radius:8px; font-size:11px;
     }
     .wa-empty { color:var(--text-muted); text-align:center; padding:22px !important; }
+    #waViewProjects:not([hidden]) { display:flex; flex-direction:column; }
+    #waViewProjects .wa-list-card { margin-top:0; order:1; }
+    #waViewProjects .wa-team-card { order:2; }
+    #waViewProjects .wa-steps { order:3; }
+    #waViewProjects .wa-grid { order:4; }
+    .wa-project-filterbar {
+      align-items:center; display:flex; flex-wrap:wrap; gap:7px; margin:0 0 12px;
+    }
+    .wa-project-filterbar .wa-input { min-width:145px; width:auto; }
+    .wa-project-filterbar input.wa-input { flex:1; min-width:220px; }
+    .wa-detail-signals {
+      display:grid; gap:8px; grid-template-columns:repeat(6,minmax(0,1fr)); margin-bottom:14px;
+    }
+    .wa-detail-signal {
+      background:var(--bg-base); border:1px solid var(--border); border-radius:7px; padding:10px;
+    }
+    .wa-detail-signal strong {
+      display:block; font-family:var(--font-mono); font-size:12px; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap;
+    }
+    .wa-detail-signal span {
+      color:var(--text-muted); display:block; font-size:8px; margin-top:4px;
+      text-transform:uppercase;
+    }
+    .wa-risk-value, .wa-detail-signal.risk strong, .wa-table td.risk { color:var(--accent-red); }
     @media (max-width:820px) {
       .wa-header { height:auto; padding:12px 16px; align-items:flex-start; gap:12px; }
       .wa-logo { width:160px; }
@@ -215,6 +244,7 @@
       .wa-main { padding:20px 14px 36px; }
       .wa-grid, .wa-steps, .wa-overview-panels, .wa-connection-grid, .wa-team-layout { grid-template-columns:1fr; }
       .wa-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .wa-detail-signals { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .wa-form-grid { grid-template-columns:1fr; }
     }
     @media (max-width:520px) {
@@ -232,14 +262,14 @@
     <nav class="wa-nav" aria-label="Primary navigation">
       <a href="/index.html">Executive</a>
       <a href="/operate.html">Operate</a>
-      <a href="/work-items.html" class="active">Projects</a>
+      <a href="/work-items.html" class="active">Work</a>
       <a href="/onboarding.html">Connect &amp; Setup</a>
     </nav>
   </header>
 
   <main class="wa-main">
-    <div class="wa-eyebrow">Projects · Work Attribution</div>
-    <h1 class="wa-title">Connect AI spending to real work.</h1>
+    <div class="wa-eyebrow">Work Attribution</div>
+    <h1 class="wa-title">See which business work is consuming AI.</h1>
     <p class="wa-subtitle">
       See which projects are creating AI cost, which need attention, and how much activity is still
       unattributed. Connect a business system or create projects directly in CostPilot.
@@ -249,24 +279,34 @@
       <button class="wa-tab active" id="waTabOverview" type="button" role="tab" aria-selected="true"
         aria-controls="waViewOverview" onclick="waShowView('overview')">Overview</button>
       <button class="wa-tab" id="waTabProjects" type="button" role="tab" aria-selected="false"
-        aria-controls="waViewProjects" onclick="waShowView('projects')">Projects</button>
+        aria-controls="waViewProjects" onclick="waShowView('projects')">Work</button>
       <button class="wa-tab" id="waTabConnections" type="button" role="tab" aria-selected="false"
-        aria-controls="waViewConnections" onclick="waShowView('connections')">Connections &amp; Rules</button>
+        aria-controls="waViewConnections" onclick="waShowView('connections')">Attribution Setup</button>
     </div>
 
     <section class="wa-view" id="waViewOverview" role="tabpanel" aria-labelledby="waTabOverview">
       <div class="wa-overview-grid" aria-label="Project attribution summary">
+        <article class="wa-kpi positive">
+          <div class="wa-kpi-label">Attribution Coverage</div>
+          <div class="wa-kpi-value" id="waAttributionCoverage">—</div>
+          <div class="wa-kpi-sub">recorded AI spend linked to work</div>
+        </article>
         <article class="wa-kpi">
           <div class="wa-kpi-label">Active Projects</div>
           <div class="wa-kpi-value" id="waActiveProjects">—</div>
           <div class="wa-kpi-sub" id="waActiveProjectsSub">accepting AI activity</div>
         </article>
-        <article class="wa-kpi positive">
+        <article class="wa-kpi">
           <div class="wa-kpi-label">Attributed Spend</div>
           <div class="wa-kpi-value" id="waOverviewAttributedSpend">—</div>
           <div class="wa-kpi-sub" id="waAttributedPct">— of recorded AI spend</div>
         </article>
-        <article class="wa-kpi">
+        <article class="wa-kpi optimization">
+          <div class="wa-kpi-label">Tokens Pruned</div>
+          <div class="wa-kpi-value" id="waOverviewTokensPruned">—</div>
+          <div class="wa-kpi-sub">removed from attributed requests</div>
+        </article>
+        <article class="wa-kpi warning">
           <div class="wa-kpi-label">Unattributed Spend</div>
           <div class="wa-kpi-value" id="waUnattributedSpend">—</div>
           <div class="wa-kpi-sub">AI cost not linked to a project</div>
@@ -274,12 +314,7 @@
         <article class="wa-kpi">
           <div class="wa-kpi-label">Needs Attention</div>
           <div class="wa-kpi-value" id="waAttentionCount">—</div>
-          <div class="wa-kpi-sub">on hold or at least 80% of budget</div>
-        </article>
-        <article class="wa-kpi">
-          <div class="wa-kpi-label">Total Projects</div>
-          <div class="wa-kpi-value" id="waOverviewProjectCount">—</div>
-          <div class="wa-kpi-sub">across connected business systems</div>
+          <div class="wa-kpi-sub">budget, risk, status, or unexpected activity</div>
         </article>
       </div>
 
@@ -287,8 +322,8 @@
         <section class="wa-card" aria-labelledby="waAttentionTitle">
           <div class="wa-list-head">
             <div>
-              <h2 class="wa-card-title" id="waAttentionTitle">Projects needing attention</h2>
-              <p class="wa-card-sub" style="margin-bottom:0">Budget pressure and paused work that need a decision.</p>
+              <h2 class="wa-card-title" id="waAttentionTitle">Work needing attention</h2>
+              <p class="wa-card-sub" style="margin-bottom:0">Budget, risk, paused work, or unexpected agent activity requiring review.</p>
             </div>
             <button class="wa-secondary" type="button" onclick="waShowView('projects')">View projects</button>
           </div>
@@ -392,17 +427,34 @@
     <section class="wa-card wa-list-card" aria-labelledby="projectListTitle">
       <div class="wa-list-head">
         <div>
-          <h2 class="wa-card-title" id="projectListTitle">Projects</h2>
-          <p class="wa-card-sub" style="margin-bottom:0">AI requests and spending attributed to each project.</p>
+          <h2 class="wa-card-title" id="projectListTitle">Business work</h2>
+          <p class="wa-card-sub" style="margin-bottom:0">Projects, matters, cases, and engagements consuming AI resources.</p>
         </div>
         <div class="wa-stats">
           <span><strong id="waProjectCount">0</strong> projects</span>
           <span><strong id="waAttributedSpend">$0.00</strong> attributed</span>
         </div>
       </div>
+      <div class="wa-project-filterbar" aria-label="Work filters">
+        <input class="wa-input" id="waProjectSearch" type="search" placeholder="Search work, customer, owner, department, or source…" oninput="waRenderProjectRows()" />
+        <select class="wa-input" id="waProjectStatusFilter" onchange="waRenderProjectRows()">
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="on_hold">On hold</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="archived">Archived</option>
+        </select>
+        <select class="wa-input" id="waProjectAttentionFilter" onchange="waRenderProjectRows()">
+          <option value="">All signals</option>
+          <option value="attention">Needs attention</option>
+          <option value="unassigned">No people or agents</option>
+        </select>
+        <button class="wa-secondary" type="button" onclick="waClearProjectFilters()">Clear</button>
+      </div>
       <div class="wa-table-wrap">
         <table class="wa-table">
-          <thead><tr><th>Project</th><th>Source</th><th>Owner</th><th>Department</th><th>People / Agents</th><th>Requests</th><th>Monthly Spend</th><th>Budget</th><th>Status</th></tr></thead>
+          <thead><tr><th>Work</th><th>Customer / Source</th><th>Owner</th><th>People / Agents</th><th>Requests</th><th>Tokens Pruned</th><th>Monthly Spend</th><th>Risk</th><th>Status</th></tr></thead>
           <tbody id="waProjectRows"><tr><td colspan="9" class="wa-empty">Loading projects…</td></tr></tbody>
         </table>
       </div>
@@ -422,6 +474,7 @@
           </div>
           <button class="wa-secondary" type="button" onclick="waClearTeamSelection()">Close</button>
         </div>
+        <div class="wa-detail-signals" id="waProjectDetailSignals"></div>
         <section class="wa-people-section" aria-labelledby="waProjectPeopleTitle">
           <h3 id="waProjectPeopleTitle">People &amp; token usage</h3>
           <p>Human users attributed to this project, separate from the AI agents performing the work.</p>
@@ -569,12 +622,14 @@
     function waRenderOverview() {
       const summary = waSummary || {};
       const attention = summary.projects_needing_attention || [];
+      document.getElementById("waAttributionCoverage").textContent =
+        `${Number(summary.attributed_spend_pct || 0).toFixed(1)}%`;
       document.getElementById("waActiveProjects").textContent =
         Number(summary.active_project_count || 0).toLocaleString();
-      document.getElementById("waOverviewProjectCount").textContent =
-        Number(summary.project_count || 0).toLocaleString();
       document.getElementById("waOverviewAttributedSpend").textContent =
         waMoney(summary.attributed_spend_usd);
+      document.getElementById("waOverviewTokensPruned").textContent =
+        Number(summary.tokens_saved || 0).toLocaleString();
       document.getElementById("waUnattributedSpend").textContent =
         waMoney(summary.unattributed_spend_usd);
       document.getElementById("waAttributedPct").textContent =
@@ -584,15 +639,21 @@
 
       document.getElementById("waAttentionList").innerHTML = attention.length
         ? attention.slice(0, 5).map(item => {
-            const signal = item.status === "on_hold"
-              ? "On hold"
-              : `${Number(item.budget_used_pct || 0).toFixed(0)}% of budget`;
-            return `<div class="wa-attention-row">
+            const labels = {
+              on_hold: "On hold",
+              budget: `${Number(item.budget_used_pct || 0).toFixed(0)}% of budget`,
+              risk: `${Number(item.risk_event_count || 0)} risk event${Number(item.risk_event_count || 0) === 1 ? "" : "s"}`,
+              unexpected_agents: `${Number(item.unexpected_agent_count || 0)} unexpected agent${Number(item.unexpected_agent_count || 0) === 1 ? "" : "s"}`,
+            };
+            const signal = (item.signals || []).map(key => labels[key]).filter(Boolean).join(" · ");
+            return `<div class="wa-attention-row" role="button" tabindex="0"
+              onclick="waOpenProject('${waEscape(item.external_id)}')"
+              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();waOpenProject('${waEscape(item.external_id)}')}">
               <div><strong>${waEscape(item.name)}</strong><span>${waEscape(item.external_id)}</span></div>
-              <div class="wa-attention-value">${waEscape(signal)}</div>
+              <div class="wa-attention-value">${waEscape(signal || "Review")}</div>
             </div>`;
           }).join("")
-        : `<div class="wa-empty">No projects currently need attention.</div>`;
+        : `<div class="wa-empty">No business work currently needs attention.</div>`;
 
       const sources = new Map();
       waItems.forEach(item => {
@@ -618,6 +679,60 @@
       return waItems.find(item => item.external_id === waSelectedProjectId);
     }
 
+    function waOpenProject(projectId) {
+      waShowView("projects");
+      waSelectProject(projectId);
+    }
+
+    function waProjectNeedsAttention(item) {
+      const budgetPct = item.monthly_ai_budget
+        ? Number(item.spend_month_usd || 0) / Number(item.monthly_ai_budget) * 100
+        : 0;
+      return item.status === "on_hold"
+        || budgetPct >= 80
+        || Number(item.risk_event_count || 0) > 0
+        || (item.agent_team || []).some(member => member.assignment_status === "unexpected");
+    }
+
+    function waClearProjectFilters() {
+      document.getElementById("waProjectSearch").value = "";
+      document.getElementById("waProjectStatusFilter").value = "";
+      document.getElementById("waProjectAttentionFilter").value = "";
+      waRenderProjectRows();
+    }
+
+    function waRenderProjectRows() {
+      const search = document.getElementById("waProjectSearch").value.trim().toLowerCase();
+      const status = document.getElementById("waProjectStatusFilter").value;
+      const signal = document.getElementById("waProjectAttentionFilter").value;
+      const visible = waItems.filter(item => {
+        const customer = item.account_name || item.business_context?.customer?.name || "";
+        const haystack = [
+          item.name, item.external_id, customer, item.owner, item.department,
+          item.source_platform, item.business_context?.work_label
+        ].filter(Boolean).join(" ").toLowerCase();
+        const unassigned = Number(item.assigned_user_count || 0) === 0
+          && Number(item.assigned_agent_count || 0) === 0;
+        return (!search || haystack.includes(search))
+          && (!status || item.status === status)
+          && (!signal || (signal === "attention" ? waProjectNeedsAttention(item) : unassigned));
+      });
+      document.getElementById("waProjectRows").innerHTML = visible.length ? visible.map(item => {
+        const customer = item.account_name || item.business_context?.customer?.name || "No customer";
+        return `<tr data-project-id="${waEscape(item.external_id)}" onclick="waSelectProject('${waEscape(item.external_id)}')">
+          <td><div class="wa-project-name">${waEscape(item.name)}</div><div class="wa-project-id">${waEscape(item.external_id)}</div></td>
+          <td>${waEscape(customer)}<div class="wa-project-id">${waEscape(item.source_platform || "CostPilot")}</div></td>
+          <td>${waEscape(item.owner || "—")}<div class="wa-project-id">${waEscape(item.department || "No department")}</div></td>
+          <td>${Number(item.assigned_user_count || 0).toLocaleString()} people · ${Number(item.assigned_agent_count || 0).toLocaleString()} agents</td>
+          <td>${Number(item.request_count || 0).toLocaleString()}</td>
+          <td>${Number(item.tokens_saved || 0).toLocaleString()}</td>
+          <td>${waMoney(item.spend_month_usd)}</td>
+          <td class="${Number(item.risk_event_count || 0) ? "risk" : ""}">${Number(item.risk_event_count || 0).toLocaleString()}</td>
+          <td><span class="wa-badge">${waEscape(waStatus(item.status))}</span></td>
+        </tr>`;
+      }).join("") : '<tr><td colspan="9" class="wa-empty">No business work matches these filters.</td></tr>';
+    }
+
     function waClearTeamSelection() {
       waSelectedProjectId = "";
       document.getElementById("waTeamPlaceholder").hidden = false;
@@ -638,6 +753,19 @@
         context.customer?.name ? `Customer: ${context.customer.name}` : "",
         source.platform ? `Source: ${source.platform}${source.record_type ? ` / ${source.record_type}` : ""}` : ""
       ].filter(Boolean).join(" · ");
+      const budgetPct = project.monthly_ai_budget
+        ? Number(project.spend_month_usd || 0) / Number(project.monthly_ai_budget) * 100
+        : null;
+      document.getElementById("waProjectDetailSignals").innerHTML = [
+        ["Requests", Number(project.request_count || 0).toLocaleString()],
+        ["Total tokens", Number(project.total_tokens || 0).toLocaleString()],
+        ["Tokens pruned", Number(project.tokens_saved || 0).toLocaleString()],
+        ["Total spend", waMoney(project.spend_usd)],
+        ["Monthly spend", `${waMoney(project.spend_month_usd)}${budgetPct == null ? "" : ` · ${budgetPct.toFixed(0)}% of budget`}`],
+        ["Risk events", Number(project.risk_event_count || 0).toLocaleString(), Number(project.risk_event_count || 0) ? "risk" : ""],
+      ].map(([label, value, className = ""]) => `<div class="wa-detail-signal ${className}">
+        <span>${waEscape(label)}</span><strong>${waEscape(value)}</strong>
+      </div>`).join("");
       if (!document.getElementById("waAgentDepartment").value && project.department) {
         document.getElementById("waAgentDepartment").value = project.department;
       }
@@ -673,7 +801,7 @@
             return `<div class="wa-team-row">
               <div>
                 <strong>${waEscape(member.display_name || member.name)}</strong>
-                <small>${waEscape(member.role || "Not assigned")} · ${waEscape(member.source_platform || "Custom")} · ${Number(member.call_count || 0).toLocaleString()} requests · ${waMoney(member.spend_usd)}</small>
+                <small>${waEscape(member.role || "Not assigned")} · ${waEscape(member.source_platform || "Custom")} · ${Number(member.call_count || 0).toLocaleString()} requests · ${Number(member.tokens_saved || 0).toLocaleString()} pruned · ${waMoney(member.spend_usd)}</small>
               </div>
               <span class="wa-team-state ${stateClass}">${waEscape(state)}</span>
               ${unexpected ? '<span></span>' : `<button class="wa-remove" type="button" onclick="waUnassignAgent(${member.agent_id})">Remove</button>`}
@@ -686,7 +814,7 @@
       const people = project.user_team || [];
       document.getElementById("waProjectPeople").innerHTML = people.length
         ? `<div class="wa-table-wrap"><table class="wa-people-table">
-            <thead><tr><th>Person</th><th>Role</th><th>Requests</th><th>Input</th><th>Output</th><th>Total tokens</th><th>Cost</th><th>Access</th></tr></thead>
+            <thead><tr><th>Person</th><th>Role</th><th>Requests</th><th>Input</th><th>Output</th><th>Total tokens</th><th>Pruned</th><th>Cost</th><th>Access</th></tr></thead>
             <tbody>${people.map(person => `<tr>
               <td class="wa-person-name"><strong>${waEscape(person.name)}</strong><span>${waEscape(person.email || person.external_id)} · ${waEscape(person.source_platform)}</span></td>
               <td>${waEscape(person.role || "Unassigned")}</td>
@@ -694,6 +822,7 @@
               <td>${Number(person.input_tokens || 0).toLocaleString()}</td>
               <td>${Number(person.output_tokens || 0).toLocaleString()}</td>
               <td>${Number(person.total_tokens || 0).toLocaleString()}</td>
+              <td>${Number(person.tokens_saved || 0).toLocaleString()}</td>
               <td>${waMoney(person.spend_usd)}</td>
               <td><span class="wa-team-state ${person.can_use_ai === false ? "unexpected" : "used"}">${person.can_use_ai === false ? "No AI" : waEscape(person.membership_status || person.assignment_status)}</span></td>
             </tr>`).join("")}</tbody>
@@ -756,24 +885,12 @@
         document.getElementById("waAttributedSpend").textContent = waMoney(
           waItems.reduce((sum, item) => sum + Number(item.spend_usd || 0), 0)
         );
-        document.getElementById("waProjectRows").innerHTML = waItems.length ? waItems.map(item => `
-          <tr data-project-id="${waEscape(item.external_id)}" onclick="waSelectProject('${waEscape(item.external_id)}')">
-            <td><div class="wa-project-name">${waEscape(item.name)}</div><div class="wa-project-id">${waEscape(item.external_id)}</div></td>
-            <td>${waEscape(item.business_context?.work_label || "Project")} · ${waEscape(item.source_platform || "CostPilot")}</td>
-            <td>${waEscape(item.owner || "—")}</td>
-            <td>${waEscape(item.department || "—")}</td>
-            <td>${Number(item.assigned_user_count || 0).toLocaleString()} people · ${Number(item.assigned_agent_count || 0).toLocaleString()} agents</td>
-            <td>${Number(item.request_count || 0).toLocaleString()}</td>
-            <td>${waMoney(item.spend_month_usd)}</td>
-            <td>${item.monthly_ai_budget == null ? "—" : waMoney(item.monthly_ai_budget)}</td>
-            <td><span class="wa-badge">${waEscape(waStatus(item.status))}</span></td>
-          </tr>
-        `).join("") : '<tr><td colspan="9" class="wa-empty">No projects yet. Create the first one above.</td></tr>';
+        waRenderProjectRows();
         waRenderOverview();
         if (keepTeam && waSelectedProjectId) waSelectProject(waSelectedProjectId);
       } catch (error) {
         document.getElementById("waProjectRows").innerHTML =
-          `<tr><td colspan="8" class="wa-empty">Could not load projects: ${waEscape(error.message)}</td></tr>`;
+          `<tr><td colspan="9" class="wa-empty">Could not load projects: ${waEscape(error.message)}</td></tr>`;
         document.getElementById("waAttentionList").innerHTML =
           `<div class="wa-empty">Could not load project signals.</div>`;
       }

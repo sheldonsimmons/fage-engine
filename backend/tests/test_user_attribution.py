@@ -62,6 +62,7 @@ def test_project_user_is_created_and_usage_is_reported():
             model_tier="Scout",
             input_tokens=420,
             output_tokens=80,
+            tokens_saved=125,
             cost_usd=0.04,
         )
     )
@@ -74,6 +75,7 @@ def test_project_user_is_created_and_usage_is_reported():
     assert rows[0]["input_tokens"] == 420
     assert rows[0]["output_tokens"] == 80
     assert rows[0]["total_tokens"] == 500
+    assert rows[0]["tokens_saved"] == 125
     assert rows[0]["spend_usd"] == 0.04
 
 
