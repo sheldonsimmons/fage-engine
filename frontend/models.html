@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CostPilot — Model Registry</title>
+  <title>CostPilot — Models &amp; Routing Eligibility</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/models.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260723-v442" />
@@ -36,10 +36,43 @@
     <!-- ── Page header ────────────────────────────────────────────────── -->
     <div class="mdl-page-header">
       <div>
-        <h1 class="mdl-title">Model Registry</h1>
-        <p class="mdl-subtitle">Register and manage the AI models your company uses. CostPilot routes every request to the right model based on tier, complexity, and budget.</p>
+        <h1 class="mdl-title">Models &amp; Routing Eligibility</h1>
+        <p class="mdl-subtitle">See which models CostPilot may use, what they cost, and exactly which model the existing router would select for each tier and department.</p>
       </div>
       <button class="mdl-add-btn" onclick="openAddModal()">+ Add Model</button>
+    </div>
+
+    <div class="mdl-health-grid" aria-label="Model catalog health">
+      <div class="mdl-health-card"><strong id="mdlHealthRegistered">—</strong><span>Registered</span></div>
+      <div class="mdl-health-card good"><strong id="mdlHealthEnabled">—</strong><span>Routing eligible</span></div>
+      <div class="mdl-health-card"><strong id="mdlHealthDefaults">—</strong><span>Enabled defaults</span></div>
+      <div class="mdl-health-card"><strong id="mdlHealthProviders">—</strong><span>Providers</span></div>
+      <div class="mdl-health-card warn"><strong id="mdlHealthWarnings">—</strong><span>Configuration warnings</span></div>
+    </div>
+
+    <div class="mdl-control-grid">
+      <section class="mdl-control-card" aria-labelledby="mdlCatalogHealthTitle">
+        <h2 id="mdlCatalogHealthTitle">Catalog health</h2>
+        <p>Warnings identify configuration that can change which model the router selects. They do not change routing themselves.</p>
+        <div class="mdl-warning-list" id="mdlWarningList"><div class="mdl-warning">Loading model configuration…</div></div>
+      </section>
+      <section class="mdl-control-card" aria-labelledby="mdlRoutingPreviewTitle">
+        <h2 id="mdlRoutingPreviewTitle">Routing preview</h2>
+        <p>Uses CostPilot’s current selection priority and cascade policy. No AI call, spend, or audit event is created.</p>
+        <div class="mdl-preview-controls">
+          <select id="mdlPreviewTier" class="mdl-filter-select" onchange="previewModelRouting()">
+            <option value="1">Tier 1 · Scout</option>
+            <option value="2">Tier 2 · Analyst</option>
+            <option value="3">Tier 3 · Advisor</option>
+            <option value="4">Tier 4 · Strategist</option>
+          </select>
+          <select id="mdlPreviewDepartment" class="mdl-filter-select" onchange="previewModelRouting()">
+            <option value="">Global / any department</option>
+          </select>
+          <button class="mdl-action-btn" type="button" onclick="previewModelRouting()">Preview</button>
+        </div>
+        <div class="mdl-preview-result" id="mdlPreviewResult">Loading current routing selection…</div>
+      </section>
     </div>
 
     <!-- ── Tier reference cards ────────────────────────────────────────── -->
@@ -50,7 +83,10 @@
     <!-- ── Model table ─────────────────────────────────────────────────── -->
     <div class="mdl-table-card">
       <div class="mdl-table-header">
-        <div class="mdl-table-title">Registered Models</div>
+        <div>
+          <div class="mdl-table-title">Registered Models</div>
+          <div class="mdl-table-note">Rates shown are CostPilot’s current input and output rates. Cached-input pricing is not stored separately in this registry.</div>
+        </div>
         <div class="mdl-table-filters">
           <select id="filterTier" class="mdl-filter-select" onchange="loadModels()">
             <option value="">All Tiers</option>
@@ -87,7 +123,7 @@
               <th>Input / 1M tokens</th>
               <th>Output / 1M tokens</th>
               <th>Status</th>
-              <th>Default</th>
+              <th>Routing Role</th>
               <th></th>
             </tr>
           </thead>

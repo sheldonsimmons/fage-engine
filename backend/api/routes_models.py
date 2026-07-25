@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import ModelRegistry
+from config import FLAGSHIP_MODEL, MICRO_MODEL
 
 router = APIRouter()
 
@@ -108,6 +109,92 @@ def _serialize(m: ModelRegistry) -> dict:
 def get_tiers():
     """Returns tier metadata — names, descriptions, examples."""
     return [{"tier": k, **v} for k, v in TIER_META.items()]
+
+
+@router.get("/routing-preview")
+def preview_model_routing(
+    tier: int = Query(..., ge=1, le=4),
+    department: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Explain the router's selection policy without making an AI call."""
+    from core.router import _get_model_from_registry
+
+    requested_department = (department or "").strip() or None
+    # The legacy recursive resolver can revisit Tier 2 when Tier 2 and Tier 3 are
+    # both empty. Bound the read-only preview to the documented cascade order so
+    # an incomplete registry cannot make this diagnostic endpoint recurse.
+    cascade_order = {
+        1: [1],
+        2: [2, 3, 1],
+        3: [3, 2, 1],
+        4: [4, 3, 2, 1],
+    }[tier]
+    eligible_tier = None
+    for candidate_tier in cascade_order:
+        query = db.query(ModelRegistry).filter(
+            ModelRegistry.tier == candidate_tier,
+            ModelRegistry.is_enabled == True,
+        )
+        if requested_department:
+            query = query.filter(
+                (ModelRegistry.department == requested_department)
+                | (ModelRegistry.department == None)
+            )
+        else:
+            query = query.filter(ModelRegistry.department == None)
+        if query.first():
+            eligible_tier = candidate_tier
+            break
+
+    selected = (
+        _get_model_from_registry(eligible_tier, db, department=requested_department)
+        if eligible_tier is not None
+        else None
+    )
+    if selected:
+        resolved_tier = int(selected["tier"])
+        return {
+            "source": "registry",
+            "requested_tier": tier,
+            "requested_tier_name": TIER_META[tier]["name"],
+            "resolved_tier": resolved_tier,
+            "resolved_tier_name": TIER_META[resolved_tier]["name"],
+            "cascaded": resolved_tier != tier,
+            "department": requested_department,
+            "scope": "department" if selected["department_scoped"] else "global",
+            "display_name": selected["display_name"],
+            "model_id": selected["model_id"],
+            "cost_input_per_1m": selected["cost_input_per_million"],
+            "cost_output_per_1m": selected["cost_output_per_million"],
+            "reason": (
+                f"No enabled Tier {tier} model matched, so the existing router cascaded "
+                f"to Tier {resolved_tier}."
+                if resolved_tier != tier
+                else (
+                    f"Selected the {requested_department} scoped eligible model."
+                    if selected["department_scoped"]
+                    else "Selected the eligible global model for this tier."
+                )
+            ),
+        }
+
+    fallback = MICRO_MODEL if tier <= 2 else FLAGSHIP_MODEL
+    return {
+        "source": "built_in_fallback",
+        "requested_tier": tier,
+        "requested_tier_name": TIER_META[tier]["name"],
+        "resolved_tier": tier,
+        "resolved_tier_name": TIER_META[tier]["name"],
+        "cascaded": False,
+        "department": requested_department,
+        "scope": "system",
+        "display_name": fallback["display_name"],
+        "model_id": fallback["name"],
+        "cost_input_per_1m": fallback["input_cost_per_million"],
+        "cost_output_per_1m": fallback["output_cost_per_million"],
+        "reason": "No eligible registry model was found, so the existing built-in fallback would be used.",
+    }
 
 
 @router.get("")

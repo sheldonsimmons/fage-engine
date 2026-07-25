@@ -43,6 +43,82 @@
 }
 .mdl-add-btn:hover { opacity: 0.85; }
 
+/* ── Catalog health and routing preview ────────────────────────────────────── */
+.mdl-health-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.mdl-health-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.mdl-health-card strong { display: block; color: var(--text-primary); font-size: 20px; }
+.mdl-health-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin-top: 5px;
+  text-transform: uppercase;
+}
+.mdl-health-card.good { border-top: 3px solid var(--accent-green); }
+.mdl-health-card.warn { border-top: 3px dashed var(--accent-yellow); }
+.mdl-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.mdl-control-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 16px;
+}
+.mdl-control-card h2 { color: var(--text-primary); font-size: 13px; margin: 0 0 4px; }
+.mdl-control-card > p { color: var(--text-muted); font-size: 10px; line-height: 1.45; margin: 0 0 12px; }
+.mdl-warning-list { display: grid; gap: 7px; }
+.mdl-warning {
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-yellow);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 9px 10px;
+}
+.mdl-warning strong { color: var(--text-primary); }
+.mdl-warning.ok { border-left-color: var(--accent-green); }
+.mdl-preview-controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 7px; }
+.mdl-preview-result {
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin-top: 10px;
+  min-height: 84px;
+  padding: 11px;
+}
+.mdl-preview-result strong { display: block; color: var(--text-primary); font-size: 13px; }
+.mdl-preview-result code { color: var(--accent); display: block; font-size: 10px; margin-top: 4px; overflow-wrap: anywhere; }
+.mdl-preview-result span { color: var(--text-muted); display: block; font-size: 9px; line-height: 1.45; margin-top: 5px; }
+.mdl-preview-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  display: inline-block !important;
+  font-size: 8px !important;
+  font-weight: 750;
+  margin: 0 5px 5px 0 !important;
+  padding: 3px 6px;
+  text-transform: uppercase;
+}
+
 /* ── Tier reference row ─────────────────────────────────────────────────────── */
 .mdl-tier-row {
   display: grid;
@@ -104,6 +180,12 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
+}
+.mdl-table-note {
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.4;
+  margin-top: 3px;
 }
 .mdl-table-filters {
   display: flex;
@@ -191,6 +273,8 @@
 .mdl-status-off { background: rgba(139,148,158,0.15); color: var(--text-muted); }
 .mdl-default-badge { font-size: 11px; font-weight: 700; color: var(--accent-yellow); }
 .mdl-default-none  { color: var(--text-muted); font-size: 12px; }
+.mdl-eligible-badge { color: var(--accent); font-size: 10px; font-weight: 700; }
+.mdl-ineligible-badge { color: var(--text-muted); font-size: 10px; }
 
 .mdl-actions { display: flex; gap: 6px; }
 .mdl-action-btn {
@@ -207,6 +291,15 @@
 .mdl-action-btn:hover { border-color: var(--accent); color: var(--accent); }
 .mdl-action-toggle:hover { border-color: var(--accent-yellow); color: var(--accent-yellow); }
 .mdl-action-delete:hover  { border-color: var(--accent-red);    color: var(--accent-red); }
+
+@media (max-width: 900px) {
+  .mdl-health-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mdl-control-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .mdl-health-grid { grid-template-columns: 1fr 1fr; }
+  .mdl-preview-controls { grid-template-columns: 1fr; }
+}
 
 .mdl-placeholder {
   text-align: center;

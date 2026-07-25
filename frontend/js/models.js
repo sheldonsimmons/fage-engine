@@ -254,6 +254,10 @@ let _selectedTier = null;
 loadTierNames().then(() => {
   renderTierCards();
   renderTierOptions();
+  if (_allModels.length) {
+    updateTierCounts();
+    renderModelHealth();
+  }
 });
 renderPresetOptions();
 loadModels();
@@ -283,8 +287,15 @@ function updateTierCounts() {
   Object.keys(TIERS).forEach(tier => {
     const el = document.getElementById("tierCount" + tier);
     if (!el) return;
-    const count = _allModels.filter(m => m.tier === parseInt(tier)).length;
-    el.textContent = count > 0 ? count + " model" + (count !== 1 ? "s" : "") + " registered" : "No models yet";
+    const models = _allModels.filter(m => m.tier === parseInt(tier));
+    const eligible = models.filter(m => m.is_enabled);
+    const globalDefault = eligible.find(m => m.is_default && !m.department);
+    if (!models.length) {
+      el.textContent = "No models yet";
+    } else {
+      el.textContent = eligible.length + " eligible · " +
+        (globalDefault ? "Default: " + globalDefault.display_name : "No global default");
+    }
   });
 }
 
@@ -326,22 +337,135 @@ function selectTier(tier) {
 // ── Model table ───────────────────────────────────────────────────────────────
 
 async function loadModels() {
-  const tier     = document.getElementById("filterTier").value;
-  const provider = document.getElementById("filterProvider").value;
-  const enabled  = document.getElementById("filterEnabled").value;
-
-  const params = new URLSearchParams();
-  if (tier)     params.set("tier", tier);
-  if (provider) params.set("provider", provider);
-  if (enabled !== "") params.set("enabled", enabled);
-
   try {
-    _allModels = await apiGet("/api/models?" + params.toString());
-    renderTable(_allModels);
+    _allModels = await apiGet("/api/models");
+    renderTable(getFilteredModels());
     updateTierCounts();
+    renderModelHealth();
+    renderPreviewDepartments();
+    previewModelRouting();
   } catch (e) {
     document.getElementById("modelTableBody").innerHTML =
       '<tr><td colspan="9" class="mdl-placeholder" style="color:var(--accent-red)">Error loading models: ' + e.message + '</td></tr>';
+  }
+}
+
+function getFilteredModels() {
+  const tier = document.getElementById("filterTier").value;
+  const provider = document.getElementById("filterProvider").value;
+  const enabled = document.getElementById("filterEnabled").value;
+  return _allModels.filter(m => {
+    if (tier && String(m.tier) !== tier) return false;
+    if (provider && m.provider !== provider) return false;
+    if (enabled !== "" && String(Boolean(m.is_enabled)) !== enabled) return false;
+    return true;
+  });
+}
+
+function modelHtmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderModelHealth() {
+  const enabled = _allModels.filter(m => m.is_enabled);
+  const defaults = enabled.filter(m => m.is_default);
+  const providers = new Set(_allModels.map(m => m.provider).filter(Boolean));
+  const warnings = [];
+
+  Object.keys(TIERS).forEach(rawTier => {
+    const tier = Number(rawTier);
+    const tierLabel = getTierName(tier);
+    const globalModels = _allModels.filter(m => m.tier === tier && !m.department);
+    const eligibleGlobal = globalModels.filter(m => m.is_enabled);
+    const enabledDefaults = eligibleGlobal.filter(m => m.is_default);
+    const disabledDefaults = globalModels.filter(m => m.is_default && !m.is_enabled);
+
+    if (!eligibleGlobal.length) {
+      warnings.push(`<strong>${modelHtmlEscape(tierLabel)}</strong> has no eligible global model. Requests may cascade to another tier or use the built-in fallback.`);
+    } else if (!enabledDefaults.length) {
+      warnings.push(`<strong>${modelHtmlEscape(tierLabel)}</strong> has no enabled global default. The router will use the first eligible global model.`);
+    }
+    if (enabledDefaults.length > 1) {
+      warnings.push(`<strong>${modelHtmlEscape(tierLabel)}</strong> has ${enabledDefaults.length} enabled global defaults. Verify which one should lead routing.`);
+    }
+    if (disabledDefaults.length) {
+      warnings.push(`<strong>${modelHtmlEscape(tierLabel)}</strong> has a disabled model still marked default. Disabled models are ignored by routing.`);
+    }
+  });
+
+  const scopedGroups = new Map();
+  _allModels.filter(m => m.department).forEach(m => {
+    const key = `${m.department}::${m.tier}`;
+    if (!scopedGroups.has(key)) scopedGroups.set(key, []);
+    scopedGroups.get(key).push(m);
+  });
+  scopedGroups.forEach(models => {
+    const eligible = models.filter(m => m.is_enabled);
+    const activeDefaults = eligible.filter(m => m.is_default);
+    const { department, tier } = models[0];
+    if (eligible.length && !activeDefaults.length) {
+      warnings.push(`<strong>${modelHtmlEscape(department)} · ${modelHtmlEscape(getTierName(tier))}</strong> has eligible models but no default. The first eligible department model will be used.`);
+    }
+    if (activeDefaults.length > 1) {
+      warnings.push(`<strong>${modelHtmlEscape(department)} · ${modelHtmlEscape(getTierName(tier))}</strong> has ${activeDefaults.length} enabled defaults.`);
+    }
+  });
+
+  const missingPricing = enabled.filter(m =>
+    Number(m.cost_input_per_1m) <= 0 || Number(m.cost_output_per_1m) <= 0
+  );
+  if (missingPricing.length) {
+    warnings.push(`<strong>${missingPricing.length} eligible model${missingPricing.length === 1 ? "" : "s"}</strong> have a zero input or output rate. Verify pricing before relying on cost forecasts.`);
+  }
+
+  document.getElementById("mdlHealthRegistered").textContent = _allModels.length;
+  document.getElementById("mdlHealthEnabled").textContent = enabled.length;
+  document.getElementById("mdlHealthDefaults").textContent = defaults.length;
+  document.getElementById("mdlHealthProviders").textContent = providers.size;
+  document.getElementById("mdlHealthWarnings").textContent = warnings.length;
+  document.getElementById("mdlWarningList").innerHTML = warnings.length
+    ? warnings.slice(0, 8).map(w => `<div class="mdl-warning">${w}</div>`).join("")
+    : '<div class="mdl-warning ok"><strong>Catalog ready.</strong> Every tier has an eligible global default and enabled pricing is populated.</div>';
+}
+
+function renderPreviewDepartments() {
+  const select = document.getElementById("mdlPreviewDepartment");
+  const current = select.value;
+  const departments = [...new Set(_allModels.map(m => m.department).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  select.innerHTML = '<option value="">Global / any department</option>' +
+    departments.map(d => `<option value="${modelHtmlEscape(d)}">${modelHtmlEscape(d)}</option>`).join("");
+  if (departments.includes(current)) select.value = current;
+}
+
+async function previewModelRouting() {
+  const result = document.getElementById("mdlPreviewResult");
+  if (!result) return;
+  const tier = document.getElementById("mdlPreviewTier").value;
+  const department = document.getElementById("mdlPreviewDepartment").value;
+  const params = new URLSearchParams({ tier });
+  if (department) params.set("department", department);
+  result.textContent = "Checking current routing selection…";
+  try {
+    const preview = await apiGet("/api/models/routing-preview?" + params.toString());
+    const routeLabel = preview.cascaded
+      ? `${getTierName(preview.requested_tier)} → ${getTierName(preview.resolved_tier)}`
+      : getTierName(preview.resolved_tier);
+    result.innerHTML =
+      `<span class="mdl-preview-pill">${modelHtmlEscape(preview.source)}</span>` +
+      `<span class="mdl-preview-pill">${modelHtmlEscape(preview.scope)}</span>` +
+      `<span class="mdl-preview-pill">${modelHtmlEscape(routeLabel)}</span>` +
+      `<strong>${modelHtmlEscape(preview.display_name)}</strong>` +
+      `<code>${modelHtmlEscape(preview.model_id)}</code>` +
+      `<span>$${Number(preview.cost_input_per_1m).toFixed(2)} input · $${Number(preview.cost_output_per_1m).toFixed(2)} output per 1M tokens</span>` +
+      `<span>${modelHtmlEscape(preview.reason)}</span>`;
+  } catch (e) {
+    result.innerHTML = `<span style="color:var(--accent-red)">Preview unavailable: ${modelHtmlEscape(e.message)}</span>`;
   }
 }
 
@@ -364,31 +488,36 @@ function renderTable(models) {
     const enabledBadge = m.is_enabled
       ? '<span class="mdl-status-badge mdl-status-on">Enabled</span>'
       : '<span class="mdl-status-badge mdl-status-off">Disabled</span>';
-    const defaultBadge = m.is_default
-      ? '<span class="mdl-default-badge">★ Default</span>'
-      : '<span class="mdl-default-none">—</span>';
+    let routingRole = '<span class="mdl-ineligible-badge">Not eligible</span>';
+    if (!m.is_enabled && m.is_default) {
+      routingRole = '<span class="mdl-default-badge">⚠ Default disabled</span>';
+    } else if (m.is_enabled && m.is_default) {
+      routingRole = '<span class="mdl-default-badge">★ Default</span>';
+    } else if (m.is_enabled) {
+      routingRole = '<span class="mdl-eligible-badge">Eligible fallback</span>';
+    }
 
     return (
       '<tr>' +
         '<td>' +
-          '<div class="mdl-model-name">' + m.display_name + '</div>' +
-          (m.department ? '<div class="mdl-dept-scope">🏢 ' + m.department + ' only</div>' : '') +
-          (m.notes ? '<div class="mdl-model-notes">' + m.notes + '</div>' : '') +
+          '<div class="mdl-model-name">' + modelHtmlEscape(m.display_name) + '</div>' +
+          (m.department ? '<div class="mdl-dept-scope">🏢 ' + modelHtmlEscape(m.department) + ' only</div>' : '') +
+          (m.notes ? '<div class="mdl-model-notes">' + modelHtmlEscape(m.notes) + '</div>' : '') +
         '</td>' +
         '<td>' +
-          '<span class="mdl-provider-badge">' + m.provider + '</span>' +
+          '<span class="mdl-provider-badge">' + modelHtmlEscape(m.provider) + '</span>' +
         '</td>' +
         '<td>' +
           '<div class="mdl-tier-badge" style="color:' + (tierInfo.color || "#8b949e") + '; border-color:' + (tierInfo.color || "#8b949e") + '">' +
-            (tierInfo.icon || "◈") + ' ' + m.tier_name +
+            (tierInfo.icon || "◈") + ' ' + modelHtmlEscape(m.tier_name) +
           '</div>' +
-          '<div class="mdl-tier-tagline-sm">' + m.tier_tagline + '</div>' +
+          '<div class="mdl-tier-tagline-sm">' + modelHtmlEscape(m.tier_tagline) + '</div>' +
         '</td>' +
-        '<td><code class="mdl-model-id">' + m.model_id + '</code></td>' +
+        '<td><code class="mdl-model-id">' + modelHtmlEscape(m.model_id) + '</code></td>' +
         '<td class="mdl-cost">$' + m.cost_input_per_1m.toFixed(2) + '</td>' +
         '<td class="mdl-cost">$' + m.cost_output_per_1m.toFixed(2) + '</td>' +
         '<td>' + enabledBadge + '</td>' +
-        '<td>' + defaultBadge + '</td>' +
+        '<td>' + routingRole + '</td>' +
         '<td class="mdl-actions">' +
           '<button class="mdl-action-btn" onclick="openEditModal(' + m.id + ')">Edit</button>' +
           '<button class="mdl-action-btn mdl-action-toggle" onclick="toggleModel(' + m.id + ', event)">' +
