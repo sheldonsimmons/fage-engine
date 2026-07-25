@@ -86,6 +86,16 @@ def _run_migrations():
             ensure_column(conn, "token_transactions", "usage_source", "VARCHAR DEFAULT 'estimated'")
         except Exception:
             pass
+        for column, definition in (
+            ("model_name", "VARCHAR"),
+            ("resolved_model_tier", "VARCHAR"),
+            ("model_source", "VARCHAR"),
+            ("routing_cascaded", "BOOLEAN DEFAULT FALSE"),
+        ):
+            try:
+                ensure_column(conn, "token_transactions", column, definition)
+            except Exception:
+                pass
         try:
             ensure_column(conn, "token_transactions", "work_item_id", "INTEGER REFERENCES work_items(id)")
         except Exception:

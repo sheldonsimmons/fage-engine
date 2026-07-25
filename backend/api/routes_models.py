@@ -18,14 +18,15 @@ Endpoints:
   GET    /api/models/tiers     — return tier metadata (names, descriptions)
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import ModelRegistry
+from database.models import ModelRegistry, TokenTransaction
 from config import FLAGSHIP_MODEL, MICRO_MODEL
 
 router = APIRouter()
@@ -121,37 +122,7 @@ def preview_model_routing(
     from core.router import _get_model_from_registry
 
     requested_department = (department or "").strip() or None
-    # The legacy recursive resolver can revisit Tier 2 when Tier 2 and Tier 3 are
-    # both empty. Bound the read-only preview to the documented cascade order so
-    # an incomplete registry cannot make this diagnostic endpoint recurse.
-    cascade_order = {
-        1: [1],
-        2: [2, 3, 1],
-        3: [3, 2, 1],
-        4: [4, 3, 2, 1],
-    }[tier]
-    eligible_tier = None
-    for candidate_tier in cascade_order:
-        query = db.query(ModelRegistry).filter(
-            ModelRegistry.tier == candidate_tier,
-            ModelRegistry.is_enabled == True,
-        )
-        if requested_department:
-            query = query.filter(
-                (ModelRegistry.department == requested_department)
-                | (ModelRegistry.department == None)
-            )
-        else:
-            query = query.filter(ModelRegistry.department == None)
-        if query.first():
-            eligible_tier = candidate_tier
-            break
-
-    selected = (
-        _get_model_from_registry(eligible_tier, db, department=requested_department)
-        if eligible_tier is not None
-        else None
-    )
+    selected = _get_model_from_registry(tier, db, department=requested_department)
     if selected:
         resolved_tier = int(selected["tier"])
         return {
@@ -194,6 +165,158 @@ def preview_model_routing(
         "cost_input_per_1m": fallback["input_cost_per_million"],
         "cost_output_per_1m": fallback["output_cost_per_million"],
         "reason": "No eligible registry model was found, so the existing built-in fallback would be used.",
+    }
+
+
+@router.get("/routing-outcomes")
+def get_model_routing_outcomes(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Summarize exact model telemetry and clearly identify legacy tier-inferred rows."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (
+        db.query(
+            TokenTransaction.model_name,
+            TokenTransaction.model_tier,
+            TokenTransaction.resolved_model_tier,
+            TokenTransaction.model_source,
+            TokenTransaction.routing_cascaded,
+            TokenTransaction.department,
+            func.count(TokenTransaction.id).label("calls"),
+            func.sum(TokenTransaction.cost_usd).label("spend"),
+        )
+        .filter(
+            TokenTransaction.timestamp >= cutoff,
+            or_(
+                TokenTransaction.routing_reason.is_(None),
+                ~TokenTransaction.routing_reason.in_(("VOICE_GUARD_PRUNE", "BLOCKED", "SKIPPED")),
+            ),
+        )
+        .group_by(
+            TokenTransaction.model_name,
+            TokenTransaction.model_tier,
+            TokenTransaction.resolved_model_tier,
+            TokenTransaction.model_source,
+            TokenTransaction.routing_cascaded,
+            TokenTransaction.department,
+        )
+        .all()
+    )
+
+    catalog = db.query(ModelRegistry).all()
+    enabled = [m for m in catalog if m.is_enabled]
+    tier_number = {
+        "scout": 1, "micro": 1,
+        "analyst": 2,
+        "advisor": 3, "flagship": 3,
+        "strategist": 4,
+    }
+    inferred_defaults = {}
+    for tier in range(1, 5):
+        candidates = [m for m in enabled if m.tier == tier and not m.department]
+        inferred_defaults[tier] = (
+            next((m for m in candidates if m.is_default), None)
+            or (candidates[0] if candidates else None)
+        )
+
+    outcomes = {}
+    total_calls = 0
+    total_spend = 0.0
+    recorded_calls = 0
+    cascaded_calls = 0
+    fallback_calls = 0
+
+    for row in rows:
+        calls = int(row.calls or 0)
+        spend = float(row.spend or 0.0)
+        total_calls += calls
+        total_spend += spend
+        exact = bool(row.model_name)
+        matched = None
+
+        if exact:
+            recorded_calls += calls
+            matched = next(
+                (
+                    m for m in catalog
+                    if m.model_id == row.model_name or m.display_name == row.model_name
+                ),
+                None,
+            )
+            model_key = matched.model_id if matched else row.model_name
+            display_name = matched.display_name if matched else row.model_name
+        else:
+            tier_label = row.resolved_model_tier or row.model_tier or ""
+            matched = inferred_defaults.get(tier_number.get(tier_label.lower()))
+            model_key = matched.model_id if matched else f"unattributed:{tier_label or 'unknown'}"
+            display_name = matched.display_name if matched else f"Unattributed {tier_label or 'model'}"
+
+        item = outcomes.setdefault(model_key, {
+            "model_key": model_key,
+            "display_name": display_name,
+            "provider": matched.provider if matched else None,
+            "calls": 0,
+            "spend_usd": 0.0,
+            "exact_calls": 0,
+            "inferred_calls": 0,
+            "departments": {},
+        })
+        item["calls"] += calls
+        item["spend_usd"] += spend
+        item["exact_calls" if exact else "inferred_calls"] += calls
+        department = row.department or "Unassigned"
+        item["departments"][department] = item["departments"].get(department, 0) + calls
+        if row.routing_cascaded:
+            cascaded_calls += calls
+        if row.model_source == "built_in_fallback":
+            fallback_calls += calls
+
+    model_rows = sorted(outcomes.values(), key=lambda item: item["spend_usd"], reverse=True)
+    for item in model_rows:
+        item["spend_usd"] = round(item["spend_usd"], 6)
+        item["avg_cost_usd"] = round(item["spend_usd"] / item["calls"], 6) if item["calls"] else 0.0
+        item["telemetry"] = (
+            "exact"
+            if item["exact_calls"] == item["calls"]
+            else "inferred"
+            if item["inferred_calls"] == item["calls"]
+            else "mixed"
+        )
+        item["top_departments"] = [
+            {"department": department, "calls": calls}
+            for department, calls in sorted(
+                item.pop("departments").items(),
+                key=lambda pair: (-pair[1], pair[0]),
+            )[:3]
+        ]
+
+    used_keys = set(outcomes)
+    unused_eligible = [
+        {
+            "id": m.id,
+            "display_name": m.display_name,
+            "model_id": m.model_id,
+            "tier": m.tier,
+            "department": m.department,
+        }
+        for m in enabled
+        if m.model_id not in used_keys and m.display_name not in used_keys
+    ]
+
+    return {
+        "days": days,
+        "total_calls": total_calls,
+        "total_spend_usd": round(total_spend, 6),
+        "avg_cost_usd": round(total_spend / total_calls, 6) if total_calls else 0.0,
+        "recorded_calls": recorded_calls,
+        "inferred_calls": total_calls - recorded_calls,
+        "telemetry_coverage_pct": round(recorded_calls / total_calls * 100, 1) if total_calls else 0.0,
+        "cascaded_calls": cascaded_calls,
+        "fallback_calls": fallback_calls,
+        "unused_eligible_count": len(unused_eligible),
+        "unused_eligible": unused_eligible,
+        "models": model_rows,
     }
 
 

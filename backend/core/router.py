@@ -101,50 +101,52 @@ def _get_model_from_registry(tier_num: int, db, department: str = None):
         return None
 
     from database.models import ModelRegistry
-    from sqlalchemy import or_
+
+    cascade_order = {
+        1: [1],
+        2: [2, 3, 1],
+        3: [3, 2, 1],
+        4: [4, 3, 2, 1],
+    }.get(tier_num, [])
 
     model = None
-
-    if department:
-        # 1. Department-specific default
-        model = db.query(ModelRegistry).filter(
-            ModelRegistry.tier == tier_num,
-            ModelRegistry.is_enabled == True,
-            ModelRegistry.is_default == True,
-            ModelRegistry.department == department,
-        ).first()
-
-        # 2. Department-specific any-enabled
-        if not model:
+    for candidate_tier in cascade_order:
+        if department:
+            # 1. Department-specific default
             model = db.query(ModelRegistry).filter(
-                ModelRegistry.tier == tier_num,
+                ModelRegistry.tier == candidate_tier,
                 ModelRegistry.is_enabled == True,
+                ModelRegistry.is_default == True,
                 ModelRegistry.department == department,
             ).first()
 
-    # 3. Global default (department IS NULL)
-    if not model:
-        model = db.query(ModelRegistry).filter(
-            ModelRegistry.tier == tier_num,
-            ModelRegistry.is_enabled == True,
-            ModelRegistry.is_default == True,
-            ModelRegistry.department == None,
-        ).first()
+            # 2. Department-specific any-enabled
+            if not model:
+                model = db.query(ModelRegistry).filter(
+                    ModelRegistry.tier == candidate_tier,
+                    ModelRegistry.is_enabled == True,
+                    ModelRegistry.department == department,
+                ).first()
 
-    # 4. Global any-enabled
-    if not model:
-        model = db.query(ModelRegistry).filter(
-            ModelRegistry.tier == tier_num,
-            ModelRegistry.is_enabled == True,
-            ModelRegistry.department == None,
-        ).first()
+        # 3. Global default (department IS NULL)
+        if not model:
+            model = db.query(ModelRegistry).filter(
+                ModelRegistry.tier == candidate_tier,
+                ModelRegistry.is_enabled == True,
+                ModelRegistry.is_default == True,
+                ModelRegistry.department == None,
+            ).first()
 
-    # Cascade: Analyst (tier 2) falls UP to Advisor (tier 3) if no Analyst model registered.
-    # All other tiers cascade down to the next cheaper tier.
-    if not model and tier_num == 2:
-        return _get_model_from_registry(3, db, department)
-    if not model and tier_num > 1:
-        return _get_model_from_registry(tier_num - 1, db, department)
+        # 4. Global any-enabled
+        if not model:
+            model = db.query(ModelRegistry).filter(
+                ModelRegistry.tier == candidate_tier,
+                ModelRegistry.is_enabled == True,
+                ModelRegistry.department == None,
+            ).first()
+
+        if model:
+            break
 
     if not model:
         return None
@@ -298,19 +300,23 @@ def route(
         model_id_to_use  = registry_model["model_id"]
         # Always use the REQUESTED tier's name — not the cascaded model's tier
         model_tier_label = TIER_NAMES.get(tier_num, registry_model["tier_name"])
+        resolved_model_tier = registry_model["tier_name"]
         display_name     = registry_model["display_name"]
         cost_in_per_m    = registry_model["cost_input_per_million"]
         cost_out_per_m   = registry_model["cost_output_per_million"]
         fallback_tier    = "micro" if tier_num <= 2 else "flagship"
+        model_source     = "registry"
     else:
         # No models in registry — fall back to hardcoded config
         is_micro         = tier_num <= 2
         model_id_to_use  = None
         model_tier_label = TIER_NAMES.get(tier_num, "Scout" if is_micro else "Advisor")
+        resolved_model_tier = model_tier_label
         display_name     = MICRO_MODEL["display_name"] if is_micro else FLAGSHIP_MODEL["display_name"]
         cost_in_per_m    = MICRO_MODEL["input_cost_per_million"]  if is_micro else FLAGSHIP_MODEL["input_cost_per_million"]
         cost_out_per_m   = MICRO_MODEL["output_cost_per_million"] if is_micro else FLAGSHIP_MODEL["output_cost_per_million"]
         fallback_tier    = "micro" if is_micro else "flagship"
+        model_source     = "built_in_fallback"
 
     # Step 5 — Call the model
     model_result = call_model(working_text, model_id=model_id_to_use, fallback_tier=fallback_tier)
@@ -342,6 +348,9 @@ def route(
         "routing_reason":           routing_reason,
         "matched_keywords":         complexity_result["matched_keywords"],
         "model_tier":               model_tier_label,
+        "resolved_model_tier":      resolved_model_tier,
+        "model_source":             model_source,
+        "routing_cascaded":         resolved_model_tier != model_tier_label,
         "model_name":               model_name,
         "input_tokens":             model_result["input_tokens"],
         "output_tokens":            model_result["output_tokens"],

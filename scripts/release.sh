@@ -80,6 +80,13 @@ with engine.connect() as conn:
         ADD COLUMN IF NOT EXISTS actor_source_platform VARCHAR
     '''))
     conn.execute(text('''
+        ALTER TABLE token_transactions
+        ADD COLUMN IF NOT EXISTS model_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS resolved_model_tier VARCHAR,
+        ADD COLUMN IF NOT EXISTS model_source VARCHAR,
+        ADD COLUMN IF NOT EXISTS routing_cascaded BOOLEAN DEFAULT FALSE
+    '''))
+    conn.execute(text('''
         ALTER TABLE audit_events
         ADD COLUMN IF NOT EXISTS work_user_id INTEGER REFERENCES work_users(id)
     '''))

@@ -261,6 +261,7 @@ loadTierNames().then(() => {
 });
 renderPresetOptions();
 loadModels();
+loadRoutingOutcomes();
 
 // ── Tier reference cards ──────────────────────────────────────────────────────
 
@@ -466,6 +467,71 @@ async function previewModelRouting() {
       `<span>${modelHtmlEscape(preview.reason)}</span>`;
   } catch (e) {
     result.innerHTML = `<span style="color:var(--accent-red)">Preview unavailable: ${modelHtmlEscape(e.message)}</span>`;
+  }
+}
+
+function formatModelCurrency(value) {
+  const amount = Number(value || 0);
+  if (amount === 0) return "$0.00";
+  if (amount < 0.01) return "$" + amount.toFixed(4);
+  return "$" + amount.toFixed(2);
+}
+
+async function loadRoutingOutcomes() {
+  const list = document.getElementById("mdlOutcomeList");
+  if (!list) return;
+  const days = document.getElementById("mdlOutcomeDays").value;
+  list.innerHTML = '<div class="mdl-placeholder">Loading routing outcomes…</div>';
+  try {
+    const data = await apiGet(`/api/models/routing-outcomes?days=${encodeURIComponent(days)}`);
+    document.getElementById("mdlOutcomeCalls").textContent = Number(data.total_calls).toLocaleString();
+    document.getElementById("mdlOutcomeSpend").textContent = formatModelCurrency(data.total_spend_usd);
+    document.getElementById("mdlOutcomeAvg").textContent = formatModelCurrency(data.avg_cost_usd);
+    document.getElementById("mdlOutcomeCascade").textContent = Number(data.cascaded_calls).toLocaleString();
+    document.getElementById("mdlOutcomeFallback").textContent = Number(data.fallback_calls).toLocaleString();
+    document.getElementById("mdlOutcomeUnused").textContent = Number(data.unused_eligible_count).toLocaleString();
+
+    const exact = Number(data.recorded_calls);
+    const inferred = Number(data.inferred_calls);
+    const unusedNames = (data.unused_eligible || []).slice(0, 4).map(m => m.display_name);
+    let note = `${Number(data.telemetry_coverage_pct).toFixed(1)}% exact-model telemetry · ${exact.toLocaleString()} exact · ${inferred.toLocaleString()} tier-inferred.`;
+    if (inferred) {
+      note += " Inferred history is mapped to the current eligible default for its recorded tier and is not presented as provider-confirmed.";
+    }
+    if (unusedNames.length) {
+      note += ` Eligible models with no attributed calls: ${unusedNames.join(", ")}${data.unused_eligible_count > unusedNames.length ? ", and more" : ""}.`;
+    }
+    document.getElementById("mdlTelemetryNote").textContent = note;
+
+    if (!(data.models || []).length) {
+      list.innerHTML = '<div class="mdl-placeholder">No AI calls were recorded in this period.</div>';
+      return;
+    }
+    list.innerHTML = data.models.map(model => {
+      const telemetry = model.telemetry === "exact" ? "Exact" :
+        model.telemetry === "mixed" ? "Mixed telemetry" : "Tier-inferred";
+      const badgeClass = model.telemetry === "exact" ? "" : " inferred";
+      const departments = (model.top_departments || [])
+        .map(item => `${item.department} ${Number(item.calls).toLocaleString()}`)
+        .join(" · ");
+      return (
+        '<div class="mdl-outcome-row">' +
+          '<div class="mdl-outcome-model">' +
+            '<strong>' + modelHtmlEscape(model.display_name) +
+              '<span class="mdl-telemetry-badge' + badgeClass + '">' + telemetry + '</span>' +
+            '</strong>' +
+            '<span>' + modelHtmlEscape(model.provider || "Provider not recorded") +
+              (departments ? ' · ' + modelHtmlEscape(departments) : '') +
+            '</span>' +
+          '</div>' +
+          '<div class="mdl-outcome-stat"><strong>' + Number(model.calls).toLocaleString() + '</strong><span>Calls</span></div>' +
+          '<div class="mdl-outcome-stat"><strong>' + formatModelCurrency(model.spend_usd) + '</strong><span>Spend</span></div>' +
+          '<div class="mdl-outcome-stat"><strong>' + formatModelCurrency(model.avg_cost_usd) + '</strong><span>Average / call</span></div>' +
+        '</div>'
+      );
+    }).join("");
+  } catch (e) {
+    list.innerHTML = `<div class="mdl-placeholder" style="color:var(--accent-red)">Routing outcomes unavailable: ${modelHtmlEscape(e.message)}</div>`;
   }
 }
 

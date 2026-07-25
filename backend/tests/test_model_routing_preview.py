@@ -1,9 +1,12 @@
+from datetime import datetime
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from api.routes_models import preview_model_routing
+from api.routes_models import get_model_routing_outcomes, preview_model_routing
+from core.router import route
 from database.db import Base
-from database.models import ModelRegistry
+from database.models import ModelRegistry, TokenTransaction
 
 
 def _session():
@@ -88,3 +91,99 @@ def test_preview_uses_built_in_fallback_when_registry_is_empty():
 
     assert result["source"] == "built_in_fallback"
     assert result["model_id"] == "micro-model-v1"
+
+
+def test_router_records_resolved_tier_after_bounded_cascade():
+    db = _session()
+    db.add(_model("Scout Exact", "scout-exact", 1, default=True))
+    db.commit()
+
+    result = route(
+        "Summarize this short customer note.",
+        "Sales",
+        db=db,
+        auto_prune=False,
+    )
+
+    assert result["model_name"] == "Scout Exact"
+    assert result["model_tier"] == "Analyst"
+    assert result["resolved_model_tier"] == "Scout"
+    assert result["model_source"] == "registry"
+    assert result["routing_cascaded"] is True
+
+
+def test_routing_outcomes_separates_exact_and_inferred_history():
+    db = _session()
+    db.add_all([
+        _model("Global Scout", "global-scout", 1, default=True),
+        _model("Global Advisor", "global-advisor", 3, default=True),
+        _model("Unused Strategist", "unused-strategist", 4, default=True),
+        TokenTransaction(
+            department="Sales",
+            model_tier="Scout",
+            model_name="global-scout",
+            resolved_model_tier="Scout",
+            model_source="registry",
+            routing_cascaded=False,
+            input_tokens=100,
+            output_tokens=20,
+            cost_usd=0.2,
+            routing_reason="ROUTINE",
+            timestamp=datetime.utcnow(),
+        ),
+        TokenTransaction(
+            department="Legal",
+            model_tier="flagship",
+            model_name=None,
+            input_tokens=200,
+            output_tokens=40,
+            cost_usd=0.3,
+            routing_reason="COMPLEX",
+            timestamp=datetime.utcnow(),
+        ),
+        TokenTransaction(
+            department="Support",
+            model_tier="Analyst",
+            model_name="global-advisor",
+            resolved_model_tier="Advisor",
+            model_source="registry",
+            routing_cascaded=True,
+            input_tokens=150,
+            output_tokens=30,
+            cost_usd=0.4,
+            routing_reason="MODERATE",
+            timestamp=datetime.utcnow(),
+        ),
+        TokenTransaction(
+            department="Legal",
+            model_tier="Blocked",
+            model_name="BLOCKED",
+            resolved_model_tier="Blocked",
+            model_source="provider_proxy",
+            routing_cascaded=False,
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            routing_reason="BLOCKED",
+            timestamp=datetime.utcnow(),
+        ),
+    ])
+    db.commit()
+
+    result = get_model_routing_outcomes(days=30, db=db)
+
+    assert result["total_calls"] == 3
+    assert result["recorded_calls"] == 2
+    assert result["inferred_calls"] == 1
+    assert result["telemetry_coverage_pct"] == 66.7
+    assert result["cascaded_calls"] == 1
+    assert result["fallback_calls"] == 0
+    assert result["unused_eligible_count"] == 1
+    assert result["unused_eligible"][0]["model_id"] == "unused-strategist"
+    advisor = next(row for row in result["models"] if row["model_key"] == "global-advisor")
+    assert advisor["calls"] == 2
+    assert advisor["telemetry"] == "mixed"
+    assert advisor["top_departments"] == [
+        {"department": "Legal", "calls": 1},
+        {"department": "Support", "calls": 1},
+    ]

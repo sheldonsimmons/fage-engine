@@ -242,6 +242,10 @@ class TokenTransaction(Base):
     actor_email     = Column(String, nullable=True)
     actor_source_platform = Column(String, nullable=True)
     model_tier      = Column(String,   nullable=False)    # micro | flagship
+    model_name      = Column(String,   nullable=True)     # exact provider/registry model used
+    resolved_model_tier = Column(String, nullable=True)   # actual tier after cascade
+    model_source    = Column(String,   nullable=True)     # registry | built_in_fallback | provider_proxy
+    routing_cascaded = Column(Boolean, default=False)
     input_tokens   = Column(Integer,  nullable=False)
     output_tokens  = Column(Integer,  nullable=False)
     usage_source   = Column(String,   nullable=False, default="estimated")  # provider_reported | estimated

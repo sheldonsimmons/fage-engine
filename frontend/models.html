@@ -75,6 +75,32 @@
       </section>
     </div>
 
+    <section class="mdl-outcomes-card" aria-labelledby="mdlOutcomesTitle">
+      <div class="mdl-outcomes-head">
+        <div>
+          <h2 id="mdlOutcomesTitle">Routing outcomes</h2>
+          <p>What CostPilot actually used. Older calls without exact model telemetry are explicitly marked as tier-inferred.</p>
+        </div>
+        <select id="mdlOutcomeDays" class="mdl-filter-select" onchange="loadRoutingOutcomes()">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+      <div class="mdl-outcome-kpis">
+        <div><strong id="mdlOutcomeCalls">—</strong><span>AI calls</span></div>
+        <div><strong id="mdlOutcomeSpend">—</strong><span>Total spend</span></div>
+        <div><strong id="mdlOutcomeAvg">—</strong><span>Average / call</span></div>
+        <div><strong id="mdlOutcomeCascade">—</strong><span>Cascaded</span></div>
+        <div><strong id="mdlOutcomeFallback">—</strong><span>Built-in fallback</span></div>
+        <div><strong id="mdlOutcomeUnused">—</strong><span>Eligible, unused</span></div>
+      </div>
+      <div class="mdl-telemetry-note" id="mdlTelemetryNote">Loading model telemetry…</div>
+      <div class="mdl-outcome-list" id="mdlOutcomeList">
+        <div class="mdl-placeholder">Loading routing outcomes…</div>
+      </div>
+    </section>
+
     <!-- ── Tier reference cards ────────────────────────────────────────── -->
     <div class="mdl-tier-row" id="tierCards">
       <!-- Injected by JS -->
