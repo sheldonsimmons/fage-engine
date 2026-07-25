@@ -222,6 +222,10 @@ def write_audit_event(
     input_tokens:     int       = None,
     output_tokens:    int       = None,
     usage_source:     str       = None,
+    model_name:       str       = None,
+    resolved_model_tier: str    = None,
+    model_source:     str       = None,
+    routing_cascaded: bool      = False,
     raw_payload:      str       = None,   # original text before pruning (None = not logged)
     work_item                    = None,   # optional WorkItem ORM record
     work_user                    = None,   # optional human WorkUser ORM record
@@ -243,6 +247,13 @@ def write_audit_event(
         context["output_tokens"] = output_tokens
     if usage_source:
         context["usage_source"] = usage_source
+    if model_name:
+        context["model_name"] = model_name
+    if resolved_model_tier:
+        context["resolved_model_tier"] = resolved_model_tier
+    if model_source:
+        context["model_source"] = model_source
+    context["routing_cascaded"] = bool(routing_cascaded)
     if work_item:
         context["work_item_id"] = work_item.external_id
         context["work_item_name"] = work_item.name

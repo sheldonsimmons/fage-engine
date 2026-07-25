@@ -387,6 +387,12 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
             "compression_pct": round((tokens_saved / raw_tokens) * 100, 1) if raw_tokens > 0 else 0.0,
             "usage_source": usage_source,
         })
+    budget_ctx.update({
+        "model_name": model,
+        "resolved_model_tier": tier,
+        "model_source": "provider_proxy",
+        "routing_cascaded": False,
+    })
 
     # Audit event — feeds Governance Event Stream + decision ledger
     is_routine = routing_reason.startswith("ROUTINE") and not routing_reason == "BLOCKED"

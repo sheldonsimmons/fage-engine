@@ -1,12 +1,17 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from api.routes_models import get_model_routing_outcomes, preview_model_routing
+from api.routes_models import (
+    get_model_routing_outcome_detail,
+    get_model_routing_outcomes,
+    preview_model_routing,
+)
 from core.router import route
 from database.db import Base
-from database.models import ModelRegistry, TokenTransaction
+from database.models import AuditEvent, ModelRegistry, TokenTransaction
 
 
 def _session():
@@ -167,6 +172,24 @@ def test_routing_outcomes_separates_exact_and_inferred_history():
             routing_reason="BLOCKED",
             timestamp=datetime.utcnow(),
         ),
+        AuditEvent(
+            event_type="ROUTING",
+            department="Support",
+            model_tier="Advisor",
+            context_snapshot=json.dumps({"model_name": "global-advisor"}),
+            decision_outcome="Advisor model used",
+            risk_level="medium",
+            timestamp=datetime.utcnow(),
+        ),
+        AuditEvent(
+            event_type="ROUTING",
+            department="Legal",
+            model_tier="flagship",
+            context_snapshot=json.dumps({}),
+            decision_outcome="Flagship model used",
+            risk_level="medium",
+            timestamp=datetime.utcnow(),
+        ),
     ])
     db.commit()
 
@@ -187,3 +210,15 @@ def test_routing_outcomes_separates_exact_and_inferred_history():
         {"department": "Legal", "calls": 1},
         {"department": "Support", "calls": 1},
     ]
+
+    detail = get_model_routing_outcome_detail(
+        model_key="global-advisor",
+        days=30,
+        db=db,
+    )
+    assert detail["total_calls"] == 2
+    assert detail["exact_calls"] == 1
+    assert detail["inferred_calls"] == 1
+    assert detail["cascaded_calls"] == 1
+    assert [row["department"] for row in detail["departments"]] == ["Legal", "Support"]
+    assert {row["telemetry"] for row in detail["audit_events"]} == {"exact", "tier_related"}

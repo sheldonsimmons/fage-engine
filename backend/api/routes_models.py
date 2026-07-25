@@ -18,15 +18,16 @@ Endpoints:
   GET    /api/models/tiers     — return tier metadata (names, descriptions)
 """
 
+import json
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import ModelRegistry, TokenTransaction
+from database.models import AuditEvent, ModelRegistry, TokenTransaction
 from config import FLAGSHIP_MODEL, MICRO_MODEL
 
 router = APIRouter()
@@ -317,6 +318,193 @@ def get_model_routing_outcomes(
         "unused_eligible_count": len(unused_eligible),
         "unused_eligible": unused_eligible,
         "models": model_rows,
+    }
+
+
+@router.get("/routing-outcomes/detail")
+def get_model_routing_outcome_detail(
+    model_key: str = Query(..., min_length=1, max_length=200),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Return evidence behind one model outcome without changing routing state."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    catalog = db.query(ModelRegistry).all()
+    model = next(
+        (m for m in catalog if m.model_id == model_key or m.display_name == model_key),
+        None,
+    )
+    tier_labels = {
+        1: ("Scout", "micro"),
+        2: ("Analyst",),
+        3: ("Advisor", "flagship"),
+        4: ("Strategist",),
+    }
+
+    exact_values = {model_key}
+    if model:
+        exact_values.update((model.model_id, model.display_name))
+    match_conditions = [TokenTransaction.model_name.in_(exact_values)]
+    allow_inferred = False
+    relevant_tiers = set()
+
+    if model:
+        relevant_tiers = set(tier_labels.get(model.tier, ()))
+        global_candidates = [
+            m for m in catalog
+            if m.is_enabled and m.tier == model.tier and not m.department
+        ]
+        current_default = (
+            next((m for m in global_candidates if m.is_default), None)
+            or (global_candidates[0] if global_candidates else None)
+        )
+        allow_inferred = bool(current_default and current_default.id == model.id)
+        if allow_inferred:
+            match_conditions.append(and_(
+                TokenTransaction.model_name.is_(None),
+                TokenTransaction.model_tier.in_(relevant_tiers),
+            ))
+    elif model_key.startswith("unattributed:"):
+        inferred_label = model_key.split(":", 1)[1]
+        relevant_tiers = {inferred_label}
+        allow_inferred = True
+        match_conditions = [and_(
+            TokenTransaction.model_name.is_(None),
+            TokenTransaction.model_tier == inferred_label,
+        )]
+
+    transactions = (
+        db.query(TokenTransaction)
+        .filter(
+            TokenTransaction.timestamp >= cutoff,
+            or_(
+                TokenTransaction.routing_reason.is_(None),
+                ~TokenTransaction.routing_reason.in_(("VOICE_GUARD_PRUNE", "BLOCKED", "SKIPPED")),
+            ),
+            or_(*match_conditions),
+        )
+        .order_by(TokenTransaction.timestamp.desc())
+        .all()
+    )
+
+    departments = {}
+    agents = {}
+    exact_calls = 0
+    inferred_calls = 0
+    total_spend = 0.0
+    cascaded_calls = 0
+    fallback_calls = 0
+    recent_calls = []
+
+    for tx in transactions:
+        exact = bool(tx.model_name)
+        exact_calls += int(exact)
+        inferred_calls += int(not exact)
+        total_spend += float(tx.cost_usd or 0.0)
+        cascaded_calls += int(bool(tx.routing_cascaded))
+        fallback_calls += int(tx.model_source == "built_in_fallback")
+
+        department = tx.department or "Unassigned"
+        dept = departments.setdefault(department, {"department": department, "calls": 0, "spend_usd": 0.0})
+        dept["calls"] += 1
+        dept["spend_usd"] += float(tx.cost_usd or 0.0)
+
+        agent_name = tx.agent.name if tx.agent else "Unassigned"
+        agent_key = str(tx.agent_id) if tx.agent_id else f"unassigned:{department}"
+        agent = agents.setdefault(agent_key, {
+            "agent_id": tx.agent_id,
+            "agent_name": agent_name,
+            "department": department,
+            "source_platform": tx.agent.source_platform if tx.agent else tx.source_platform,
+            "calls": 0,
+            "spend_usd": 0.0,
+        })
+        agent["calls"] += 1
+        agent["spend_usd"] += float(tx.cost_usd or 0.0)
+
+        if len(recent_calls) < 12:
+            recent_calls.append({
+                "id": tx.id,
+                "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
+                "department": department,
+                "agent_name": agent_name,
+                "requested_tier": tx.model_tier,
+                "resolved_tier": tx.resolved_model_tier or tx.model_tier,
+                "routing_reason": tx.routing_reason,
+                "cost_usd": round(float(tx.cost_usd or 0.0), 6),
+                "routing_cascaded": bool(tx.routing_cascaded),
+                "model_source": tx.model_source,
+                "telemetry": "exact" if exact else "inferred",
+            })
+
+    department_rows = sorted(departments.values(), key=lambda item: (-item["calls"], item["department"]))
+    agent_rows = sorted(agents.values(), key=lambda item: (-item["calls"], item["agent_name"]))
+    for item in department_rows + agent_rows:
+        item["spend_usd"] = round(item["spend_usd"], 6)
+
+    audit_conditions = []
+    for value in exact_values:
+        audit_conditions.extend((
+            AuditEvent.context_snapshot.contains(f'"model_name": "{value}"'),
+            AuditEvent.context_snapshot.contains(f'"model_name":"{value}"'),
+        ))
+    if allow_inferred and relevant_tiers:
+        audit_conditions.append(and_(
+            AuditEvent.model_tier.in_(relevant_tiers),
+            ~AuditEvent.context_snapshot.contains('"model_name"'),
+        ))
+    audit_query = db.query(AuditEvent).filter(AuditEvent.timestamp >= cutoff)
+    if audit_conditions:
+        audit_query = audit_query.filter(or_(*audit_conditions))
+    audit_candidates = audit_query.order_by(AuditEvent.timestamp.desc()).limit(100).all()
+    audit_rows = []
+    for event in audit_candidates:
+        try:
+            context = json.loads(event.context_snapshot or "{}")
+        except Exception:
+            context = {}
+        audit_model_name = context.get("model_name")
+        exact_audit = audit_model_name in exact_values if audit_model_name else False
+        inferred_audit = not audit_model_name and allow_inferred
+        if not exact_audit and not inferred_audit:
+            continue
+        audit_rows.append({
+            "id": event.id,
+            "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+            "department": event.department,
+            "event_type": event.event_type,
+            "decision_outcome": event.decision_outcome,
+            "risk_level": event.risk_level,
+            "telemetry": "exact" if exact_audit else "tier_related",
+        })
+        if len(audit_rows) == 8:
+            break
+
+    total_calls = len(transactions)
+    return {
+        "model": {
+            "id": model.id if model else None,
+            "model_key": model.model_id if model else model_key,
+            "display_name": model.display_name if model else model_key,
+            "provider": model.provider if model else None,
+            "tier": model.tier if model else None,
+            "tier_name": TIER_META[model.tier]["name"] if model else None,
+            "is_enabled": model.is_enabled if model else None,
+            "is_default": model.is_default if model else None,
+            "department": model.department if model else None,
+        },
+        "days": days,
+        "total_calls": total_calls,
+        "total_spend_usd": round(total_spend, 6),
+        "avg_cost_usd": round(total_spend / total_calls, 6) if total_calls else 0.0,
+        "exact_calls": exact_calls,
+        "inferred_calls": inferred_calls,
+        "cascaded_calls": cascaded_calls,
+        "fallback_calls": fallback_calls,
+        "departments": department_rows,
+        "agents": agent_rows,
+        "recent_calls": recent_calls,
+        "audit_events": audit_rows,
     }
 
 

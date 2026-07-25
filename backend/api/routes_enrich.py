@@ -367,6 +367,10 @@ async def enrich_and_route_salesforce(
                 matched_keywords = all_matched,
                 cost_usd         = result["cost_usd"],
                 decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f} | Case {req.record_id} | Sources: {', '.join(sources)}",
+                model_name       = result.get("model_name"),
+                resolved_model_tier = result.get("resolved_model_tier"),
+                model_source     = result.get("model_source"),
+                routing_cascaded = result.get("routing_cascaded", False),
             )
         except Exception:
             pass

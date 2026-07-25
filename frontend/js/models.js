@@ -515,7 +515,9 @@ async function loadRoutingOutcomes() {
         .map(item => `${item.department} ${Number(item.calls).toLocaleString()}`)
         .join(" · ");
       return (
-        '<div class="mdl-outcome-row">' +
+        '<div class="mdl-outcome-row" role="button" tabindex="0" data-model-key="' + modelHtmlEscape(model.model_key) + '"' +
+          ' onclick="openRoutingOutcomeDetail(this.dataset.modelKey)"' +
+          ' onkeydown="handleRoutingOutcomeKey(event,this)">' +
           '<div class="mdl-outcome-model">' +
             '<strong>' + modelHtmlEscape(model.display_name) +
               '<span class="mdl-telemetry-badge' + badgeClass + '">' + telemetry + '</span>' +
@@ -527,6 +529,7 @@ async function loadRoutingOutcomes() {
           '<div class="mdl-outcome-stat"><strong>' + Number(model.calls).toLocaleString() + '</strong><span>Calls</span></div>' +
           '<div class="mdl-outcome-stat"><strong>' + formatModelCurrency(model.spend_usd) + '</strong><span>Spend</span></div>' +
           '<div class="mdl-outcome-stat"><strong>' + formatModelCurrency(model.avg_cost_usd) + '</strong><span>Average / call</span></div>' +
+          '<div class="mdl-outcome-open" aria-hidden="true">›</div>' +
         '</div>'
       );
     }).join("");
@@ -534,6 +537,120 @@ async function loadRoutingOutcomes() {
     list.innerHTML = `<div class="mdl-placeholder" style="color:var(--accent-red)">Routing outcomes unavailable: ${modelHtmlEscape(e.message)}</div>`;
   }
 }
+
+function formatModelDetailTime(value) {
+  if (!value) return "Time unavailable";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString([], {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
+function handleRoutingOutcomeKey(event, element) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  openRoutingOutcomeDetail(element.dataset.modelKey);
+}
+
+function closeRoutingOutcomeDetail(event) {
+  if (event && event.target !== event.currentTarget) return;
+  const overlay = document.getElementById("mdlOutcomeDetailOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+
+async function openRoutingOutcomeDetail(modelKey) {
+  const overlay = document.getElementById("mdlOutcomeDetailOverlay");
+  const body = document.getElementById("mdlOutcomeDetailBody");
+  const days = document.getElementById("mdlOutcomeDays").value;
+  overlay.style.display = "flex";
+  document.getElementById("mdlDetailTitle").textContent = "Model usage";
+  document.getElementById("mdlDetailSubtitle").textContent = "Loading routing evidence…";
+  body.innerHTML = '<div class="mdl-placeholder">Loading model evidence…</div>';
+
+  try {
+    const data = await apiGet(
+      `/api/models/routing-outcomes/detail?model_key=${encodeURIComponent(modelKey)}&days=${encodeURIComponent(days)}`
+    );
+    const model = data.model;
+    document.getElementById("mdlDetailTitle").textContent = model.display_name;
+    document.getElementById("mdlDetailSubtitle").textContent =
+      `${model.provider || "Provider not recorded"} · ${model.tier_name || "Tier not recorded"} · Last ${data.days} days`;
+
+    const departmentRows = (data.departments || []).map(item =>
+      '<div class="mdl-detail-row">' +
+        '<strong>' + modelHtmlEscape(item.department) + '</strong>' +
+        '<span>' + Number(item.calls).toLocaleString() + ' calls</span>' +
+        '<span>' + formatModelCurrency(item.spend_usd) + '</span>' +
+      '</div>'
+    ).join("") || '<div class="mdl-detail-empty">No department usage in this period.</div>';
+
+    const agentRows = (data.agents || []).slice(0, 10).map(item =>
+      '<div class="mdl-detail-row">' +
+        '<strong>' + modelHtmlEscape(item.agent_name) +
+          '<span>' + modelHtmlEscape(item.department || "Unassigned") + ' · ' + modelHtmlEscape(item.source_platform || "Platform unknown") + '</span>' +
+        '</strong>' +
+        '<span>' + Number(item.calls).toLocaleString() + ' calls</span>' +
+        '<span>' + formatModelCurrency(item.spend_usd) + '</span>' +
+      '</div>'
+    ).join("") || '<div class="mdl-detail-empty">No agent attribution in this period.</div>';
+
+    const recentRows = (data.recent_calls || []).map(item => {
+      const route = item.routing_cascaded
+        ? `${item.requested_tier || "Unknown"} → ${item.resolved_tier || "Unknown"}`
+        : item.resolved_tier || item.requested_tier || "Unknown";
+      const telemetry = item.telemetry === "exact" ? "Exact" : "Inferred";
+      return '<div class="mdl-detail-row mdl-detail-recent">' +
+        '<strong>' + modelHtmlEscape(formatModelDetailTime(item.timestamp)) +
+          '<span>' + modelHtmlEscape(item.department) + ' · ' + modelHtmlEscape(item.agent_name) + '</span>' +
+        '</strong>' +
+        '<span>' + modelHtmlEscape(route) + (item.routing_cascaded ? " · cascaded" : "") + '</span>' +
+        '<span>' + modelHtmlEscape(item.routing_reason || item.model_source || "Routed") + '</span>' +
+        '<span>' + formatModelCurrency(item.cost_usd) + ' · ' + telemetry + '</span>' +
+      '</div>';
+    }).join("") || '<div class="mdl-detail-empty">No recent calls in this period.</div>';
+
+    const auditRows = (data.audit_events || []).map(item =>
+      '<div class="mdl-detail-row mdl-detail-recent">' +
+        '<strong>#' + Number(item.id) + ' · ' + modelHtmlEscape(formatModelDetailTime(item.timestamp)) +
+          '<span>' + modelHtmlEscape(item.department || "Unassigned") + '</span>' +
+        '</strong>' +
+        '<span>' + modelHtmlEscape(item.event_type || "Event") + '</span>' +
+        '<span>' + modelHtmlEscape(item.decision_outcome || "Decision recorded") + '</span>' +
+        '<span>' + (item.telemetry === "exact" ? "Exact model" : "Tier-related") + '</span>' +
+      '</div>'
+    ).join("") || '<div class="mdl-detail-empty">No matching audit evidence in this period.</div>';
+
+    body.innerHTML =
+      '<div class="mdl-detail-kpis">' +
+        '<div class="mdl-detail-kpi"><strong>' + Number(data.total_calls).toLocaleString() + '</strong><span>Calls</span></div>' +
+        '<div class="mdl-detail-kpi"><strong>' + formatModelCurrency(data.total_spend_usd) + '</strong><span>Spend</span></div>' +
+        '<div class="mdl-detail-kpi"><strong>' + Number(data.exact_calls).toLocaleString() + '</strong><span>Exact</span></div>' +
+        '<div class="mdl-detail-kpi"><strong>' + Number(data.inferred_calls).toLocaleString() + '</strong><span>Inferred</span></div>' +
+        '<div class="mdl-detail-kpi"><strong>' + Number(data.cascaded_calls).toLocaleString() + '</strong><span>Cascaded</span></div>' +
+        '<div class="mdl-detail-kpi"><strong>' + Number(data.fallback_calls).toLocaleString() + '</strong><span>Fallback</span></div>' +
+        '<div class="mdl-detail-kpi"><strong>' + formatModelCurrency(data.avg_cost_usd) + '</strong><span>Average / call</span></div>' +
+      '</div>' +
+      '<div class="mdl-detail-section"><h3>Department usage</h3><div class="mdl-detail-table">' + departmentRows + '</div></div>' +
+      '<div class="mdl-detail-section"><h3>Agent usage</h3><div class="mdl-detail-table">' + agentRows + '</div></div>' +
+      '<div class="mdl-detail-section"><h3>Recent calls</h3>' +
+        '<div class="mdl-detail-section-note">Exact identifies a recorded model name. Inferred maps legacy tier-only history to the current default.</div>' +
+        '<div class="mdl-detail-table">' + recentRows + '</div></div>' +
+      '<div class="mdl-detail-section"><h3>Audit evidence</h3>' +
+        '<div class="mdl-detail-section-note">Tier-related events predate exact-model audit telemetry and should not be treated as provider-confirmed.</div>' +
+        '<div class="mdl-detail-table">' + auditRows + '</div></div>' +
+      '<div class="mdl-detail-actions">' +
+        (model.id ? '<button class="mdl-add-btn" type="button" onclick="closeRoutingOutcomeDetail();openEditModal(' + Number(model.id) + ')">Adjust model configuration</button>' : '') +
+        '<a class="mdl-action-btn" href="/operate.html#auditSection">Open full audit log</a>' +
+      '</div>';
+  } catch (e) {
+    body.innerHTML = `<div class="mdl-placeholder" style="color:var(--accent-red)">Model evidence unavailable: ${modelHtmlEscape(e.message)}</div>`;
+  }
+}
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") closeRoutingOutcomeDetail();
+});
 
 function renderTable(models) {
   const tbody = document.getElementById("modelTableBody");
