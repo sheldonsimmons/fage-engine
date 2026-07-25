@@ -103,6 +103,42 @@
       gap: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--text-muted); font-weight: 600; }
     .mgmt-toggle-btn:hover { color: var(--text-primary); }
+
+    /* Operate owns current agent usage and attention. Executive savings remain
+       in the DOM for compatibility, but are not duplicated on this page. */
+    #ceoSavingsBanner { display: none !important; }
+    .agentlake-focus-bar {
+      align-items: center; background: var(--bg-panel); border-bottom: 1px solid var(--border);
+      display: grid; flex-shrink: 0; gap: 12px;
+      grid-template-columns: minmax(230px, 1.25fr) repeat(5, minmax(100px, .55fr));
+      padding: 12px 24px;
+    }
+    .agentlake-focus-title strong { color: var(--text-primary); display: block; font-size: 15px; }
+    .agentlake-focus-title span { color: var(--text-muted); display: block; font-size: 10px; margin-top: 3px; }
+    .agentlake-focus-metric { border-left: 1px solid var(--border); padding-left: 12px; }
+    .agentlake-focus-metric strong {
+      color: var(--text-primary); display: block; font-family: var(--font-mono);
+      font-size: 17px; line-height: 1;
+    }
+    .agentlake-focus-metric span {
+      color: var(--text-muted); display: block; font-size: 8px; font-weight: 700;
+      letter-spacing: .06em; margin-top: 5px; text-transform: uppercase;
+    }
+    .agentlake-focus-metric.attention strong { color: var(--accent-red); }
+    .agentlake-owner-links {
+      align-items: center; border-top: 1px solid var(--border); display: flex;
+      flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px;
+    }
+    .agentlake-owner-links span { color: var(--text-muted); font-size: 9px; margin-right: auto; }
+    .agentlake-owner-links a {
+      border: 1px solid var(--border); border-radius: 5px; color: var(--text-muted);
+      font-size: 9px; font-weight: 700; padding: 5px 8px; text-decoration: none;
+    }
+    .agentlake-owner-links a:hover { border-color: var(--accent); color: var(--accent); }
+    @media (max-width: 1050px) {
+      .agentlake-focus-bar { grid-template-columns: repeat(3, 1fr); }
+      .agentlake-focus-title { grid-column: 1 / -1; }
+    }
   </style>
 </head>
 <body data-dashboard-scope="all">
@@ -159,6 +195,18 @@
   <span id="kpiSpendCard"></span><span id="kpiTokensSavedCard"></span>
   <span id="kpiAgentsCard"></span><span id="kpiThrottleCard"></span><span id="kpiBlockedCard"></span>
 </div>
+
+<section class="agentlake-focus-bar" aria-label="AgentLake operating summary" data-guide-id="agentlakeFocus">
+  <div class="agentlake-focus-title">
+    <strong>AgentLake Operations</strong>
+    <span>Which agents are being used, which are idle, and which need attention?</span>
+  </div>
+  <div class="agentlake-focus-metric"><strong id="agentlakeFocusRegistered">—</strong><span>Registered</span></div>
+  <div class="agentlake-focus-metric"><strong id="agentlakeFocusUsed">—</strong><span>Used in 30 days</span></div>
+  <div class="agentlake-focus-metric"><strong id="agentlakeFocusAdoption">—</strong><span>Adoption</span></div>
+  <div class="agentlake-focus-metric"><strong id="agentlakeFocusNever">—</strong><span>Never used</span></div>
+  <div class="agentlake-focus-metric attention"><strong id="agentlakeFocusAttention">—</strong><span>Need attention</span></div>
+</section>
 
 <!-- ── CEO Savings Banner ───────────────────────────────────────────────────── -->
 <div id="ceoSavingsBanner" data-guide-id="kpiSpendCard" style="
@@ -277,7 +325,7 @@
       <div class="dp-wrap dash-section" data-panel-id="budgets-agents" id="budgetsAgentsSection" data-guide-id="budgetsAgentsSection">
         <div class="dash-sec-head" onclick="togglePanel('agentBudgetBody','agentBudgetChevron')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Agentlake Registry &amp; Budget
+          <span>▸ AgentLake Operations
             <span class="help-icon" data-help="budgetPanel" onclick="event.stopPropagation();showHelp('budgetPanel')">?</span>
           </span>
           <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:10px" id="midRowSummary"></span>
@@ -287,16 +335,56 @@
 
           <div class="agentlake-view-head">
             <div>
-              <div class="sec-sub-label" style="margin-bottom:4px">Agentlake Registry</div>
+              <div class="sec-sub-label" style="margin-bottom:4px">AgentLake Registry</div>
               <div class="agentlake-view-description" id="agentlakeViewDescription">
                 Operational summary of the agents that need attention or are being used.
               </div>
             </div>
             <div class="agentlake-tabs" role="tablist" aria-label="Agentlake views">
               <button id="agentlakeTabOverview" class="agentlake-tab active" type="button" role="tab" aria-selected="true" aria-controls="agentlakeOverview" onclick="setAgentlakeView('overview')">Overview</button>
+              <button id="agentlakeTabUsage" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeUsage" onclick="setAgentlakeView('usage')">Usage</button>
               <button id="agentlakeTabDepartments" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeDepartments" onclick="setAgentlakeView('departments')">By Department</button>
               <button id="agentlakeTabProjects" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeProjects" onclick="setAgentlakeView('projects')">Projects</button>
               <button id="agentlakeTabAll" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeAllAgents" onclick="setAgentlakeView('all')">All Agents</button>
+            </div>
+          </div>
+
+          <div id="agentlakeUsage" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabUsage" hidden>
+            <div id="agentEffBody">
+              <div class="agent-usage-head">
+                <div>
+                  <strong>30-day agent usage</strong>
+                  <span>Current adoption, cost, pruning, and activity across every registered agent.</span>
+                </div>
+                <div class="agent-usage-views" role="group" aria-label="Agent usage view">
+                  <button class="active" type="button" data-usage-view="most_used" onclick="setAgentUsageView('most_used')">Most Used</button>
+                  <button type="button" data-usage-view="least_used" onclick="setAgentUsageView('least_used')">Least Used</button>
+                  <button type="button" data-usage-view="unused" onclick="setAgentUsageView('unused')">Unused</button>
+                  <button type="button" data-usage-view="highest_cost" onclick="setAgentUsageView('highest_cost')">Highest Cost</button>
+                  <button type="button" data-usage-view="recent" onclick="setAgentUsageView('recent')">Recently Active</button>
+                  <button type="button" data-usage-view="all" onclick="setAgentUsageView('all')">All Agents</button>
+                </div>
+              </div>
+              <div class="agent-usage-filterbar" aria-label="Agent usage filters">
+                <select class="agent-filter-select" id="agentUsageFilterDept" onchange="applyAgentUsageFilters()">
+                  <option value="">All Departments</option>
+                </select>
+                <select class="agent-filter-select" id="agentUsageFilterPlatform" onchange="applyAgentUsageFilters()">
+                  <option value="">All Platforms</option>
+                </select>
+                <input class="agent-filter-search" id="agentUsageFilterSearch" type="search"
+                  placeholder="Search agents…" oninput="applyAgentUsageFilters()" />
+              </div>
+              <div class="agent-usage-summary" aria-label="Agent adoption summary">
+                <div><strong id="agentUsageRegistered">—</strong><span>Registered</span></div>
+                <div><strong id="agentUsageUsed">—</strong><span>Used in 30 days</span></div>
+                <div><strong id="agentUsageInactive">—</strong><span>Inactive</span></div>
+                <div><strong id="agentUsageNever">—</strong><span>Never used</span></div>
+                <div><strong id="agentUsageAdoption">—</strong><span>30-day adoption</span></div>
+              </div>
+              <div id="agentEffBody2" class="efficiency-leaderboard">
+                <div class="placeholder">Loading...</div>
+              </div>
             </div>
           </div>
 
@@ -387,14 +475,14 @@
             <div id="agentCardGrid" class="agent-card-grid-6" style="margin-bottom:20px"></div>
           </div>
 
-          <div class="sec-sub-label">Department Budget Utilization</div>
-          <div id="liveBudgetBars" style="margin-bottom:16px"></div>
+          <div style="display:none" aria-hidden="true"><div id="liveBudgetBars"></div></div>
 
-          <!-- Budget Controls & Agent Management moved to Admin page -->
-          <div style="padding-top:12px;border-top:1px solid var(--border)">
-            <a href="/admin.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);text-decoration:none;padding:6px 12px;border:1px solid var(--border);border-radius:5px;transition:color 0.15s,border-color 0.15s" onmouseover="this.style.color='var(--text-primary)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border)'">
-              🛠 Manage budgets &amp; agents → Admin
-            </a>
+          <div class="agentlake-owner-links">
+            <span>AgentLake shows current operations. Configuration and historical analysis stay with their owning pages.</span>
+            <a href="/work-items.html">Project details → Work</a>
+            <a href="/policy.html">Routing controls → Govern</a>
+            <a href="/reports.html">Historical trends → Reports</a>
+            <a href="/admin.html">Agent management → Admin</a>
           </div>
 
           <div style="display:none">
@@ -517,9 +605,9 @@
           <span>▸ 30-Day Spend &amp; Activity Trends
             <span class="help-icon" data-help="trendsPanel" onclick="event.stopPropagation();showHelp('trendsPanel')">?</span>
           </span>
-          <span class="sec-right"><span class="sec-chev" id="timeseriesChevron">▾</span></span>
+          <span class="sec-right"><span class="sec-chev" id="timeseriesChevron">▸</span></span>
         </div>
-        <div id="timeseriesBody" class="dash-sec-body">
+        <div id="timeseriesBody" class="dash-sec-body" style="display:none">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
             <div>
               <div class="field-label" style="margin-bottom:10px">Daily Spend (USD) by Department</div>
@@ -540,54 +628,6 @@
         <span id="routingBlockedBtn"></span><span id="routingFeedChevron"></span>
       </div>
 
-      <!-- ── Agent Usage ──────────────────────────────────────────────────────── -->
-      <div class="dp-wrap dash-section" data-panel-id="agent-efficiency" id="agentEfficiencySection">
-        <div class="dash-sec-head" onclick="togglePanel('agentEffBody','agentEffChevron')">
-          <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Agent Usage
-            <span class="help-icon" data-help="agentEfficiencyPanel" onclick="event.stopPropagation();showHelp('agentEfficiencyPanel')">?</span>
-          </span>
-          <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">see what is being used, what is inactive, and what has never run</span>
-          <span class="sec-right"><span class="sec-chev" id="agentEffChevron">▾</span></span>
-        </div>
-        <div id="agentEffBody" class="dash-sec-body">
-          <div class="agent-usage-head">
-            <div>
-              <strong>30-day agent usage</strong>
-              <span>Current adoption and activity across every registered agent.</span>
-            </div>
-            <div class="agent-usage-views" role="group" aria-label="Agent usage view">
-              <button class="active" type="button" data-usage-view="most_used" onclick="setAgentUsageView('most_used')">Most Used</button>
-              <button type="button" data-usage-view="least_used" onclick="setAgentUsageView('least_used')">Least Used</button>
-              <button type="button" data-usage-view="unused" onclick="setAgentUsageView('unused')">Unused</button>
-              <button type="button" data-usage-view="highest_cost" onclick="setAgentUsageView('highest_cost')">Highest Cost</button>
-              <button type="button" data-usage-view="recent" onclick="setAgentUsageView('recent')">Recently Active</button>
-              <button type="button" data-usage-view="all" onclick="setAgentUsageView('all')">All Agents</button>
-            </div>
-          </div>
-          <div class="agent-usage-filterbar" aria-label="Agent usage filters">
-            <select class="agent-filter-select" id="agentUsageFilterDept" onchange="applyAgentUsageFilters()">
-              <option value="">All Departments</option>
-            </select>
-            <select class="agent-filter-select" id="agentUsageFilterPlatform" onchange="applyAgentUsageFilters()">
-              <option value="">All Platforms</option>
-            </select>
-            <input class="agent-filter-search" id="agentUsageFilterSearch" type="search"
-              placeholder="Search agents…" oninput="applyAgentUsageFilters()" />
-          </div>
-          <div class="agent-usage-summary" aria-label="Agent adoption summary">
-            <div><strong id="agentUsageRegistered">—</strong><span>Registered</span></div>
-            <div><strong id="agentUsageUsed">—</strong><span>Used in 30 days</span></div>
-            <div><strong id="agentUsageInactive">—</strong><span>Inactive</span></div>
-            <div><strong id="agentUsageNever">—</strong><span>Never used</span></div>
-            <div><strong id="agentUsageAdoption">—</strong><span>30-day adoption</span></div>
-          </div>
-          <div id="agentEffBody2" class="efficiency-leaderboard">
-            <div class="placeholder">Loading...</div>
-          </div>
-        </div>
-      </div>
-
       <!-- ── Top Keywords + Compliance Breakdown ────────────────────────────── -->
       <div class="dp-wrap dash-section" data-panel-id="insights" id="insightsSection">
         <div class="dash-sec-head" onclick="togglePanel('insightsBody','insightsChevron')">
@@ -596,9 +636,9 @@
             <span class="help-icon" data-help="routingInsightsPanel" onclick="event.stopPropagation();showHelp('routingInsightsPanel')">?</span>
           </span>
           <span style="font-size:10px;color:var(--text-muted);margin-left:8px;font-weight:400">keywords driving complex routing · compliance events</span>
-          <span class="sec-right"><span class="sec-chev" id="insightsChevron">▾</span></span>
+          <span class="sec-right"><span class="sec-chev" id="insightsChevron">▸</span></span>
         </div>
-        <div id="insightsBody" class="dash-sec-body">
+        <div id="insightsBody" class="dash-sec-body" style="display:none">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
             <!-- Top Keywords -->
             <div>
@@ -725,12 +765,47 @@
 <script src="/js/Sortable.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/tier-utils.js"></script>
-<script src="js/dashboard.js?v=20260724-v450"></script>
+<script src="js/dashboard.js?v=20260725-v458"></script>
 <script src="js/budget.js"></script>
-<script src="js/agentlake.js?v=20260724-v452"></script>
+<script src="js/agentlake.js?v=20260725-v458"></script>
 <script src="js/timeseries.js"></script>
 <script src="js/auditor.js?v=20260723-v439"></script>
 <script src="js/event_stream.js?v=20260723-v443"></script>
+<script>
+window.PAGE_TOUR_STEPS = [
+  {
+    target: "agentlakeFocus",
+    title: "Welcome to AgentLake",
+    body: "AgentLake answers one operational question: which AI agents are being used, which are idle, and which need attention?",
+    position: "bottom"
+  },
+  {
+    target: "budgetsAgentsSection",
+    title: "Agent Operations",
+    body: "Start with attention, recent activity, highest spend, or unused agents. Use the tabs to compare usage, departments, projects, and the complete registry.",
+    position: "bottom"
+  },
+  {
+    selector: "#agentlakeTabProjects",
+    title: "Project Participation",
+    body: "The Projects view shows which agents participate in business work. Full project ownership, budgets, and attribution remain on the Work page.",
+    position: "bottom"
+  },
+  {
+    target: "auditSection",
+    title: "Decision Evidence",
+    body: "Open the audit log when an operational signal needs investigation. Every recorded decision keeps its rationale and evidence.",
+    position: "top"
+  },
+  {
+    target: "eventStreamSection",
+    title: "Live Exceptions",
+    body: "The event stream summarizes what CostPilot is doing now, keeping blocked, throttled, pruning, and complex-routing activity visible.",
+    position: "left",
+    last: true
+  }
+];
+</script>
 <script src="js/help.js?v=20260724-v450"></script>
 <script>
 function toggleToolsMenu(e) {

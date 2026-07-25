@@ -368,6 +368,10 @@ async function renderAgentEfficiency() {
     setUsageText("agentUsageInactive", inactive.toLocaleString());
     setUsageText("agentUsageNever", never.toLocaleString());
     setUsageText("agentUsageAdoption", `${adoption.toFixed(0)}%`);
+    setUsageText("agentlakeFocusRegistered", registered.toLocaleString());
+    setUsageText("agentlakeFocusUsed", used.toLocaleString());
+    setUsageText("agentlakeFocusAdoption", `${adoption.toFixed(0)}%`);
+    setUsageText("agentlakeFocusNever", never.toLocaleString());
     renderAgentUsageRows();
   } catch(e) {
     leaderboard.innerHTML = `<div class="placeholder" style="color:var(--accent-red)">${e.message}</div>`;
@@ -645,9 +649,9 @@ function restorePanelStates() {
     ["midRowBody",       "midRowChevron"],
     ["routingRulesBody",  "routingRulesChevron"],
     ["timeseriesBody",    "timeseriesChevron"],
+    ["insightsBody",      "insightsChevron"],
   ];
-  // Panels that are always open regardless of saved state
-  const alwaysOpen = new Set(["timeseriesBody"]);
+  const alwaysOpen = new Set();
 
   panels.forEach(([bodyId, chevronId]) => {
     const body    = document.getElementById(bodyId);
@@ -664,10 +668,8 @@ function restorePanelStates() {
     }
   });
 
-  // Ensure timeseries localStorage preference doesn't override alwaysOpen
-  try { localStorage.removeItem("panel_timeseriesBody"); } catch(e) {}
-
-  // Re-render timeseries charts — container is now guaranteed visible
+  // Load chart data after panel state restoration. Chart.js is resized again
+  // by togglePanel when the historical-trends panel is opened.
   setTimeout(() => {
     if (typeof loadTimeSeries === "function") loadTimeSeries();
   }, 100);

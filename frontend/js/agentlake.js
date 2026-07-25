@@ -657,11 +657,15 @@ function agentlakeLastUsed(iso) {
 }
 
 function setAgentlakeView(view) {
-  _agentlakeView = ["overview", "departments", "projects", "all"].includes(view) ? view : "overview";
+  _agentlakeView = ["overview", "usage", "departments", "projects", "all"].includes(view) ? view : "overview";
   const config = {
     overview: {
       panel: "agentlakeOverview", tab: "agentlakeTabOverview",
       description: "Operational summary of the agents that need attention or are being used."
+    },
+    usage: {
+      panel: "agentlakeUsage", tab: "agentlakeTabUsage",
+      description: "Compare 30-day adoption, traffic, spend, pruning, and last activity by agent."
     },
     departments: {
       panel: "agentlakeDepartments", tab: "agentlakeTabDepartments",
@@ -692,13 +696,8 @@ function setAgentlakeView(view) {
 }
 
 function showNeverUsedAgents() {
-  setAgentlakeView("all");
-  clearAgentCardFilters();
-  const neverUsedIds = new Set(_agentSpend.filter(row => !row.call_count).map(row => row.agent_id));
-  const activeAgents = _allAgents.filter(agent => !agent.archived && neverUsedIds.has(agent.id));
-  renderAgentCards(activeAgents, _allAgents.filter(agent => !agent.archived).length);
-  const count = document.getElementById("agentCardFilterCount");
-  if (count) count.textContent = `Showing ${activeAgents.length} never-used agents`;
+  setAgentlakeView("usage");
+  setAgentUsageView("unused");
 }
 
 function renderAgentlakeViews() {
@@ -724,6 +723,8 @@ function renderAgentlakeViews() {
 
   const attentionCount = document.getElementById("agentlakeAttentionCount");
   if (attentionCount) attentionCount.textContent = attention.length;
+  const focusAttention = document.getElementById("agentlakeFocusAttention");
+  if (focusAttention) focusAttention.textContent = attention.length.toLocaleString();
   renderAgentlakeCompactList("agentlakeAttentionList", attention.slice(0, 5), agent => ({
     name: displayAgentName(agent),
     meta: `${displayAgentDept(agent)} · ${agent.source_platform || "Custom"}`,
