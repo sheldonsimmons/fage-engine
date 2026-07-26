@@ -354,11 +354,11 @@ def get_model_routing_outcome_detail(
             m for m in catalog
             if m.is_enabled and m.tier == model.tier and not m.department
         ]
-        current_default = (
+        current_selection = (
             next((m for m in global_candidates if m.is_default), None)
             or (global_candidates[0] if global_candidates else None)
         )
-        allow_inferred = bool(current_default and current_default.id == model.id)
+        allow_inferred = bool(current_selection and current_selection.id == model.id)
         if allow_inferred:
             match_conditions.append(and_(
                 TokenTransaction.model_name.is_(None),

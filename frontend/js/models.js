@@ -496,7 +496,7 @@ async function loadRoutingOutcomes() {
     const unusedNames = (data.unused_eligible || []).slice(0, 4).map(m => m.display_name);
     let note = `${Number(data.telemetry_coverage_pct).toFixed(1)}% exact-model telemetry · ${exact.toLocaleString()} exact · ${inferred.toLocaleString()} tier-inferred.`;
     if (inferred) {
-      note += " Inferred history is mapped to the current eligible default for its recorded tier and is not presented as provider-confirmed.";
+      note += " Inferred history is mapped to the current eligible tier selection and is not presented as provider-confirmed.";
     }
     if (unusedNames.length) {
       note += ` Eligible models with no attributed calls: ${unusedNames.join(", ")}${data.unused_eligible_count > unusedNames.length ? ", and more" : ""}.`;
@@ -634,7 +634,7 @@ async function openRoutingOutcomeDetail(modelKey) {
       '<div class="mdl-detail-section"><h3>Department usage</h3><div class="mdl-detail-table">' + departmentRows + '</div></div>' +
       '<div class="mdl-detail-section"><h3>Agent usage</h3><div class="mdl-detail-table">' + agentRows + '</div></div>' +
       '<div class="mdl-detail-section"><h3>Recent calls</h3>' +
-        '<div class="mdl-detail-section-note">Exact identifies a recorded model name. Inferred maps legacy tier-only history to the current default.</div>' +
+        '<div class="mdl-detail-section-note">Exact identifies a recorded model name. Inferred maps legacy tier-only history to the current eligible tier selection.</div>' +
         '<div class="mdl-detail-table">' + recentRows + '</div></div>' +
       '<div class="mdl-detail-section"><h3>Audit evidence</h3>' +
         '<div class="mdl-detail-section-note">Tier-related events predate exact-model audit telemetry and should not be treated as provider-confirmed.</div>' +
