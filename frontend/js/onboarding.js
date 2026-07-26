@@ -38,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (TRIAL_PRV) selectProvider(TRIAL_PRV);
   }
   restoreBusinessContextOnboarding();
+  restoreOAuthDiscovery();
 });
 
 const businessFirstState = {
@@ -642,6 +643,179 @@ function renderObConnectionPlan(platform) {
     <div class="ob-connection-plan-item"><strong>3 · Attribute</strong>${_obEsc(plan.identity)}</div>`;
 }
 
+let obDiscoveryConnectionId = null;
+let obDiscoveredFields = [];
+
+function renderObDiscoveryCard(platform) {
+  const card = document.getElementById("obDiscoveryCard");
+  if (!card) return;
+  const label = OB_PLATFORMS[platform]?.label || platform;
+  if (!["salesforce", "servicenow", "hubspot"].includes(platform)) {
+    card.innerHTML = "";
+    return;
+  }
+  const available = platform === "salesforce";
+  card.innerHTML = `<div class="ob-discovery-head">
+      <div><h3>Find my objects and fields</h3>
+      <p>Sign in to ${_obEsc(label)} and CostPilot will inspect metadata—not customer records—to recommend your mapping.</p></div>
+      <span class="ob-context-eyebrow">${available ? "Available" : "Adapter next"}</span>
+    </div>
+    ${available ? `<div class="ob-discovery-actions">
+      <button type="button" class="ob-btn-primary" onclick="connectSalesforceDiscovery('https://login.salesforce.com')">Connect Salesforce</button>
+      <button type="button" class="ob-btn-ghost" onclick="connectSalesforceDiscovery('https://test.salesforce.com')">Use a Sandbox</button>
+    </div>` : `<div class="ob-discovery-status">${_obEsc(label)} uses the same registry and mapping format. OAuth discovery will be enabled after the Salesforce reference adapter is validated.</div>`}
+    <div id="obDiscoveryStatus"></div>
+    <div id="obDiscoveryResults"></div>`;
+}
+
+async function connectSalesforceDiscovery(authBaseUrl) {
+  const status = document.getElementById("obDiscoveryStatus");
+  status.innerHTML = `<div class="ob-discovery-status">Creating a secure Salesforce connection…</div>`;
+  try {
+    const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
+    const createdResponse = await fetch(`${CostPilot_URL}/api/integrations/connections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        platform: "salesforce",
+        display_name: `Salesforce ${new Date().toISOString()}`,
+        auth_base_url: authBaseUrl,
+      }),
+    });
+    if (!createdResponse.ok) throw new Error(`Could not create connection (${createdResponse.status}).`);
+    const connection = await createdResponse.json();
+    obDiscoveryConnectionId = connection.id;
+    localStorage.setItem("cp_discovery_connection_id", String(connection.id));
+    const authResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${connection.id}/authorize`, {
+      method: "POST",
+    });
+    const auth = await authResponse.json();
+    if (!authResponse.ok) throw new Error(auth.detail || "Could not start Salesforce authorization.");
+    if (!auth.configured) {
+      status.innerHTML = `<div class="ob-discovery-status">${_obEsc(auth.detail)} You can continue with the recommended manual mapping below.</div>`;
+      return;
+    }
+    window.location.href = auth.authorization_url;
+  } catch (error) {
+    status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
+  }
+}
+
+function restoreOAuthDiscovery() {
+  const params = new URLSearchParams(window.location.search || "");
+  if (params.get("oauth") !== "success" || !params.get("connection_id")) return;
+  obDiscoveryConnectionId = Number(params.get("connection_id"));
+  localStorage.setItem("cp_discovery_connection_id", String(obDiscoveryConnectionId));
+  document.body.classList.add("ob-connection-mode");
+  document.querySelectorAll(".ob-screen").forEach(screen => screen.classList.remove("active"));
+  document.getElementById("screen-5")?.classList.add("active");
+  selectObPlatform("salesforce");
+  setUniversalSetupStage(3);
+  loadSalesforceObjects();
+  window.history.replaceState({}, "", "/onboarding.html");
+}
+
+async function loadSalesforceObjects() {
+  const status = document.getElementById("obDiscoveryStatus");
+  const results = document.getElementById("obDiscoveryResults");
+  status.innerHTML = `<div class="ob-discovery-status">Connected. Reading accessible Salesforce object metadata…</div>`;
+  try {
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/objects`);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Object discovery failed.");
+    const preferred = payload.objects.filter(obj =>
+      obj.custom || ["Case", "Opportunity", "Account", "Contact", "Lead", "Task"].includes(obj.name)
+    );
+    const objects = preferred.length ? preferred : payload.objects;
+    results.innerHTML = `<div class="ob-field" style="margin-top:14px">
+      <label class="ob-label">Choose what represents your ${_obEsc(_businessWorkLabel() || "work")}</label>
+      <select class="ob-input" id="obDiscoveredObject">
+        ${objects.map(obj => `<option value="${_obEsc(obj.name)}">${_obEsc(obj.label)} · ${_obEsc(obj.name)}</option>`).join("")}
+      </select>
+      <div class="ob-discovery-actions"><button type="button" class="ob-btn-primary" onclick="discoverSalesforceFields()">Find and Recommend Fields →</button></div>
+    </div>`;
+    status.innerHTML = `<div class="ob-discovery-status">Salesforce connected. ${payload.objects.length} accessible objects found.</div>`;
+  } catch (error) {
+    status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
+  }
+}
+
+async function discoverSalesforceFields() {
+  const objectName = document.getElementById("obDiscoveredObject").value;
+  const status = document.getElementById("obDiscoveryStatus");
+  status.innerHTML = `<div class="ob-discovery-status">Inspecting ${_obEsc(objectName)} fields and relationships…</div>`;
+  try {
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/discover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ object_name: objectName }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Field discovery failed.");
+    obDiscoveredFields = payload.fields;
+    renderDiscoveredMapping(payload);
+    document.getElementById("obPlatObject").value = objectName;
+    status.innerHTML = `<div class="ob-discovery-status">${payload.fields.length} fields found. Review CostPilot's recommendations before approving.</div>`;
+  } catch (error) {
+    status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
+  }
+}
+
+function renderDiscoveredMapping(payload) {
+  const targets = [
+    ["work_id", "Work ID"],
+    ["work_name", "Work name"],
+    ["owner", "Owner / user"],
+    ["customer", "Customer"],
+    ["status", "Status"],
+    ["content", "AI content"],
+  ];
+  const options = `<option value="">Not mapped</option>` + payload.fields.map(field =>
+    `<option value="${_obEsc(field.name)}">${_obEsc(field.label)} · ${_obEsc(field.name)}</option>`
+  ).join("");
+  document.getElementById("obDiscoveryResults").innerHTML = `<div class="ob-discovery-mapping">
+    ${targets.map(([key, label]) => {
+      const rec = payload.recommendations[key];
+      return `<div class="ob-discovery-map-row">
+        <label for="obMap-${key}">${label}</label>
+        <select class="ob-input" id="obMap-${key}" data-map-key="${key}">${options}</select>
+        <span class="ob-confidence">${rec ? `${rec.confidence} match` : "Choose"}</span>
+      </div>`;
+    }).join("")}
+    <div class="ob-discovery-actions">
+      <button type="button" class="ob-btn-primary" onclick="approveDiscoveredMapping()">Approve Mapping →</button>
+    </div>
+  </div>`;
+  targets.forEach(([key]) => {
+    const value = payload.recommendations[key]?.field;
+    const select = document.getElementById(`obMap-${key}`);
+    if (select && value) select.value = value;
+  });
+}
+
+async function approveDiscoveredMapping() {
+  const mapping = {};
+  document.querySelectorAll("[data-map-key]").forEach(select => {
+    if (select.value) mapping[select.dataset.mapKey] = select.value;
+  });
+  const selectedObject = document.getElementById("obDiscoveredObject").value;
+  const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/mapping`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ selected_object: selectedObject, mapping }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    document.getElementById("obDiscoveryStatus").innerHTML = `<div class="ob-error">${_obEsc(payload.detail || "Could not save mapping.")}</div>`;
+    return;
+  }
+  const contentField = mapping.content;
+  if (contentField) _renderObFields([{ label: "Content", name: contentField }]);
+  document.getElementById("obDiscoveryStatus").innerHTML =
+    `<div class="ob-discovery-status"><strong>Mapping approved.</strong> CostPilot saved this connection for your workspace. You can still adjust advanced fields below.</div>`;
+}
+
 let obSelectedPlatform = null;
 let _obLastPlatform = null;
 let obBusinessContext = null;
@@ -893,6 +1067,7 @@ function selectObPlatform(platform) {
   if (selectedSummary) selectedSummary.style.display = "flex";
   if (selectedName) selectedName.textContent = cfg.label;
   renderObConnectionPlan(platform);
+  renderObDiscoveryCard(platform);
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
   if (fieldsLabel) fieldsLabel.childNodes[0].textContent = copy.fieldsLabel + " ";
   if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;

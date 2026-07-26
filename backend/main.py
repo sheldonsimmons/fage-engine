@@ -372,6 +372,10 @@ app.include_router(routes_router.router, prefix="/api/route", tags=["Router"])
 from api import routes_integrations
 app.include_router(routes_integrations.router, prefix="/api/integrations", tags=["Integrations"])
 
+# Persistent platform connection registry and metadata discovery
+from api import routes_connections
+app.include_router(routes_connections.router, prefix="/api/integrations/connections", tags=["Connections"])
+
 # Work Attribution — projects, matters, engagements, cases, and claims
 from api import routes_work_items
 app.include_router(routes_work_items.router, prefix="/api/work-items", tags=["Work Attribution"])

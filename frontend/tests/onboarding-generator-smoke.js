@@ -56,7 +56,10 @@ globalThis.__universalSetup = {
   verificationHtml: _universalVerificationHtml,
   setStage: setUniversalSetupStage,
   runTest: runUniversalSetupTest,
-  activate: activateUniversalConnection
+  activate: activateUniversalConnection,
+  renderDiscovery: renderObDiscoveryCard,
+  restoreDiscovery: restoreOAuthDiscovery,
+  approveDiscovery: approveDiscoveredMapping
 };`,
   sandbox
 );
@@ -99,13 +102,30 @@ for (const name of ["salesforce", "servicenow", "hubspot"]) {
   }
 }
 
-for (const name of ["renderConnectionPlan", "verificationHtml", "setStage", "runTest", "activate"]) {
+for (const name of [
+  "renderConnectionPlan",
+  "verificationHtml",
+  "setStage",
+  "runTest",
+  "activate",
+  "renderDiscovery",
+  "restoreDiscovery",
+  "approveDiscovery",
+]) {
   if (typeof sandbox.__universalSetup[name] !== "function") {
     throw new Error(`universal setup function is missing: ${name}`);
   }
 }
 
-for (const marker of ["/api/integrations/contract", "/api/route", "obPlatformInstalled"]) {
+for (const marker of [
+  "/api/integrations/contract",
+  "/api/integrations/connections",
+  "/objects",
+  "/discover",
+  "/mapping",
+  "/api/route",
+  "obPlatformInstalled",
+]) {
   if (!source.includes(marker)) {
     throw new Error(`universal setup verification is missing: ${marker}`);
   }

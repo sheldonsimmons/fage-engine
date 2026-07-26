@@ -113,6 +113,34 @@ class DepartmentBudget(Base):
     archived          = Column(Boolean,  nullable=True, default=False)  # soft-hide stale departments without deleting history
 
 
+class IntegrationConnection(Base):
+    """A tenant-scoped external platform connection and its approved mapping."""
+    __tablename__ = "integration_connections"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "platform", "display_name", name="uq_integration_connection_name"),
+    )
+
+    id                    = Column(Integer, primary_key=True, index=True)
+    workspace_id          = Column(String, nullable=False, default="default", index=True)
+    platform              = Column(String, nullable=False, index=True)
+    display_name          = Column(String, nullable=False)
+    status                = Column(String, nullable=False, default="draft")
+    auth_base_url         = Column(String, nullable=True)
+    instance_url          = Column(String, nullable=True)
+    external_tenant_id    = Column(String, nullable=True)
+    access_token_encrypted = Column(Text, nullable=True)
+    refresh_token_encrypted = Column(Text, nullable=True)
+    oauth_state           = Column(String, nullable=True, index=True)
+    selected_object       = Column(String, nullable=True)
+    mapping_json          = Column(Text, nullable=True)
+    discovery_json        = Column(Text, nullable=True)
+    last_tested_at        = Column(DateTime, nullable=True)
+    last_success_at       = Column(DateTime, nullable=True)
+    last_error            = Column(Text, nullable=True)
+    created_at            = Column(DateTime, default=datetime.utcnow)
+    updated_at            = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class WorkAccount(Base):
     """Optional customer, client, or business-unit parent for attributed work."""
     __tablename__ = "work_accounts"
