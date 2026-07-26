@@ -15,6 +15,17 @@ public with sharing class CostPilotAgentforceAction {
         for (GovernanceRequest request : requests) {
             results.add(governOne(request));
         }
+        List<CostPilot_Project__c> projectUpdates = new List<CostPilot_Project__c>();
+        for (Integer index = 0; index < requests.size(); index++) {
+            CostPilot_Project__c projectUpdate =
+                projectUpdateFor(requests[index], results[index]);
+            if (projectUpdate != null) {
+                projectUpdates.add(projectUpdate);
+            }
+        }
+        if (!projectUpdates.isEmpty()) {
+            update projectUpdates;
+        }
         return results;
     }
 
@@ -28,6 +39,7 @@ public with sharing class CostPilotAgentforceAction {
             return output;
         }
 
+        hydrateProjectRequest(request);
         MembershipContext membership = membershipFor(request.recordId);
         HttpRequest httpRequest = new HttpRequest();
         httpRequest.setEndpoint(
@@ -83,6 +95,8 @@ public with sharing class CostPilotAgentforceAction {
             output.selectedModel = (String) payload.get('selected_model');
             output.selectedTier = (String) payload.get('selected_tier');
             output.trackingId = (String) payload.get('tracking_id');
+            output.aiResponse = (String) payload.get('ai_response');
+            output.executionMode = (String) payload.get('execution_mode');
             output.estimatedCostUsd = decimalValue(payload.get('estimated_cost_usd'));
             output.projectBudgetRemainingUsd =
                 decimalValue(payload.get('project_budget_remaining_usd'));
@@ -92,6 +106,68 @@ public with sharing class CostPilotAgentforceAction {
             output.reason = 'CostPilot could not be reached: ' + exceptionValue.getMessage();
         }
         return output;
+    }
+
+    private static void hydrateProjectRequest(GovernanceRequest request) {
+        try {
+            Id typedRecordId = Id.valueOf(request.recordId);
+            if (typedRecordId.getSObjectType() != CostPilot_Project__c.SObjectType) {
+                return;
+            }
+            CostPilot_Project__c project = [
+                SELECT Name, Project_ID__c, Project_Owner__c, Status__c,
+                       Monthly_AI_Budget__c, Department__c
+                FROM CostPilot_Project__c
+                WHERE Id = :typedRecordId
+                LIMIT 1
+            ];
+            if (String.isBlank(request.projectExternalId)) {
+                request.projectExternalId = project.Project_ID__c;
+            }
+            if (String.isBlank(request.projectName)) {
+                request.projectName = project.Name;
+            }
+            if (String.isBlank(request.projectOwner)) {
+                request.projectOwner = project.Project_Owner__c;
+            }
+            if (String.isBlank(request.projectStatus)) {
+                request.projectStatus = project.Status__c;
+            }
+            if (request.monthlyAiBudget == null) {
+                request.monthlyAiBudget = project.Monthly_AI_Budget__c;
+            }
+            if (String.isBlank(request.department)) {
+                request.department = project.Department__c;
+            }
+        } catch (Exception ignored) {
+            // Non-project records can continue using values supplied by the
+            // Agentforce action until a metadata mapping is configured.
+        }
+    }
+
+    private static CostPilot_Project__c projectUpdateFor(
+        GovernanceRequest request,
+        GovernanceResult result
+    ) {
+        if (request == null || result == null || String.isBlank(request.recordId)) {
+            return null;
+        }
+        try {
+            Id typedRecordId = Id.valueOf(request.recordId);
+            if (typedRecordId.getSObjectType() != CostPilot_Project__c.SObjectType) {
+                return null;
+            }
+            return new CostPilot_Project__c(
+                Id = typedRecordId,
+                CostPilot_Decision__c = result.decision,
+                CostPilot_Tracking_ID__c = result.trackingId,
+                Estimated_AI_Cost__c = result.estimatedCostUsd,
+                Last_AI_Request__c = result.aiResponse,
+                Selected_Model__c = result.selectedModel
+            );
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static MembershipContext membershipFor(String recordId) {
@@ -120,7 +196,8 @@ public with sharing class CostPilotAgentforceAction {
             }
             CostPilot_Project_Member__c membership = memberships[0];
             context.role = membership.Role__c;
-            context.status = membership.Status__c;
+            context.status = String.isBlank(membership.Status__c)
+                ? 'active' : membership.Status__c.toLowerCase();
             context.canUseAi = membership.Can_Use_AI__c;
             context.accountId = membership.Project__r.Account__c;
             context.accountName = membership.Project__r.Account__r == null
@@ -214,5 +291,11 @@ public with sharing class CostPilotAgentforceAction {
 
         @InvocableVariable(label='CostPilot Tracking ID')
         public String trackingId;
+
+        @InvocableVariable(label='AI Response')
+        public String aiResponse;
+
+        @InvocableVariable(label='Execution Mode')
+        public String executionMode;
     }
 }

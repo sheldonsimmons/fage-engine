@@ -216,6 +216,8 @@ class RouteResponse(BaseModel):
     sensitive_term_matches:     List[str] = []
     work_item_id:               Optional[str] = None
     work_item_name:             Optional[str] = None
+    provider:                   Optional[str] = None
+    model_mode:                 str = "simulated"
 
 
 def _resolve_department(db: Session, req: RouteRequest) -> str:

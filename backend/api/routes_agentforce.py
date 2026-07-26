@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from api.routes_proxy import _get_account
 from api.routes_router import RouteRequest, route_payload
 from core.business_context import normalize_context_type
+from core.model_client import get_mode_info
 from database.db import get_db
 from database.models import TokenTransaction, WorkAccount, WorkItem
 
@@ -55,6 +56,8 @@ class AgentforceGovernResponse(BaseModel):
     estimated_cost_usd: float = 0.0
     project_budget_remaining_usd: Optional[float] = None
     tracking_id: Optional[str] = None
+    ai_response: Optional[str] = None
+    execution_mode: Optional[str] = None
 
 
 def _project_identifier(body: AgentforceGovernRequest) -> str:
@@ -203,6 +206,16 @@ def govern_agentforce_work(
             project_budget_remaining_usd=_project_budget_remaining(db, project),
         )
 
+    mode_info = get_mode_info()
+    if mode_info["mode"] != "live":
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Agentforce execution requires CostPilot live model mode. "
+                "Simulation is disabled for Salesforce AI responses."
+            ),
+        )
+
     department = body.department.strip() or project.department or "Sales"
     workspace_department = f"{workspace_id}:{department}"
 
@@ -257,6 +270,8 @@ def govern_agentforce_work(
         estimated_cost_usd=result.cost_usd,
         project_budget_remaining_usd=_project_budget_remaining(db, project),
         tracking_id=f"CP-TX-{transaction.id}" if transaction else None,
+        ai_response=result.simulated_response,
+        execution_mode=result.model_mode,
     )
 
 
