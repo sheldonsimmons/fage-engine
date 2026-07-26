@@ -477,6 +477,24 @@ function formatModelCurrency(value) {
   return "$" + amount.toFixed(2);
 }
 
+function formatTelemetryCoverage(value, exact, total) {
+  const pct = Number(value || 0);
+  if (!total || !exact) return "0.0%";
+  if (pct < 0.1) return "<0.1%";
+  return `${pct.toFixed(1)}%`;
+}
+
+function handleRoutingAlertAction(code, modelKey) {
+  if (modelKey) {
+    openRoutingOutcomeDetail(modelKey);
+    return;
+  }
+  const target = code === "routing_cascade"
+    ? document.getElementById("mdlRoutingPreviewTitle")
+    : document.getElementById("mdlCatalogHealthTitle");
+  if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 async function loadRoutingOutcomes() {
   const list = document.getElementById("mdlOutcomeList");
   if (!list) return;
@@ -493,8 +511,12 @@ async function loadRoutingOutcomes() {
 
     const exact = Number(data.recorded_calls);
     const inferred = Number(data.inferred_calls);
+    const total = Number(data.total_calls);
+    const preciseCoverage = Number(
+      data.telemetry_coverage_pct_precise ?? data.telemetry_coverage_pct ?? 0
+    );
     const unusedNames = (data.unused_eligible || []).slice(0, 4).map(m => m.display_name);
-    let note = `${Number(data.telemetry_coverage_pct).toFixed(1)}% exact-model telemetry · ${exact.toLocaleString()} exact · ${inferred.toLocaleString()} tier-inferred.`;
+    let note = `${formatTelemetryCoverage(preciseCoverage, exact, total)} exact-model telemetry · ${exact.toLocaleString()} exact · ${inferred.toLocaleString()} tier-inferred.`;
     if (inferred) {
       note += " Inferred history is mapped to the current eligible tier selection and is not presented as provider-confirmed.";
     }
@@ -502,6 +524,31 @@ async function loadRoutingOutcomes() {
       note += ` Eligible models with no attributed calls: ${unusedNames.join(", ")}${data.unused_eligible_count > unusedNames.length ? ", and more" : ""}.`;
     }
     document.getElementById("mdlTelemetryNote").textContent = note;
+
+    const alerts = data.alerts || [];
+    const alertWrap = document.getElementById("mdlRoutingAlerts");
+    alertWrap.innerHTML = alerts.length
+      ? alerts.map(alert =>
+          '<div class="mdl-routing-alert ' + modelHtmlEscape(alert.severity || "info") + '">' +
+            '<div class="mdl-routing-alert-icon" aria-hidden="true">' +
+              (alert.severity === "critical" ? "!" : alert.severity === "warning" ? "△" : "i") +
+            '</div>' +
+            '<div class="mdl-routing-alert-copy">' +
+              '<strong>' + modelHtmlEscape(alert.title) + '</strong>' +
+              '<span>' + modelHtmlEscape(alert.detail) + '</span>' +
+            '</div>' +
+            '<button class="mdl-routing-alert-action" type="button" data-code="' +
+              modelHtmlEscape(alert.code || "") + '" data-model-key="' +
+              modelHtmlEscape(alert.model_key || "") + '" onclick="handleRoutingAlertAction(this.dataset.code,this.dataset.modelKey)">' +
+              modelHtmlEscape(alert.action || "Review") +
+            '</button>' +
+          '</div>'
+        ).join("")
+      : '<div class="mdl-routing-alert good">' +
+          '<div class="mdl-routing-alert-icon" aria-hidden="true">✓</div>' +
+          '<div class="mdl-routing-alert-copy"><strong>No routing issues detected</strong>' +
+          '<span>No fallback, cascade, unused-model, or high-concentration signal crossed the review threshold.</span></div>' +
+        '</div>';
 
     if (!(data.models || []).length) {
       list.innerHTML = '<div class="mdl-placeholder">No AI calls were recorded in this period.</div>';
@@ -534,6 +581,8 @@ async function loadRoutingOutcomes() {
       );
     }).join("");
   } catch (e) {
+    const alertWrap = document.getElementById("mdlRoutingAlerts");
+    if (alertWrap) alertWrap.innerHTML = '<div class="mdl-routing-alert critical">Routing signals unavailable.</div>';
     list.innerHTML = `<div class="mdl-placeholder" style="color:var(--accent-red)">Routing outcomes unavailable: ${modelHtmlEscape(e.message)}</div>`;
   }
 }

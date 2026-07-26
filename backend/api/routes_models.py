@@ -305,6 +305,51 @@ def get_model_routing_outcomes(
         if m.model_id not in used_keys and m.display_name not in used_keys
     ]
 
+    alerts = []
+    if fallback_calls:
+        alerts.append({
+            "code": "built_in_fallback",
+            "severity": "critical",
+            "title": f"{fallback_calls:,} call{'s' if fallback_calls != 1 else ''} used a built-in fallback",
+            "detail": "No eligible registry model was available for these requests. Review enabled models and tier coverage.",
+            "action": "Review model eligibility",
+            "model_key": None,
+        })
+    if cascaded_calls:
+        alerts.append({
+            "code": "routing_cascade",
+            "severity": "warning",
+            "title": f"{cascaded_calls:,} call{'s' if cascaded_calls != 1 else ''} changed tiers",
+            "detail": "The requested tier had no matching eligible model, so CostPilot selected another tier.",
+            "action": "Check tier coverage",
+            "model_key": None,
+        })
+    if unused_eligible:
+        first_unused = unused_eligible[0]
+        alerts.append({
+            "code": "eligible_unused",
+            "severity": "info",
+            "title": f"{len(unused_eligible):,} eligible model{'s are' if len(unused_eligible) != 1 else ' is'} unused",
+            "detail": "Eligible models with no attributed calls may be intentional, or may indicate routing configuration that never selects them.",
+            "action": "Inspect unused model",
+            "model_key": first_unused["model_id"],
+        })
+
+    spend_concentration_pct = 0.0
+    if model_rows and total_spend > 0:
+        top_model = model_rows[0]
+        spend_concentration_pct = round(top_model["spend_usd"] / total_spend * 100, 1)
+        if total_calls >= 10 and spend_concentration_pct >= 70:
+            alerts.append({
+                "code": "spend_concentration",
+                "severity": "warning",
+                "title": f"{spend_concentration_pct:.1f}% of model spend is on {top_model['display_name']}",
+                "detail": "High concentration is not automatically a problem, but it deserves review when a premium model dominates total spend.",
+                "action": "Inspect spending evidence",
+                "model_key": top_model["model_key"],
+            })
+
+    precise_coverage = recorded_calls / total_calls * 100 if total_calls else 0.0
     return {
         "days": days,
         "total_calls": total_calls,
@@ -312,11 +357,14 @@ def get_model_routing_outcomes(
         "avg_cost_usd": round(total_spend / total_calls, 6) if total_calls else 0.0,
         "recorded_calls": recorded_calls,
         "inferred_calls": total_calls - recorded_calls,
-        "telemetry_coverage_pct": round(recorded_calls / total_calls * 100, 1) if total_calls else 0.0,
+        "telemetry_coverage_pct": round(precise_coverage, 1),
+        "telemetry_coverage_pct_precise": round(precise_coverage, 4),
         "cascaded_calls": cascaded_calls,
         "fallback_calls": fallback_calls,
+        "spend_concentration_pct": spend_concentration_pct,
         "unused_eligible_count": len(unused_eligible),
         "unused_eligible": unused_eligible,
+        "alerts": alerts,
         "models": model_rows,
     }
 

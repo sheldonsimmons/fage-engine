@@ -199,10 +199,16 @@ def test_routing_outcomes_separates_exact_and_inferred_history():
     assert result["recorded_calls"] == 2
     assert result["inferred_calls"] == 1
     assert result["telemetry_coverage_pct"] == 66.7
+    assert result["telemetry_coverage_pct_precise"] == 66.6667
     assert result["cascaded_calls"] == 1
     assert result["fallback_calls"] == 0
     assert result["unused_eligible_count"] == 1
     assert result["unused_eligible"][0]["model_id"] == "unused-strategist"
+    assert result["spend_concentration_pct"] == 77.8
+    assert {alert["code"] for alert in result["alerts"]} == {
+        "routing_cascade",
+        "eligible_unused",
+    }
     advisor = next(row for row in result["models"] if row["model_key"] == "global-advisor")
     assert advisor["calls"] == 2
     assert advisor["telemetry"] == "mixed"
