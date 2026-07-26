@@ -6,8 +6,8 @@
       "description": "Shows whether CostPilot blocked the request before it reached an AI model.",
       "lightning:type": "lightning__booleanType",
       "lightning:isPII": false,
-      "copilotAction:isDisplayable": true,
-      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:isDisplayable": false,
+      "copilotAction:isUsedByPlanner": false,
       "copilotAction:useHydratedPrompt": false
     },
     "costPilotResponse": {
@@ -15,8 +15,8 @@
       "description": "The governed response from CostPilot that the agent should use when responding to the user.",
       "lightning:type": "lightning__textType",
       "lightning:isPII": false,
-      "copilotAction:isDisplayable": false,
-      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:isDisplayable": true,
+      "copilotAction:isUsedByPlanner": false,
       "copilotAction:useHydratedPrompt": false
     },
     "modelTier": {
@@ -25,7 +25,7 @@
       "lightning:type": "lightning__textType",
       "lightning:isPII": false,
       "copilotAction:isDisplayable": false,
-      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:isUsedByPlanner": false,
       "copilotAction:useHydratedPrompt": false
     },
     "outcome": {
@@ -34,7 +34,7 @@
       "lightning:type": "lightning__textType",
       "lightning:isPII": false,
       "copilotAction:isDisplayable": false,
-      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:isUsedByPlanner": false,
       "copilotAction:useHydratedPrompt": false
     },
     "riskLevel": {
@@ -43,7 +43,7 @@
       "lightning:type": "lightning__textType",
       "lightning:isPII": false,
       "copilotAction:isDisplayable": false,
-      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:isUsedByPlanner": false,
       "copilotAction:useHydratedPrompt": false
     }
   },

@@ -20,6 +20,7 @@ CostPilot automatically retrieves accessible record fields and Opportunity produ
 
 If Blocked is false, return CostPilot Response verbatim as the final answer. Do not create a second response and do not call another model.
 If Blocked is true, explain CostPilot Response and stop.
+CostPilot Response is the only user-facing action result. Never display Blocked, Model Tier, Risk Level, Outcome, or other action metadata as a separate chat message.
 Do not ask for information already available in the conversation or current Salesforce record.</description>
             <developerName>CostPilotUniversalInstruction</developerName>
             <language xsi:nil="true"/>
