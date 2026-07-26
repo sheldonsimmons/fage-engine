@@ -30,6 +30,52 @@ function formatAuditCapturedAt(value) {
   });
 }
 
+function formatExecutiveRationale(detail, snapshot = {}) {
+  const original = String(detail?.rationale || "No rationale recorded.");
+  const escape = value => String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
+  if (!original.toUpperCase().startsWith("ROUTINE CALL") &&
+      !original.toUpperCase().startsWith("ROUTINE REQUEST")) {
+    return escape(original);
+  }
+
+  const tier = detail?.model_tier || snapshot.model_tier || "Scout";
+  const department = detail?.display_department ||
+    String(detail?.department || snapshot.department || "Unknown").split(":").pop();
+  const tokens = Number(snapshot.raw_tokens ?? detail?.raw_tokens);
+  const tokenLine = Number.isFinite(tokens)
+    ? `The request contained ${tokens.toLocaleString()} tokens and no complexity or high-risk indicators required escalation.`
+    : "No complexity or high-risk indicators required escalation.";
+  const budgetCap = snapshot.budget_cap_usd;
+  const budgetSpent = snapshot.budget_spent_usd;
+  const budgetPct = snapshot.budget_used_pct;
+  const budgetLine = budgetCap != null
+    ? `<strong>Budget:</strong> ${escape(budgetPct ?? "—")}% used — $${escape(budgetSpent ?? "0")} of $${escape(budgetCap)}`
+    : "<strong>Budget:</strong> Not configured";
+  const controlLine = snapshot.throttled
+    ? "<strong>Control:</strong> Throttling applied"
+    : "<strong>Control:</strong> No throttling applied";
+  const cost = detail?.cost_usd != null
+    ? `$${Number(detail.cost_usd).toFixed(6)}`
+    : "Not recorded";
+  const retention = snapshot.raw_retention_days != null
+    ? `${escape(snapshot.raw_retention_days)}-day retention policy`
+    : "configured retention policy";
+
+  return [
+    `<strong>Routine request — ${escape(tier)} selected</strong>`,
+    escape(tokenLine),
+    budgetLine,
+    controlLine,
+    `<strong>Call cost:</strong> ${escape(cost)}`,
+    `<strong>Audit:</strong> Evidence retained according to the ${retention}`,
+  ].join("<br>");
+}
+
 async function loadAuditLog() {
   try {
     const events = await apiGet("/api/audit?limit=50");
@@ -207,7 +253,7 @@ async function fetchRationaleContent(eventId) {
       </div>
       <div class="rationale-section">
         <div class="rationale-label">PLAIN-ENGLISH RATIONALE</div>
-        <div class="rationale-text">${detail.rationale || "No rationale recorded."}</div>
+        <div class="rationale-text">${formatExecutiveRationale(detail, snapshot)}</div>
       </div>
       <div class="rationale-section">
         <div class="rationale-label">CONTEXT SNAPSHOT (at time of decision)</div>

@@ -100,6 +100,9 @@ def _build_rationale(
     cost_usd:         float,
     context:          dict,
 ) -> str:
+    # Workspace-qualified departments are internal routing keys. Audit
+    # rationale is user-facing, so show only the business department name.
+    department = (department or "Unknown").split(":")[-1].strip()
     kw_str   = ", ".join(f'"{k}"' for k in matched_keywords) if matched_keywords else "none"
     spent    = _fmt(context.get("budget_spent_usd"), ".4f")
     cap      = _fmt(context.get("budget_cap_usd"),   ".2f")
@@ -173,17 +176,17 @@ def _build_rationale(
             f"This action is logged for compliance review."
         )
 
-    # ROUTINE — Scout tier. Every call logged for compliance.
+    # ROUTINE — keep the default view concise. The context snapshot retains
+    # the complete budget, routing, retention, and evidence fields.
     tier_label = model_tier or "Scout"
     return (
-        f"ROUTINE CALL — {tier_label} tier selected for {department} department. "
-        f"Routing analysis: {routing_reason}. "
-        f"No high-risk keywords detected (checked against: {kw_str if matched_keywords else 'none matched'}). "
-        f"Department budget at time of call: {used_pct}% used "
-        f"(${spent} of ${cap} monthly cap) — within threshold, no throttle applied. "
+        f"ROUTINE REQUEST — {tier_label} selected for {department}. "
+        f"{routing_reason}. "
+        f"No high-risk indicators detected. "
+        f"Budget: {used_pct}% used (${spent} of ${cap}). "
+        f"Control: no throttling applied. "
         f"Call cost: ${cost_usd:.6f}. "
-        f"Full payload retained in audit record. If PII is found in this payload, "
-        f"this record is the evidence that it reached the {tier_label} model."
+        f"Audit evidence retained according to the configured retention policy."
     )
 
 

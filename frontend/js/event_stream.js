@@ -336,7 +336,7 @@ async function toggleStreamEvent(eventId) {
       </div>
 
       <div class="gov-detail-label">Rationale</div>
-      <div class="gov-detail-text">${e.rationale || "No rationale recorded."}</div>
+      <div class="gov-detail-text">${formatExecutiveRationale(e, snapshot)}</div>
 
       <div class="gov-detail-label">Agent Context</div>
       <div class="gov-detail-mono">${agentLine}</div>
