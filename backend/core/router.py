@@ -186,6 +186,7 @@ def route(
     force_complex: bool = False,
     agent_min_tier: int = None,
     agent_max_tier: int = None,
+    force_simulated_model: bool = False,
 ) -> dict:
     """
     Full routing pipeline for one payload.
@@ -319,7 +320,12 @@ def route(
         model_source     = "built_in_fallback"
 
     # Step 5 — Call the model
-    model_result = call_model(working_text, model_id=model_id_to_use, fallback_tier=fallback_tier)
+    model_result = call_model(
+        working_text,
+        model_id=model_id_to_use,
+        fallback_tier=fallback_tier,
+        force_simulated=force_simulated_model,
+    )
 
     # Step 6 — Calculate cost from actual token counts using registry rates
     cost_usd = _calculate_cost(
@@ -338,8 +344,9 @@ def route(
         pruning_cost_saved = 0.0
 
     # Model display name (use actual model_id in live mode)
-    mode_info  = get_mode_info()
-    model_name = model_result["model_id"] if mode_info["mode"] == "live" else display_name
+    mode_info = get_mode_info()
+    effective_model_mode = "simulated" if force_simulated_model else mode_info["mode"]
+    model_name = model_result["model_id"] if effective_model_mode == "live" else display_name
 
     return {
         "department":               department,
@@ -362,5 +369,5 @@ def route(
         "pruning_cost_saved_usd":   pruning_cost_saved,
         "total_cost_without_pruning": round(cost_usd + pruning_cost_saved, 6),
         "provider":                 model_result["provider"],
-        "model_mode":               mode_info["mode"],
+        "model_mode":               effective_model_mode,
     }

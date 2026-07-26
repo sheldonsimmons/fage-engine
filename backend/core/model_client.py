@@ -59,7 +59,12 @@ def get_mode_info() -> dict:
     }
 
 
-def call_model(text: str, model_id: str = None, fallback_tier: str = "micro") -> dict:
+def call_model(
+    text: str,
+    model_id: str = None,
+    fallback_tier: str = "micro",
+    force_simulated: bool = False,
+) -> dict:
     """
     Main entry point. Routes to live or simulated based on CostPilot_MODEL_MODE.
 
@@ -76,7 +81,7 @@ def call_model(text: str, model_id: str = None, fallback_tier: str = "micro") ->
         output_tokens  — token count (real from API or estimated)
         provider       — "openai" | "anthropic" | "simulated"
     """
-    if MODEL_MODE == "live":
+    if MODEL_MODE == "live" and not force_simulated:
         # Resolve which model ID to actually call
         if model_id:
             resolved_id = model_id

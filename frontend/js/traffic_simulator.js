@@ -421,6 +421,7 @@
         source_platform: item.platform,
         voice_guard_processed: false,
         is_test: false,
+        synthetic_simulation: true,
         payload_type: "text",
       }),
     });

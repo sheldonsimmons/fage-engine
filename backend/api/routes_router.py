@@ -72,6 +72,7 @@ class RouteRequest(BaseModel):
     voice_guard_processed:  bool = False           # True = Voice Guard already redacted PII numbers, skip PII keyword block
     min_tokens:             int  = 3               # Skip routing if pruned payload is below this token count (catches truly empty Salesforce on-create fires)
     is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
+    synthetic_simulation:   bool = False           # Traffic simulator only: persist governed activity without waiting on a live provider response
     payload_type:           str  = "text"          # "text" = full pruning pipeline | "code" = skip pruner, secrets detection only | "transcript" = voice guard path
     work_item_id:           Optional[str] = None    # Public project/matter/engagement ID; optional for backward compatibility
     actor_external_id:      Optional[str] = None    # Human identity in the source platform
@@ -489,6 +490,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         force_complex=force_complex,
         agent_min_tier=agent.min_tier if agent else None,
         agent_max_tier=agent.max_tier if agent else None,
+        force_simulated_model=req.synthetic_simulation,
     )
 
     if not req.is_test:
