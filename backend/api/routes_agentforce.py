@@ -40,6 +40,8 @@ class AgentforceGovernRequest(BaseModel):
     project_member_can_use_ai: Optional[bool] = True
     context_type: str = Field(default="project", max_length=40)
     context_template: str = Field(default="salesforce_project", max_length=120)
+    source_type: Optional[str] = Field(default=None, max_length=120)
+    source_system: str = Field(default="Salesforce", max_length=120)
     source_record_type: str = Field(default="CostPilot_Project__c", max_length=120)
     customer_external_id: Optional[str] = Field(default=None, max_length=120)
     customer_name: Optional[str] = Field(default=None, max_length=200)
@@ -85,6 +87,15 @@ def _resolve_or_create_project(
 ) -> WorkItem:
     external_id = _project_identifier(body)
     project = db.query(WorkItem).filter(WorkItem.external_id == external_id).first()
+    if not project and body.project_external_id:
+        legacy_external_id = f"SF-{body.record_id.strip()}"
+        project = (
+            db.query(WorkItem)
+            .filter(WorkItem.external_id == legacy_external_id)
+            .first()
+        )
+        if project:
+            project.external_id = external_id
 
     if project and project.workspace_id not in (None, workspace_id):
         raise HTTPException(
@@ -117,11 +128,13 @@ def _resolve_or_create_project(
             project.monthly_ai_budget = body.monthly_ai_budget
         project.department = body.department.strip() or project.department
         project.status = status
-        project.source_platform = "Salesforce"
+        project.source_platform = body.source_system.strip() or "Salesforce"
         project.workspace_id = workspace_id
         project.context_type = context_type
         project.context_template = body.context_template
-        project.source_record_type = body.source_record_type
+        project.source_record_type = (
+            body.source_type or body.source_record_type
+        ).strip()
         project.source_record_id = body.record_id.strip()
         if account:
             project.account_id = account.id
@@ -134,11 +147,13 @@ def _resolve_or_create_project(
             status=status,
             monthly_ai_budget=body.monthly_ai_budget,
             cost_treatment="unspecified",
-            source_platform="Salesforce",
+            source_platform=body.source_system.strip() or "Salesforce",
             workspace_id=workspace_id,
             context_type=context_type,
             context_template=body.context_template,
-            source_record_type=body.source_record_type,
+            source_record_type=(
+                body.source_type or body.source_record_type
+            ).strip(),
             source_record_id=body.record_id.strip(),
             account_id=account.id if account else None,
         )

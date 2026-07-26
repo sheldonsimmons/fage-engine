@@ -10,6 +10,13 @@ private class CostPilotGatewayTest {
             );
             System.assert(taskDescription.contains('Salesforce record context:'));
             System.assert(taskDescription.contains('Gateway Test'));
+            System.assertEquals('CP-TEST-1', requestBody.get('project_external_id'));
+            System.assertEquals('Gateway Test', requestBody.get('project_name'));
+            System.assertEquals(
+                'CostPilot_Project__c',
+                requestBody.get('source_type')
+            );
+            System.assertEquals('Salesforce', requestBody.get('source_system'));
             HttpResponse responseValue = new HttpResponse();
             responseValue.setStatusCode(200);
             responseValue.setHeader('Content-Type', 'application/json');

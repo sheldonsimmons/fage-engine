@@ -55,6 +55,15 @@ public with sharing class CostPilotGateway {
             CostPilotAgentforceAction.GovernanceRequest governanceRequest =
                 new CostPilotAgentforceAction.GovernanceRequest();
             governanceRequest.recordId = requestValue.recordId;
+            RecordIdentity identity = recordIdentity(requestValue.recordId);
+            if (identity != null) {
+                governanceRequest.projectName = identity.displayName;
+                governanceRequest.sourceType = identity.objectName;
+                governanceRequest.sourceSystem = 'Salesforce';
+                if (identity.objectName != 'CostPilot_Project__c') {
+                    governanceRequest.projectExternalId = requestValue.recordId;
+                }
+            }
             String groundedContext = recordContext(requestValue.recordId);
             governanceRequest.taskDescription = String.isBlank(groundedContext)
                 ? requestValue.prompt
@@ -86,6 +95,45 @@ public with sharing class CostPilotGateway {
             responses.add(responseValue);
         }
         return responses;
+    }
+
+    private static RecordIdentity recordIdentity(String recordId) {
+        if (String.isBlank(recordId)) {
+            return null;
+        }
+        try {
+            Id typedRecordId = Id.valueOf(recordId);
+            Schema.DescribeSObjectResult objectDescribe =
+                typedRecordId.getSObjectType().getDescribe();
+            Map<String, Schema.SObjectField> fieldMap =
+                objectDescribe.fields.getMap();
+            String labelField;
+            if (fieldMap.containsKey('Name') &&
+                fieldMap.get('Name').getDescribe().isAccessible()) {
+                labelField = 'Name';
+            } else if (fieldMap.containsKey('Subject') &&
+                       fieldMap.get('Subject').getDescribe().isAccessible()) {
+                labelField = 'Subject';
+            }
+            String displayName;
+            if (labelField != null) {
+                SObject recordValue = Database.query(
+                    'SELECT ' + labelField +
+                    ' FROM ' + objectDescribe.getName() +
+                    ' WHERE Id = :typedRecordId LIMIT 1'
+                );
+                displayName = String.valueOf(recordValue.get(labelField));
+            }
+            if (String.isBlank(displayName)) {
+                displayName = objectDescribe.getLabel() + ' ' + recordId;
+            }
+            RecordIdentity identity = new RecordIdentity();
+            identity.objectName = objectDescribe.getName();
+            identity.displayName = displayName;
+            return identity;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static String recordContext(String recordId) {
@@ -131,5 +179,10 @@ public with sharing class CostPilotGateway {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private class RecordIdentity {
+        String objectName;
+        String displayName;
     }
 }

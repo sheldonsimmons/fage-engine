@@ -71,7 +71,12 @@ public with sharing class CostPilotAgentforceAction {
             'project_member_can_use_ai' => membership.canUseAi,
             'context_type'          => 'project',
             'context_template'      => 'salesforce_project',
-            'source_record_type'    => recordTypeName(request.recordId),
+            'source_type'           => String.isBlank(request.sourceType)
+                ? recordTypeName(request.recordId) : request.sourceType,
+            'source_system'         => String.isBlank(request.sourceSystem)
+                ? 'Salesforce' : request.sourceSystem,
+            'source_record_type'    => String.isBlank(request.sourceType)
+                ? recordTypeName(request.recordId) : request.sourceType,
             'customer_external_id'  => membership.accountId,
             'customer_name'         => membership.accountName
         }));
@@ -265,6 +270,12 @@ public with sharing class CostPilotAgentforceAction {
 
         @InvocableVariable(label='Requested Model')
         public String requestedModel;
+
+        @InvocableVariable(label='Source Type')
+        public String sourceType;
+
+        @InvocableVariable(label='Source System')
+        public String sourceSystem;
     }
 
     public class GovernanceResult {

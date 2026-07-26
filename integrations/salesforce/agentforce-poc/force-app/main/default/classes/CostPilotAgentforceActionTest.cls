@@ -25,6 +25,7 @@ private class CostPilotAgentforceActionTest {
             System.assertEquals(UserInfo.getName(), body.get('salesforce_user_name'));
             System.assertEquals(UserInfo.getUserEmail(), body.get('salesforce_user_email'));
             System.assertEquals('active', body.get('project_member_status'));
+            System.assertEquals('Salesforce', body.get('source_system'));
 
             HttpResponse response = new HttpResponse();
             response.setStatusCode(200);
