@@ -41,6 +41,7 @@ class AgentStatus(BaseModel):
     collision_policy: Optional[str]
     locked_at:        Optional[str]
     lock_reason:      Optional[str]
+    last_used_at:     Optional[str] = None
     archived:         Optional[bool] = False
     active_recently:  Optional[bool] = False
     min_tier:         Optional[int]  = 1
