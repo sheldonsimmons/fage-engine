@@ -7,10 +7,11 @@ POST /api/route
   in the database, and updates the department's running spend total.
 """
 
+import re
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -30,8 +31,39 @@ from core.budget import effective_budget_context, reconcile_throttle_state
 router = APIRouter()
 
 
+class UniversalSourceContext(BaseModel):
+    platform: str
+    workspace_id: str
+    agent_name: Optional[str] = None
+    agent_id: Optional[int] = None
+    department: Optional[str] = None
+
+
+class UniversalActorContext(BaseModel):
+    external_id: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    can_use_ai: Optional[bool] = None
+
+
+class UniversalWorkContext(BaseModel):
+    external_id: str
+    type: str = "project"
+    name: Optional[str] = None
+    sync_if_missing: bool = False
+
+
+class UniversalRequestContext(BaseModel):
+    content: str
+    task: Optional[str] = None
+    payload_type: str = "text"
+    auto_prune: bool = True
+
+
 class RouteRequest(BaseModel):
-    text:                   str
+    text:                   Optional[str] = None
     department:             str  = "Support"
     auto_prune:             bool = True
     agent_id:               Optional[int] = None
@@ -51,6 +83,113 @@ class RouteRequest(BaseModel):
     actor_status:           Optional[str] = None
     actor_can_use_ai:       Optional[bool] = None
     enforce_project_membership: bool = False
+    contract_version:       Optional[str] = None
+    mode:                   str = "control"
+    source_context:         Optional[UniversalSourceContext] = Field(default=None, alias="source")
+    actor_context:          Optional[UniversalActorContext] = Field(default=None, alias="actor")
+    work_context:           Optional[UniversalWorkContext] = Field(default=None, alias="work")
+    request_context:        Optional[UniversalRequestContext] = Field(default=None, alias="request")
+
+    class Config:
+        populate_by_name = True
+
+
+def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
+    """Translate the universal envelope into the existing flat routing inputs."""
+    if req.mode != "control":
+        raise HTTPException(
+            status_code=400,
+            detail="POST /api/route supports mode='control'. Observe-mode ingestion is not available yet.",
+        )
+    if req.source_context:
+        req.source_platform = req.source_context.platform
+        req.actor_workspace_id = req.source_context.workspace_id
+        if req.source_context.agent_name:
+            req.agent_name = req.source_context.agent_name
+        if req.source_context.agent_id is not None:
+            req.agent_id = req.source_context.agent_id
+        if req.source_context.department:
+            req.department = req.source_context.department
+    if req.actor_context:
+        req.actor_external_id = req.actor_context.external_id
+        req.actor_name = req.actor_context.name
+        req.actor_email = req.actor_context.email
+        req.actor_source_platform = req.source_platform
+        req.actor_role = req.actor_context.role
+        req.actor_status = req.actor_context.status
+        req.actor_can_use_ai = req.actor_context.can_use_ai
+    if req.request_context:
+        req.text = req.request_context.content
+        req.payload_type = req.request_context.payload_type
+        req.auto_prune = req.request_context.auto_prune
+    if not (req.text or "").strip():
+        raise HTTPException(status_code=422, detail="A non-empty text or request.content value is required")
+    return req
+
+
+def _canonical_work_external_id(workspace_id: str, platform: str, source_record_id: str) -> str:
+    raw = f"{workspace_id}:{platform}:{source_record_id}"
+    return re.sub(r"[^A-Za-z0-9._:-]+", "-", raw).strip("-")[:240]
+
+
+def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optional[WorkItem]:
+    """Resolve a legacy work ID or sync a universal platform work record."""
+    if not req.work_item_id and not req.work_context:
+        return None
+
+    if req.work_context:
+        work = req.work_context
+        platform = (req.source_platform or "Custom").strip() or "Custom"
+        workspace_id = (req.actor_workspace_id or "default").strip() or "default"
+        source_record_id = work.external_id.strip()
+        item = (
+            db.query(WorkItem)
+            .filter(
+                WorkItem.workspace_id == workspace_id,
+                WorkItem.source_platform == platform,
+                WorkItem.source_record_id == source_record_id,
+            )
+            .first()
+        )
+        if not item:
+            canonical_id = _canonical_work_external_id(workspace_id, platform, source_record_id)
+            item = db.query(WorkItem).filter(WorkItem.external_id == canonical_id).first()
+        if not item and work.sync_if_missing:
+            from core.business_context import normalize_context_type
+            item = WorkItem(
+                external_id=_canonical_work_external_id(workspace_id, platform, source_record_id),
+                name=(work.name or f"{work.type.title()} {source_record_id}").strip(),
+                department=department,
+                status="active",
+                source_platform=platform,
+                workspace_id=workspace_id,
+                context_type=normalize_context_type(work.type),
+                context_template=f"{platform.lower()}_{work.type.lower()}",
+                source_record_type=work.type,
+                source_record_id=source_record_id,
+            )
+            db.add(item)
+            db.commit()
+            db.refresh(item)
+        if not item:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Work record '{source_record_id}' was not found. Set work.sync_if_missing=true to create it.",
+            )
+    else:
+        public_id = req.work_item_id.strip()
+        item = db.query(WorkItem).filter(WorkItem.external_id == public_id).first()
+        if not item and public_id.isdigit():
+            item = db.query(WorkItem).filter(WorkItem.id == int(public_id)).first()
+        if not item:
+            raise HTTPException(status_code=404, detail=f"Work item '{public_id}' was not found")
+
+    if item.status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Work item '{item.external_id}' is {item.status} and cannot receive new requests",
+        )
+    return item
 
 
 class RouteResponse(BaseModel):
@@ -197,24 +336,11 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       5. Simulate model call + calculate real cost
       6. Record transaction and update department spend in the DB
     """
+    req = _normalize_universal_request(req)
     department = _resolve_department(db, req)
 
     # ── Resolve optional project/matter/engagement context ───────────────────
-    work_item = None
-    if req.work_item_id:
-        public_id = req.work_item_id.strip()
-        work_item = db.query(WorkItem).filter(WorkItem.external_id == public_id).first()
-        if not work_item and public_id.isdigit():
-            work_item = db.query(WorkItem).filter(WorkItem.id == int(public_id)).first()
-        if not work_item:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail=f"Work item '{public_id}' was not found")
-        if work_item.status != "active":
-            from fastapi import HTTPException
-            raise HTTPException(
-                status_code=409,
-                detail=f"Work item '{work_item.external_id}' is {work_item.status} and cannot receive new requests",
-            )
+    work_item = _resolve_work_item(db, req, department)
 
     work_user = _resolve_work_user(db, req, work_item) if not req.is_test else None
 

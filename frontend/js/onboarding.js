@@ -1582,13 +1582,33 @@ ${requestVars}
         httpReq.setMethod('POST');
         httpReq.setHeader('Content-Type', 'application/json');
         httpReq.setBody(JSON.serialize(new Map<String, Object>{
-            'text'            => payload,
-            'department'      => department,
-            'auto_prune'      => true,
-            'agent_name'      => agentName,
-            'source_platform' => 'Salesforce',
-            'source_object'   => '${_codeStr(obj)}',
-            'source_record_id'=> recordId
+            'contract_version' => '2026-07-26',
+            'mode'             => 'control',
+            'source' => new Map<String, Object>{
+                'platform'     => 'Salesforce',
+                'workspace_id' => UserInfo.getOrganizationId(),
+                'agent_name'   => agentName,
+                'department'   => department
+            },
+            'actor' => new Map<String, Object>{
+                'external_id' => UserInfo.getUserId(),
+                'name'        => UserInfo.getName(),
+                'email'       => UserInfo.getUserEmail(),
+                'role'        => 'Member',
+                'can_use_ai'  => true
+            },
+            'work' => new Map<String, Object>{
+                'external_id'    => recordId,
+                'type'           => '${_codeStr(obj)}',
+                'name'           => '${_codeStr(obj)} ' + recordId,
+                'sync_if_missing'=> true
+            },
+            'request' => new Map<String, Object>{
+                'task'         => 'Process ${_codeStr(obj)} record',
+                'content'      => payload,
+                'payload_type' => 'text',
+                'auto_prune'   => true
+            }
         }));
         httpReq.setTimeout(30000);
         System.debug('CostPilot request endpoint: ' + httpReq.getEndpoint());
@@ -1667,11 +1687,30 @@ function _genServiceNow(obj, dept, agent, fields, returnFields = []) {
     rm.setHttpMethod('POST');
     rm.setRequestHeader('Content-Type', 'application/json');
     rm.setRequestBody(JSON.stringify({
-        text:            prompt,
-        department:      '${dept}',
-        auto_prune:      true,
-        agent_name:      '${agent}',
-        source_platform: 'ServiceNow'
+        contract_version: '2026-07-26',
+        mode: 'control',
+        source: {
+            platform: 'ServiceNow',
+            workspace_id: gs.getProperty('instance_name'),
+            agent_name: '${agent}',
+            department: '${dept}'
+        },
+        actor: {
+            external_id: gs.getUserID(),
+            name: gs.getUserDisplayName()
+        },
+        work: {
+            external_id: current.getUniqueValue(),
+            type: '${obj}',
+            name: current.getDisplayValue() || '${obj} ' + current.getUniqueValue(),
+            sync_if_missing: true
+        },
+        request: {
+            task: 'Process ${obj} record',
+            content: prompt,
+            payload_type: 'text',
+            auto_prune: true
+        }
     }));
     var response = rm.execute();
     if (response.getStatusCode() == 200) {
@@ -1705,11 +1744,30 @@ const axios = require('axios');
 exports.main = async (event, callback) => {
   const text = ${prompt};
   const res  = await axios.post('${CostPilot_URL}/api/route', {
-    text,
-    department:      '${dept}',
-    auto_prune:      true,
-    agent_name:      '${agent}',
-    source_platform: 'HubSpot',
+    contract_version: '2026-07-26',
+    mode: 'control',
+    source: {
+      platform: 'HubSpot',
+      workspace_id: String(event.origin?.portalId || 'hubspot'),
+      agent_name: '${agent}',
+      department: '${dept}',
+    },
+    actor: event.origin?.userId ? {
+      external_id: String(event.origin.userId),
+      name: String(event.origin.userId),
+    } : null,
+    work: {
+      external_id: String(event.object?.objectId || event.callbackId),
+      type: '${obj}',
+      name: '${obj} ' + String(event.object?.objectId || event.callbackId),
+      sync_if_missing: true,
+    },
+    request: {
+      task: 'Process ${obj} record',
+      content: text,
+      payload_type: 'text',
+      auto_prune: true,
+    },
   });
   callback({
     outputFields: {

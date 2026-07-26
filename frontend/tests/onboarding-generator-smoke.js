@@ -69,4 +69,27 @@ for (const [name, generator] of Object.entries(sandbox.__onboardingGenerators)) 
   }
 }
 
+for (const name of ["salesforce", "servicenow", "hubspot"]) {
+  const output = sandbox.__onboardingGenerators[name](
+    "ExampleRecord",
+    "Sales",
+    "Context Agent",
+    fields,
+    []
+  );
+  for (const marker of [
+    "contract_version",
+    "2026-07-26",
+    "source",
+    "actor",
+    "work",
+    "request",
+    "sync_if_missing",
+  ]) {
+    if (!output.includes(marker)) {
+      throw new Error(`${name} generator is missing universal contract marker: ${marker}`);
+    }
+  }
+}
+
 console.log("onboarding generator smoke ok");

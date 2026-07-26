@@ -368,6 +368,10 @@ app.include_router(routes_pruner.router, prefix="/api/prune", tags=["Pruner"])
 from api import routes_router
 app.include_router(routes_router.router, prefix="/api/route", tags=["Router"])
 
+# Universal platform connector contract and capability manifests
+from api import routes_integrations
+app.include_router(routes_integrations.router, prefix="/api/integrations", tags=["Integrations"])
+
 # Work Attribution — projects, matters, engagements, cases, and claims
 from api import routes_work_items
 app.include_router(routes_work_items.router, prefix="/api/work-items", tags=["Work Attribution"])
