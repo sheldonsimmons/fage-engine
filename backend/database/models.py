@@ -169,6 +169,8 @@ class WorkItem(Base):
     department         = Column(String,   nullable=True)
     status             = Column(String,   nullable=False, default="active")
     monthly_ai_budget  = Column(Float,    nullable=True)
+    budget_warning_pct = Column(Float,    nullable=False, default=80.0)
+    budget_action      = Column(String,   nullable=False, default="warn")
     cost_treatment     = Column(String,   nullable=False, default="unspecified")
     source_platform    = Column(String,   nullable=True, default="CostPilot")
     workspace_id       = Column(String,   nullable=True, index=True)
@@ -176,6 +178,7 @@ class WorkItem(Base):
     context_template   = Column(String,   nullable=True)
     source_record_type = Column(String,   nullable=True)
     source_record_id   = Column(String,   nullable=True, index=True)
+    merged_into_work_item_id = Column(Integer, ForeignKey("work_items.id"), nullable=True, index=True)
     created_at         = Column(DateTime, default=datetime.utcnow)
     updated_at         = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -184,6 +187,32 @@ class WorkItem(Base):
     audit_events       = relationship("AuditEvent", back_populates="work_item")
     agent_assignments  = relationship("WorkItemAgent", back_populates="work_item", cascade="all, delete-orphan")
     user_assignments   = relationship("WorkItemUser", back_populates="work_item", cascade="all, delete-orphan")
+    source_links       = relationship("WorkItemSourceLink", back_populates="work_item", cascade="all, delete-orphan")
+
+
+class WorkItemSourceLink(Base):
+    """A source-system record that rolls up to one canonical CostPilot project."""
+    __tablename__ = "work_item_source_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "source_platform", "source_record_id",
+            name="uq_work_item_source_record",
+        ),
+    )
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    work_item_id        = Column(Integer, ForeignKey("work_items.id"), nullable=False, index=True)
+    workspace_id        = Column(String, nullable=False, default="default", index=True)
+    source_platform     = Column(String, nullable=False)
+    source_record_type  = Column(String, nullable=True)
+    source_record_id    = Column(String, nullable=False, index=True)
+    source_record_name  = Column(String, nullable=True)
+    account_external_id = Column(String, nullable=True, index=True)
+    is_primary          = Column(Boolean, nullable=False, default=False)
+    created_at          = Column(DateTime, default=datetime.utcnow)
+    updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    work_item = relationship("WorkItem", back_populates="source_links")
 
 
 class WorkItemAgent(Base):

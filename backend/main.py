@@ -121,6 +121,9 @@ def _run_migrations():
             ("context_template", "VARCHAR"),
             ("source_record_type", "VARCHAR"),
             ("source_record_id", "VARCHAR"),
+            ("budget_warning_pct", "FLOAT DEFAULT 80 NOT NULL"),
+            ("budget_action", "VARCHAR DEFAULT 'warn' NOT NULL"),
+            ("merged_into_work_item_id", "INTEGER REFERENCES work_items(id)"),
         ):
             try:
                 ensure_column(conn, "work_items", column, definition)

@@ -180,6 +180,22 @@
     }
     .wa-people-section h3 { font-size:13px; margin:0 0 3px; }
     .wa-people-section > p { color:var(--text-muted); font-size:10px; margin:0 0 12px; line-height:1.4; }
+    .wa-project-controls {
+      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px;
+    }
+    .wa-project-control {
+      border:1px solid var(--border); border-radius:8px; background:var(--bg-base); padding:14px;
+    }
+    .wa-project-control h3 { font-size:13px; margin:0 0 3px; }
+    .wa-project-control > p { color:var(--text-muted); font-size:10px; line-height:1.4; margin:0 0 10px; }
+    .wa-control-stack { display:grid; gap:8px; }
+    .wa-linked-records { display:grid; gap:6px; margin-bottom:9px; max-height:150px; overflow:auto; }
+    .wa-linked-record {
+      align-items:center; border:1px solid var(--border); border-radius:6px; display:flex;
+      gap:8px; justify-content:space-between; padding:8px;
+    }
+    .wa-linked-record strong { display:block; font-size:10px; }
+    .wa-linked-record span { color:var(--text-muted); display:block; font-size:8px; margin-top:2px; }
     .wa-people-table { width:100%; border-collapse:collapse; font-size:10px; }
     .wa-people-table th {
       color:var(--text-muted); font-size:8px; text-transform:uppercase; letter-spacing:.07em;
@@ -242,7 +258,7 @@
       .wa-logo { width:160px; }
       .wa-nav { justify-content:flex-end; }
       .wa-main { padding:20px 14px 36px; }
-      .wa-grid, .wa-steps, .wa-overview-panels, .wa-connection-grid, .wa-team-layout { grid-template-columns:1fr; }
+      .wa-grid, .wa-steps, .wa-overview-panels, .wa-connection-grid, .wa-team-layout, .wa-project-controls { grid-template-columns:1fr; }
       .wa-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .wa-detail-signals { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .wa-form-grid { grid-template-columns:1fr; }
@@ -475,6 +491,45 @@
           <button class="wa-secondary" type="button" onclick="waClearTeamSelection()">Close</button>
         </div>
         <div class="wa-detail-signals" id="waProjectDetailSignals"></div>
+        <div class="wa-project-controls">
+          <section class="wa-project-control">
+            <h3>Project budget</h3>
+            <p>Adjust this project without changing its department budget.</p>
+            <div class="wa-control-stack">
+              <input class="wa-input" id="waManageBudget" type="number" min="0" step="0.01" placeholder="No project budget" aria-label="Monthly project AI budget" />
+              <input class="wa-input" id="waManageBudgetWarning" type="number" min="1" max="100" step="1" value="80" aria-label="Budget warning percent" />
+              <select class="wa-input" id="waManageBudgetAction" aria-label="Budget action">
+                <option value="warn">Warn</option>
+                <option value="throttle">Throttle</option>
+                <option value="block">Block</option>
+              </select>
+              <button class="wa-primary" type="button" onclick="waSaveProjectBudget()">Save budget</button>
+              <span class="wa-status" id="waBudgetStatus"></span>
+            </div>
+          </section>
+          <section class="wa-project-control">
+            <h3>Linked source records</h3>
+            <p>Many Salesforce, ServiceNow, or HubSpot records can roll up here.</p>
+            <div class="wa-linked-records" id="waLinkedRecords"></div>
+            <div class="wa-control-stack">
+              <input class="wa-input" id="waLinkPlatform" value="Salesforce" maxlength="120" placeholder="Platform" />
+              <input class="wa-input" id="waLinkRecordType" maxlength="120" placeholder="Record type, such as Opportunity" />
+              <input class="wa-input" id="waLinkRecordId" maxlength="120" placeholder="Record ID" />
+              <input class="wa-input" id="waLinkRecordName" maxlength="200" placeholder="Visible record name" />
+              <button class="wa-secondary" type="button" onclick="waLinkSourceRecord()">Link record</button>
+              <span class="wa-status" id="waLinkStatus"></span>
+            </div>
+          </section>
+          <section class="wa-project-control">
+            <h3>Merge duplicate project</h3>
+            <p>Move its records and history here, then archive it with a permanent merge reference.</p>
+            <div class="wa-control-stack">
+              <select class="wa-input" id="waMergeSource" aria-label="Duplicate project to merge"></select>
+              <button class="wa-secondary" type="button" onclick="waMergeProject()">Merge into this project</button>
+              <span class="wa-status" id="waMergeStatus"></span>
+            </div>
+          </section>
+        </div>
         <section class="wa-people-section" aria-labelledby="waProjectPeopleTitle">
           <h3 id="waProjectPeopleTitle">People &amp; token usage</h3>
           <p>Human users attributed to this project, separate from the AI agents performing the work.</p>
@@ -766,11 +821,100 @@
       ].map(([label, value, className = ""]) => `<div class="wa-detail-signal ${className}">
         <span>${waEscape(label)}</span><strong>${waEscape(value)}</strong>
       </div>`).join("");
+      document.getElementById("waManageBudget").value =
+        project.monthly_ai_budget == null ? "" : project.monthly_ai_budget;
+      document.getElementById("waManageBudgetWarning").value =
+        Number(project.budget_warning_pct || 80);
+      document.getElementById("waManageBudgetAction").value = project.budget_action || "warn";
+      const links = project.source_links || [];
+      document.getElementById("waLinkedRecords").innerHTML = links.length
+        ? links.map(link => `<div class="wa-linked-record">
+            <div><strong>${waEscape(link.source_record_name || link.source_record_id)}</strong>
+            <span>${waEscape(link.source_platform)} · ${waEscape(link.source_record_type || "Record")} · ${waEscape(link.source_record_id)}</span></div>
+            ${link.is_primary ? '<span class="wa-team-state used">Primary</span>' : ""}
+          </div>`).join("")
+        : '<div class="wa-empty">No linked records yet.</div>';
+      const mergeCandidates = waItems.filter(item =>
+        item.external_id !== project.external_id &&
+        item.status !== "archived" &&
+        (!project.workspace_id || !item.workspace_id || item.workspace_id === project.workspace_id)
+      );
+      document.getElementById("waMergeSource").innerHTML =
+        '<option value="">Select the duplicate project</option>' +
+        mergeCandidates.map(item =>
+          `<option value="${waEscape(item.external_id)}">${waEscape(item.name)} · ${waEscape(item.external_id)}</option>`
+        ).join("");
       if (!document.getElementById("waAgentDepartment").value && project.department) {
         document.getElementById("waAgentDepartment").value = project.department;
       }
       waRenderAgentTeam();
       document.getElementById("waAgentTeamCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    async function waSaveProjectBudget() {
+      const project = waSelectedProject();
+      if (!project) return;
+      const rawBudget = document.getElementById("waManageBudget").value;
+      const body = {
+        monthly_ai_budget: rawBudget === "" ? null : Number(rawBudget),
+        budget_warning_pct: Number(document.getElementById("waManageBudgetWarning").value || 80),
+        budget_action: document.getElementById("waManageBudgetAction").value,
+      };
+      waSetStatus("waBudgetStatus", "Saving…");
+      try {
+        await apiPatch(`/api/work-items/${encodeURIComponent(project.external_id)}`, body);
+        waSetStatus("waBudgetStatus", "Budget saved.");
+        await waLoadProjects(project.external_id, true);
+      } catch (error) {
+        waSetStatus("waBudgetStatus", error.message, true);
+      }
+    }
+
+    async function waLinkSourceRecord() {
+      const project = waSelectedProject();
+      if (!project) return;
+      const recordId = document.getElementById("waLinkRecordId").value.trim();
+      if (!recordId) {
+        waSetStatus("waLinkStatus", "Enter a record ID.", true);
+        return;
+      }
+      waSetStatus("waLinkStatus", "Linking…");
+      try {
+        await apiPost(`/api/work-items/${encodeURIComponent(project.external_id)}/source-links`, {
+          source_platform: document.getElementById("waLinkPlatform").value.trim() || "Custom",
+          source_record_type: document.getElementById("waLinkRecordType").value.trim() || null,
+          source_record_id: recordId,
+          source_record_name: document.getElementById("waLinkRecordName").value.trim() || null,
+          workspace_id: project.workspace_id || null,
+        });
+        document.getElementById("waLinkRecordId").value = "";
+        document.getElementById("waLinkRecordName").value = "";
+        waSetStatus("waLinkStatus", "Record linked.");
+        await waLoadProjects(project.external_id, true);
+      } catch (error) {
+        waSetStatus("waLinkStatus", error.message, true);
+      }
+    }
+
+    async function waMergeProject() {
+      const target = waSelectedProject();
+      const sourceId = document.getElementById("waMergeSource").value;
+      const source = waItems.find(item => item.external_id === sourceId);
+      if (!target || !source) {
+        waSetStatus("waMergeStatus", "Select the duplicate project.", true);
+        return;
+      }
+      if (!confirm(`Merge “${source.name}” into “${target.name}”? Its AI history and linked records will move here, and the duplicate will be archived.`)) return;
+      waSetStatus("waMergeStatus", "Merging…");
+      try {
+        await apiPost(`/api/work-items/${encodeURIComponent(source.external_id)}/merge`, {
+          target_identifier: target.external_id,
+        });
+        waSetStatus("waMergeStatus", "Projects merged.");
+        await waLoadProjects(target.external_id, true);
+      } catch (error) {
+        waSetStatus("waMergeStatus", error.message, true);
+      }
     }
 
     function waRenderAgentTeam() {

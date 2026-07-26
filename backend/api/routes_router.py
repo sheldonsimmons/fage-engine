@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -474,6 +475,43 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     is_throttled   = bool(budget_context.get("throttled")) if budget_context else (budget.throttled if budget else False)
     throttle_tier  = (budget_context.get("throttle_tier") if budget_context else (getattr(budget, "throttle_tier", 1) if budget else 1)) or 1
 
+    project_spend_month = 0.0
+    if work_item and work_item.monthly_ai_budget is not None and work_item.monthly_ai_budget > 0:
+        month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        project_spend_month = float(
+            db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+            .filter(
+                TokenTransaction.work_item_id == work_item.id,
+                TokenTransaction.timestamp >= month_start,
+            )
+            .scalar()
+            or 0.0
+        )
+        project_at_cap = project_spend_month >= float(work_item.monthly_ai_budget)
+        project_action = work_item.budget_action or "warn"
+        if project_at_cap and project_action == "block":
+            write_audit_event(
+                db=db,
+                event_type="BUDGET",
+                department=department,
+                routing_decision="BLOCKED",
+                routing_reason=f"Project budget reached for {work_item.name}",
+                prompt_payload=req.text[:2000],
+                model_tier="none",
+                agent_id=agent.id if agent else req.agent_id,
+                cost_usd=0.0,
+                decision_outcome="Request blocked by project budget policy",
+                work_item=work_item,
+                work_user=work_user,
+            )
+            raise HTTPException(
+                status_code=429,
+                detail=f"Project '{work_item.name}' has reached its monthly AI budget.",
+            )
+        if project_at_cap and project_action == "throttle":
+            is_throttled = True
+            throttle_tier = 1
+
     force_complex = term_result["triggered"] and term_result["action"] == "escalate"
 
     # Capture raw text before routing (for raw payload logging)
@@ -611,7 +649,17 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
     # ── Budget stats for the response ──────────────────────────────────────────
     response_budget_context = effective_budget_context(db, department)
-    if response_budget_context and response_budget_context.get("budget_cap_usd", 0) > 0:
+    if work_item and work_item.monthly_ai_budget is not None and work_item.monthly_ai_budget > 0:
+        project_spend_after = project_spend_month + (0.0 if req.is_test else float(result["cost_usd"]))
+        budget_used_pct = round(
+            (project_spend_after / float(work_item.monthly_ai_budget)) * 100,
+            1,
+        )
+        budget_remaining_usd = round(
+            float(work_item.monthly_ai_budget) - project_spend_after,
+            4,
+        )
+    elif response_budget_context and response_budget_context.get("budget_cap_usd", 0) > 0:
         budget_used_pct      = response_budget_context.get("budget_used_pct", 0.0)
         budget_remaining_usd = round(
             response_budget_context.get("budget_cap_usd", 0.0)

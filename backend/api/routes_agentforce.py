@@ -15,7 +15,7 @@ from api.routes_router import RouteRequest, route_payload
 from core.business_context import normalize_context_type
 from core.model_client import get_mode_info
 from database.db import get_db
-from database.models import TokenTransaction, WorkAccount, WorkItem
+from database.models import TokenTransaction, WorkAccount, WorkItem, WorkItemSourceLink
 
 
 router = APIRouter()
@@ -85,8 +85,45 @@ def _resolve_or_create_project(
     workspace_id: str,
     body: AgentforceGovernRequest,
 ) -> WorkItem:
+    source_platform = body.source_system.strip() or "Salesforce"
+    source_record_id = body.record_id.strip()
+    source_record_type = (body.source_type or body.source_record_type).strip()
+    account = _resolve_customer(db, workspace_id, body)
+
+    source_link = (
+        db.query(WorkItemSourceLink)
+        .filter(
+            WorkItemSourceLink.workspace_id == workspace_id,
+            WorkItemSourceLink.source_platform == source_platform,
+            WorkItemSourceLink.source_record_id == source_record_id,
+        )
+        .first()
+    )
+    project = (
+        db.query(WorkItem).filter(WorkItem.id == source_link.work_item_id).first()
+        if source_link else None
+    )
+
+    is_explicit_project = source_record_type.lower() == "costpilot_project__c"
+    grouped_by_account = False
+    if not project and account and not is_explicit_project:
+        project = (
+            db.query(WorkItem)
+            .filter(
+                WorkItem.workspace_id == workspace_id,
+                WorkItem.account_id == account.id,
+                WorkItem.status != "archived",
+            )
+            .order_by(WorkItem.created_at)
+            .first()
+        )
+        grouped_by_account = project is not None
+
     external_id = _project_identifier(body)
-    project = db.query(WorkItem).filter(WorkItem.external_id == external_id).first()
+    if account and not is_explicit_project:
+        external_id = f"SF-ACCOUNT-{account.external_id}"
+    if not project:
+        project = db.query(WorkItem).filter(WorkItem.external_id == external_id).first()
     if not project and body.project_external_id:
         legacy_external_id = f"SF-{body.record_id.strip()}"
         project = (
@@ -103,7 +140,6 @@ def _resolve_or_create_project(
             detail="That project identifier belongs to a different CostPilot workspace.",
         )
 
-    account = _resolve_customer(db, workspace_id, body)
     status = _normalized_project_status(body.project_status)
     try:
         context_type = normalize_context_type(
@@ -120,7 +156,7 @@ def _resolve_or_create_project(
         )
 
     if project:
-        if body.project_name:
+        if body.project_name and not grouped_by_account:
             project.name = body.project_name.strip()
         if body.project_owner:
             project.owner = body.project_owner.strip()
@@ -128,37 +164,55 @@ def _resolve_or_create_project(
             project.monthly_ai_budget = body.monthly_ai_budget
         project.department = body.department.strip() or project.department
         project.status = status
-        project.source_platform = body.source_system.strip() or "Salesforce"
+        project.source_platform = source_platform
         project.workspace_id = workspace_id
         project.context_type = context_type
         project.context_template = body.context_template
-        project.source_record_type = (
-            body.source_type or body.source_record_type
-        ).strip()
-        project.source_record_id = body.record_id.strip()
+        if not project.source_record_id:
+            project.source_record_type = source_record_type
+            project.source_record_id = source_record_id
         if account:
             project.account_id = account.id
     else:
         project = WorkItem(
             external_id=external_id,
-            name=(body.project_name or f"Salesforce work {body.record_id}").strip(),
+            name=(
+                body.customer_name
+                if account and not is_explicit_project and body.customer_name
+                else body.project_name or f"Salesforce work {body.record_id}"
+            ).strip(),
             owner=(body.project_owner or "").strip() or None,
             department=body.department.strip() or "Sales",
             status=status,
             monthly_ai_budget=body.monthly_ai_budget,
             cost_treatment="unspecified",
-            source_platform=body.source_system.strip() or "Salesforce",
+            source_platform=source_platform,
             workspace_id=workspace_id,
             context_type=context_type,
             context_template=body.context_template,
-            source_record_type=(
-                body.source_type or body.source_record_type
-            ).strip(),
-            source_record_id=body.record_id.strip(),
+            source_record_type=source_record_type,
+            source_record_id=source_record_id,
             account_id=account.id if account else None,
         )
         db.add(project)
 
+    db.flush()
+    if not source_link:
+        source_link = WorkItemSourceLink(
+            work_item_id=project.id,
+            workspace_id=workspace_id,
+            source_platform=source_platform,
+            source_record_type=source_record_type,
+            source_record_id=source_record_id,
+            source_record_name=body.project_name,
+            account_external_id=body.customer_external_id,
+            is_primary=not bool(project.source_links),
+        )
+        db.add(source_link)
+    else:
+        source_link.source_record_type = source_record_type
+        source_link.source_record_name = body.project_name or source_link.source_record_name
+        source_link.account_external_id = body.customer_external_id or source_link.account_external_id
     db.commit()
     db.refresh(project)
     return project

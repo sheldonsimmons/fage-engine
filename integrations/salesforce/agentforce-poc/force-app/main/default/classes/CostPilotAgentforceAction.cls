@@ -188,7 +188,33 @@ public with sharing class CostPilotAgentforceAction {
         context.canUseAi = true;
         try {
             Id typedRecordId = Id.valueOf(recordId);
-            if (typedRecordId.getSObjectType() != CostPilot_Project__c.SObjectType) {
+            Schema.SObjectType objectType = typedRecordId.getSObjectType();
+            if (objectType != CostPilot_Project__c.SObjectType) {
+                Schema.DescribeSObjectResult describeValue = objectType.getDescribe();
+                if (objectType == Account.SObjectType) {
+                    Account accountValue = [
+                        SELECT Id, Name FROM Account WHERE Id = :typedRecordId LIMIT 1
+                    ];
+                    context.accountId = accountValue.Id;
+                    context.accountName = accountValue.Name;
+                    return context;
+                }
+                Map<String, Schema.SObjectField> fields = describeValue.fields.getMap();
+                if (fields.containsKey('AccountId') &&
+                    fields.get('AccountId').getDescribe().isAccessible()) {
+                    SObject sourceRecord = Database.query(
+                        'SELECT AccountId FROM ' + describeValue.getName() +
+                        ' WHERE Id = :typedRecordId LIMIT 1'
+                    );
+                    Id accountId = (Id) sourceRecord.get('AccountId');
+                    if (accountId != null) {
+                        Account accountValue = [
+                            SELECT Id, Name FROM Account WHERE Id = :accountId LIMIT 1
+                        ];
+                        context.accountId = accountValue.Id;
+                        context.accountName = accountValue.Name;
+                    }
+                }
                 return context;
             }
             List<CostPilot_Project_Member__c> memberships = [
@@ -214,8 +240,8 @@ public with sharing class CostPilotAgentforceAction {
             context.accountName = membership.Project__r.Account__r == null
                 ? null : membership.Project__r.Account__r.Name;
         } catch (Exception ignored) {
-            // Non-project actions remain backward compatible. CostPilot still
-            // receives and records the current Salesforce user identity.
+            // Records without an Account relationship remain valid and are
+            // linked by their own Salesforce record ID.
         }
         return context;
     }

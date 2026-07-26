@@ -19,6 +19,7 @@ from database.models import (
     WorkAccount,
     WorkItem,
     WorkItemAgent,
+    WorkItemSourceLink,
     WorkItemUser,
     WorkUser,
 )
@@ -42,6 +43,7 @@ VALID_COST_TREATMENTS = {
     "nonbillable",
     "review_required",
 }
+VALID_BUDGET_ACTIONS = {"warn", "throttle", "block"}
 
 
 class AccountIn(BaseModel):
@@ -60,6 +62,8 @@ class WorkItemIn(BaseModel):
     department: Optional[str] = Field(default=None, max_length=120)
     status: str = "active"
     monthly_ai_budget: Optional[float] = Field(default=None, ge=0)
+    budget_warning_pct: float = Field(default=80, ge=1, le=100)
+    budget_action: str = "warn"
     cost_treatment: str = "unspecified"
     source_platform: Optional[str] = Field(default="CostPilot", max_length=120)
     workspace_id: Optional[str] = Field(default=None, max_length=120)
@@ -77,6 +81,8 @@ class WorkItemUpdate(BaseModel):
     department: Optional[str] = Field(default=None, max_length=120)
     status: Optional[str] = None
     monthly_ai_budget: Optional[float] = Field(default=None, ge=0)
+    budget_warning_pct: Optional[float] = Field(default=None, ge=1, le=100)
+    budget_action: Optional[str] = None
     cost_treatment: Optional[str] = None
     source_platform: Optional[str] = Field(default=None, max_length=120)
     context_type: Optional[str] = Field(default=None, max_length=40)
@@ -118,6 +124,20 @@ class ProjectUserUpsertIn(BaseModel):
     assigned_by: Optional[str] = Field(default=None, max_length=200)
 
 
+class SourceLinkIn(BaseModel):
+    source_platform: str = Field(min_length=1, max_length=120)
+    source_record_id: str = Field(min_length=1, max_length=120)
+    source_record_type: Optional[str] = Field(default=None, max_length=120)
+    source_record_name: Optional[str] = Field(default=None, max_length=200)
+    workspace_id: Optional[str] = Field(default=None, max_length=120)
+    account_external_id: Optional[str] = Field(default=None, max_length=120)
+    is_primary: bool = False
+
+
+class MergeWorkItemsIn(BaseModel):
+    target_identifier: str = Field(min_length=1, max_length=240)
+
+
 def _clean_external_id(value: Optional[str], prefix: str) -> str:
     if value:
         cleaned = re.sub(r"[^A-Za-z0-9._:-]+", "-", value.strip()).strip("-")
@@ -140,6 +160,28 @@ def _validate_cost_treatment(value: str):
             status_code=400,
             detail=f"cost_treatment must be one of: {', '.join(sorted(VALID_COST_TREATMENTS))}",
         )
+
+
+def _validate_budget_action(value: str):
+    if value not in VALID_BUDGET_ACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"budget_action must be one of: {', '.join(sorted(VALID_BUDGET_ACTIONS))}",
+        )
+
+
+def _source_link_json(link: WorkItemSourceLink) -> dict:
+    return {
+        "id": link.id,
+        "source_platform": link.source_platform,
+        "source_record_type": link.source_record_type,
+        "source_record_id": link.source_record_id,
+        "source_record_name": link.source_record_name,
+        "workspace_id": link.workspace_id,
+        "account_external_id": link.account_external_id,
+        "is_primary": bool(link.is_primary),
+        "created_at": link.created_at.isoformat() if link.created_at else None,
+    }
 
 
 def _account_json(account: WorkAccount) -> dict:
@@ -241,6 +283,10 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         agent_team = _project_agent_rows(item, db)
         user_team = _project_user_rows(item, db)
     budget = item.monthly_ai_budget
+    source_links = sorted(
+        item.source_links,
+        key=lambda link: (not bool(link.is_primary), link.source_platform, link.source_record_type or "", link.source_record_name or link.source_record_id),
+    )
     return {
         "id": item.id,
         "external_id": item.external_id,
@@ -251,6 +297,8 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "department": item.department,
         "status": item.status,
         "monthly_ai_budget": budget,
+        "budget_warning_pct": float(item.budget_warning_pct or 80),
+        "budget_action": item.budget_action or "warn",
         "cost_treatment": item.cost_treatment,
         "source_platform": item.source_platform,
         "workspace_id": item.workspace_id,
@@ -258,6 +306,8 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "context_template": item.context_template,
         "source_record_type": item.source_record_type,
         "source_record_id": item.source_record_id,
+        "source_links": [_source_link_json(link) for link in source_links],
+        "merged_into_work_item_id": item.merged_into_work_item_id,
         "business_context": business_context_json(item),
         "request_count": int(request_count or 0),
         "input_tokens": int(input_tokens or 0),
@@ -561,7 +611,7 @@ def work_item_summary(
         signals = []
         if item["status"] == "on_hold":
             signals.append("on_hold")
-        if budget_pct >= 80:
+        if budget_pct >= float(item.get("budget_warning_pct") or 80):
             signals.append("budget")
         if risk_events:
             signals.append("risk")
@@ -601,6 +651,7 @@ def work_item_summary(
 def create_work_item(body: WorkItemIn, db: Session = Depends(get_db)):
     _validate_status(body.status)
     _validate_cost_treatment(body.cost_treatment)
+    _validate_budget_action(body.budget_action)
     try:
         context_type = normalize_context_type(
             body.context_type,
@@ -642,6 +693,8 @@ def update_work_item(identifier: str, body: WorkItemUpdate, db: Session = Depend
         _validate_status(changes["status"])
     if "cost_treatment" in changes:
         _validate_cost_treatment(changes["cost_treatment"])
+    if "budget_action" in changes:
+        _validate_budget_action(changes["budget_action"])
     if "context_type" in changes or "context_template" in changes:
         try:
             changes["context_type"] = normalize_context_type(
@@ -669,6 +722,123 @@ def update_work_item(identifier: str, body: WorkItemUpdate, db: Session = Depend
     db.commit()
     db.refresh(item)
     return _work_item_json(item, db)
+
+
+@router.post("/{identifier}/source-links", status_code=201)
+def link_source_record(
+    identifier: str,
+    body: SourceLinkIn,
+    db: Session = Depends(get_db),
+):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    workspace_id = (body.workspace_id or item.workspace_id or "default").strip() or "default"
+    platform = body.source_platform.strip()
+    record_id = body.source_record_id.strip()
+    existing = (
+        db.query(WorkItemSourceLink)
+        .filter(
+            WorkItemSourceLink.workspace_id == workspace_id,
+            func.lower(WorkItemSourceLink.source_platform) == platform.lower(),
+            WorkItemSourceLink.source_record_id == record_id,
+        )
+        .first()
+    )
+    if existing and existing.work_item_id != item.id:
+        other = db.query(WorkItem).filter(WorkItem.id == existing.work_item_id).first()
+        raise HTTPException(
+            status_code=409,
+            detail=f"That source record is already linked to {other.name if other else 'another project'}. Merge the projects to move it safely.",
+        )
+    link = existing or WorkItemSourceLink(
+        work_item_id=item.id,
+        workspace_id=workspace_id,
+        source_platform=platform,
+        source_record_id=record_id,
+    )
+    link.source_record_type = body.source_record_type
+    link.source_record_name = body.source_record_name
+    link.account_external_id = body.account_external_id
+    link.is_primary = body.is_primary
+    if not existing:
+        db.add(link)
+    db.commit()
+    db.refresh(link)
+    return _source_link_json(link)
+
+
+@router.post("/{identifier}/merge")
+def merge_work_items(
+    identifier: str,
+    body: MergeWorkItemsIn,
+    db: Session = Depends(get_db),
+):
+    source = resolve_work_item(db, identifier)
+    target = resolve_work_item(db, body.target_identifier)
+    if not source or not target:
+        raise HTTPException(status_code=404, detail="Source or destination project was not found")
+    if source.id == target.id:
+        raise HTTPException(status_code=400, detail="Select two different projects")
+    if source.workspace_id and target.workspace_id and source.workspace_id != target.workspace_id:
+        raise HTTPException(status_code=409, detail="Projects from different workspaces cannot be merged")
+
+    db.query(TokenTransaction).filter(TokenTransaction.work_item_id == source.id).update(
+        {TokenTransaction.work_item_id: target.id}, synchronize_session=False
+    )
+    db.query(AuditEvent).filter(AuditEvent.work_item_id == source.id).update(
+        {AuditEvent.work_item_id: target.id}, synchronize_session=False
+    )
+
+    target_agent_ids = {
+        row[0] for row in db.query(WorkItemAgent.agent_id)
+        .filter(WorkItemAgent.work_item_id == target.id).all()
+    }
+    for assignment in list(source.agent_assignments):
+        if assignment.agent_id in target_agent_ids:
+            db.delete(assignment)
+        else:
+            assignment.work_item_id = target.id
+            target_agent_ids.add(assignment.agent_id)
+
+    target_user_ids = {
+        row[0] for row in db.query(WorkItemUser.work_user_id)
+        .filter(WorkItemUser.work_item_id == target.id).all()
+    }
+    for assignment in list(source.user_assignments):
+        if assignment.work_user_id in target_user_ids:
+            db.delete(assignment)
+        else:
+            assignment.work_item_id = target.id
+            target_user_ids.add(assignment.work_user_id)
+
+    for link in list(source.source_links):
+        duplicate = (
+            db.query(WorkItemSourceLink)
+            .filter(
+                WorkItemSourceLink.work_item_id == target.id,
+                WorkItemSourceLink.workspace_id == link.workspace_id,
+                func.lower(WorkItemSourceLink.source_platform) == link.source_platform.lower(),
+                WorkItemSourceLink.source_record_id == link.source_record_id,
+            )
+            .first()
+        )
+        if duplicate:
+            db.delete(link)
+        else:
+            link.work_item_id = target.id
+
+    source.status = "archived"
+    source.merged_into_work_item_id = target.id
+    source.updated_at = datetime.utcnow()
+    target.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(target)
+    return {
+        "merged": source.external_id,
+        "into": target.external_id,
+        "project": _work_item_json(target, db),
+    }
 
 
 @router.post("/{identifier}/archive")
