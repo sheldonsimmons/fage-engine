@@ -50,6 +50,13 @@ globalThis.__onboardingGenerators = {
   java: _genJava,
   ruby: _genRuby,
   rest: _genRest
+};
+globalThis.__universalSetup = {
+  renderConnectionPlan: renderObConnectionPlan,
+  verificationHtml: _universalVerificationHtml,
+  setStage: setUniversalSetupStage,
+  runTest: runUniversalSetupTest,
+  activate: activateUniversalConnection
 };`,
   sandbox
 );
@@ -89,6 +96,18 @@ for (const name of ["salesforce", "servicenow", "hubspot"]) {
     if (!output.includes(marker)) {
       throw new Error(`${name} generator is missing universal contract marker: ${marker}`);
     }
+  }
+}
+
+for (const name of ["renderConnectionPlan", "verificationHtml", "setStage", "runTest", "activate"]) {
+  if (typeof sandbox.__universalSetup[name] !== "function") {
+    throw new Error(`universal setup function is missing: ${name}`);
+  }
+}
+
+for (const marker of ["/api/integrations/contract", "/api/route", "obPlatformInstalled"]) {
+  if (!source.includes(marker)) {
+    throw new Error(`universal setup verification is missing: ${marker}`);
   }
 }
 

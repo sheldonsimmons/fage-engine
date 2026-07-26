@@ -48,6 +48,14 @@ const businessFirstState = {
   built: false,
 };
 
+function setUniversalSetupStage(stage) {
+  document.querySelectorAll(".ob-universal-stage").forEach(item => {
+    const itemStage = Number(item.dataset.stage);
+    item.classList.toggle("active", itemStage === stage);
+    item.classList.toggle("done", itemStage < stage);
+  });
+}
+
 function _selectBusinessChoice(containerId, selected) {
   document.querySelectorAll(`#${containerId} .ob-choice`).forEach(button => {
     button.classList.toggle("selected", button === selected);
@@ -71,6 +79,7 @@ function chooseBusinessSource(button) {
   businessFirstState.built = false;
   document.getElementById("obCustomSourceWrap").hidden = button.dataset.value !== "custom";
   document.getElementById("obDetailsQuestion").hidden = false;
+  setUniversalSetupStage(2);
   refreshBusinessTemplatePreview();
   document.getElementById("obDetailsQuestion").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -217,6 +226,7 @@ function openBusinessContextConnection() {
   document.querySelectorAll(".ob-screen").forEach(screen => screen.classList.remove("active"));
   document.getElementById("screen-5").classList.add("active");
   selectObPlatform(platform);
+  setUniversalSetupStage(3);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -226,6 +236,7 @@ function returnToBusinessContextOnboarding() {
   document.querySelectorAll(".ob-screen").forEach(screen => screen.classList.remove("active"));
   document.getElementById("screen-1").classList.add("active");
   refreshBusinessTemplatePreview();
+  setUniversalSetupStage(businessFirstState.source ? 2 : 1);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -596,6 +607,41 @@ const OB_PLATFORMS = {
   rest:       { label: "REST / cURL",   kind: "code",     objects: ["request","webhook","worker","script"],                     agentDefault: "CostPilot-API" },
 };
 
+const OB_CONNECTOR_PLANS = {
+  salesforce: {
+    authenticate: "Named Credential",
+    install: "Agentforce action or record-triggered Flow",
+    identity: "Organization ID · User ID · Salesforce record ID",
+  },
+  servicenow: {
+    authenticate: "OAuth REST Message",
+    install: "Flow Designer action or Business Rule",
+    identity: "Instance name · User sys_id · Record sys_id",
+  },
+  hubspot: {
+    authenticate: "OAuth or private app",
+    install: "Workflow custom code action",
+    identity: "Portal ID · User ID · Object ID",
+  },
+};
+
+function renderObConnectionPlan(platform) {
+  const plan = OB_CONNECTOR_PLANS[platform];
+  const container = document.getElementById("obConnectionPlan");
+  if (!container) return;
+  if (!plan) {
+    container.innerHTML = `
+      <div class="ob-connection-plan-item"><strong>Authenticate</strong>CostPilot API credential</div>
+      <div class="ob-connection-plan-item"><strong>Install</strong>Add the generated request to your application</div>
+      <div class="ob-connection-plan-item"><strong>Attribute</strong>Workspace · User · Work record</div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="ob-connection-plan-item"><strong>1 · Authenticate</strong>${_obEsc(plan.authenticate)}</div>
+    <div class="ob-connection-plan-item"><strong>2 · Install</strong>${_obEsc(plan.install)}</div>
+    <div class="ob-connection-plan-item"><strong>3 · Attribute</strong>${_obEsc(plan.identity)}</div>`;
+}
+
 let obSelectedPlatform = null;
 let _obLastPlatform = null;
 let obBusinessContext = null;
@@ -846,6 +892,7 @@ function selectObPlatform(platform) {
   document.querySelectorAll("#screen-5 .ob-platform-group").forEach(group => { group.style.display = "none"; });
   if (selectedSummary) selectedSummary.style.display = "flex";
   if (selectedName) selectedName.textContent = cfg.label;
+  renderObConnectionPlan(platform);
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
   if (fieldsLabel) fieldsLabel.childNodes[0].textContent = copy.fieldsLabel + " ";
   if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;
@@ -1373,8 +1420,12 @@ function _obActions() {
   return `<div class="ob-actions" style="margin-top:24px">
     <button class="ob-btn-ghost" onclick="generateObCode()">↺ Regenerate</button>
     ${vg}
-    <button class="ob-btn-primary" onclick="goToDashboard()">Open Dashboard →</button>
+    <button class="ob-btn-primary" onclick="goToUniversalVerification()">Continue to Verification ↓</button>
   </div>`;
+}
+
+function goToUniversalVerification() {
+  document.getElementById("obUniversalVerification")?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function obCopyCode(id) {
@@ -1426,11 +1477,125 @@ async function generateObCode() {
     rest:_genRest,
   };
   const html   = _businessContextSummaryHtml()
-    + (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields);
+    + (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields)
+    + _universalVerificationHtml();
   const out   = document.getElementById("obPlatOutput");
   out.innerHTML = html;
   out.style.display = "block";
+  setUniversalSetupStage(4);
   out.scrollIntoView({ behavior: "smooth" });
+}
+
+function _universalVerificationHtml() {
+  const platform = OB_PLATFORMS[obSelectedPlatform]?.label || obSelectedPlatform;
+  return `<section class="ob-verification" id="obUniversalVerification">
+    <h3>Verify your CostPilot connection</h3>
+    <p>This test validates CostPilot's live contract, routing, governance, pruning, and attribution envelope. After installing the generated code, confirm the platform step before activation.</p>
+    <div class="ob-verification-list">
+      <div class="ob-verification-row pass"><span>✓</span> Business context configured <span class="status">Ready</span></div>
+      <div class="ob-verification-row pass"><span>✓</span> ${_obEsc(platform)} mapping generated <span class="status">Ready</span></div>
+      <div class="ob-verification-row" id="obVerifyContract"><span>○</span> Universal contract available <span class="status">Not tested</span></div>
+      <div class="ob-verification-row" id="obVerifyRoute"><span>○</span> Routing and pruning test <span class="status">Not tested</span></div>
+    </div>
+    <button type="button" class="ob-btn-primary" id="obRunTestBtn" onclick="runUniversalSetupTest()">Run CostPilot Test →</button>
+    <div class="ob-error" id="obVerificationError"></div>
+    <label class="ob-activation-confirm">
+      <input type="checkbox" id="obPlatformInstalled" onchange="refreshActivationButton()" />
+      <span>I installed the generated setup in ${_obEsc(platform)}. This confirms the external platform step that CostPilot cannot inspect directly.</span>
+    </label>
+    <button type="button" class="ob-btn-primary" id="obActivateBtn" onclick="activateUniversalConnection()" disabled>Activate Connection</button>
+  </section>`;
+}
+
+function _markVerificationRow(id, label) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  row.classList.add("pass");
+  row.querySelector("span").textContent = "✓";
+  row.querySelector(".status").textContent = label;
+}
+
+async function runUniversalSetupTest() {
+  const button = document.getElementById("obRunTestBtn");
+  const error = document.getElementById("obVerificationError");
+  button.disabled = true;
+  button.textContent = "Testing…";
+  error.textContent = "";
+  try {
+    const contractResponse = await fetch(`${CostPilot_URL}/api/integrations/contract`);
+    if (!contractResponse.ok) throw new Error("Universal contract is unavailable.");
+    const contract = await contractResponse.json();
+    if (contract.contract_version !== "2026-07-26") throw new Error("Unexpected connector contract version.");
+    _markVerificationRow("obVerifyContract", "Connected");
+
+    const testResponse = await fetch(`${CostPilot_URL}/api/route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contract_version: contract.contract_version,
+        mode: "control",
+        is_test: true,
+        source: {
+          platform: obSelectedPlatform,
+          workspace_id: "onboarding-verification",
+          agent_name: document.getElementById("obPlatAgent").value || "CostPilot Setup Test",
+          department: document.getElementById("obPlatDept").value || "Operations",
+        },
+        request: {
+          task: "Verify CostPilot connection",
+          content: "Summarize this routine setup verification request.",
+          payload_type: "text",
+          auto_prune: true,
+        },
+      }),
+    });
+    if (!testResponse.ok) throw new Error(`Routing test failed (${testResponse.status}).`);
+    const result = await testResponse.json();
+    _markVerificationRow("obVerifyRoute", `${result.model_tier || "Model"} · ${result.routing_decision || "Routed"}`);
+    localStorage.setItem("cp_connection_test", JSON.stringify({
+      platform: obSelectedPlatform,
+      tested_at: new Date().toISOString(),
+      contract_version: contract.contract_version,
+      model_tier: result.model_tier,
+      routing_decision: result.routing_decision,
+      tokens_saved: result.tokens_saved_by_pruning || 0,
+    }));
+    button.textContent = "Test Passed ✓";
+    refreshActivationButton();
+  } catch (testError) {
+    error.textContent = testError.message;
+    button.disabled = false;
+    button.textContent = "Retry CostPilot Test →";
+  }
+}
+
+function refreshActivationButton() {
+  const tested = document.getElementById("obVerifyRoute")?.classList.contains("pass");
+  const installed = document.getElementById("obPlatformInstalled")?.checked;
+  const button = document.getElementById("obActivateBtn");
+  if (button) button.disabled = !(tested && installed);
+}
+
+function activateUniversalConnection() {
+  const record = {
+    platform: obSelectedPlatform,
+    platform_label: OB_PLATFORMS[obSelectedPlatform]?.label || obSelectedPlatform,
+    object: document.getElementById("obPlatObject").value.trim(),
+    department: document.getElementById("obPlatDept").value,
+    agent_name: document.getElementById("obPlatAgent").value.trim(),
+    business_context: obBusinessContext,
+    contract_version: "2026-07-26",
+    status: "active",
+    activated_at: new Date().toISOString(),
+  };
+  localStorage.setItem("cp_active_connection", JSON.stringify(record));
+  setUniversalSetupStage(5);
+  const section = document.getElementById("obUniversalVerification");
+  section.innerHTML = `<div class="ob-context-eyebrow">Connection active</div>
+    <h3>${_obEsc(record.platform_label)} is ready for CostPilot</h3>
+    <p>Requests can now be attributed to the user, ${_obEsc(obBusinessContext?.work_label || "work record")}, agent, department, and platform.</p>
+    <div class="ob-actions"><button class="ob-btn-primary" onclick="goToDashboard()">Open Dashboard →</button></div>`;
+  section.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function _isSalesforceApiName(name) {

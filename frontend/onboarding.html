@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Setup</title>
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="stylesheet" href="css/onboarding.css?v=20260724-business-context-first" />
+  <link rel="stylesheet" href="css/onboarding.css?v=20260726-universal-setup" />
 </head>
 <body class="onboarding-body">
 
@@ -19,6 +19,14 @@
       <a href="/operate.html" class="conn-back-link" style="margin-left:auto">← Dashboard</a>
       <a href="/connect.html" class="conn-back-link" style="margin-left:16px">+ Connect Platform</a>
     </div>
+
+    <nav class="ob-universal-progress" id="obUniversalProgress" aria-label="Integration setup progress">
+      <div class="ob-universal-stage active" data-stage="1"><span>1</span><strong>Business context</strong></div>
+      <div class="ob-universal-stage" data-stage="2"><span>2</span><strong>Platform</strong></div>
+      <div class="ob-universal-stage" data-stage="3"><span>3</span><strong>Mapping</strong></div>
+      <div class="ob-universal-stage" data-stage="4"><span>4</span><strong>Verify</strong></div>
+      <div class="ob-universal-stage" data-stage="5"><span>5</span><strong>Active</strong></div>
+    </nav>
 
     <main class="ob-business-first" id="obBusinessFirst">
       <div class="ob-context-eyebrow">Business Context Engine</div>
@@ -400,6 +408,7 @@
           </div>
           <button type="button" class="ob-btn-ghost" onclick="resetObPlatformScreen()" style="font-size:12px;padding:7px 14px">Change</button>
         </div>
+        <div class="ob-connection-plan" id="obConnectionPlan"></div>
         <section class="ob-context-card" id="obBusinessContextCard" hidden>
           <div class="ob-context-eyebrow">Business Context Engine</div>
           <h2>What should CostPilot understand about this work?</h2>
@@ -580,7 +589,7 @@
 
   <script src="js/api.js?v=20260606"></script>
   <script src="js/tier-utils.js?v=20260606"></script>
-  <script src="js/onboarding.js?v=20260724-business-context-first"></script>
+  <script src="js/onboarding.js?v=20260726-universal-setup"></script>
   <script src="/js/mobile-guard.js?v=20260606"></script>
 </body>
 </html>
