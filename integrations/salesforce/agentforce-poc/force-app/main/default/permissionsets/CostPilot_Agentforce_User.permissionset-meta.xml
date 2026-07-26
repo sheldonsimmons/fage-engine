@@ -5,6 +5,10 @@
         <enabled>true</enabled>
     </classAccesses>
     <description>Allows an Agentforce proof user to manage CostPilot projects and members and run the CostPilot governance action.</description>
+    <externalCredentialPrincipalAccesses>
+        <enabled>true</enabled>
+        <externalCredentialPrincipal>CostPilotExternal-CostPilotKey</externalCredentialPrincipal>
+    </externalCredentialPrincipalAccesses>
     <fieldPermissions>
         <editable>true</editable>
         <field>CostPilot_Project__c.Account__c</field>

@@ -116,7 +116,7 @@ public with sharing class CostPilotAgentforceAction {
             }
             CostPilot_Project__c project = [
                 SELECT Name, Project_ID__c, Project_Owner__c, Status__c,
-                       Monthly_AI_Budget__c, Department__c
+                       Monthly_AI_Budget__c, Department__c, Selected_Model__c
                 FROM CostPilot_Project__c
                 WHERE Id = :typedRecordId
                 LIMIT 1
@@ -139,6 +139,9 @@ public with sharing class CostPilotAgentforceAction {
             if (String.isBlank(request.department)) {
                 request.department = project.Department__c;
             }
+            if (String.isBlank(request.requestedModel)) {
+                request.requestedModel = project.Selected_Model__c;
+            }
         } catch (Exception ignored) {
             // Non-project records can continue using values supplied by the
             // Agentforce action until a metadata mapping is configured.
@@ -157,14 +160,17 @@ public with sharing class CostPilotAgentforceAction {
             if (typedRecordId.getSObjectType() != CostPilot_Project__c.SObjectType) {
                 return null;
             }
-            return new CostPilot_Project__c(
+            CostPilot_Project__c projectUpdate = new CostPilot_Project__c(
                 Id = typedRecordId,
                 CostPilot_Decision__c = result.decision,
                 CostPilot_Tracking_ID__c = result.trackingId,
                 Estimated_AI_Cost__c = result.estimatedCostUsd,
-                Last_AI_Request__c = result.aiResponse,
-                Selected_Model__c = result.selectedModel
+                Last_AI_Request__c = result.aiResponse
             );
+            if (!String.isBlank(result.selectedModel)) {
+                projectUpdate.Selected_Model__c = result.selectedModel;
+            }
+            return projectUpdate;
         } catch (Exception ignored) {
             return null;
         }
