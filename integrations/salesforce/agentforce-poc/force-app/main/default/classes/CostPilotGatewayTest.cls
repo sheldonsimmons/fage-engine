@@ -3,6 +3,13 @@ private class CostPilotGatewayTest {
     private class CostPilotMock implements HttpCalloutMock {
         public HttpResponse respond(HttpRequest requestValue) {
             System.assert(requestValue.getEndpoint().startsWith('callout:CostPilot/'));
+            Map<String, Object> requestBody =
+                (Map<String, Object>) JSON.deserializeUntyped(requestValue.getBody());
+            String taskDescription = String.valueOf(
+                requestBody.get('task_description')
+            );
+            System.assert(taskDescription.contains('Salesforce record context:'));
+            System.assert(taskDescription.contains('Gateway Test'));
             HttpResponse responseValue = new HttpResponse();
             responseValue.setStatusCode(200);
             responseValue.setHeader('Content-Type', 'application/json');

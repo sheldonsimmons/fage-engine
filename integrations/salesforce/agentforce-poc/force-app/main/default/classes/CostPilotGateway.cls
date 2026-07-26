@@ -55,7 +55,11 @@ public with sharing class CostPilotGateway {
             CostPilotAgentforceAction.GovernanceRequest governanceRequest =
                 new CostPilotAgentforceAction.GovernanceRequest();
             governanceRequest.recordId = requestValue.recordId;
-            governanceRequest.taskDescription = requestValue.prompt;
+            String groundedContext = recordContext(requestValue.recordId);
+            governanceRequest.taskDescription = String.isBlank(groundedContext)
+                ? requestValue.prompt
+                : requestValue.prompt + '\n\nSalesforce record context:\n' +
+                    groundedContext;
             governanceRequest.agentName = String.isBlank(requestValue.agentName)
                 ? 'Salesforce Agentforce'
                 : requestValue.agentName;
@@ -82,5 +86,50 @@ public with sharing class CostPilotGateway {
             responses.add(responseValue);
         }
         return responses;
+    }
+
+    private static String recordContext(String recordId) {
+        if (String.isBlank(recordId)) {
+            return null;
+        }
+        try {
+            Id typedRecordId = Id.valueOf(recordId);
+            Schema.SObjectType objectType = typedRecordId.getSObjectType();
+            Schema.DescribeSObjectResult objectDescribe = objectType.getDescribe();
+            Map<String, Schema.SObjectField> fieldMap =
+                objectDescribe.fields.getMap();
+            List<String> preferredFields = new List<String>{
+                'Name', 'Subject', 'Status', 'StageName', 'Amount', 'CloseDate',
+                'NextStep', 'Description', 'Type', 'Priority', 'Origin',
+                'AccountId', 'ContactId', 'OpportunityId', 'OwnerId'
+            };
+            List<String> selectedFields = new List<String>{ 'Id' };
+            for (String fieldName : preferredFields) {
+                if (fieldMap.containsKey(fieldName) &&
+                    fieldMap.get(fieldName).getDescribe().isAccessible()) {
+                    selectedFields.add(fieldName);
+                }
+            }
+            SObject recordValue = Database.query(
+                'SELECT ' + String.join(selectedFields, ',') +
+                ' FROM ' + objectDescribe.getName() +
+                ' WHERE Id = :typedRecordId LIMIT 1'
+            );
+            Map<String, Object> context = new Map<String, Object>{
+                'object' => objectDescribe.getName(),
+                'fields' => recordValue.getPopulatedFieldsAsMap()
+            };
+            if (objectDescribe.getName() == 'Opportunity') {
+                context.put('products', [
+                    SELECT Product2.Name, Quantity, TotalPrice, Description
+                    FROM OpportunityLineItem
+                    WHERE OpportunityId = :typedRecordId
+                    LIMIT 20
+                ]);
+            }
+            return JSON.serialize(context);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }
