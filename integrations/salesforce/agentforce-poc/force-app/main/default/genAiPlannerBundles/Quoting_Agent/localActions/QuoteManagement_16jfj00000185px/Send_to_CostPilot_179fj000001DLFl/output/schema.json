@@ -1,0 +1,51 @@
+{
+  "unevaluatedProperties": false,
+  "properties": {
+    "blocked": {
+      "title": "Blocked",
+      "description": "Shows whether CostPilot blocked the request before it reached an AI model.",
+      "lightning:type": "lightning__booleanType",
+      "lightning:isPII": false,
+      "copilotAction:isDisplayable": true,
+      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:useHydratedPrompt": false
+    },
+    "costPilotResponse": {
+      "title": "CostPilot Response",
+      "description": "The governed response from CostPilot that the agent should use when responding to the user.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isDisplayable": false,
+      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:useHydratedPrompt": false
+    },
+    "modelTier": {
+      "title": "Model Tier",
+      "description": "The model tier CostPilot selected for the request, such as Scout, Analyst, Advisor, or Strategist.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isDisplayable": false,
+      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:useHydratedPrompt": false
+    },
+    "outcome": {
+      "title": "Outcome",
+      "description": "The routing or governance outcome recorded by CostPilot.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isDisplayable": false,
+      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:useHydratedPrompt": false
+    },
+    "riskLevel": {
+      "title": "Risk Level",
+      "description": "The risk level CostPilot assigned to the request.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isDisplayable": false,
+      "copilotAction:isUsedByPlanner": true,
+      "copilotAction:useHydratedPrompt": false
+    }
+  },
+  "lightning:type": "lightning__objectType"
+}

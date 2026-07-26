@@ -1,0 +1,56 @@
+{
+  "required": ["prompt"],
+  "unevaluatedProperties": false,
+  "properties": {
+    "agentName": {
+      "title": "Agent Name",
+      "description": "The name of the Salesforce agent performing the work. Use CostPilot Agent when no more specific name is known.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isUserInput": false
+    },
+    "department": {
+      "title": "Department",
+      "description": "The business department responsible for this request when known from the record or conversation.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isUserInput": false
+    },
+    "businessUnit": {
+      "title": "Business Unit",
+      "description": "The business unit responsible for this request when known.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isUserInput": false
+    },
+    "recordId": {
+      "title": "Record Id",
+      "description": "The current Salesforce record ID when the request refers to this record, the current record, or information on the open page.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isUserInput": false
+    },
+    "objectName": {
+      "title": "Object Name",
+      "description": "The Salesforce object API name for the current record when known, such as Opportunity, Account, Case, Contact, or CostPilot_Project__c.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isUserInput": false
+    },
+    "prompt": {
+      "title": "User Prompt",
+      "description": "The complete AI request from the user. Preserve the user's requested task, format, quantity, audience, and other instructions.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isUserInput": false
+    },
+    "contextJson": {
+      "title": "Context JSON",
+      "description": "Optional additional structured context already available to the agent. Do not ask the user to provide it.",
+      "lightning:type": "lightning__textType",
+      "lightning:isPII": false,
+      "copilotAction:isUserInput": false
+    }
+  },
+  "lightning:type": "lightning__objectType"
+}
