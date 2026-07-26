@@ -4,6 +4,10 @@
         <apexClass>CostPilotAgentforceAction</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>CostPilotGateway</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <description>Allows an Agentforce proof user to manage CostPilot projects and members and run the CostPilot governance action.</description>
     <externalCredentialPrincipalAccesses>
         <enabled>true</enabled>
