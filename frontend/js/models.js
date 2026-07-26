@@ -670,6 +670,62 @@ async function openRoutingOutcomeDetail(modelKey) {
       '</div>'
     ).join("") || '<div class="mdl-detail-empty">No matching audit evidence in this period.</div>';
 
+    const optimization = data.optimization || {};
+    const scenario = optimization.scenario;
+    const reasonRows = (optimization.routing_reasons || []).slice(0, 5).map(item =>
+      '<div class="mdl-opt-reason">' +
+        '<strong>' + modelHtmlEscape(item.reason) + '</strong>' +
+        '<span>' + Number(item.calls).toLocaleString() + ' calls · ' +
+          Number(item.share_pct || 0).toFixed(1) + '% · ' + formatModelCurrency(item.spend_usd) +
+        '</span>' +
+      '</div>'
+    ).join("") || '<div class="mdl-detail-empty">No routing reasons recorded.</div>';
+    const driverParts = [];
+    if (optimization.top_agent) {
+      driverParts.push(
+        '<div class="mdl-opt-driver"><span>Leading agent</span><strong>' +
+        modelHtmlEscape(optimization.top_agent.agent_name) + '</strong><small>' +
+        formatModelCurrency(optimization.top_agent.spend_usd) + ' · ' +
+        Number(optimization.top_agent.spend_share_pct || 0).toFixed(1) + '% of this model’s spend</small></div>'
+      );
+    }
+    if (optimization.top_department) {
+      driverParts.push(
+        '<div class="mdl-opt-driver"><span>Leading department</span><strong>' +
+        modelHtmlEscape(optimization.top_department.department) + '</strong><small>' +
+        formatModelCurrency(optimization.top_department.spend_usd) + ' · ' +
+        Number(optimization.top_department.spend_share_pct || 0).toFixed(1) + '% of this model’s spend</small></div>'
+      );
+    }
+    const scenarioHtml = scenario
+      ? '<div class="mdl-opt-scenario">' +
+          '<div><span>Compare with</span><strong>' + modelHtmlEscape(scenario.candidate_display_name) +
+            ' · ' + modelHtmlEscape(scenario.candidate_tier_name) + '</strong></div>' +
+          '<div><span>Current spend</span><strong>' + formatModelCurrency(scenario.current_spend_usd) + '</strong></div>' +
+          '<div><span>Illustrative spend</span><strong>' + formatModelCurrency(scenario.estimated_spend_usd) + '</strong></div>' +
+          '<div class="saving"><span>Potential period savings</span><strong>' +
+            formatModelCurrency(scenario.estimated_savings_usd) + ' · ' +
+            Number(scenario.estimated_savings_pct || 0).toFixed(1) + '%</strong></div>' +
+          '<div class="saving"><span>Annualized at this pace</span><strong>' +
+            formatModelCurrency(scenario.annualized_savings_usd) + '</strong></div>' +
+          '<p>' + modelHtmlEscape(scenario.disclaimer) + '</p>' +
+        '</div>'
+      : '';
+    const optimizationHtml =
+      '<div class="mdl-optimization ' + modelHtmlEscape(optimization.status || "insufficient_data") + '">' +
+        '<div class="mdl-opt-eyebrow">Optimization opportunity · ' +
+          modelHtmlEscape(optimization.confidence || "none") + ' telemetry</div>' +
+        '<h3>' + modelHtmlEscape(optimization.headline || "Optimization analysis unavailable.") + '</h3>' +
+        '<p>' + modelHtmlEscape(optimization.guidance || "No routing change is recommended.") + '</p>' +
+        (driverParts.length ? '<div class="mdl-opt-drivers">' + driverParts.join("") + '</div>' : '') +
+        '<div class="mdl-opt-review"><strong>' +
+          Number(optimization.review_candidate_calls || 0).toLocaleString() +
+          ' calls flagged for first review</strong><span>Overrides, cascades, or built-in fallback · ' +
+          formatModelCurrency(optimization.review_candidate_spend_usd) + '</span></div>' +
+        scenarioHtml +
+        '<div class="mdl-opt-reasons"><h4>Why requests reached this model</h4>' + reasonRows + '</div>' +
+      '</div>';
+
     body.innerHTML =
       '<div class="mdl-detail-kpis">' +
         '<div class="mdl-detail-kpi"><strong>' + Number(data.total_calls).toLocaleString() + '</strong><span>Calls</span></div>' +
@@ -680,6 +736,7 @@ async function openRoutingOutcomeDetail(modelKey) {
         '<div class="mdl-detail-kpi"><strong>' + Number(data.fallback_calls).toLocaleString() + '</strong><span>Fallback</span></div>' +
         '<div class="mdl-detail-kpi"><strong>' + formatModelCurrency(data.avg_cost_usd) + '</strong><span>Average / call</span></div>' +
       '</div>' +
+      optimizationHtml +
       '<div class="mdl-detail-section"><h3>Department usage</h3><div class="mdl-detail-table">' + departmentRows + '</div></div>' +
       '<div class="mdl-detail-section"><h3>Agent usage</h3><div class="mdl-detail-table">' + agentRows + '</div></div>' +
       '<div class="mdl-detail-section"><h3>Recent calls</h3>' +

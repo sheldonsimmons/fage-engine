@@ -490,6 +490,128 @@ def get_model_routing_outcome_detail(
     for item in department_rows + agent_rows:
         item["spend_usd"] = round(item["spend_usd"], 6)
 
+    reason_totals = {}
+    review_candidate_calls = 0
+    review_candidate_spend = 0.0
+    for tx in transactions:
+        reason = (tx.routing_reason or "UNKNOWN").upper()
+        reason_item = reason_totals.setdefault(reason, {"reason": reason, "calls": 0, "spend_usd": 0.0})
+        reason_item["calls"] += 1
+        reason_item["spend_usd"] += float(tx.cost_usd or 0.0)
+        if reason == "OVERRIDE" or bool(tx.routing_cascaded) or tx.model_source == "built_in_fallback":
+            review_candidate_calls += 1
+            review_candidate_spend += float(tx.cost_usd or 0.0)
+
+    routing_reasons = sorted(
+        reason_totals.values(),
+        key=lambda item: (-item["calls"], -item["spend_usd"], item["reason"]),
+    )
+    for item in routing_reasons:
+        item["spend_usd"] = round(item["spend_usd"], 6)
+        item["share_pct"] = round(item["calls"] / len(transactions) * 100, 1) if transactions else 0.0
+
+    top_agent = max(agent_rows, key=lambda item: item["spend_usd"], default=None)
+    top_department = max(department_rows, key=lambda item: item["spend_usd"], default=None)
+    if top_agent:
+        top_agent = {
+            **top_agent,
+            "spend_share_pct": round(top_agent["spend_usd"] / total_spend * 100, 1) if total_spend else 0.0,
+        }
+    if top_department:
+        top_department = {
+            **top_department,
+            "spend_share_pct": round(top_department["spend_usd"] / total_spend * 100, 1) if total_spend else 0.0,
+        }
+
+    lower_model = None
+    if model and model.tier > 1:
+        requested_department = model.department
+        for candidate_tier in range(model.tier - 1, 0, -1):
+            tier_candidates = [
+                candidate for candidate in catalog
+                if candidate.is_enabled and candidate.tier == candidate_tier
+            ]
+            if requested_department:
+                scoped = [candidate for candidate in tier_candidates if candidate.department == requested_department]
+                lower_model = (
+                    next((candidate for candidate in scoped if candidate.is_default), None)
+                    or (scoped[0] if scoped else None)
+                )
+            if not lower_model:
+                global_candidates = [candidate for candidate in tier_candidates if not candidate.department]
+                lower_model = (
+                    next((candidate for candidate in global_candidates if candidate.is_default), None)
+                    or (global_candidates[0] if global_candidates else None)
+                )
+            if lower_model:
+                break
+
+    optimization = {
+        "status": "insufficient_data",
+        "headline": "More usage is needed before CostPilot can model an opportunity.",
+        "guidance": "No routing change is recommended.",
+        "confidence": (
+            "exact" if exact_calls and not inferred_calls
+            else "mixed" if exact_calls and inferred_calls
+            else "inferred" if inferred_calls
+            else "none"
+        ),
+        "routing_reasons": routing_reasons,
+        "review_candidate_calls": review_candidate_calls,
+        "review_candidate_spend_usd": round(review_candidate_spend, 6),
+        "top_agent": top_agent,
+        "top_department": top_department,
+        "scenario": None,
+    }
+    if transactions and model and model.tier == 1:
+        optimization.update({
+            "status": "lowest_tier",
+            "headline": "This model is already in CostPilot’s lowest-cost routing tier.",
+            "guidance": "Review usage and pricing, but there is no lower registered tier to model.",
+        })
+    elif transactions and model and not lower_model:
+        optimization.update({
+            "status": "no_lower_model",
+            "headline": "No lower-tier eligible model is available for comparison.",
+            "guidance": "Register or enable a lower-tier model before evaluating a savings scenario.",
+        })
+    elif transactions and model and lower_model:
+        estimated_cost = sum(
+            (
+                int(tx.input_tokens or 0) * float(lower_model.cost_input_per_1m or 0.0)
+                + int(tx.output_tokens or 0) * float(lower_model.cost_output_per_1m or 0.0)
+            ) / 1_000_000
+            for tx in transactions
+        )
+        savings = max(0.0, total_spend - estimated_cost)
+        savings_pct = savings / total_spend * 100 if total_spend else 0.0
+        optimization.update({
+            "status": "review" if savings > 0 else "no_savings",
+            "headline": (
+                f"Review {model.display_name} usage before changing routing."
+                if savings > 0
+                else f"{lower_model.display_name} does not produce savings with the current recorded rates."
+            ),
+            "guidance": (
+                "Start with overrides, cascades, and the leading spend driver. Complex or sensitive requests should not be downgraded without a quality review."
+                if savings > 0
+                else "Keep the current route unless quality, latency, or provider strategy supports a change."
+            ),
+            "scenario": {
+                "scope": "All attributed calls in this period",
+                "candidate_model_key": lower_model.model_id,
+                "candidate_display_name": lower_model.display_name,
+                "candidate_tier": lower_model.tier,
+                "candidate_tier_name": TIER_META[lower_model.tier]["name"],
+                "current_spend_usd": round(total_spend, 6),
+                "estimated_spend_usd": round(estimated_cost, 6),
+                "estimated_savings_usd": round(savings, 6),
+                "estimated_savings_pct": round(savings_pct, 1),
+                "annualized_savings_usd": round(savings * (365 / days), 2) if days else 0.0,
+                "disclaimer": "Illustrative cost scenario only. It does not determine that these calls are safe to move and does not change routing.",
+            },
+        })
+
     audit_conditions = []
     for value in exact_values:
         audit_conditions.extend((
@@ -549,6 +671,7 @@ def get_model_routing_outcome_detail(
         "inferred_calls": inferred_calls,
         "cascaded_calls": cascaded_calls,
         "fallback_calls": fallback_calls,
+        "optimization": optimization,
         "departments": department_rows,
         "agents": agent_rows,
         "recent_calls": recent_calls,

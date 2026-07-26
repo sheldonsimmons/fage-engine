@@ -228,3 +228,13 @@ def test_routing_outcomes_separates_exact_and_inferred_history():
     assert detail["cascaded_calls"] == 1
     assert [row["department"] for row in detail["departments"]] == ["Legal", "Support"]
     assert {row["telemetry"] for row in detail["audit_events"]} == {"exact", "tier_related"}
+    assert detail["optimization"]["confidence"] == "mixed"
+    assert detail["optimization"]["top_agent"]["agent_name"] == "Unassigned"
+    assert detail["optimization"]["top_department"]["department"] == "Support"
+    assert detail["optimization"]["review_candidate_calls"] == 1
+    assert detail["optimization"]["routing_reasons"] == [
+        {"reason": "MODERATE", "calls": 1, "spend_usd": 0.4, "share_pct": 50.0},
+        {"reason": "COMPLEX", "calls": 1, "spend_usd": 0.3, "share_pct": 50.0},
+    ]
+    assert detail["optimization"]["scenario"]["candidate_display_name"] == "Global Scout"
+    assert detail["optimization"]["scenario"]["disclaimer"].startswith("Illustrative cost scenario only.")
