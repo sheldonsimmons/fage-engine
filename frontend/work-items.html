@@ -493,9 +493,12 @@
         <div class="wa-detail-signals" id="waProjectDetailSignals"></div>
         <div class="wa-project-controls">
           <section class="wa-project-control">
-            <h3>Project budget</h3>
-            <p>Adjust this project without changing its department budget.</p>
+            <h3>Parent project &amp; budget</h3>
+            <p>Name the shared parent that linked records sit under, then set its AI budget.</p>
             <div class="wa-control-stack">
+              <input class="wa-input" id="waManageProjectName" type="text" maxlength="200" placeholder="Parent project name" aria-label="Parent project name" />
+              <button class="wa-secondary" type="button" onclick="waSaveProjectName()">Save parent name</button>
+              <span class="wa-status" id="waNameStatus"></span>
               <input class="wa-input" id="waManageBudget" type="number" min="0" step="0.01" placeholder="No project budget" aria-label="Monthly project AI budget" />
               <input class="wa-input" id="waManageBudgetWarning" type="number" min="1" max="100" step="1" value="80" aria-label="Budget warning percent" />
               <select class="wa-input" id="waManageBudgetAction" aria-label="Budget action">
@@ -822,6 +825,7 @@
       ].map(([label, value, className = ""]) => `<div class="wa-detail-signal ${className}">
         <span>${waEscape(label)}</span><strong>${waEscape(value)}</strong>
       </div>`).join("");
+      document.getElementById("waManageProjectName").value = project.name || "";
       document.getElementById("waManageBudget").value =
         project.monthly_ai_budget == null ? "" : project.monthly_ai_budget;
       document.getElementById("waManageBudgetWarning").value =
@@ -853,6 +857,24 @@
       }
       waRenderAgentTeam();
       document.getElementById("waAgentTeamCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    async function waSaveProjectName() {
+      const project = waSelectedProject();
+      if (!project) return;
+      const name = document.getElementById("waManageProjectName").value.trim();
+      if (!name) {
+        waSetStatus("waNameStatus", "Enter a parent project name.", true);
+        return;
+      }
+      waSetStatus("waNameStatus", "Saving…");
+      try {
+        await apiPatch(`/api/work-items/${encodeURIComponent(project.external_id)}`, { name });
+        waSetStatus("waNameStatus", "Parent name saved.");
+        await waLoadProjects(project.external_id, true);
+      } catch (error) {
+        waSetStatus("waNameStatus", error.message, true);
+      }
     }
 
     async function waSaveProjectBudget() {
