@@ -14,15 +14,18 @@ from api.routes_work_items import (
     _work_item_json,
     business_context_reporting,
     list_context_templates,
+    project_activity_reporting,
 )
 from core.business_context import get_context_template, normalize_context_type
 from database.db import Base
 from database.models import (
     TokenTransaction,
     TrialAccount,
+    RegisteredAgent,
     WorkAccount,
     WorkItem,
     WorkItemSourceLink,
+    WorkUser,
 )
 
 
@@ -180,6 +183,91 @@ def test_business_context_reporting_counts_transactions_once_and_keeps_origin():
     assert sum(child["request_count"] for child in report["parents"][0]["children"]) == 2
     assert report["attribution"]["unattributed_request_count"] == 1
     assert report["attribution"]["coverage_pct"] == 66.7
+
+
+def test_project_activity_report_links_person_agent_account_project_and_cost():
+    db = _session()
+    account = WorkAccount(
+        external_id="001-ACME",
+        name="Acme Corporation",
+        workspace_id="WORKSPACE-1",
+    )
+    db.add(account)
+    db.flush()
+    project = WorkItem(
+        external_id="PROJECT-ACME",
+        name="Acme Expansion",
+        account_id=account.id,
+        context_type="project",
+        status="active",
+        source_platform="Salesforce",
+        workspace_id="WORKSPACE-1",
+    )
+    person = WorkUser(
+        workspace_id="WORKSPACE-1",
+        source_platform="Salesforce",
+        external_id="005-MARIA",
+        name="Maria Lopez",
+        email="maria@example.com",
+    )
+    agent = RegisteredAgent(
+        name="Sales Follow-up Agent",
+        department="Sales",
+        source_platform="Salesforce Agentforce",
+        permissions="read,write",
+    )
+    db.add_all([project, person, agent])
+    db.flush()
+    db.add(TokenTransaction(
+        department="WORKSPACE-1:Sales",
+        source_platform="Salesforce Agentforce",
+        work_item_id=project.id,
+        work_user_id=person.id,
+        agent_id=agent.id,
+        origin_record_id="006-OPP",
+        origin_record_type="Opportunity",
+        origin_record_name="Acme Renewal",
+        model_tier="Scout",
+        model_name="gpt-4.1-mini",
+        input_tokens=800,
+        output_tokens=200,
+        tokens_saved=125,
+        cost_usd=0.04,
+    ))
+    db.commit()
+
+    report = project_activity_reporting(
+        workspace_id="WORKSPACE-1",
+        date_from=datetime.utcnow() - timedelta(days=1),
+        date_to=datetime.utcnow() + timedelta(days=1),
+        days=30,
+        project_id="PROJECT-ACME",
+        user_external_id="005-MARIA",
+        agent_id=agent.id,
+        account_id="001-ACME",
+        source_platform="Salesforce Agentforce",
+        record_type="Opportunity",
+        activity_limit=100,
+        db=db,
+    )
+
+    assert report["summary"] == {
+        "request_count": 1,
+        "input_tokens": 800,
+        "output_tokens": 200,
+        "total_tokens": 1000,
+        "tokens_saved": 125,
+        "spend_usd": 0.04,
+        "people_count": 1,
+        "agent_count": 1,
+        "project_count": 1,
+    }
+    activity = report["activities"][0]
+    assert activity["user_name"] == "Maria Lopez"
+    assert activity["agent_name"] == "Sales Follow-up Agent"
+    assert activity["account_name"] == "Acme Corporation"
+    assert activity["project_name"] == "Acme Expansion"
+    assert activity["source_record_name"] == "Acme Renewal"
 
 
 def test_workspace_saves_business_context_template():

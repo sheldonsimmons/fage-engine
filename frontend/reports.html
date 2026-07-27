@@ -91,7 +91,7 @@
     <div class="rpt-tabs" id="rptTabRow">
       <button id="rptTabSavings"    class="rpt-tab active" data-tab="savings">💰 Savings</button>
       <button id="rptTabRisk"       class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
-      <button id="rptTabContexts"   class="rpt-tab" data-tab="contexts">Business Contexts</button>
+      <button id="rptTabContexts"   class="rpt-tab" data-tab="contexts">Project Attribution</button>
       <button id="rptTabDepts"      class="rpt-tab" data-tab="departments">🏢 Departments</button>
       <button id="rptTabEfficiency" class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
       <button id="rptTabActivity"   class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
@@ -338,54 +338,110 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
-         TAB 3: DEPARTMENTS
+         PROJECT ATTRIBUTION
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-pane" id="tab-contexts">
-      <div class="rpt-export-bar" id="business-contexts">
-        <span style="color:var(--text-muted);font-size:11px;margin-right:auto">
-          Parent totals and related-record contributions are alternate views of the same governed calls.
-        </span>
-        <button class="export-btn" onclick="exportContextCsv()">⬇ CSV</button>
+      <div class="project-attribution-intro" id="business-contexts">
+        <div>
+          <h2>Project Attribution</h2>
+          <p>See which person used which agent, for what account and project, and the resulting token cost.</p>
+        </div>
+        <button class="export-btn" onclick="exportContextCsv()">⬇ Activity CSV</button>
       </div>
+
+      <div class="project-attribution-filters">
+        <label>Project
+          <select id="ctxProjectFilter" onchange="loadBusinessContexts()"><option value="">All Projects</option></select>
+        </label>
+        <label>Person
+          <select id="ctxPersonFilter" onchange="loadBusinessContexts()"><option value="">All People</option></select>
+        </label>
+        <label>Account
+          <select id="ctxAccountFilter" onchange="loadBusinessContexts()"><option value="">All Accounts</option></select>
+        </label>
+        <label>Agent
+          <select id="ctxAgentFilter" onchange="loadBusinessContexts()"><option value="">All Agents</option></select>
+        </label>
+        <label>Source
+          <select id="ctxSourceFilter" onchange="loadBusinessContexts()"><option value="">All Sources</option></select>
+        </label>
+        <label>Record Type
+          <select id="ctxRecordTypeFilter" onchange="loadBusinessContexts()"><option value="">All Record Types</option></select>
+        </label>
+        <button type="button" class="act-reset-btn" onclick="resetProjectAttributionFilters()">Clear Filters</button>
+      </div>
+
       <div class="rpt-kpi-row">
         <div class="rpt-kpi">
-          <div class="rpt-kpi-label" id="ctx-active-label">Active Contexts</div>
-          <div class="rpt-kpi-value" id="ctx-active">—</div>
-          <div class="rpt-kpi-sub">with AI activity</div>
+          <div class="rpt-kpi-label">Requests</div>
+          <div class="rpt-kpi-value" id="ctx-requests">—</div>
+          <div class="rpt-kpi-sub">governed AI calls</div>
         </div>
         <div class="rpt-kpi">
-          <div class="rpt-kpi-label">Attributed Requests</div>
-          <div class="rpt-kpi-value green" id="ctx-coverage">—</div>
-          <div class="rpt-kpi-sub" id="ctx-attributed">— linked calls</div>
+          <div class="rpt-kpi-label">Total Tokens</div>
+          <div class="rpt-kpi-value" id="ctx-tokens">—</div>
+          <div class="rpt-kpi-sub" id="ctx-token-split">— input · — output</div>
         </div>
         <div class="rpt-kpi">
-          <div class="rpt-kpi-label">Unattributed Requests</div>
-          <div class="rpt-kpi-value" id="ctx-unattributed">—</div>
-          <div class="rpt-kpi-sub" id="ctx-unattributed-spend">— spend</div>
+          <div class="rpt-kpi-label">Tokens Pruned</div>
+          <div class="rpt-kpi-value green" id="ctx-pruned">—</div>
+          <div class="rpt-kpi-sub">removed before model calls</div>
         </div>
         <div class="rpt-kpi">
-          <div class="rpt-kpi-label">Governed Spend</div>
+          <div class="rpt-kpi-label">Token Cost</div>
           <div class="rpt-kpi-value" id="ctx-spend">—</div>
-          <div class="rpt-kpi-sub">counted once at company level</div>
+          <div class="rpt-kpi-sub">for the filtered activity</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">People</div>
+          <div class="rpt-kpi-value" id="ctx-people">—</div>
+          <div class="rpt-kpi-sub">identified users</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Agents</div>
+          <div class="rpt-kpi-value" id="ctx-agents">—</div>
+          <div class="rpt-kpi-sub">used in this period</div>
         </div>
       </div>
-      <div class="panel" style="padding:18px">
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px">
+
+      <div class="project-attribution-breakdowns">
+        <div class="panel">
           <div>
-            <div class="rpt-chart-title" id="ctx-table-title">Business context attribution</div>
-            <div style="color:var(--text-muted);font-size:11px;margin-top:4px">
-              Expand a row to see the source records, people, or transactions contributing to its total.
-            </div>
+            <div class="rpt-chart-title">Usage by Project</div>
+            <div class="project-attribution-sub">Account, requests, tokens, and cost by project.</div>
           </div>
-        </div>
-        <div style="overflow:auto">
           <table class="rpt-context-table">
-            <thead>
-              <tr><th>Business Context</th><th>Related Records</th><th>Requests</th><th>Tokens</th><th>Tokens Pruned</th><th>Spend</th><th>Budget</th><th>Risk</th></tr>
-            </thead>
-            <tbody id="ctx-report-rows"><tr><td colspan="8">Loading business-context attribution…</td></tr></tbody>
+            <thead><tr><th>Project</th><th>Account</th><th>Requests</th><th>Tokens</th><th>Cost</th></tr></thead>
+            <tbody id="ctx-project-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
           </table>
         </div>
+        <div class="panel">
+          <div>
+            <div class="rpt-chart-title">Usage by Person</div>
+            <div class="project-attribution-sub">Factual AI consumption by identified user.</div>
+          </div>
+          <table class="rpt-context-table">
+            <thead><tr><th>Person</th><th>Requests</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
+            <tbody id="ctx-person-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel project-attribution-ledger">
+        <div class="project-attribution-ledger-head">
+          <div>
+            <div class="rpt-chart-title">AI Activity Ledger</div>
+            <div class="project-attribution-sub">Each row connects a person, agent, account, project, source record, tokens, and cost.</div>
+          </div>
+          <span id="ctx-activity-count">— activities</span>
+        </div>
+        <div class="project-attribution-table-wrap">
+          <table class="rpt-context-table">
+            <thead><tr><th>Date</th><th>Person</th><th>Agent</th><th>Account</th><th>Project</th><th>Source Record</th><th>Model</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
+            <tbody id="ctx-activity-rows"><tr><td colspan="10">Loading project activity…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="project-attribution-note">CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.</div>
       </div>
     </div>
 

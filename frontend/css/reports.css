@@ -749,3 +749,106 @@
 .rpt-context-table .ctx-mono {
   font-family: var(--font-mono);
 }
+.project-attribution-intro {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.project-attribution-intro h2 {
+  color: var(--text-primary);
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+.project-attribution-intro p,
+.project-attribution-sub {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin: 0;
+}
+.project-attribution-filters {
+  align-items: end;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(130px, 1fr)) auto;
+  margin-bottom: 16px;
+  padding: 14px;
+}
+.project-attribution-filters label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.project-attribution-filters select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+.project-attribution-breakdowns {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 14px;
+}
+.project-attribution-breakdowns .panel,
+.project-attribution-ledger {
+  padding: 16px;
+}
+.project-attribution-breakdowns .rpt-context-table {
+  margin-top: 11px;
+}
+.project-attribution-ledger-head {
+  align-items: flex-end;
+  display: flex;
+  gap: 15px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.project-attribution-ledger-head > span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.project-attribution-table-wrap {
+  max-height: 540px;
+  overflow: auto;
+}
+.project-attribution-ledger .rpt-context-table {
+  min-width: 1350px;
+}
+.project-attribution-ledger .rpt-context-table thead {
+  background: var(--bg-panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.project-attribution-note {
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+@media (max-width: 1100px) {
+  .project-attribution-filters {
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .project-attribution-filters,
+  .project-attribution-breakdowns {
+    grid-template-columns: 1fr;
+  }
+}

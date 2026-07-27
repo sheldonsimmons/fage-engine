@@ -909,6 +909,229 @@ def business_context_reporting(
     }
 
 
+@router.get("/activity-report")
+def project_activity_reporting(
+    workspace_id: Optional[str] = Query(None),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    project_id: Optional[str] = Query(None),
+    user_external_id: Optional[str] = Query(None),
+    agent_id: Optional[int] = Query(None),
+    account_id: Optional[str] = Query(None),
+    source_platform: Optional[str] = Query(None),
+    record_type: Optional[str] = Query(None),
+    activity_limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """Factual user → agent → account/project → token-cost attribution."""
+    period_end = date_to or datetime.utcnow()
+    period_start = date_from or (period_end - timedelta(days=days))
+    if period_start >= period_end:
+        raise HTTPException(status_code=400, detail="date_from must be before date_to")
+
+    query = (
+        db.query(
+            TokenTransaction,
+            WorkItem,
+            WorkAccount,
+            WorkUser,
+            RegisteredAgent,
+        )
+        .outerjoin(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .outerjoin(WorkAccount, WorkItem.account_id == WorkAccount.id)
+        .outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
+        .outerjoin(RegisteredAgent, TokenTransaction.agent_id == RegisteredAgent.id)
+        .filter(
+            TokenTransaction.timestamp >= period_start,
+            TokenTransaction.timestamp < period_end,
+        )
+    )
+    if workspace_id:
+        query = query.filter(WorkItem.workspace_id == workspace_id)
+
+    base_rows = query.order_by(TokenTransaction.timestamp.desc()).all()
+
+    def identity(row):
+        tx, project, account, user, agent = row
+        return {
+            "project_external_id": project.external_id if project else None,
+            "project_name": project.name if project else "Unattributed",
+            "account_external_id": account.external_id if account else None,
+            "account_name": account.name if account else "Unassigned account",
+            "user_external_id": (
+                user.external_id if user else tx.actor_external_id
+            ),
+            "user_name": user.name if user else (tx.actor_name or "Unknown user"),
+            "user_email": user.email if user else tx.actor_email,
+            "user_source_platform": (
+                user.source_platform if user else tx.actor_source_platform
+            ),
+            "agent_id": agent.id if agent else tx.agent_id,
+            "agent_name": agent.name if agent else "Unknown agent",
+            "agent_platform": agent.source_platform if agent else tx.source_platform,
+        }
+
+    option_rows = [identity(row) for row in base_rows]
+
+    def matches(row):
+        tx, _, _, _, _ = row
+        item = identity(row)
+        if project_id and item["project_external_id"] != project_id:
+            return False
+        if user_external_id and item["user_external_id"] != user_external_id:
+            return False
+        if agent_id is not None and item["agent_id"] != agent_id:
+            return False
+        if account_id and item["account_external_id"] != account_id:
+            return False
+        if source_platform and (tx.source_platform or "") != source_platform:
+            return False
+        if record_type and (tx.origin_record_type or "") != record_type:
+            return False
+        return True
+
+    rows = [row for row in base_rows if matches(row)]
+
+    def aggregate(key_fn):
+        grouped = {}
+        for row in rows:
+            tx = row[0]
+            key, label, metadata = key_fn(row)
+            bucket = grouped.setdefault(key or "__unknown__", {
+                "id": key,
+                "label": label,
+                **metadata,
+                "request_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "tokens_saved": 0,
+                "spend_usd": 0.0,
+            })
+            bucket["request_count"] += 1
+            bucket["input_tokens"] += int(tx.input_tokens or 0)
+            bucket["output_tokens"] += int(tx.output_tokens or 0)
+            bucket["tokens_saved"] += int(tx.tokens_saved or 0)
+            bucket["spend_usd"] += float(tx.cost_usd or 0.0)
+        result = []
+        for bucket in grouped.values():
+            bucket["total_tokens"] = bucket["input_tokens"] + bucket["output_tokens"]
+            bucket["spend_usd"] = round(bucket["spend_usd"], 6)
+            result.append(bucket)
+        return sorted(
+            result,
+            key=lambda bucket: (-bucket["spend_usd"], -bucket["request_count"], bucket["label"]),
+        )
+
+    project_breakdown = aggregate(lambda row: (
+        identity(row)["project_external_id"],
+        identity(row)["project_name"],
+        {
+            "account_external_id": identity(row)["account_external_id"],
+            "account_name": identity(row)["account_name"],
+        },
+    ))
+    people_breakdown = aggregate(lambda row: (
+        identity(row)["user_external_id"],
+        identity(row)["user_name"],
+        {
+            "email": identity(row)["user_email"],
+            "source_platform": identity(row)["user_source_platform"],
+        },
+    ))
+    agent_breakdown = aggregate(lambda row: (
+        identity(row)["agent_id"],
+        identity(row)["agent_name"],
+        {"source_platform": identity(row)["agent_platform"]},
+    ))
+
+    activities = []
+    for tx, project, account, user, agent in rows[:activity_limit]:
+        item = identity((tx, project, account, user, agent))
+        activities.append({
+            "transaction_id": tx.id,
+            "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
+            **item,
+            "source_platform": tx.source_platform,
+            "source_record_id": tx.origin_record_id,
+            "source_record_type": tx.origin_record_type,
+            "source_record_name": tx.origin_record_name,
+            "model_tier": tx.model_tier,
+            "model_name": tx.model_name,
+            "input_tokens": int(tx.input_tokens or 0),
+            "output_tokens": int(tx.output_tokens or 0),
+            "total_tokens": int(tx.input_tokens or 0) + int(tx.output_tokens or 0),
+            "tokens_saved": int(tx.tokens_saved or 0),
+            "cost_usd": round(float(tx.cost_usd or 0.0), 6),
+            "was_pruned": bool(tx.was_pruned),
+            "routing_reason": tx.routing_reason,
+        })
+
+    def unique_options(key, label, extra=None):
+        options = {}
+        for item in option_rows:
+            value = item.get(key)
+            if value is None:
+                continue
+            options[str(value)] = {
+                "value": value,
+                "label": item.get(label) or str(value),
+                **({extra: item.get(extra)} if extra else {}),
+            }
+        return sorted(options.values(), key=lambda item: item["label"].lower())
+
+    total_input = sum(int(row[0].input_tokens or 0) for row in rows)
+    total_output = sum(int(row[0].output_tokens or 0) for row in rows)
+    return {
+        "period": {
+            "date_from": period_start.isoformat(),
+            "date_to": period_end.isoformat(),
+            "days": max(1, (period_end - period_start).days),
+        },
+        "filters": {
+            "project_id": project_id,
+            "user_external_id": user_external_id,
+            "agent_id": agent_id,
+            "account_id": account_id,
+            "source_platform": source_platform,
+            "record_type": record_type,
+        },
+        "filter_options": {
+            "projects": unique_options("project_external_id", "project_name", "account_name"),
+            "people": unique_options("user_external_id", "user_name", "user_email"),
+            "agents": unique_options("agent_id", "agent_name", "agent_platform"),
+            "accounts": unique_options("account_external_id", "account_name"),
+            "source_platforms": sorted({
+                row[0].source_platform for row in base_rows if row[0].source_platform
+            }),
+            "record_types": sorted({
+                row[0].origin_record_type for row in base_rows if row[0].origin_record_type
+            }),
+        },
+        "summary": {
+            "request_count": len(rows),
+            "input_tokens": total_input,
+            "output_tokens": total_output,
+            "total_tokens": total_input + total_output,
+            "tokens_saved": sum(int(row[0].tokens_saved or 0) for row in rows),
+            "spend_usd": round(sum(float(row[0].cost_usd or 0.0) for row in rows), 6),
+            "people_count": len({identity(row)["user_external_id"] for row in rows if identity(row)["user_external_id"]}),
+            "agent_count": len({identity(row)["agent_id"] for row in rows if identity(row)["agent_id"] is not None}),
+            "project_count": len({identity(row)["project_external_id"] for row in rows if identity(row)["project_external_id"]}),
+        },
+        "project_breakdown": project_breakdown,
+        "people_breakdown": people_breakdown,
+        "agent_breakdown": agent_breakdown,
+        "activities": activities,
+        "activity_count": len(rows),
+        "activity_limit": activity_limit,
+        "measurement_note": (
+            "This report attributes AI consumption only. It does not score employee "
+            "productivity or infer business outcomes."
+        ),
+    }
+
+
 @router.post("", status_code=201)
 def create_work_item(body: WorkItemIn, db: Session = Depends(get_db)):
     _validate_status(body.status)

@@ -308,9 +308,9 @@
           <div class="wa-kpi-sub">recorded AI spend linked to work</div>
         </article>
         <article class="wa-kpi">
-          <div class="wa-kpi-label">Active Projects</div>
+          <div class="wa-kpi-label">Enabled Projects</div>
           <div class="wa-kpi-value" id="waActiveProjects">—</div>
-          <div class="wa-kpi-sub" id="waActiveProjectsSub">accepting AI activity</div>
+          <div class="wa-kpi-sub" id="waActiveProjectsSub">configured to accept AI activity</div>
         </article>
         <article class="wa-kpi">
           <div class="wa-kpi-label">Attributed Spend</div>
@@ -1056,9 +1056,13 @@
 
     async function waLoadProjects(preselectId = "", keepTeam = false) {
       try {
+        const workspaceId = localStorage.getItem("cp_workspace_id") || "";
+        const workspaceQuery = workspaceId
+          ? `?workspace_id=${encodeURIComponent(workspaceId)}`
+          : "";
         [waItems, waSummary, waAgents] = await Promise.all([
-          apiGet("/api/work-items"),
-          apiGet("/api/work-items/summary"),
+          apiGet(`/api/work-items${workspaceQuery}`),
+          apiGet(`/api/work-items/summary${workspaceQuery}`),
           apiGet("/api/agents"),
         ]);
         const active = waItems.filter(item => item.status === "active");

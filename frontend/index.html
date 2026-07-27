@@ -1610,7 +1610,7 @@
         <div class="exec-glance-kpi-sub" id="execGlanceRequestsSub">evaluated by CostPilot</div>
       </article>
       <article class="exec-glance-kpi">
-        <div class="exec-glance-kpi-label" id="execGlanceContextLabel">Active Business Contexts</div>
+        <div class="exec-glance-kpi-label" id="execGlanceContextLabel">Business Contexts With Activity</div>
         <div class="exec-glance-kpi-value" id="execGlanceContextCount">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceContextSub">with governed AI activity</div>
       </article>
@@ -4222,7 +4222,7 @@ function renderExecutiveGlance(events, data, context) {
   setText("execGlanceBudgetSub", `${fmtUsd(context.budget.spend || 0)} of ${fmtUsd(context.budget.cap || 0)}`);
   setText("execGlanceRequests", fmtNum(context.totalCalls));
   setText("execGlanceRequestsSub", "evaluated before model execution");
-  setText("execGlanceContextLabel", `Active ${contextReport?.context_label_plural || "Business Contexts"}`);
+  setText("execGlanceContextLabel", `${contextReport?.context_label_plural || "Business Contexts"} With Activity`);
   setText("execGlanceContextCount", fmtNum(contextReport?.active_context_count || 0));
   setText("execGlanceContextSub", "with governed AI activity");
   setText("execGlanceRisk", fmtNum(context.controlsCount));

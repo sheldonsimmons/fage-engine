@@ -624,9 +624,13 @@ async function loadAgentlakeProjects() {
   const stale = Date.now() - _agentlakeProjectsLoadedAt > 30000;
   if (!stale) return;
   try {
+    const workspaceId = localStorage.getItem("cp_workspace_id") || "";
+    const workspaceQuery = workspaceId
+      ? `?workspace_id=${encodeURIComponent(workspaceId)}`
+      : "";
     const [projects, summary] = await Promise.all([
-      apiGet("/api/work-items"),
-      apiGet("/api/work-items/summary")
+      apiGet(`/api/work-items${workspaceQuery}`),
+      apiGet(`/api/work-items/summary${workspaceQuery}`)
     ]);
     _agentlakeProjects = Array.isArray(projects) ? projects : [];
     _agentlakeProjectSummary = summary || {};

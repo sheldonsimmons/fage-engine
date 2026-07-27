@@ -438,77 +438,136 @@ function loadActiveTab() {
   // efficiency tab remains on-demand. Restore cached reviews, but do not rerun analysis automatically.
 }
 
-function contextBudgetLabel(row) {
-  if (row.monthly_ai_budget == null) return "Not set";
-  return `${Number(row.budget_used_pct || 0).toFixed(1)}% of ${fmtUsd(Number(row.monthly_ai_budget || 0))}`;
+function projectAttributionSelect(id, defaultLabel, options) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">${escapeHtml(defaultLabel)}</option>` +
+    (options || []).map(option => {
+      const value = String(option.value ?? option);
+      const label = option.label ?? option;
+      return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+    }).join("");
+  if ([...select.options].some(option => option.value === current)) select.value = current;
 }
 
-function toggleContextChildren(parentId) {
-  document.querySelectorAll(`[data-context-parent="${CSS.escape(String(parentId))}"]`).forEach(row => {
-    row.hidden = !row.hidden;
+function projectAttributionFilterValue(id) {
+  return document.getElementById(id)?.value || "";
+}
+
+function resetProjectAttributionFilters() {
+  [
+    "ctxProjectFilter", "ctxPersonFilter", "ctxAccountFilter",
+    "ctxAgentFilter", "ctxSourceFilter", "ctxRecordTypeFilter",
+  ].forEach(id => {
+    const select = document.getElementById(id);
+    if (select) select.value = "";
   });
+  loadBusinessContexts();
 }
 
 async function loadBusinessContexts() {
-  const { days } = getActiveDateRange();
+  const { date_from, date_to, days } = getActiveDateRange();
   const wsId = localStorage.getItem("cp_workspace_id") || "";
-  const wsParam = wsId ? `&workspace_id=${encodeURIComponent(wsId)}` : "";
+  const params = new URLSearchParams({
+    date_from,
+    date_to,
+    days: String(Math.min(365, days)),
+    activity_limit: "1000",
+  });
+  if (wsId) params.set("workspace_id", wsId);
+  const selectedFilters = {
+    project_id: projectAttributionFilterValue("ctxProjectFilter"),
+    user_external_id: projectAttributionFilterValue("ctxPersonFilter"),
+    account_id: projectAttributionFilterValue("ctxAccountFilter"),
+    agent_id: projectAttributionFilterValue("ctxAgentFilter"),
+    source_platform: projectAttributionFilterValue("ctxSourceFilter"),
+    record_type: projectAttributionFilterValue("ctxRecordTypeFilter"),
+  };
+  Object.entries(selectedFilters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
   try {
-    const data = await apiGet(`/api/work-items/reporting?days=${Math.min(365, days)}&limit=100${wsParam}`);
+    const data = await apiGet(`/api/work-items/activity-report?${params.toString()}`);
     _rptContextData = data;
-    setKpi("ctx-active", fmtNum(data.active_context_count || 0));
-    setKpi("ctx-coverage", `${Number(data.attribution?.coverage_pct || 0).toFixed(1)}%`);
-    setKpi("ctx-attributed", `${fmtNum(data.attribution?.attributed_request_count || 0)} linked calls`);
-    setKpi("ctx-unattributed", fmtNum(data.attribution?.unattributed_request_count || 0));
-    setKpi("ctx-unattributed-spend", `${fmtUsd(Number(data.attribution?.unattributed_spend_usd || 0))} spend`);
-    setKpi("ctx-spend", fmtUsd(Number(data.company_totals?.spend_usd || 0)));
-    document.getElementById("ctx-active-label").textContent = `Active ${data.context_label_plural || "Contexts"}`;
-    document.getElementById("ctx-table-title").textContent = `${data.context_label_plural || "Business Contexts"} and related records`;
+    const summary = data.summary || {};
+    setKpi("ctx-requests", fmtNum(summary.request_count || 0));
+    setKpi("ctx-tokens", fmtNum(summary.total_tokens || 0));
+    setKpi("ctx-token-split", `${fmtNum(summary.input_tokens || 0)} input · ${fmtNum(summary.output_tokens || 0)} output`);
+    setKpi("ctx-pruned", fmtNum(summary.tokens_saved || 0));
+    setKpi("ctx-spend", fmtUsd(Number(summary.spend_usd || 0)));
+    setKpi("ctx-people", fmtNum(summary.people_count || 0));
+    setKpi("ctx-agents", fmtNum(summary.agent_count || 0));
 
-    const body = document.getElementById("ctx-report-rows");
-    const parents = data.parents || [];
-    if (!parents.length) {
-      body.innerHTML = '<tr><td colspan="8">No attributed business-context activity is recorded for this period.</td></tr>';
-      return;
-    }
-    body.innerHTML = parents.map(parent => {
-      const children = parent.children || [];
-      const parentRow = `<tr class="ctx-parent" onclick="toggleContextChildren('${String(parent.id).replace(/'/g, "\\'")}')">
-        <td><div class="ctx-name">${escapeHtml(parent.name)}</div><div class="ctx-meta">▸ ${escapeHtml(parent.context_type || "work")} · ${escapeHtml(parent.source_platform || "Unknown source")}</div></td>
-        <td>${fmtNum(parent.related_record_count || 0)}</td>
-        <td class="ctx-mono">${fmtNum(parent.request_count || 0)}</td>
-        <td class="ctx-mono">${fmtNum(parent.total_tokens || 0)}</td>
-        <td class="ctx-mono">${fmtNum(parent.tokens_saved || 0)}</td>
-        <td class="ctx-mono">${fmtUsd(Number(parent.spend_usd || 0))}</td>
-        <td>${escapeHtml(contextBudgetLabel(parent))}</td>
-        <td>${fmtNum(parent.risk_event_count || 0)}</td>
-      </tr>`;
-      const childRows = children.map(child => `<tr class="ctx-child" data-context-parent="${escapeHtml(String(parent.id))}" hidden>
-        <td><div class="ctx-name">${escapeHtml(child.source_record_name || child.source_record_id || "Historical activity")}</div><div class="ctx-meta">${escapeHtml(child.source_record_type || "Source record")} · ${escapeHtml(child.source_platform || "Unknown source")}</div></td>
-        <td>Contribution</td>
-        <td class="ctx-mono">${fmtNum(child.request_count || 0)}</td>
-        <td class="ctx-mono">${fmtNum((child.input_tokens || 0) + (child.output_tokens || 0))}</td>
-        <td class="ctx-mono">${fmtNum(child.tokens_saved || 0)}</td>
-        <td class="ctx-mono">${fmtUsd(Number(child.spend_usd || 0))}</td>
-        <td>Included in parent</td>
-        <td>—</td>
-      </tr>`).join("");
-      return parentRow + childRows;
-    }).join("");
+    const options = data.filter_options || {};
+    projectAttributionSelect("ctxProjectFilter", "All Projects", options.projects);
+    projectAttributionSelect("ctxPersonFilter", "All People", options.people);
+    projectAttributionSelect("ctxAccountFilter", "All Accounts", options.accounts);
+    projectAttributionSelect("ctxAgentFilter", "All Agents", options.agents);
+    projectAttributionSelect("ctxSourceFilter", "All Sources", options.source_platforms);
+    projectAttributionSelect("ctxRecordTypeFilter", "All Record Types", options.record_types);
+
+    const projectBody = document.getElementById("ctx-project-rows");
+    projectBody.innerHTML = (data.project_breakdown || []).length
+      ? data.project_breakdown.map(row => `<tr>
+          <td><div class="ctx-name">${escapeHtml(row.label)}</div></td>
+          <td>${escapeHtml(row.account_name || "Unassigned account")}</td>
+          <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
+          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+          <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
+        </tr>`).join("")
+      : '<tr><td colspan="5">No project activity matches these filters.</td></tr>';
+
+    const personBody = document.getElementById("ctx-person-rows");
+    personBody.innerHTML = (data.people_breakdown || []).length
+      ? data.people_breakdown.map(row => `<tr>
+          <td><div class="ctx-name">${escapeHtml(row.label)}</div><div class="ctx-meta">${escapeHtml(row.email || row.source_platform || "")}</div></td>
+          <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
+          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+          <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
+          <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
+        </tr>`).join("")
+      : '<tr><td colspan="5">No identified user activity matches these filters.</td></tr>';
+
+    const activityBody = document.getElementById("ctx-activity-rows");
+    const activities = data.activities || [];
+    activityBody.innerHTML = activities.length
+      ? activities.map(row => `<tr>
+          <td class="ctx-mono">${escapeHtml(row.timestamp ? new Date(row.timestamp).toLocaleString() : "—")}</td>
+          <td><div class="ctx-name">${escapeHtml(row.user_name || "Unknown user")}</div><div class="ctx-meta">${escapeHtml(row.user_source_platform || "")}</div></td>
+          <td><div class="ctx-name">${escapeHtml(row.agent_name || "Unknown agent")}</div><div class="ctx-meta">${escapeHtml(row.agent_platform || "")}</div></td>
+          <td>${escapeHtml(row.account_name || "Unassigned account")}</td>
+          <td>${escapeHtml(row.project_name || "Unattributed")}</td>
+          <td><div class="ctx-name">${escapeHtml(row.source_record_name || row.source_record_id || "Not recorded")}</div><div class="ctx-meta">${escapeHtml(row.source_record_type || row.source_platform || "")}</div></td>
+          <td><div>${escapeHtml(row.model_name || row.model_tier || "—")}</div><div class="ctx-meta">${escapeHtml(row.model_tier || "")}</div></td>
+          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+          <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
+          <td class="ctx-mono">${fmtUsd(Number(row.cost_usd || 0))}</td>
+        </tr>`).join("")
+      : '<tr><td colspan="10">No AI activity matches these filters.</td></tr>';
+    document.getElementById("ctx-activity-count").textContent =
+      `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"}`;
   } catch (err) {
-    document.getElementById("ctx-report-rows").innerHTML = `<tr><td colspan="8">Could not load business-context attribution: ${escapeHtml(err.message)}</td></tr>`;
+    document.getElementById("ctx-activity-rows").innerHTML =
+      `<tr><td colspan="10">Could not load project attribution: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
 function exportContextCsv() {
   const data = _rptContextData;
   if (!data) return;
-  const headers = ["Context", "Type", "Source", "Requests", "Input Tokens", "Output Tokens", "Tokens Pruned", "Spend USD", "Budget Used %", "Risk Events"];
-  const rows = (data.parents || []).map(row => [
-    row.name, row.context_type, row.source_platform, row.request_count, row.input_tokens,
-    row.output_tokens, row.tokens_saved, row.spend_usd, row.budget_used_pct ?? "", row.risk_event_count,
+  const headers = [
+    "Timestamp", "Person", "Person External ID", "Agent", "Account", "Project",
+    "Source System", "Record Type", "Source Record", "Model", "Input Tokens",
+    "Output Tokens", "Tokens Pruned", "Cost USD",
+  ];
+  const rows = (data.activities || []).map(row => [
+    row.timestamp, row.user_name, row.user_external_id, row.agent_name, row.account_name,
+    row.project_name, row.source_platform, row.source_record_type,
+    row.source_record_name || row.source_record_id, row.model_name || row.model_tier,
+    row.input_tokens, row.output_tokens, row.tokens_saved, row.cost_usd,
   ]);
-  downloadCsv(`costpilot_business_contexts_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  downloadCsv(`costpilot_project_attribution_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 }
 
 function isReportFilterActive() {
