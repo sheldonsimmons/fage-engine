@@ -869,8 +869,29 @@
 .project-attribution-ledger {
   padding: 16px;
 }
+.project-attribution-breakdowns .panel {
+  min-width: 0;
+  overflow: hidden;
+}
 .project-attribution-breakdowns .rpt-context-table {
   margin-top: 11px;
+  table-layout: fixed;
+}
+.project-attribution-breakdowns .rpt-context-table th,
+.project-attribution-breakdowns .rpt-context-table td {
+  overflow-wrap: anywhere;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.project-attribution-breakdowns .rpt-context-table .ctx-mono {
+  font-size: 10px;
+  white-space: nowrap;
+}
+.project-attribution-breakdowns .rpt-context-table th:first-child {
+  width: 28%;
+}
+.project-attribution-breakdowns .rpt-context-table th:last-child {
+  width: 16%;
 }
 .project-attribution-ledger-head {
   align-items: flex-end;

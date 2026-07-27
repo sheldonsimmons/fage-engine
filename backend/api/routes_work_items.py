@@ -1042,19 +1042,39 @@ def project_activity_reporting(
         )
 
     project_breakdown = aggregate(lambda row: (
-        identity(row)["project_external_id"],
-        identity(row)["project_name"],
+        identity(row)["project_external_id"] or (
+            "__simulator__" if bool(row[0].is_simulation) else None
+        ),
+        (
+            "Simulator Traffic"
+            if not identity(row)["project_external_id"] and bool(row[0].is_simulation)
+            else identity(row)["project_name"]
+        ),
         {
             "account_external_id": identity(row)["account_external_id"],
-            "account_name": identity(row)["account_name"],
+            "account_name": (
+                "Synthetic workload"
+                if not identity(row)["project_external_id"] and bool(row[0].is_simulation)
+                else identity(row)["account_name"]
+            ),
         },
     ))
     people_breakdown = aggregate(lambda row: (
-        identity(row)["user_external_id"],
-        identity(row)["user_name"],
+        identity(row)["user_external_id"] or (
+            "__simulator__" if bool(row[0].is_simulation) else None
+        ),
+        (
+            "Simulator User"
+            if not identity(row)["user_external_id"] and bool(row[0].is_simulation)
+            else identity(row)["user_name"]
+        ),
         {
             "email": identity(row)["user_email"],
-            "source_platform": identity(row)["user_source_platform"],
+            "source_platform": (
+                "CostPilot Simulator"
+                if not identity(row)["user_external_id"] and bool(row[0].is_simulation)
+                else identity(row)["user_source_platform"]
+            ),
         },
     ))
     agent_breakdown = aggregate(lambda row: (
@@ -1207,15 +1227,29 @@ def organizational_usage_reporting(
     units, users, agents, work = {}, {}, {}, {}
     for tx, user, agent, item in rows:
         unit_name = charged_name(tx)
-        user_key = (user.external_id if user else tx.actor_external_id) or "__unknown__"
+        is_simulation = bool(tx.is_simulation)
+        user_key = (
+            (user.external_id if user else tx.actor_external_id)
+            or ("__simulator__" if is_simulation else "__unknown__")
+        )
         agent_key = str(agent.id if agent else tx.agent_id or "__unknown__")
-        work_key = item.external_id if item else "__unattributed__"
+        work_key = (
+            item.external_id
+            if item
+            else ("__simulator__" if is_simulation else "__unattributed__")
+        )
         dimensions = (
             company,
             units.setdefault(unit_name, {**blank_bucket(unit_name), "unit_type": "department"}),
             users.setdefault((unit_name, user_key), {
-                **blank_bucket(user.name if user else (tx.actor_name or "Unknown user")),
-                "external_id": None if user_key == "__unknown__" else user_key,
+                **blank_bucket(
+                    user.name
+                    if user
+                    else (tx.actor_name or ("Simulator User" if is_simulation else "Unknown user"))
+                ),
+                "external_id": (
+                    None if user_key in {"__unknown__", "__simulator__"} else user_key
+                ),
                 "charged_unit": unit_name,
             }),
             agents.setdefault((unit_name, agent_key), {
@@ -1224,7 +1258,11 @@ def organizational_usage_reporting(
                 "charged_unit": unit_name,
             }),
             work.setdefault((unit_name, work_key), {
-                **blank_bucket(item.name if item else "Unattributed work"),
+                **blank_bucket(
+                    item.name
+                    if item
+                    else ("Simulator Traffic" if is_simulation else "Unattributed work")
+                ),
                 "external_id": item.external_id if item else None,
                 "charged_unit": unit_name,
             }),
