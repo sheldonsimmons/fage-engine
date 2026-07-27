@@ -165,6 +165,14 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
             item = db.query(WorkItem).filter(WorkItem.external_id == canonical_id).first()
         if not item and work.sync_if_missing:
             from core.business_context import normalize_context_type
+            try:
+                context_type = normalize_context_type(work.type)
+            except ValueError:
+                # Platform-native object names (for example ServiceNow's
+                # change_request or a customer's custom table) remain intact
+                # as source_record_type while using the universal custom
+                # reporting category internally.
+                context_type = "custom"
             item = WorkItem(
                 external_id=_canonical_work_external_id(workspace_id, platform, source_record_id),
                 name=(work.name or f"{work.type.title()} {source_record_id}").strip(),
@@ -172,7 +180,7 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
                 status="active",
                 source_platform=platform,
                 workspace_id=workspace_id,
-                context_type=normalize_context_type(work.type),
+                context_type=context_type,
                 context_template=f"{platform.lower()}_{work.type.lower()}",
                 source_record_type=work.type,
                 source_record_id=source_record_id,

@@ -108,6 +108,23 @@ def test_universal_work_records_are_tenant_scoped_and_synced():
     assert db.query(WorkItem).count() == 2
 
 
+def test_platform_native_record_type_is_preserved_with_safe_custom_category():
+    db = _session()
+    request = RouteRequest(
+        **_universal_payload("ServiceNow", "dev412335", "SN-CHANGE-1")
+    )
+    request.work_context.type = "change_request"
+    request.work_context.name = "CHG0001001"
+    _normalize_universal_request(request)
+
+    item = _resolve_work_item(db, request, "Operations")
+
+    assert item.context_type == "custom"
+    assert item.source_record_type == "change_request"
+    assert item.source_record_id == "SN-CHANGE-1"
+    assert item.name == "CHG0001001"
+
+
 def test_legacy_flat_request_remains_backward_compatible():
     req = RouteRequest(
         text="Existing integration payload",
