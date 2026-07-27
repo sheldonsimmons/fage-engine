@@ -2,7 +2,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.routes_router import RouteRequest, route_payload
-from api.routes_work_items import organizational_usage_reporting
+from api.routes_work_items import (
+    classify_business_purpose,
+    organizational_usage_reporting,
+    project_activity_reporting,
+)
 from database.db import Base
 from database.models import AuditEvent, OrganizationalUnit, TokenTransaction
 
@@ -97,3 +101,57 @@ def test_organizational_report_does_not_sum_dimensions_into_company_total():
     assert report["users"][0]["request_count"] == 1
     assert report["agents"][0]["request_count"] == 1
     assert report["work_items"][0]["request_count"] == 1
+
+
+def test_business_purpose_is_deterministic_and_filterable():
+    db = _session()
+    for external_id, record_type, agent_name in (
+        ("OPP-1", "Opportunity", "Renewal Agent"),
+        ("CHG-1", "change_request", "Change Agent"),
+    ):
+        request = RouteRequest(**{
+            "synthetic_simulation": True,
+            "source": {
+                "platform": "Salesforce" if record_type == "Opportunity" else "ServiceNow",
+                "workspace_id": "PURPOSE-1",
+                "agent_name": agent_name,
+                "department": "Operations",
+            },
+            "actor": {"external_id": f"USER-{external_id}", "name": "Test User"},
+            "work": {
+                "external_id": external_id,
+                "type": record_type,
+                "name": external_id,
+                "sync_if_missing": True,
+            },
+            "request": {"content": f"Summarize {record_type} and recommend next steps."},
+        })
+        route_payload(request, db)
+
+    tx_rows = db.query(TokenTransaction).order_by(TokenTransaction.id).all()
+    assert classify_business_purpose(tx_rows[0]) == "Sales & Revenue"
+    assert classify_business_purpose(tx_rows[1]) == "IT Service Management"
+
+    report = project_activity_reporting(
+        workspace_id="PURPOSE-1",
+        date_from=None,
+        date_to=None,
+        days=30,
+        project_id=None,
+        user_external_id=None,
+        agent_id=None,
+        account_id=None,
+        source_platform=None,
+        record_type=None,
+        charged_unit=None,
+        business_purpose="IT Service Management",
+        activity_limit=500,
+        db=db,
+    )
+
+    assert report["summary"]["request_count"] == 1
+    assert report["business_purpose_breakdown"][0]["label"] == "IT Service Management"
+    assert {item["label"] for item in report["filter_options"]["business_purposes"]} == {
+        "IT Service Management",
+        "Sales & Revenue",
+    }

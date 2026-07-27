@@ -796,6 +796,101 @@
   min-width: 0;
   padding: 7px 8px;
 }
+.project-attribution-active-filters {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: -6px 0 16px;
+}
+.project-attribution-active-filters > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.project-filter-chip {
+  align-items: center;
+  background: rgba(88, 166, 255, .08);
+  border: 1px solid rgba(88, 166, 255, .45);
+  border-radius: 999px;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 10px;
+  gap: 7px;
+  padding: 5px 8px;
+}
+.project-filter-chip:hover {
+  background: rgba(88, 166, 255, .16);
+}
+.purpose-usage-panel {
+  margin-bottom: 14px;
+  padding: 16px;
+}
+.purpose-usage-head {
+  align-items: flex-end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.purpose-usage-head > span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.purpose-usage-chart {
+  display: grid;
+  gap: 7px;
+}
+.purpose-usage-row {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: grid;
+  font-size: 10px;
+  gap: 10px;
+  grid-template-columns: minmax(150px, 230px) minmax(120px, 1fr) 80px minmax(145px, auto);
+  padding: 7px 8px;
+  text-align: left;
+}
+.purpose-usage-row:hover,
+.purpose-usage-row.active {
+  background: rgba(88, 166, 255, .06);
+  border-color: var(--accent);
+}
+.purpose-usage-label {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.purpose-usage-track {
+  background: var(--border);
+  border-radius: 999px;
+  height: 9px;
+  overflow: hidden;
+}
+.purpose-usage-track > span {
+  background: var(--accent);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+.purpose-usage-row strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+.purpose-usage-meta {
+  font-family: var(--font-mono);
+  text-align: right;
+}
 .project-attribution-breakdowns {
   display: grid;
   gap: 14px;
@@ -937,5 +1032,16 @@
   .project-attribution-filters,
   .project-attribution-breakdowns {
     grid-template-columns: 1fr;
+  }
+  .purpose-usage-row {
+    grid-template-columns: 1fr 75px;
+  }
+  .purpose-usage-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .purpose-usage-meta {
+    grid-column: 1 / -1;
+    text-align: left;
   }
 }

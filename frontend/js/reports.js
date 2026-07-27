@@ -458,7 +458,7 @@ function projectAttributionFilterValue(id) {
 function resetProjectAttributionFilters() {
   [
     "ctxOrgFilter", "ctxProjectFilter", "ctxPersonFilter", "ctxAccountFilter",
-    "ctxAgentFilter", "ctxSourceFilter", "ctxRecordTypeFilter",
+    "ctxAgentFilter", "ctxSourceFilter", "ctxRecordTypeFilter", "ctxPurposeFilter",
   ].forEach(id => {
     const select = document.getElementById(id);
     if (select) select.value = "";
@@ -470,6 +470,42 @@ function selectOrganizationalUnit(name) {
   const select = document.getElementById("ctxOrgFilter");
   if (!select) return;
   select.value = select.value === name ? "" : name;
+  loadBusinessContexts();
+}
+
+function clearProjectAttributionFilter(id) {
+  const select = document.getElementById(id);
+  if (select) select.value = "";
+  loadBusinessContexts();
+}
+
+function renderProjectAttributionActiveFilters() {
+  const definitions = [
+    ["ctxOrgFilter", "Team"], ["ctxProjectFilter", "Project"],
+    ["ctxPersonFilter", "Person"], ["ctxAccountFilter", "Account"],
+    ["ctxAgentFilter", "Agent"], ["ctxSourceFilter", "Source"],
+    ["ctxRecordTypeFilter", "Record type"], ["ctxPurposeFilter", "Purpose"],
+  ];
+  const chips = definitions.flatMap(([id, label]) => {
+    const select = document.getElementById(id);
+    if (!select?.value) return [];
+    const selected = select.options[select.selectedIndex]?.textContent || select.value;
+    return `<button type="button" class="project-filter-chip" onclick="clearProjectAttributionFilter('${id}')">
+      <span>${escapeHtml(label)}: ${escapeHtml(selected)}</span><span aria-hidden="true">×</span>
+    </button>`;
+  });
+  const container = document.getElementById("ctxActiveFilters");
+  if (!container) return;
+  container.hidden = chips.length === 0;
+  container.innerHTML = chips.length
+    ? `<span>Active filters</span>${chips.join("")}`
+    : "";
+}
+
+function selectBusinessPurpose(value) {
+  const select = document.getElementById("ctxPurposeFilter");
+  if (!select) return;
+  select.value = select.value === value ? "" : value;
   loadBusinessContexts();
 }
 
@@ -491,6 +527,7 @@ async function loadBusinessContexts() {
     source_platform: projectAttributionFilterValue("ctxSourceFilter"),
     record_type: projectAttributionFilterValue("ctxRecordTypeFilter"),
     charged_unit: projectAttributionFilterValue("ctxOrgFilter"),
+    business_purpose: projectAttributionFilterValue("ctxPurposeFilter"),
   };
   Object.entries(selectedFilters).forEach(([key, value]) => {
     if (value) params.set(key, value);
@@ -524,6 +561,8 @@ async function loadBusinessContexts() {
     projectAttributionSelect("ctxAgentFilter", "All Agents", options.agents);
     projectAttributionSelect("ctxSourceFilter", "All Sources", options.source_platforms);
     projectAttributionSelect("ctxRecordTypeFilter", "All Record Types", options.record_types);
+    projectAttributionSelect("ctxPurposeFilter", "All Business Purposes", options.business_purposes);
+    renderProjectAttributionActiveFilters();
 
     const selectedOrg = projectAttributionFilterValue("ctxOrgFilter");
     const company = orgData.company || {};
@@ -545,6 +584,29 @@ async function loadBusinessContexts() {
           <span>${fmtNum(row.request_count || 0)} requests · ${fmtNum(row.total_tokens || 0)} tokens</span>
         </button>`).join("")
       : '<div class="org-unit-empty">No organizational usage is available for this period.</div>';
+
+    const purposes = data.business_purpose_breakdown || [];
+    const maxPurposeSpend = Math.max(...purposes.map(row => Number(row.spend_usd || 0)), 0);
+    const totalPurposeSpend = purposes.reduce((sum, row) => sum + Number(row.spend_usd || 0), 0);
+    const selectedPurpose = projectAttributionFilterValue("ctxPurposeFilter");
+    document.getElementById("ctx-purpose-total").textContent = `${fmtUsd(totalPurposeSpend)} total spend`;
+    document.getElementById("ctx-purpose-chart").innerHTML = purposes.length
+      ? purposes.map(row => {
+          const spend = Number(row.spend_usd || 0);
+          const width = maxPurposeSpend > 0
+            ? Math.max(2, spend / maxPurposeSpend * 100)
+            : 0;
+          return `<button type="button"
+              class="purpose-usage-row${selectedPurpose === row.label ? " active" : ""}"
+              data-purpose="${escapeHtml(row.label || "")}"
+              onclick="selectBusinessPurpose(this.dataset.purpose)">
+            <span class="purpose-usage-label">${escapeHtml(row.label)}</span>
+            <span class="purpose-usage-track"><span style="width:${width.toFixed(2)}%"></span></span>
+            <strong>${fmtUsd(spend)}</strong>
+            <span class="purpose-usage-meta">${fmtNum(row.total_tokens || 0)} tokens · ${fmtNum(row.request_count || 0)} requests</span>
+          </button>`;
+        }).join("")
+      : '<div class="org-unit-empty">No business-purpose usage matches these filters.</div>';
 
     const projectBody = document.getElementById("ctx-project-rows");
     projectBody.innerHTML = (data.project_breakdown || []).length

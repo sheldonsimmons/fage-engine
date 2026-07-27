@@ -371,8 +371,12 @@
         <label>Record Type
           <select id="ctxRecordTypeFilter" onchange="loadBusinessContexts()"><option value="">All Record Types</option></select>
         </label>
+        <label>Business Purpose
+          <select id="ctxPurposeFilter" onchange="loadBusinessContexts()"><option value="">All Business Purposes</option></select>
+        </label>
         <button type="button" class="act-reset-btn" onclick="resetProjectAttributionFilters()">Clear Filters</button>
       </div>
+      <div class="project-attribution-active-filters" id="ctxActiveFilters" hidden></div>
 
       <div class="panel org-usage-overview">
         <div class="org-usage-head">
@@ -421,6 +425,19 @@
           <div class="rpt-kpi-label">Agents</div>
           <div class="rpt-kpi-value" id="ctx-agents">—</div>
           <div class="rpt-kpi-sub">used in this period</div>
+        </div>
+      </div>
+
+      <div class="panel purpose-usage-panel">
+        <div class="purpose-usage-head">
+          <div>
+            <div class="rpt-chart-title">Spend and tokens by business purpose</div>
+            <div class="project-attribution-sub">Deterministic categories based on source record type and agent metadata. Unclear activity remains unclassified.</div>
+          </div>
+          <span id="ctx-purpose-total">— total spend</span>
+        </div>
+        <div class="purpose-usage-chart" id="ctx-purpose-chart">
+          <div class="org-unit-empty">Loading business-purpose usage…</div>
         </div>
       </div>
 

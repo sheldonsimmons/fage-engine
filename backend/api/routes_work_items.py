@@ -45,6 +45,76 @@ VALID_COST_TREATMENTS = {
 }
 VALID_BUDGET_ACTIONS = {"warn", "throttle", "block"}
 
+BUSINESS_PURPOSE_RULES = (
+    (
+        "Customer & Employee Support",
+        {
+            "case", "incident", "problem", "support", "ticket", "customer",
+            "contact", "service", "help", "triage", "resolution",
+        },
+    ),
+    (
+        "Sales & Revenue",
+        {
+            "account", "opportunity", "quote", "lead", "sales", "renewal",
+            "pipeline", "campaign", "promotion", "loyalty",
+        },
+    ),
+    (
+        "IT Service Management",
+        {
+            "change_request", "change request", "cmdb", "it service",
+            "maintenance", "infrastructure", "configuration",
+        },
+    ),
+    (
+        "Document Processing",
+        {
+            "document", "contract", "invoice", "content", "email", "brief",
+            "summarization", "summarize",
+        },
+    ),
+    (
+        "Research & Analysis",
+        {
+            "research", "analysis", "analyst", "forecast", "review", "quality",
+            "risk", "audit",
+        },
+    ),
+    (
+        "Software Development",
+        {
+            "code", "software", "developer", "engineering", "bug", "test",
+            "release", "deployment",
+        },
+    ),
+    (
+        "Business Operations",
+        {
+            "operations", "workflow", "fulfillment", "inventory", "schedule",
+            "billing", "finance", "capex", "refund", "chargeback",
+        },
+    ),
+)
+
+
+def classify_business_purpose(tx, project=None, agent=None):
+    """Return an explainable business-purpose bucket from persisted metadata."""
+    signals = " ".join(
+        str(value or "").lower()
+        for value in (
+            tx.origin_record_type,
+            tx.origin_record_name,
+            project.context_type if project else None,
+            project.source_record_type if project else None,
+            agent.name if agent else None,
+        )
+    )
+    for label, keywords in BUSINESS_PURPOSE_RULES:
+        if any(keyword in signals for keyword in keywords):
+            return label
+    return "Other / Unclassified"
+
 
 class AccountIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -922,6 +992,7 @@ def project_activity_reporting(
     source_platform: Optional[str] = Query(None),
     record_type: Optional[str] = Query(None),
     charged_unit: Optional[str] = None,
+    business_purpose: Optional[str] = None,
     activity_limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
@@ -984,6 +1055,7 @@ def project_activity_reporting(
             "agent_unit": tx.agent_org_unit_name,
             "work_unit": tx.work_org_unit_name,
             "attribution_source": tx.attribution_source,
+            "business_purpose": classify_business_purpose(tx, project, agent),
         }
 
     option_rows = [identity(row) for row in base_rows]
@@ -1004,6 +1076,8 @@ def project_activity_reporting(
         if record_type and (tx.origin_record_type or "") != record_type:
             return False
         if charged_unit and item["charged_unit"] != charged_unit:
+            return False
+        if business_purpose and item["business_purpose"] != business_purpose:
             return False
         return True
 
@@ -1092,6 +1166,11 @@ def project_activity_reporting(
         identity(row)["agent_name"],
         {"source_platform": identity(row)["agent_platform"]},
     ))
+    purpose_breakdown = aggregate(lambda row: (
+        identity(row)["business_purpose"],
+        identity(row)["business_purpose"],
+        {},
+    ))
 
     activities = []
     for tx, project, account, user, agent in rows[:activity_limit]:
@@ -1145,6 +1224,7 @@ def project_activity_reporting(
             "source_platform": source_platform,
             "record_type": record_type,
             "charged_unit": charged_unit,
+            "business_purpose": business_purpose,
         },
         "filter_options": {
             "projects": unique_options("project_external_id", "project_name", "account_name"),
@@ -1158,6 +1238,7 @@ def project_activity_reporting(
                 row[0].origin_record_type for row in base_rows if row[0].origin_record_type
             }),
             "organizational_units": unique_options("charged_unit", "charged_unit"),
+            "business_purposes": unique_options("business_purpose", "business_purpose"),
         },
         "summary": {
             "request_count": len(rows),
@@ -1175,6 +1256,7 @@ def project_activity_reporting(
         "project_breakdown": project_breakdown,
         "people_breakdown": people_breakdown,
         "agent_breakdown": agent_breakdown,
+        "business_purpose_breakdown": purpose_breakdown,
         "activities": activities,
         "activity_count": len(rows),
         "activity_limit": activity_limit,
