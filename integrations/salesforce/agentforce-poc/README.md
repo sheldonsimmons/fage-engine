@@ -128,3 +128,33 @@ In Agentforce Preview, request a summary. Confirm:
 
 Set Project Status to `On Hold` and repeat. CostPilot should return
 `allowed = false` without creating an AI transaction.
+
+## 7. Generate attributed Salesforce activity
+
+The package includes a **CostPilot Load Generator** Lightning tab for repeatable
+proof data. It uses Salesforce records and users rather than anonymous browser
+traffic.
+
+1. Deploy the CostPilot backend change that accepts `simulation_mode`.
+2. Deploy this Salesforce DX source and assign
+   `CostPilot_Agentforce_User` to the test user.
+3. Open **App Launcher → CostPilot Load Generator**.
+4. Select an Account, Opportunity, or CostPilot Project.
+5. Select the Salesforce user and enter the visible agent and department.
+6. Choose a routing mix:
+   - **Balanced** exercises Scout, Analyst, Advisor, and Strategist evenly.
+   - **Natural** lets CostPilot classify the generated request normally.
+   - **Economy** favors Scout and Analyst and avoids Strategist.
+   - **Complex** alternates Advisor and Strategist.
+7. Choose the operating mode:
+   - **Simulation** permits 1–25 calls. Each call runs attribution,
+     governance, pruning, routing, budget logic, and reporting, but does not
+     purchase an LLM response.
+   - **Live** permits 1–3 calls and uses the normal CostPilot-to-model path.
+8. Start the run and watch completed, failed, and remaining call counts.
+
+Every generated call sends the Salesforce record ID as the permanent work key,
+the record name as its visible label, the selected Salesforce user, agent name,
+department, source system, and source object. The resulting activity therefore
+appears in CostPilot under the same project, person, agent, and model reporting
+used for real Agentforce work.

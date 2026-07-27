@@ -45,6 +45,7 @@ class AgentforceGovernRequest(BaseModel):
     source_record_type: str = Field(default="CostPilot_Project__c", max_length=120)
     customer_external_id: Optional[str] = Field(default=None, max_length=120)
     customer_name: Optional[str] = Field(default=None, max_length=200)
+    simulation_mode: bool = False
 
 
 class AgentforceGovernResponse(BaseModel):
@@ -287,7 +288,7 @@ def govern_agentforce_work(
         )
 
     mode_info = get_mode_info()
-    if mode_info["mode"] != "live":
+    if mode_info["mode"] != "live" and not body.simulation_mode:
         raise HTTPException(
             status_code=503,
             detail=(
@@ -320,6 +321,7 @@ def govern_agentforce_work(
                 actor_status=body.project_member_status,
                 actor_can_use_ai=body.project_member_can_use_ai,
                 enforce_project_membership=bool(body.salesforce_user_id),
+                synthetic_simulation=body.simulation_mode,
             ),
             db,
         )

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Routing_Mix__c</fullName><label>Routing Mix</label><length>40</length><required>true</required><type>Text</type></CustomField>

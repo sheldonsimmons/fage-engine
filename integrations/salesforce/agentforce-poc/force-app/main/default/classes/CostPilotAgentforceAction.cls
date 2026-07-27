@@ -15,16 +15,16 @@ public with sharing class CostPilotAgentforceAction {
         for (GovernanceRequest request : requests) {
             results.add(governOne(request));
         }
-        List<CostPilot_Project__c> projectUpdates = new List<CostPilot_Project__c>();
+        Map<Id, CostPilot_Project__c> projectUpdates = new Map<Id, CostPilot_Project__c>();
         for (Integer index = 0; index < requests.size(); index++) {
             CostPilot_Project__c projectUpdate =
                 projectUpdateFor(requests[index], results[index]);
             if (projectUpdate != null) {
-                projectUpdates.add(projectUpdate);
+                projectUpdates.put(projectUpdate.Id, projectUpdate);
             }
         }
         if (!projectUpdates.isEmpty()) {
-            update projectUpdates;
+            update projectUpdates.values();
         }
         return results;
     }
@@ -63,9 +63,12 @@ public with sharing class CostPilotAgentforceAction {
             'agent_name'            => String.isBlank(request.agentName)
                 ? 'Salesforce Agentforce' : request.agentName,
             'requested_model'       => request.requestedModel,
-            'salesforce_user_id'    => UserInfo.getUserId(),
-            'salesforce_user_name'  => UserInfo.getName(),
-            'salesforce_user_email' => UserInfo.getUserEmail(),
+            'salesforce_user_id'    => String.isBlank(request.attributionUserId)
+                ? UserInfo.getUserId() : request.attributionUserId,
+            'salesforce_user_name'  => String.isBlank(request.attributionUserName)
+                ? UserInfo.getName() : request.attributionUserName,
+            'salesforce_user_email' => String.isBlank(request.attributionUserEmail)
+                ? UserInfo.getUserEmail() : request.attributionUserEmail,
             'project_member_role'   => membership.role,
             'project_member_status' => membership.status,
             'project_member_can_use_ai' => membership.canUseAi,
@@ -78,7 +81,8 @@ public with sharing class CostPilotAgentforceAction {
             'source_record_type'    => String.isBlank(request.sourceType)
                 ? recordTypeName(request.recordId) : request.sourceType,
             'customer_external_id'  => membership.accountId,
-            'customer_name'         => membership.accountName
+            'customer_name'         => membership.accountName,
+            'simulation_mode'       => request.simulationMode == true
         }));
 
         try {
@@ -302,6 +306,11 @@ public with sharing class CostPilotAgentforceAction {
 
         @InvocableVariable(label='Source System')
         public String sourceSystem;
+
+        public String attributionUserId;
+        public String attributionUserName;
+        public String attributionUserEmail;
+        public Boolean simulationMode;
     }
 
     public class GovernanceResult {

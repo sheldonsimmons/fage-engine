@@ -1,0 +1,148 @@
+<template>
+    <lightning-card title="CostPilot Salesforce Load Generator" icon-name="standard:einstein_replies">
+        <div class="slds-var-p-horizontal_medium slds-var-p-bottom_medium">
+            <p class="intro">
+                Generate governed AI activity using real Salesforce records, users, and agent names.
+                Simulation records the complete CostPilot decision without purchasing an LLM response.
+            </p>
+
+            <template if:true={errorMessage}>
+                <div class="slds-notify slds-notify_alert slds-alert_error slds-var-m-bottom_medium" role="alert">
+                    <span class="slds-assistive-text">Error</span>
+                    <h2>{errorMessage}</h2>
+                </div>
+            </template>
+
+            <div class="form-grid">
+                <lightning-combobox
+                    label="Salesforce record type"
+                    value={sourceObject}
+                    options={sourceObjectOptions}
+                    onchange={handleSourceObjectChange}
+                    disabled={isRunning}
+                    required>
+                </lightning-combobox>
+
+                <lightning-combobox
+                    label="Record to attribute"
+                    value={recordId}
+                    options={recordOptions}
+                    onchange={handleRecordChange}
+                    disabled={disableRecordSelection}
+                    required>
+                </lightning-combobox>
+
+                <lightning-combobox
+                    label="Salesforce user"
+                    value={attributionUserId}
+                    options={userOptions}
+                    onchange={handleUserChange}
+                    disabled={isRunning}
+                    required>
+                </lightning-combobox>
+
+                <lightning-input
+                    label="Agent name"
+                    value={agentName}
+                    onchange={handleAgentNameChange}
+                    disabled={isRunning}
+                    required>
+                </lightning-input>
+
+                <lightning-input
+                    label="Department"
+                    value={department}
+                    onchange={handleDepartmentChange}
+                    disabled={isRunning}>
+                </lightning-input>
+
+                <lightning-combobox
+                    label="Mode"
+                    value={mode}
+                    options={modeOptions}
+                    onchange={handleModeChange}
+                    disabled={isRunning}>
+                </lightning-combobox>
+
+                <lightning-combobox
+                    label="Routing mix"
+                    value={routingMix}
+                    options={routingMixOptions}
+                    onchange={handleRoutingMixChange}
+                    disabled={isRunning}>
+                </lightning-combobox>
+
+                <lightning-combobox
+                    label="Number of calls"
+                    value={callCount}
+                    options={callCountOptions}
+                    onchange={handleCallCountChange}
+                    disabled={isRunning}>
+                </lightning-combobox>
+            </div>
+
+            <div class={modeNoticeClass}>
+                <strong>{modeNoticeTitle}</strong>
+                <span>{modeNoticeText}</span>
+            </div>
+
+            <div class="actions">
+                <lightning-button
+                    variant="brand"
+                    label="Start governed run"
+                    onclick={handleStart}
+                    disabled={disableStart}>
+                </lightning-button>
+                <template if:true={isRunning}>
+                    <lightning-button
+                        variant="destructive-text"
+                        label="Stop after current call"
+                        onclick={handleStop}>
+                    </lightning-button>
+                </template>
+            </div>
+
+            <template if:true={hasRun}>
+                <section class="run-panel" aria-live="polite">
+                    <div class="run-heading">
+                        <div>
+                            <span class="eyebrow">{runStatus.runNumber}</span>
+                            <h2>{runStatus.status}</h2>
+                            <p>{runStatus.sourceRecordName} · {runStatus.agentName}</p>
+                        </div>
+                        <lightning-badge label={runStatus.mode}></lightning-badge>
+                    </div>
+
+                    <lightning-progress-bar
+                        value={progressPercent}
+                        size="large"
+                        variant="circular">
+                    </lightning-progress-bar>
+
+                    <div class="metrics">
+                        <div>
+                            <strong>{runStatus.completedCalls}</strong>
+                            <span>completed</span>
+                        </div>
+                        <div>
+                            <strong>{runStatus.failedCalls}</strong>
+                            <span>failed</span>
+                        </div>
+                        <div>
+                            <strong>{remainingCalls}</strong>
+                            <span>remaining</span>
+                        </div>
+                        <div>
+                            <strong>{runStatus.routingMix}</strong>
+                            <span>routing mix</span>
+                        </div>
+                    </div>
+
+                    <template if:true={runStatus.lastError}>
+                        <p class="run-error">Latest error: {runStatus.lastError}</p>
+                    </template>
+                </section>
+            </template>
+        </div>
+    </lightning-card>
+</template>
