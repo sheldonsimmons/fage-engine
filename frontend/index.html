@@ -4430,6 +4430,46 @@ function renderExec(data) {
     ? events.filter(event => Boolean(event.is_simulation)).length
     : Number(d.simulation_calls || 0);
   const liveCount = Math.max(0, totalCalls - simulationCount);
+  const drivers = topCostDrivers(events, data);
+  const topDriver = drivers[0];
+  const executiveContext = {
+    actualCost,
+    annualSavings,
+    totalAvoided,
+    totalCalls,
+    routingPct,
+    budget,
+    controlsCount,
+    simulationCount,
+    liveCount,
+    blockedCount,
+    unreviewedBlockedCount,
+    collisionCount,
+    throttleCount,
+    routingSaved,
+    pruningSaved,
+    pruneStats,
+    throttleSaved,
+    blockedSaved,
+    drivers,
+  };
+
+  // Populate the primary executive view before legacy/detail panels. A stale
+  // secondary component must never leave the decision-making surface blank.
+  try {
+    renderExecutiveGlance(events, data, executiveContext);
+  } catch (err) {
+    console.error("Executive glance detail render failed:", err);
+  }
+  updateExecActionStrip({
+    data,
+    budget,
+    topDriver,
+    blockedCount,
+    unreviewedBlockedCount,
+    collisionCount,
+    collisionBreakdown,
+  });
 
   document.getElementById("execFilterStatus").textContent = filterSummaryText(events.length);
   const scopeNotice = document.getElementById("execScopeNotice");
@@ -4504,38 +4544,6 @@ function renderExec(data) {
   setText("execAvgAfter", fmtUsd(avgAfter));
   setText("execPremiumAvoided", fmtNum(economyCalls));
 
-  const drivers = topCostDrivers(events, data);
-  const topDriver = drivers[0];
-  renderExecutiveGlance(events, data, {
-    actualCost,
-    annualSavings,
-    totalAvoided,
-    totalCalls,
-    routingPct,
-    budget,
-    controlsCount,
-    simulationCount,
-    liveCount,
-    blockedCount,
-    unreviewedBlockedCount,
-    collisionCount,
-    throttleCount,
-    routingSaved,
-    pruningSaved,
-    pruneStats,
-    throttleSaved,
-    blockedSaved,
-    drivers,
-  });
-  updateExecActionStrip({
-    data,
-    budget,
-    topDriver,
-    blockedCount,
-    unreviewedBlockedCount,
-    collisionCount,
-    collisionBreakdown,
-  });
   setText("execHeroTopDriverValue", topDriver ? topDriver.agent : "No driver yet");
   setText(
     "execHeroTopDriverSub",
@@ -4737,6 +4745,34 @@ function renderExec(data) {
   }
 }
 
+function renderExecFallback(data, error) {
+  const d = data?.dashboard || {};
+  const contextReport = data?.businessContexts || {};
+  const spend = Number(d.spend_month_usd || 0);
+  const avoided = Number(d.total_savings_usd || 0);
+  const annual = Number(d.projected_annual_savings || avoided * 12);
+  const requests = Number(d.requests_governed || 0);
+  const tokensPruned = Number(d.tokens_saved_total || 0);
+  const budgetPct = Number(d.overall_budget_pct || 0);
+  const blocked = Number(d.blocked_count || 0);
+  const collisions = Number(d.collision_count || 0);
+  const throttled = Number(d.throttle_prevented || 0);
+
+  setText("execGlanceSpend", fmtUsd(spend));
+  setText("execGlanceAvoided", fmtUsd(annual));
+  setText("execGlanceAvoidedSub", `${fmtUsd(avoided)} avoided in current period`);
+  setText("execGlancePruningTokens", fmtNum(tokensPruned));
+  setText("execGlanceBudget", `${Math.round(budgetPct)}%`);
+  setText("execGlanceRequests", fmtNum(requests));
+  setText("execGlanceContextCount", fmtNum(Number(contextReport.active_context_count || 0)));
+  setText("execGlanceRisk", fmtNum(blocked + collisions + throttled));
+  setText("execActionTitle", "Core totals loaded");
+  setText("execActionDriverTitle", "Some dashboard details need refresh");
+  setText("execActionDriverSub", "Core CostPilot totals are available while a secondary panel recovers.");
+  document.getElementById("execActionStrip")?.classList.remove("clear");
+  console.error("Executive dashboard fallback used:", error);
+}
+
 async function loadExec() {
   try {
     const [dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage] = await Promise.all([
@@ -4767,6 +4803,7 @@ async function loadExec() {
     updateTrialStartCard(await loadTrialScopedExecData(execData));
   } catch (err) {
     console.warn("Executive dashboard load failed:", err.message);
+    renderExecFallback(execData, err);
   }
 }
 
