@@ -1009,6 +1009,16 @@ def project_activity_reporting(
 
     rows = [row for row in base_rows if matches(row)]
 
+    def is_simulator_traffic(row):
+        tx, project, _, user, agent = row
+        return bool(tx.is_simulation) or bool(
+            agent
+            and not project
+            and not user
+            and not tx.actor_external_id
+            and not tx.origin_record_id
+        )
+
     def aggregate(key_fn):
         grouped = {}
         for row in rows:
@@ -1030,7 +1040,7 @@ def project_activity_reporting(
             bucket["output_tokens"] += int(tx.output_tokens or 0)
             bucket["tokens_saved"] += int(tx.tokens_saved or 0)
             bucket["spend_usd"] += float(tx.cost_usd or 0.0)
-            bucket["simulation_count"] += 1 if bool(tx.is_simulation) else 0
+            bucket["simulation_count"] += 1 if is_simulator_traffic(row) else 0
         result = []
         for bucket in grouped.values():
             bucket["total_tokens"] = bucket["input_tokens"] + bucket["output_tokens"]
@@ -1043,36 +1053,36 @@ def project_activity_reporting(
 
     project_breakdown = aggregate(lambda row: (
         identity(row)["project_external_id"] or (
-            "__simulator__" if bool(row[0].is_simulation) else None
+            "__simulator__" if is_simulator_traffic(row) else None
         ),
         (
             "Simulator Traffic"
-            if not identity(row)["project_external_id"] and bool(row[0].is_simulation)
+            if not identity(row)["project_external_id"] and is_simulator_traffic(row)
             else identity(row)["project_name"]
         ),
         {
             "account_external_id": identity(row)["account_external_id"],
             "account_name": (
                 "Synthetic workload"
-                if not identity(row)["project_external_id"] and bool(row[0].is_simulation)
+                if not identity(row)["project_external_id"] and is_simulator_traffic(row)
                 else identity(row)["account_name"]
             ),
         },
     ))
     people_breakdown = aggregate(lambda row: (
         identity(row)["user_external_id"] or (
-            "__simulator__" if bool(row[0].is_simulation) else None
+            "__simulator__" if is_simulator_traffic(row) else None
         ),
         (
             "Simulator User"
-            if not identity(row)["user_external_id"] and bool(row[0].is_simulation)
+            if not identity(row)["user_external_id"] and is_simulator_traffic(row)
             else identity(row)["user_name"]
         ),
         {
             "email": identity(row)["user_email"],
             "source_platform": (
                 "CostPilot Simulator"
-                if not identity(row)["user_external_id"] and bool(row[0].is_simulation)
+                if not identity(row)["user_external_id"] and is_simulator_traffic(row)
                 else identity(row)["user_source_platform"]
             ),
         },
@@ -1159,8 +1169,8 @@ def project_activity_reporting(
             "people_count": len({identity(row)["user_external_id"] for row in rows if identity(row)["user_external_id"]}),
             "agent_count": len({identity(row)["agent_id"] for row in rows if identity(row)["agent_id"] is not None}),
             "project_count": len({identity(row)["project_external_id"] for row in rows if identity(row)["project_external_id"]}),
-            "simulation_count": sum(1 for row in rows if bool(row[0].is_simulation)),
-            "live_count": sum(1 for row in rows if not bool(row[0].is_simulation)),
+            "simulation_count": sum(1 for row in rows if is_simulator_traffic(row)),
+            "live_count": sum(1 for row in rows if not is_simulator_traffic(row)),
         },
         "project_breakdown": project_breakdown,
         "people_breakdown": people_breakdown,
@@ -1227,7 +1237,13 @@ def organizational_usage_reporting(
     units, users, agents, work = {}, {}, {}, {}
     for tx, user, agent, item in rows:
         unit_name = charged_name(tx)
-        is_simulation = bool(tx.is_simulation)
+        is_simulation = bool(tx.is_simulation) or bool(
+            agent
+            and not item
+            and not user
+            and not tx.actor_external_id
+            and not tx.origin_record_id
+        )
         user_key = (
             (user.external_id if user else tx.actor_external_id)
             or ("__simulator__" if is_simulation else "__unknown__")
