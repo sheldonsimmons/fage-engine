@@ -109,6 +109,10 @@ def _run_migrations():
             ensure_column(conn, "audit_events", "is_simulation", "BOOLEAN DEFAULT FALSE NOT NULL")
         except Exception:
             pass
+        try:
+            ensure_column(conn, "audit_events", "cost_usd", "FLOAT")
+        except Exception:
+            pass
         for table in ("token_transactions", "audit_events"):
             for column, definition in (
                 ("work_user_id", "INTEGER REFERENCES work_users(id)"),

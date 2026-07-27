@@ -1,4 +1,11 @@
-from core.auditor import _build_rationale
+from types import SimpleNamespace
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from core.auditor import _build_rationale, _extract_cost_usd
+from core.budget import effective_budget_context
+from database.models import Base, DepartmentBudget
 
 
 BASE_CONTEXT = {
@@ -39,3 +46,41 @@ def test_true_budget_override_is_described_as_human_supervisor_action():
 
     assert "SUPERVISOR OVERRIDE GRANTED" in rationale
     assert "human supervisor has manually cleared" in rationale
+
+
+def test_workspace_budget_context_does_not_leak_global_department_spend():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        db.add_all([
+            DepartmentBudget(
+                department="Engineering",
+                monthly_cap_usd=10.0,
+                current_spend_usd=5.0,
+            ),
+            DepartmentBudget(
+                department="WORKSPACE123:Engineering",
+                monthly_cap_usd=10.0,
+                current_spend_usd=0.0,
+            ),
+        ])
+        db.commit()
+
+        context = effective_budget_context(db, "WORKSPACE123:Engineering")
+
+        assert context["budget_spent_usd"] == 0.0
+        assert context["budget_used_pct"] == 0.0
+    finally:
+        db.close()
+
+
+def test_legacy_budget_event_does_not_report_budget_snapshot_as_call_cost():
+    event = SimpleNamespace(
+        event_type="BUDGET",
+        cost_usd=None,
+        decision_outcome="Budget throttle override granted",
+        rationale="Budget remains at 5.3% ($0.5322 spent).",
+    )
+
+    assert _extract_cost_usd(event) == 0.0

@@ -321,6 +321,7 @@ def write_audit_event(
         matched_keywords_json = json.dumps(matched_keywords or []),
         rationale        = rationale,
         decision_outcome = decision_outcome,
+        cost_usd          = cost_usd,
         risk_level       = risk_level,
         is_simulation    = bool(is_simulation),
         timestamp        = now,
@@ -397,6 +398,11 @@ def _extract_cost_usd(e: AuditEvent):
     cost = getattr(e, "cost_usd", None)
     if cost is not None:
         return cost
+    # Budget-control events do not consume model tokens. Older rows predate
+    # the explicit cost column, so do not mistake budget snapshot dollars for
+    # an AI-call cost.
+    if getattr(e, "event_type", None) == "BUDGET":
+        return 0.0
 
     for text in (getattr(e, "decision_outcome", None), getattr(e, "rationale", None)):
         if not text:

@@ -349,6 +349,7 @@ class AuditEvent(Base):
     matched_keywords_json = Column(Text,     nullable=True)    # JSON array e.g. '["urgent","legal"]'
     rationale        = Column(Text,     nullable=True)    # Plain-English justification
     decision_outcome = Column(String,   nullable=True)
+    cost_usd          = Column(Float,    nullable=True)
     risk_level       = Column(String,   default="low")    # low | medium | high | critical
     is_simulation    = Column(Boolean,  nullable=False, default=False)
     timestamp        = Column(DateTime, default=datetime.utcnow)

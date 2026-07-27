@@ -34,6 +34,14 @@ def clean_budget_department_name(department: str) -> str:
 
 def related_budget_rows(db: Session, department: str) -> list[DepartmentBudget]:
     """Return budget rows that belong to the same displayed department."""
+    # A workspace-qualified department is a tenant-scoped routing key. Never
+    # combine it with the global department or another workspace's budget.
+    # Unqualified names may still be grouped for the all-company dashboard.
+    qualified = clean_budget_department_name(department) != str(department or "").strip()
+    if qualified:
+        exact = db.query(DepartmentBudget).filter_by(department=department).first()
+        return [exact] if exact else []
+
     target = clean_budget_department_name(department).lower()
     if not target:
         return []
