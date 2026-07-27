@@ -27,7 +27,7 @@ CONNECTOR_MANIFESTS = {
         "label": "ServiceNow",
         "category": "business_platform",
         "authentication": {"type": "oauth_rest_message", "customer_label": "Connect ServiceNow"},
-        "installation": ["Flow Designer action", "REST Message", "Business Rule"],
+        "installation": ["Flow Designer action", "REST Message"],
         "modes": {"control": "available", "observe": "planned"},
         "objects": ["sn_customerservice_case", "incident", "pm_project", "sc_request", "problem", "change_request", "task"],
         "recommended_work": [

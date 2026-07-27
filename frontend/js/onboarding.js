@@ -2107,64 +2107,92 @@ CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ re
 }
 
 function _genServiceNow(obj, dept, agent, fields, returnFields = []) {
-  const prompt = _jsPrompt(fields, "current", (v, f) => `(${v}.getValue('${_codeStr(f)}') || '')`);
-  const returnWrites = returnFields.map(f =>
-    `        current.setValue('${_codeStr(f.name)}', ${_serviceNowResultExpr(f.source)});`
-  ).join("\n");
   const code =
-`// ServiceNow Business Rule — Table: ${obj}
-// When: after | Insert: true | Update: true
+`// ServiceNow Flow Designer custom Action — Script step
+// Runs only when a Flow, UI Action, Virtual Agent, or Now Assist workflow
+// explicitly invokes "CostPilot Governed AI Request".
+(function execute(inputs, outputs) {
+    var tableName = String(inputs.record_table || '${obj}').trim();
+    var recordSysId = String(inputs.record_sys_id || '').trim();
+    var prompt = String(inputs.prompt || '').trim();
+    if (!tableName || !recordSysId || !prompt) {
+        throw new Error('record_table, record_sys_id, and prompt are required.');
+    }
 
-(function executeRule(current, previous) {
-    var prompt = ${prompt};
+    var record = new GlideRecordSecure(tableName);
+    if (!record.get(recordSysId)) {
+        throw new Error('The requested ServiceNow record was not found or is not accessible.');
+    }
 
     var rm = new sn_ws.RESTMessageV2();
     rm.setEndpoint('${CostPilot_URL}/api/route');
     rm.setHttpMethod('POST');
     rm.setRequestHeader('Content-Type', 'application/json');
+    rm.setHttpTimeout(120000);
     rm.setRequestBody(JSON.stringify({
         contract_version: '2026-07-26',
         mode: 'control',
         source: {
             platform: 'ServiceNow',
             workspace_id: gs.getProperty('instance_name'),
-            agent_name: '${agent}',
-            department: '${dept}'
+            agent_name: String(inputs.agent_name || '${agent}'),
+            department: String(inputs.department || '${dept}')
         },
         actor: {
             external_id: gs.getUserID(),
-            name: gs.getUserDisplayName()
+            name: gs.getUserDisplayName(),
+            email: gs.getUser().getEmail()
         },
         work: {
-            external_id: current.getUniqueValue(),
-            type: '${obj}',
-            name: current.getDisplayValue() || '${obj} ' + current.getUniqueValue(),
+            external_id: record.getUniqueValue(),
+            type: tableName,
+            name: record.getDisplayValue() || tableName + ' ' + record.getUniqueValue(),
             sync_if_missing: true
         },
         request: {
-            task: 'Process ${obj} record',
+            task: String(inputs.task || 'ServiceNow AI request'),
             content: prompt,
             payload_type: 'text',
             auto_prune: true
         }
     }));
+
     var response = rm.execute();
-    if (response.getStatusCode() == 200) {
-        var r = JSON.parse(response.getBody());
-${returnWrites || "        // No return columns configured. CostPilot still routes, logs, and reports this request."}
-        if (${returnFields.length ? "true" : "false"}) {
-            current.setWorkflow(false);
-            current.update();
-        }
+    var status = response.getStatusCode();
+    if (status < 200 || status >= 300) {
+        throw new Error('CostPilot request failed (' + status + '): ' + response.getBody());
     }
-})(current, previous);`;
+    var result = JSON.parse(response.getBody());
+
+    outputs.ai_response = result.simulated_response || '';
+    outputs.model_tier = result.model_tier || '';
+    outputs.model_name = result.model_name || '';
+    outputs.routing_decision = result.routing_decision || '';
+    outputs.cost_usd = Number(result.cost_usd || 0);
+    outputs.input_tokens = Number(result.input_tokens || 0);
+    outputs.output_tokens = Number(result.output_tokens || 0);
+    outputs.tokens_pruned = Number(result.tokens_saved_by_pruning || 0);
+    outputs.work_item_id = result.work_item_id || '';
+    outputs.work_item_name = result.work_item_name || '';
+})(inputs, outputs);`;
+
+  const setupHtml = `<div class="ob-code-section" style="margin-top:20px">
+    <div class="ob-code-header"><span class="ob-code-label">Flow Designer Action setup</span><span class="ob-code-hint">This action runs only when an AI workflow explicitly calls it.</span></div>
+    <div class="ob-install-steps">
+      <div><strong>1. Flow Designer → New → Action</strong><br/>Name: <strong>CostPilot Governed AI Request</strong> · Application: Global</div>
+      <div><strong>2. Add Action Inputs</strong><br/><code>prompt</code>, <code>record_table</code>, and <code>record_sys_id</code> as required String inputs. Add optional String inputs <code>task</code>, <code>agent_name</code>, and <code>department</code>.</div>
+      <div><strong>3. Add a Script step</strong><br/>Create matching Script inputs and paste the generated script below.</div>
+      <div><strong>4. Add Action Outputs</strong><br/><code>ai_response</code>, <code>model_tier</code>, <code>model_name</code>, <code>routing_decision</code>, <code>work_item_id</code>, and <code>work_item_name</code> as String; <code>cost_usd</code> as Decimal; <code>input_tokens</code>, <code>output_tokens</code>, and <code>tokens_pruned</code> as Integer.</div>
+      <div><strong>5. Invoke it only from AI experiences</strong><br/>Add this action to a user-triggered Flow, UI Action, Virtual Agent, or Now Assist workflow. Do not attach it to a record insert/update trigger.</div>
+    </div>
+  </div>`;
 
   return _platformMappingHtml("servicenow", obj, fields, returnFields)
     + _obCodeSection(
-      "Business Rule Script",
-      "System Definition → Business Rules → New · Table: " + obj + " · When: after · Insert + Update",
+      "CostPilot Governed AI Request — Script step",
+      "Flow Designer → Action → Add Script step · Explicit AI requests only",
       code
-    ) + _obBanner("servicenow", obj, dept, agent) + _obActions();
+    ) + setupHtml + _obBanner("servicenow", obj, dept, agent) + _obActions();
 }
 
 function _genHubSpot(obj, dept, agent, fields, returnFields = []) {
