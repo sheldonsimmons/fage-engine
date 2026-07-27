@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from api.routes_connections import (
     ConnectionCreate,
     MappingUpdate,
+    _servicenow_auth_base,
     approve_mapping,
     create_connection,
     list_connections,
@@ -151,3 +152,59 @@ def test_salesforce_connection_rejects_non_salesforce_authorization_hosts():
         assert False, "A non-Salesforce OAuth host must be rejected"
     except HTTPException as exc:
         assert exc.status_code == 400
+
+
+def test_servicenow_connection_accepts_only_https_instance_domains():
+    assert (
+        _servicenow_auth_base("https://acme-dev.service-now.com/")
+        == "https://acme-dev.service-now.com"
+    )
+    for unsafe_url in (
+        "http://acme-dev.service-now.com",
+        "https://service-now.com.example.net",
+        "https://example.com",
+    ):
+        try:
+            _servicenow_auth_base(unsafe_url)
+            assert False, f"{unsafe_url} must not be accepted as a ServiceNow instance"
+        except HTTPException as exc:
+            assert exc.status_code == 400
+
+
+def test_servicenow_connection_uses_the_shared_mapping_lifecycle():
+    db = _session()
+    item = create_connection(
+        ConnectionCreate(
+            workspace_id="SN-ACME",
+            platform="servicenow",
+            display_name="ServiceNow Development",
+            auth_base_url="https://acme-dev.service-now.com",
+        ),
+        db=db,
+    )
+    assert item["platform"] == "servicenow"
+    assert item["status"] == "draft"
+
+    updated = approve_mapping(
+        item["id"],
+        MappingUpdate(
+            selected_object="customer_account",
+            mapping={
+                "work_id": "sys_id",
+                "work_name": "name",
+                "owner": "assigned_to",
+                "children": [
+                    {
+                        "object": "incident",
+                        "label": "Incident",
+                        "parent_field": "company",
+                        "behavior": "track_and_rollup",
+                    }
+                ],
+            },
+        ),
+        db=db,
+    )
+    assert updated["status"] == "active"
+    assert updated["mapping"]["parent_object"] == "customer_account"
+    assert updated["mapping"]["children"][0]["object"] == "incident"

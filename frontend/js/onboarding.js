@@ -646,6 +646,7 @@ function renderObConnectionPlan(platform) {
 }
 
 let obDiscoveryConnectionId = null;
+let obDiscoveryPlatform = null;
 let obDiscoveredFields = [];
 let obDiscoveredRelationships = [];
 
@@ -657,23 +658,49 @@ function renderObDiscoveryCard(platform) {
     card.innerHTML = "";
     return;
   }
-  const available = platform === "salesforce";
+  const available = ["salesforce", "servicenow"].includes(platform);
+  obDiscoveryPlatform = platform;
   card.innerHTML = `<div class="ob-discovery-head">
       <div><h3>Find my objects and fields</h3>
       <p>Sign in to ${_obEsc(label)} and CostPilot will inspect metadata—not customer records—to recommend your mapping.</p></div>
       <span class="ob-context-eyebrow">${available ? "Available" : "Adapter next"}</span>
     </div>
-    ${available ? `<div class="ob-discovery-actions">
+    ${platform === "salesforce" ? `<div class="ob-discovery-actions">
       <button type="button" class="ob-btn-primary" onclick="connectSalesforceDiscovery('https://login.salesforce.com')">Connect Salesforce</button>
       <button type="button" class="ob-btn-ghost" onclick="connectSalesforceDiscovery('https://test.salesforce.com')">Use a Sandbox</button>
-    </div>` : `<div class="ob-discovery-status">${_obEsc(label)} uses the same registry and mapping format. OAuth discovery will be enabled after the Salesforce reference adapter is validated.</div>`}
+    </div>` : platform === "servicenow" ? `<div class="ob-field">
+      <label class="ob-label" for="obServiceNowInstance">ServiceNow instance URL</label>
+      <input class="ob-input" id="obServiceNowInstance" type="url"
+             placeholder="https://your-instance.service-now.com"
+             autocomplete="url">
+      <div class="ob-discovery-actions">
+        <button type="button" class="ob-btn-primary" onclick="connectServiceNowDiscovery()">Connect ServiceNow</button>
+      </div>
+      <div class="ob-field-help">CostPilot reads table and field definitions only. The ServiceNow user still controls access through roles and ACLs.</div>
+    </div>` : `<div class="ob-discovery-status">${_obEsc(label)} uses the same registry and mapping format. Its OAuth discovery adapter is not available yet.</div>`}
     <div id="obDiscoveryStatus"></div>
     <div id="obDiscoveryResults"></div>`;
 }
 
 async function connectSalesforceDiscovery(authBaseUrl) {
+  return connectPlatformDiscovery("salesforce", authBaseUrl);
+}
+
+async function connectServiceNowDiscovery() {
+  const instanceInput = document.getElementById("obServiceNowInstance");
+  const instanceUrl = (instanceInput?.value || "").trim();
+  if (!instanceUrl) {
+    document.getElementById("obDiscoveryStatus").innerHTML =
+      `<div class="ob-error">Enter your ServiceNow instance URL first.</div>`;
+    return;
+  }
+  return connectPlatformDiscovery("servicenow", instanceUrl);
+}
+
+async function connectPlatformDiscovery(platform, authBaseUrl) {
   const status = document.getElementById("obDiscoveryStatus");
-  status.innerHTML = `<div class="ob-discovery-status">Creating a secure Salesforce connection…</div>`;
+  const label = OB_PLATFORMS[platform]?.label || platform;
+  status.innerHTML = `<div class="ob-discovery-status">Creating a secure ${_obEsc(label)} connection…</div>`;
   try {
     const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
     const createdResponse = await fetch(`${CostPilot_URL}/api/integrations/connections`, {
@@ -681,20 +708,22 @@ async function connectSalesforceDiscovery(authBaseUrl) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         workspace_id: workspaceId,
-        platform: "salesforce",
-        display_name: `Salesforce ${new Date().toISOString()}`,
+        platform,
+        display_name: `${label} ${new Date().toISOString()}`,
         auth_base_url: authBaseUrl,
       }),
     });
     if (!createdResponse.ok) throw new Error(`Could not create connection (${createdResponse.status}).`);
     const connection = await createdResponse.json();
     obDiscoveryConnectionId = connection.id;
+    obDiscoveryPlatform = platform;
     localStorage.setItem("cp_discovery_connection_id", String(connection.id));
+    localStorage.setItem("cp_discovery_platform", platform);
     const authResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${connection.id}/authorize`, {
       method: "POST",
     });
     const auth = await authResponse.json();
-    if (!authResponse.ok) throw new Error(auth.detail || "Could not start Salesforce authorization.");
+    if (!authResponse.ok) throw new Error(auth.detail || `Could not start ${label} authorization.`);
     if (!auth.configured) {
       status.innerHTML = `<div class="ob-discovery-status">${_obEsc(auth.detail)} You can continue with the recommended manual mapping below.</div>`;
       return;
@@ -709,42 +738,52 @@ function restoreOAuthDiscovery() {
   const params = new URLSearchParams(window.location.search || "");
   if (params.get("oauth") !== "success" || !params.get("connection_id")) return;
   obDiscoveryConnectionId = Number(params.get("connection_id"));
+  obDiscoveryPlatform = params.get("platform") || localStorage.getItem("cp_discovery_platform") || "salesforce";
   localStorage.setItem("cp_discovery_connection_id", String(obDiscoveryConnectionId));
+  localStorage.setItem("cp_discovery_platform", obDiscoveryPlatform);
   document.body.classList.add("ob-connection-mode");
   document.querySelectorAll(".ob-screen").forEach(screen => screen.classList.remove("active"));
   document.getElementById("screen-5")?.classList.add("active");
-  selectObPlatform("salesforce");
+  selectObPlatform(obDiscoveryPlatform);
   setUniversalSetupStage(3);
-  loadSalesforceObjects();
+  loadDiscoveryObjects();
   window.history.replaceState({}, "", "/onboarding.html");
 }
 
 async function loadSalesforceObjects() {
+  return loadDiscoveryObjects();
+}
+
+async function loadDiscoveryObjects() {
   const status = document.getElementById("obDiscoveryStatus");
   const results = document.getElementById("obDiscoveryResults");
-  status.innerHTML = `<div class="ob-discovery-status">Connected. Reading accessible Salesforce object metadata…</div>`;
+  const label = OB_PLATFORMS[obDiscoveryPlatform]?.label || "platform";
+  status.innerHTML = `<div class="ob-discovery-status">Connected. Reading accessible ${_obEsc(label)} metadata…</div>`;
   try {
     const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/objects`);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "Object discovery failed.");
-    const preferred = payload.objects.filter(obj =>
-      obj.custom || ["Case", "Opportunity", "Account", "Contact", "Lead", "Task"].includes(obj.name)
-    );
+    const preferred = payload.objects.filter(obj => obj.recommended || obj.custom ||
+      ["Case", "Opportunity", "Account", "Contact", "Lead", "Task"].includes(obj.name));
     const objects = preferred.length ? preferred : payload.objects;
     results.innerHTML = `<div class="ob-field" style="margin-top:14px">
       <label class="ob-label">Choose the parent object AI activity should roll up to</label>
       <select class="ob-input" id="obDiscoveredObject">
         ${objects.map(obj => `<option value="${_obEsc(obj.name)}">${_obEsc(obj.label)} · ${_obEsc(obj.name)}</option>`).join("")}
       </select>
-      <div class="ob-discovery-actions"><button type="button" class="ob-btn-primary" onclick="discoverSalesforceFields()">Find and Recommend Fields →</button></div>
+      <div class="ob-discovery-actions"><button type="button" class="ob-btn-primary" onclick="discoverPlatformFields()">Find and Recommend Fields →</button></div>
     </div>`;
-    status.innerHTML = `<div class="ob-discovery-status">Salesforce connected. ${payload.objects.length} accessible objects found.</div>`;
+    status.innerHTML = `<div class="ob-discovery-status">${_obEsc(label)} connected. ${payload.objects.length} accessible objects found.</div>`;
   } catch (error) {
     status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
   }
 }
 
 async function discoverSalesforceFields() {
+  return discoverPlatformFields();
+}
+
+async function discoverPlatformFields() {
   const objectName = document.getElementById("obDiscoveredObject").value;
   const status = document.getElementById("obDiscoveryStatus");
   status.innerHTML = `<div class="ob-discovery-status">Inspecting ${_obEsc(objectName)} fields and relationships…</div>`;
@@ -862,8 +901,11 @@ async function approveDiscoveredMapping() {
   }
   const contentField = mapping.content;
   if (contentField) _renderObFields([{ label: "Content", name: contentField }]);
+  const nextStep = obDiscoveryPlatform === "servicenow"
+    ? `Next: install the generated Flow Designer action, run one request from a mapped record, and confirm the record sys_id, user sys_id, agent, tokens, and cost in Projects.`
+    : `Next: install the generated action, run one request from a mapped record, and confirm its record, user, agent, tokens, and cost in Projects.`;
   document.getElementById("obDiscoveryStatus").innerHTML =
-    `<div class="ob-discovery-status"><strong>Business context approved.</strong> CostPilot will preserve every originating record and apply the parent/child roll-up choices you selected. You can still adjust advanced fields below.</div>`;
+    `<div class="ob-discovery-status"><strong>Business context approved.</strong> CostPilot will preserve every originating record and apply the parent/child roll-up choices you selected. ${_obEsc(nextStep)}</div>`;
 }
 
 let obSelectedPlatform = null;
