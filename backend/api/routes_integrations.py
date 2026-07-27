@@ -90,7 +90,17 @@ def get_connector_contract():
             "observe": "Reserved for post-call telemetry ingestion; not accepted by /api/route yet.",
         },
         "required": ["source.platform", "source.workspace_id", "request.content"],
-        "optional": ["source.agent_name", "source.department", "actor", "work", "request.task"],
+        "optional": [
+            "source.agent_name",
+            "source.department",
+            "source.agent_department",
+            "source.charged_department",
+            "actor",
+            "actor.department",
+            "work",
+            "work.department",
+            "request.task",
+        ],
         "example": {
             "contract_version": CONTRACT_VERSION,
             "mode": "control",
@@ -99,16 +109,19 @@ def get_connector_contract():
                 "workspace_id": "00D000000000001",
                 "agent_name": "Renewal Assistant",
                 "department": "Sales",
+                "agent_department": "Revenue Operations",
             },
             "actor": {
                 "external_id": "005000000000001",
                 "name": "David Chen",
                 "email": "david@example.com",
+                "department": "Enterprise Sales",
             },
             "work": {
                 "external_id": "006000000000001",
                 "type": "Opportunity",
                 "name": "Acme Renewal",
+                "department": "Strategic Accounts",
                 "sync_if_missing": True,
             },
             "request": {

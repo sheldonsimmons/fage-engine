@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -921,6 +921,7 @@ def project_activity_reporting(
     account_id: Optional[str] = Query(None),
     source_platform: Optional[str] = Query(None),
     record_type: Optional[str] = Query(None),
+    charged_unit: Optional[str] = None,
     activity_limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
@@ -948,12 +949,20 @@ def project_activity_reporting(
         )
     )
     if workspace_id:
-        query = query.filter(WorkItem.workspace_id == workspace_id)
+        query = query.filter(or_(
+            TokenTransaction.workspace_id == workspace_id,
+            TokenTransaction.workspace_id.is_(None) & (WorkItem.workspace_id == workspace_id),
+        ))
 
     base_rows = query.order_by(TokenTransaction.timestamp.desc()).all()
 
     def identity(row):
         tx, project, account, user, agent = row
+        charged_unit_name = (
+            (tx.charged_org_unit_name or "").strip()
+            or (tx.department or "").split(":")[-1].strip()
+            or "Unassigned"
+        )
         return {
             "project_external_id": project.external_id if project else None,
             "project_name": project.name if project else "Unattributed",
@@ -970,6 +979,11 @@ def project_activity_reporting(
             "agent_id": agent.id if agent else tx.agent_id,
             "agent_name": agent.name if agent else "Unknown agent",
             "agent_platform": agent.source_platform if agent else tx.source_platform,
+            "charged_unit": charged_unit_name,
+            "actor_unit": tx.actor_org_unit_name,
+            "agent_unit": tx.agent_org_unit_name,
+            "work_unit": tx.work_org_unit_name,
+            "attribution_source": tx.attribution_source,
         }
 
     option_rows = [identity(row) for row in base_rows]
@@ -988,6 +1002,8 @@ def project_activity_reporting(
         if source_platform and (tx.source_platform or "") != source_platform:
             return False
         if record_type and (tx.origin_record_type or "") != record_type:
+            return False
+        if charged_unit and item["charged_unit"] != charged_unit:
             return False
         return True
 
@@ -1098,6 +1114,7 @@ def project_activity_reporting(
             "account_id": account_id,
             "source_platform": source_platform,
             "record_type": record_type,
+            "charged_unit": charged_unit,
         },
         "filter_options": {
             "projects": unique_options("project_external_id", "project_name", "account_name"),
@@ -1110,6 +1127,7 @@ def project_activity_reporting(
             "record_types": sorted({
                 row[0].origin_record_type for row in base_rows if row[0].origin_record_type
             }),
+            "organizational_units": unique_options("charged_unit", "charged_unit"),
         },
         "summary": {
             "request_count": len(rows),
@@ -1133,6 +1151,114 @@ def project_activity_reporting(
         "measurement_note": (
             "This report attributes AI consumption only. It does not score employee "
             "productivity or infer business outcomes."
+        ),
+    }
+
+
+@router.get("/organizational-usage")
+def organizational_usage_reporting(
+    workspace_id: Optional[str] = Query(None),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    charged_unit: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Company to organizational-unit drill-down, with each transaction counted once."""
+    period_end = date_to or datetime.utcnow()
+    period_start = date_from or (period_end - timedelta(days=days))
+    if period_start >= period_end:
+        raise HTTPException(status_code=400, detail="date_from must be before date_to")
+
+    query = (
+        db.query(TokenTransaction, WorkUser, RegisteredAgent, WorkItem)
+        .outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
+        .outerjoin(RegisteredAgent, TokenTransaction.agent_id == RegisteredAgent.id)
+        .outerjoin(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .filter(
+            TokenTransaction.timestamp >= period_start,
+            TokenTransaction.timestamp < period_end,
+        )
+    )
+    if workspace_id:
+        query = query.filter(or_(
+            TokenTransaction.workspace_id == workspace_id,
+            TokenTransaction.workspace_id.is_(None) & (WorkItem.workspace_id == workspace_id),
+        ))
+    rows = query.all()
+
+    def charged_name(tx):
+        return (
+            (tx.charged_org_unit_name or "").strip()
+            or (tx.department or "").split(":")[-1].strip()
+            or "Unassigned"
+        )
+
+    if charged_unit:
+        rows = [row for row in rows if charged_name(row[0]) == charged_unit]
+
+    def blank_bucket(label):
+        return {
+            "label": label, "request_count": 0, "input_tokens": 0,
+            "output_tokens": 0, "tokens_pruned": 0, "spend_usd": 0.0,
+        }
+
+    company = blank_bucket("Company")
+    units, users, agents, work = {}, {}, {}, {}
+    for tx, user, agent, item in rows:
+        unit_name = charged_name(tx)
+        user_key = (user.external_id if user else tx.actor_external_id) or "__unknown__"
+        agent_key = str(agent.id if agent else tx.agent_id or "__unknown__")
+        work_key = item.external_id if item else "__unattributed__"
+        dimensions = (
+            company,
+            units.setdefault(unit_name, {**blank_bucket(unit_name), "unit_type": "department"}),
+            users.setdefault((unit_name, user_key), {
+                **blank_bucket(user.name if user else (tx.actor_name or "Unknown user")),
+                "external_id": None if user_key == "__unknown__" else user_key,
+                "charged_unit": unit_name,
+            }),
+            agents.setdefault((unit_name, agent_key), {
+                **blank_bucket(agent.name if agent else "Unknown agent"),
+                "agent_id": agent.id if agent else tx.agent_id,
+                "charged_unit": unit_name,
+            }),
+            work.setdefault((unit_name, work_key), {
+                **blank_bucket(item.name if item else "Unattributed work"),
+                "external_id": item.external_id if item else None,
+                "charged_unit": unit_name,
+            }),
+        )
+        for bucket in dimensions:
+            bucket["request_count"] += 1
+            bucket["input_tokens"] += int(tx.input_tokens or 0)
+            bucket["output_tokens"] += int(tx.output_tokens or 0)
+            bucket["tokens_pruned"] += int(tx.tokens_saved or 0)
+            bucket["spend_usd"] += float(tx.cost_usd or 0.0)
+
+    def finish(values):
+        result = []
+        for bucket in values:
+            bucket["total_tokens"] = bucket["input_tokens"] + bucket["output_tokens"]
+            bucket["spend_usd"] = round(bucket["spend_usd"], 6)
+            result.append(bucket)
+        return sorted(result, key=lambda row: (-row["spend_usd"], -row["request_count"], row["label"]))
+
+    finish([company])
+    return {
+        "period": {
+            "date_from": period_start.isoformat(),
+            "date_to": period_end.isoformat(),
+            "workspace_id": workspace_id,
+        },
+        "company": company,
+        "organizational_units": finish(list(units.values())),
+        "users": finish(list(users.values())),
+        "agents": finish(list(agents.values())),
+        "work_items": finish(list(work.values())),
+        "counting_rule": (
+            "Company and drill-down rows are alternate dimensions of the same token "
+            "transactions; only company totals should be summed."
         ),
     }
 

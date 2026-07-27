@@ -91,7 +91,7 @@
     <div class="rpt-tabs" id="rptTabRow">
       <button id="rptTabSavings"    class="rpt-tab active" data-tab="savings">💰 Savings</button>
       <button id="rptTabRisk"       class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
-      <button id="rptTabContexts"   class="rpt-tab" data-tab="contexts">Project Attribution</button>
+      <button id="rptTabContexts"   class="rpt-tab" data-tab="contexts">AI Usage Attribution</button>
       <button id="rptTabDepts"      class="rpt-tab" data-tab="departments">🏢 Departments</button>
       <button id="rptTabEfficiency" class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
       <button id="rptTabActivity"   class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
@@ -343,13 +343,16 @@
     <div class="rpt-pane" id="tab-contexts">
       <div class="project-attribution-intro" id="business-contexts">
         <div>
-          <h2>Project Attribution</h2>
-          <p>See which person used which agent, for what account and project, and the resulting token cost.</p>
+          <h2>AI Usage Attribution</h2>
+          <p>Start with the company, drill into a department or team, then see the people, agents, projects, records, tokens, and cost behind every AI request.</p>
         </div>
         <button class="export-btn" onclick="exportContextCsv()">⬇ Activity CSV</button>
       </div>
 
       <div class="project-attribution-filters">
+        <label>Department / Team
+          <select id="ctxOrgFilter" onchange="loadBusinessContexts()"><option value="">All Departments &amp; Teams</option></select>
+        </label>
         <label>Project
           <select id="ctxProjectFilter" onchange="loadBusinessContexts()"><option value="">All Projects</option></select>
         </label>
@@ -369,6 +372,23 @@
           <select id="ctxRecordTypeFilter" onchange="loadBusinessContexts()"><option value="">All Record Types</option></select>
         </label>
         <button type="button" class="act-reset-btn" onclick="resetProjectAttributionFilters()">Clear Filters</button>
+      </div>
+
+      <div class="panel org-usage-overview">
+        <div class="org-usage-head">
+          <div>
+            <div class="rpt-chart-title">Company AI usage</div>
+            <div class="project-attribution-sub" id="ctx-org-path">Company · all departments and teams</div>
+          </div>
+          <div class="org-company-total">
+            <span id="ctx-org-company-requests">— requests</span>
+            <strong id="ctx-org-company-spend">—</strong>
+          </div>
+        </div>
+        <div class="org-unit-grid" id="ctx-org-units">
+          <div class="org-unit-empty">Loading organizational usage…</div>
+        </div>
+        <div class="project-attribution-note">Department and team cards are alternate views of the same company calls; they are not added to the company total.</div>
       </div>
 
       <div class="rpt-kpi-row">
@@ -425,6 +445,16 @@
             <tbody id="ctx-person-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
           </table>
         </div>
+        <div class="panel">
+          <div>
+            <div class="rpt-chart-title">Usage by Agent</div>
+            <div class="project-attribution-sub">Which AI agents generated the requests and cost.</div>
+          </div>
+          <table class="rpt-context-table">
+            <thead><tr><th>Agent</th><th>Requests</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
+            <tbody id="ctx-agent-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="panel project-attribution-ledger">
@@ -437,8 +467,8 @@
         </div>
         <div class="project-attribution-table-wrap">
           <table class="rpt-context-table">
-            <thead><tr><th>Date</th><th>Person</th><th>Agent</th><th>Account</th><th>Project</th><th>Source Record</th><th>Model</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
-            <tbody id="ctx-activity-rows"><tr><td colspan="10">Loading project activity…</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Department / Team</th><th>Person</th><th>Agent</th><th>Account</th><th>Project</th><th>Source Record</th><th>Model</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
+            <tbody id="ctx-activity-rows"><tr><td colspan="11">Loading AI activity…</td></tr></tbody>
           </table>
         </div>
         <div class="project-attribution-note">CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.</div>

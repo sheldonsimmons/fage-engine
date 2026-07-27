@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import (
     DepartmentBudget,
+    OrganizationalUnit,
     RegisteredAgent,
     TokenTransaction,
     WorkItem,
@@ -38,6 +39,8 @@ class UniversalSourceContext(BaseModel):
     agent_name: Optional[str] = None
     agent_id: Optional[int] = None
     department: Optional[str] = None
+    agent_department: Optional[str] = None
+    charged_department: Optional[str] = None
 
 
 class UniversalActorContext(BaseModel):
@@ -47,6 +50,7 @@ class UniversalActorContext(BaseModel):
     role: Optional[str] = None
     status: Optional[str] = None
     can_use_ai: Optional[bool] = None
+    department: Optional[str] = None
 
 
 class UniversalWorkContext(BaseModel):
@@ -54,6 +58,7 @@ class UniversalWorkContext(BaseModel):
     type: str = "project"
     name: Optional[str] = None
     sync_if_missing: bool = False
+    department: Optional[str] = None
 
 
 class UniversalRequestContext(BaseModel):
@@ -87,6 +92,10 @@ class RouteRequest(BaseModel):
     actor_role:             Optional[str] = None
     actor_status:           Optional[str] = None
     actor_can_use_ai:       Optional[bool] = None
+    actor_department:       Optional[str] = None
+    agent_department:       Optional[str] = None
+    work_department:        Optional[str] = None
+    charged_department:     Optional[str] = None
     enforce_project_membership: bool = False
     contract_version:       Optional[str] = None
     mode:                   str = "control"
@@ -115,6 +124,8 @@ def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
             req.agent_id = req.source_context.agent_id
         if req.source_context.department:
             req.department = req.source_context.department
+        req.agent_department = req.source_context.agent_department
+        req.charged_department = req.source_context.charged_department
     if req.actor_context:
         req.actor_external_id = req.actor_context.external_id
         req.actor_name = req.actor_context.name
@@ -123,6 +134,7 @@ def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
         req.actor_role = req.actor_context.role
         req.actor_status = req.actor_context.status
         req.actor_can_use_ai = req.actor_context.can_use_ai
+        req.actor_department = req.actor_context.department
     if req.request_context:
         req.text = req.request_context.content
         req.payload_type = req.request_context.payload_type
@@ -131,6 +143,8 @@ def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
         req.origin_record_id = req.work_context.external_id
         req.origin_record_type = req.work_context.type
         req.origin_record_name = req.work_context.name
+    if req.work_context and req.work_context.department:
+        req.work_department = req.work_context.department
     if not (req.text or "").strip():
         raise HTTPException(status_code=422, detail="A non-empty text or request.content value is required")
     return req
@@ -176,7 +190,7 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
             item = WorkItem(
                 external_id=_canonical_work_external_id(workspace_id, platform, source_record_id),
                 name=(work.name or f"{work.type.title()} {source_record_id}").strip(),
-                department=department,
+                department=(req.work_department or department),
                 status="active",
                 source_platform=platform,
                 workspace_id=workspace_id,
@@ -238,7 +252,15 @@ class RouteResponse(BaseModel):
 
 
 def _resolve_department(db: Session, req: RouteRequest) -> str:
-    requested = (req.department or "Support").strip() or "Support"
+    # New universal envelopes can provide precise charge context. Legacy
+    # requests continue to use the original department field unchanged.
+    requested = (
+        req.charged_department
+        or req.work_department
+        or req.actor_department
+        or req.department
+        or "Support"
+    ).strip() or "Support"
     if db.query(DepartmentBudget).filter_by(department=requested).first():
         return requested
 
@@ -253,6 +275,100 @@ def _resolve_department(db: Session, req: RouteRequest) -> str:
             return agent.department
 
     return requested
+
+
+def _org_external_id(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
+    return f"name:{slug or 'unassigned'}"
+
+
+def _get_or_create_org_unit(
+    db: Session,
+    workspace_id: str,
+    name: Optional[str],
+    source_platform: Optional[str],
+) -> Optional[OrganizationalUnit]:
+    display_name = (name or "").strip()
+    if not display_name:
+        return None
+    external_id = _org_external_id(display_name)
+    unit = (
+        db.query(OrganizationalUnit)
+        .filter(
+            OrganizationalUnit.workspace_id == workspace_id,
+            OrganizationalUnit.external_id == external_id,
+        )
+        .first()
+    )
+    if not unit:
+        unit = OrganizationalUnit(
+            workspace_id=workspace_id,
+            external_id=external_id,
+            name=display_name,
+            unit_type="department",
+            source_platform=(source_platform or "").strip() or None,
+        )
+        db.add(unit)
+        db.flush()
+    return unit
+
+
+def _resolve_organizational_attribution(
+    db: Session,
+    req: RouteRequest,
+    department: str,
+    agent: Optional[RegisteredAgent],
+    work_item: Optional[WorkItem],
+    work_user: Optional[WorkUser],
+) -> dict:
+    """Resolve independent actor, agent, work, and charged reporting dimensions."""
+    workspace_id = (
+        (req.actor_workspace_id or "").strip()
+        or ((work_item.workspace_id or "").strip() if work_item else "")
+        or "default"
+    )
+    platform = (req.source_platform or "Custom").strip() or "Custom"
+    actor_name = (req.actor_department or "").strip() or None
+    agent_name = (req.agent_department or "").strip() or (agent.department if agent else None)
+    work_name = (req.work_department or "").strip() or (work_item.department if work_item else None)
+
+    actor_unit = _get_or_create_org_unit(db, workspace_id, actor_name, platform)
+    agent_unit = _get_or_create_org_unit(db, workspace_id, agent_name, platform)
+    work_unit = _get_or_create_org_unit(db, workspace_id, work_name, platform)
+    charged_unit = _get_or_create_org_unit(db, workspace_id, department, platform)
+
+    if work_user and actor_unit:
+        work_user.primary_org_unit_id = actor_unit.id
+    if agent and agent_unit:
+        agent.owner_org_unit_id = agent_unit.id
+    if work_item and work_unit:
+        work_item.org_unit_id = work_unit.id
+
+    if req.charged_department:
+        source, confidence = "explicit_request", "high"
+    elif req.work_department:
+        source, confidence = "work_record", "high"
+    elif req.actor_department:
+        source, confidence = "actor_primary_unit", "medium"
+    elif req.agent_department:
+        source, confidence = "agent_owner_unit", "medium"
+    else:
+        source, confidence = "legacy_department", "medium"
+
+    db.flush()
+    return {
+        "workspace_id": workspace_id,
+        "actor_org_unit_id": actor_unit.id if actor_unit else None,
+        "actor_org_unit_name": actor_unit.name if actor_unit else None,
+        "agent_org_unit_id": agent_unit.id if agent_unit else None,
+        "agent_org_unit_name": agent_unit.name if agent_unit else None,
+        "work_org_unit_id": work_unit.id if work_unit else None,
+        "work_org_unit_name": work_unit.name if work_unit else None,
+        "charged_org_unit_id": charged_unit.id if charged_unit else None,
+        "charged_org_unit_name": charged_unit.name if charged_unit else department,
+        "attribution_source": source,
+        "attribution_confidence": confidence,
+    }
 
 
 def _resolve_work_user(
@@ -405,6 +521,22 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         agent.last_used_at = datetime.utcnow()
         db.commit()
 
+    attribution = (
+        _resolve_organizational_attribution(db, req, department, agent, work_item, work_user)
+        if not req.is_test
+        else {
+            "workspace_id": (req.actor_workspace_id or "default"),
+            "actor_org_unit_name": req.actor_department,
+            "agent_org_unit_name": req.agent_department or (agent.department if agent else None),
+            "work_org_unit_name": req.work_department or (work_item.department if work_item else None),
+            "charged_org_unit_name": department,
+            "attribution_source": "test",
+            "attribution_confidence": "high",
+        }
+    )
+    if not req.is_test:
+        db.commit()
+
     # ── payload_type gate — code payloads skip the pruner entirely ───────────
     # Agent pruning_enabled=False overrides everything — "off means off".
     # Otherwise: code payloads (Python, JS, SQL, configs) are never pruned.
@@ -447,6 +579,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             origin_record_type = req.origin_record_type,
             origin_record_name = req.origin_record_name,
             is_simulation    = bool(req.synthetic_simulation),
+            attribution      = attribution,
         )
         from fastapi import HTTPException
         raise HTTPException(
@@ -526,6 +659,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 origin_record_type=req.origin_record_type,
                 origin_record_name=req.origin_record_name,
                 is_simulation=bool(req.synthetic_simulation),
+                attribution=attribution,
             )
             raise HTTPException(
                 status_code=429,
@@ -570,6 +704,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             actor_name      = work_user.name if work_user else None,
             actor_email     = work_user.email if work_user else None,
             actor_source_platform = work_user.source_platform if work_user else None,
+            **attribution,
             model_tier      = result["model_tier"],
             model_name      = result["model_name"],
             resolved_model_tier = result.get("resolved_model_tier", result["model_tier"]),
@@ -669,6 +804,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 origin_record_type = req.origin_record_type,
                 origin_record_name = req.origin_record_name,
                 is_simulation    = bool(req.synthetic_simulation),
+                attribution      = attribution,
             )
         except Exception:
             pass  # Never let audit write failure break the routing response

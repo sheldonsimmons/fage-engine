@@ -73,6 +73,7 @@ class RegisteredAgent(Base):
     id               = Column(Integer,  primary_key=True, index=True)
     name             = Column(String,   nullable=False, unique=True)
     department       = Column(String,   nullable=False)
+    owner_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
     source_platform  = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     permissions      = Column(String,   nullable=False)   # e.g. "read,write"
     target_table     = Column(String,   nullable=True)
@@ -111,6 +112,25 @@ class DepartmentBudget(Base):
     raw_payload_logging_enabled = Column(Boolean, default=False)  # per-dept raw payload logging toggle
     raw_retention_days          = Column(Integer, default=30)     # 30 | 90 | 180 | 365 | 0=indefinite
     archived          = Column(Boolean,  nullable=True, default=False)  # soft-hide stale departments without deleting history
+
+
+class OrganizationalUnit(Base):
+    """A tenant-scoped department, team, cost center, or other reporting unit."""
+    __tablename__ = "organizational_units"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "external_id", name="uq_organizational_unit_external_id"),
+    )
+
+    id              = Column(Integer, primary_key=True, index=True)
+    workspace_id    = Column(String, nullable=False, default="default", index=True)
+    external_id     = Column(String, nullable=False, index=True)
+    name            = Column(String, nullable=False)
+    unit_type       = Column(String, nullable=False, default="department")
+    parent_id       = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    source_platform = Column(String, nullable=True)
+    status          = Column(String, nullable=False, default="active")
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class IntegrationConnection(Base):
@@ -167,6 +187,7 @@ class WorkItem(Base):
     account_id         = Column(Integer,  ForeignKey("work_accounts.id"), nullable=True)
     owner              = Column(String,   nullable=True)
     department         = Column(String,   nullable=True)
+    org_unit_id        = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
     status             = Column(String,   nullable=False, default="active")
     monthly_ai_budget  = Column(Float,    nullable=True)
     budget_warning_pct = Column(Float,    nullable=False, default=80.0)
@@ -252,6 +273,7 @@ class WorkUser(Base):
     external_id     = Column(String, nullable=False, index=True)
     name            = Column(String, nullable=False)
     email           = Column(String, nullable=True)
+    primary_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
     status          = Column(String, nullable=False, default="active")
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -301,6 +323,17 @@ class TokenTransaction(Base):
     actor_name      = Column(String, nullable=True)
     actor_email     = Column(String, nullable=True)
     actor_source_platform = Column(String, nullable=True)
+    workspace_id    = Column(String, nullable=True, index=True)
+    actor_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    actor_org_unit_name = Column(String, nullable=True)
+    agent_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    agent_org_unit_name = Column(String, nullable=True)
+    work_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    work_org_unit_name = Column(String, nullable=True)
+    charged_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    charged_org_unit_name = Column(String, nullable=True)
+    attribution_source = Column(String, nullable=True)
+    attribution_confidence = Column(String, nullable=True)
     model_tier      = Column(String,   nullable=False)    # micro | flagship
     model_name      = Column(String,   nullable=True)     # exact provider/registry model used
     resolved_model_tier = Column(String, nullable=True)   # actual tier after cascade
@@ -340,6 +373,17 @@ class AuditEvent(Base):
     actor_name       = Column(String, nullable=True)
     actor_email      = Column(String, nullable=True)
     actor_source_platform = Column(String, nullable=True)
+    workspace_id       = Column(String, nullable=True, index=True)
+    actor_org_unit_id  = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    actor_org_unit_name = Column(String, nullable=True)
+    agent_org_unit_id  = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    agent_org_unit_name = Column(String, nullable=True)
+    work_org_unit_id   = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    work_org_unit_name = Column(String, nullable=True)
+    charged_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
+    charged_org_unit_name = Column(String, nullable=True)
+    attribution_source = Column(String, nullable=True)
+    attribution_confidence = Column(String, nullable=True)
     department       = Column(String,   nullable=False)
     model_tier       = Column(String,   nullable=True)
     context_snapshot = Column(Text,     nullable=True)    # JSON string — frozen system state

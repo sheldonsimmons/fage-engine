@@ -1377,7 +1377,7 @@
       .trial-test-grid { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260725-v454" />
+  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260727-attribution" />
 </head>
 <body class="cp-executive-page">
 
@@ -1691,6 +1691,22 @@
         <div class="exec-glance-concentration" id="execGlanceConcentration"></div>
         <div class="exec-glance-attribution" id="execGlanceAttribution"></div>
       </article>
+    </section>
+
+    <section class="exec-glance-panel exec-glance-accountability" aria-labelledby="execGlanceAccountabilityHeading">
+      <div class="exec-glance-panel-head">
+        <div>
+          <h2 id="execGlanceAccountabilityHeading">AI spend accountability</h2>
+          <p id="execGlanceAccountabilityScope">Who and what generated AI cost in the selected period.</p>
+        </div>
+        <a href="/reports.html?tab=contexts#business-contexts">Open usage attribution →</a>
+      </div>
+      <div class="exec-glance-accountability-grid" id="execGlanceAccountabilityGrid">
+        <div class="exec-glance-empty">Loading organizational attribution…</div>
+      </div>
+      <div class="exec-glance-accountability-note" id="execGlanceAccountabilityNote">
+        Company totals and drill-downs are alternate views of the same governed requests.
+      </div>
     </section>
 
     <section class="exec-glance-panel exec-glance-drivers">
@@ -2353,6 +2369,28 @@ function execHasActiveFilters() {
   return execActiveFilters().length > 0;
 }
 
+function executiveAttributionUrl() {
+  let days = execFilters.range === "mtd"
+    ? Math.max(1, new Date().getDate())
+    : Number(execFilters.range || 30);
+  const params = new URLSearchParams({ days: String(days) });
+  const workspaceId = localStorage.getItem("cp_workspace_id") || "";
+  if (workspaceId) params.set("workspace_id", workspaceId);
+  if (execFilters.dept) params.set("charged_unit", displayDeptName(execFilters.dept));
+  return `/api/work-items/organizational-usage?${params.toString()}`;
+}
+
+async function refreshExecutiveAttribution() {
+  if (!execData) return;
+  try {
+    execData.organizationalUsage = await apiGet(executiveAttributionUrl());
+  } catch (err) {
+    console.warn("Organizational attribution refresh failed:", err.message);
+    execData.organizationalUsage = null;
+  }
+  renderExecGlanceAccountability(execData);
+}
+
 function execLayoutIds() {
   const defaults = EXEC_LAYOUT_SECTIONS.map(s => s.id);
   try {
@@ -2592,6 +2630,7 @@ function updateExecFilter(key, value) {
   if (execData) {
     populateExecFilters(execData);
     renderExec(execData);
+    refreshExecutiveAttribution();
   }
 }
 
@@ -2601,6 +2640,7 @@ function clearExecFilters() {
   if (execData) {
     populateExecFilters(execData);
     renderExec(execData);
+    refreshExecutiveAttribution();
   }
 }
 
@@ -2610,6 +2650,7 @@ function applyExecDrillFilter(updates = {}) {
   if (execData) {
     populateExecFilters(execData);
     renderExec(execData);
+    refreshExecutiveAttribution();
   }
 }
 
@@ -4205,6 +4246,57 @@ function renderExecGlanceDrivers(drivers, actualCost) {
   }).join("");
 }
 
+function execAttributionCard(kind, row, emptyLabel) {
+  if (!row) {
+    return `<article class="exec-glance-accountability-card empty">
+      <span>${escapeHtml(kind)}</span>
+      <strong>${escapeHtml(emptyLabel)}</strong>
+      <small>No attributed usage in this scope</small>
+    </article>`;
+  }
+  const meta = [
+    `${fmtNum(Number(row.request_count || 0))} requests`,
+    `${fmtNum(Number(row.total_tokens || 0))} tokens`,
+  ].join(" · ");
+  return `<article class="exec-glance-accountability-card">
+    <span>${escapeHtml(kind)}</span>
+    <strong title="${escapeHtml(row.label || emptyLabel)}">${escapeHtml(row.label || emptyLabel)}</strong>
+    <b>${fmtUsd(Number(row.spend_usd || 0))}</b>
+    <small>${meta}</small>
+  </article>`;
+}
+
+function renderExecGlanceAccountability(data) {
+  const container = document.getElementById("execGlanceAccountabilityGrid");
+  if (!container) return;
+  const usage = data.organizationalUsage;
+  if (!usage) {
+    container.innerHTML = '<div class="exec-glance-empty">Organizational attribution will appear after governed requests include business context.</div>';
+    return;
+  }
+  const first = rows => Array.isArray(rows) && rows.length ? rows[0] : null;
+  container.innerHTML = [
+    execAttributionCard("Top department / team", first(usage.organizational_units), "Unassigned"),
+    execAttributionCard("Top person", first(usage.users), "Unknown user"),
+    execAttributionCard("Top project / record", first(usage.work_items), "Unattributed work"),
+    execAttributionCard("Top agent", first(usage.agents), "Unknown agent"),
+  ].join("");
+
+  const company = usage.company || {};
+  const scope = document.getElementById("execGlanceAccountabilityScope");
+  if (scope) {
+    const unit = execFilters.dept ? ` · ${displayDeptName(execFilters.dept)}` : "";
+    scope.textContent = `${fmtUsd(Number(company.spend_usd || 0))} across ${fmtNum(Number(company.request_count || 0))} governed requests${unit}.`;
+  }
+  const note = document.getElementById("execGlanceAccountabilityNote");
+  if (note) {
+    const filtersOutsideAttribution = execFilters.platform || execFilters.agent || execFilters.tier || execFilters.model || execFilters.risk;
+    note.textContent = filtersOutsideAttribution
+      ? "Accountability cards follow the selected date and department. Platform, agent, model, and risk filters apply to the other executive panels."
+      : (usage.counting_rule || "Company totals and drill-downs are alternate views of the same governed requests.");
+  }
+}
+
 function renderExecutiveGlance(events, data, context) {
   const contextReport = data.businessContexts || null;
   setText("execGlanceSpend", fmtUsd(context.actualCost));
@@ -4276,6 +4368,7 @@ function renderExecutiveGlance(events, data, context) {
       : `<span>Business-context attribution will appear as governed calls are linked.</span>`;
   }
   renderExecGlanceConcentration();
+  renderExecGlanceAccountability(data);
   renderExecGlanceDrivers(context.drivers, context.actualCost);
 }
 
@@ -4646,7 +4739,7 @@ function renderExec(data) {
 
 async function loadExec() {
   try {
-    const [dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts] = await Promise.all([
+    const [dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage] = await Promise.all([
       apiGet("/api/dashboard"),
       apiGet("/api/timeseries?days=180"),
       apiGet("/api/audit?limit=5000"),
@@ -4663,8 +4756,12 @@ async function loadExec() {
         console.warn("Business-context reporting load failed:", err.message);
         return null;
       }),
+      apiGet(executiveAttributionUrl()).catch(err => {
+        console.warn("Organizational attribution load failed:", err.message);
+        return null;
+      }),
     ]);
-    execData = { dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts };
+    execData = { dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage };
     populateExecFilters(execData);
     renderExec(execData);
     updateTrialStartCard(await loadTrialScopedExecData(execData));

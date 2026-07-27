@@ -128,6 +128,33 @@ def _run_migrations():
                     ensure_column(conn, table, column, definition)
                 except Exception:
                     pass
+        for table, column, definition in (
+            ("registered_agents", "owner_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
+            ("work_items", "org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
+            ("work_users", "primary_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
+        ):
+            try:
+                ensure_column(conn, table, column, definition)
+            except Exception:
+                pass
+        for table in ("token_transactions", "audit_events"):
+            for column, definition in (
+                ("workspace_id", "VARCHAR"),
+                ("actor_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
+                ("actor_org_unit_name", "VARCHAR"),
+                ("agent_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
+                ("agent_org_unit_name", "VARCHAR"),
+                ("work_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
+                ("work_org_unit_name", "VARCHAR"),
+                ("charged_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
+                ("charged_org_unit_name", "VARCHAR"),
+                ("attribution_source", "VARCHAR"),
+                ("attribution_confidence", "VARCHAR"),
+            ):
+                try:
+                    ensure_column(conn, table, column, definition)
+                except Exception:
+                    pass
         for column, definition in (
             ("context_type", "VARCHAR DEFAULT 'project' NOT NULL"),
             ("context_template", "VARCHAR"),

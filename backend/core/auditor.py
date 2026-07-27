@@ -253,12 +253,15 @@ def write_audit_event(
     origin_record_type: str      = None,
     origin_record_name: str      = None,
     is_simulation:    bool       = False,
+    attribution:      dict       = None,
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
 
     context    = _build_context_snapshot(db, department)
     context["is_simulation"] = bool(is_simulation)
+    attribution = attribution or {}
+    context["organizational_attribution"] = attribution
 
     # Attach pruning stats to the context snapshot
     if tokens_saved or raw_tokens or clean_tokens:
@@ -312,6 +315,17 @@ def write_audit_event(
         actor_name       = work_user.name if work_user else None,
         actor_email      = work_user.email if work_user else None,
         actor_source_platform = work_user.source_platform if work_user else None,
+        workspace_id       = attribution.get("workspace_id"),
+        actor_org_unit_id  = attribution.get("actor_org_unit_id"),
+        actor_org_unit_name = attribution.get("actor_org_unit_name"),
+        agent_org_unit_id  = attribution.get("agent_org_unit_id"),
+        agent_org_unit_name = attribution.get("agent_org_unit_name"),
+        work_org_unit_id   = attribution.get("work_org_unit_id"),
+        work_org_unit_name = attribution.get("work_org_unit_name"),
+        charged_org_unit_id = attribution.get("charged_org_unit_id"),
+        charged_org_unit_name = attribution.get("charged_org_unit_name"),
+        attribution_source = attribution.get("attribution_source"),
+        attribution_confidence = attribution.get("attribution_confidence"),
         department       = department,
         model_tier       = model_tier,
         context_snapshot = json.dumps(context),

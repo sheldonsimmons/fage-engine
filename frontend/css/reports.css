@@ -774,7 +774,7 @@
   border-radius: 8px;
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(6, minmax(130px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
   margin-bottom: 16px;
   padding: 14px;
 }
@@ -799,8 +799,71 @@
 .project-attribution-breakdowns {
   display: grid;
   gap: 14px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 14px;
+}
+.org-usage-overview {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+.org-usage-head {
+  align-items: flex-end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.org-company-total {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.org-company-total span {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.org-company-total strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 20px;
+}
+.org-unit-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.org-unit-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  text-align: left;
+}
+.org-unit-card:hover,
+.org-unit-card.active {
+  background: rgba(88, 166, 255, .07);
+  border-color: var(--accent);
+}
+.org-unit-card .org-unit-name {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.org-unit-card strong {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 17px;
+}
+.org-unit-card > span:last-child,
+.org-unit-empty {
+  color: var(--text-muted);
+  font-size: 10px;
 }
 .project-attribution-breakdowns .panel,
 .project-attribution-ledger {
@@ -844,6 +907,9 @@
 @media (max-width: 1100px) {
   .project-attribution-filters {
     grid-template-columns: repeat(3, minmax(140px, 1fr));
+  }
+  .project-attribution-breakdowns {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 760px) {

@@ -457,12 +457,19 @@ function projectAttributionFilterValue(id) {
 
 function resetProjectAttributionFilters() {
   [
-    "ctxProjectFilter", "ctxPersonFilter", "ctxAccountFilter",
+    "ctxOrgFilter", "ctxProjectFilter", "ctxPersonFilter", "ctxAccountFilter",
     "ctxAgentFilter", "ctxSourceFilter", "ctxRecordTypeFilter",
   ].forEach(id => {
     const select = document.getElementById(id);
     if (select) select.value = "";
   });
+  loadBusinessContexts();
+}
+
+function selectOrganizationalUnit(name) {
+  const select = document.getElementById("ctxOrgFilter");
+  if (!select) return;
+  select.value = select.value === name ? "" : name;
   loadBusinessContexts();
 }
 
@@ -483,12 +490,22 @@ async function loadBusinessContexts() {
     agent_id: projectAttributionFilterValue("ctxAgentFilter"),
     source_platform: projectAttributionFilterValue("ctxSourceFilter"),
     record_type: projectAttributionFilterValue("ctxRecordTypeFilter"),
+    charged_unit: projectAttributionFilterValue("ctxOrgFilter"),
   };
   Object.entries(selectedFilters).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
   try {
-    const data = await apiGet(`/api/work-items/activity-report?${params.toString()}`);
+    const orgParams = new URLSearchParams({
+      date_from,
+      date_to,
+      days: String(Math.min(365, days)),
+    });
+    if (wsId) orgParams.set("workspace_id", wsId);
+    const [data, orgData] = await Promise.all([
+      apiGet(`/api/work-items/activity-report?${params.toString()}`),
+      apiGet(`/api/work-items/organizational-usage?${orgParams.toString()}`),
+    ]);
     _rptContextData = data;
     const summary = data.summary || {};
     setKpi("ctx-requests", fmtNum(summary.request_count || 0));
@@ -500,12 +517,34 @@ async function loadBusinessContexts() {
     setKpi("ctx-agents", fmtNum(summary.agent_count || 0));
 
     const options = data.filter_options || {};
+    projectAttributionSelect("ctxOrgFilter", "All Departments & Teams", options.organizational_units);
     projectAttributionSelect("ctxProjectFilter", "All Projects", options.projects);
     projectAttributionSelect("ctxPersonFilter", "All People", options.people);
     projectAttributionSelect("ctxAccountFilter", "All Accounts", options.accounts);
     projectAttributionSelect("ctxAgentFilter", "All Agents", options.agents);
     projectAttributionSelect("ctxSourceFilter", "All Sources", options.source_platforms);
     projectAttributionSelect("ctxRecordTypeFilter", "All Record Types", options.record_types);
+
+    const selectedOrg = projectAttributionFilterValue("ctxOrgFilter");
+    const company = orgData.company || {};
+    document.getElementById("ctx-org-company-requests").textContent =
+      `${fmtNum(company.request_count || 0)} requests`;
+    document.getElementById("ctx-org-company-spend").textContent =
+      fmtUsd(Number(company.spend_usd || 0));
+    document.getElementById("ctx-org-path").textContent = selectedOrg
+      ? `Company → ${selectedOrg}`
+      : "Company · all departments and teams";
+    const orgUnits = orgData.organizational_units || [];
+    document.getElementById("ctx-org-units").innerHTML = orgUnits.length
+      ? orgUnits.map(row => `<button type="button"
+          class="org-unit-card${selectedOrg === row.label ? " active" : ""}"
+          data-unit="${escapeHtml(row.label || "")}"
+          onclick="selectOrganizationalUnit(this.dataset.unit)">
+          <span class="org-unit-name">${escapeHtml(row.label)}</span>
+          <strong>${fmtUsd(Number(row.spend_usd || 0))}</strong>
+          <span>${fmtNum(row.request_count || 0)} requests · ${fmtNum(row.total_tokens || 0)} tokens</span>
+        </button>`).join("")
+      : '<div class="org-unit-empty">No organizational usage is available for this period.</div>';
 
     const projectBody = document.getElementById("ctx-project-rows");
     projectBody.innerHTML = (data.project_breakdown || []).length
@@ -529,11 +568,23 @@ async function loadBusinessContexts() {
         </tr>`).join("")
       : '<tr><td colspan="5">No identified user activity matches these filters.</td></tr>';
 
+    const agentBody = document.getElementById("ctx-agent-rows");
+    agentBody.innerHTML = (data.agent_breakdown || []).length
+      ? data.agent_breakdown.map(row => `<tr>
+          <td><div class="ctx-name">${escapeHtml(row.label)}</div><div class="ctx-meta">${escapeHtml(row.source_platform || "")}</div></td>
+          <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
+          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+          <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
+          <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
+        </tr>`).join("")
+      : '<tr><td colspan="5">No agent activity matches these filters.</td></tr>';
+
     const activityBody = document.getElementById("ctx-activity-rows");
     const activities = data.activities || [];
     activityBody.innerHTML = activities.length
       ? activities.map(row => `<tr>
           <td class="ctx-mono">${escapeHtml(row.timestamp ? new Date(row.timestamp).toLocaleString() : "—")}</td>
+          <td><div class="ctx-name">${escapeHtml(row.charged_unit || "Unassigned")}</div><div class="ctx-meta">${escapeHtml(row.attribution_source || "")}</div></td>
           <td><div class="ctx-name">${escapeHtml(row.user_name || "Unknown user")}</div><div class="ctx-meta">${escapeHtml(row.user_source_platform || "")}</div></td>
           <td><div class="ctx-name">${escapeHtml(row.agent_name || "Unknown agent")}</div><div class="ctx-meta">${escapeHtml(row.agent_platform || "")}</div></td>
           <td>${escapeHtml(row.account_name || "Unassigned account")}</td>
@@ -544,13 +595,13 @@ async function loadBusinessContexts() {
           <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
           <td class="ctx-mono">${fmtUsd(Number(row.cost_usd || 0))}</td>
         </tr>`).join("")
-      : '<tr><td colspan="10">No AI activity matches these filters.</td></tr>';
+      : '<tr><td colspan="11">No AI activity matches these filters.</td></tr>';
     document.getElementById("ctx-activity-count").textContent =
       `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"} · ` +
       `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation`;
   } catch (err) {
     document.getElementById("ctx-activity-rows").innerHTML =
-      `<tr><td colspan="10">Could not load project attribution: ${escapeHtml(err.message)}</td></tr>`;
+      `<tr><td colspan="11">Could not load AI usage attribution: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -558,12 +609,14 @@ function exportContextCsv() {
   const data = _rptContextData;
   if (!data) return;
   const headers = [
-    "Timestamp", "Person", "Person External ID", "Agent", "Account", "Project",
+    "Timestamp", "Charged Department or Team", "Attribution Source",
+    "Person", "Person External ID", "Agent", "Account", "Project",
     "Source System", "Record Type", "Source Record", "Model", "Input Tokens",
     "Output Tokens", "Tokens Pruned", "Cost USD", "Execution Mode",
   ];
   const rows = (data.activities || []).map(row => [
-    row.timestamp, row.user_name, row.user_external_id, row.agent_name, row.account_name,
+    row.timestamp, row.charged_unit, row.attribution_source,
+    row.user_name, row.user_external_id, row.agent_name, row.account_name,
     row.project_name, row.source_platform, row.source_record_type,
     row.source_record_name || row.source_record_id, row.model_name || row.model_tier,
     row.input_tokens, row.output_tokens, row.tokens_saved, row.cost_usd,
