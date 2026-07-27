@@ -8,6 +8,7 @@ from api.routes_connections import (
     create_connection,
     list_connections,
     recommend_business_mapping,
+    recommend_child_relationships,
 )
 from fastapi import HTTPException
 from database.db import Base
@@ -65,6 +66,34 @@ def test_connection_registry_is_workspace_scoped_and_never_returns_tokens():
     assert len(list_connections("ORG-B", db=db)["connections"]) == 1
 
 
+def test_parent_metadata_produces_useful_child_relationship_suggestions():
+    relationships = [
+        {
+            "childSObject": "Opportunity",
+            "field": "AccountId",
+            "relationshipName": "Opportunities",
+            "cascadeDelete": False,
+        },
+        {
+            "childSObject": "Project_Task__c",
+            "field": "Project__c",
+            "relationshipName": "Project_Tasks__r",
+            "cascadeDelete": True,
+        },
+        {
+            "childSObject": "AccountHistory",
+            "field": "AccountId",
+            "relationshipName": "Histories",
+        },
+    ]
+    suggestions = recommend_child_relationships(relationships)
+
+    assert [item["object"] for item in suggestions] == ["Project_Task__c", "Opportunity"]
+    assert suggestions[0]["parent_field"] == "Project__c"
+    assert suggestions[0]["recommended_behavior"] == "track_and_rollup"
+    assert all(item["confidence"] == "high" for item in suggestions)
+
+
 def test_approved_mapping_is_persisted_as_active_connection():
     db = _session()
     item = create_connection(
@@ -84,6 +113,16 @@ def test_approved_mapping_is_persisted_as_active_connection():
                 "work_name": "Name",
                 "owner": "OwnerId",
                 "content": "Description__c",
+                "children": [
+                    {
+                        "object": "Project_Task__c",
+                        "label": "Project Task",
+                        "parent_field": "Project__c",
+                        "relationship_name": "Project_Tasks__r",
+                        "behavior": "track_and_rollup",
+                    }
+                ],
+                "unmapped_behavior": "separate",
             },
         ),
         db=db,
@@ -91,6 +130,10 @@ def test_approved_mapping_is_persisted_as_active_connection():
     assert updated["status"] == "active"
     assert updated["selected_object"] == "CostPilot_Project__c"
     assert updated["mapping"]["content"] == "Description__c"
+    assert updated["mapping"]["parent_object"] == "CostPilot_Project__c"
+    assert updated["mapping"]["preserve_origin_record"] is True
+    assert updated["mapping"]["children"][0]["object"] == "Project_Task__c"
+    assert updated["mapping"]["children"][0]["behavior"] == "track_and_rollup"
 
 
 def test_salesforce_connection_rejects_non_salesforce_authorization_hosts():

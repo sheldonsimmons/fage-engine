@@ -10,6 +10,8 @@ from typing import Optional
 
 
 VALID_CONTEXT_TYPES = {
+    "account",
+    "customer",
     "custom",
     "project",
     "matter",
@@ -18,6 +20,9 @@ VALID_CONTEXT_TYPES = {
     "ticket",
     "claim",
     "opportunity",
+    "incident",
+    "campaign",
+    "product",
     "environment",
     "application",
 }

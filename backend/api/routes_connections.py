@@ -154,6 +154,65 @@ def recommend_business_mapping(fields: list[dict]) -> dict:
     return recommendations
 
 
+def recommend_child_relationships(relationships: list[dict]) -> list[dict]:
+    """Return useful direct children from a platform parent-object description."""
+    suggestions = []
+    ignored_suffixes = (
+        "ChangeEvent",
+        "Feed",
+        "History",
+        "Share",
+        "Tag",
+    )
+    ignored_objects = {
+        "ActivityHistory",
+        "AttachedContentDocument",
+        "CombinedAttachment",
+        "ContentDocumentLink",
+        "Event",
+        "Note",
+        "OpenActivity",
+        "ProcessInstance",
+        "Task",
+    }
+    for relationship in relationships:
+        child_object = str(relationship.get("childSObject") or "").strip()
+        parent_field = str(relationship.get("field") or "").strip()
+        relationship_name = str(relationship.get("relationshipName") or "").strip()
+        if (
+            not child_object
+            or not parent_field
+            or child_object in ignored_objects
+            or child_object.endswith(ignored_suffixes)
+        ):
+            continue
+        is_custom = child_object.endswith("__c")
+        common_child = child_object in {
+            "Account",
+            "Case",
+            "Contact",
+            "Contract",
+            "Lead",
+            "Opportunity",
+            "Order",
+            "Quote",
+            "WorkOrder",
+        }
+        score = 100 if is_custom else 90 if common_child else 60
+        suggestions.append({
+            "object": child_object,
+            "label": child_object.removesuffix("__c").replace("_", " "),
+            "parent_field": parent_field,
+            "relationship_name": relationship_name or None,
+            "cascade_delete": bool(relationship.get("cascadeDelete")),
+            "confidence": "high" if score >= 90 else "medium",
+            "score": score,
+            "recommended_behavior": "track_and_rollup",
+        })
+    suggestions.sort(key=lambda item: (-item["score"], item["label"].lower(), item["object"]))
+    return suggestions
+
+
 @router.get("")
 def list_connections(workspace_id: str = Query(default="default"), db: Session = Depends(get_db)):
     items = (
@@ -335,11 +394,13 @@ async def discover_object_fields(
         for field in payload.get("fields", [])
     ]
     recommendations = recommend_business_mapping(fields)
+    child_relationships = recommend_child_relationships(payload.get("childRelationships", []))
     discovery = {
         "object": body.object_name,
         "object_label": payload.get("label", body.object_name),
         "fields": fields,
         "recommendations": recommendations,
+        "child_relationships": child_relationships,
         "discovered_at": datetime.utcnow().isoformat(),
     }
     item.selected_object = body.object_name
@@ -354,8 +415,35 @@ async def discover_object_fields(
 @router.put("/{connection_id}/mapping")
 def approve_mapping(connection_id: int, body: MappingUpdate, db: Session = Depends(get_db)):
     item = _get_connection(db, connection_id)
+    mapping = dict(body.mapping)
+    children = mapping.get("children") or []
+    if not isinstance(children, list) or len(children) > 100:
+        raise HTTPException(status_code=400, detail="children must be a list of no more than 100 relationships")
+    valid_behaviors = {"track_and_rollup", "rollup_only", "separate", "ignore"}
+    normalized_children = []
+    for child in children:
+        if not isinstance(child, dict):
+            raise HTTPException(status_code=400, detail="Each child relationship must be an object")
+        child_object = str(child.get("object") or "").strip()
+        parent_field = str(child.get("parent_field") or "").strip()
+        behavior = str(child.get("behavior") or "track_and_rollup").strip().lower()
+        if not child_object or not parent_field:
+            raise HTTPException(status_code=400, detail="Each child relationship requires object and parent_field")
+        if behavior not in valid_behaviors:
+            raise HTTPException(status_code=400, detail=f"Unknown child attribution behavior '{behavior}'")
+        normalized_children.append({
+            "object": child_object,
+            "label": str(child.get("label") or child_object).strip()[:200],
+            "parent_field": parent_field,
+            "relationship_name": str(child.get("relationship_name") or "").strip() or None,
+            "behavior": behavior,
+        })
+    mapping["parent_object"] = body.selected_object
+    mapping["children"] = normalized_children
+    mapping["preserve_origin_record"] = True
+    mapping.setdefault("unmapped_behavior", "separate")
     item.selected_object = body.selected_object
-    item.mapping_json = json.dumps(body.mapping)
+    item.mapping_json = json.dumps(mapping)
     item.status = "active"
     item.last_tested_at = datetime.utcnow()
     item.last_success_at = datetime.utcnow()

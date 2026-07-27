@@ -100,6 +100,7 @@ def test_template_catalog_uses_one_universal_contract():
     assert get_context_template("salesforce_project").context_type == "project"
     assert normalize_context_type(None, template_key="servicenow_case") == "case"
     assert normalize_context_type("custom", template_key="universal_context") == "custom"
+    assert normalize_context_type("account", template_key="salesforce_project") == "account"
 
 
 def test_workspace_saves_business_context_template():

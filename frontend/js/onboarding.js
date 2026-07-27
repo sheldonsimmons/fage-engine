@@ -104,6 +104,8 @@ function _businessWorkLabel() {
     case: "Case",
     ticket: "Ticket",
     opportunity: "Opportunity",
+    account: "Account",
+    customer: "Customer",
   };
   return labels[businessFirstState.workType] || "";
 }
@@ -249,7 +251,7 @@ function restoreBusinessContextOnboarding() {
     return;
   }
   if (!saved?.work_label) return;
-  const standardWork = ["project", "matter", "engagement", "case", "ticket", "opportunity"];
+  const standardWork = ["project", "matter", "engagement", "case", "ticket", "opportunity", "account", "customer"];
   const workValue = standardWork.includes(saved.work_type) ? saved.work_type : "custom";
   const workButton = document.querySelector(`#obWorkChoices [data-value="${workValue}"]`);
   if (workButton) chooseBusinessWork(workButton);
@@ -645,6 +647,7 @@ function renderObConnectionPlan(platform) {
 
 let obDiscoveryConnectionId = null;
 let obDiscoveredFields = [];
+let obDiscoveredRelationships = [];
 
 function renderObDiscoveryCard(platform) {
   const card = document.getElementById("obDiscoveryCard");
@@ -729,7 +732,7 @@ async function loadSalesforceObjects() {
     );
     const objects = preferred.length ? preferred : payload.objects;
     results.innerHTML = `<div class="ob-field" style="margin-top:14px">
-      <label class="ob-label">Choose what represents your ${_obEsc(_businessWorkLabel() || "work")}</label>
+      <label class="ob-label">Choose the parent object AI activity should roll up to</label>
       <select class="ob-input" id="obDiscoveredObject">
         ${objects.map(obj => `<option value="${_obEsc(obj.name)}">${_obEsc(obj.label)} · ${_obEsc(obj.name)}</option>`).join("")}
       </select>
@@ -754,9 +757,10 @@ async function discoverSalesforceFields() {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "Field discovery failed.");
     obDiscoveredFields = payload.fields;
+    obDiscoveredRelationships = payload.child_relationships || [];
     renderDiscoveredMapping(payload);
     document.getElementById("obPlatObject").value = objectName;
-    status.innerHTML = `<div class="ob-discovery-status">${payload.fields.length} fields found. Review CostPilot's recommendations before approving.</div>`;
+    status.innerHTML = `<div class="ob-discovery-status">${payload.fields.length} fields and ${obDiscoveredRelationships.length} useful child relationships found. Review CostPilot's recommendations before approving.</div>`;
   } catch (error) {
     status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
   }
@@ -774,7 +778,12 @@ function renderDiscoveredMapping(payload) {
   const options = `<option value="">Not mapped</option>` + payload.fields.map(field =>
     `<option value="${_obEsc(field.name)}">${_obEsc(field.label)} · ${_obEsc(field.name)}</option>`
   ).join("");
+  const children = (payload.child_relationships || []).slice(0, 30);
   document.getElementById("obDiscoveryResults").innerHTML = `<div class="ob-discovery-mapping">
+    <div class="ob-discovery-section-head">
+      <strong>Parent identity</strong>
+      <span>${_obEsc(payload.object_label || payload.object)} is the shared container. Its permanent ID remains the linking key.</span>
+    </div>
     ${targets.map(([key, label]) => {
       const rec = payload.recommendations[key];
       return `<div class="ob-discovery-map-row">
@@ -783,8 +792,40 @@ function renderDiscoveredMapping(payload) {
         <span class="ob-confidence">${rec ? `${rec.confidence} match` : "Choose"}</span>
       </div>`;
     }).join("")}
+    <div class="ob-discovery-section-head">
+      <strong>Suggested child records</strong>
+      <span>Choose how AI activity originating on each related record should appear in CostPilot.</span>
+    </div>
+    <div class="ob-relationship-list">
+      ${children.length ? children.map((child, index) => `
+        <div class="ob-relationship-row"
+             data-child-index="${index}"
+             data-child-object="${_obEsc(child.object)}"
+             data-child-label="${_obEsc(child.label)}"
+             data-parent-field="${_obEsc(child.parent_field)}"
+             data-relationship-name="${_obEsc(child.relationship_name || "")}">
+          <div>
+            <strong>${_obEsc(child.label)}</strong>
+            <span>${_obEsc(child.object)} → ${_obEsc(child.parent_field)} → ${_obEsc(payload.object)}</span>
+          </div>
+          <select class="ob-input ob-child-behavior" aria-label="Attribution behavior for ${_obEsc(child.label)}">
+            <option value="track_and_rollup" ${child.confidence === "high" ? "selected" : ""}>Track separately + roll up</option>
+            <option value="rollup_only">Roll up to parent only</option>
+            <option value="separate">Track separately only</option>
+            <option value="ignore" ${child.confidence !== "high" ? "selected" : ""}>Ignore for attribution</option>
+          </select>
+          <span class="ob-confidence">${_obEsc(child.confidence)} match</span>
+        </div>`).join("") : '<div class="ob-discovery-status">No direct child relationships were found. You can continue with the parent object and add relationships later.</div>'}
+    </div>
+    <label class="ob-unmapped-choice">
+      <span>Records without an approved relationship</span>
+      <select class="ob-input" id="obUnmappedBehavior">
+        <option value="separate">Track as separate work</option>
+        <option value="ignore">Govern and audit, but do not attribute</option>
+      </select>
+    </label>
     <div class="ob-discovery-actions">
-      <button type="button" class="ob-btn-primary" onclick="approveDiscoveredMapping()">Approve Mapping →</button>
+      <button type="button" class="ob-btn-primary" onclick="approveDiscoveredMapping()">Approve Business Context →</button>
     </div>
   </div>`;
   targets.forEach(([key]) => {
@@ -800,6 +841,15 @@ async function approveDiscoveredMapping() {
     if (select.value) mapping[select.dataset.mapKey] = select.value;
   });
   const selectedObject = document.getElementById("obDiscoveredObject").value;
+  mapping.children = [...document.querySelectorAll(".ob-relationship-row")].map(row => ({
+    object: row.dataset.childObject,
+    label: row.dataset.childLabel,
+    parent_field: row.dataset.parentField,
+    relationship_name: row.dataset.relationshipName || null,
+    behavior: row.querySelector(".ob-child-behavior").value,
+  }));
+  mapping.unmapped_behavior = document.getElementById("obUnmappedBehavior")?.value || "separate";
+  mapping.preserve_origin_record = true;
   const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/mapping`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -813,7 +863,7 @@ async function approveDiscoveredMapping() {
   const contentField = mapping.content;
   if (contentField) _renderObFields([{ label: "Content", name: contentField }]);
   document.getElementById("obDiscoveryStatus").innerHTML =
-    `<div class="ob-discovery-status"><strong>Mapping approved.</strong> CostPilot saved this connection for your workspace. You can still adjust advanced fields below.</div>`;
+    `<div class="ob-discovery-status"><strong>Business context approved.</strong> CostPilot will preserve every originating record and apply the parent/child roll-up choices you selected. You can still adjust advanced fields below.</div>`;
 }
 
 let obSelectedPlatform = null;
@@ -843,6 +893,8 @@ const OB_CONTEXT_OBJECTS = {
     case: "Case",
     ticket: "Case",
     opportunity: "Opportunity",
+    account: "Account",
+    customer: "Account",
   },
   servicenow: {
     project: "pm_project",
@@ -851,6 +903,8 @@ const OB_CONTEXT_OBJECTS = {
     case: "sn_customerservice_case",
     ticket: "incident",
     opportunity: "u_opportunity",
+    account: "customer_account",
+    customer: "customer_account",
   },
 };
 

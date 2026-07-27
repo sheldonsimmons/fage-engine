@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Setup</title>
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="stylesheet" href="css/onboarding.css?v=20260726-universal-setup" />
+  <link rel="stylesheet" href="css/onboarding.css?v=20260726-context-mapper" />
 </head>
 <body class="onboarding-body">
 
@@ -30,8 +30,8 @@
 
     <main class="ob-business-first" id="obBusinessFirst">
       <div class="ob-context-eyebrow">Business Context Engine</div>
-      <h1 class="ob-title">What do you call your work?</h1>
-      <p class="ob-subtitle">Tell CostPilot how your business talks. We’ll build the technical template behind the scenes.</p>
+      <h1 class="ob-title">What should AI activity roll up to?</h1>
+      <p class="ob-subtitle">Choose the business record that should hold the complete AI story. CostPilot will suggest its related records after you connect your system.</p>
 
       <section class="ob-question-block" id="obWorkQuestion">
         <div class="ob-choice-grid" id="obWorkChoices">
@@ -41,6 +41,8 @@
           <button type="button" class="ob-choice" data-value="case" onclick="chooseBusinessWork(this)">Cases</button>
           <button type="button" class="ob-choice" data-value="ticket" onclick="chooseBusinessWork(this)">Tickets</button>
           <button type="button" class="ob-choice" data-value="opportunity" onclick="chooseBusinessWork(this)">Opportunities</button>
+          <button type="button" class="ob-choice" data-value="account" onclick="chooseBusinessWork(this)">Accounts</button>
+          <button type="button" class="ob-choice" data-value="customer" onclick="chooseBusinessWork(this)">Customers</button>
           <button type="button" class="ob-choice ob-choice-custom" data-value="custom" onclick="chooseBusinessWork(this)">Use my own term</button>
         </div>
         <div class="ob-custom-entry" id="obCustomWorkWrap" hidden>
@@ -590,7 +592,7 @@
 
   <script src="js/api.js?v=20260606"></script>
   <script src="js/tier-utils.js?v=20260606"></script>
-  <script src="js/onboarding.js?v=20260726-universal-setup"></script>
+  <script src="js/onboarding.js?v=20260726-context-mapper"></script>
   <script src="/js/mobile-guard.js?v=20260606"></script>
 </body>
 </html>
