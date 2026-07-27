@@ -498,7 +498,7 @@ def get_model_routing_outcome_detail(
         reason_item = reason_totals.setdefault(reason, {"reason": reason, "calls": 0, "spend_usd": 0.0})
         reason_item["calls"] += 1
         reason_item["spend_usd"] += float(tx.cost_usd or 0.0)
-        if reason == "OVERRIDE" or bool(tx.routing_cascaded) or tx.model_source == "built_in_fallback":
+        if reason in ("OVERRIDE", "TIER_OVERRIDE") or bool(tx.routing_cascaded) or tx.model_source == "built_in_fallback":
             review_candidate_calls += 1
             review_candidate_spend += float(tx.cost_usd or 0.0)
 

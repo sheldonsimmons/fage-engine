@@ -4221,7 +4221,12 @@ function renderExecutiveGlance(events, data, context) {
   setText("execGlanceBudget", `${Math.round(context.budget.pct || 0)}%`);
   setText("execGlanceBudgetSub", `${fmtUsd(context.budget.spend || 0)} of ${fmtUsd(context.budget.cap || 0)}`);
   setText("execGlanceRequests", fmtNum(context.totalCalls));
-  setText("execGlanceRequestsSub", "evaluated before model execution");
+  setText(
+    "execGlanceRequestsSub",
+    context.simulationCount > 0
+      ? `${fmtNum(context.liveCount)} live · ${fmtNum(context.simulationCount)} simulation`
+      : "evaluated before model execution"
+  );
   setText("execGlanceContextLabel", `${contextReport?.context_label_plural || "Business Contexts"} With Activity`);
   setText("execGlanceContextCount", fmtNum(contextReport?.active_context_count || 0));
   setText("execGlanceContextSub", "with governed AI activity");
@@ -4328,6 +4333,10 @@ function renderExec(data) {
   const pruneStats = pruningTokenStats(events, pruningTokens, tokenVolume);
   const withoutCostPilot = actualCost + totalAvoided;
   const controlsCount = blockedCount + throttleCount + collisionCount;
+  const simulationCount = hasFilters
+    ? events.filter(event => Boolean(event.is_simulation)).length
+    : Number(d.simulation_calls || 0);
+  const liveCount = Math.max(0, totalCalls - simulationCount);
 
   document.getElementById("execFilterStatus").textContent = filterSummaryText(events.length);
   const scopeNotice = document.getElementById("execScopeNotice");
@@ -4412,6 +4421,8 @@ function renderExec(data) {
     routingPct,
     budget,
     controlsCount,
+    simulationCount,
+    liveCount,
     blockedCount,
     unreviewedBlockedCount,
     collisionCount,

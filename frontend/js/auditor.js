@@ -203,6 +203,7 @@ function renderAuditTable(events) {
             <strong>${e.display_agent_name || e.agent_name || "Unlinked request"}</strong>
             <span class="badge ${isBlocked ? 'badge-critical' : 'badge-scout'}">${isBlocked ? "BLOCKED" : e.event_type}</span>
             <span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()} RISK</span>
+            ${e.is_simulation ? '<span class="badge badge-event">SIMULATION</span>' : ""}
           </div>
           <div class="audit-event-context">${e.display_department || e.department} · <span class="badge ${tierBadgeClass}">${tierLabel}</span></div>
           <div class="audit-event-outcome${isBlocked ? " blocked" : ""}">${outcome}</div>
@@ -259,6 +260,7 @@ async function fetchRationaleContent(eventId) {
         <div class="rationale-label">CONTEXT SNAPSHOT (at time of decision)</div>
         <div class="rationale-text" style="font-family:var(--font-mono); font-size:11px">
           ${agentLine}<br>
+          Mode: ${detail.is_simulation ? "Simulation" : "Live"}<br>
           ${contextLine}
           ${snapshot.tokens_saved > 0 ? `<br><br>
           <span style="color:var(--accent-green)">&#9660; Pruning:</span>
@@ -341,7 +343,7 @@ function _renderRoutingRows(events) {
         <td style="font-family:var(--font-mono);color:var(--text-muted);font-size:11px">${ts}</td>
         <td style="font-weight:600;color:var(--accent);font-size:11px">${e.display_agent_name || e.agent_name || "—"}</td>
         <td style="color:var(--text-muted);font-size:11px">${e.display_department || e.department || "—"}</td>
-        <td>${tierBadge}</td>
+        <td>${tierBadge}${e.is_simulation ? ' <span class="badge badge-event">SIMULATION</span>' : ""}</td>
         <td><span class="badge ${riskClass}">${(e.risk_level || "low").toUpperCase()}</span></td>
         <td style="font-size:11px;color:${isBlocked ? 'var(--accent-red)' : 'var(--text-muted)'}">${e.decision_outcome || "—"}</td>
       </tr>`;

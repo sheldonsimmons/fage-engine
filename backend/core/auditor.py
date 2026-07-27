@@ -167,13 +167,30 @@ def _build_rationale(
             f"Decision: flagship routing is warranted given the signals present."
         )
 
-    if routing_decision == "OVERRIDE":
+    if routing_decision == "TIER_OVERRIDE":
+        return (
+            f"MODEL TIER OVERRIDE — {model_tier or 'requested tier'} explicitly selected "
+            f"for {department}. Trigger: {routing_reason}. "
+            f"Budget snapshot: {used_pct}% used (${spent} of ${cap}). "
+            f"No supervisor budget override occurred. "
+            f"Call cost: ${cost_usd:.6f}. This routing instruction is retained for review."
+        )
+
+    if routing_decision == "BUDGET_OVERRIDE":
         return (
             f"SUPERVISOR OVERRIDE GRANTED for {department} department. "
             f"A human supervisor has manually cleared the budget throttle, "
             f"restoring flagship model access. Budget remains at "
             f"{used_pct}% (${spent} spent). "
             f"This action is logged for compliance review."
+        )
+
+    if routing_decision == "BUDGET_OVERRIDE_REVOKED":
+        return (
+            f"SUPERVISOR OVERRIDE REVOKED for {department} department. "
+            f"Human-authorized access beyond the configured budget throttle was removed. "
+            f"Budget remains at {used_pct}% (${spent} spent). "
+            f"Future requests will follow the department throttle policy."
         )
 
     # ROUTINE — keep the default view concise. The context snapshot retains
@@ -235,11 +252,13 @@ def write_audit_event(
     origin_record_id: str        = None,
     origin_record_type: str      = None,
     origin_record_name: str      = None,
+    is_simulation:    bool       = False,
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
 
     context    = _build_context_snapshot(db, department)
+    context["is_simulation"] = bool(is_simulation)
 
     # Attach pruning stats to the context snapshot
     if tokens_saved or raw_tokens or clean_tokens:
@@ -303,6 +322,7 @@ def write_audit_event(
         rationale        = rationale,
         decision_outcome = decision_outcome,
         risk_level       = risk_level,
+        is_simulation    = bool(is_simulation),
         timestamp        = now,
     )
     db.add(event)
@@ -329,6 +349,7 @@ def write_audit_event(
         "risk_level":       risk_level,
         "decision_outcome": decision_outcome,
         "cost_usd":         cost_usd,
+        "is_simulation":    bool(is_simulation),
         "matched_keywords": matched_keywords,
         "context_snapshot": context,
         "prompt_payload":   prompt_payload[:2000],
@@ -346,6 +367,7 @@ def write_audit_event(
         "actor_name":       work_user.name if work_user else None,
         "model_tier":       model_tier,
         "risk_level":       risk_level,
+        "is_simulation":    bool(is_simulation),
         "decision_outcome": decision_outcome,
         "rationale":        rationale,
         "timestamp":        now.isoformat(),
@@ -465,6 +487,7 @@ def _serialize(e: AuditEvent, full: bool = False) -> dict:
         "tokens_saved":     context.get("tokens_saved", 0) or 0,
         "compression_pct":  context.get("compression_pct"),
         "usage_source":     context.get("usage_source"),
+        "is_simulation":    bool(getattr(e, "is_simulation", False) or context.get("is_simulation", False)),
     }
     if full:
         raw = getattr(e, "raw_payload", None)

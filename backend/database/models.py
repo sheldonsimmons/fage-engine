@@ -306,6 +306,7 @@ class TokenTransaction(Base):
     resolved_model_tier = Column(String, nullable=True)   # actual tier after cascade
     model_source    = Column(String,   nullable=True)     # registry | built_in_fallback | provider_proxy
     routing_cascaded = Column(Boolean, default=False)
+    is_simulation   = Column(Boolean,  nullable=False, default=False)
     input_tokens   = Column(Integer,  nullable=False)
     output_tokens  = Column(Integer,  nullable=False)
     usage_source   = Column(String,   nullable=False, default="estimated")  # provider_reported | estimated
@@ -349,6 +350,7 @@ class AuditEvent(Base):
     rationale        = Column(Text,     nullable=True)    # Plain-English justification
     decision_outcome = Column(String,   nullable=True)
     risk_level       = Column(String,   default="low")    # low | medium | high | critical
+    is_simulation    = Column(Boolean,  nullable=False, default=False)
     timestamp        = Column(DateTime, default=datetime.utcnow)
 
     agent = relationship("RegisteredAgent", back_populates="audit_events")

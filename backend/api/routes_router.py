@@ -438,6 +438,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             origin_record_id = req.origin_record_id,
             origin_record_type = req.origin_record_type,
             origin_record_name = req.origin_record_name,
+            is_simulation    = bool(req.synthetic_simulation),
         )
         from fastapi import HTTPException
         raise HTTPException(
@@ -516,6 +517,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 origin_record_id=req.origin_record_id,
                 origin_record_type=req.origin_record_type,
                 origin_record_name=req.origin_record_name,
+                is_simulation=bool(req.synthetic_simulation),
             )
             raise HTTPException(
                 status_code=429,
@@ -565,6 +567,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             resolved_model_tier = result.get("resolved_model_tier", result["model_tier"]),
             model_source    = result.get("model_source"),
             routing_cascaded = result.get("routing_cascaded", False),
+            is_simulation   = bool(req.synthetic_simulation),
             input_tokens   = result["input_tokens"],
             output_tokens  = result["output_tokens"],
             usage_source   = result.get("usage_source", "estimated"),
@@ -657,6 +660,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 origin_record_id = req.origin_record_id,
                 origin_record_type = req.origin_record_type,
                 origin_record_name = req.origin_record_name,
+                is_simulation    = bool(req.synthetic_simulation),
             )
         except Exception:
             pass  # Never let audit write failure break the routing response

@@ -86,7 +86,7 @@ function _renderStreamEvent(e, nested = false) {
         onclick="event.stopPropagation();toggleStreamEvent(${e.id})"
         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();toggleStreamEvent(${e.id})}">
         <div class="gov-event-header">
-          <span class="gov-event-type" style="color:${color}">${title}</span>
+          <span class="gov-event-type" style="color:${color}">${title}${e.is_simulation ? ' · <span class="badge badge-event">SIMULATION</span>' : ""}</span>
           <span class="gov-event-time">${ts}</span>
         </div>
         <div class="gov-event-body">${_streamEscape(summary.outcome)}</div>
@@ -136,6 +136,7 @@ function _renderStreamGroup(group, index) {
   const dept = first.display_department || first.department || "No department";
   const groupId = `gov-group-${index}`;
   const activityLabel = group.type === "pruning" ? "PRUNING" : "ROUTING";
+  const simulationCount = events.filter(event => Boolean(event.is_simulation)).length;
 
   return `
     <div class="gov-event gov-event-group type-${group.type}" role="button" tabindex="0"
@@ -152,6 +153,7 @@ function _renderStreamGroup(group, index) {
       </div>
       <div class="gov-event-metrics">
         <span>$${totalCost.toFixed(6)} spent</span>
+        ${simulationCount > 0 ? `<span>${simulationCount} simulation</span>` : ""}
         ${totalSaved > 0 ? `<span>${totalSaved.toLocaleString()} tokens saved</span>` : ""}
       </div>
       <div class="gov-event-inspect">Show ${events.length} events <span>›</span></div>

@@ -747,7 +747,7 @@ function renderAgentlakeViews() {
 
   renderAgentlakeCompactList("agentlakeSpendList", usedRows.slice(0, 5), row => ({
     name: row.display_name || row.agent_name,
-    meta: `${Number(row.call_count).toLocaleString()} requests · ${row.display_department || row.department || "—"}`,
+    meta: `${Number(row.call_count).toLocaleString()} requests · ${row.display_department || row.department || "—"}${Number(row.simulation_call_count || 0) > 0 ? ` · ${Number(row.simulation_call_count).toLocaleString()} simulated` : ""}`,
     value: `$${Number(row.total_cost_usd || 0).toFixed(2)}`
   }), "No attributed agent spending yet.");
 

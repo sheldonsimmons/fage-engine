@@ -91,6 +91,7 @@ def _run_migrations():
             ("resolved_model_tier", "VARCHAR"),
             ("model_source", "VARCHAR"),
             ("routing_cascaded", "BOOLEAN DEFAULT FALSE"),
+            ("is_simulation", "BOOLEAN DEFAULT FALSE NOT NULL"),
         ):
             try:
                 ensure_column(conn, "token_transactions", column, definition)
@@ -102,6 +103,10 @@ def _run_migrations():
             pass
         try:
             ensure_column(conn, "audit_events", "work_item_id", "INTEGER REFERENCES work_items(id)")
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "audit_events", "is_simulation", "BOOLEAN DEFAULT FALSE NOT NULL")
         except Exception:
             pass
         for table in ("token_transactions", "audit_events"):

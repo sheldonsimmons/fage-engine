@@ -539,14 +539,15 @@ async function loadBusinessContexts() {
           <td>${escapeHtml(row.account_name || "Unassigned account")}</td>
           <td>${escapeHtml(row.project_name || "Unattributed")}</td>
           <td><div class="ctx-name">${escapeHtml(row.source_record_name || row.source_record_id || "Not recorded")}</div><div class="ctx-meta">${escapeHtml(row.source_record_type || row.source_platform || "")}</div></td>
-          <td><div>${escapeHtml(row.model_name || row.model_tier || "—")}</div><div class="ctx-meta">${escapeHtml(row.model_tier || "")}</div></td>
+          <td><div>${escapeHtml(row.model_name || row.model_tier || "—")}</div><div class="ctx-meta">${escapeHtml(row.model_tier || "")}${row.is_simulation ? ' · <span class="rpt-badge badge-event">SIMULATION</span>' : ""}</div></td>
           <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
           <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
           <td class="ctx-mono">${fmtUsd(Number(row.cost_usd || 0))}</td>
         </tr>`).join("")
       : '<tr><td colspan="10">No AI activity matches these filters.</td></tr>';
     document.getElementById("ctx-activity-count").textContent =
-      `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"}`;
+      `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"} · ` +
+      `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation`;
   } catch (err) {
     document.getElementById("ctx-activity-rows").innerHTML =
       `<tr><td colspan="10">Could not load project attribution: ${escapeHtml(err.message)}</td></tr>`;
@@ -559,13 +560,14 @@ function exportContextCsv() {
   const headers = [
     "Timestamp", "Person", "Person External ID", "Agent", "Account", "Project",
     "Source System", "Record Type", "Source Record", "Model", "Input Tokens",
-    "Output Tokens", "Tokens Pruned", "Cost USD",
+    "Output Tokens", "Tokens Pruned", "Cost USD", "Execution Mode",
   ];
   const rows = (data.activities || []).map(row => [
     row.timestamp, row.user_name, row.user_external_id, row.agent_name, row.account_name,
     row.project_name, row.source_platform, row.source_record_type,
     row.source_record_name || row.source_record_id, row.model_name || row.model_tier,
     row.input_tokens, row.output_tokens, row.tokens_saved, row.cost_usd,
+    row.is_simulation ? "Simulation" : "Live",
   ]);
   downloadCsv(`costpilot_project_attribution_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 }

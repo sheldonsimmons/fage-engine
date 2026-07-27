@@ -263,7 +263,9 @@ def route(
     elif forced_tier is not None:
         tier_num         = forced_tier
         tier_label       = TIER_NAMES.get(forced_tier, f"Tier {forced_tier}")
-        routing_decision = "OVERRIDE"
+        # An explicit model-tier instruction is not a human budget override.
+        # Keep the selected tier unchanged while recording the decision accurately.
+        routing_decision = "TIER_OVERRIDE"
         routing_reason   = f"Explicit tier tag used — routed directly to {tier_label} (Tier {forced_tier})"
     elif force_complex:
         tier_num         = 4          # Strategist for sensitive term escalations

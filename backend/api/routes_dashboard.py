@@ -120,6 +120,9 @@ def get_dashboard(
     IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
 
     total_calls = db.query(func.count(TokenTransaction.id)).filter(*_filters(tx_scope, IS_AI_CALL)).scalar() or 0
+    simulation_routed_calls = db.query(func.count(TokenTransaction.id)).filter(
+        *_filters(tx_scope, IS_AI_CALL, TokenTransaction.is_simulation.is_(True))
+    ).scalar() or 0
 
     # Economy tiers: Scout (tier 1), Analyst (tier 2), and legacy "micro"
     ECONOMY_TIERS  = ("Scout", "Analyst", "micro")
@@ -223,6 +226,14 @@ def get_dashboard(
     requests_routed = scout_calls + analyst_calls + advisor_calls + strategist_calls
     requests_blocked = blocked_count
     requests_governed = requests_routed + requests_blocked
+    simulation_blocked_calls = db.query(func.count(AuditEvent.id)).filter(
+        *_filters(
+            audit_scope,
+            AuditEvent.decision_outcome.ilike("%blocked%"),
+            AuditEvent.is_simulation.is_(True),
+        )
+    ).scalar() or 0
+    simulation_calls = simulation_routed_calls + simulation_blocked_calls
     full_flagship_cost = requests_routed * FLAGSHIP_AVG
     routing_savings_usd = max(0.0, full_flagship_cost - (spend_month or 0.0))
     blocked_savings_usd = round(requests_blocked * 0.018, 6)
@@ -299,6 +310,8 @@ def get_dashboard(
         "pruning_savings_usd":   pruning_savings_usd,
         "calls_today":           calls_today,
         "total_calls":           total_calls,
+        "simulation_calls":      simulation_calls,
+        "live_calls":            max(0, requests_governed - simulation_calls),
         "requests_governed":     requests_governed,
         "requests_routed":       requests_routed,
         "requests_blocked":      requests_blocked,

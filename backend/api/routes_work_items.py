@@ -1007,12 +1007,14 @@ def project_activity_reporting(
                 "output_tokens": 0,
                 "tokens_saved": 0,
                 "spend_usd": 0.0,
+                "simulation_count": 0,
             })
             bucket["request_count"] += 1
             bucket["input_tokens"] += int(tx.input_tokens or 0)
             bucket["output_tokens"] += int(tx.output_tokens or 0)
             bucket["tokens_saved"] += int(tx.tokens_saved or 0)
             bucket["spend_usd"] += float(tx.cost_usd or 0.0)
+            bucket["simulation_count"] += 1 if bool(tx.is_simulation) else 0
         result = []
         for bucket in grouped.values():
             bucket["total_tokens"] = bucket["input_tokens"] + bucket["output_tokens"]
@@ -1065,6 +1067,7 @@ def project_activity_reporting(
             "cost_usd": round(float(tx.cost_usd or 0.0), 6),
             "was_pruned": bool(tx.was_pruned),
             "routing_reason": tx.routing_reason,
+            "is_simulation": bool(tx.is_simulation),
         })
 
     def unique_options(key, label, extra=None):
@@ -1118,6 +1121,8 @@ def project_activity_reporting(
             "people_count": len({identity(row)["user_external_id"] for row in rows if identity(row)["user_external_id"]}),
             "agent_count": len({identity(row)["agent_id"] for row in rows if identity(row)["agent_id"] is not None}),
             "project_count": len({identity(row)["project_external_id"] for row in rows if identity(row)["project_external_id"]}),
+            "simulation_count": sum(1 for row in rows if bool(row[0].is_simulation)),
+            "live_count": sum(1 for row in rows if not bool(row[0].is_simulation)),
         },
         "project_breakdown": project_breakdown,
         "people_breakdown": people_breakdown,

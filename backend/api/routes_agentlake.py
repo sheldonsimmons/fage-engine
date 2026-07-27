@@ -135,6 +135,7 @@ def agent_spend_summary(db: Session = Depends(get_db)):
         total_output   = sum(t.output_tokens or 0 for t in txns)
         total_saved    = sum(t.tokens_saved or 0  for t in txns)
         call_count     = len(txns)
+        simulation_calls = sum(1 for t in txns if bool(t.is_simulation))
 
         # Most-used tier
         tier_counts: dict = {}
@@ -154,6 +155,7 @@ def agent_spend_summary(db: Session = Depends(get_db)):
             "active_recently": agent_active_recently(agent),
             "last_used_at":    agent.last_used_at.isoformat() if agent.last_used_at else None,
             "call_count":      call_count,
+            "simulation_call_count": simulation_calls,
             "total_cost_usd":  total_cost,
             "total_input_tokens":  total_input,
             "total_output_tokens": total_output,

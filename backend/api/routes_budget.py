@@ -20,6 +20,7 @@ from core.budget import (
     grant_override, revoke_override, reset_period, set_throttle_tier,
     set_raw_logging, archive_department,
 )
+from core.auditor import write_audit_event
 
 router = APIRouter()
 
@@ -85,7 +86,18 @@ def update_cap(department: str, body: SetCapRequest, db: Session = Depends(get_d
 def override_throttle(department: str, db: Session = Depends(get_db)):
     """Supervisor action: grant a throttle override so flagship models can run again."""
     try:
-        return grant_override(db, department)
+        result = grant_override(db, department)
+        write_audit_event(
+            db=db,
+            event_type="BUDGET",
+            department=department,
+            routing_decision="BUDGET_OVERRIDE",
+            routing_reason="Human supervisor granted a department budget throttle override",
+            prompt_payload="",
+            model_tier=None,
+            decision_outcome="Budget throttle override granted",
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -94,7 +106,18 @@ def override_throttle(department: str, db: Session = Depends(get_db)):
 def revoke_throttle_override(department: str, db: Session = Depends(get_db)):
     """Supervisor action: revoke a previously granted override."""
     try:
-        return revoke_override(db, department)
+        result = revoke_override(db, department)
+        write_audit_event(
+            db=db,
+            event_type="BUDGET",
+            department=department,
+            routing_decision="BUDGET_OVERRIDE_REVOKED",
+            routing_reason="Human supervisor revoked the department budget throttle override",
+            prompt_payload="",
+            model_tier=None,
+            decision_outcome="Budget throttle override revoked",
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
