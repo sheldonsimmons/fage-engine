@@ -111,6 +111,9 @@ def _run_migrations():
                 ("actor_name", "VARCHAR"),
                 ("actor_email", "VARCHAR"),
                 ("actor_source_platform", "VARCHAR"),
+                ("origin_record_id", "VARCHAR"),
+                ("origin_record_type", "VARCHAR"),
+                ("origin_record_name", "VARCHAR"),
             ):
                 try:
                     ensure_column(conn, table, column, definition)

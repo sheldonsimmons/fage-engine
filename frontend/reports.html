@@ -91,6 +91,7 @@
     <div class="rpt-tabs" id="rptTabRow">
       <button id="rptTabSavings"    class="rpt-tab active" data-tab="savings">💰 Savings</button>
       <button id="rptTabRisk"       class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
+      <button id="rptTabContexts"   class="rpt-tab" data-tab="contexts">Business Contexts</button>
       <button id="rptTabDepts"      class="rpt-tab" data-tab="departments">🏢 Departments</button>
       <button id="rptTabEfficiency" class="rpt-tab" data-tab="efficiency">🤖 Bot Efficiency</button>
       <button id="rptTabActivity"   class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
@@ -339,6 +340,55 @@
     <!-- ══════════════════════════════════════════════════════════════════
          TAB 3: DEPARTMENTS
     ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-contexts">
+      <div class="rpt-export-bar" id="business-contexts">
+        <span style="color:var(--text-muted);font-size:11px;margin-right:auto">
+          Parent totals and related-record contributions are alternate views of the same governed calls.
+        </span>
+        <button class="export-btn" onclick="exportContextCsv()">⬇ CSV</button>
+      </div>
+      <div class="rpt-kpi-row">
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label" id="ctx-active-label">Active Contexts</div>
+          <div class="rpt-kpi-value" id="ctx-active">—</div>
+          <div class="rpt-kpi-sub">with AI activity</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Attributed Requests</div>
+          <div class="rpt-kpi-value green" id="ctx-coverage">—</div>
+          <div class="rpt-kpi-sub" id="ctx-attributed">— linked calls</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Unattributed Requests</div>
+          <div class="rpt-kpi-value" id="ctx-unattributed">—</div>
+          <div class="rpt-kpi-sub" id="ctx-unattributed-spend">— spend</div>
+        </div>
+        <div class="rpt-kpi">
+          <div class="rpt-kpi-label">Governed Spend</div>
+          <div class="rpt-kpi-value" id="ctx-spend">—</div>
+          <div class="rpt-kpi-sub">counted once at company level</div>
+        </div>
+      </div>
+      <div class="panel" style="padding:18px">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px">
+          <div>
+            <div class="rpt-chart-title" id="ctx-table-title">Business context attribution</div>
+            <div style="color:var(--text-muted);font-size:11px;margin-top:4px">
+              Expand a row to see the source records, people, or transactions contributing to its total.
+            </div>
+          </div>
+        </div>
+        <div style="overflow:auto">
+          <table class="rpt-context-table">
+            <thead>
+              <tr><th>Business Context</th><th>Related Records</th><th>Requests</th><th>Tokens</th><th>Tokens Pruned</th><th>Spend</th><th>Budget</th><th>Risk</th></tr>
+            </thead>
+            <tbody id="ctx-report-rows"><tr><td colspan="8">Loading business-context attribution…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div class="rpt-pane" id="tab-departments">
 
       <div class="rpt-export-bar">

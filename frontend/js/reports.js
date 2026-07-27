@@ -13,6 +13,7 @@ const charts   = {};
 let _rptRiskEvents  = [];
 let _rptDeptData    = [];
 let _rptSavingsData = null;
+let _rptContextData = null;
 const _hiddenDeptChartLabels = new Set();
 let _riskDrillDate = "";
 let _riskDrillKind = "";
@@ -430,10 +431,84 @@ function onDatePresetChange() {
 function loadActiveTab() {
   if (activeTab === "savings")     loadSavings();
   if (activeTab === "risk")        loadRisk();
+  if (activeTab === "contexts")    loadBusinessContexts();
   if (activeTab === "departments") loadDepartments();
   if (activeTab === "activity")    loadAgentActivity();
   if (activeTab === "efficiency")  restoreEfficiencyReviewForSelectedDays();
   // efficiency tab remains on-demand. Restore cached reviews, but do not rerun analysis automatically.
+}
+
+function contextBudgetLabel(row) {
+  if (row.monthly_ai_budget == null) return "Not set";
+  return `${Number(row.budget_used_pct || 0).toFixed(1)}% of ${fmtUsd(Number(row.monthly_ai_budget || 0))}`;
+}
+
+function toggleContextChildren(parentId) {
+  document.querySelectorAll(`[data-context-parent="${CSS.escape(String(parentId))}"]`).forEach(row => {
+    row.hidden = !row.hidden;
+  });
+}
+
+async function loadBusinessContexts() {
+  const { days } = getActiveDateRange();
+  const wsId = localStorage.getItem("cp_workspace_id") || "";
+  const wsParam = wsId ? `&workspace_id=${encodeURIComponent(wsId)}` : "";
+  try {
+    const data = await apiGet(`/api/work-items/reporting?days=${Math.min(365, days)}&limit=100${wsParam}`);
+    _rptContextData = data;
+    setKpi("ctx-active", fmtNum(data.active_context_count || 0));
+    setKpi("ctx-coverage", `${Number(data.attribution?.coverage_pct || 0).toFixed(1)}%`);
+    setKpi("ctx-attributed", `${fmtNum(data.attribution?.attributed_request_count || 0)} linked calls`);
+    setKpi("ctx-unattributed", fmtNum(data.attribution?.unattributed_request_count || 0));
+    setKpi("ctx-unattributed-spend", `${fmtUsd(Number(data.attribution?.unattributed_spend_usd || 0))} spend`);
+    setKpi("ctx-spend", fmtUsd(Number(data.company_totals?.spend_usd || 0)));
+    document.getElementById("ctx-active-label").textContent = `Active ${data.context_label_plural || "Contexts"}`;
+    document.getElementById("ctx-table-title").textContent = `${data.context_label_plural || "Business Contexts"} and related records`;
+
+    const body = document.getElementById("ctx-report-rows");
+    const parents = data.parents || [];
+    if (!parents.length) {
+      body.innerHTML = '<tr><td colspan="8">No attributed business-context activity is recorded for this period.</td></tr>';
+      return;
+    }
+    body.innerHTML = parents.map(parent => {
+      const children = parent.children || [];
+      const parentRow = `<tr class="ctx-parent" onclick="toggleContextChildren('${String(parent.id).replace(/'/g, "\\'")}')">
+        <td><div class="ctx-name">${escapeHtml(parent.name)}</div><div class="ctx-meta">▸ ${escapeHtml(parent.context_type || "work")} · ${escapeHtml(parent.source_platform || "Unknown source")}</div></td>
+        <td>${fmtNum(parent.related_record_count || 0)}</td>
+        <td class="ctx-mono">${fmtNum(parent.request_count || 0)}</td>
+        <td class="ctx-mono">${fmtNum(parent.total_tokens || 0)}</td>
+        <td class="ctx-mono">${fmtNum(parent.tokens_saved || 0)}</td>
+        <td class="ctx-mono">${fmtUsd(Number(parent.spend_usd || 0))}</td>
+        <td>${escapeHtml(contextBudgetLabel(parent))}</td>
+        <td>${fmtNum(parent.risk_event_count || 0)}</td>
+      </tr>`;
+      const childRows = children.map(child => `<tr class="ctx-child" data-context-parent="${escapeHtml(String(parent.id))}" hidden>
+        <td><div class="ctx-name">${escapeHtml(child.source_record_name || child.source_record_id || "Historical activity")}</div><div class="ctx-meta">${escapeHtml(child.source_record_type || "Source record")} · ${escapeHtml(child.source_platform || "Unknown source")}</div></td>
+        <td>Contribution</td>
+        <td class="ctx-mono">${fmtNum(child.request_count || 0)}</td>
+        <td class="ctx-mono">${fmtNum((child.input_tokens || 0) + (child.output_tokens || 0))}</td>
+        <td class="ctx-mono">${fmtNum(child.tokens_saved || 0)}</td>
+        <td class="ctx-mono">${fmtUsd(Number(child.spend_usd || 0))}</td>
+        <td>Included in parent</td>
+        <td>—</td>
+      </tr>`).join("");
+      return parentRow + childRows;
+    }).join("");
+  } catch (err) {
+    document.getElementById("ctx-report-rows").innerHTML = `<tr><td colspan="8">Could not load business-context attribution: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function exportContextCsv() {
+  const data = _rptContextData;
+  if (!data) return;
+  const headers = ["Context", "Type", "Source", "Requests", "Input Tokens", "Output Tokens", "Tokens Pruned", "Spend USD", "Budget Used %", "Risk Events"];
+  const rows = (data.parents || []).map(row => [
+    row.name, row.context_type, row.source_platform, row.request_count, row.input_tokens,
+    row.output_tokens, row.tokens_saved, row.spend_usd, row.budget_used_pct ?? "", row.risk_event_count,
+  ]);
+  downloadCsv(`costpilot_business_contexts_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 }
 
 function isReportFilterActive() {
@@ -1609,6 +1684,11 @@ function randomizeReportCards() {
 
 // Init drag for the default (savings) tab on load
 document.addEventListener("DOMContentLoaded", () => {
+  const requestedTab = new URLSearchParams(window.location.search).get("tab");
+  const requestedButton = requestedTab
+    ? document.querySelector(`.rpt-tab[data-tab="${CSS.escape(requestedTab)}"]`)
+    : null;
+  if (requestedButton && requestedTab !== activeTab) requestedButton.click();
   setTimeout(() => initDraggableReports("savings"), 100);
 });
 

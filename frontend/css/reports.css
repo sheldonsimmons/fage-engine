@@ -705,3 +705,47 @@
   font-size: 12px;
   padding: 8px 0;
 }
+.rpt-context-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+.rpt-context-table th,
+.rpt-context-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.rpt-context-table th {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.rpt-context-table .ctx-parent {
+  cursor: pointer;
+}
+.rpt-context-table .ctx-parent:hover {
+  background: rgba(88, 166, 255, .05);
+}
+.rpt-context-table .ctx-child td {
+  background: rgba(255, 255, 255, .018);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.rpt-context-table .ctx-child td:first-child {
+  padding-left: 38px;
+}
+.rpt-context-table .ctx-name {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.rpt-context-table .ctx-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-top: 3px;
+}
+.rpt-context-table .ctx-mono {
+  font-family: var(--font-mono);
+}

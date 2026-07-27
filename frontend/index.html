@@ -1609,6 +1609,11 @@
         <div class="exec-glance-kpi-value" id="execGlanceRequests">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceRequestsSub">evaluated by CostPilot</div>
       </article>
+      <article class="exec-glance-kpi">
+        <div class="exec-glance-kpi-label" id="execGlanceContextLabel">Active Business Contexts</div>
+        <div class="exec-glance-kpi-value" id="execGlanceContextCount">—</div>
+        <div class="exec-glance-kpi-sub" id="execGlanceContextSub">with governed AI activity</div>
+      </article>
       <article class="exec-glance-kpi" id="execGlanceRiskCard">
         <div class="exec-glance-kpi-label">Risk &amp; Controls</div>
         <div class="exec-glance-kpi-value" id="execGlanceRisk">—</div>
@@ -1675,15 +1680,16 @@
       <article class="exec-glance-panel">
         <div class="exec-glance-panel-head">
           <div>
-            <h2>Spend concentration</h2>
-            <p>Where AI spend is accumulating.</p>
+            <h2 id="execGlanceConcentrationHeading">AI activity by business context</h2>
+            <p id="execGlanceConcentrationDescription">Where governed AI work and spend are accumulating.</p>
           </div>
           <div class="exec-glance-switch" role="group" aria-label="Spend concentration view">
-            <button class="active" id="execGlanceDeptButton" type="button" onclick="setExecGlanceConcentration('department')">Departments</button>
-            <button id="execGlanceProjectButton" type="button" onclick="setExecGlanceConcentration('project')">Projects</button>
+            <button id="execGlanceDeptButton" type="button" onclick="setExecGlanceConcentration('department')">Departments</button>
+            <button class="active" id="execGlanceProjectButton" type="button" onclick="setExecGlanceConcentration('project')">Business Contexts</button>
           </div>
         </div>
         <div class="exec-glance-concentration" id="execGlanceConcentration"></div>
+        <div class="exec-glance-attribution" id="execGlanceAttribution"></div>
       </article>
     </section>
 
@@ -2813,7 +2819,7 @@ let execChart = null;
 let savingsDonutChartInstance = null;
 let execGlanceTrendChartInstance = null;
 let execGlanceSavingsChartInstance = null;
-let execGlanceConcentrationView = "department";
+let execGlanceConcentrationView = "project";
 let execGlanceConcentrationRows = { department: [], project: [] };
 let execHelpFloating = null;
 
@@ -4163,11 +4169,12 @@ function renderExecGlanceConcentration() {
   container.innerHTML = rows.map(row => {
     const width = Math.max(row.value > 0 ? 3 : 0, Math.round((row.value / max) * 100));
     const share = total > 0 ? Math.round((row.value / total) * 100) : 0;
-    return `<div class="exec-glance-bar-row">
+    const rowContent = `<div class="exec-glance-bar-row">
       <div class="exec-glance-bar-meta"><strong title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</strong><span>${fmtUsd(row.value)}</span></div>
       <div class="exec-glance-bar-track"><div style="width:${width}%"></div></div>
       <div class="exec-glance-bar-caption"><span>${fmtNum(row.calls)} requests</span><span>${share}% of top-five spend</span></div>
     </div>`;
+    return row.href ? `<a class="exec-glance-context-link" href="${escapeHtml(row.href)}">${rowContent}</a>` : rowContent;
   }).join("");
 }
 
@@ -4199,6 +4206,7 @@ function renderExecGlanceDrivers(drivers, actualCost) {
 }
 
 function renderExecutiveGlance(events, data, context) {
+  const contextReport = data.businessContexts || null;
   setText("execGlanceSpend", fmtUsd(context.actualCost));
   setText("execGlanceSpendSub", execHasActiveFilters() ? "selected filtered period" : "all workspace data");
   setText("execGlanceAvoided", fmtUsd(context.annualSavings));
@@ -4214,6 +4222,9 @@ function renderExecutiveGlance(events, data, context) {
   setText("execGlanceBudgetSub", `${fmtUsd(context.budget.spend || 0)} of ${fmtUsd(context.budget.cap || 0)}`);
   setText("execGlanceRequests", fmtNum(context.totalCalls));
   setText("execGlanceRequestsSub", "evaluated before model execution");
+  setText("execGlanceContextLabel", `Active ${contextReport?.context_label_plural || "Business Contexts"}`);
+  setText("execGlanceContextCount", fmtNum(contextReport?.active_context_count || 0));
+  setText("execGlanceContextSub", "with governed AI activity");
   setText("execGlanceRisk", fmtNum(context.controlsCount));
   setText("execGlanceRiskSub", `${fmtNum(context.blockedCount)} blocked · ${fmtNum(context.unreviewedBlockedCount)} awaiting review`);
 
@@ -4237,10 +4248,28 @@ function renderExecutiveGlance(events, data, context) {
     blocked: context.blockedSaved,
   });
   renderExecGlanceModels(events, data);
+  const contextRows = (contextReport?.parents || []).map(parent => ({
+    label: parent.name,
+    value: Number(parent.spend_usd || 0),
+    calls: Number(parent.request_count || 0),
+    href: `/work-items.html?project=${encodeURIComponent(parent.external_id || "")}`,
+  }));
   execGlanceConcentrationRows = {
     department: groupSpend(events, event => displayDeptName(event.department || event.source_department), data),
-    project: groupSpend(events, event => execProjectLabel(event), data),
+    project: contextRows.length ? contextRows : groupSpend(events, event => execProjectLabel(event), data),
   };
+  const pluralLabel = contextReport?.context_label_plural || "Business Contexts";
+  setText("execGlanceProjectButton", pluralLabel);
+  setText("execGlanceConcentrationHeading", `AI activity by ${pluralLabel.toLowerCase()}`);
+  const attribution = contextReport?.attribution;
+  const attributionEl = document.getElementById("execGlanceAttribution");
+  if (attributionEl) {
+    attributionEl.innerHTML = attribution
+      ? `<span><strong>${Number(attribution.coverage_pct || 0).toFixed(1)}%</strong> of requests attributed</span>
+         <span><strong>${fmtNum(attribution.unattributed_request_count || 0)}</strong> unattributed · ${fmtUsd(attribution.unattributed_spend_usd || 0)}</span>
+         <a href="/reports.html?tab=contexts#business-contexts">Open attribution report →</a>`
+      : `<span>Business-context attribution will appear as governed calls are linked.</span>`;
+  }
   renderExecGlanceConcentration();
   renderExecGlanceDrivers(context.drivers, context.actualCost);
 }
@@ -4606,7 +4635,7 @@ function renderExec(data) {
 
 async function loadExec() {
   try {
-    const [dashboard, timeseries, audits, agents, models, reviewStatus] = await Promise.all([
+    const [dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts] = await Promise.all([
       apiGet("/api/dashboard"),
       apiGet("/api/timeseries?days=180"),
       apiGet("/api/audit?limit=5000"),
@@ -4619,8 +4648,12 @@ async function loadExec() {
         console.warn("Blocked review status load failed:", err.message);
         return { reviewed_through_id: 0, unreviewed_blocked_count: 0 };
       }),
+      apiGet("/api/work-items/reporting?days=30&limit=10").catch(err => {
+        console.warn("Business-context reporting load failed:", err.message);
+        return null;
+      }),
     ]);
-    execData = { dashboard, timeseries, audits, agents, models, reviewStatus };
+    execData = { dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts };
     populateExecFilters(execData);
     renderExec(execData);
     updateTrialStartCard(await loadTrialScopedExecData(execData));

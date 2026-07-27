@@ -466,7 +466,7 @@
 .cp-executive-page .exec-glance-kpis {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .cp-executive-page .exec-glance-kpi,
@@ -713,6 +713,34 @@
 .cp-executive-page .exec-glance-concentration {
   display: grid;
   gap: 11px;
+}
+.cp-executive-page .exec-glance-context-link {
+  color: inherit;
+  display: block;
+  text-decoration: none;
+}
+.cp-executive-page .exec-glance-context-link:hover strong {
+  color: var(--cp-color-primary);
+}
+.cp-executive-page .exec-glance-attribution {
+  align-items: center;
+  border-top: 1px solid var(--cp-color-border);
+  color: var(--cp-color-text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 8px;
+  gap: 8px 14px;
+  margin-top: 13px;
+  padding-top: 11px;
+}
+.cp-executive-page .exec-glance-attribution strong {
+  color: var(--cp-color-text);
+  font-family: var(--cp-font-mono);
+}
+.cp-executive-page .exec-glance-attribution a {
+  color: var(--cp-color-primary);
+  margin-left: auto;
+  text-decoration: none;
 }
 .cp-executive-page .exec-glance-panel-actions {
   align-items: flex-end;

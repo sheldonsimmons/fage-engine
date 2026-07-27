@@ -76,6 +76,9 @@ class RouteRequest(BaseModel):
     synthetic_simulation:   bool = False           # Traffic simulator only: persist governed activity without waiting on a live provider response
     payload_type:           str  = "text"          # "text" = full pruning pipeline | "code" = skip pruner, secrets detection only | "transcript" = voice guard path
     work_item_id:           Optional[str] = None    # Public project/matter/engagement ID; optional for backward compatibility
+    origin_record_id:       Optional[str] = None    # Exact source record where this AI request originated
+    origin_record_type:     Optional[str] = None
+    origin_record_name:     Optional[str] = None
     actor_external_id:      Optional[str] = None    # Human identity in the source platform
     actor_name:             Optional[str] = None
     actor_email:            Optional[str] = None
@@ -124,6 +127,10 @@ def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
         req.text = req.request_context.content
         req.payload_type = req.request_context.payload_type
         req.auto_prune = req.request_context.auto_prune
+    if req.work_context and not req.origin_record_id:
+        req.origin_record_id = req.work_context.external_id
+        req.origin_record_type = req.work_context.type
+        req.origin_record_name = req.work_context.name
     if not (req.text or "").strip():
         raise HTTPException(status_code=422, detail="A non-empty text or request.content value is required")
     return req
@@ -428,6 +435,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             decision_outcome = "Request blocked by sensitive term policy",
             work_item        = work_item,
             work_user        = work_user,
+            origin_record_id = req.origin_record_id,
+            origin_record_type = req.origin_record_type,
+            origin_record_name = req.origin_record_name,
         )
         from fastapi import HTTPException
         raise HTTPException(
@@ -503,6 +513,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 decision_outcome="Request blocked by project budget policy",
                 work_item=work_item,
                 work_user=work_user,
+                origin_record_id=req.origin_record_id,
+                origin_record_type=req.origin_record_type,
+                origin_record_name=req.origin_record_name,
             )
             raise HTTPException(
                 status_code=429,
@@ -540,6 +553,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             agent_id        = agent.id if agent else req.agent_id,
             work_item_id    = work_item.id if work_item else None,
             work_user_id    = work_user.id if work_user else None,
+            origin_record_id = (req.origin_record_id or "").strip() or None,
+            origin_record_type = (req.origin_record_type or "").strip() or None,
+            origin_record_name = (req.origin_record_name or "").strip() or None,
             actor_external_id = work_user.external_id if work_user else None,
             actor_name      = work_user.name if work_user else None,
             actor_email     = work_user.email if work_user else None,
@@ -638,6 +654,9 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 raw_payload      = _raw_to_store,
                 work_item        = work_item,
                 work_user        = work_user,
+                origin_record_id = req.origin_record_id,
+                origin_record_type = req.origin_record_type,
+                origin_record_name = req.origin_record_name,
             )
         except Exception:
             pass  # Never let audit write failure break the routing response

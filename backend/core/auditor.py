@@ -232,6 +232,9 @@ def write_audit_event(
     raw_payload:      str       = None,   # original text before pruning (None = not logged)
     work_item                    = None,   # optional WorkItem ORM record
     work_user                    = None,   # optional human WorkUser ORM record
+    origin_record_id: str        = None,
+    origin_record_type: str      = None,
+    origin_record_name: str      = None,
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
@@ -261,6 +264,10 @@ def write_audit_event(
         context["work_item_id"] = work_item.external_id
         context["work_item_name"] = work_item.name
         context["work_item_internal_id"] = work_item.id
+    if origin_record_id:
+        context["origin_record_id"] = origin_record_id
+        context["origin_record_type"] = origin_record_type
+        context["origin_record_name"] = origin_record_name
     if work_user:
         context["actor_user_id"] = work_user.id
         context["actor_external_id"] = work_user.external_id
@@ -279,6 +286,9 @@ def write_audit_event(
         agent_id         = agent_id,
         work_item_id     = work_item.id if work_item else None,
         work_user_id     = work_user.id if work_user else None,
+        origin_record_id = origin_record_id,
+        origin_record_type = origin_record_type,
+        origin_record_name = origin_record_name,
         actor_external_id = work_user.external_id if work_user else None,
         actor_name       = work_user.name if work_user else None,
         actor_email      = work_user.email if work_user else None,
@@ -307,6 +317,9 @@ def write_audit_event(
         "agent_id":         agent_id,
         "work_item_id":     work_item.external_id if work_item else None,
         "work_item_name":   work_item.name if work_item else None,
+        "origin_record_id": origin_record_id,
+        "origin_record_type": origin_record_type,
+        "origin_record_name": origin_record_name,
         "actor_external_id": work_user.external_id if work_user else None,
         "actor_name":       work_user.name if work_user else None,
         "actor_email":      work_user.email if work_user else None,

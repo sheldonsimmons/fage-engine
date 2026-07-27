@@ -2,7 +2,7 @@
 
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -643,6 +643,268 @@ def work_item_summary(
         "projects_needing_attention": sorted(
             attention,
             key=lambda item: (item["status"] != "on_hold", -item["budget_used_pct"]),
+        ),
+    }
+
+
+@router.get("/reporting")
+def business_context_reporting(
+    workspace_id: Optional[str] = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Executive-safe parent totals and origin contributions counted once."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    item_query = db.query(WorkItem).filter(
+        WorkItem.status != "archived",
+        WorkItem.merged_into_work_item_id.is_(None),
+    )
+    if workspace_id:
+        item_query = item_query.filter(WorkItem.workspace_id == workspace_id)
+    items = item_query.all()
+    item_by_id = {item.id: item for item in items}
+    item_ids = list(item_by_id)
+
+    tx_filters = [TokenTransaction.timestamp >= cutoff]
+    audit_filters = [AuditEvent.timestamp >= cutoff]
+    if workspace_id:
+        tx_filters.append(TokenTransaction.department.like(f"{workspace_id}:%"))
+        audit_filters.append(AuditEvent.department.like(f"{workspace_id}:%"))
+
+    total_calls, total_input, total_output, total_saved, total_spend = (
+        db.query(
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        )
+        .filter(*tx_filters)
+        .one()
+    )
+    attributed_rows = []
+    if item_ids:
+        attributed_rows = (
+            db.query(
+                TokenTransaction.work_item_id,
+                func.count(TokenTransaction.id),
+                func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+                func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+                func.max(TokenTransaction.timestamp),
+            )
+            .filter(*tx_filters, TokenTransaction.work_item_id.in_(item_ids))
+            .group_by(TokenTransaction.work_item_id)
+            .all()
+        )
+    parent_stats = {
+        row[0]: {
+            "request_count": int(row[1] or 0),
+            "input_tokens": int(row[2] or 0),
+            "output_tokens": int(row[3] or 0),
+            "tokens_saved": int(row[4] or 0),
+            "spend_usd": float(row[5] or 0.0),
+            "last_activity_at": row[6],
+        }
+        for row in attributed_rows
+    }
+    attributed_calls = sum(row["request_count"] for row in parent_stats.values())
+    attributed_spend = sum(row["spend_usd"] for row in parent_stats.values())
+
+    origin_stats: dict[int, list[dict]] = {}
+    if item_ids:
+        origin_rows = (
+            db.query(
+                TokenTransaction.work_item_id,
+                TokenTransaction.origin_record_id,
+                TokenTransaction.origin_record_type,
+                TokenTransaction.origin_record_name,
+                func.count(TokenTransaction.id),
+                func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+                func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+                func.max(TokenTransaction.timestamp),
+            )
+            .filter(*tx_filters, TokenTransaction.work_item_id.in_(item_ids))
+            .group_by(
+                TokenTransaction.work_item_id,
+                TokenTransaction.origin_record_id,
+                TokenTransaction.origin_record_type,
+                TokenTransaction.origin_record_name,
+            )
+            .all()
+        )
+        links_by_item = {
+            item.id: {link.source_record_id: link for link in item.source_links}
+            for item in items
+        }
+        for row in origin_rows:
+            item_id, origin_id, origin_type, origin_name = row[:4]
+            link = links_by_item.get(item_id, {}).get(origin_id)
+            origin_stats.setdefault(item_id, []).append({
+                "source_record_id": origin_id,
+                "source_record_type": origin_type or (link.source_record_type if link else None),
+                "source_record_name": origin_name or (link.source_record_name if link else None)
+                    or ("Historical activity" if not origin_id else origin_id),
+                "source_platform": link.source_platform if link else item_by_id[item_id].source_platform,
+                "is_primary": bool(link.is_primary) if link else False,
+                "origin_recorded": bool(origin_id),
+                "request_count": int(row[4] or 0),
+                "input_tokens": int(row[5] or 0),
+                "output_tokens": int(row[6] or 0),
+                "tokens_saved": int(row[7] or 0),
+                "spend_usd": round(float(row[8] or 0.0), 6),
+                "last_activity_at": row[9].isoformat() if row[9] else None,
+            })
+
+    risk_by_item = {}
+    if item_ids:
+        risk_rows = (
+            db.query(AuditEvent.work_item_id, func.count(AuditEvent.id))
+            .filter(
+                *audit_filters,
+                AuditEvent.work_item_id.in_(item_ids),
+                func.lower(func.coalesce(AuditEvent.risk_level, "low")).in_(
+                    ("medium", "high", "critical")
+                ),
+            )
+            .group_by(AuditEvent.work_item_id)
+            .all()
+        )
+        risk_by_item = {row[0]: int(row[1] or 0) for row in risk_rows}
+
+    parents = []
+    for item in items:
+        stats = parent_stats.get(item.id, {
+            "request_count": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "tokens_saved": 0,
+            "spend_usd": 0.0,
+            "last_activity_at": None,
+        })
+        budget = float(item.monthly_ai_budget) if item.monthly_ai_budget is not None else None
+        budget_used_pct = (
+            round(stats["spend_usd"] / budget * 100, 1) if budget and budget > 0 else None
+        )
+        children = sorted(
+            origin_stats.get(item.id, []),
+            key=lambda row: (-row["spend_usd"], -row["request_count"]),
+        )
+        parents.append({
+            "id": item.id,
+            "external_id": item.external_id,
+            "name": item.name,
+            "context_type": item.context_type or "project",
+            "status": item.status,
+            "department": item.department,
+            "source_platform": item.source_platform,
+            "request_count": stats["request_count"],
+            "input_tokens": stats["input_tokens"],
+            "output_tokens": stats["output_tokens"],
+            "total_tokens": stats["input_tokens"] + stats["output_tokens"],
+            "tokens_saved": stats["tokens_saved"],
+            "spend_usd": round(stats["spend_usd"], 6),
+            "monthly_ai_budget": budget,
+            "budget_used_pct": budget_used_pct,
+            "risk_event_count": risk_by_item.get(item.id, 0),
+            "last_activity_at": stats["last_activity_at"].isoformat()
+                if stats["last_activity_at"] else None,
+            "related_record_count": len(item.source_links),
+            "origin_coverage_pct": round(
+                sum(child["request_count"] for child in children if child["origin_recorded"])
+                / stats["request_count"] * 100,
+                1,
+            ) if stats["request_count"] else 0.0,
+            "children": children,
+        })
+    parents.sort(key=lambda row: (-row["spend_usd"], -row["request_count"], row["name"]))
+
+    active_types = [row["context_type"] for row in parents if row["request_count"]]
+    context_type = max(set(active_types), key=active_types.count) if active_types else "work"
+    labels = {
+        "account": ("Account", "Accounts"),
+        "customer": ("Customer", "Customers"),
+        "matter": ("Matter", "Matters"),
+        "project": ("Project", "Projects"),
+        "case": ("Case", "Cases"),
+        "opportunity": ("Opportunity", "Opportunities"),
+        "engagement": ("Engagement", "Engagements"),
+    }
+    singular_label, plural_label = labels.get(
+        context_type,
+        (context_type.replace("_", " ").title(), f"{context_type.replace('_', ' ').title()}s"),
+    )
+    actions = []
+    for parent in parents:
+        signals = []
+        if parent["budget_used_pct"] is not None and parent["budget_used_pct"] >= 100:
+            signals.append("over_budget")
+        elif parent["budget_used_pct"] is not None and parent["budget_used_pct"] >= 80:
+            signals.append("budget_watch")
+        if parent["risk_event_count"]:
+            signals.append("risk")
+        if signals:
+            actions.append({
+                "external_id": parent["external_id"],
+                "name": parent["name"],
+                "signals": signals,
+                "budget_used_pct": parent["budget_used_pct"],
+                "risk_event_count": parent["risk_event_count"],
+                "spend_usd": parent["spend_usd"],
+            })
+    unattributed_calls = max(0, int(total_calls or 0) - attributed_calls)
+    unattributed_spend = max(0.0, float(total_spend or 0.0) - attributed_spend)
+    if unattributed_calls:
+        actions.append({
+            "external_id": None,
+            "name": "Unattributed AI activity",
+            "signals": ["unattributed"],
+            "request_count": unattributed_calls,
+            "spend_usd": round(unattributed_spend, 6),
+        })
+
+    return {
+        "period_days": days,
+        "context_type": context_type,
+        "context_label": singular_label,
+        "context_label_plural": plural_label,
+        "company_totals": {
+            "request_count": int(total_calls or 0),
+            "input_tokens": int(total_input or 0),
+            "output_tokens": int(total_output or 0),
+            "total_tokens": int(total_input or 0) + int(total_output or 0),
+            "tokens_saved": int(total_saved or 0),
+            "spend_usd": round(float(total_spend or 0.0), 6),
+        },
+        "attribution": {
+            "attributed_request_count": attributed_calls,
+            "unattributed_request_count": unattributed_calls,
+            "attributed_spend_usd": round(attributed_spend, 6),
+            "unattributed_spend_usd": round(unattributed_spend, 6),
+            "coverage_pct": round(
+                attributed_calls / int(total_calls or 0) * 100,
+                1,
+            ) if total_calls else 0.0,
+        },
+        "active_context_count": sum(
+            1 for row in parents if row["status"] == "active" and row["request_count"] > 0
+        ),
+        "parents": parents[:limit],
+        "actions": sorted(
+            actions,
+            key=lambda row: (
+                "over_budget" not in row["signals"],
+                "risk" not in row["signals"],
+                -float(row.get("spend_usd") or 0),
+            ),
+        )[:limit],
+        "double_counting_protection": (
+            "Company totals are calculated directly from transactions. Parent and child "
+            "rows are alternate views of those same transactions and are never added together."
         ),
     }
 

@@ -10,10 +10,20 @@ from api.routes_trial import (
     _trial_status_payload,
     save_business_context,
 )
-from api.routes_work_items import _work_item_json, list_context_templates
+from api.routes_work_items import (
+    _work_item_json,
+    business_context_reporting,
+    list_context_templates,
+)
 from core.business_context import get_context_template, normalize_context_type
 from database.db import Base
-from database.models import TrialAccount, WorkAccount, WorkItem
+from database.models import (
+    TokenTransaction,
+    TrialAccount,
+    WorkAccount,
+    WorkItem,
+    WorkItemSourceLink,
+)
 
 
 def _session():
@@ -101,6 +111,75 @@ def test_template_catalog_uses_one_universal_contract():
     assert normalize_context_type(None, template_key="servicenow_case") == "case"
     assert normalize_context_type("custom", template_key="universal_context") == "custom"
     assert normalize_context_type("account", template_key="salesforce_project") == "account"
+
+
+def test_business_context_reporting_counts_transactions_once_and_keeps_origin():
+    db = _session()
+    parent = WorkItem(
+        external_id="ACME",
+        name="Acme Corporation",
+        context_type="account",
+        status="active",
+        source_platform="Salesforce",
+    )
+    db.add(parent)
+    db.commit()
+    db.refresh(parent)
+    db.add(WorkItemSourceLink(
+        work_item_id=parent.id,
+        source_platform="Salesforce",
+        source_record_type="Opportunity",
+        source_record_id="006-OPP-1",
+        source_record_name="Acme Expansion",
+    ))
+    db.add_all([
+        TokenTransaction(
+            department="Sales",
+            work_item_id=parent.id,
+            source_platform="Salesforce",
+            origin_record_id="006-OPP-1",
+            origin_record_type="Opportunity",
+            origin_record_name="Acme Expansion",
+            model_tier="Scout",
+            input_tokens=100,
+            output_tokens=50,
+            tokens_saved=20,
+            cost_usd=0.10,
+        ),
+        TokenTransaction(
+            department="Sales",
+            work_item_id=parent.id,
+            source_platform="Salesforce",
+            origin_record_id="001-ACME",
+            origin_record_type="Account",
+            origin_record_name="Acme Corporation",
+            model_tier="Scout",
+            input_tokens=200,
+            output_tokens=75,
+            tokens_saved=30,
+            cost_usd=0.20,
+        ),
+        TokenTransaction(
+            department="Direct",
+            source_platform="Direct API",
+            model_tier="Scout",
+            input_tokens=50,
+            output_tokens=25,
+            tokens_saved=5,
+            cost_usd=0.05,
+        ),
+    ])
+    db.commit()
+
+    report = business_context_reporting(workspace_id=None, days=30, limit=10, db=db)
+
+    assert report["company_totals"]["request_count"] == 3
+    assert report["company_totals"]["spend_usd"] == 0.35
+    assert report["parents"][0]["request_count"] == 2
+    assert report["parents"][0]["spend_usd"] == 0.30
+    assert sum(child["request_count"] for child in report["parents"][0]["children"]) == 2
+    assert report["attribution"]["unattributed_request_count"] == 1
+    assert report["attribution"]["coverage_pct"] == 66.7
 
 
 def test_workspace_saves_business_context_template():
