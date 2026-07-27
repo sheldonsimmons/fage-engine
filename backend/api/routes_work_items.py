@@ -780,6 +780,11 @@ def merge_work_items(
         raise HTTPException(status_code=404, detail="Source or destination project was not found")
     if source.id == target.id:
         raise HTTPException(status_code=400, detail="Select two different projects")
+    if target.status == "archived" or target.merged_into_work_item_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="The destination project is archived or already merged. Restore it before using it as the surviving project.",
+        )
     if source.workspace_id and target.workspace_id and source.workspace_id != target.workspace_id:
         raise HTTPException(status_code=409, detail="Projects from different workspaces cannot be merged")
 
@@ -839,6 +844,21 @@ def merge_work_items(
         "into": target.external_id,
         "project": _work_item_json(target, db),
     }
+
+
+@router.post("/{identifier}/restore-merge")
+def restore_merged_work_item(identifier: str, db: Session = Depends(get_db)):
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    if item.status != "archived" and item.merged_into_work_item_id is None:
+        raise HTTPException(status_code=409, detail="This project is already active")
+    item.status = "active"
+    item.merged_into_work_item_id = None
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(item)
+    return _work_item_json(item, db)
 
 
 @router.post("/{identifier}/archive")

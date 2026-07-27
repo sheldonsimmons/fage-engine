@@ -117,6 +117,17 @@ def _resolve_or_create_project(
             .order_by(WorkItem.created_at)
             .first()
         )
+        if not project:
+            project = (
+                db.query(WorkItem)
+                .filter(
+                    WorkItem.workspace_id == workspace_id,
+                    WorkItem.external_id.in_(
+                        (account.external_id, f"SF-{account.external_id}")
+                    ),
+                )
+                .first()
+            )
         grouped_by_account = project is not None
 
     external_id = _project_identifier(body)

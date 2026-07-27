@@ -522,10 +522,11 @@
           </section>
           <section class="wa-project-control">
             <h3>Merge duplicate project</h3>
-            <p>Move its records and history here, then archive it with a permanent merge reference.</p>
+            <p><strong>Keep the project selected above.</strong> Choose the duplicate that should be absorbed and archived.</p>
             <div class="wa-control-stack">
               <select class="wa-input" id="waMergeSource" aria-label="Duplicate project to merge"></select>
-              <button class="wa-secondary" type="button" onclick="waMergeProject()">Merge into this project</button>
+              <button class="wa-secondary" id="waMergeButton" type="button" onclick="waMergeProject()">Absorb duplicate into selected project</button>
+              <button class="wa-secondary" id="waRestoreMergeButton" type="button" onclick="waRestoreMergedProject()" hidden>Restore selected project</button>
               <span class="wa-status" id="waMergeStatus"></span>
             </div>
           </section>
@@ -836,14 +837,17 @@
         : '<div class="wa-empty">No linked records yet.</div>';
       const mergeCandidates = waItems.filter(item =>
         item.external_id !== project.external_id &&
-        item.status !== "archived" &&
         (!project.workspace_id || !item.workspace_id || item.workspace_id === project.workspace_id)
       );
       document.getElementById("waMergeSource").innerHTML =
         '<option value="">Select the duplicate project</option>' +
         mergeCandidates.map(item =>
-          `<option value="${waEscape(item.external_id)}">${waEscape(item.name)} · ${waEscape(item.external_id)}</option>`
+          `<option value="${waEscape(item.external_id)}">${waEscape(item.name)} · ${waEscape(item.external_id)}${item.status === "archived" ? " · archived duplicate" : ""}</option>`
         ).join("");
+      const destinationUnavailable = project.status === "archived" || project.merged_into_work_item_id != null;
+      document.getElementById("waMergeButton").disabled = destinationUnavailable;
+      document.getElementById("waMergeSource").disabled = destinationUnavailable;
+      document.getElementById("waRestoreMergeButton").hidden = !destinationUnavailable;
       if (!document.getElementById("waAgentDepartment").value && project.department) {
         document.getElementById("waAgentDepartment").value = project.department;
       }
@@ -904,6 +908,10 @@
         waSetStatus("waMergeStatus", "Select the duplicate project.", true);
         return;
       }
+      if (target.status === "archived" || target.merged_into_work_item_id != null) {
+        waSetStatus("waMergeStatus", "Restore the selected project before using it as the merge destination.", true);
+        return;
+      }
       if (!confirm(`Merge “${source.name}” into “${target.name}”? Its AI history and linked records will move here, and the duplicate will be archived.`)) return;
       waSetStatus("waMergeStatus", "Merging…");
       try {
@@ -912,6 +920,20 @@
         });
         waSetStatus("waMergeStatus", "Projects merged.");
         await waLoadProjects(target.external_id, true);
+      } catch (error) {
+        waSetStatus("waMergeStatus", error.message, true);
+      }
+    }
+
+    async function waRestoreMergedProject() {
+      const project = waSelectedProject();
+      if (!project) return;
+      if (!confirm(`Restore “${project.name}” as the active surviving project?`)) return;
+      waSetStatus("waMergeStatus", "Restoring…");
+      try {
+        await apiPost(`/api/work-items/${encodeURIComponent(project.external_id)}/restore-merge`, {});
+        waSetStatus("waMergeStatus", "Project restored.");
+        await waLoadProjects(project.external_id, true);
       } catch (error) {
         waSetStatus("waMergeStatus", error.message, true);
       }
