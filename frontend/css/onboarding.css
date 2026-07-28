@@ -71,8 +71,42 @@
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(3, 1fr);
-  margin-bottom: 18px;
+  margin: 0;
   padding: 14px;
+}
+.ob-setup-overview,
+.ob-advanced-setup {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.ob-setup-overview > summary,
+.ob-advanced-setup > summary {
+  align-items: center;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: space-between;
+  padding: 13px 15px;
+}
+.ob-setup-overview > summary span,
+.ob-advanced-setup > summary span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+.ob-setup-overview[open] > summary,
+.ob-advanced-setup[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+.ob-setup-overview .ob-connection-plan,
+.ob-advanced-setup .ob-form {
+  border: 0;
+  border-radius: 0 0 10px 10px;
+  padding: 16px;
 }
 .ob-connection-plan-item {
   color: var(--text-muted);
@@ -116,7 +150,7 @@
 .ob-sf-path-options {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .ob-sf-path-option {
   align-items: flex-start;
@@ -561,6 +595,47 @@
   padding: 10px 12px;
 }
 .ob-context-result strong { color: var(--text-primary); }
+.ob-context-custom {
+  margin-top: 8px;
+}
+.ob-context-custom[hidden] {
+  display: none;
+}
+.ob-relationship-approved {
+  display: grid;
+  gap: 5px;
+}
+.ob-relationship-approved > span {
+  display: block;
+}
+.ob-relationship-preview {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+.ob-relationship-preview > div {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.ob-relationship-preview span {
+  color: var(--text-muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+.ob-relationship-preview ul {
+  color: var(--text-muted);
+  margin: 5px 0 0;
+  padding-left: 18px;
+}
+.ob-relationship-preview li + li {
+  margin-top: 4px;
+}
 .ob-advanced-mapping {
   border: 1px solid var(--border);
   border-radius: 8px;

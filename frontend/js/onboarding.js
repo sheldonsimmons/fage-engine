@@ -634,12 +634,29 @@ function selectSalesforceAiMode(mode) {
   if (!["agentforce", "automation"].includes(mode)) return;
   obSalesforceAiMode = mode;
   localStorage.setItem("cp_salesforce_ai_mode", mode);
+  const generateButton = document.getElementById("obGenerateSetupBtn");
+  if (generateButton) {
+    generateButton.textContent = mode === "agentforce"
+      ? "Show Agentforce Setup →"
+      : "Generate Setup Code →";
+  }
   renderSalesforceAiPath("salesforce");
   renderObConnectionPlan("salesforce");
 }
 
 function getSalesforceGovernedObjects() {
-  return [...document.querySelectorAll("[data-sf-record]:checked")].map(input => input.value);
+  const relationshipMapping = _getApprovedRelationshipMapping();
+  if (relationshipMapping?.parent_object) {
+    return [
+      relationshipMapping.parent_object,
+      ...(relationshipMapping.children || [])
+        .filter(child => child.behavior !== "ignore")
+        .map(child => child.object),
+    ];
+  }
+  const selectedObject = document.getElementById("obDiscoveredObject")?.value
+    || document.getElementById("obPlatObject")?.value;
+  return selectedObject ? [selectedObject] : [];
 }
 
 function renderSalesforceAiPath(platform) {
@@ -658,12 +675,7 @@ function renderSalesforceAiPath(platform) {
   if (!detail) return;
   if (obSalesforceAiMode === "agentforce") {
     detail.innerHTML = `<strong>Use one universal action: CostPilot Governed AI Work.</strong>
-      Add it to every Agentforce agent whose requests should pass through CostPilot. The action can carry the record ID, record name, user, agent, and department without creating a different integration for each object.
-      <div class="ob-sf-record-list" aria-label="Salesforce records this action may govern">
-        ${["Account","Opportunity","Contact","Case","Project / custom record"].map((label, index) =>
-          `<label><input type="checkbox" data-sf-record value="${_obEsc(label)}" ${index < 4 ? "checked" : ""}> ${_obEsc(label)}</label>`
-        ).join("")}
-      </div>`;
+      Add it to each Agentforce agent whose requests should pass through CostPilot. The relationship step below decides which Salesforce record is the parent and which related records roll up to it.`;
   } else {
     detail.innerHTML = `<strong>Use the generated invocable action from Flow, Apex, or custom automation.</strong>
       CostPilot only measures calls that explicitly invoke the action. Ordinary record creation or updates are not counted as AI usage.`;
@@ -708,8 +720,8 @@ function renderObDiscoveryCard(platform) {
   const available = ["salesforce", "servicenow"].includes(platform);
   obDiscoveryPlatform = platform;
   card.innerHTML = `<div class="ob-discovery-head">
-      <div><h3>Find my objects and fields</h3>
-      <p>Sign in to ${_obEsc(label)} and CostPilot will inspect metadata—not customer records—to recommend your mapping.</p></div>
+      <div><h3>Find related objects</h3>
+      <p>Connect ${_obEsc(label)} so CostPilot can suggest which record is the parent and which related records should roll up to it. CostPilot reads metadata—not customer record contents.</p></div>
       <span class="ob-context-eyebrow">${available ? "Available" : "Adapter next"}</span>
     </div>
     ${platform === "salesforce" ? `<div class="ob-discovery-actions">
@@ -813,14 +825,17 @@ async function loadDiscoveryObjects() {
     const preferred = payload.objects.filter(obj => obj.recommended || obj.custom ||
       ["Case", "Opportunity", "Account", "Contact", "Lead", "Task"].includes(obj.name));
     const objects = preferred.length ? preferred : payload.objects;
-    results.innerHTML = `<div class="ob-field" style="margin-top:14px">
-      <label class="ob-label">Choose the parent object AI activity should roll up to</label>
+    results.innerHTML = `<div class="ob-field ob-parent-object-step" style="margin-top:14px">
+      <div class="ob-context-eyebrow">Step 1 of 2</div>
+      <label class="ob-label">Choose the primary business context</label>
+      <p class="ob-field-help">This is the parent record where related AI cost, tokens, users, and agents will roll up.</p>
       <select class="ob-input" id="obDiscoveredObject">
         ${objects.map(obj => `<option value="${_obEsc(obj.name)}">${_obEsc(obj.label)} · ${_obEsc(obj.name)}</option>`).join("")}
       </select>
-      <div class="ob-discovery-actions"><button type="button" class="ob-btn-primary" onclick="discoverPlatformFields()">Find and Recommend Fields →</button></div>
+      <div class="ob-discovery-actions"><button type="button" class="ob-btn-primary" onclick="discoverPlatformFields()">Find related objects →</button></div>
     </div>`;
-    status.innerHTML = `<div class="ob-discovery-status">${_obEsc(label)} connected. ${payload.objects.length} accessible objects found.</div>`;
+    status.innerHTML = `<div class="ob-discovery-status"><strong>${_obEsc(label)} connected.</strong> Choose the parent record below, then CostPilot will find its related objects.</div>`;
+    results.scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (error) {
     status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
   }
@@ -833,7 +848,7 @@ async function discoverSalesforceFields() {
 async function discoverPlatformFields() {
   const objectName = document.getElementById("obDiscoveredObject").value;
   const status = document.getElementById("obDiscoveryStatus");
-  status.innerHTML = `<div class="ob-discovery-status">Inspecting ${_obEsc(objectName)} fields and relationships…</div>`;
+  status.innerHTML = `<div class="ob-discovery-status">Finding objects related to ${_obEsc(objectName)}…</div>`;
   try {
     const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/discover`, {
       method: "POST",
@@ -846,7 +861,7 @@ async function discoverPlatformFields() {
     obDiscoveredRelationships = payload.child_relationships || [];
     renderDiscoveredMapping(payload);
     document.getElementById("obPlatObject").value = objectName;
-    status.innerHTML = `<div class="ob-discovery-status">${payload.fields.length} fields and ${obDiscoveredRelationships.length} useful child relationships found. Review CostPilot's recommendations before approving.</div>`;
+    status.innerHTML = `<div class="ob-discovery-status"><strong>Relationship suggestions ready.</strong> Review which records should roll up to ${_obEsc(payload.object_label || objectName)}.</div>`;
   } catch (error) {
     status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
   }
@@ -867,20 +882,24 @@ function renderDiscoveredMapping(payload) {
   const children = (payload.child_relationships || []).slice(0, 30);
   document.getElementById("obDiscoveryResults").innerHTML = `<div class="ob-discovery-mapping">
     <div class="ob-discovery-section-head">
-      <strong>Parent identity</strong>
-      <span>${_obEsc(payload.object_label || payload.object)} is the shared container. Its permanent ID remains the linking key.</span>
+      <span class="ob-context-eyebrow">Step 2 of 2</span>
+      <strong>Primary business context: ${_obEsc(payload.object_label || payload.object)}</strong>
+      <span>Its permanent ID is the parent linking key. CostPilot keeps the original source record on every AI request.</span>
     </div>
-    ${targets.map(([key, label]) => {
+    <details class="ob-advanced-mapping">
+      <summary>Identity field details <span>Optional</span></summary>
+      <div class="ob-advanced-mapping-body">${targets.map(([key, label]) => {
       const rec = payload.recommendations[key];
       return `<div class="ob-discovery-map-row">
         <label for="obMap-${key}">${label}</label>
         <select class="ob-input" id="obMap-${key}" data-map-key="${key}">${options}</select>
         <span class="ob-confidence">${rec ? `${rec.confidence} match` : "Choose"}</span>
       </div>`;
-    }).join("")}
+    }).join("")}</div>
+    </details>
     <div class="ob-discovery-section-head">
-      <strong>Suggested child records</strong>
-      <span>Choose how AI activity originating on each related record should appear in CostPilot.</span>
+      <strong>Related records to include</strong>
+      <span>Choose how AI activity from each related object should appear beneath the parent.</span>
     </div>
     <div class="ob-relationship-list">
       ${children.length ? children.map((child, index) => `
@@ -911,7 +930,7 @@ function renderDiscoveredMapping(payload) {
       </select>
     </label>
     <div class="ob-discovery-actions">
-      <button type="button" class="ob-btn-primary" onclick="approveDiscoveredMapping()">Approve Business Context →</button>
+      <button type="button" class="ob-btn-primary" onclick="approveDiscoveredMapping()">Approve relationship mapping →</button>
     </div>
   </div>`;
   targets.forEach(([key]) => {
@@ -946,13 +965,39 @@ async function approveDiscoveredMapping() {
     document.getElementById("obDiscoveryStatus").innerHTML = `<div class="ob-error">${_obEsc(payload.detail || "Could not save mapping.")}</div>`;
     return;
   }
+  const approvedRelationshipMapping = {
+    platform: obDiscoveryPlatform,
+    connection_id: obDiscoveryConnectionId,
+    parent_object: selectedObject,
+    children: mapping.children,
+    unmapped_behavior: mapping.unmapped_behavior,
+    preserve_origin_record: true,
+    approved_at: new Date().toISOString(),
+  };
+  localStorage.setItem("cp_relationship_mapping", JSON.stringify(approvedRelationshipMapping));
   const contentField = mapping.content;
   if (contentField) _renderObFields([{ label: "Content", name: contentField }]);
+  const includedChildren = mapping.children.filter(child => child.behavior !== "ignore");
+  const relationshipSummary = includedChildren.length
+    ? includedChildren.map(child => `${_obEsc(child.label)} (${_obEsc(child.behavior.replaceAll("_", " "))})`).join(", ")
+    : "No related objects selected";
   const nextStep = obDiscoveryPlatform === "servicenow"
     ? `Next: install the generated Flow Designer action, run one request from a mapped record, and confirm the record sys_id, user sys_id, agent, tokens, and cost in Projects.`
     : `Next: install the generated action, run one request from a mapped record, and confirm its record, user, agent, tokens, and cost in Projects.`;
   document.getElementById("obDiscoveryStatus").innerHTML =
-    `<div class="ob-discovery-status"><strong>Business context approved.</strong> CostPilot will preserve every originating record and apply the parent/child roll-up choices you selected. ${_obEsc(nextStep)}</div>`;
+    `<div class="ob-discovery-status ob-relationship-approved"><strong>Relationship mapping approved.</strong>
+      <span><b>Parent:</b> ${_obEsc(selectedObject)}</span>
+      <span><b>Related:</b> ${relationshipSummary}</span>
+      <span>${_obEsc(nextStep)}</span>
+    </div>`;
+}
+
+function _getApprovedRelationshipMapping() {
+  try {
+    return JSON.parse(localStorage.getItem("cp_relationship_mapping") || "null");
+  } catch (_) {
+    return null;
+  }
 }
 
 let obSelectedPlatform = null;
@@ -1033,11 +1078,17 @@ function configureObBusinessContext(platform) {
   const workType = saved?.platform === platform
     ? saved.work_type
     : template.defaultWorkType;
-  const customerLabel = saved?.platform === platform
-    ? saved.customer_label
+  const customerValue = saved?.platform === platform
+    ? (saved.customer_type || (saved.customer_label_custom ? "Custom" : saved.customer_label))
     : template.defaultCustomerLabel;
   document.getElementById("obContextWorkType").value = workType;
-  document.getElementById("obContextCustomerLabel").value = customerLabel;
+  document.getElementById("obContextCustomerLabel").value = customerValue;
+  if (workType === "custom") {
+    document.getElementById("obContextCustomWork").value = saved?.work_label || "";
+  }
+  if (customerValue === "Custom") {
+    document.getElementById("obContextCustomCustomer").value = saved?.customer_label_custom || saved?.customer_label || "";
+  }
   updateObBusinessContext(true);
 }
 
@@ -1048,7 +1099,19 @@ function updateObBusinessContext(setObjectDefault = false) {
     name: `${OB_PLATFORMS[obSelectedPlatform].label} Business Context`,
   };
   const workType = document.getElementById("obContextWorkType").value;
-  const customerLabel = document.getElementById("obContextCustomerLabel").value;
+  const customerValue = document.getElementById("obContextCustomerLabel").value;
+  const customWorkInput = document.getElementById("obContextCustomWork");
+  const customCustomerInput = document.getElementById("obContextCustomCustomer");
+  if (customWorkInput) customWorkInput.hidden = workType !== "custom";
+  if (customCustomerInput) customCustomerInput.hidden = customerValue !== "Custom";
+  const customWorkLabel = (customWorkInput?.value || "").trim();
+  const customCustomerLabel = (customCustomerInput?.value || "").trim();
+  const workLabel = workType === "custom"
+    ? (customWorkLabel || "Custom work")
+    : workType.charAt(0).toUpperCase() + workType.slice(1);
+  const customerLabel = customerValue === "Custom"
+    ? (customCustomerLabel || "Customer")
+    : customerValue;
   const measures = [...document.querySelectorAll(".ob-context-measures input:checked")]
     .map(input => input.value);
   obBusinessContext = {
@@ -1056,8 +1119,10 @@ function updateObBusinessContext(setObjectDefault = false) {
     template_name: template.name,
     platform: obSelectedPlatform,
     work_type: workType,
-    work_label: workType.charAt(0).toUpperCase() + workType.slice(1),
+    work_label: workLabel,
+    customer_type: customerValue,
     customer_label: customerLabel,
+    customer_label_custom: customerValue === "Custom" ? customCustomerLabel : "",
     measures,
   };
   localStorage.setItem("cp_business_context", JSON.stringify(obBusinessContext));
@@ -1068,7 +1133,7 @@ function updateObBusinessContext(setObjectDefault = false) {
     objectInput.value = objectName;
   }
   const result = document.getElementById("obContextResult");
-  result.innerHTML = `<strong>${template.name} selected.</strong> CostPilot will connect each ${obBusinessContext.work_label.toLowerCase()} to its ${customerLabel.toLowerCase()}, user, agent, ${measures.length ? measures.join(", ") : "business activity"}, and source record.`;
+  result.innerHTML = `<strong>${_obEsc(workLabel)} selected.</strong> CostPilot will connect each ${_obEsc(workLabel.toLowerCase())} to its ${_obEsc(customerLabel.toLowerCase())}, user, agent, ${_obEsc(measures.length ? measures.join(", ") : "business activity")}, and source record.`;
 }
 
 async function persistObBusinessContext() {
@@ -1212,6 +1277,12 @@ function selectObPlatform(platform) {
   renderObConnectionPlan(platform);
   renderObDiscoveryCard(platform);
   renderSalesforceAiPath(platform);
+  const generateButton = document.getElementById("obGenerateSetupBtn");
+  if (generateButton) {
+    generateButton.textContent = platform === "salesforce" && obSalesforceAiMode === "agentforce"
+      ? "Show Agentforce Setup →"
+      : "Generate Setup Code →";
+  }
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
   if (fieldsLabel) fieldsLabel.childNodes[0].textContent = copy.fieldsLabel + " ";
   if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;
@@ -1990,6 +2061,41 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
         <div class="ob-code-header"><span class="ob-code-label">Flow, Apex, or custom AI</span></div>
         <p class="ob-code-hint">Invoke <code>Send to CostPilot</code> only when AI work occurs. Do not attach it to every record save, because ordinary CRM activity is not AI usage. For a conversational Agentforce response, use the packaged <code>Route Through CostPilot</code> action instead.</p>
       </div>`;
+
+  // Agentforce customers should see the short packaged-action workflow, not
+  // the legacy Apex implementation used by custom automation.
+  if (obSalesforceAiMode === "agentforce") {
+    const approved = _getApprovedRelationshipMapping();
+    const parentObject = approved?.parent_object || obj;
+    const relatedObjects = (approved?.children || [])
+      .filter(child => child.behavior !== "ignore");
+    const relatedHtml = relatedObjects.length
+      ? relatedObjects.map(child =>
+          `<li><strong>${_obEsc(child.label || child.object)}</strong> — ${_obEsc(child.behavior.replaceAll("_", " "))}</li>`
+        ).join("")
+      : `<li>No related objects approved yet. Use <strong>Find related objects</strong> above before activation.</li>`;
+    const relationshipPreview = `<div class="ob-code-section ob-agentforce-relationship">
+      <div class="ob-code-header">
+        <span class="ob-code-label">Business relationship</span>
+        <span class="ob-code-hint">CostPilot uses this hierarchy for attribution and reporting.</span>
+      </div>
+      <div class="ob-relationship-preview">
+        <div><span>Parent</span><strong>${_obEsc(parentObject)}</strong></div>
+        <div><span>Related records</span><ul>${relatedHtml}</ul></div>
+      </div>
+    </div>`;
+    const setupSteps = `<div class="ob-flow-steps">
+      <div class="ob-flow-step"><span class="ob-flow-num">1</span><div><strong>Confirm the CostPilot Salesforce components are installed</strong><br/>In Salesforce Setup, verify that the Apex action <code>Route Through CostPilot</code> is available. If it is missing, install the CostPilot pilot components first.</div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add the action to Agentforce</strong><br/>Open Agentforce Builder, choose the topic that handles governed AI work, then select <code>Add Action → Apex → Route Through CostPilot</code>. Label it <code>CostPilot Governed AI Work</code>.</div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">3</span><div><strong>Map the request context</strong><br/>Pass the user request, current record ID, record name, agent name, and department. CostPilot uses the approved relationship above to connect related records to <strong>${_obEsc(parentObject)}</strong>.</div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">4</span><div><strong>Add one topic instruction</strong><br/><code>For AI work involving a Salesforce record, call CostPilot Governed AI Work and return its AI response to the user.</code></div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">5</span><div><strong>Test a real request</strong><br/>Run one request from the Salesforce record. Verify the response returns to Agentforce and the request appears in CostPilot with its user, agent, record, tokens, cost, and parent context.</div></div>
+    </div>`;
+    return relationshipPreview
+      + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Agentforce setup</span><span class="ob-code-hint">No Apex code to copy for this path.</span></div>${setupSteps}</div>`
+      + _obBanner("salesforce", parentObject, dept, agent)
+      + _obActions();
+  }
 
   // ── Trial version: proxy endpoint, no custom fields required ─────────────
   if (IS_TRIAL) {

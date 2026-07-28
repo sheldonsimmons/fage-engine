@@ -410,8 +410,6 @@
           </div>
           <button type="button" class="ob-btn-ghost" onclick="resetObPlatformScreen()" style="font-size:12px;padding:7px 14px">Change</button>
         </div>
-        <div class="ob-connection-plan" id="obConnectionPlan"></div>
-        <section class="ob-discovery-card" id="obDiscoveryCard"></section>
         <section class="ob-sf-path" id="obSalesforceAiPath" hidden>
           <div class="ob-context-eyebrow">Salesforce AI connection</div>
           <h2>How should Salesforce send AI work to CostPilot?</h2>
@@ -432,14 +430,6 @@
                 <span>Call the same CostPilot action from Salesforce automation or custom code.</span>
               </span>
             </label>
-            <label class="ob-sf-path-option unavailable" aria-disabled="true">
-              <input type="radio" name="obSalesforceAiMode" value="reporting" disabled />
-              <span class="ob-sf-path-copy">
-                <span class="ob-sf-path-badge secondary">Visibility only · coming next</span>
-                <strong>Import reporting without control</strong>
-                <span>Measure provider activity without placing CostPilot in the request path.</span>
-              </span>
-            </label>
           </div>
           <div class="ob-sf-path-detail" id="obSalesforceAiPathDetails"></div>
         </section>
@@ -457,7 +447,12 @@
                 <option value="case">Case</option>
                 <option value="ticket">Ticket</option>
                 <option value="opportunity">Opportunity</option>
+                <option value="custom">Custom…</option>
               </select>
+              <input id="obContextCustomWork" class="ob-input ob-context-custom" type="text"
+                     placeholder="Enter your name for this work"
+                     aria-label="Custom work name" hidden
+                     oninput="updateObBusinessContext()" />
             </div>
             <div class="ob-field">
               <label class="ob-label" for="obContextCustomerLabel">What do you call the customer?</label>
@@ -466,7 +461,12 @@
                 <option value="Account">Account</option>
                 <option value="Client">Client</option>
                 <option value="Organization">Organization</option>
+                <option value="Custom">Custom…</option>
               </select>
+              <input id="obContextCustomCustomer" class="ob-input ob-context-custom" type="text"
+                     placeholder="Enter your name for the customer"
+                     aria-label="Custom customer name" hidden
+                     oninput="updateObBusinessContext()" />
             </div>
           </div>
           <fieldset class="ob-context-measures">
@@ -479,7 +479,14 @@
           </fieldset>
           <div class="ob-context-result" id="obContextResult"></div>
         </section>
-        <div class="ob-form" style="margin-bottom:20px">
+        <section class="ob-discovery-card" id="obDiscoveryCard"></section>
+        <details class="ob-setup-overview">
+          <summary>See setup overview <span>Optional</span></summary>
+          <div class="ob-connection-plan" id="obConnectionPlan"></div>
+        </details>
+        <details class="ob-advanced-setup">
+          <summary>Technical settings <span>Optional — CostPilot has selected defaults</span></summary>
+          <div class="ob-form">
           <div class="ob-field">
             <label class="ob-label" id="obObjectLabel">Object / Record Type</label>
             <input type="text" id="obPlatObject" class="ob-input" list="obPlatObjectOptions" placeholder="Case" />
@@ -522,10 +529,11 @@
           </div>
             </div>
           </details>
-        </div>
+          </div>
+        </details>
         <div class="ob-actions" style="margin-bottom:0">
           <button class="ob-btn-ghost" onclick="returnToBusinessContextOnboarding()">← Back</button>
-          <button class="ob-btn-primary" onclick="generateObCode()">Generate Setup Code →</button>
+          <button class="ob-btn-primary" id="obGenerateSetupBtn" onclick="generateObCode()">Show Agentforce Setup →</button>
         </div>
         <div class="ob-error" id="error-5"></div>
       </div>
