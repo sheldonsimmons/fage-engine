@@ -473,6 +473,106 @@ async def _salesforce_get(item: IntegrationConnection, path: str) -> dict:
     return response.json()
 
 
+async def _salesforce_try_query(
+    item: IntegrationConnection,
+    query: str,
+    *,
+    tooling: bool = False,
+) -> tuple[list[dict], Optional[str]]:
+    """Query optional Salesforce metadata without failing the whole onboarding."""
+    path = "tooling/query" if tooling else "query"
+    try:
+        payload = await _salesforce_get(item, f"{path}?q={quote(query, safe='')}")
+        return payload.get("records", []), None
+    except HTTPException as exc:
+        return [], str(exc.detail)
+
+
+@router.get("/{connection_id}/ai-entry-points")
+async def discover_salesforce_ai_entry_points(
+    connection_id: int,
+    db: Session = Depends(get_db),
+):
+    """Discover existing Agentforce agents and Salesforce Flows for guided activation."""
+    item = _get_connection(db, connection_id)
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=400, detail="AI entry-point discovery currently supports Salesforce")
+
+    # BotDefinition is the Tooling API representation used by Agentforce/Einstein
+    # agents. Some trial orgs do not expose it, so this query is deliberately
+    # optional and its permission failure is returned as a warning.
+    agent_records, agent_error = await _salesforce_try_query(
+        item,
+        "SELECT Id, DeveloperName, MasterLabel FROM BotDefinition ORDER BY MasterLabel",
+        tooling=True,
+    )
+    if agent_error:
+        agent_records, agent_error = await _salesforce_try_query(
+            item,
+            "SELECT Id, DeveloperName, MasterLabel FROM Bot ORDER BY MasterLabel",
+            tooling=True,
+        )
+    agents = [
+        {
+            "id": record.get("Id"),
+            "name": record.get("DeveloperName") or record.get("MasterLabel") or record.get("Id"),
+            "label": record.get("MasterLabel") or record.get("DeveloperName") or record.get("Id"),
+            "status": "discovered",
+            "costpilot_status": "action_required",
+        }
+        for record in agent_records
+        if record.get("Id")
+    ]
+
+    flow_records, flow_error = await _salesforce_try_query(
+        item,
+        (
+            "SELECT Id, DeveloperName, MasterLabel, ActiveVersionId, ProcessType "
+            "FROM FlowDefinitionView ORDER BY MasterLabel"
+        ),
+        tooling=True,
+    )
+    if flow_error:
+        flow_records, flow_error = await _salesforce_try_query(
+            item,
+            "SELECT Id, DeveloperName, MasterLabel, ActiveVersionId FROM FlowDefinitionView ORDER BY MasterLabel",
+            tooling=True,
+        )
+    flows = [
+        {
+            "id": record.get("Id"),
+            "name": record.get("DeveloperName") or record.get("MasterLabel") or record.get("Id"),
+            "label": record.get("MasterLabel") or record.get("DeveloperName") or record.get("Id"),
+            "active": bool(record.get("ActiveVersionId")),
+            "process_type": record.get("ProcessType"),
+            "trigger_type": record.get("TriggerType"),
+            "status": "active" if record.get("ActiveVersionId") else "inactive",
+            "costpilot_status": "action_required",
+        }
+        for record in flow_records
+        if record.get("Id")
+    ]
+
+    warnings = []
+    if agent_error:
+        warnings.append(
+            "Agentforce agents could not be listed with this org or OAuth user. "
+            "You can enter an agent manually."
+        )
+    if flow_error:
+        warnings.append(
+            "Flows could not be listed with this org or OAuth user. "
+            "You can enter a flow manually."
+        )
+    return {
+        "connection_id": item.id,
+        "agents": agents,
+        "flows": flows,
+        "warnings": warnings,
+        "discovered_at": datetime.utcnow().isoformat(),
+    }
+
+
 async def _servicenow_table_get(
     item: IntegrationConnection,
     table: str,

@@ -636,9 +636,7 @@ function selectSalesforceAiMode(mode) {
   localStorage.setItem("cp_salesforce_ai_mode", mode);
   const generateButton = document.getElementById("obGenerateSetupBtn");
   if (generateButton) {
-    generateButton.textContent = mode === "agentforce"
-      ? "Show Agentforce Setup →"
-      : "Generate Setup Code →";
+    generateButton.textContent = "Show Activation Steps →";
   }
   renderSalesforceAiPath("salesforce");
   renderObConnectionPlan("salesforce");
@@ -665,21 +663,10 @@ function renderSalesforceAiPath(platform) {
   section.hidden = platform !== "salesforce";
   if (platform !== "salesforce") return;
 
-  section.querySelectorAll("[data-sf-mode]").forEach(option => {
-    option.classList.toggle("selected", option.dataset.sfMode === obSalesforceAiMode);
-    const input = option.querySelector("input");
-    if (input && !input.disabled) input.checked = input.value === obSalesforceAiMode;
-  });
-
   const detail = document.getElementById("obSalesforceAiPathDetails");
   if (!detail) return;
-  if (obSalesforceAiMode === "agentforce") {
-    detail.innerHTML = `<strong>Use one universal action: CostPilot Governed AI Work.</strong>
-      Add it to each Agentforce agent whose requests should pass through CostPilot. The relationship step below decides which Salesforce record is the parent and which related records roll up to it.`;
-  } else {
-    detail.innerHTML = `<strong>Use the generated invocable action from Flow, Apex, or custom automation.</strong>
-      CostPilot only measures calls that explicitly invoke the action. Ordinary record creation or updates are not counted as AI usage.`;
-  }
+  detail.innerHTML = `<strong>One universal action: CostPilot Governed AI Work.</strong>
+    Add it only to the Agentforce agents and Flows whose AI requests should be governed. Connecting OAuth alone discovers metadata; it does not count ordinary Salesforce activity as AI usage.`;
 }
 
 function renderObConnectionPlan(platform) {
@@ -709,6 +696,7 @@ let obDiscoveryPlatform = null;
 let obDiscoveredFields = [];
 let obDiscoveredRelationships = [];
 let obDiscoveredObjectName = null;
+let obSalesforceEntryPoints = { agents: [], flows: [] };
 
 function renderObDiscoveryCard(platform) {
   const card = document.getElementById("obDiscoveryCard");
@@ -1008,6 +996,9 @@ async function approveDiscoveredMapping() {
         <span>${_obEsc(nextStep)}</span>
       </div>`;
     if (button) button.textContent = "Relationship mapping approved ✓";
+    if (obDiscoveryPlatform === "salesforce") {
+      await loadSalesforceAiEntryPoints();
+    }
   } catch (error) {
     status.innerHTML = `<div class="ob-error"><strong>Relationship mapping was not saved.</strong> ${_obEsc(error.message)}</div>`;
     if (button) {
@@ -1015,6 +1006,140 @@ async function approveDiscoveredMapping() {
       button.textContent = "Try approval again →";
     }
     status.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+async function loadSalesforceAiEntryPoints() {
+  const section = document.getElementById("obSalesforceEntryPoints");
+  if (!section || !obDiscoveryConnectionId) return;
+  section.hidden = false;
+  section.innerHTML = `<div class="ob-discovery-status">Finding existing Agentforce agents and Salesforce Flows…</div>`;
+  try {
+    const response = await fetch(
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points`
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "AI entry-point discovery failed.");
+    obSalesforceEntryPoints = {
+      agents: payload.agents || [],
+      flows: payload.flows || [],
+    };
+    renderSalesforceAiEntryPoints(payload);
+  } catch (error) {
+    renderSalesforceAiEntryPoints({
+      agents: [],
+      flows: [],
+      warnings: [error.message || "CostPilot could not list Salesforce AI entry points."],
+    });
+  }
+}
+
+function renderSalesforceAiEntryPoints(payload) {
+  const section = document.getElementById("obSalesforceEntryPoints");
+  if (!section) return;
+  const saved = _getSelectedSalesforceEntryPoints();
+  const agents = payload.agents || [];
+  const flows = payload.flows || [];
+  const rows = (items, kind) => items.map(item => {
+    const key = `${kind}:${item.id || item.name}`;
+    const checked = saved.some(savedItem => savedItem.key === key);
+    const detail = kind === "agent"
+      ? "Existing Agentforce agent"
+      : `${item.status === "active" ? "Active" : "Inactive"}${item.process_type ? ` · ${item.process_type}` : ""}`;
+    return `<label class="ob-entry-point-row">
+      <input type="checkbox" data-entry-kind="${kind}" data-entry-id="${_obEsc(item.id || "")}"
+             data-entry-name="${_obEsc(item.name || "")}" data-entry-label="${_obEsc(item.label || item.name || "")}"
+             ${checked ? "checked" : ""} onchange="saveSalesforceEntryPointSelection()" />
+      <span><strong>${_obEsc(item.label || item.name)}</strong><small>${_obEsc(detail)}</small></span>
+      <span class="ob-entry-status">Action required</span>
+    </label>`;
+  }).join("");
+  const warnings = (payload.warnings || []).map(message =>
+    `<div class="ob-entry-warning">${_obEsc(message)}</div>`
+  ).join("");
+  section.innerHTML = `<div class="ob-discovery-head">
+      <div><div class="ob-context-eyebrow">Choose AI entry points</div>
+      <h3>Which Salesforce AI should CostPilot govern?</h3>
+      <p>Select existing Agentforce agents and Flows. CostPilot will give you one short activation checklist for each selection.</p></div>
+      <span class="ob-context-eyebrow">Read-only discovery</span>
+    </div>
+    ${warnings}
+    <div class="ob-entry-tabs" role="tablist">
+      <button type="button" class="active" data-entry-tab="agents" onclick="showSalesforceEntryTab('agents')">Agentforce Agents <span>${agents.length}</span></button>
+      <button type="button" data-entry-tab="flows" onclick="showSalesforceEntryTab('flows')">Salesforce Flows <span>${flows.length}</span></button>
+    </div>
+    <div class="ob-entry-panel" data-entry-panel="agents">
+      ${rows(agents, "agent") || '<div class="ob-entry-empty">No agents were returned. Add the agent name below and continue.</div>'}
+      <label class="ob-entry-manual"><span>Agent not listed?</span><input class="ob-input" id="obManualAgentName" placeholder="Enter existing Agentforce agent name" /></label>
+      <button type="button" class="ob-btn-ghost" onclick="addManualSalesforceEntryPoint('agent')">+ Add agent</button>
+    </div>
+    <div class="ob-entry-panel" data-entry-panel="flows" hidden>
+      ${rows(flows, "flow") || '<div class="ob-entry-empty">No flows were returned. Add the flow name below and continue.</div>'}
+      <label class="ob-entry-manual"><span>Flow not listed?</span><input class="ob-input" id="obManualFlowName" placeholder="Enter existing Salesforce Flow name" /></label>
+      <button type="button" class="ob-btn-ghost" onclick="addManualSalesforceEntryPoint('flow')">+ Add flow</button>
+    </div>
+    <div class="ob-entry-footer">
+      <span id="obEntryPointCount">0 selected</span>
+      <strong>Selection does not modify Salesforce.</strong> You will add the CostPilot action during activation.
+    </div>`;
+  saveSalesforceEntryPointSelection();
+  section.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function showSalesforceEntryTab(tab) {
+  document.querySelectorAll("[data-entry-tab]").forEach(button =>
+    button.classList.toggle("active", button.dataset.entryTab === tab)
+  );
+  document.querySelectorAll("[data-entry-panel]").forEach(panel =>
+    panel.hidden = panel.dataset.entryPanel !== tab
+  );
+}
+
+function addManualSalesforceEntryPoint(kind) {
+  const input = document.getElementById(kind === "agent" ? "obManualAgentName" : "obManualFlowName");
+  const name = (input?.value || "").trim();
+  if (!name) return;
+  const selected = _getSelectedSalesforceEntryPoints();
+  const key = `${kind}:manual:${name.toLowerCase()}`;
+  if (!selected.some(item => item.key === key)) {
+    selected.push({ key, kind, id: "", name, label: name, source: "manual" });
+  }
+  localStorage.setItem("cp_salesforce_entry_points", JSON.stringify(selected));
+  renderSalesforceAiEntryPoints({
+    agents: kind === "agent"
+      ? [...obSalesforceEntryPoints.agents, { id: `manual:${name}`, name, label: name }]
+      : obSalesforceEntryPoints.agents,
+    flows: kind === "flow"
+      ? [...obSalesforceEntryPoints.flows, { id: `manual:${name}`, name, label: name, status: "unknown" }]
+      : obSalesforceEntryPoints.flows,
+    warnings: [],
+  });
+}
+
+function saveSalesforceEntryPointSelection() {
+  const existingManual = _getSelectedSalesforceEntryPoints().filter(item => item.source === "manual");
+  const selected = [...document.querySelectorAll("[data-entry-kind]:checked")].map(input => ({
+    key: `${input.dataset.entryKind}:${input.dataset.entryId || input.dataset.entryName}`,
+    kind: input.dataset.entryKind,
+    id: input.dataset.entryId || "",
+    name: input.dataset.entryName,
+    label: input.dataset.entryLabel || input.dataset.entryName,
+    source: (input.dataset.entryId || "").startsWith("manual:") ? "manual" : "discovery",
+    activation_status: "action_required",
+  }));
+  existingManual.forEach(item => {
+    if (!selected.some(selectedItem => selectedItem.key === item.key)) selected.push(item);
+  });
+  localStorage.setItem("cp_salesforce_entry_points", JSON.stringify(selected));
+  const count = document.getElementById("obEntryPointCount");
+  if (count) count.textContent = `${selected.length} selected`;
+}
+
+function _getSelectedSalesforceEntryPoints() {
+  try {
+    return JSON.parse(localStorage.getItem("cp_salesforce_entry_points") || "[]");
+  } catch (_) {
+    return [];
   }
 }
 
@@ -1305,8 +1430,8 @@ function selectObPlatform(platform) {
   renderSalesforceAiPath(platform);
   const generateButton = document.getElementById("obGenerateSetupBtn");
   if (generateButton) {
-    generateButton.textContent = platform === "salesforce" && obSalesforceAiMode === "agentforce"
-      ? "Show Agentforce Setup →"
+    generateButton.textContent = platform === "salesforce"
+      ? "Show Activation Steps →"
       : "Generate Setup Code →";
   }
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
@@ -1904,12 +2029,15 @@ async function generateObCode() {
 
 function _universalVerificationHtml() {
   const platform = OB_PLATFORMS[obSelectedPlatform]?.label || obSelectedPlatform;
-  const agentforce = obSelectedPlatform === "salesforce" && obSalesforceAiMode === "agentforce";
-  const actionRow = agentforce
-    ? `<div class="ob-verification-row" id="obVerifyAgentAction"><span>○</span> CostPilot action added to Agentforce <span class="status">Confirm below</span></div>`
+  const selectedEntryPoints = obSelectedPlatform === "salesforce" ? _getSelectedSalesforceEntryPoints() : [];
+  const entryPointLabel = selectedEntryPoints.length
+    ? `${selectedEntryPoints.length} selected Salesforce AI entr${selectedEntryPoints.length === 1 ? "y point" : "y points"}`
+    : "selected Salesforce AI entry points";
+  const actionRow = obSelectedPlatform === "salesforce"
+    ? `<div class="ob-verification-row" id="obVerifyAgentAction"><span>○</span> CostPilot action added to ${_obEsc(entryPointLabel)} <span class="status">Confirm below</span></div>`
     : "";
-  const installText = agentforce
-    ? `I installed the generated Salesforce setup and added <strong>CostPilot Governed AI Work</strong> to the Agentforce agents I want governed.`
+  const installText = obSelectedPlatform === "salesforce"
+    ? `I added <strong>CostPilot Governed AI Work</strong> to every selected Agentforce agent and Salesforce Flow that I want governed.`
     : `I installed the generated setup in ${_obEsc(platform)}. This confirms the external platform step that CostPilot cannot inspect directly.`;
   return `<section class="ob-verification" id="obUniversalVerification">
     <h3>Verify your CostPilot connection</h3>
@@ -1932,7 +2060,7 @@ function _universalVerificationHtml() {
 }
 
 function confirmPlatformInstall(confirmed) {
-  if (obSelectedPlatform === "salesforce" && obSalesforceAiMode === "agentforce") {
+  if (obSelectedPlatform === "salesforce") {
     const row = document.getElementById("obVerifyAgentAction");
     if (row) {
       row.classList.toggle("pass", confirmed);
@@ -2020,6 +2148,7 @@ function activateUniversalConnection() {
     department: document.getElementById("obPlatDept").value,
     agent_name: document.getElementById("obPlatAgent").value.trim(),
     salesforce_ai_mode: obSelectedPlatform === "salesforce" ? obSalesforceAiMode : null,
+    salesforce_entry_points: obSelectedPlatform === "salesforce" ? _getSelectedSalesforceEntryPoints() : [],
     governed_record_types: obSelectedPlatform === "salesforce" ? getSalesforceGovernedObjects() : [],
     business_context: obBusinessContext,
     contract_version: "2026-07-26",
@@ -2029,8 +2158,8 @@ function activateUniversalConnection() {
   localStorage.setItem("cp_active_connection", JSON.stringify(record));
   setUniversalSetupStage(5);
   const section = document.getElementById("obUniversalVerification");
-  const nextStep = record.platform === "salesforce" && record.salesforce_ai_mode === "agentforce"
-    ? `Run one real request from Agentforce. When it invokes <strong>CostPilot Governed AI Work</strong>, the request will appear in Audit and reporting with its user, agent, department, and Salesforce record.`
+  const nextStep = record.platform === "salesforce"
+    ? `Run one real request from a selected agent or Flow. When it invokes <strong>CostPilot Governed AI Work</strong>, the request will appear in Audit and reporting with its user, entry point, department, and Salesforce record.`
     : `Run one real request from ${_obEsc(record.platform_label)} to confirm live attribution.`;
   section.innerHTML = `<div class="ob-context-eyebrow">Connection active</div>
     <h3>${_obEsc(record.platform_label)} is ready for CostPilot</h3>
@@ -2069,6 +2198,11 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
   const sfReturnWrites = _salesforceReturnWrites(returnFields);
   const sfTrialReturnWrites = _salesforceTrialReturnWrites(returnFields);
   const governedObjects = getSalesforceGovernedObjects();
+  const selectedEntryPoints = _getSelectedSalesforceEntryPoints();
+  const selectedAgents = selectedEntryPoints.filter(item => item.kind === "agent");
+  const selectedFlows = selectedEntryPoints.filter(item => item.kind === "flow");
+  const selectedAgentNames = selectedAgents.map(item => item.label || item.name).join(", ");
+  const selectedFlowNames = selectedFlows.map(item => item.label || item.name).join(", ");
   const agentforceGuide = obSalesforceAiMode === "agentforce"
     ? `<div class="ob-code-section" style="margin-top:20px">
         <div class="ob-code-header">
@@ -2090,7 +2224,7 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
 
   // Agentforce customers should see the short packaged-action workflow, not
   // the legacy Apex implementation used by custom automation.
-  if (obSalesforceAiMode === "agentforce") {
+  if (obSalesforceAiMode === "agentforce" || selectedEntryPoints.length) {
     const approved = _getApprovedRelationshipMapping();
     const parentObject = approved?.parent_object || obj;
     const relatedObjects = (approved?.children || [])
@@ -2110,12 +2244,24 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
         <div><span>Related records</span><ul>${relatedHtml}</ul></div>
       </div>
     </div>`;
-    const setupSteps = `<div class="ob-flow-steps">
+    const selectedSummary = `<div class="ob-entry-activation-summary">
+      <strong>Selected for activation</strong>
+      <span>Agentforce: ${_obEsc(selectedAgentNames || "None selected")}</span>
+      <span>Flows: ${_obEsc(selectedFlowNames || "None selected")}</span>
+    </div>`;
+    const agentSteps = selectedAgents.length || (!selectedEntryPoints.length && obSalesforceAiMode === "agentforce")
+      ? `<div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add the action to Agentforce</strong><br/>Open each selected agent in Agentforce Builder, choose the topic that handles governed AI work, then select <code>Add Action → Apex → Route Through CostPilot</code>. Label it <code>CostPilot Governed AI Work</code>.</div></div>`
+      : "";
+    const flowSteps = selectedFlows.length
+      ? `<div class="ob-flow-step"><span class="ob-flow-num">${selectedAgents.length ? "3" : "2"}</span><div><strong>Add the action to each selected Flow</strong><br/>Open the Flow, place <code>Route Through CostPilot</code> exactly where AI work should occur, and map the prompt, record ID, record name, flow name, and department. Do not attach it to every record save.</div></div>`
+      : "";
+    const contextStepNumber = 2 + (agentSteps ? 1 : 0) + (flowSteps ? 1 : 0);
+    const setupSteps = `${selectedSummary}<div class="ob-flow-steps">
       <div class="ob-flow-step"><span class="ob-flow-num">1</span><div><strong>Confirm the CostPilot Salesforce components are installed</strong><br/>In Salesforce Setup, verify that the Apex action <code>Route Through CostPilot</code> is available. If it is missing, install the CostPilot pilot components first.</div></div>
-      <div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add the action to Agentforce</strong><br/>Open Agentforce Builder, choose the topic that handles governed AI work, then select <code>Add Action → Apex → Route Through CostPilot</code>. Label it <code>CostPilot Governed AI Work</code>.</div></div>
-      <div class="ob-flow-step"><span class="ob-flow-num">3</span><div><strong>Map the request context</strong><br/>Pass the user request, current record ID, record name, agent name, and department. CostPilot uses the approved relationship above to connect related records to <strong>${_obEsc(parentObject)}</strong>.</div></div>
-      <div class="ob-flow-step"><span class="ob-flow-num">4</span><div><strong>Add one topic instruction</strong><br/><code>For AI work involving a Salesforce record, call CostPilot Governed AI Work and return its AI response to the user.</code></div></div>
-      <div class="ob-flow-step"><span class="ob-flow-num">5</span><div><strong>Test a real request</strong><br/>Run one request from the Salesforce record. Verify the response returns to Agentforce and the request appears in CostPilot with its user, agent, record, tokens, cost, and parent context.</div></div>
+      ${agentSteps}${flowSteps}
+      <div class="ob-flow-step"><span class="ob-flow-num">${contextStepNumber}</span><div><strong>Map the request context</strong><br/>Pass the user request, current record ID, record name, agent or Flow name, and department. CostPilot uses the approved relationship above to connect related records to <strong>${_obEsc(parentObject)}</strong>.</div></div>
+      ${agentSteps ? `<div class="ob-flow-step"><span class="ob-flow-num">${contextStepNumber + 1}</span><div><strong>Add one Agentforce instruction</strong><br/><code>For AI work involving a Salesforce record, call CostPilot Governed AI Work and return its AI response to the user.</code></div></div>` : ""}
+      <div class="ob-flow-step"><span class="ob-flow-num">${contextStepNumber + (agentSteps ? 2 : 1)}</span><div><strong>Test each selected entry point</strong><br/>Run one real request from every selected agent and Flow. Verify each request appears in CostPilot with its user, entry-point name, record, tokens, cost, and parent context.</div></div>
     </div>`;
     return relationshipPreview
       + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Agentforce setup</span><span class="ob-code-hint">No Apex code to copy for this path.</span></div>${setupSteps}</div>`
@@ -2351,8 +2497,12 @@ function _genServiceNow(obj, dept, agent, fields, returnFields = []) {
         throw new Error('The requested ServiceNow record was not found or is not accessible.');
     }
 
+    var apiBaseUrl = String(gs.getProperty(
+        'costpilot.api_base_url',
+        '${CostPilot_URL}'
+    )).replace(/\\/+$/, '');
     var rm = new sn_ws.RESTMessageV2();
-    rm.setEndpoint('${CostPilot_URL}/api/route');
+    rm.setEndpoint(apiBaseUrl + '/api/route');
     rm.setHttpMethod('POST');
     rm.setRequestHeader('Content-Type', 'application/json');
     rm.setHttpTimeout(120000);
@@ -2406,11 +2556,12 @@ function _genServiceNow(obj, dept, agent, fields, returnFields = []) {
   const setupHtml = `<div class="ob-code-section" style="margin-top:20px">
     <div class="ob-code-header"><span class="ob-code-label">Flow Designer Action setup</span><span class="ob-code-hint">This action runs only when an AI workflow explicitly calls it.</span></div>
     <div class="ob-install-steps">
-      <div><strong>1. Flow Designer → New → Action</strong><br/>Name: <strong>CostPilot Governed AI Request</strong> · Application: Global</div>
-      <div><strong>2. Add Action Inputs</strong><br/><code>prompt</code>, <code>record_table</code>, and <code>record_sys_id</code> as required String inputs. Add optional String inputs <code>task</code>, <code>agent_name</code>, and <code>department</code>.</div>
-      <div><strong>3. Add a Script step</strong><br/>Create matching Script inputs and paste the generated script below.</div>
-      <div><strong>4. Add Action Outputs</strong><br/><code>ai_response</code>, <code>model_tier</code>, <code>model_name</code>, <code>routing_decision</code>, <code>work_item_id</code>, and <code>work_item_name</code> as String; <code>cost_usd</code> as Decimal; <code>input_tokens</code>, <code>output_tokens</code>, and <code>tokens_pruned</code> as Integer.</div>
-      <div><strong>5. Invoke it only from AI experiences</strong><br/>Add this action to a user-triggered Flow, UI Action, Virtual Agent, or Now Assist workflow. Do not attach it to a record insert/update trigger.</div>
+      <div><strong>1. Import the CostPilot Update Set or create the Action manually</strong><br/>Name: <strong>CostPilot Governed AI Request</strong> · Application: Global</div>
+      <div><strong>2. Configure the endpoint</strong><br/>System Property: <code>costpilot.api_base_url</code> · Value: <code>${_obEsc(CostPilot_URL)}</code>. Credentials and tokens are configured separately and are never packaged.</div>
+      <div><strong>3. Add Action Inputs</strong><br/><code>prompt</code>, <code>record_table</code>, and <code>record_sys_id</code> as required String inputs. Add optional String inputs <code>task</code>, <code>agent_name</code>, and <code>department</code>.</div>
+      <div><strong>4. Add a Script step</strong><br/>Create matching Script inputs and paste the generated script below.</div>
+      <div><strong>5. Add Action Outputs</strong><br/><code>ai_response</code>, <code>model_tier</code>, <code>model_name</code>, <code>routing_decision</code>, <code>work_item_id</code>, and <code>work_item_name</code> as String; <code>cost_usd</code> as Decimal; <code>input_tokens</code>, <code>output_tokens</code>, and <code>tokens_pruned</code> as Integer.</div>
+      <div><strong>6. Invoke it only from AI experiences</strong><br/>Add this action to a user-triggered Flow, UI Action, Virtual Agent, or Now Assist workflow. Do not attach it to a record insert/update trigger.</div>
     </div>
   </div>`;
 
