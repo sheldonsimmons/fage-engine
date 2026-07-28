@@ -113,23 +113,6 @@ from database.db import Base, engine as _engine
 KnownModel.__table__.create(bind=_engine, checkfirst=True)
 print('   known_models table ready')
 
-# Keyword upserts — add new output-demand keywords if not already present
-import json
-from core.routing_config import get_routing_config
-from database.db import SessionLocal
-db = SessionLocal()
-cfg = get_routing_config(db)
-kws = set(cfg.complexity_keywords)
-new_kws = ['calculate', 'draft', 'generate', 'explain', 'predict', 'prioritize']
-added = [kw for kw in new_kws if kw not in kws]
-if added:
-    cfg.complexity_keywords = list(kws) + added
-    db.commit()
-    print(f'   Keywords added: {added}')
-else:
-    print('   Keywords already up to date')
-db.close()
-
 # Known models seed — populate Quick Select dropdown if table is empty
 from database.models import KnownModel
 from database.db import SessionLocal
