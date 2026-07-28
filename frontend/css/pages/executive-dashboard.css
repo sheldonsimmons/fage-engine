@@ -1479,6 +1479,281 @@ html.cp-executive-theme {
   }
 }
 
+/* Executive story layout: intentionally varied components rather than a
+   uniform wall of cards. */
+.cp-executive-page .exec-command-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 2.2fr) minmax(260px, 0.72fr);
+  margin-bottom: 18px;
+}
+
+.cp-executive-page .exec-command-grid .exec-action-strip {
+  height: 100%;
+  margin: 0;
+}
+
+.cp-executive-page .exec-budget-command {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(51, 149, 255, 0.14), transparent 170px),
+    linear-gradient(145deg, #1b2938, #172433);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 270px;
+  padding: 20px;
+}
+
+.cp-executive-page .exec-budget-command.warning {
+  border-top: 4px dashed var(--cp-color-warning);
+}
+
+.cp-executive-page .exec-budget-command.critical {
+  border: 3px double var(--cp-color-danger);
+}
+
+.cp-executive-page .exec-budget-command-head {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.cp-executive-page .exec-budget-command-head a {
+  color: #7dbbff;
+  font-size: 9px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.cp-executive-page .exec-budget-command-status {
+  color: var(--cp-color-text);
+  font-size: 13px;
+  font-weight: 750;
+  margin-top: 4px;
+}
+
+.cp-executive-page .exec-budget-gauge {
+  --budget-pct: 0deg;
+  align-items: center;
+  background: conic-gradient(
+    var(--cp-color-positive) 0 var(--budget-pct),
+    #2a3a4b var(--budget-pct) 360deg
+  );
+  border-radius: 50%;
+  display: flex;
+  height: 132px;
+  justify-content: center;
+  margin: 10px auto;
+  position: relative;
+  width: 132px;
+}
+
+.cp-executive-page .exec-budget-command.warning .exec-budget-gauge {
+  background: conic-gradient(
+    var(--cp-color-warning) 0 var(--budget-pct),
+    #2a3a4b var(--budget-pct) 360deg
+  );
+}
+
+.cp-executive-page .exec-budget-command.critical .exec-budget-gauge {
+  background: conic-gradient(
+    var(--cp-color-danger) 0 var(--budget-pct),
+    #2a3a4b var(--budget-pct) 360deg
+  );
+}
+
+.cp-executive-page .exec-budget-gauge::after {
+  background: #182636;
+  border: 1px solid var(--cp-color-border);
+  border-radius: 50%;
+  content: "";
+  inset: 13px;
+  position: absolute;
+}
+
+.cp-executive-page .exec-budget-gauge-inner {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+.cp-executive-page .exec-budget-gauge-inner strong {
+  color: var(--cp-color-text);
+  font-size: 28px;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.cp-executive-page .exec-budget-gauge-inner span {
+  color: var(--cp-color-text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.cp-executive-page .exec-budget-command > .exec-glance-kpi-sub {
+  text-align: center;
+}
+
+.cp-executive-page .exec-budget-command > .exec-glance-budget-track {
+  width: 100%;
+}
+
+.cp-executive-page .exec-glance-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cp-executive-page .exec-glance-kpi {
+  min-height: 160px;
+}
+
+.cp-executive-page .exec-scope-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cp-executive-page .exec-scope-stat {
+  align-items: center;
+  background: #152230;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  min-height: 82px;
+  padding: 14px 16px;
+}
+
+.cp-executive-page .exec-scope-stat .exec-glance-kpi-icon {
+  flex: 0 0 30px;
+  margin: 0;
+}
+
+.cp-executive-page .exec-scope-stat strong {
+  color: var(--cp-color-text);
+  display: block;
+  font-size: 20px;
+  line-height: 1.1;
+  margin: 4px 0 3px;
+}
+
+.cp-executive-page .exec-scope-stat.warning {
+  border-top: 3px dashed var(--cp-color-warning);
+}
+
+.cp-executive-page .exec-scope-stat.critical {
+  border: 3px double var(--cp-color-danger);
+}
+
+.cp-executive-page .exec-change-panel {
+  padding-bottom: 18px;
+}
+
+.cp-executive-page .exec-change-grid {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.cp-executive-page .exec-change-grid article {
+  background: #14212f;
+  border-left: 2px solid #33475c;
+  min-height: 104px;
+  padding: 18px;
+}
+
+.cp-executive-page .exec-change-grid article:first-child {
+  border-left-color: var(--cp-color-primary);
+}
+
+.cp-executive-page .exec-change-grid span {
+  color: var(--cp-color-text-muted);
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.cp-executive-page .exec-change-grid strong {
+  color: var(--cp-color-text);
+  display: block;
+  font-size: 24px;
+  margin: 9px 0 6px;
+}
+
+.cp-executive-page .exec-change-grid strong.up {
+  color: #79baff;
+}
+
+.cp-executive-page .exec-change-grid strong.up::before {
+  content: "↑ ";
+}
+
+.cp-executive-page .exec-change-grid strong.down {
+  color: #c0aaff;
+}
+
+.cp-executive-page .exec-change-grid strong.down::before {
+  content: "↓ ";
+}
+
+.cp-executive-page .exec-change-grid small {
+  color: var(--cp-color-text-secondary);
+  display: block;
+  font-size: 9px;
+}
+
+.cp-executive-page .exec-dimension-switch {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cp-executive-page .exec-glance-concentration .exec-glance-bar-row {
+  background: #14212f;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  margin-bottom: 9px;
+  padding: 10px 12px;
+}
+
+.cp-executive-page .exec-glance-concentration .exec-glance-bar-row:hover {
+  border-color: var(--cp-color-border-strong);
+}
+
+@media (max-width: 1180px) {
+  .cp-executive-page .exec-command-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cp-executive-page .exec-budget-command {
+    min-height: 230px;
+  }
+
+  .cp-executive-page .exec-scope-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .cp-executive-page .exec-glance-kpis,
+  .cp-executive-page .exec-scope-strip,
+  .cp-executive-page .exec-change-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cp-executive-page .exec-dimension-switch {
+    justify-content: flex-start;
+  }
+}
+
 /* Tabler command-center composition
    Keeps the existing dashboard data contract while giving the executive view
    the hierarchy and density of a purpose-built analytics product. */

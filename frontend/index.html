@@ -1571,6 +1571,7 @@
     </div>
   </div>
 
+  <section class="exec-command-grid" aria-label="Executive command summary">
   <section class="exec-action-strip card clear" id="execActionStrip" aria-label="Executive action signals">
     <div class="exec-action-head">
       <div>
@@ -1601,6 +1602,24 @@
       </div>
     </div>
   </section>
+  <article class="exec-budget-command card" id="execGlanceBudgetCard">
+    <div class="exec-budget-command-head">
+      <div>
+        <div class="exec-glance-kpi-label">Budget position</div>
+        <div class="exec-budget-command-status" id="execBudgetStatus">Within plan</div>
+      </div>
+      <a href="/admin.html">Manage budgets →</a>
+    </div>
+    <div class="exec-budget-gauge" id="execBudgetGauge" role="img" aria-label="Workspace budget utilization">
+      <div class="exec-budget-gauge-inner">
+        <strong id="execGlanceBudget">—</strong>
+        <span>used</span>
+      </div>
+    </div>
+    <div class="exec-glance-kpi-sub" id="execGlanceBudgetSub">workspace budget</div>
+    <div class="exec-glance-budget-track" aria-hidden="true"><div id="execGlanceBudgetBar"></div></div>
+  </article>
+  </section>
 
   <main class="exec-glance" id="execGlanceDashboard" aria-label="Executive AI scorecard">
     <section class="exec-glance-kpis" aria-label="Executive key performance indicators">
@@ -1623,30 +1642,40 @@
         <div class="exec-glance-kpi-sub" id="execGlancePruningSub">removed before model calls</div>
         <div class="exec-glance-pruning-track" aria-hidden="true"><div id="execGlancePruningBar"></div></div>
       </article>
-      <article class="exec-glance-kpi card" id="execGlanceBudgetCard">
-        <div class="exec-glance-kpi-icon" aria-hidden="true">◔</div>
-        <div class="exec-glance-kpi-label">Budget Used</div>
-        <div class="exec-glance-kpi-value" id="execGlanceBudget">—</div>
-        <div class="exec-glance-kpi-sub" id="execGlanceBudgetSub">workspace budget</div>
-        <div class="exec-glance-budget-track"><div id="execGlanceBudgetBar"></div></div>
-      </article>
       <article class="exec-glance-kpi card">
         <div class="exec-glance-kpi-icon" aria-hidden="true">✓</div>
         <div class="exec-glance-kpi-label">Governed Requests</div>
         <div class="exec-glance-kpi-value" id="execGlanceRequests">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceRequestsSub">evaluated by CostPilot</div>
       </article>
-      <article class="exec-glance-kpi card">
+    </section>
+
+    <section class="exec-scope-strip" aria-label="AI activity coverage">
+      <article class="exec-scope-stat card">
         <div class="exec-glance-kpi-icon" aria-hidden="true">▦</div>
-        <div class="exec-glance-kpi-label" id="execGlanceContextLabel">Business Contexts With Activity</div>
-        <div class="exec-glance-kpi-value" id="execGlanceContextCount">—</div>
+        <div><div class="exec-glance-kpi-label" id="execGlanceContextLabel">Business Contexts With Activity</div>
+        <strong id="execGlanceContextCount">—</strong>
         <div class="exec-glance-kpi-sub" id="execGlanceContextSub">with governed AI activity</div>
+        </div>
       </article>
-      <article class="exec-glance-kpi card" id="execGlanceRiskCard">
+      <article class="exec-scope-stat card" id="execGlanceRiskCard">
         <div class="exec-glance-kpi-icon" aria-hidden="true">!</div>
-        <div class="exec-glance-kpi-label">Risk &amp; Controls</div>
-        <div class="exec-glance-kpi-value" id="execGlanceRisk">—</div>
+        <div><div class="exec-glance-kpi-label">Risk &amp; Controls</div>
+        <strong id="execGlanceRisk">—</strong>
         <div class="exec-glance-kpi-sub" id="execGlanceRiskSub">blocked and controlled events</div>
+        </div>
+      </article>
+      <article class="exec-scope-stat card">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">◉</div>
+        <div><div class="exec-glance-kpi-label">Identified users</div>
+        <strong id="execIdentifiedUsers">—</strong>
+        <div class="exec-glance-kpi-sub">people with attributed AI activity</div></div>
+      </article>
+      <article class="exec-scope-stat card">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">⌁</div>
+        <div><div class="exec-glance-kpi-label">Active agents</div>
+        <strong id="execActiveAgents">—</strong>
+        <div class="exec-glance-kpi-sub">agents used in this period</div></div>
       </article>
     </section>
 
@@ -1686,6 +1715,21 @@
       </article>
     </section>
 
+    <section class="exec-glance-panel card exec-change-panel" aria-labelledby="execChangeHeading">
+      <div class="exec-glance-panel-head">
+        <div>
+          <h2 id="execChangeHeading">What changed?</h2>
+          <p>Current half of the selected period compared with the previous half.</p>
+        </div>
+      </div>
+      <div class="exec-change-grid">
+        <article><span>Spend</span><strong id="execChangeSpend">—</strong><small id="execChangeSpendMeta">Waiting for activity</small></article>
+        <article><span>Requests</span><strong id="execChangeRequests">—</strong><small id="execChangeRequestsMeta">Waiting for activity</small></article>
+        <article><span>Tokens pruned</span><strong id="execChangePruned">—</strong><small id="execChangePrunedMeta">Waiting for activity</small></article>
+        <article><span>Risk events</span><strong id="execChangeRisk">—</strong><small id="execChangeRiskMeta">Waiting for activity</small></article>
+      </div>
+    </section>
+
     <section class="exec-glance-breakdowns">
       <article class="exec-glance-panel card">
         <div class="exec-glance-panel-head">
@@ -1712,9 +1756,12 @@
             <h2 id="execGlanceConcentrationHeading">AI activity by business context</h2>
             <p id="execGlanceConcentrationDescription">Where governed AI work and spend are accumulating.</p>
           </div>
-          <div class="exec-glance-switch" role="group" aria-label="Spend concentration view">
+          <div class="exec-glance-switch exec-dimension-switch" role="group" aria-label="AI usage dimension">
             <button id="execGlanceDeptButton" type="button" onclick="setExecGlanceConcentration('department')">Departments</button>
-            <button class="active" id="execGlanceProjectButton" type="button" onclick="setExecGlanceConcentration('project')">Business Contexts</button>
+            <button class="active" id="execGlanceProjectButton" type="button" onclick="setExecGlanceConcentration('project')">Projects</button>
+            <button id="execGlancePeopleButton" type="button" onclick="setExecGlanceConcentration('person')">People</button>
+            <button id="execGlanceAgentButton" type="button" onclick="setExecGlanceConcentration('agent')">Agents</button>
+            <button id="execGlanceModelButton" type="button" onclick="setExecGlanceConcentration('model')">Models</button>
           </div>
         </div>
         <div class="exec-glance-concentration" id="execGlanceConcentration"></div>
@@ -4228,8 +4275,16 @@ function renderExecGlanceConcentration() {
   const container = document.getElementById("execGlanceConcentration");
   if (!container) return;
   const rows = (execGlanceConcentrationRows[execGlanceConcentrationView] || []).slice(0, 5);
-  document.getElementById("execGlanceDeptButton")?.classList.toggle("active", execGlanceConcentrationView === "department");
-  document.getElementById("execGlanceProjectButton")?.classList.toggle("active", execGlanceConcentrationView === "project");
+  const buttons = {
+    department: "execGlanceDeptButton",
+    project: "execGlanceProjectButton",
+    person: "execGlancePeopleButton",
+    agent: "execGlanceAgentButton",
+    model: "execGlanceModelButton",
+  };
+  Object.entries(buttons).forEach(([view, id]) => {
+    document.getElementById(id)?.classList.toggle("active", execGlanceConcentrationView === view);
+  });
   if (!rows.length) {
     container.innerHTML = `<div class="exec-glance-empty">No ${execGlanceConcentrationView} spend is recorded in this view yet.</div>`;
     return;
@@ -4249,8 +4304,69 @@ function renderExecGlanceConcentration() {
 }
 
 function setExecGlanceConcentration(view) {
-  execGlanceConcentrationView = view === "project" ? "project" : "department";
+  execGlanceConcentrationView = ["department", "project", "person", "agent", "model"].includes(view)
+    ? view
+    : "department";
+  const headings = {
+    department: "AI activity by department",
+    project: "AI activity by business context",
+    person: "AI activity by person",
+    agent: "AI activity by agent",
+    model: "AI activity by model",
+  };
+  setText("execGlanceConcentrationHeading", headings[execGlanceConcentrationView]);
   renderExecGlanceConcentration();
+}
+
+function execChangeLabel(current, previous, formatter = value => fmtNum(value)) {
+  if (current === 0 && previous === 0) {
+    return { value: "No change", meta: `${formatter(current)} in both periods`, state: "neutral" };
+  }
+  if (previous === 0) {
+    return { value: "New", meta: `${formatter(current)} in current period`, state: current > 0 ? "up" : "neutral" };
+  }
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return {
+    value: `${pct > 0 ? "+" : ""}${pct}%`,
+    meta: `${formatter(current)} now · ${formatter(previous)} previously`,
+    state: pct > 0 ? "up" : pct < 0 ? "down" : "neutral",
+  };
+}
+
+function renderExecChanges(events) {
+  const valid = (events || []).filter(event => eventTs(event) > 0);
+  if (!valid.length) return;
+  const newest = Math.max(...valid.map(eventTs));
+  const oldest = Math.min(...valid.map(eventTs));
+  const midpoint = oldest + ((newest - oldest) / 2);
+  const previous = valid.filter(event => eventTs(event) < midpoint);
+  const current = valid.filter(event => eventTs(event) >= midpoint);
+  const summarize = rows => ({
+    spend: totalEventCost(rows),
+    requests: rows.length,
+    pruned: rows.reduce((sum, event) => sum + Number(event.tokens_saved || 0), 0),
+    risk: rows.filter(event => {
+      const risk = norm(event.risk_level);
+      return isBlockedEvent(event) || risk === "critical" || risk === "high";
+    }).length,
+  });
+  const now = summarize(current);
+  const before = summarize(previous);
+  [
+    ["Spend", now.spend, before.spend, fmtUsd],
+    ["Requests", now.requests, before.requests, fmtNum],
+    ["Pruned", now.pruned, before.pruned, fmtNum],
+    ["Risk", now.risk, before.risk, fmtNum],
+  ].forEach(([key, currentValue, previousValue, formatter]) => {
+    const result = execChangeLabel(currentValue, previousValue, formatter);
+    const value = document.getElementById(`execChange${key}`);
+    const meta = document.getElementById(`execChange${key}Meta`);
+    if (value) {
+      value.textContent = result.value;
+      value.className = result.state;
+    }
+    if (meta) meta.textContent = result.meta;
+  });
 }
 
 function renderExecGlanceDrivers(drivers, actualCost) {
@@ -4353,16 +4469,26 @@ function renderExecutiveGlance(events, data, context) {
   setText("execGlanceContextSub", "with governed AI activity");
   setText("execGlanceRisk", fmtNum(context.controlsCount));
   setText("execGlanceRiskSub", `${fmtNum(context.blockedCount)} blocked · ${fmtNum(context.unreviewedBlockedCount)} awaiting review`);
+  const usage = data.organizationalUsage;
+  setText("execIdentifiedUsers", fmtNum((usage?.users || []).filter(row => Number(row.request_count || 0) > 0).length));
+  setText("execActiveAgents", fmtNum((usage?.agents || []).filter(row => Number(row.request_count || 0) > 0).length));
 
   const budgetCard = document.getElementById("execGlanceBudgetCard");
-  if (budgetCard) budgetCard.className = `exec-glance-kpi ${context.budget.pct >= 100 ? "critical" : context.budget.pct >= 80 ? "warning" : ""}`;
+  const budgetState = context.budget.pct >= 100 ? "critical" : context.budget.pct >= 80 ? "warning" : "healthy";
+  if (budgetCard) budgetCard.className = `exec-budget-command card ${budgetState}`;
   const budgetBar = document.getElementById("execGlanceBudgetBar");
   if (budgetBar) {
     budgetBar.style.width = `${Math.max(0, Math.min(100, context.budget.pct || 0))}%`;
     budgetBar.style.background = context.budget.pct >= 100 ? "var(--cp-color-danger)" : context.budget.pct >= 80 ? "var(--cp-color-warning)" : "var(--cp-color-positive)";
   }
+  const budgetGauge = document.getElementById("execBudgetGauge");
+  if (budgetGauge) budgetGauge.style.setProperty("--budget-pct", `${Math.max(0, Math.min(100, context.budget.pct || 0)) * 3.6}deg`);
+  setText(
+    "execBudgetStatus",
+    budgetState === "critical" ? "Over budget" : budgetState === "warning" ? "Near limit" : "Within plan"
+  );
   const riskCard = document.getElementById("execGlanceRiskCard");
-  if (riskCard) riskCard.className = `exec-glance-kpi ${context.unreviewedBlockedCount + context.collisionCount > 0 ? "critical" : context.throttleCount > 0 ? "warning" : ""}`;
+  if (riskCard) riskCard.className = `exec-scope-stat card ${context.unreviewedBlockedCount + context.collisionCount > 0 ? "critical" : context.throttleCount > 0 ? "warning" : ""}`;
   const pruningBar = document.getElementById("execGlancePruningBar");
   if (pruningBar) pruningBar.style.width = `${Math.max(0, Math.min(100, context.pruneStats.pct || 0))}%`;
 
@@ -4383,6 +4509,14 @@ function renderExecutiveGlance(events, data, context) {
   execGlanceConcentrationRows = {
     department: groupSpend(events, event => displayDeptName(event.department || event.source_department), data),
     project: contextRows.length ? contextRows : groupSpend(events, event => execProjectLabel(event), data),
+    person: (usage?.users || []).map(row => ({
+      label: row.label || row.name || row.email || "Unknown user",
+      value: Number(row.spend_usd || 0),
+      calls: Number(row.request_count || 0),
+      tokens: Number(row.total_tokens || 0),
+    })).sort((a, b) => b.value - a.value),
+    agent: groupAgentSpend(events, data),
+    model: groupSpend(events, (event, currentData) => modelLabelForEvent(event, currentData), data),
   };
   const pluralLabel = contextReport?.context_label_plural || "Business Contexts";
   setText("execGlanceProjectButton", pluralLabel);
@@ -4399,6 +4533,7 @@ function renderExecutiveGlance(events, data, context) {
   renderExecGlanceConcentration();
   renderExecGlanceAccountability(data);
   renderExecGlanceDrivers(context.drivers, context.actualCost);
+  renderExecChanges(events);
 }
 
 function renderExec(data) {
