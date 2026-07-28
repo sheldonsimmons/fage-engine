@@ -1,15 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="cp-executive-theme" data-bs-theme="light">
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Executive Summary</title>
+  <link rel="stylesheet" href="/vendor/tabler/tabler.min.css?v=1.4.0" />
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260723-v442" />
-  <script src="/js/chart.umd.min.js"></script>
-  <script src="/js/chart-theme.js"></script>
   <style>
     /* ── Executive landing layout ─────────────────────────────────────────────── */
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-base); }
@@ -1377,7 +1376,9 @@
       .trial-test-grid { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260727-attribution" />
+  <link rel="stylesheet" href="css/pages/executive-dashboard.css?v=20260727-tabler-pilot" />
+  <script src="/js/chart.umd.min.js"></script>
+  <script src="/js/chart-theme.js"></script>
 </head>
 <body class="cp-executive-page">
 
@@ -1395,7 +1396,7 @@
 </div>
 
 <!-- ── Header ─────────────────────────────────────────────────────────────────── -->
-<div class="exec-header">
+<header class="exec-header navbar navbar-expand-md" aria-label="CostPilot primary navigation">
   <div class="exec-header-left">
     <div>
       <div class="exec-logo">
@@ -1425,10 +1426,21 @@
     <a href="/demo-crm.html"   class="nav-link" style="color:var(--accent-purple)">🎯 Live Demo</a>
     <a href="/live-landing.html" class="nav-link" style="color:var(--accent-green)">● LIVE</a>
   </div>
-</div>
+</header>
 
 <!-- ── Body ───────────────────────────────────────────────────────────────────── -->
 <div class="exec-body">
+  <section class="cp-exec-page-heading page-header d-print-none" aria-labelledby="cpExecPageTitle">
+    <div>
+      <div class="page-pretitle">Executive command center</div>
+      <h1 class="page-title" id="cpExecPageTitle">AI spend, savings, and risk</h1>
+      <p class="cp-exec-page-summary">See where governed AI activity is accumulating, what CostPilot prevented, and what needs attention.</p>
+    </div>
+    <div class="cp-exec-page-meta" aria-label="Dashboard scope">
+      <span class="cp-exec-meta-label">View</span>
+      <strong>Current filtered period</strong>
+    </div>
+  </section>
 
   <!-- Temporarily hidden for the main dashboard; setup remains available from Connect Platform and Workspace pages. -->
   <div class="trial-start-card" id="trialStartCard" style="display:none">
@@ -1505,43 +1517,43 @@
     </div>
   </div>
 
-  <div class="exec-filter-card">
+  <div class="exec-filter-card card">
     <div class="exec-filter-head">
       <div class="exec-filter-title">Executive View Filters</div>
       <div class="exec-filter-status" id="execFilterStatus">All data</div>
     </div>
     <div class="exec-filter-grid">
-      <select class="exec-filter" id="execFilterDept" onchange="updateExecFilter('dept', this.value)">
+      <select class="exec-filter form-select" id="execFilterDept" onchange="updateExecFilter('dept', this.value)">
         <option value="">All Departments</option>
       </select>
-      <select class="exec-filter" id="execFilterPlatform" onchange="updateExecFilter('platform', this.value)">
+      <select class="exec-filter form-select" id="execFilterPlatform" onchange="updateExecFilter('platform', this.value)">
         <option value="">All Platforms</option>
       </select>
-      <select class="exec-filter" id="execFilterAgent" onchange="updateExecFilter('agent', this.value)">
+      <select class="exec-filter form-select" id="execFilterAgent" onchange="updateExecFilter('agent', this.value)">
         <option value="">All Agents</option>
       </select>
-      <select class="exec-filter" id="execFilterRange" onchange="updateExecFilter('range', this.value)">
+      <select class="exec-filter form-select" id="execFilterRange" onchange="updateExecFilter('range', this.value)">
         <option value="30">Last 30 Days</option>
         <option value="1">Last 24 Hours</option>
         <option value="7">Last 7 Days</option>
         <option value="mtd">Month to Date</option>
         <option value="180">Last 180 Days</option>
       </select>
-      <select class="exec-filter" id="execFilterTier" onchange="updateExecFilter('tier', this.value)">
+      <select class="exec-filter form-select" id="execFilterTier" onchange="updateExecFilter('tier', this.value)">
         <option value="">All Tiers</option>
         <option value="scout">Scout</option>
         <option value="analyst">Analyst</option>
         <option value="advisor">Advisor</option>
         <option value="strategist">Strategist</option>
       </select>
-      <select class="exec-filter" id="execFilterRisk" onchange="updateExecFilter('risk', this.value)">
+      <select class="exec-filter form-select" id="execFilterRisk" onchange="updateExecFilter('risk', this.value)">
         <option value="">All Risk</option>
         <option value="critical">Critical</option>
         <option value="high">High</option>
         <option value="medium">Medium</option>
         <option value="low">Low</option>
       </select>
-      <button class="exec-filter-clear" onclick="clearExecFilters()">Clear Filters</button>
+      <button class="exec-filter-clear btn btn-outline-secondary" onclick="clearExecFilters()">Clear Filters</button>
     </div>
     <div class="exec-filter-scope" id="execScopeNotice">
       <span><strong>Filtered executive view active.</strong> Savings, routing percent, and governed requests below are calculated only from the selected slice.</span>
@@ -1549,7 +1561,7 @@
     </div>
   </div>
 
-  <section class="exec-action-strip clear" id="execActionStrip" aria-label="Executive action signals">
+  <section class="exec-action-strip card clear" id="execActionStrip" aria-label="Executive action signals">
     <div class="exec-action-head">
       <div>
         <div class="exec-action-kicker">Action Required</div>
@@ -1582,39 +1594,39 @@
 
   <main class="exec-glance" id="execGlanceDashboard" aria-label="Executive AI scorecard">
     <section class="exec-glance-kpis" aria-label="Executive key performance indicators">
-      <article class="exec-glance-kpi">
+      <article class="exec-glance-kpi card">
         <div class="exec-glance-kpi-label">AI Spend</div>
         <div class="exec-glance-kpi-value" id="execGlanceSpend">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceSpendSub">current filtered period</div>
       </article>
-      <article class="exec-glance-kpi positive">
+      <article class="exec-glance-kpi card positive">
         <div class="exec-glance-kpi-label">Annual Savings</div>
         <div class="exec-glance-kpi-value" id="execGlanceAvoided">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceAvoidedSub">projected from current savings</div>
       </article>
-      <article class="exec-glance-kpi optimization" id="execGlancePruningCard">
+      <article class="exec-glance-kpi card optimization" id="execGlancePruningCard">
         <div class="exec-glance-kpi-label">Tokens Pruned</div>
         <div class="exec-glance-kpi-value" id="execGlancePruningTokens">—</div>
         <div class="exec-glance-kpi-sub" id="execGlancePruningSub">removed before model calls</div>
         <div class="exec-glance-pruning-track" aria-hidden="true"><div id="execGlancePruningBar"></div></div>
       </article>
-      <article class="exec-glance-kpi" id="execGlanceBudgetCard">
+      <article class="exec-glance-kpi card" id="execGlanceBudgetCard">
         <div class="exec-glance-kpi-label">Budget Used</div>
         <div class="exec-glance-kpi-value" id="execGlanceBudget">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceBudgetSub">workspace budget</div>
         <div class="exec-glance-budget-track"><div id="execGlanceBudgetBar"></div></div>
       </article>
-      <article class="exec-glance-kpi">
+      <article class="exec-glance-kpi card">
         <div class="exec-glance-kpi-label">Governed Requests</div>
         <div class="exec-glance-kpi-value" id="execGlanceRequests">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceRequestsSub">evaluated by CostPilot</div>
       </article>
-      <article class="exec-glance-kpi">
+      <article class="exec-glance-kpi card">
         <div class="exec-glance-kpi-label" id="execGlanceContextLabel">Business Contexts With Activity</div>
         <div class="exec-glance-kpi-value" id="execGlanceContextCount">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceContextSub">with governed AI activity</div>
       </article>
-      <article class="exec-glance-kpi" id="execGlanceRiskCard">
+      <article class="exec-glance-kpi card" id="execGlanceRiskCard">
         <div class="exec-glance-kpi-label">Risk &amp; Controls</div>
         <div class="exec-glance-kpi-value" id="execGlanceRisk">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceRiskSub">blocked and controlled events</div>
@@ -1622,7 +1634,7 @@
     </section>
 
     <section class="exec-glance-primary">
-      <article class="exec-glance-panel exec-glance-trend">
+      <article class="exec-glance-panel card exec-glance-trend">
         <div class="exec-glance-panel-head">
           <div>
             <h2>Actual spend vs. uncontrolled baseline</h2>
@@ -1638,7 +1650,7 @@
         </div>
       </article>
 
-      <article class="exec-glance-panel exec-glance-savings">
+      <article class="exec-glance-panel card exec-glance-savings">
         <div class="exec-glance-panel-head">
           <div>
             <h2>Savings mix</h2>
@@ -1658,7 +1670,7 @@
     </section>
 
     <section class="exec-glance-breakdowns">
-      <article class="exec-glance-panel">
+      <article class="exec-glance-panel card">
         <div class="exec-glance-panel-head">
           <div>
             <h2>Model cost and usage</h2>
@@ -1677,7 +1689,7 @@
         <div class="exec-glance-model-bars" id="execGlanceModelBars"></div>
       </article>
 
-      <article class="exec-glance-panel">
+      <article class="exec-glance-panel card">
         <div class="exec-glance-panel-head">
           <div>
             <h2 id="execGlanceConcentrationHeading">AI activity by business context</h2>
@@ -1693,7 +1705,7 @@
       </article>
     </section>
 
-    <section class="exec-glance-panel exec-glance-accountability" aria-labelledby="execGlanceAccountabilityHeading">
+    <section class="exec-glance-panel card exec-glance-accountability" aria-labelledby="execGlanceAccountabilityHeading">
       <div class="exec-glance-panel-head">
         <div>
           <h2 id="execGlanceAccountabilityHeading">AI spend accountability</h2>
@@ -1709,7 +1721,7 @@
       </div>
     </section>
 
-    <section class="exec-glance-panel exec-glance-drivers">
+    <section class="exec-glance-panel card exec-glance-drivers">
       <div class="exec-glance-panel-head">
         <div>
           <h2>Top cost drivers</h2>
@@ -1718,7 +1730,7 @@
         <a href="/operate.html">Open AgentLake →</a>
       </div>
       <div class="exec-glance-table-wrap">
-        <table>
+        <table class="table table-vcenter card-table">
           <thead>
             <tr><th>Driver</th><th>Department</th><th>Requests</th><th>Spend</th><th>Share</th><th>Executive signal</th></tr>
           </thead>
@@ -4884,6 +4896,7 @@ setInterval(loadExec, 30000);
   banner.style.display = "flex";
 })();
 </script>
+<script src="/vendor/tabler/tabler.min.js?v=1.4.0"></script>
 <script src="/js/global-nav.js?v=20260723-v442"></script>
 </body>
 </html>
