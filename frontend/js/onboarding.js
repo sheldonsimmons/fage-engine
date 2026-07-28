@@ -708,6 +708,7 @@ let obDiscoveryConnectionId = null;
 let obDiscoveryPlatform = null;
 let obDiscoveredFields = [];
 let obDiscoveredRelationships = [];
+let obDiscoveredObjectName = null;
 
 function renderObDiscoveryCard(platform) {
   const card = document.getElementById("obDiscoveryCard");
@@ -847,6 +848,7 @@ async function discoverSalesforceFields() {
 
 async function discoverPlatformFields() {
   const objectName = document.getElementById("obDiscoveredObject").value;
+  obDiscoveredObjectName = objectName;
   const status = document.getElementById("obDiscoveryStatus");
   status.innerHTML = `<div class="ob-discovery-status">Finding objects related to ${_obEsc(objectName)}…</div>`;
   try {
@@ -868,6 +870,7 @@ async function discoverPlatformFields() {
 }
 
 function renderDiscoveredMapping(payload) {
+  obDiscoveredObjectName = payload.object || obDiscoveredObjectName;
   const targets = [
     ["work_id", "Work ID"],
     ["work_name", "Work name"],
@@ -930,7 +933,7 @@ function renderDiscoveredMapping(payload) {
       </select>
     </label>
     <div class="ob-discovery-actions">
-      <button type="button" class="ob-btn-primary" onclick="approveDiscoveredMapping()">Approve relationship mapping →</button>
+      <button type="button" class="ob-btn-primary" id="obApproveRelationshipBtn" onclick="approveDiscoveredMapping()">Approve relationship mapping →</button>
     </div>
   </div>`;
   targets.forEach(([key]) => {
@@ -941,55 +944,78 @@ function renderDiscoveredMapping(payload) {
 }
 
 async function approveDiscoveredMapping() {
-  const mapping = {};
-  document.querySelectorAll("[data-map-key]").forEach(select => {
-    if (select.value) mapping[select.dataset.mapKey] = select.value;
-  });
-  const selectedObject = document.getElementById("obDiscoveredObject").value;
-  mapping.children = [...document.querySelectorAll(".ob-relationship-row")].map(row => ({
-    object: row.dataset.childObject,
-    label: row.dataset.childLabel,
-    parent_field: row.dataset.parentField,
-    relationship_name: row.dataset.relationshipName || null,
-    behavior: row.querySelector(".ob-child-behavior").value,
-  }));
-  mapping.unmapped_behavior = document.getElementById("obUnmappedBehavior")?.value || "separate";
-  mapping.preserve_origin_record = true;
-  const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/mapping`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ selected_object: selectedObject, mapping }),
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    document.getElementById("obDiscoveryStatus").innerHTML = `<div class="ob-error">${_obEsc(payload.detail || "Could not save mapping.")}</div>`;
-    return;
+  const button = document.getElementById("obApproveRelationshipBtn");
+  const status = document.getElementById("obDiscoveryStatus");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving relationship mapping…";
   }
-  const approvedRelationshipMapping = {
-    platform: obDiscoveryPlatform,
-    connection_id: obDiscoveryConnectionId,
-    parent_object: selectedObject,
-    children: mapping.children,
-    unmapped_behavior: mapping.unmapped_behavior,
-    preserve_origin_record: true,
-    approved_at: new Date().toISOString(),
-  };
-  localStorage.setItem("cp_relationship_mapping", JSON.stringify(approvedRelationshipMapping));
-  const contentField = mapping.content;
-  if (contentField) _renderObFields([{ label: "Content", name: contentField }]);
-  const includedChildren = mapping.children.filter(child => child.behavior !== "ignore");
-  const relationshipSummary = includedChildren.length
-    ? includedChildren.map(child => `${_obEsc(child.label)} (${_obEsc(child.behavior.replaceAll("_", " "))})`).join(", ")
-    : "No related objects selected";
-  const nextStep = obDiscoveryPlatform === "servicenow"
-    ? `Next: install the generated Flow Designer action, run one request from a mapped record, and confirm the record sys_id, user sys_id, agent, tokens, and cost in Projects.`
-    : `Next: install the generated action, run one request from a mapped record, and confirm its record, user, agent, tokens, and cost in Projects.`;
-  document.getElementById("obDiscoveryStatus").innerHTML =
-    `<div class="ob-discovery-status ob-relationship-approved"><strong>Relationship mapping approved.</strong>
-      <span><b>Parent:</b> ${_obEsc(selectedObject)}</span>
-      <span><b>Related:</b> ${relationshipSummary}</span>
-      <span>${_obEsc(nextStep)}</span>
-    </div>`;
+  try {
+    const mapping = {};
+    document.querySelectorAll("[data-map-key]").forEach(select => {
+      if (select.value) mapping[select.dataset.mapKey] = select.value;
+    });
+    const selectedObject = obDiscoveredObjectName;
+    if (!selectedObject) throw new Error("The parent object was lost. Select the parent object and try discovery again.");
+    if (!obDiscoveryConnectionId) throw new Error("The connection expired. Reconnect Salesforce and try again.");
+    mapping.children = [...document.querySelectorAll(".ob-relationship-row")].map(row => ({
+      object: row.dataset.childObject,
+      label: row.dataset.childLabel,
+      parent_field: row.dataset.parentField,
+      relationship_name: row.dataset.relationshipName || null,
+      behavior: row.querySelector(".ob-child-behavior").value,
+    }));
+    mapping.unmapped_behavior = document.getElementById("obUnmappedBehavior")?.value || "separate";
+    mapping.preserve_origin_record = true;
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/mapping`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selected_object: selectedObject, mapping }),
+    });
+    const responseText = await response.text();
+    let payload = {};
+    try {
+      payload = responseText ? JSON.parse(responseText) : {};
+    } catch (_) {
+      payload = {};
+    }
+    if (!response.ok) {
+      throw new Error(payload.detail || `Could not save mapping (${response.status}).`);
+    }
+    const approvedRelationshipMapping = {
+      platform: obDiscoveryPlatform,
+      connection_id: obDiscoveryConnectionId,
+      parent_object: selectedObject,
+      children: mapping.children,
+      unmapped_behavior: mapping.unmapped_behavior,
+      preserve_origin_record: true,
+      approved_at: new Date().toISOString(),
+    };
+    localStorage.setItem("cp_relationship_mapping", JSON.stringify(approvedRelationshipMapping));
+    const contentField = mapping.content;
+    if (contentField) _renderObFields([{ label: "Content", name: contentField }]);
+    const includedChildren = mapping.children.filter(child => child.behavior !== "ignore");
+    const relationshipSummary = includedChildren.length
+      ? includedChildren.map(child => `${_obEsc(child.label)} (${_obEsc(child.behavior.replaceAll("_", " "))})`).join(", ")
+      : "No related objects selected";
+    const nextStep = obDiscoveryPlatform === "servicenow"
+      ? `Next: install the generated Flow Designer action, run one request from a mapped record, and confirm the record sys_id, user sys_id, agent, tokens, and cost in Projects.`
+      : `Next: install the generated action, run one request from a mapped record, and confirm its record, user, agent, tokens, and cost in Projects.`;
+    document.getElementById("obDiscoveryStatus").innerHTML =
+      `<div class="ob-discovery-status ob-relationship-approved"><strong>Relationship mapping approved.</strong>
+        <span><b>Parent:</b> ${_obEsc(selectedObject)}</span>
+        <span><b>Related:</b> ${relationshipSummary}</span>
+        <span>${_obEsc(nextStep)}</span>
+      </div>`;
+    if (button) button.textContent = "Relationship mapping approved ✓";
+  } catch (error) {
+    status.innerHTML = `<div class="ob-error"><strong>Relationship mapping was not saved.</strong> ${_obEsc(error.message)}</div>`;
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Try approval again →";
+    }
+    status.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 function _getApprovedRelationshipMapping() {
