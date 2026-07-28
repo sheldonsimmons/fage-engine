@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="cp-executive-theme" data-bs-theme="light">
+<html lang="en" class="cp-executive-theme" data-bs-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" />
@@ -1428,6 +1428,16 @@
   </div>
 </header>
 
+<nav class="cp-exec-subnav" aria-label="Executive dashboard sections">
+  <div class="cp-exec-subnav-inner">
+    <a class="active" href="#cpExecPageTitle" aria-current="page">Overview</a>
+    <a href="#execGlanceTrendChart">Spend &amp; savings</a>
+    <a href="#execGlanceModelBars">Models</a>
+    <a href="#execGlanceConcentration">Business context</a>
+    <a href="#execGlanceAccountabilityHeading">Accountability</a>
+  </div>
+</nav>
+
 <!-- ── Body ───────────────────────────────────────────────────────────────────── -->
 <div class="exec-body">
   <section class="cp-exec-page-heading page-header d-print-none" aria-labelledby="cpExecPageTitle">
@@ -1437,8 +1447,8 @@
       <p class="cp-exec-page-summary">See where governed AI activity is accumulating, what CostPilot prevented, and what needs attention.</p>
     </div>
     <div class="cp-exec-page-meta" aria-label="Dashboard scope">
-      <span class="cp-exec-meta-label">View</span>
-      <strong>Current filtered period</strong>
+      <a class="btn btn-outline-secondary" href="/reports.html">Open reports</a>
+      <a class="btn btn-primary" href="/operate.html">Open operations</a>
     </div>
   </section>
 
@@ -1595,38 +1605,45 @@
   <main class="exec-glance" id="execGlanceDashboard" aria-label="Executive AI scorecard">
     <section class="exec-glance-kpis" aria-label="Executive key performance indicators">
       <article class="exec-glance-kpi card">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">$</div>
         <div class="exec-glance-kpi-label">AI Spend</div>
         <div class="exec-glance-kpi-value" id="execGlanceSpend">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceSpendSub">current filtered period</div>
       </article>
       <article class="exec-glance-kpi card positive">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">↘</div>
         <div class="exec-glance-kpi-label">Annual Savings</div>
         <div class="exec-glance-kpi-value" id="execGlanceAvoided">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceAvoidedSub">projected from current savings</div>
       </article>
       <article class="exec-glance-kpi card optimization" id="execGlancePruningCard">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">✂</div>
         <div class="exec-glance-kpi-label">Tokens Pruned</div>
         <div class="exec-glance-kpi-value" id="execGlancePruningTokens">—</div>
         <div class="exec-glance-kpi-sub" id="execGlancePruningSub">removed before model calls</div>
         <div class="exec-glance-pruning-track" aria-hidden="true"><div id="execGlancePruningBar"></div></div>
       </article>
       <article class="exec-glance-kpi card" id="execGlanceBudgetCard">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">◔</div>
         <div class="exec-glance-kpi-label">Budget Used</div>
         <div class="exec-glance-kpi-value" id="execGlanceBudget">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceBudgetSub">workspace budget</div>
         <div class="exec-glance-budget-track"><div id="execGlanceBudgetBar"></div></div>
       </article>
       <article class="exec-glance-kpi card">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">✓</div>
         <div class="exec-glance-kpi-label">Governed Requests</div>
         <div class="exec-glance-kpi-value" id="execGlanceRequests">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceRequestsSub">evaluated by CostPilot</div>
       </article>
       <article class="exec-glance-kpi card">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">▦</div>
         <div class="exec-glance-kpi-label" id="execGlanceContextLabel">Business Contexts With Activity</div>
         <div class="exec-glance-kpi-value" id="execGlanceContextCount">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceContextSub">with governed AI activity</div>
       </article>
       <article class="exec-glance-kpi card" id="execGlanceRiskCard">
+        <div class="exec-glance-kpi-icon" aria-hidden="true">!</div>
         <div class="exec-glance-kpi-label">Risk &amp; Controls</div>
         <div class="exec-glance-kpi-value" id="execGlanceRisk">—</div>
         <div class="exec-glance-kpi-sub" id="execGlanceRiskSub">blocked and controlled events</div>
