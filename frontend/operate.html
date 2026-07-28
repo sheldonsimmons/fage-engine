@@ -432,12 +432,11 @@
               <span id="agentlakeProjectCount">Showing all projects</span>
               <div>
                 <select id="agentlakeProjectStatus" class="agent-filter-select" onchange="renderAgentlakeProjects()">
-                  <option value="">All Statuses</option>
+                  <option value="">All Active Statuses</option>
                   <option value="active">Active</option>
                   <option value="on_hold">On Hold</option>
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
-                  <option value="archived">Archived</option>
                 </select>
                 <input id="agentlakeProjectSearch" class="agent-filter-search agent-card-search" type="search"
                        placeholder="Search projects..." oninput="renderAgentlakeProjects()" />

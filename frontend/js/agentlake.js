@@ -770,6 +770,20 @@ function agentlakeProjectStatusLabel(status) {
   }[status] || "Unknown";
 }
 
+function agentlakeWorkLabels() {
+  const visible = _agentlakeProjects.filter(project => project.status !== "archived");
+  const configured = visible
+    .map(project => project.business_context?.work_label)
+    .find(Boolean);
+  const singular = String(configured || "Work").trim() || "Work";
+  const plural = /[^aeiou]y$/i.test(singular)
+    ? `${singular.slice(0, -1)}ies`
+    : /(s|x|z|ch|sh)$/i.test(singular)
+      ? `${singular}es`
+      : `${singular}s`;
+  return { singular, plural };
+}
+
 function clearAgentlakeProjectFilters() {
   const status = document.getElementById("agentlakeProjectStatus");
   const search = document.getElementById("agentlakeProjectSearch");
@@ -792,7 +806,12 @@ function renderAgentlakeProjects() {
 
   const statusFilter = document.getElementById("agentlakeProjectStatus")?.value || "";
   const search = (document.getElementById("agentlakeProjectSearch")?.value || "").trim().toLowerCase();
+  const labels = agentlakeWorkLabels();
   const projects = _agentlakeProjects.filter(project => {
+    // Archived work is historical evidence, not live AgentLake inventory.
+    // It remains available through the dedicated work-management/reporting
+    // surfaces but must never appear in this operational list.
+    if (project.status === "archived") return false;
     if (statusFilter && project.status !== statusFilter) return false;
     const searchable = [
       project.name, project.external_id, project.account_name, project.owner,
@@ -806,14 +825,16 @@ function renderAgentlakeProjects() {
     return activityB - activityA || Number(b.spend_usd || 0) - Number(a.spend_usd || 0);
   });
 
-  const totalProjects = Number(_agentlakeProjectSummary.project_count || _agentlakeProjects.length);
+  const totalProjects = _agentlakeProjects.filter(project => project.status !== "archived").length;
   const activeProjects = Number(_agentlakeProjectSummary.active_project_count || 0);
   const attributedPct = Number(_agentlakeProjectSummary.attributed_spend_pct || 0);
-  const riskProjects = _agentlakeProjects.filter(project => Number(project.risk_event_count || 0) > 0).length;
+  const riskProjects = _agentlakeProjects.filter(project =>
+    project.status !== "archived" && Number(project.risk_event_count || 0) > 0
+  ).length;
   const metrics = document.getElementById("agentlakeProjectMetrics");
   if (metrics) {
     metrics.innerHTML = [
-      [totalProjects, "Projects"],
+      [totalProjects, labels.plural],
       [activeProjects, "Active"],
       [`${attributedPct.toFixed(1)}%`, "Spend attributed"],
       [riskProjects, "With risk events"]
@@ -825,7 +846,7 @@ function renderAgentlakeProjects() {
   }
 
   const count = document.getElementById("agentlakeProjectCount");
-  if (count) count.textContent = `Showing ${projects.length} of ${_agentlakeProjects.length} projects`;
+  if (count) count.textContent = `Showing ${projects.length} of ${totalProjects} ${labels.plural.toLowerCase()}`;
 
   const unattributedSpend = Number(_agentlakeProjectSummary.unattributed_spend_usd || 0);
   const unattributed = !statusFilter && !search && unattributedSpend > 0 ? `
@@ -833,7 +854,7 @@ function renderAgentlakeProjects() {
       <div class="agentlake-project-identity">
         <span class="agentlake-project-status needs-attribution">Needs attribution</span>
         <h3>Unattributed AI activity</h3>
-        <p>Usage that has not been linked to a project.</p>
+        <p>Usage that has not been linked to ${agentlakeEscape(labels.singular.toLowerCase())}.</p>
       </div>
       <div class="agentlake-project-stat"><strong>$${unattributedSpend.toFixed(2)}</strong><span>unattributed spend</span></div>
       <a class="agentlake-project-link" href="/work-items.html">Review attribution →</a>
@@ -890,13 +911,13 @@ function renderAgentlakeProjects() {
             <strong>${budget == null ? "Not set" : `$${monthlySpend.toFixed(2)} of $${budget.toFixed(2)}`}</strong>
             ${budgetPct == null ? "" : `<div><i style="width:${budgetPct.toFixed(1)}%"></i></div>`}
           </div>
-          <a href="/work-items.html">Manage project →</a>
+          <a href="/work-items.html">Manage ${agentlakeEscape(labels.singular.toLowerCase())} →</a>
         </div>
       </details>`;
   }).join("");
 
   list.innerHTML = unattributed + cards ||
-    '<div class="agentlake-empty">No projects match these filters. Create or connect projects from the Projects page.</div>';
+    `<div class="agentlake-empty">No ${agentlakeEscape(labels.plural.toLowerCase())} match these filters. Create or connect ${agentlakeEscape(labels.plural.toLowerCase())} from the Work page.</div>`;
 }
 
 function renderAgentlakeCompactList(elementId, rows, formatter, emptyMessage) {
