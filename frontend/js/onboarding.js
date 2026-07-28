@@ -628,6 +628,48 @@ const OB_CONNECTOR_PLANS = {
   },
 };
 
+let obSalesforceAiMode = localStorage.getItem("cp_salesforce_ai_mode") || "agentforce";
+
+function selectSalesforceAiMode(mode) {
+  if (!["agentforce", "automation"].includes(mode)) return;
+  obSalesforceAiMode = mode;
+  localStorage.setItem("cp_salesforce_ai_mode", mode);
+  renderSalesforceAiPath("salesforce");
+  renderObConnectionPlan("salesforce");
+}
+
+function getSalesforceGovernedObjects() {
+  return [...document.querySelectorAll("[data-sf-record]:checked")].map(input => input.value);
+}
+
+function renderSalesforceAiPath(platform) {
+  const section = document.getElementById("obSalesforceAiPath");
+  if (!section) return;
+  section.hidden = platform !== "salesforce";
+  if (platform !== "salesforce") return;
+
+  section.querySelectorAll("[data-sf-mode]").forEach(option => {
+    option.classList.toggle("selected", option.dataset.sfMode === obSalesforceAiMode);
+    const input = option.querySelector("input");
+    if (input && !input.disabled) input.checked = input.value === obSalesforceAiMode;
+  });
+
+  const detail = document.getElementById("obSalesforceAiPathDetails");
+  if (!detail) return;
+  if (obSalesforceAiMode === "agentforce") {
+    detail.innerHTML = `<strong>Use one universal action: CostPilot Governed AI Work.</strong>
+      Add it to every Agentforce agent whose requests should pass through CostPilot. The action can carry the record ID, record name, user, agent, and department without creating a different integration for each object.
+      <div class="ob-sf-record-list" aria-label="Salesforce records this action may govern">
+        ${["Account","Opportunity","Contact","Case","Project / custom record"].map((label, index) =>
+          `<label><input type="checkbox" data-sf-record value="${_obEsc(label)}" ${index < 4 ? "checked" : ""}> ${_obEsc(label)}</label>`
+        ).join("")}
+      </div>`;
+  } else {
+    detail.innerHTML = `<strong>Use the generated invocable action from Flow, Apex, or custom automation.</strong>
+      CostPilot only measures calls that explicitly invoke the action. Ordinary record creation or updates are not counted as AI usage.`;
+  }
+}
+
 function renderObConnectionPlan(platform) {
   const plan = OB_CONNECTOR_PLANS[platform];
   const container = document.getElementById("obConnectionPlan");
@@ -639,9 +681,14 @@ function renderObConnectionPlan(platform) {
       <div class="ob-connection-plan-item"><strong>Attribute</strong>Workspace · User · Work record</div>`;
     return;
   }
+  const install = platform === "salesforce"
+    ? (obSalesforceAiMode === "agentforce"
+      ? "Add CostPilot Governed AI Work to Agentforce"
+      : "Invoke CostPilot from Flow, Apex, or custom AI")
+    : plan.install;
   container.innerHTML = `
     <div class="ob-connection-plan-item"><strong>1 · Authenticate</strong>${_obEsc(plan.authenticate)}</div>
-    <div class="ob-connection-plan-item"><strong>2 · Install</strong>${_obEsc(plan.install)}</div>
+    <div class="ob-connection-plan-item"><strong>2 · Install</strong>${_obEsc(install)}</div>
     <div class="ob-connection-plan-item"><strong>3 · Attribute</strong>${_obEsc(plan.identity)}</div>`;
 }
 
@@ -1164,6 +1211,7 @@ function selectObPlatform(platform) {
   if (selectedName) selectedName.textContent = cfg.label;
   renderObConnectionPlan(platform);
   renderObDiscoveryCard(platform);
+  renderSalesforceAiPath(platform);
   if (objectLabel) objectLabel.textContent = copy.objectLabel;
   if (fieldsLabel) fieldsLabel.childNodes[0].textContent = copy.fieldsLabel + " ";
   if (fieldsLabelHint) fieldsLabelHint.textContent = copy.fieldHint;
@@ -1759,23 +1807,43 @@ async function generateObCode() {
 
 function _universalVerificationHtml() {
   const platform = OB_PLATFORMS[obSelectedPlatform]?.label || obSelectedPlatform;
+  const agentforce = obSelectedPlatform === "salesforce" && obSalesforceAiMode === "agentforce";
+  const actionRow = agentforce
+    ? `<div class="ob-verification-row" id="obVerifyAgentAction"><span>○</span> CostPilot action added to Agentforce <span class="status">Confirm below</span></div>`
+    : "";
+  const installText = agentforce
+    ? `I installed the generated Salesforce setup and added <strong>CostPilot Governed AI Work</strong> to the Agentforce agents I want governed.`
+    : `I installed the generated setup in ${_obEsc(platform)}. This confirms the external platform step that CostPilot cannot inspect directly.`;
   return `<section class="ob-verification" id="obUniversalVerification">
     <h3>Verify your CostPilot connection</h3>
-    <p>This test validates CostPilot's live contract, routing, governance, pruning, and attribution envelope. After installing the generated code, confirm the platform step before activation.</p>
+    <p>This test validates CostPilot's live contract, routing, governance, pruning, and attribution envelope. It does not claim that an external agent is connected until you confirm that platform step.</p>
     <div class="ob-verification-list">
       <div class="ob-verification-row pass"><span>✓</span> Business context configured <span class="status">Ready</span></div>
       <div class="ob-verification-row pass"><span>✓</span> ${_obEsc(platform)} mapping generated <span class="status">Ready</span></div>
       <div class="ob-verification-row" id="obVerifyContract"><span>○</span> Universal contract available <span class="status">Not tested</span></div>
       <div class="ob-verification-row" id="obVerifyRoute"><span>○</span> Routing and pruning test <span class="status">Not tested</span></div>
+      ${actionRow}
     </div>
     <button type="button" class="ob-btn-primary" id="obRunTestBtn" onclick="runUniversalSetupTest()">Run CostPilot Test →</button>
     <div class="ob-error" id="obVerificationError"></div>
     <label class="ob-activation-confirm">
-      <input type="checkbox" id="obPlatformInstalled" onchange="refreshActivationButton()" />
-      <span>I installed the generated setup in ${_obEsc(platform)}. This confirms the external platform step that CostPilot cannot inspect directly.</span>
+      <input type="checkbox" id="obPlatformInstalled" onchange="confirmPlatformInstall(this.checked)" />
+      <span>${installText}</span>
     </label>
     <button type="button" class="ob-btn-primary" id="obActivateBtn" onclick="activateUniversalConnection()" disabled>Activate Connection</button>
   </section>`;
+}
+
+function confirmPlatformInstall(confirmed) {
+  if (obSelectedPlatform === "salesforce" && obSalesforceAiMode === "agentforce") {
+    const row = document.getElementById("obVerifyAgentAction");
+    if (row) {
+      row.classList.toggle("pass", confirmed);
+      row.querySelector("span").textContent = confirmed ? "✓" : "○";
+      row.querySelector(".status").textContent = confirmed ? "Confirmed" : "Confirm below";
+    }
+  }
+  refreshActivationButton();
 }
 
 function _markVerificationRow(id, label) {
@@ -1854,6 +1922,8 @@ function activateUniversalConnection() {
     object: document.getElementById("obPlatObject").value.trim(),
     department: document.getElementById("obPlatDept").value,
     agent_name: document.getElementById("obPlatAgent").value.trim(),
+    salesforce_ai_mode: obSelectedPlatform === "salesforce" ? obSalesforceAiMode : null,
+    governed_record_types: obSelectedPlatform === "salesforce" ? getSalesforceGovernedObjects() : [],
     business_context: obBusinessContext,
     contract_version: "2026-07-26",
     status: "active",
@@ -1862,9 +1932,13 @@ function activateUniversalConnection() {
   localStorage.setItem("cp_active_connection", JSON.stringify(record));
   setUniversalSetupStage(5);
   const section = document.getElementById("obUniversalVerification");
+  const nextStep = record.platform === "salesforce" && record.salesforce_ai_mode === "agentforce"
+    ? `Run one real request from Agentforce. When it invokes <strong>CostPilot Governed AI Work</strong>, the request will appear in Audit and reporting with its user, agent, department, and Salesforce record.`
+    : `Run one real request from ${_obEsc(record.platform_label)} to confirm live attribution.`;
   section.innerHTML = `<div class="ob-context-eyebrow">Connection active</div>
     <h3>${_obEsc(record.platform_label)} is ready for CostPilot</h3>
     <p>Requests can now be attributed to the user, ${_obEsc(obBusinessContext?.work_label || "work record")}, agent, department, and platform.</p>
+    <p><strong>Final live check:</strong> ${nextStep}</p>
     <div class="ob-actions"><button class="ob-btn-primary" onclick="goToDashboard()">Open Dashboard →</button></div>`;
   section.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -1897,6 +1971,25 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
   </div>`;
   const sfReturnWrites = _salesforceReturnWrites(returnFields);
   const sfTrialReturnWrites = _salesforceTrialReturnWrites(returnFields);
+  const governedObjects = getSalesforceGovernedObjects();
+  const agentforceGuide = obSalesforceAiMode === "agentforce"
+    ? `<div class="ob-code-section" style="margin-top:20px">
+        <div class="ob-code-header">
+          <span class="ob-code-label">Agentforce — add the universal action</span>
+          <span class="ob-code-hint">This is the step that places CostPilot in the AI request path.</span>
+        </div>
+        <div class="ob-flow-steps">
+          <div class="ob-flow-step"><span class="ob-flow-num">1</span><div><strong>Open Agentforce Builder</strong><br/>Open the agent you want CostPilot to govern. Create or select a general AI-work topic.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add Action → Apex → Route Through CostPilot</strong><br/>Give the agent-facing action the label <code>CostPilot Governed AI Work</code>. This synchronous packaged action returns CostPilot's AI response to Agentforce and can be reused for summaries, drafting, analysis, recommendations, and other governed AI tasks.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">3</span><div><strong>Map the context</strong><br/>Pass the current record ID, record name, user request, agent name, and department. Selected record types: <strong>${_obEsc(governedObjects.join(", ") || obj)}</strong>.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">4</span><div><strong>Tell the topic when to use it</strong><br/>“For AI work involving a Salesforce record, call CostPilot Governed AI Work and return its AI response to the user.”</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">5</span><div><strong>Test one real request</strong><br/>A successful CostPilot setup test verifies the gateway. A real Agentforce request appearing in CostPilot Audit verifies the agent itself.</div></div>
+        </div>
+      </div>`
+    : `<div class="ob-code-section" style="margin-top:20px">
+        <div class="ob-code-header"><span class="ob-code-label">Flow, Apex, or custom AI</span></div>
+        <p class="ob-code-hint">Invoke <code>Send to CostPilot</code> only when AI work occurs. Do not attach it to every record save, because ordinary CRM activity is not AI usage. For a conversational Agentforce response, use the packaged <code>Route Through CostPilot</code> action instead.</p>
+      </div>`;
 
   // ── Trial version: proxy endpoint, no custom fields required ─────────────
   if (IS_TRIAL) {
@@ -1990,6 +2083,7 @@ ${requestVars}
 
     return `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Salesforce Mapping</span><span class="ob-code-hint">These are the exact object and field API names this setup will route.</span></div>${mappingHtml}</div>`
       + _obCodeSection("Apex Class — paste into Developer Console", "No provider credential needed; map each Flow input to the field names you configured", apex)
+      + agentforceGuide
       + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Setup Steps</span></div>${flowHtml}</div>`
       + _obBanner("salesforce", obj, dept, agent) + _obActions();
   }
@@ -2100,6 +2194,7 @@ CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ re
 
   return `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Salesforce Mapping</span><span class="ob-code-hint">These are the exact object and field API names this setup will route.</span></div>${mappingHtml}</div>`
     + _obCodeSection("Step 1 — Apex Class", "Developer Console → File → Open → CostPilotCallout → Replace all → Save", apex)
+    + agentforceGuide
     + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 2 — Salesforce Flow</span></div>${flowHtml}</div>`
     + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 3 — Custom Fields on ${_obEsc(obj)}</span><span class="ob-code-hint">Setup → Object Manager → ${_obEsc(obj)} → Fields &amp; Relationships → New</span></div>${fieldHtml}</div>`
     + _obCodeSection("Debug Test — Execute Anonymous", "Runs the Apex action without waiting on your Flow trigger", testApex)

@@ -93,6 +93,71 @@
   padding: 16px;
 }
 .ob-discovery-card:empty { display: none; }
+.ob-sf-path {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+  padding: 18px;
+}
+.ob-sf-path[hidden] { display: none; }
+.ob-sf-path h2 {
+  color: var(--text-primary);
+  font-size: 17px;
+  margin: 5px 0 6px;
+}
+.ob-sf-path-intro {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 0 0 15px;
+}
+.ob-sf-path-intro strong { color: var(--text-primary); }
+.ob-sf-path-options {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ob-sf-path-option {
+  align-items: flex-start;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-height: 112px;
+  padding: 13px;
+}
+.ob-sf-path-option.selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.ob-sf-path-option.unavailable { cursor: not-allowed; opacity: .64; }
+.ob-sf-path-option input { margin-top: 3px; }
+.ob-sf-path-copy { display: grid; gap: 5px; }
+.ob-sf-path-copy strong { color: var(--text-primary); font-size: 12px; }
+.ob-sf-path-copy > span:last-child { color: var(--text-muted); font-size: 10px; line-height: 1.45; }
+.ob-sf-path-badge {
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.ob-sf-path-badge.secondary { color: var(--text-muted); }
+.ob-sf-path-detail {
+  background: rgba(88, 166, 255, .05);
+  border-left: 3px solid var(--accent);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+  margin-top: 14px;
+  padding: 11px 13px;
+}
+.ob-sf-path-detail strong { color: var(--text-primary); }
+.ob-sf-record-list { display: flex; flex-wrap: wrap; gap: 7px 12px; margin-top: 8px; }
+.ob-sf-record-list label { align-items: center; color: var(--text-primary); display: flex; gap: 5px; font-size: 10px; }
 .ob-discovery-head {
   align-items: flex-start;
   display: flex;
@@ -197,6 +262,7 @@
 @media (max-width: 640px) {
   .ob-universal-stage strong { display: none; }
   .ob-connection-plan { grid-template-columns: 1fr; }
+  .ob-sf-path-options { grid-template-columns: 1fr; }
   .ob-discovery-map-row { grid-template-columns: 1fr; }
   .ob-relationship-row, .ob-unmapped-choice { grid-template-columns: 1fr; }
   .ob-confidence { text-align: left; }

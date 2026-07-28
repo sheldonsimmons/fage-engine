@@ -412,6 +412,37 @@
         </div>
         <div class="ob-connection-plan" id="obConnectionPlan"></div>
         <section class="ob-discovery-card" id="obDiscoveryCard"></section>
+        <section class="ob-sf-path" id="obSalesforceAiPath" hidden>
+          <div class="ob-context-eyebrow">Salesforce AI connection</div>
+          <h2>How should Salesforce send AI work to CostPilot?</h2>
+          <p class="ob-sf-path-intro"><strong>Connecting Salesforce discovers business context.</strong> Adding a CostPilot action to an agent or automation is what makes its AI requests governed, pruned, routed, and measured.</p>
+          <div class="ob-sf-path-options" role="radiogroup" aria-label="Salesforce AI connection method">
+            <label class="ob-sf-path-option" data-sf-mode="agentforce">
+              <input type="radio" name="obSalesforceAiMode" value="agentforce" checked onchange="selectSalesforceAiMode(this.value)" />
+              <span class="ob-sf-path-copy">
+                <span class="ob-sf-path-badge">Recommended</span>
+                <strong>Govern Agentforce requests</strong>
+                <span>Add one reusable CostPilot action to each Agentforce agent you want governed.</span>
+              </span>
+            </label>
+            <label class="ob-sf-path-option" data-sf-mode="automation">
+              <input type="radio" name="obSalesforceAiMode" value="automation" onchange="selectSalesforceAiMode(this.value)" />
+              <span class="ob-sf-path-copy">
+                <strong>Govern Flow, Apex, or custom AI</strong>
+                <span>Call the same CostPilot action from Salesforce automation or custom code.</span>
+              </span>
+            </label>
+            <label class="ob-sf-path-option unavailable" aria-disabled="true">
+              <input type="radio" name="obSalesforceAiMode" value="reporting" disabled />
+              <span class="ob-sf-path-copy">
+                <span class="ob-sf-path-badge secondary">Visibility only · coming next</span>
+                <strong>Import reporting without control</strong>
+                <span>Measure provider activity without placing CostPilot in the request path.</span>
+              </span>
+            </label>
+          </div>
+          <div class="ob-sf-path-detail" id="obSalesforceAiPathDetails"></div>
+        </section>
         <section class="ob-context-card" id="obBusinessContextCard" hidden>
           <div class="ob-context-eyebrow">Business Context Engine</div>
           <h2>What should CostPilot understand about this work?</h2>
