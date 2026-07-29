@@ -149,6 +149,18 @@ async def _populate_salesforce_costpilot_credential(
             },
             json=payload,
         )
+        # POST creates the encrypted principal value. Salesforce returns 409
+        # when a value already exists (for example after reconnecting), in
+        # which case PUT securely replaces it.
+        if response.status_code == 409:
+            response = await client.put(
+                endpoint,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
     if response.status_code in (200, 201, 204):
         return True, ""
     # Never return the request body because it contains the workspace secret.

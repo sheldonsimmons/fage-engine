@@ -130,6 +130,49 @@ def test_salesforce_package_setup_populates_the_packaged_named_principal(monkeyp
     }
 
 
+def test_salesforce_package_setup_replaces_an_existing_named_principal(monkeypatch):
+    calls = []
+
+    class Response:
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, endpoint, headers, json):
+            calls.append(("POST", endpoint, headers, json))
+            return Response(409)
+
+        async def put(self, endpoint, headers, json):
+            calls.append(("PUT", endpoint, headers, json))
+            return Response(200)
+
+    monkeypatch.setattr("api.routes_connections.httpx.AsyncClient", Client)
+    ok, error = asyncio.run(
+        _populate_salesforce_costpilot_credential(
+            instance_url="https://acme.my.salesforce.com",
+            access_token="salesforce-access-token",
+            secret_key="sk-cp-replacement",
+        )
+    )
+
+    assert ok is True
+    assert error == ""
+    assert [call[0] for call in calls] == ["POST", "PUT"]
+    assert calls[-1][3]["credentials"]["CostPilotKey"] == {
+        "value": "sk-cp-replacement",
+        "encrypted": True,
+    }
+
+
 def test_parent_metadata_produces_useful_child_relationship_suggestions():
     relationships = [
         {
