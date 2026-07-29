@@ -529,29 +529,25 @@ def reset_demo_data(db=None):
     Clears all transactions, audit events, and registered agents.
     Resets department spend to $0 but preserves user-set budget caps.
     """
-    from database.models import TokenTransaction, AuditEvent, DepartmentBudget, RegisteredAgent
-    from datetime import datetime
     from database.db import SessionLocal
+    from database.reset_demo import reset_demo_records
 
     db = SessionLocal()
     try:
-        tx_count     = db.query(TokenTransaction).delete()
-        audit_count  = db.query(AuditEvent).delete()
-        agent_count  = db.query(RegisteredAgent).delete()
-        # Reset all department spend to $0, unthrottle
-        for budget in db.query(DepartmentBudget).all():
-            budget.current_spend_usd = 0.0
-            budget.throttled         = False
-            budget.override_granted  = False
-            budget.period_start      = datetime.utcnow()
+        result = reset_demo_records(db)
         db.commit()
         return {
-            "status":              "ok",
-            "transactions_cleared": tx_count,
-            "audit_events_cleared": audit_count,
-            "agents_cleared":       agent_count,
-            "message":             "Full reset complete. All agents, transactions, and audit events cleared. Budget caps preserved.",
+            "status": "ok",
+            **result,
+            "message": (
+                "Full reset complete. All agents, agent assignments, transactions, "
+                "audit events, and review checkpoints cleared. Business contexts "
+                "and budget caps preserved."
+            ),
         }
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
