@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Salesforce_User_Required</fullName>
+    <active>true</active>
+    <description>Every CostPilot project membership must identify a Salesforce user.</description>
+    <errorConditionFormula>ISBLANK(Salesforce_User__c)</errorConditionFormula>
+    <errorDisplayField>Salesforce_User__c</errorDisplayField>
+    <errorMessage>Select a Salesforce user for this project membership.</errorMessage>
+</ValidationRule>

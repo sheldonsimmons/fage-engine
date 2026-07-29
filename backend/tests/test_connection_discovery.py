@@ -1,9 +1,13 @@
+import asyncio
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.routes_connections import (
     ConnectionCreate,
     MappingUpdate,
+    _new_salesforce_workspace,
+    _populate_salesforce_costpilot_credential,
     _servicenow_auth_base,
     approve_mapping,
     create_connection,
@@ -65,6 +69,60 @@ def test_connection_registry_is_workspace_scoped_and_never_returns_tokens():
     assert other["id"] != item["id"]
     assert len(list_connections("ORG-A", db=db)["connections"]) == 1
     assert len(list_connections("ORG-B", db=db)["connections"]) == 1
+
+
+def test_salesforce_package_setup_creates_and_reuses_a_workspace():
+    db = _session()
+    identity = {
+        "email": "admin@acme.example",
+        "display_name": "Acme Admin",
+        "organization_id": "00D000000000001AAA",
+    }
+
+    first = _new_salesforce_workspace(identity, db)
+    db.commit()
+    second = _new_salesforce_workspace(identity, db)
+
+    assert first.id == second.id
+    assert first.workspace_id == second.workspace_id
+    assert first.secret_key.startswith("sk-cp-")
+    assert first.platform == "salesforce"
+
+
+def test_salesforce_package_setup_populates_the_packaged_named_principal(monkeypatch):
+    captured = {}
+
+    class Response:
+        status_code = 201
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured["timeout"] = kwargs["timeout"]
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, endpoint, headers, json):
+            captured.update(endpoint=endpoint, headers=headers, json=json)
+            return Response()
+
+    monkeypatch.setattr("api.routes_connections.httpx.AsyncClient", Client)
+    ok, error = asyncio.run(
+        _populate_salesforce_costpilot_credential(
+            instance_url="https://acme.my.salesforce.com",
+            access_token="salesforce-access-token",
+            secret_key="sk-cp-private",
+        )
+    )
+
+    assert ok is True
+    assert error == ""
+    assert captured["json"]["externalCredential"] == "CostPilotExternal"
+    assert captured["json"]["principalName"] == "CostPilotKey"
+    assert captured["json"]["credentials"] == {"CostPilotKey": "sk-cp-private"}
 
 
 def test_parent_metadata_produces_useful_child_relationship_suggestions():

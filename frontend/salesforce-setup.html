@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CostPilot Salesforce Setup</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-blue: #1769e0;
+      --cp-green: #137a4f;
+      --cp-red: #b42318;
+      --cp-ink: #172033;
+      --cp-muted: #58657a;
+      --cp-line: #dce3ec;
+      --cp-bg: #f4f7fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      background: var(--cp-bg);
+      color: var(--cp-ink);
+      font: 16px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(680px, 100%);
+      padding: 40px;
+      background: #fff;
+      border: 1px solid var(--cp-line);
+      border-radius: 16px;
+      box-shadow: 0 18px 50px rgb(23 32 51 / 10%);
+    }
+    .eyebrow {
+      color: var(--cp-blue);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 8px 0 10px; font-size: clamp(28px, 5vw, 40px); line-height: 1.12; }
+    p { color: var(--cp-muted); }
+    .status {
+      margin: 26px 0;
+      padding: 20px;
+      border: 1px solid var(--cp-line);
+      border-left: 5px solid var(--cp-blue);
+      border-radius: 10px;
+      background: #f8fbff;
+    }
+    .status.success { border-left-color: var(--cp-green); background: #f2fbf7; }
+    .status.error { border-left-color: var(--cp-red); background: #fff6f5; }
+    .status strong { display: block; color: var(--cp-ink); font-size: 18px; }
+    ol { margin: 22px 0 0; padding-left: 24px; }
+    li { padding: 6px 0; }
+    code {
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: #eef2f7;
+      color: var(--cp-ink);
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      margin-top: 18px;
+      padding: 0 18px;
+      border-radius: 8px;
+      background: var(--cp-blue);
+      color: #fff;
+      font-weight: 750;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">CostPilot for Salesforce</div>
+    <h1 id="title">Finishing your secure connection</h1>
+    <p id="summary">CostPilot is verifying the Salesforce organization and configuring its encrypted connection.</p>
+    <div class="status" id="statusBox" role="status" aria-live="polite">
+      <strong id="statusTitle">Connecting…</strong>
+      <span id="statusDetail">Keep this window open while setup finishes.</span>
+    </div>
+    <div id="successSteps" hidden>
+      <ol>
+        <li>Return to the <strong>CostPilot Setup</strong> tab in Salesforce.</li>
+        <li>Select the Agentforce agents or Flows CostPilot should govern.</li>
+        <li>Add <strong>Route Through CostPilot</strong> and run the guided verification.</li>
+      </ol>
+      <a class="button" href="javascript:window.close()">Return to Salesforce</a>
+    </div>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const state = params.get("status");
+    const reason = params.get("reason");
+    const box = document.getElementById("statusBox");
+    const title = document.getElementById("statusTitle");
+    const detail = document.getElementById("statusDetail");
+    if (state === "success") {
+      document.getElementById("title").textContent = "Salesforce is connected";
+      document.getElementById("summary").textContent =
+        "The workspace connection was created and stored securely in Salesforce. No API key was copied or exposed.";
+      box.classList.add("success");
+      title.textContent = "Connection verified";
+      detail.textContent = `Workspace ${params.get("workspace_id") || ""} is ready for Agentforce and Flow setup.`;
+      document.getElementById("successSteps").hidden = false;
+    } else if (state === "error") {
+      document.getElementById("title").textContent = "Connection needs attention";
+      document.getElementById("summary").textContent =
+        "Nothing was activated. Correct the issue below and start the connection again from Salesforce.";
+      box.classList.add("error");
+      title.textContent = "Setup could not finish";
+      const messages = {
+        oauth_not_configured: "CostPilot's Salesforce authorization service is not configured.",
+        org_mismatch: "The Salesforce organization you authorized was not the organization where the package is installed.",
+        credential_provisioning: "Salesforce authorization succeeded, but the packaged encrypted credential could not be activated."
+      };
+      detail.textContent = messages[reason] || "The secure connection could not be completed.";
+    }
+  </script>
+</body>
+</html>

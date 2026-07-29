@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Account__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Customer or account whose work is represented by this project.</description>
+    <label>Account</label>
+    <referenceTo>Account</referenceTo>
+    <relationshipLabel>CostPilot Projects</relationshipLabel>
+    <relationshipName>CostPilot_Projects</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

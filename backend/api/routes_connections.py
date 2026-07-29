@@ -6,7 +6,9 @@ import json
 import os
 import re
 import secrets
-from datetime import datetime
+import uuid
+from base64 import b64encode
+from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote, urlencode, urlparse
 
@@ -17,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import IntegrationConnection
+from database.models import IntegrationConnection, TrialAccount
 
 
 router = APIRouter()
@@ -57,6 +59,85 @@ class ObjectDiscoveryRequest(BaseModel):
 class MappingUpdate(BaseModel):
     selected_object: str = Field(min_length=1, max_length=160)
     mapping: dict
+
+
+def _new_salesforce_workspace(identity: dict, db: Session) -> TrialAccount:
+    """Resolve the CostPilot workspace for a verified Salesforce administrator."""
+    email = str(identity.get("email") or identity.get("username") or "").strip().lower()
+    if email:
+        existing = db.query(TrialAccount).filter(TrialAccount.email == email).first()
+        if existing:
+            if not existing.secret_key:
+                existing.secret_key = "sk-cp-" + secrets.token_urlsafe(32)
+            existing.platform = "salesforce"
+            existing.is_active = True
+            db.flush()
+            return existing
+
+    org_id = str(identity.get("organization_id") or "salesforce").strip()
+    fallback_email = f"salesforce-{org_id.lower()}@connected.costpilot.local"
+    existing = db.query(TrialAccount).filter(TrialAccount.email == fallback_email).first()
+    if existing:
+        if not existing.secret_key:
+            existing.secret_key = "sk-cp-" + secrets.token_urlsafe(32)
+        existing.is_active = True
+        db.flush()
+        return existing
+
+    workspace_id = uuid.uuid4().hex[:16].upper()
+    account = TrialAccount(
+        email=email or fallback_email,
+        name=str(identity.get("display_name") or identity.get("username") or "Salesforce Administrator"),
+        company=str(identity.get("organization_id") or "Salesforce"),
+        api_key_enc=b64encode(b"").decode(),
+        provider="openai",
+        workspace_id=workspace_id,
+        secret_key="sk-cp-" + secrets.token_urlsafe(32),
+        platform="salesforce",
+        setup_complete=False,
+        trial_start=datetime.utcnow(),
+        trial_end=datetime.utcnow() + timedelta(days=30),
+        plan="trial",
+        is_active=True,
+        trial_call_cap=500,
+        trial_spend_cap_usd=10.0,
+    )
+    db.add(account)
+    db.flush()
+    return account
+
+
+async def _populate_salesforce_costpilot_credential(
+    *,
+    instance_url: str,
+    access_token: str,
+    secret_key: str,
+) -> tuple[bool, str]:
+    """Populate the packaged encrypted principal through Salesforce Connect REST."""
+    endpoint = (
+        f"{instance_url.rstrip('/')}/services/data/{SALESFORCE_API_VERSION}"
+        "/named-credentials/credential"
+    )
+    payload = {
+        "authenticationProtocol": "Custom",
+        "credentials": {"CostPilotKey": secret_key},
+        "externalCredential": "CostPilotExternal",
+        "principalName": "CostPilotKey",
+        "principalType": "NamedPrincipal",
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            endpoint,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+    if response.status_code in (200, 201, 204):
+        return True, ""
+    # Never return the request body because it contains the workspace secret.
+    return False, f"Salesforce credential provisioning returned HTTP {response.status_code}."
 
 
 def _fernet():
@@ -245,6 +326,76 @@ def recommend_child_relationships(relationships: list[dict]) -> list[dict]:
     return suggestions
 
 
+@router.get("/salesforce/package/start")
+def start_salesforce_package_setup(
+    org_id: str = Query(min_length=15, max_length=18),
+    instance_url: str = Query(min_length=1, max_length=300),
+    db: Session = Depends(get_db),
+):
+    """Start the post-install connection without asking the customer for a key."""
+    auth_base = _salesforce_auth_base(instance_url)
+    client_id = os.getenv("SALESFORCE_CLIENT_ID")
+    redirect_uri = os.getenv(
+        "SALESFORCE_REDIRECT_URI",
+        "https://fage-engine-21cb49fe4806.herokuapp.com/api/integrations/connections/oauth/salesforce/callback",
+    )
+    if not client_id:
+        return RedirectResponse(
+            url="/salesforce-setup.html?status=error&reason=oauth_not_configured"
+        )
+
+    state = secrets.token_urlsafe(32)
+    item = IntegrationConnection(
+        workspace_id=f"pending-{secrets.token_hex(8)}",
+        platform="salesforce",
+        display_name=f"Salesforce package setup {org_id}",
+        status="authorizing",
+        auth_base_url=auth_base,
+        oauth_state=state,
+        mapping_json=json.dumps({
+            "package_setup": True,
+            "requested_org_id": org_id,
+        }),
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    query = urlencode({
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "scope": "api refresh_token",
+        "state": state,
+        "prompt": "login",
+    })
+    return RedirectResponse(url=f"{auth_base}/services/oauth2/authorize?{query}")
+
+
+@router.get("/salesforce/package/status")
+def salesforce_package_status(
+    org_id: str = Query(min_length=15, max_length=18),
+    db: Session = Depends(get_db),
+):
+    prefix = f"Salesforce package setup {org_id}"
+    item = (
+        db.query(IntegrationConnection)
+        .filter(
+            IntegrationConnection.platform == "salesforce",
+            IntegrationConnection.display_name == prefix,
+        )
+        .order_by(IntegrationConnection.created_at.desc())
+        .first()
+    )
+    if not item:
+        return {"status": "not_started", "connected": False}
+    return {
+        "status": item.status,
+        "connected": item.status == "connected",
+        "workspace_id": item.workspace_id if item.status == "connected" else None,
+        "last_error": item.last_error,
+    }
+
+
 @router.get("")
 def list_connections(workspace_id: str = Query(default="default"), db: Session = Depends(get_db)):
     items = (
@@ -389,12 +540,74 @@ async def salesforce_callback(
         db.commit()
         raise HTTPException(status_code=502, detail="Salesforce authorization failed")
     token = response.json()
-    item.access_token_encrypted = _encrypt(token.get("access_token"))
+    access_token = token.get("access_token")
+    if not access_token or not token.get("instance_url"):
+        item.status = "error"
+        item.last_error = "Salesforce authorization did not return an access token and instance URL"
+        db.commit()
+        raise HTTPException(status_code=502, detail="Salesforce authorization was incomplete")
+
+    identity = {}
+    identity_url = token.get("id") or ""
+    if identity_url:
+        async with httpx.AsyncClient(timeout=20) as client:
+            identity_response = await client.get(
+                identity_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if identity_response.status_code < 400:
+            identity = identity_response.json()
+
+    mapping = json.loads(item.mapping_json) if item.mapping_json else {}
+    package_setup = bool(mapping.get("package_setup"))
+    external_org_id = str(
+        identity.get("organization_id")
+        or (identity_url.rstrip("/").split("/")[-2] if "/" in identity_url else "")
+    )
+    requested_org_id = str(mapping.get("requested_org_id") or "")
+    if package_setup and requested_org_id and external_org_id != requested_org_id:
+        item.status = "error"
+        item.last_error = "The authorized Salesforce org did not match the installed package org"
+        item.oauth_state = None
+        db.commit()
+        return RedirectResponse(
+            url="/salesforce-setup.html?status=error&reason=org_mismatch"
+        )
+
+    item.access_token_encrypted = _encrypt(access_token)
     item.refresh_token_encrypted = _encrypt(token.get("refresh_token"))
     item.instance_url = token.get("instance_url")
-    identity_url = token.get("id") or ""
-    item.external_tenant_id = identity_url.rstrip("/").split("/")[-2] if "/" in identity_url else None
+    item.external_tenant_id = external_org_id or None
     item.oauth_state = None
+
+    if package_setup:
+        identity.setdefault("organization_id", external_org_id)
+        account = _new_salesforce_workspace(identity, db)
+        provisioned, provision_error = await _populate_salesforce_costpilot_credential(
+            instance_url=item.instance_url,
+            access_token=access_token,
+            secret_key=account.secret_key,
+        )
+        item.workspace_id = account.workspace_id
+        item.status = "connected" if provisioned else "error"
+        item.last_success_at = datetime.utcnow() if provisioned else None
+        item.last_error = None if provisioned else provision_error
+        db.commit()
+        if not provisioned:
+            return RedirectResponse(
+                url=(
+                    f"/salesforce-setup.html?status=error"
+                    f"&reason=credential_provisioning&connection_id={item.id}"
+                )
+            )
+        return RedirectResponse(
+            url=(
+                f"/salesforce-setup.html?status=success"
+                f"&workspace_id={quote(account.workspace_id)}"
+                f"&org_id={quote(external_org_id)}"
+            )
+        )
+
     item.status = "connected"
     item.last_success_at = datetime.utcnow()
     item.last_error = None

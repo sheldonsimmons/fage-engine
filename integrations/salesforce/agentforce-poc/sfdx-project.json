@@ -3,10 +3,23 @@
     {
       "path": "force-app",
       "default": true
+    },
+    {
+      "versionName": "ver 0.1",
+      "versionNumber": "0.1.0.NEXT",
+      "path": "package-source",
+      "default": false,
+      "package": "CostPilot Salesforce Connector",
+      "versionDescription": "CostPilot governed AI routing, attribution, and Agentforce or Flow actions."
     }
   ],
   "name": "costpilot-agentforce-poc",
   "namespace": "",
   "sfdcLoginUrl": "https://test.salesforce.com",
-  "sourceApiVersion": "65.0"
+  "sourceApiVersion": "67.0",
+  "packageAliases": {
+    "CostPilot Salesforce Connector": "0Hofj0000002fWvCAI",
+    "CostPilot Salesforce Connector@0.1.0-1": "04tfj000000OgpJAAS",
+    "CostPilot Salesforce Connector@0.1.0-2": "04tfj000000OhevAAC"
+  }
 }
