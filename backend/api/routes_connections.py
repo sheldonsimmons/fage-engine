@@ -63,6 +63,17 @@ class MappingUpdate(BaseModel):
     mapping: dict
 
 
+class AiEntryPointSelection(BaseModel):
+    kind: str = Field(pattern="^(agent|flow)$")
+    id: str = Field(default="", max_length=160)
+    name: str = Field(min_length=1, max_length=240)
+    label: str = Field(default="", max_length=240)
+
+
+class AiEntryPointSelectionUpdate(BaseModel):
+    entries: list[AiEntryPointSelection] = Field(default_factory=list, max_length=250)
+
+
 def _new_pkce_pair() -> tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(
@@ -508,6 +519,7 @@ async def salesforce_package_status(
         "status": item.status,
         "connected": item.status == "connected",
         "workspace_id": item.workspace_id if item.status == "connected" else None,
+        "connection_id": item.id if item.status == "connected" else None,
         "last_error": item.last_error,
     }
 
@@ -979,8 +991,42 @@ async def discover_salesforce_ai_entry_points(
         "connection_id": item.id,
         "agents": agents,
         "flows": flows,
+        "selected": (
+            json.loads(item.mapping_json or "{}").get("selected_ai_entry_points", [])
+        ),
         "warnings": warnings,
         "discovered_at": datetime.utcnow().isoformat(),
+    }
+
+
+@router.post("/{connection_id}/ai-entry-points/selection")
+def save_salesforce_ai_entry_points(
+    connection_id: int,
+    payload: AiEntryPointSelectionUpdate,
+    db: Session = Depends(get_db),
+):
+    """Persist the Agentforce agents and Flows approved during package setup."""
+    item = _get_connection(db, connection_id)
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=400, detail="AI entry-point selection currently supports Salesforce")
+    mapping = json.loads(item.mapping_json or "{}")
+    mapping["selected_ai_entry_points"] = [
+        {
+            "kind": entry.kind,
+            "id": entry.id,
+            "name": entry.name,
+            "label": entry.label or entry.name,
+            "activation_status": "action_required",
+        }
+        for entry in payload.entries
+    ]
+    mapping["entry_points_selected_at"] = datetime.utcnow().isoformat()
+    item.mapping_json = json.dumps(mapping)
+    db.commit()
+    return {
+        "connection_id": item.id,
+        "selected": mapping["selected_ai_entry_points"],
+        "count": len(mapping["selected_ai_entry_points"]),
     }
 
 

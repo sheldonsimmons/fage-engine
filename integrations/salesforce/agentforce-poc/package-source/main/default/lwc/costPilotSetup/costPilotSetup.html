@@ -2,61 +2,329 @@
     <lightning-card title="CostPilot Setup" icon-name="utility:setup">
         <div class="shell">
             <template lwc:if={loading}>
-                <lightning-spinner alternative-text="Loading CostPilot setup"></lightning-spinner>
-            </template>
-            <template lwc:elseif={errorMessage}>
-                <div class="notice error" role="alert">
-                    <strong>Setup could not load.</strong>
-                    <span>{errorMessage}</span>
+                <div class="loading">
+                    <lightning-spinner alternative-text="Loading CostPilot setup"></lightning-spinner>
+                    <p>Checking the Salesforce connection…</p>
                 </div>
             </template>
+
             <template lwc:elseif={ready}>
-                <div class="intro">
+                <header class="intro">
                     <p class="eyebrow">Secure post-install setup</p>
                     <h1>Connect {state.orgName} to CostPilot</h1>
                     <p>
-                        Authorize this Salesforce organization, create or select its
-                        CostPilot workspace, and activate the packaged encrypted connection.
-                        No API key, Apex, CLI, or Named Credential editing is required.
+                        Connect this organization, choose which AI entry points CostPilot
+                        should govern, and complete one guided test.
                     </p>
-                </div>
+                </header>
 
-                <ol class="steps">
-                    <li class="active">
-                        <span>1</span>
-                        <div><strong>Connect</strong><small>Authorize this Salesforce organization</small></div>
-                    </li>
-                    <li>
-                        <span>2</span>
-                        <div><strong>Select AI entry points</strong><small>Choose Agentforce agents and Flows</small></div>
-                    </li>
-                    <li>
-                        <span>3</span>
-                        <div><strong>Verify and activate</strong><small>Send one governed test request</small></div>
-                    </li>
-                </ol>
+                <nav class="steps" aria-label="CostPilot setup progress">
+                    <button
+                        class={stepOneClass}
+                        type="button"
+                        data-step="1"
+                        onclick={openStep}>
+                        <span class="step-number">1</span>
+                        <span>
+                            <strong>Connect</strong>
+                            <small>Authorize Salesforce</small>
+                        </span>
+                    </button>
+                    <button
+                        class={stepTwoClass}
+                        type="button"
+                        data-step="2"
+                        onclick={openStep}
+                        disabled={loading}>
+                        <span class="step-number">2</span>
+                        <span>
+                            <strong>Select AI entry points</strong>
+                            <small>Choose agents and Flows</small>
+                        </span>
+                    </button>
+                    <button
+                        class={stepThreeClass}
+                        type="button"
+                        data-step="3"
+                        onclick={openStep}
+                        disabled={continueDisabled}>
+                        <span class="step-number">3</span>
+                        <span>
+                            <strong>Activate</strong>
+                            <small>Add the packaged action</small>
+                        </span>
+                    </button>
+                </nav>
 
-                <section class="connection">
-                    <div>
-                        <p class="label">Salesforce organization</p>
-                        <strong>{state.orgName}</strong>
-                        <p class="meta">{environmentLabel} · {state.orgId}</p>
+                <template lwc:if={errorMessage}>
+                    <div class="notice error section-gap" role="alert">
+                        <strong>CostPilot needs attention</strong>
+                        <span>{errorMessage}</span>
                     </div>
-                    <lightning-button
-                        variant="brand"
-                        label="Connect to CostPilot"
-                        onclick={connect}>
-                    </lightning-button>
-                </section>
+                </template>
 
-                <p class="security">
-                    Salesforce will ask an administrator to approve API access. CostPilot
-                    then stores a revocable workspace credential in Salesforce encrypted storage.
-                </p>
+                <template lwc:if={showConnect}>
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="label">Salesforce organization</p>
+                                <h2>{state.orgName}</h2>
+                                <p class="meta">{environmentLabel} · {state.orgId}</p>
+                            </div>
+                            <template lwc:if={connected}>
+                                <span class="status success">Connected</span>
+                            </template>
+                            <template lwc:else>
+                                <span class="status neutral">Not connected</span>
+                            </template>
+                        </div>
+
+                        <template lwc:if={connected}>
+                            <div class="notice success">
+                                <strong>Connection verified</strong>
+                                <span>Workspace {state.workspaceId} is ready.</span>
+                            </div>
+                            <div class="actions">
+                                <lightning-button
+                                    variant="brand"
+                                    label="Choose agents and Flows"
+                                    data-step="2"
+                                    onclick={openStep}>
+                                </lightning-button>
+                                <lightning-button
+                                    label="Refresh connection"
+                                    onclick={refreshConnection}>
+                                </lightning-button>
+                            </div>
+                        </template>
+                        <template lwc:else>
+                            <p class="body-copy">
+                                Salesforce will ask an administrator to approve API access.
+                                CostPilot stores the resulting workspace credential in encrypted
+                                Salesforce storage.
+                            </p>
+                            <div class="actions">
+                                <lightning-button
+                                    variant="brand"
+                                    label="Connect to CostPilot"
+                                    onclick={connect}>
+                                </lightning-button>
+                                <lightning-button
+                                    label="I finished authorization — refresh"
+                                    onclick={refreshConnection}>
+                                </lightning-button>
+                            </div>
+                        </template>
+                    </section>
+                </template>
+
+                <template lwc:if={showEntryPoints}>
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="label">Step 2</p>
+                                <h2>Which AI entry points should CostPilot govern?</h2>
+                                <p class="meta">
+                                    Select every Agentforce agent or Flow that sends work to an AI model.
+                                </p>
+                            </div>
+                            <span class="selection-count">{selectionSummary}</span>
+                        </div>
+
+                        <template for:each={warnings} for:item="warning">
+                            <div class="notice warning compact" role="status" key={warning}>
+                                <strong>Discovery note</strong>
+                                <span>{warning}</span>
+                            </div>
+                        </template>
+
+                        <div class="entry-grid">
+                            <article class="entry-section">
+                                <div class="entry-heading">
+                                    <div>
+                                        <h3>Agentforce agents</h3>
+                                        <p>Agents that can use the Route Through CostPilot action.</p>
+                                    </div>
+                                    <span class="kind-badge">Agentforce</span>
+                                </div>
+
+                                <template lwc:if={hasAgents}>
+                                    <div class="entry-list">
+                                        <template for:each={agents} for:item="agent">
+                                            <div class="entry-row" key={agent.id}>
+                                                <lightning-input
+                                                    type="checkbox"
+                                                    label={agent.label}
+                                                    checked={agent.selected}
+                                                    data-kind="agent"
+                                                    data-id={agent.id}
+                                                    onchange={handleSelection}>
+                                                </lightning-input>
+                                                <span class="entry-meta">{agent.status}</span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template lwc:else>
+                                    <p class="empty">
+                                        No agents were returned by Salesforce metadata discovery.
+                                        You can still add one by name.
+                                    </p>
+                                </template>
+
+                                <div class="manual-entry">
+                                    <lightning-input
+                                        type="text"
+                                        label="Agent not listed?"
+                                        placeholder="Enter the Agentforce agent name"
+                                        value={manualAgentName}
+                                        data-kind="agent"
+                                        onchange={handleManualName}>
+                                    </lightning-input>
+                                    <lightning-button
+                                        label="Add agent"
+                                        data-kind="agent"
+                                        onclick={addManualEntry}>
+                                    </lightning-button>
+                                </div>
+                            </article>
+
+                            <article class="entry-section">
+                                <div class="entry-heading">
+                                    <div>
+                                        <h3>Salesforce Flows</h3>
+                                        <p>Flows that invoke AI and should route that request through CostPilot.</p>
+                                    </div>
+                                    <span class="kind-badge">Flow</span>
+                                </div>
+
+                                <template lwc:if={hasFlows}>
+                                    <div class="entry-list">
+                                        <template for:each={flows} for:item="flow">
+                                            <div class="entry-row" key={flow.id}>
+                                                <lightning-input
+                                                    type="checkbox"
+                                                    label={flow.label}
+                                                    checked={flow.selected}
+                                                    data-kind="flow"
+                                                    data-id={flow.id}
+                                                    onchange={handleSelection}>
+                                                </lightning-input>
+                                                <span class="entry-meta">{flow.processType}</span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template lwc:else>
+                                    <p class="empty">
+                                        No eligible Flows were returned. Add one by name if Salesforce
+                                        metadata access is limited.
+                                    </p>
+                                </template>
+
+                                <div class="manual-entry">
+                                    <lightning-input
+                                        type="text"
+                                        label="Flow not listed?"
+                                        placeholder="Enter the Flow label"
+                                        value={manualFlowName}
+                                        data-kind="flow"
+                                        onchange={handleManualName}>
+                                    </lightning-input>
+                                    <lightning-button
+                                        label="Add Flow"
+                                        data-kind="flow"
+                                        onclick={addManualEntry}>
+                                    </lightning-button>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="footer-actions">
+                            <p>
+                                Selection does not change an agent or Flow. It records what your
+                                administrator intends to govern.
+                            </p>
+                            <lightning-button
+                                variant="brand"
+                                label="Save selections and continue"
+                                disabled={continueDisabled}
+                                onclick={continueToActivation}>
+                            </lightning-button>
+                        </div>
+                    </section>
+                </template>
+
+                <template lwc:if={showActivation}>
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="label">Final Salesforce step</p>
+                                <h2>Add Route Through CostPilot</h2>
+                                <p class="meta">
+                                    Salesforce requires an administrator to place packaged actions
+                                    into the selected agent topics or Flows.
+                                </p>
+                            </div>
+                            <span class="status success">Selections saved</span>
+                        </div>
+
+                        <template lwc:if={hasSelectedAgents}>
+                            <article class="instruction-card">
+                                <h3>For each selected Agentforce agent</h3>
+                                <ol>
+                                    <li>Open the agent in Agentforce Builder.</li>
+                                    <li>Open the topic that handles governed AI work.</li>
+                                    <li>Select <strong>Add Action → Apex → Route Through CostPilot</strong>.</li>
+                                    <li>Map the request and record context, then use the returned AI Response.</li>
+                                </ol>
+                                <div class="selected-chips">
+                                    <template for:each={selectedAgents} for:item="agent">
+                                        <span class="selected-chip" key={agent.id}>{agent.label}</span>
+                                    </template>
+                                </div>
+                            </article>
+                        </template>
+
+                        <template lwc:if={hasSelectedFlows}>
+                            <article class="instruction-card">
+                                <h3>For each selected Flow</h3>
+                                <ol>
+                                    <li>Open the Flow in Flow Builder.</li>
+                                    <li>Add an <strong>Action</strong> element where the AI request should run.</li>
+                                    <li>Choose <strong>Route Through CostPilot</strong>.</li>
+                                    <li>Map the prompt, record ID, object name, agent name, and department.</li>
+                                </ol>
+                                <div class="selected-chips">
+                                    <template for:each={selectedFlows} for:item="flow">
+                                        <span class="selected-chip" key={flow.id}>{flow.label}</span>
+                                    </template>
+                                </div>
+                            </article>
+                        </template>
+
+                        <div class="notice info">
+                            <strong>Why this is the only manual step</strong>
+                            <span>
+                                Salesforce does not allow an installed package to silently alter an
+                                existing agent topic or active Flow. The action itself is already
+                                included in the package.
+                            </span>
+                        </div>
+
+                        <div class="actions">
+                            <lightning-button
+                                label="Back to selections"
+                                onclick={backToEntryPoints}>
+                            </lightning-button>
+                        </div>
+                    </section>
+                </template>
             </template>
+
             <template lwc:else>
                 <div class="notice error" role="alert">
-                    <strong>Setup details are unavailable.</strong>
+                    <strong>Setup details are unavailable</strong>
                     <span>Refresh this tab. If the problem continues, contact your Salesforce administrator.</span>
                 </div>
             </template>

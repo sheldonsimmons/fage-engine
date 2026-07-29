@@ -1,9 +1,11 @@
 import asyncio
+import json
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.routes_connections import (
+    AiEntryPointSelectionUpdate,
     ConnectionCreate,
     MappingUpdate,
     _merge_salesforce_package_connection,
@@ -15,6 +17,7 @@ from api.routes_connections import (
     list_connections,
     recommend_business_mapping,
     recommend_child_relationships,
+    save_salesforce_ai_entry_points,
     salesforce_package_status,
 )
 from fastapi import HTTPException
@@ -157,6 +160,50 @@ def test_salesforce_package_status_prefers_a_working_connection():
     assert status["connected"] is True
     assert status["status"] == "connected"
     assert status["workspace_id"] == "WORKSPACE-A"
+    assert status["connection_id"] is not None
+
+
+def test_salesforce_package_saves_selected_agents_and_flows():
+    db = _session()
+    item = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Salesforce package setup 00D000000000001AAA",
+        status="connected",
+        mapping_json='{"package_setup": true}',
+    )
+    db.add(item)
+    db.commit()
+
+    result = save_salesforce_ai_entry_points(
+        item.id,
+        AiEntryPointSelectionUpdate(
+            entries=[
+                {
+                    "kind": "agent",
+                    "id": "0Xx000000000001",
+                    "name": "Sales_Assistant",
+                    "label": "Sales Assistant",
+                },
+                {
+                    "kind": "flow",
+                    "id": "300000000000001",
+                    "name": "Draft_Follow_Up",
+                    "label": "Draft Follow Up",
+                },
+            ]
+        ),
+        db=db,
+    )
+
+    db.refresh(item)
+    mapping = json.loads(item.mapping_json)
+    assert result["count"] == 2
+    assert mapping["package_setup"] is True
+    assert [entry["kind"] for entry in mapping["selected_ai_entry_points"]] == [
+        "agent",
+        "flow",
+    ]
 
 
 def test_salesforce_package_setup_populates_the_packaged_named_principal(monkeypatch):
