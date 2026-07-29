@@ -1,7 +1,55 @@
 (() => {
+  const personaNames = [
+    ["Maya Chen", "maya.chen@example.com"],
+    ["Jordan Brooks", "jordan.brooks@example.com"],
+    ["Elena Martinez", "elena.martinez@example.com"],
+    ["Noah Williams", "noah.williams@example.com"],
+    ["Marcus Reed", "marcus.reed@example.com"],
+    ["Priya Shah", "priya.shah@example.com"],
+    ["Alex Morgan", "alex.morgan@example.com"],
+    ["Olivia Bennett", "olivia.bennett@example.com"],
+    ["David Kim", "david.kim@example.com"],
+    ["Avery Johnson", "avery.johnson@example.com"],
+  ];
+
+  const roleByDepartment = {
+    Support: ["Support Manager", "Customer Support Specialist"],
+    Sales: ["Account Executive", "Sales Operations Analyst"],
+    Operations: ["Operations Manager", "Business Operations Analyst"],
+    Finance: ["Finance Analyst", "Billing Operations Manager"],
+    Marketing: ["Marketing Manager", "Content Operations Specialist"],
+    Engineering: ["Engineering Manager", "Quality Systems Analyst"],
+    Legal: ["Legal Operations Manager", "Contract Analyst"],
+  };
+
+  function createProfile(config) {
+    let personIndex = 0;
+    const people = [];
+    Object.entries(config.departments).forEach(([department, agents]) => {
+      agents.forEach((agent, agentIndex) => {
+        const [name, email] = personaNames[personIndex % personaNames.length];
+        const roles = roleByDepartment[department] || ["Business Manager", "Business Analyst"];
+        people.push({
+          externalId: `${config.workspaceId}-USER-${String(personIndex + 1).padStart(3, "0")}`,
+          name,
+          email,
+          role: roles[agentIndex % roles.length],
+          department,
+          team: config.teams[department] || department,
+          agent,
+          platform: config.platformsByDepartment?.[department]?.[agentIndex]
+            || config.platforms[personIndex % config.platforms.length],
+        });
+        personIndex += 1;
+      });
+    });
+    return { ...config, people };
+  }
+
   const profileMap = {
-    enterpriseSaas: {
+    enterpriseSaas: createProfile({
       label: "Enterprise SaaS",
+      workspaceId: "SIM-ENTERPRISE-SAAS",
       platforms: ["Salesforce Agentforce", "Salesforce Service Cloud", "Zendesk", "Slack"],
       departments: {
         Support: ["Support Resolution Agent", "Case Triage Agent"],
@@ -10,9 +58,32 @@
         Finance: ["Invoice Review Agent", "Spend Review Agent"],
         Marketing: ["Campaign Brief Agent", "Content QA Agent"],
       },
-    },
-    retailServices: {
+      teams: {
+        Support: "Customer Support",
+        Sales: "Enterprise Sales",
+        Operations: "Business Operations",
+        Finance: "Financial Operations",
+        Marketing: "Demand Generation",
+      },
+      platformsByDepartment: {
+        Support: ["Salesforce Service Cloud", "Zendesk"],
+        Sales: ["Salesforce Agentforce", "Slack"],
+        Operations: ["Slack", "Salesforce Agentforce"],
+        Finance: ["Salesforce Agentforce", "Slack"],
+        Marketing: ["Slack", "Salesforce Agentforce"],
+      },
+      contexts: [
+        { id: "ACME-FY27", type: "Opportunity", account: "Acme Corporation", name: "FY27 Renewal", department: "Sales" },
+        { id: "NORTHSTAR-ESC", type: "Case", account: "Northstar Health", name: "Support Escalation", department: "Support" },
+        { id: "MERIDIAN-EXP", type: "Account", account: "Meridian Retail", name: "Expansion Plan", department: "Sales" },
+        { id: "BLUEPEAK-INT", type: "Project", account: "BluePeak Consulting", name: "Integration Rollout", department: "Operations" },
+        { id: "HORIZON-INV", type: "Invoice", account: "Horizon Manufacturing", name: "Invoice Review", department: "Finance" },
+        { id: "SUMMIT-CAM", type: "Campaign", account: "Summit Financial", name: "Customer Campaign", department: "Marketing" },
+      ],
+    }),
+    retailServices: createProfile({
       label: "Retail Services",
+      workspaceId: "SIM-RETAIL-SERVICES",
       platforms: ["Salesforce Commerce", "Zendesk", "Shopify", "ServiceNow"],
       departments: {
         Support: ["Returns Agent", "Customer Care Agent"],
@@ -21,9 +92,32 @@
         Finance: ["Refund Review Agent", "Chargeback Agent"],
         Marketing: ["Promotion Agent", "Customer Segment Agent"],
       },
-    },
-    manufacturing: {
+      teams: {
+        Support: "Customer Care",
+        Sales: "Retail Sales",
+        Operations: "Store Operations",
+        Finance: "Retail Finance",
+        Marketing: "Customer Marketing",
+      },
+      platformsByDepartment: {
+        Support: ["Zendesk", "Salesforce Commerce"],
+        Sales: ["Salesforce Commerce", "Shopify"],
+        Operations: ["ServiceNow", "Shopify"],
+        Finance: ["Salesforce Commerce", "ServiceNow"],
+        Marketing: ["Salesforce Commerce", "Shopify"],
+      },
+      contexts: [
+        { id: "STORE-1042", type: "Store", account: "Downtown Flagship", name: "Store Operations", department: "Operations" },
+        { id: "ORDER-88219", type: "Order", account: "Jordan Customer", name: "Return and Refund", department: "Support" },
+        { id: "LOYALTY-Q3", type: "Campaign", account: "Loyalty Members", name: "Q3 Loyalty Offer", department: "Marketing" },
+        { id: "INVENTORY-WEST", type: "Inventory", account: "West Region", name: "Inventory Reconciliation", department: "Operations" },
+        { id: "CHARGEBACK-771", type: "Dispute", account: "Online Store", name: "Chargeback Review", department: "Finance" },
+        { id: "EXPANSION-NORTH", type: "Account", account: "North Region", name: "Store Expansion", department: "Sales" },
+      ],
+    }),
+    manufacturing: createProfile({
       label: "Manufacturing",
+      workspaceId: "SIM-MANUFACTURING",
       platforms: ["ServiceNow", "IoT Ops", "SAP", "Salesforce Field Service"],
       departments: {
         Support: ["Warranty Agent", "Field Support Agent"],
@@ -32,9 +126,32 @@
         Finance: ["Vendor Invoice Agent", "Capex Review Agent"],
         Engineering: ["Quality Review Agent", "Sensor Summary Agent"],
       },
-    },
-    professionalServices: {
+      teams: {
+        Support: "Field Service",
+        Sales: "Channel Sales",
+        Operations: "Plant Operations",
+        Finance: "Manufacturing Finance",
+        Engineering: "Quality Engineering",
+      },
+      platformsByDepartment: {
+        Support: ["Salesforce Field Service", "ServiceNow"],
+        Sales: ["Salesforce Field Service", "SAP"],
+        Operations: ["ServiceNow", "SAP"],
+        Finance: ["SAP", "ServiceNow"],
+        Engineering: ["SAP", "IoT Ops"],
+      },
+      contexts: [
+        { id: "PLANT-7-MAINT", type: "change_request", account: "Plant 7", name: "Equipment Maintenance", department: "Operations" },
+        { id: "DIST-QUOTE-84", type: "Quote", account: "Central Distribution", name: "Distributor Quote", department: "Sales" },
+        { id: "WARRANTY-552", type: "Case", account: "Apex Industrial", name: "Warranty Claim", department: "Support" },
+        { id: "QUALITY-LINE4", type: "Quality Review", account: "Production Line 4", name: "Defect Review", department: "Engineering" },
+        { id: "VENDOR-INV-61", type: "Invoice", account: "Titan Components", name: "Vendor Invoice", department: "Finance" },
+        { id: "SENSOR-PRESS9", type: "Asset", account: "Press 9", name: "Sensor Analysis", department: "Engineering" },
+      ],
+    }),
+    professionalServices: createProfile({
       label: "Professional Services",
+      workspaceId: "SIM-PROFESSIONAL-SERVICES",
       platforms: ["Salesforce", "HubSpot", "Microsoft Teams", "NetSuite"],
       departments: {
         Support: ["Client Request Agent", "Delivery Desk Agent"],
@@ -43,21 +160,59 @@
         Finance: ["Billing Agent", "Revenue Forecast Agent"],
         Legal: ["Contract Intake Agent", "Engagement Terms Agent"],
       },
-    },
+      teams: {
+        Support: "Client Success",
+        Sales: "Business Development",
+        Operations: "Engagement Operations",
+        Finance: "Engagement Finance",
+        Legal: "Legal Operations",
+      },
+      platformsByDepartment: {
+        Support: ["Microsoft Teams", "Salesforce"],
+        Sales: ["Salesforce", "HubSpot"],
+        Operations: ["Microsoft Teams", "Salesforce"],
+        Finance: ["NetSuite", "Salesforce"],
+        Legal: ["Salesforce", "Microsoft Teams"],
+      },
+      contexts: [
+        { id: "ACME-TRANSFORM", type: "Engagement", account: "Acme Corporation", name: "Transformation Program", department: "Operations" },
+        { id: "NORTHSTAR-AUDIT", type: "Matter", account: "Northstar Health", name: "Compliance Review", department: "Legal" },
+        { id: "MERIDIAN-PROP", type: "Opportunity", account: "Meridian Retail", name: "Advisory Proposal", department: "Sales" },
+        { id: "BLUEPEAK-BILL", type: "Invoice", account: "BluePeak Consulting", name: "Billing Review", department: "Finance" },
+        { id: "HORIZON-DELIV", type: "Project", account: "Horizon Manufacturing", name: "Delivery Plan", department: "Support" },
+        { id: "SUMMIT-STAFF", type: "Project", account: "Summit Financial", name: "Staffing Plan", department: "Operations" },
+      ],
+    }),
   };
 
   const styleLabels = {
-    balanced: "Balanced",
-    savings: "Savings-Heavy",
-    risk: "Risk-Heavy",
-    pruning: "Pruning Showcase",
+    typical: "Typical Business Day",
+    savings: "Savings and Pruning",
+    governance: "Governance Test",
+    scale: "Scale Test",
   };
 
-  const styleMix = {
-    balanced: ["routine", "routine", "moderate", "pruning", "pruning", "risk", "blocked"],
-    savings: ["routine", "routine", "routine", "routine", "moderate", "pruning", "pruning"],
-    risk: ["moderate", "risk", "risk", "risk", "blocked", "blocked", "pruning"],
-    pruning: ["pruning", "pruning", "pruning", "pruning", "routine", "moderate", "risk"],
+  const scenarioCounts = {
+    typical: {
+      25: { routine: 18, pruning: 4, moderate: 1, risk: 1, blocked: 1 },
+      50: { routine: 36, pruning: 8, moderate: 4, risk: 1, blocked: 1 },
+      100: { routine: 72, pruning: 16, moderate: 8, risk: 2, blocked: 2 },
+    },
+    savings: {
+      25: { routine: 18, pruning: 6, moderate: 1, risk: 0, blocked: 0 },
+      50: { routine: 36, pruning: 12, moderate: 2, risk: 0, blocked: 0 },
+      100: { routine: 72, pruning: 24, moderate: 4, risk: 0, blocked: 0 },
+    },
+    governance: {
+      25: { routine: 15, pruning: 4, moderate: 3, risk: 2, blocked: 1 },
+      50: { routine: 30, pruning: 8, moderate: 6, risk: 4, blocked: 2 },
+      100: { routine: 60, pruning: 16, moderate: 12, risk: 8, blocked: 4 },
+    },
+    scale: {
+      25: { routine: 20, pruning: 3, moderate: 2, risk: 0, blocked: 0 },
+      50: { routine: 40, pruning: 6, moderate: 4, risk: 0, blocked: 0 },
+      100: { routine: 80, pruning: 12, moderate: 8, risk: 0, blocked: 0 },
+    },
   };
 
   const subjects = {
@@ -95,7 +250,7 @@
 
   const state = {
     size: 50,
-    style: "balanced",
+    style: "typical",
     running: false,
     stopRequested: false,
     totals: null,
@@ -127,10 +282,6 @@
     };
   }
 
-  function pick(list) {
-    return list[Math.floor(Math.random() * list.length)];
-  }
-
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -154,13 +305,48 @@
     return "scout";
   }
 
-  function deptAgent(profile) {
-    const departments = Object.keys(profile.departments);
-    const department = pick(departments);
+  function deterministicShuffle(values, seed) {
+    const result = [...values];
+    let value = seed || 1;
+    for (let index = result.length - 1; index > 0; index -= 1) {
+      value = (value * 9301 + 49297) % 233280;
+      const swapIndex = Math.floor((value / 233280) * (index + 1));
+      [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+    }
+    return result;
+  }
+
+  function buildScenarioTypes() {
+    const modeCounts = scenarioCounts[state.style] || scenarioCounts.typical;
+    const counts = { ...(modeCounts[state.size] || modeCounts[50]) };
+    const includeBlocked = $("includeBlockedTest")?.checked !== false;
+    if (!includeBlocked && counts.blocked) {
+      counts.routine += counts.blocked;
+      counts.blocked = 0;
+    }
+
+    const types = [];
+    ["routine", "pruning", "moderate", "risk", "blocked"].forEach(type => {
+      for (let index = 0; index < (counts[type] || 0); index += 1) {
+        types.push(type);
+      }
+    });
+    return deterministicShuffle(types, state.size + state.style.length * 31);
+  }
+
+  function buildBusinessContext(profile, index) {
+    const person = profile.people[index % profile.people.length];
+    const matchingContexts = profile.contexts.filter(item => item.department === person.department);
+    const availableContexts = matchingContexts.length ? matchingContexts : profile.contexts;
+    const work = availableContexts[Math.floor(index / profile.people.length) % availableContexts.length];
     return {
-      department,
-      agent: pick(profile.departments[department]),
-      platform: pick(profile.platforms),
+      department: person.department,
+      team: person.team,
+      agent: person.agent,
+      platform: person.platform,
+      person,
+      work,
+      index: index + 1,
     };
   }
 
@@ -395,14 +581,15 @@
 
   function buildPlan() {
     const profile = profileMap[$("companyProfile").value] || profileMap.enterpriseSaas;
-    const mix = styleMix[state.style] || styleMix.balanced;
-    return Array.from({ length: state.size }, (_, index) => {
-      const context = { ...deptAgent(profile), index: index + 1 };
-      const type = pick(mix);
-      const subject = pick(subjects[type]);
+    const scenarioTypes = buildScenarioTypes();
+    return scenarioTypes.map((type, index) => {
+      const context = buildBusinessContext(profile, index);
+      const subjectOptions = subjects[type];
+      const subject = subjectOptions[index % subjectOptions.length];
       return {
         type,
         subject,
+        workspaceId: profile.workspaceId,
         ...context,
         text: `Subject: ${subject}\n\n${buildText(type, context)}`,
       };
@@ -414,15 +601,42 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: item.text,
+        contract_version: "2026-07-26",
+        mode: "control",
+        source: {
+          platform: item.platform,
+          workspace_id: item.workspaceId,
+          agent_name: item.agent,
+          department: item.department,
+          agent_department: item.team,
+          charged_department: item.department,
+        },
+        actor: {
+          external_id: item.person.externalId,
+          name: item.person.name,
+          email: item.person.email,
+          role: item.person.role,
+          status: "active",
+          can_use_ai: true,
+          department: item.team,
+        },
+        work: {
+          external_id: item.work.id,
+          type: item.work.type,
+          name: `${item.work.account} — ${item.work.name}`,
+          sync_if_missing: true,
+          department: item.work.department,
+        },
+        request: {
+          task: item.subject,
+          content: item.text,
+          payload_type: "text",
+          auto_prune: true,
+        },
         department: item.department,
-        auto_prune: true,
-        agent_name: item.agent,
-        source_platform: item.platform,
         voice_guard_processed: false,
         is_test: false,
         synthetic_simulation: true,
-        payload_type: "text",
       }),
     });
 
@@ -452,7 +666,7 @@
     const progress = state.size > 0 ? Math.round((t.completed / state.size) * 100) : 0;
 
     $("sentCount").textContent = intFmt.format(t.sent);
-    $("targetCount").textContent = `of ${state.size} requests`;
+    $("targetCount").textContent = `of ${state.size} activity records`;
     $("economyCount").textContent = intFmt.format(economy);
     $("prunedCount").textContent = intFmt.format(t.pruned);
     $("tokensSavedCount").textContent = intFmt.format(t.tokensSaved);
@@ -501,8 +715,9 @@
     node.innerHTML = `
       <div class="activity-pill ${cls}">${escapeHtml(label)}</div>
       <div class="activity-main">
-        <div class="activity-title">${escapeHtml(item.subject)}</div>
-        <div class="activity-meta">${escapeHtml(item.agent)} · ${escapeHtml(item.department)} · ${escapeHtml(item.platform)} · ${escapeHtml(outcome)}</div>
+        <div class="activity-title">${escapeHtml(item.person.name)} · ${escapeHtml(item.person.role)} · ${escapeHtml(item.subject)}</div>
+        <div class="activity-meta">${escapeHtml(item.department)} / ${escapeHtml(item.team)} · ${escapeHtml(item.agent)} · ${escapeHtml(item.platform)}</div>
+        <div class="activity-meta">${escapeHtml(item.work.account)} → ${escapeHtml(item.work.name)} · ${escapeHtml(outcome)}</div>
       </div>
       <div class="activity-cost">${blocked || error ? "-" : moneyFmt.format(cost)}</div>
     `;
@@ -565,6 +780,7 @@
     $("runSimulationBtn").disabled = isRunning;
     $("stopSimulationBtn").disabled = !isRunning;
     $("companyProfile").disabled = isRunning;
+    $("includeBlockedTest").disabled = isRunning;
     document.querySelectorAll(".choice-btn").forEach(btn => {
       btn.disabled = isRunning;
     });
@@ -578,7 +794,7 @@
     updateCounters();
     state.stopRequested = false;
     setRunning(true);
-    setStatus("Running", `Sending ${state.size} synthetic requests in small waves.`);
+    setStatus("Running", `Sending ${state.size} synthetic AI activity records in small waves.`);
 
     const plan = buildPlan();
     const waveSize = 5;
@@ -586,7 +802,7 @@
     for (let start = 0; start < plan.length; start += waveSize) {
       if (state.stopRequested) break;
       const wave = plan.slice(start, start + waveSize);
-      setStatus("Running", `Processing requests ${start + 1}-${Math.min(start + waveSize, plan.length)}.`);
+      setStatus("Running", `Processing activity records ${start + 1}-${Math.min(start + waveSize, plan.length)}.`);
       await Promise.all(wave.map(sendOne));
       if (start + waveSize < plan.length) {
         await delay(550 + Math.floor(Math.random() * 350));
@@ -606,9 +822,9 @@
 
   function updateLabels() {
     const profile = profileMap[$("companyProfile").value] || profileMap.enterpriseSaas;
-    $("styleLabel").textContent = styleLabels[state.style] || "Balanced";
+    $("styleLabel").textContent = styleLabels[state.style] || "Typical Business Day";
     $("profileLabel").textContent = profile.label;
-    $("targetCount").textContent = `of ${state.size} requests`;
+    $("targetCount").textContent = `of ${state.size} activity records`;
   }
 
   function bindEvents() {
@@ -624,7 +840,7 @@
     $("styleChoices").addEventListener("click", event => {
       const btn = event.target.closest("[data-style]");
       if (!btn || state.running) return;
-      state.style = btn.dataset.style || "balanced";
+      state.style = btn.dataset.style || "typical";
       updateChoice("styleChoices", "style", state.style);
       updateLabels();
     });

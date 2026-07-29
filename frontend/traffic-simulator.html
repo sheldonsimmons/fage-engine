@@ -150,6 +150,41 @@
       border-color: var(--accent);
     }
 
+    .toggle-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      cursor: pointer;
+      padding: 12px;
+    }
+
+    .toggle-row input {
+      width: 18px;
+      height: 18px;
+      margin: 1px 0 0;
+      accent-color: var(--accent);
+      flex: 0 0 auto;
+    }
+
+    .toggle-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .toggle-copy small {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
     .choice-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -495,8 +530,8 @@
       <div class="sim-panel">
         <div class="section-label">Recommended path</div>
         <p class="sim-copy">
-          Use <strong>Full Demo</strong> with <strong>Balanced</strong> traffic to show savings,
-          pruning, escalation, blocked requests, and reporting in one run.
+          Use <strong>50 records</strong> with <strong>Typical Business Day</strong> to create a
+          believable mix of named employees, departments, agents, and customer work.
         </p>
       </div>
     </section>
@@ -518,46 +553,50 @@
           <div class="field">
             <label>Simulation size</label>
             <div class="choice-grid" id="sizeChoices">
-              <button class="choice-btn" type="button" data-size="10">
-                <span class="choice-title">Quick</span>
-                <span class="choice-sub">10 requests</span>
-              </button>
               <button class="choice-btn" type="button" data-size="25">
-                <span class="choice-title">Standard</span>
-                <span class="choice-sub">25 requests</span>
+                <span class="choice-title">25 records</span>
+                <span class="choice-sub">Quick pilot validation</span>
               </button>
               <button class="choice-btn active" type="button" data-size="50">
-                <span class="choice-title">Full Demo</span>
-                <span class="choice-sub">50 requests</span>
+                <span class="choice-title">50 records</span>
+                <span class="choice-sub">Recommended business demo</span>
               </button>
               <button class="choice-btn" type="button" data-size="100">
-                <span class="choice-title">Heavy Run</span>
-                <span class="choice-sub">100 requests</span>
+                <span class="choice-title">100 records</span>
+                <span class="choice-sub">Larger reporting sample</span>
               </button>
             </div>
           </div>
 
           <div class="field">
-            <label>Traffic style</label>
+            <label>Business scenario</label>
             <div class="choice-grid" id="styleChoices">
-              <button class="choice-btn active" type="button" data-style="balanced">
-                <span class="choice-title">Balanced</span>
-                <span class="choice-sub">Savings, pruning, risk, and blocked events</span>
+              <button class="choice-btn active" type="button" data-style="typical">
+                <span class="choice-title">Typical Business Day</span>
+                <span class="choice-sub">Mostly normal work with a small number of alerts</span>
               </button>
               <button class="choice-btn" type="button" data-style="savings">
-                <span class="choice-title">Savings-Heavy</span>
-                <span class="choice-sub">More routine lower-cost routing</span>
+                <span class="choice-title">Savings and Pruning</span>
+                <span class="choice-sub">More routine routing and noisy context cleanup</span>
               </button>
-              <button class="choice-btn" type="button" data-style="risk">
-                <span class="choice-title">Risk-Heavy</span>
-                <span class="choice-sub">More escalations and blocked payloads</span>
+              <button class="choice-btn" type="button" data-style="governance">
+                <span class="choice-title">Governance Test</span>
+                <span class="choice-sub">A controlled policy and risk validation run</span>
               </button>
-              <button class="choice-btn" type="button" data-style="pruning">
-                <span class="choice-title">Pruning Showcase</span>
-                <span class="choice-sub">More messy payloads and token cleanup</span>
+              <button class="choice-btn" type="button" data-style="scale">
+                <span class="choice-title">Scale Test</span>
+                <span class="choice-sub">Mostly normal traffic for volume and reporting</span>
               </button>
             </div>
           </div>
+
+          <label class="toggle-row" for="includeBlockedTest">
+            <input id="includeBlockedTest" type="checkbox" checked />
+            <span class="toggle-copy">
+              Include a small blocked-request test
+              <small>Typical runs contain only 1 blocked record per 25–50 activity records and 2 per 100.</small>
+            </span>
+          </label>
 
           <button class="run-btn" id="runSimulationBtn" type="button">Run Simulation</button>
           <button class="stop-btn" id="stopSimulationBtn" type="button" disabled>Stop Run</button>
@@ -570,7 +609,7 @@
           <div class="stat-card">
             <div class="stat-label">Sent</div>
             <div class="stat-value" id="sentCount">0</div>
-            <div class="stat-sub" id="targetCount">of 50 requests</div>
+            <div class="stat-sub" id="targetCount">of 50 activity records</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Lower-cost routed</div>
@@ -624,7 +663,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-label">Traffic style</div>
-            <div class="stat-value gold" id="styleLabel">Balanced</div>
+            <div class="stat-value gold" id="styleLabel">Typical Business Day</div>
             <div class="stat-sub" id="profileLabel">Enterprise SaaS</div>
           </div>
         </div>
