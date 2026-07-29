@@ -377,6 +377,9 @@
         <button type="button" class="act-reset-btn" onclick="resetProjectAttributionFilters()">Clear Filters</button>
       </div>
       <div class="project-attribution-active-filters" id="ctxActiveFilters" hidden></div>
+      <nav class="project-attribution-drill-path" id="ctxDrillPath" aria-label="Current AI usage drill-down">
+        <strong>Company</strong><span>All AI activity</span>
+      </nav>
 
       <div class="panel org-usage-overview">
         <div class="org-usage-head">
@@ -443,34 +446,49 @@
 
       <div class="project-attribution-breakdowns">
         <div class="panel">
-          <div>
-            <div class="rpt-chart-title">Usage by Project</div>
-            <div class="project-attribution-sub">Account, requests, tokens, and cost by project.</div>
+          <div class="context-card-heading">
+            <div>
+              <div class="rpt-chart-title" id="ctx-work-breakdown-title">Usage by Work</div>
+              <div class="project-attribution-sub">Account, requests, tokens, and cost by business record.</div>
+            </div>
+            <button type="button" class="context-view-toggle" id="ctx-project-toggle" onclick="toggleContextBreakdown('project')">View all</button>
           </div>
-          <table class="rpt-context-table">
-            <thead><tr><th>Project</th><th>Account</th><th>Requests</th><th>Tokens</th><th>Cost</th></tr></thead>
-            <tbody id="ctx-project-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
-          </table>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table">
+              <thead><tr><th id="ctx-work-column-label">Work</th><th>Account</th><th>Requests</th><th>Tokens</th><th>Cost</th></tr></thead>
+              <tbody id="ctx-project-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+            </table>
+          </div>
         </div>
         <div class="panel">
-          <div>
-            <div class="rpt-chart-title">Usage by Person</div>
-            <div class="project-attribution-sub">Factual AI consumption by identified user.</div>
+          <div class="context-card-heading">
+            <div>
+              <div class="rpt-chart-title">Usage by Person</div>
+              <div class="project-attribution-sub">Factual AI consumption by identified user.</div>
+            </div>
+            <button type="button" class="context-view-toggle" id="ctx-person-toggle" onclick="toggleContextBreakdown('person')">View all</button>
           </div>
-          <table class="rpt-context-table">
-            <thead><tr><th>Person</th><th>Requests</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
-            <tbody id="ctx-person-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
-          </table>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table">
+              <thead><tr><th>Person</th><th>Requests</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
+              <tbody id="ctx-person-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+            </table>
+          </div>
         </div>
         <div class="panel">
-          <div>
-            <div class="rpt-chart-title">Usage by Agent</div>
-            <div class="project-attribution-sub">Which AI agents generated the requests and cost.</div>
+          <div class="context-card-heading">
+            <div>
+              <div class="rpt-chart-title">Usage by Agent</div>
+              <div class="project-attribution-sub">Which AI agents generated the requests and cost.</div>
+            </div>
+            <button type="button" class="context-view-toggle" id="ctx-agent-toggle" onclick="toggleContextBreakdown('agent')">View all</button>
           </div>
-          <table class="rpt-context-table">
-            <thead><tr><th>Agent</th><th>Requests</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
-            <tbody id="ctx-agent-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
-          </table>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table">
+              <thead><tr><th>Agent</th><th>Requests</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
+              <tbody id="ctx-agent-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -478,14 +496,14 @@
         <div class="project-attribution-ledger-head">
           <div>
             <div class="rpt-chart-title">AI Activity Ledger</div>
-            <div class="project-attribution-sub">Each row connects a person, agent, account, project, source record, tokens, and cost.</div>
+            <div class="project-attribution-sub">Each row connects a person, agent, account, business record, purpose, source record, tokens, and cost. Select a value to drill down.</div>
           </div>
           <span id="ctx-activity-count">— activities</span>
         </div>
         <div class="project-attribution-table-wrap">
           <table class="rpt-context-table">
-            <thead><tr><th>Date</th><th>Department / Team</th><th>Person</th><th>Agent</th><th>Account</th><th>Project</th><th>Source Record</th><th>Model</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
-            <tbody id="ctx-activity-rows"><tr><td colspan="11">Loading AI activity…</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Department / Team</th><th>Person</th><th>Agent</th><th>Account</th><th>Business Record</th><th>Source Record</th><th>Purpose</th><th>Model</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
+            <tbody id="ctx-activity-rows"><tr><td colspan="12">Loading AI activity…</td></tr></tbody>
           </table>
         </div>
         <div class="project-attribution-note">CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.</div>

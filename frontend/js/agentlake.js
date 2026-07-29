@@ -662,6 +662,7 @@ function agentlakeLastUsed(iso) {
 
 function setAgentlakeView(view) {
   _agentlakeView = ["overview", "usage", "departments", "projects", "all"].includes(view) ? view : "overview";
+  const workLabels = agentlakeWorkLabels();
   const config = {
     overview: {
       panel: "agentlakeOverview", tab: "agentlakeTabOverview",
@@ -677,7 +678,7 @@ function setAgentlakeView(view) {
     },
     projects: {
       panel: "agentlakeProjects", tab: "agentlakeTabProjects",
-      description: "Monitor which projects are using AI, which agents are involved, and where spend or risk needs attention."
+      description: `Monitor which ${workLabels.plural.toLowerCase()} are using AI, which agents are involved, and where spend or risk needs attention.`
     },
     all: {
       panel: "agentlakeAllAgents", tab: "agentlakeTabAll",
@@ -784,9 +785,28 @@ function agentlakeWorkLabels() {
   return { singular, plural };
 }
 
-function clearAgentlakeProjectFilters() {
+function applyAgentlakeWorkLanguage(labels = agentlakeWorkLabels()) {
+  const tab = document.getElementById("agentlakeTabProjects");
   const status = document.getElementById("agentlakeProjectStatus");
   const search = document.getElementById("agentlakeProjectSearch");
+  const description = document.getElementById("agentlakeViewDescription");
+  if (tab) tab.textContent = labels.plural;
+  if (status?.options?.length) status.options[0].textContent = `All ${labels.singular} Statuses`;
+  if (search) {
+    search.placeholder = `Search ${labels.plural.toLowerCase()}...`;
+    search.setAttribute("aria-label", `Search ${labels.plural.toLowerCase()}`);
+  }
+  if (description && _agentlakeView === "projects") {
+    description.textContent =
+      `Monitor which ${labels.plural.toLowerCase()} are using AI, which agents are involved, and where spend or risk needs attention.`;
+  }
+}
+
+function clearAgentlakeProjectFilters() {
+  const view = document.getElementById("agentlakeProjectView");
+  const status = document.getElementById("agentlakeProjectStatus");
+  const search = document.getElementById("agentlakeProjectSearch");
+  if (view) view.value = "activity";
   if (status) status.value = "";
   if (search) search.value = "";
   renderAgentlakeProjects();
@@ -804,14 +824,23 @@ function renderAgentlakeProjects() {
       .filter(Boolean)
   );
 
-  const statusFilter = document.getElementById("agentlakeProjectStatus")?.value || "";
+  const viewFilter = document.getElementById("agentlakeProjectView")?.value || "activity";
+  const statusSelect = document.getElementById("agentlakeProjectStatus");
+  const statusFilter = statusSelect?.value || "";
   const search = (document.getElementById("agentlakeProjectSearch")?.value || "").trim().toLowerCase();
   const labels = agentlakeWorkLabels();
+  applyAgentlakeWorkLanguage(labels);
+  const hasActivity = project =>
+    Number(project.request_count || 0) > 0
+    || Number(project.spend_usd || 0) > 0
+    || Number(project.risk_event_count || 0) > 0
+    || Boolean(project.last_activity_at);
   const projects = _agentlakeProjects.filter(project => {
     // Archived work is historical evidence, not live AgentLake inventory.
     // It remains available through the dedicated work-management/reporting
     // surfaces but must never appear in this operational list.
     if (project.status === "archived") return false;
+    if (viewFilter === "activity" && !hasActivity(project)) return false;
     if (statusFilter && project.status !== statusFilter) return false;
     const searchable = [
       project.name, project.external_id, project.account_name, project.owner,
@@ -825,8 +854,9 @@ function renderAgentlakeProjects() {
     return activityB - activityA || Number(b.spend_usd || 0) - Number(a.spend_usd || 0);
   });
 
-  const totalProjects = _agentlakeProjects.filter(project => project.status !== "archived").length;
-  const activeProjects = Number(_agentlakeProjectSummary.active_project_count || 0);
+  const connectedProjects = _agentlakeProjects.filter(project => project.status !== "archived");
+  const totalProjects = connectedProjects.length;
+  const activityProjects = connectedProjects.filter(hasActivity).length;
   const attributedPct = Number(_agentlakeProjectSummary.attributed_spend_pct || 0);
   const riskProjects = _agentlakeProjects.filter(project =>
     project.status !== "archived" && Number(project.risk_event_count || 0) > 0
@@ -834,8 +864,8 @@ function renderAgentlakeProjects() {
   const metrics = document.getElementById("agentlakeProjectMetrics");
   if (metrics) {
     metrics.innerHTML = [
-      [totalProjects, labels.plural],
-      [activeProjects, "Active"],
+      [activityProjects, `${labels.plural} with activity`],
+      [totalProjects, "Connected"],
       [`${attributedPct.toFixed(1)}%`, "Spend attributed"],
       [riskProjects, "With risk events"]
     ].map(([value, label]) => `
@@ -846,7 +876,11 @@ function renderAgentlakeProjects() {
   }
 
   const count = document.getElementById("agentlakeProjectCount");
-  if (count) count.textContent = `Showing ${projects.length} of ${totalProjects} ${labels.plural.toLowerCase()}`;
+  if (count) {
+    count.textContent = viewFilter === "activity"
+      ? `Showing ${projects.length} ${labels.plural.toLowerCase()} with AI activity · ${totalProjects} connected`
+      : `Showing ${projects.length} of ${totalProjects} connected ${labels.plural.toLowerCase()}`;
+  }
 
   const unattributedSpend = Number(_agentlakeProjectSummary.unattributed_spend_usd || 0);
   const unattributed = !statusFilter && !search && unattributedSpend > 0 ? `

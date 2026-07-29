@@ -11,9 +11,12 @@ Health check: http://localhost:8001/health
 """
 
 import os
-from fastapi import FastAPI, BackgroundTasks
+from typing import Literal, Optional
+
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
@@ -545,6 +548,63 @@ def reset_demo_data(db=None):
                 "and budget caps preserved."
             ),
         }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+class WorkspaceResetRequest(BaseModel):
+    scope: Literal["usage", "simulator", "workspace"] = "usage"
+    workspace_id: Optional[str] = None
+    confirmation: Optional[str] = None
+
+
+@app.post("/api/admin/reset", tags=["Admin"])
+def reset_workspace_data(payload: WorkspaceResetRequest):
+    """Perform an explicit, scoped reset selected by a CostPilot administrator."""
+    if payload.scope == "workspace":
+        if not payload.workspace_id:
+            raise HTTPException(
+                status_code=400,
+                detail="A workspace ID is required to reset an entire workspace.",
+            )
+        if payload.confirmation != "RESET WORKSPACE":
+            raise HTTPException(
+                status_code=400,
+                detail='Type "RESET WORKSPACE" to confirm the destructive reset.',
+            )
+
+    from database.db import SessionLocal
+    from database.reset_demo import reset_workspace_records
+
+    db = SessionLocal()
+    try:
+        result = reset_workspace_records(
+            db,
+            scope=payload.scope,
+            workspace_id=(payload.workspace_id or "").strip() or None,
+        )
+        db.commit()
+        messages = {
+            "usage": (
+                "Usage data reset. Calls, cost, tokens, audit history, and risk "
+                "events were cleared; connected business records and identities remain."
+            ),
+            "simulator": (
+                "Simulator data reset. Generated usage, business records, users, "
+                "and orphaned simulator agents were removed."
+            ),
+            "workspace": (
+                "Workspace reset. Usage, business context, identities, orphaned "
+                "agents, organizational units, and platform connections were removed."
+            ),
+        }
+        return {"status": "ok", **result, "message": messages[payload.scope]}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception:
         db.rollback()
         raise

@@ -1171,6 +1171,11 @@ def project_activity_reporting(
         identity(row)["business_purpose"],
         {},
     ))
+    organizational_unit_breakdown = aggregate(lambda row: (
+        identity(row)["charged_unit"],
+        identity(row)["charged_unit"],
+        {},
+    ))
 
     activities = []
     for tx, project, account, user, agent in rows[:activity_limit]:
@@ -1210,6 +1215,32 @@ def project_activity_reporting(
 
     total_input = sum(int(row[0].input_tokens or 0) for row in rows)
     total_output = sum(int(row[0].output_tokens or 0) for row in rows)
+    active_context_types = [
+        (row[1].context_type or "").strip().lower()
+        for row in rows
+        if row[1] and (row[1].context_type or "").strip()
+    ]
+    context_type = (
+        max(set(active_context_types), key=active_context_types.count)
+        if active_context_types else "work"
+    )
+    context_labels = {
+        "account": ("Account", "Accounts"),
+        "customer": ("Customer", "Customers"),
+        "matter": ("Matter", "Matters"),
+        "project": ("Project", "Projects"),
+        "case": ("Case", "Cases"),
+        "opportunity": ("Opportunity", "Opportunities"),
+        "engagement": ("Engagement", "Engagements"),
+        "work": ("Work", "Work"),
+    }
+    context_label, context_label_plural = context_labels.get(
+        context_type,
+        (
+            context_type.replace("_", " ").title(),
+            f"{context_type.replace('_', ' ').title()}s",
+        ),
+    )
     return {
         "period": {
             "date_from": period_start.isoformat(),
@@ -1226,6 +1257,9 @@ def project_activity_reporting(
             "charged_unit": charged_unit,
             "business_purpose": business_purpose,
         },
+        "context_type": context_type,
+        "context_label": context_label,
+        "context_label_plural": context_label_plural,
         "filter_options": {
             "projects": unique_options("project_external_id", "project_name", "account_name"),
             "people": unique_options("user_external_id", "user_name", "user_email"),
@@ -1256,6 +1290,7 @@ def project_activity_reporting(
         "project_breakdown": project_breakdown,
         "people_breakdown": people_breakdown,
         "agent_breakdown": agent_breakdown,
+        "organizational_unit_breakdown": organizational_unit_breakdown,
         "business_purpose_breakdown": purpose_breakdown,
         "activities": activities,
         "activity_count": len(rows),

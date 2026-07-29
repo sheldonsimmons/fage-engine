@@ -344,7 +344,7 @@
               <button id="agentlakeTabOverview" class="agentlake-tab active" type="button" role="tab" aria-selected="true" aria-controls="agentlakeOverview" onclick="setAgentlakeView('overview')">Overview</button>
               <button id="agentlakeTabUsage" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeUsage" onclick="setAgentlakeView('usage')">Usage</button>
               <button id="agentlakeTabDepartments" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeDepartments" onclick="setAgentlakeView('departments')">By Department</button>
-              <button id="agentlakeTabProjects" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeProjects" onclick="setAgentlakeView('projects')">Projects</button>
+              <button id="agentlakeTabProjects" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeProjects" onclick="setAgentlakeView('projects')">Work</button>
               <button id="agentlakeTabAll" class="agentlake-tab" type="button" role="tab" aria-selected="false" aria-controls="agentlakeAllAgents" onclick="setAgentlakeView('all')">All Agents</button>
             </div>
           </div>
@@ -429,8 +429,12 @@
           <div id="agentlakeProjects" class="agentlake-view" role="tabpanel" aria-labelledby="agentlakeTabProjects" hidden>
             <div id="agentlakeProjectMetrics" class="agentlake-summary-metrics" aria-live="polite"></div>
             <div class="agentlake-project-filterbar">
-              <span id="agentlakeProjectCount">Showing all projects</span>
+              <span id="agentlakeProjectCount">Showing work with AI activity</span>
               <div>
+                <select id="agentlakeProjectView" class="agent-filter-select" onchange="renderAgentlakeProjects()">
+                  <option value="activity">With AI Activity</option>
+                  <option value="all">All Connected</option>
+                </select>
                 <select id="agentlakeProjectStatus" class="agent-filter-select" onchange="renderAgentlakeProjects()">
                   <option value="">All Active Statuses</option>
                   <option value="active">Active</option>
@@ -439,12 +443,12 @@
                   <option value="cancelled">Cancelled</option>
                 </select>
                 <input id="agentlakeProjectSearch" class="agent-filter-search agent-card-search" type="search"
-                       placeholder="Search projects..." oninput="renderAgentlakeProjects()" />
+                       placeholder="Search work..." oninput="renderAgentlakeProjects()" />
                 <button type="button" class="agent-card-clear-btn" onclick="clearAgentlakeProjectFilters()">Clear</button>
               </div>
             </div>
             <div id="agentlakeProjectList" class="agentlake-project-list">
-              <p class="placeholder">Loading projects...</p>
+              <p class="placeholder">Loading work...</p>
             </div>
           </div>
 
@@ -478,7 +482,7 @@
 
           <div class="agentlake-owner-links">
             <span>AgentLake shows current operations. Configuration and historical analysis stay with their owning pages.</span>
-            <a href="/work-items.html">Project details → Work</a>
+            <a href="/work-items.html">Business work details → Work</a>
             <a href="/policy.html">Routing controls → Govern</a>
             <a href="/reports.html">Historical trends → Reports</a>
             <a href="/admin.html">Agent management → Admin</a>
@@ -781,13 +785,13 @@ window.PAGE_TOUR_STEPS = [
   {
     target: "budgetsAgentsSection",
     title: "Agent Operations",
-    body: "Start with attention, recent activity, highest spend, or unused agents. Use the tabs to compare usage, departments, projects, and the complete registry.",
+    body: "Start with attention, recent activity, highest spend, or unused agents. Use the tabs to compare usage, departments, business work, and the complete registry.",
     position: "bottom"
   },
   {
     selector: "#agentlakeTabProjects",
-    title: "Project Participation",
-    body: "The Projects view shows which agents participate in business work. Full project ownership, budgets, and attribution remain on the Work page.",
+    title: "Business Work Participation",
+    body: "This view uses the organization’s own business term—such as Accounts, Matters, or Projects—to show which agents participate in each item. Ownership, budgets, attribution, and deeper reporting remain on the Work page.",
     position: "bottom"
   },
   {

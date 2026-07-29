@@ -14,6 +14,8 @@ let _rptRiskEvents  = [];
 let _rptDeptData    = [];
 let _rptSavingsData = null;
 let _rptContextData = null;
+const _contextBreakdownExpanded = { project: false, person: false, agent: false };
+const CONTEXT_BREAKDOWN_LIMIT = 7;
 const _hiddenDeptChartLabels = new Set();
 let _riskDrillDate = "";
 let _riskDrillKind = "";
@@ -481,7 +483,7 @@ function clearProjectAttributionFilter(id) {
 
 function renderProjectAttributionActiveFilters() {
   const definitions = [
-    ["ctxOrgFilter", "Team"], ["ctxProjectFilter", "Project"],
+    ["ctxOrgFilter", "Team"], ["ctxProjectFilter", "Work"],
     ["ctxPersonFilter", "Person"], ["ctxAccountFilter", "Account"],
     ["ctxAgentFilter", "Agent"], ["ctxSourceFilter", "Source"],
     ["ctxRecordTypeFilter", "Record type"], ["ctxPurposeFilter", "Purpose"],
@@ -500,6 +502,7 @@ function renderProjectAttributionActiveFilters() {
   container.innerHTML = chips.length
     ? `<span>Active filters</span>${chips.join("")}`
     : "";
+  renderContextDrillPath();
 }
 
 function selectBusinessPurpose(value) {
@@ -507,6 +510,133 @@ function selectBusinessPurpose(value) {
   if (!select) return;
   select.value = select.value === value ? "" : value;
   loadBusinessContexts();
+}
+
+function applyProjectAttributionFilter(id, value) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  select.value = String(value ?? "");
+  loadBusinessContexts();
+}
+
+function contextDrillButton(id, value, primary, secondary = "") {
+  const label = primary || "Unknown";
+  if (value === null || value === undefined || value === "") {
+    return `<div class="ctx-name">${escapeHtml(label)}</div>` +
+      (secondary ? `<div class="ctx-meta">${escapeHtml(secondary)}</div>` : "");
+  }
+  return `<button type="button" class="ctx-drill-button"
+      data-value="${escapeHtml(String(value))}"
+      onclick="applyProjectAttributionFilter('${id}', this.dataset.value)">
+      <span class="ctx-name">${escapeHtml(label)}</span>
+      ${secondary ? `<span class="ctx-meta">${escapeHtml(secondary)}</span>` : ""}
+    </button>`;
+}
+
+function renderContextDrillPath() {
+  const path = document.getElementById("ctxDrillPath");
+  if (!path) return;
+  const definitions = [
+    ["ctxOrgFilter", "Team"],
+    ["ctxAccountFilter", "Account"],
+    ["ctxProjectFilter", "Work"],
+    ["ctxPersonFilter", "Person"],
+    ["ctxAgentFilter", "Agent"],
+    ["ctxPurposeFilter", "Purpose"],
+    ["ctxSourceFilter", "Source"],
+    ["ctxRecordTypeFilter", "Record type"],
+  ];
+  const selected = definitions.flatMap(([id, label]) => {
+    const select = document.getElementById(id);
+    if (!select?.value) return [];
+    return [{
+      id,
+      label,
+      value: select.options[select.selectedIndex]?.textContent || select.value,
+    }];
+  });
+  path.innerHTML = `<strong>Company</strong>` + (
+    selected.length
+      ? selected.map(item => `<span aria-hidden="true">›</span><button type="button"
+          onclick="clearProjectAttributionFilter('${item.id}')"
+          title="Remove ${escapeHtml(item.label)} filter">${escapeHtml(item.value)} ×</button>`).join("")
+      : "<span>All AI activity</span>"
+  );
+}
+
+function toggleContextBreakdown(kind) {
+  if (!Object.prototype.hasOwnProperty.call(_contextBreakdownExpanded, kind)) return;
+  _contextBreakdownExpanded[kind] = !_contextBreakdownExpanded[kind];
+  if (_rptContextData) renderContextBreakdowns(_rptContextData);
+}
+
+function renderContextBreakdowns(data) {
+  const singular = data.context_label || "Work";
+  const plural = data.context_label_plural || "Work";
+  const title = document.getElementById("ctx-work-breakdown-title");
+  const column = document.getElementById("ctx-work-column-label");
+  if (title) title.textContent = `Usage by ${singular}`;
+  if (column) column.textContent = singular;
+
+  const definitions = {
+    project: {
+      rows: data.project_breakdown || [],
+      body: "ctx-project-rows",
+      toggle: "ctx-project-toggle",
+      empty: `No ${singular.toLowerCase()} activity matches these filters.`,
+      render: row => `<tr>
+        <td>${contextDrillButton("ctxProjectFilter", row.id, row.label)}</td>
+        <td>${contextDrillButton("ctxAccountFilter", row.account_external_id, row.account_name || "Unassigned account")}</td>
+        <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
+        <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+        <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
+      </tr>`,
+    },
+    person: {
+      rows: data.people_breakdown || [],
+      body: "ctx-person-rows",
+      toggle: "ctx-person-toggle",
+      empty: "No identified user activity matches these filters.",
+      render: row => `<tr>
+        <td>${contextDrillButton("ctxPersonFilter", row.id, row.label, row.email || row.source_platform || "")}</td>
+        <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
+        <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+        <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
+        <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
+      </tr>`,
+    },
+    agent: {
+      rows: data.agent_breakdown || [],
+      body: "ctx-agent-rows",
+      toggle: "ctx-agent-toggle",
+      empty: "No agent activity matches these filters.",
+      render: row => `<tr>
+        <td>${contextDrillButton("ctxAgentFilter", row.id, row.label, row.source_platform || "")}</td>
+        <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
+        <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+        <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
+        <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
+      </tr>`,
+    },
+  };
+
+  Object.entries(definitions).forEach(([kind, definition]) => {
+    const expanded = _contextBreakdownExpanded[kind];
+    const visible = expanded ? definition.rows : definition.rows.slice(0, CONTEXT_BREAKDOWN_LIMIT);
+    const body = document.getElementById(definition.body);
+    if (body) {
+      body.innerHTML = visible.length
+        ? visible.map(definition.render).join("")
+        : `<tr><td colspan="5">${escapeHtml(definition.empty)}</td></tr>`;
+    }
+    const toggle = document.getElementById(definition.toggle);
+    if (toggle) {
+      toggle.hidden = definition.rows.length <= CONTEXT_BREAKDOWN_LIMIT;
+      toggle.textContent = expanded
+        ? `Show top ${CONTEXT_BREAKDOWN_LIMIT}`
+        : `View all (${definition.rows.length})`;
+    }
+  });
 }
 
 async function loadBusinessContexts() {
@@ -533,16 +663,7 @@ async function loadBusinessContexts() {
     if (value) params.set(key, value);
   });
   try {
-    const orgParams = new URLSearchParams({
-      date_from,
-      date_to,
-      days: String(Math.min(365, days)),
-    });
-    if (wsId) orgParams.set("workspace_id", wsId);
-    const [data, orgData] = await Promise.all([
-      apiGet(`/api/work-items/activity-report?${params.toString()}`),
-      apiGet(`/api/work-items/organizational-usage?${orgParams.toString()}`),
-    ]);
+    const data = await apiGet(`/api/work-items/activity-report?${params.toString()}`);
     _rptContextData = data;
     const summary = data.summary || {};
     setKpi("ctx-requests", fmtNum(summary.request_count || 0));
@@ -555,7 +676,7 @@ async function loadBusinessContexts() {
 
     const options = data.filter_options || {};
     projectAttributionSelect("ctxOrgFilter", "All Departments & Teams", options.organizational_units);
-    projectAttributionSelect("ctxProjectFilter", "All Projects", options.projects);
+    projectAttributionSelect("ctxProjectFilter", `All ${data.context_label_plural || "Work"}`, options.projects);
     projectAttributionSelect("ctxPersonFilter", "All People", options.people);
     projectAttributionSelect("ctxAccountFilter", "All Accounts", options.accounts);
     projectAttributionSelect("ctxAgentFilter", "All Agents", options.agents);
@@ -565,7 +686,7 @@ async function loadBusinessContexts() {
     renderProjectAttributionActiveFilters();
 
     const selectedOrg = projectAttributionFilterValue("ctxOrgFilter");
-    const company = orgData.company || {};
+    const company = summary;
     document.getElementById("ctx-org-company-requests").textContent =
       `${fmtNum(company.request_count || 0)} requests`;
     document.getElementById("ctx-org-company-spend").textContent =
@@ -573,7 +694,7 @@ async function loadBusinessContexts() {
     document.getElementById("ctx-org-path").textContent = selectedOrg
       ? `Company → ${selectedOrg}`
       : "Company · all departments and teams";
-    const orgUnits = orgData.organizational_units || [];
+    const orgUnits = data.organizational_unit_breakdown || [];
     document.getElementById("ctx-org-units").innerHTML = orgUnits.length
       ? orgUnits.map(row => `<button type="button"
           class="org-unit-card${selectedOrg === row.label ? " active" : ""}"
@@ -608,62 +729,32 @@ async function loadBusinessContexts() {
         }).join("")
       : '<div class="org-unit-empty">No business-purpose usage matches these filters.</div>';
 
-    const projectBody = document.getElementById("ctx-project-rows");
-    projectBody.innerHTML = (data.project_breakdown || []).length
-      ? data.project_breakdown.map(row => `<tr>
-          <td><div class="ctx-name">${escapeHtml(row.label)}</div></td>
-          <td>${escapeHtml(row.account_name || "Unassigned account")}</td>
-          <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
-          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
-          <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
-        </tr>`).join("")
-      : '<tr><td colspan="5">No project activity matches these filters.</td></tr>';
-
-    const personBody = document.getElementById("ctx-person-rows");
-    personBody.innerHTML = (data.people_breakdown || []).length
-      ? data.people_breakdown.map(row => `<tr>
-          <td><div class="ctx-name">${escapeHtml(row.label)}</div><div class="ctx-meta">${escapeHtml(row.email || row.source_platform || "")}</div></td>
-          <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
-          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
-          <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
-          <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
-        </tr>`).join("")
-      : '<tr><td colspan="5">No identified user activity matches these filters.</td></tr>';
-
-    const agentBody = document.getElementById("ctx-agent-rows");
-    agentBody.innerHTML = (data.agent_breakdown || []).length
-      ? data.agent_breakdown.map(row => `<tr>
-          <td><div class="ctx-name">${escapeHtml(row.label)}</div><div class="ctx-meta">${escapeHtml(row.source_platform || "")}</div></td>
-          <td class="ctx-mono">${fmtNum(row.request_count || 0)}</td>
-          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
-          <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
-          <td class="ctx-mono">${fmtUsd(Number(row.spend_usd || 0))}</td>
-        </tr>`).join("")
-      : '<tr><td colspan="5">No agent activity matches these filters.</td></tr>';
+    renderContextBreakdowns(data);
 
     const activityBody = document.getElementById("ctx-activity-rows");
     const activities = data.activities || [];
     activityBody.innerHTML = activities.length
       ? activities.map(row => `<tr>
           <td class="ctx-mono">${escapeHtml(row.timestamp ? new Date(row.timestamp).toLocaleString() : "—")}</td>
-          <td><div class="ctx-name">${escapeHtml(row.charged_unit || "Unassigned")}</div><div class="ctx-meta">${escapeHtml(row.attribution_source || "")}</div></td>
-          <td><div class="ctx-name">${escapeHtml(row.user_name || "Unknown user")}</div><div class="ctx-meta">${escapeHtml(row.user_source_platform || "")}</div></td>
-          <td><div class="ctx-name">${escapeHtml(row.agent_name || "Unknown agent")}</div><div class="ctx-meta">${escapeHtml(row.agent_platform || "")}</div></td>
-          <td>${escapeHtml(row.account_name || "Unassigned account")}</td>
-          <td>${escapeHtml(row.project_name || "Unattributed")}</td>
-          <td><div class="ctx-name">${escapeHtml(row.source_record_name || row.source_record_id || "Not recorded")}</div><div class="ctx-meta">${escapeHtml(row.source_record_type || row.source_platform || "")}</div></td>
+          <td>${contextDrillButton("ctxOrgFilter", row.charged_unit, row.charged_unit || "Unassigned", row.attribution_source || "")}</td>
+          <td>${contextDrillButton("ctxPersonFilter", row.user_external_id, row.user_name || "Unknown user", row.user_source_platform || "")}</td>
+          <td>${contextDrillButton("ctxAgentFilter", row.agent_id, row.agent_name || "Unknown agent", row.agent_platform || "")}</td>
+          <td>${contextDrillButton("ctxAccountFilter", row.account_external_id, row.account_name || "Unassigned account")}</td>
+          <td>${contextDrillButton("ctxProjectFilter", row.project_external_id, row.project_name || "Unattributed")}</td>
+          <td>${contextDrillButton("ctxRecordTypeFilter", row.source_record_type, row.source_record_name || row.source_record_id || "Not recorded", row.source_record_type || row.source_platform || "")}</td>
+          <td>${contextDrillButton("ctxPurposeFilter", row.business_purpose, row.business_purpose || "Unclassified")}</td>
           <td><div>${escapeHtml(row.model_name || row.model_tier || "—")}</div><div class="ctx-meta">${escapeHtml(row.model_tier || "")}${row.is_simulation ? ' · <span class="rpt-badge badge-event">SIMULATION</span>' : ""}</div></td>
           <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
           <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
           <td class="ctx-mono">${fmtUsd(Number(row.cost_usd || 0))}</td>
         </tr>`).join("")
-      : '<tr><td colspan="11">No AI activity matches these filters.</td></tr>';
+      : '<tr><td colspan="12">No AI activity matches these filters.</td></tr>';
     document.getElementById("ctx-activity-count").textContent =
       `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"} · ` +
       `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation`;
   } catch (err) {
     document.getElementById("ctx-activity-rows").innerHTML =
-      `<tr><td colspan="11">Could not load AI usage attribution: ${escapeHtml(err.message)}</td></tr>`;
+      `<tr><td colspan="12">Could not load AI usage attribution: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -684,7 +775,7 @@ function exportContextCsv() {
     row.input_tokens, row.output_tokens, row.tokens_saved, row.cost_usd,
     row.is_simulation ? "Simulation" : "Live",
   ]);
-  downloadCsv(`costpilot_project_attribution_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  downloadCsv(`costpilot_ai_usage_attribution_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 }
 
 function isReportFilterActive() {

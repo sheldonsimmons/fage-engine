@@ -573,37 +573,111 @@ async function runPruner() {
   }
 }
 
-// ── Demo reset ────────────────────────────────────────────────────────────────
-async function resetDemoData() {
-  if (!confirm("Full reset — clears everything for a clean test run.\n\n• All transactions\n• All audit events\n• All registered agents\n• All Voice Guard events\n• Department spend reset to $0\n\nBudget caps and sensitive terms are preserved.")) return;
+// ── Explicit data resets ──────────────────────────────────────────────────────
+function _selectedResetScope() {
+  return document.querySelector('input[name="resetScope"]:checked')?.value || "usage";
+}
 
-  const btn = document.getElementById("floatResetBtn");
-  if (btn) { btn.textContent = "Resetting..."; btn.disabled = true; }
+function openResetDataDialog() {
+  const dialog = document.getElementById("dataResetDialog");
+  if (!dialog) return;
+  const usage = dialog.querySelector('input[name="resetScope"][value="usage"]');
+  if (usage) usage.checked = true;
+  const confirmation = document.getElementById("resetWorkspaceConfirmation");
+  if (confirmation) confirmation.value = "";
+  updateResetDataDialog();
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+}
+
+function closeResetDataDialog() {
+  const dialog = document.getElementById("dataResetDialog");
+  if (!dialog) return;
+  if (typeof dialog.close === "function") dialog.close();
+  else dialog.removeAttribute("open");
+}
+
+function updateResetDataDialog() {
+  const scope = _selectedResetScope();
+  const confirmationWrap = document.getElementById("resetWorkspaceConfirm");
+  const confirmation = document.getElementById("resetWorkspaceConfirmation");
+  const button = document.getElementById("confirmDataResetButton");
+  const labels = {
+    usage: "Reset usage data",
+    simulator: "Reset simulator data",
+    workspace: "Reset entire workspace",
+  };
+  if (confirmationWrap) confirmationWrap.hidden = scope !== "workspace";
+  if (button) {
+    button.textContent = labels[scope];
+    button.disabled = scope === "workspace"
+      && (confirmation?.value || "") !== "RESET WORKSPACE";
+  }
+}
+
+async function executeDataReset() {
+  const scope = _selectedResetScope();
+  const button = document.getElementById("confirmDataResetButton");
+  const workspaceId = localStorage.getItem("cp_workspace_id") || "";
+  const confirmation = document.getElementById("resetWorkspaceConfirmation")?.value || "";
+
+  if (scope === "workspace" && !workspaceId) {
+    alert("CostPilot cannot identify the current workspace. Reconnect the workspace before using the full reset.");
+    return;
+  }
+  if (scope === "workspace" && confirmation !== "RESET WORKSPACE") return;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Resetting…";
+  }
 
   try {
-    const result = await apiPost("/api/admin/reset-demo", {});
+    const result = await apiPost("/api/admin/reset", {
+      scope,
+      // Simulator profiles intentionally use isolated SIM-* workspaces, so the
+      // simulator reset searches those generated namespaces across the pilot.
+      workspace_id: scope === "simulator" ? null : (workspaceId || null),
+      confirmation: scope === "workspace" ? confirmation : null,
+    });
 
-    // Also wipe Voice Guard events
-    try { await fetch("/api/voice/events", { method: "DELETE" }); } catch (_) {}
+    // Voice events are measured governance activity, but not simulator
+    // identities. Clear them only for usage and full workspace resets.
+    if (scope === "usage" || scope === "workspace") {
+      try { await fetch("/api/voice/events", { method: "DELETE" }); } catch (_) {}
+    }
 
-    // Refresh all panels
+    closeResetDataDialog();
     loadDashboard();
     loadBudgets();
     if (typeof loadAgents        === "function") loadAgents();
     if (typeof loadVoiceStats    === "function") loadVoiceStats();
     if (typeof loadVoiceAuditLog === "function") loadVoiceAuditLog();
     if (typeof loadTimeSeries    === "function") loadTimeSeries();
+    if (typeof refreshAdminOverview === "function") refreshAdminOverview();
 
-    if (btn) {
-      btn.textContent = "✓ Done";
-      setTimeout(() => { btn.textContent = "↺ Reset All"; btn.disabled = false; }, 2500);
-    }
-
-    _showResetToast(`Reset complete — ${result.transactions_cleared} transactions, ${result.audit_events_cleared} audit events, ${result.agents_cleared} agents cleared.`);
+    const entityCount = Number(result.work_items_cleared || 0)
+      + Number(result.accounts_cleared || 0)
+      + Number(result.users_cleared || 0)
+      + Number(result.agents_cleared || 0);
+    const entityText = entityCount ? `, ${entityCount} generated or connected records` : "";
+    _showResetToast(
+      `${result.message} ${result.transactions_cleared || 0} calls and `
+      + `${result.audit_events_cleared || 0} audit events cleared${entityText}.`
+    );
   } catch (e) {
-    if (btn) { btn.textContent = "↺ Reset All"; btn.disabled = false; }
     alert("Reset failed: " + e.message);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      updateResetDataDialog();
+    }
   }
+}
+
+// Keep legacy buttons working, but route them through the safer chooser.
+function resetDemoData() {
+  openResetDataDialog();
 }
 
 function _showResetToast(msg) {
