@@ -122,7 +122,12 @@ def test_salesforce_package_setup_populates_the_packaged_named_principal(monkeyp
     assert error == ""
     assert captured["json"]["externalCredential"] == "CostPilotExternal"
     assert captured["json"]["principalName"] == "CostPilotKey"
-    assert captured["json"]["credentials"] == {"CostPilotKey": "sk-cp-private"}
+    assert captured["json"]["credentials"] == {
+        "CostPilotKey": {
+            "value": "sk-cp-private",
+            "encrypted": True,
+        }
+    }
 
 
 def test_parent_metadata_produces_useful_child_relationship_suggestions():

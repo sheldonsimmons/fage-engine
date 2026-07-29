@@ -130,7 +130,12 @@ async def _populate_salesforce_costpilot_credential(
     )
     payload = {
         "authenticationProtocol": "Custom",
-        "credentials": {"CostPilotKey": secret_key},
+        "credentials": {
+            "CostPilotKey": {
+                "value": secret_key,
+                "encrypted": True,
+            }
+        },
         "externalCredential": "CostPilotExternal",
         "principalName": "CostPilotKey",
         "principalType": "NamedPrincipal",
@@ -393,7 +398,7 @@ def start_salesforce_package_setup(
 
 
 @router.get("/salesforce/package/status")
-def salesforce_package_status(
+async def salesforce_package_status(
     org_id: str = Query(min_length=15, max_length=18),
     db: Session = Depends(get_db),
 ):
@@ -409,6 +414,38 @@ def salesforce_package_status(
     )
     if not item:
         return {"status": "not_started", "connected": False}
+
+    # A package setup can reach this state when Salesforce OAuth succeeds but
+    # encrypted-principal activation is temporarily unavailable. Retry from
+    # the already-authorized connection so the subscriber doesn't have to
+    # repeat the login flow after a transient or corrected provisioning issue.
+    if (
+        item.status == "error"
+        and item.workspace_id
+        and item.instance_url
+        and item.access_token_encrypted
+        and item.last_error
+        and "credential provisioning" in item.last_error.lower()
+    ):
+        account = (
+            db.query(TrialAccount)
+            .filter(TrialAccount.workspace_id == item.workspace_id)
+            .first()
+        )
+        if account and account.secret_key:
+            item.status = "provisioning"
+            item.last_error = None
+            db.commit()
+            provisioned, provision_error = await _populate_salesforce_costpilot_credential(
+                instance_url=item.instance_url,
+                access_token=_decrypt(item.access_token_encrypted),
+                secret_key=account.secret_key,
+            )
+            item.status = "connected" if provisioned else "error"
+            item.last_success_at = datetime.utcnow() if provisioned else None
+            item.last_error = None if provisioned else provision_error
+            db.commit()
+
     return {
         "status": item.status,
         "connected": item.status == "connected",
