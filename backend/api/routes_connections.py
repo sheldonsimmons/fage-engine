@@ -117,6 +117,43 @@ def _new_salesforce_workspace(identity: dict, db: Session) -> TrialAccount:
     return account
 
 
+def _merge_salesforce_package_connection(
+    pending: IntegrationConnection,
+    workspace_id: str,
+    db: Session,
+) -> IntegrationConnection:
+    """Promote a package OAuth attempt without creating a duplicate reconnect."""
+    existing = (
+        db.query(IntegrationConnection)
+        .filter(
+            IntegrationConnection.id != pending.id,
+            IntegrationConnection.workspace_id == workspace_id,
+            IntegrationConnection.platform == pending.platform,
+            IntegrationConnection.display_name == pending.display_name,
+        )
+        .order_by(IntegrationConnection.created_at.desc())
+        .first()
+    )
+    if not existing:
+        pending.workspace_id = workspace_id
+        return pending
+
+    # Keep one stable package connection per Salesforce org and workspace.
+    # The new OAuth attempt owns the freshest tokens and instance metadata.
+    existing.auth_base_url = pending.auth_base_url or existing.auth_base_url
+    existing.instance_url = pending.instance_url
+    existing.external_tenant_id = pending.external_tenant_id
+    existing.access_token_encrypted = pending.access_token_encrypted
+    existing.refresh_token_encrypted = (
+        pending.refresh_token_encrypted or existing.refresh_token_encrypted
+    )
+    existing.oauth_state = None
+    existing.mapping_json = pending.mapping_json or existing.mapping_json
+    db.delete(pending)
+    db.flush()
+    return existing
+
+
 async def _populate_salesforce_costpilot_credential(
     *,
     instance_url: str,
@@ -740,7 +777,7 @@ async def salesforce_callback(
             access_token=access_token,
             secret_key=account.secret_key,
         )
-        item.workspace_id = account.workspace_id
+        item = _merge_salesforce_package_connection(item, account.workspace_id, db)
         item.status = "connected" if provisioned else "error"
         item.last_success_at = datetime.utcnow() if provisioned else None
         item.last_error = None if provisioned else provision_error

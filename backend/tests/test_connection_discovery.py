@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from api.routes_connections import (
     ConnectionCreate,
     MappingUpdate,
+    _merge_salesforce_package_connection,
     _new_salesforce_workspace,
     _populate_salesforce_costpilot_credential,
     _servicenow_auth_base,
@@ -17,6 +18,7 @@ from api.routes_connections import (
 )
 from fastapi import HTTPException
 from database.db import Base
+from database.models import IntegrationConnection
 
 
 def _session():
@@ -87,6 +89,45 @@ def test_salesforce_package_setup_creates_and_reuses_a_workspace():
     assert first.workspace_id == second.workspace_id
     assert first.secret_key.startswith("sk-cp-")
     assert first.platform == "salesforce"
+
+
+def test_salesforce_package_reconnect_merges_the_pending_connection():
+    db = _session()
+    display_name = "Salesforce package setup 00D000000000001AAA"
+    existing = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name=display_name,
+        status="connected",
+        access_token_encrypted="old-access",
+        refresh_token_encrypted="old-refresh",
+    )
+    pending = IntegrationConnection(
+        workspace_id="pending-reconnect",
+        platform="salesforce",
+        display_name=display_name,
+        status="authorizing",
+        auth_base_url="https://login.salesforce.com",
+        instance_url="https://acme.my.salesforce.com",
+        external_tenant_id="00D000000000001AAA",
+        access_token_encrypted="new-access",
+        refresh_token_encrypted="new-refresh",
+        mapping_json='{"package_setup": true}',
+    )
+    db.add_all([existing, pending])
+    db.commit()
+
+    merged = _merge_salesforce_package_connection(pending, "WORKSPACE-A", db)
+    merged.status = "connected"
+    db.commit()
+
+    rows = db.query(IntegrationConnection).all()
+    assert len(rows) == 1
+    assert merged.id == existing.id
+    assert merged.workspace_id == "WORKSPACE-A"
+    assert merged.access_token_encrypted == "new-access"
+    assert merged.refresh_token_encrypted == "new-refresh"
+    assert merged.instance_url == "https://acme.my.salesforce.com"
 
 
 def test_salesforce_package_setup_populates_the_packaged_named_principal(monkeypatch):
