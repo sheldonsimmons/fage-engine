@@ -457,6 +457,15 @@ async def salesforce_package_status(
         .filter(
             IntegrationConnection.platform == "salesforce",
             IntegrationConnection.display_name == prefix,
+            IntegrationConnection.status == "connected",
+        )
+        .order_by(IntegrationConnection.created_at.desc())
+        .first()
+    ) or (
+        db.query(IntegrationConnection)
+        .filter(
+            IntegrationConnection.platform == "salesforce",
+            IntegrationConnection.display_name == prefix,
         )
         .order_by(IntegrationConnection.created_at.desc())
         .first()

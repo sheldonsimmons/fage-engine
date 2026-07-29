@@ -15,6 +15,7 @@ from api.routes_connections import (
     list_connections,
     recommend_business_mapping,
     recommend_child_relationships,
+    salesforce_package_status,
 )
 from fastapi import HTTPException
 from database.db import Base
@@ -128,6 +129,34 @@ def test_salesforce_package_reconnect_merges_the_pending_connection():
     assert merged.access_token_encrypted == "new-access"
     assert merged.refresh_token_encrypted == "new-refresh"
     assert merged.instance_url == "https://acme.my.salesforce.com"
+
+
+def test_salesforce_package_status_prefers_a_working_connection():
+    db = _session()
+    display_name = "Salesforce package setup 00D000000000001AAA"
+    db.add_all([
+        IntegrationConnection(
+            workspace_id="WORKSPACE-A",
+            platform="salesforce",
+            display_name=display_name,
+            status="connected",
+        ),
+        IntegrationConnection(
+            workspace_id="pending-reconnect",
+            platform="salesforce",
+            display_name=display_name,
+            status="authorizing",
+        ),
+    ])
+    db.commit()
+
+    status = asyncio.run(
+        salesforce_package_status("00D000000000001AAA", db=db)
+    )
+
+    assert status["connected"] is True
+    assert status["status"] == "connected"
+    assert status["workspace_id"] == "WORKSPACE-A"
 
 
 def test_salesforce_package_setup_populates_the_packaged_named_principal(monkeypatch):
