@@ -118,6 +118,9 @@
       title.textContent = "Setup could not finish";
       const messages = {
         oauth_not_configured: "CostPilot's Salesforce authorization service is not configured.",
+        cross_org_oauth: "This CostPilot OAuth app is currently restricted to its publisher org. CostPilot must use the packaged, customer-installable authorization app before this org can connect.",
+        oauth_denied: "Salesforce did not authorize CostPilot. Return to Salesforce and try the connection again.",
+        oauth_incomplete: "Salesforce returned an incomplete authorization response. Return to Salesforce and try the connection again.",
         org_mismatch: "The Salesforce organization you authorized was not the organization where the package is installed.",
         credential_provisioning: "Salesforce authorization succeeded, but the packaged encrypted credential could not be activated."
       };

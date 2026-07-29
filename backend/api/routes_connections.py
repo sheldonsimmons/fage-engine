@@ -507,13 +507,41 @@ def begin_authorization(connection_id: int, db: Session = Depends(get_db)):
 
 @router.get("/oauth/salesforce/callback")
 async def salesforce_callback(
-    code: str,
     state: str,
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+    error_description: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     item = db.query(IntegrationConnection).filter(IntegrationConnection.oauth_state == state).first()
     if not item:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+    if error:
+        safe_error = re.sub(r"[^A-Za-z0-9_.-]", "_", error)[:100]
+        description = (error_description or "Salesforce did not authorize the connection").strip()
+        item.status = "error"
+        item.last_error = description[:500]
+        item.oauth_state = None
+        db.commit()
+        reason = (
+            "cross_org_oauth"
+            if error == "OAUTH_AUTHORIZATION_BLOCKED" and "Cross-org" in description
+            else "oauth_denied"
+        )
+        return RedirectResponse(
+            url=(
+                f"/salesforce-setup.html?status=error"
+                f"&reason={quote(reason)}&salesforce_error={quote(safe_error)}"
+            )
+        )
+    if not code:
+        item.status = "error"
+        item.last_error = "Salesforce returned neither an authorization code nor an OAuth error"
+        item.oauth_state = None
+        db.commit()
+        return RedirectResponse(
+            url="/salesforce-setup.html?status=error&reason=oauth_incomplete"
+        )
     client_id = os.getenv("SALESFORCE_CLIENT_ID")
     client_secret = os.getenv("SALESFORCE_CLIENT_SECRET")
     redirect_uri = os.getenv(
