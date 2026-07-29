@@ -14,6 +14,7 @@ from api.routes_connections import (
     _servicenow_auth_base,
     approve_mapping,
     create_connection,
+    discover_salesforce_ai_entry_points,
     list_connections,
     recommend_business_mapping,
     recommend_child_relationships,
@@ -204,6 +205,54 @@ def test_salesforce_package_saves_selected_agents_and_flows():
         "agent",
         "flow",
     ]
+
+
+def test_salesforce_ai_entry_points_use_current_agentforce_metadata(monkeypatch):
+    db = _session()
+    item = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Salesforce Production",
+        status="connected",
+        mapping_json="{}",
+    )
+    db.add(item)
+    db.commit()
+    queries = []
+
+    async def fake_query(_item, query, *, tooling=False):
+        queries.append((query, tooling))
+        if "GenAiPlannerDefinition" in query:
+            return [
+                {
+                    "Id": "16j000000000001",
+                    "DeveloperName": "CostPilot_Test_Agent",
+                    "MasterLabel": "CostPilot Test Agent",
+                    "PlannerType": "AiCopilot__ReAct",
+                }
+            ], None
+        if "FlowDefinition" in query:
+            return [
+                {
+                    "Id": "300000000000001",
+                    "DeveloperName": "Draft_Follow_Up",
+                    "MasterLabel": None,
+                    "ActiveVersionId": "301000000000001",
+                }
+            ], None
+        raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr("api.routes_connections._salesforce_try_query", fake_query)
+    result = asyncio.run(discover_salesforce_ai_entry_points(item.id, db=db))
+
+    assert result["agents"][0]["label"] == "CostPilot Test Agent"
+    assert result["agents"][0]["planner_type"] == "AiCopilot__ReAct"
+    assert result["flows"][0]["label"] == "Draft_Follow_Up"
+    assert result["flows"][0]["status"] == "active"
+    assert result["warnings"] == []
+    assert all(tooling is True for _, tooling in queries)
+    assert "GenAiPlannerDefinition" in queries[0][0]
+    assert "FlowDefinition" in queries[1][0]
 
 
 def test_salesforce_package_setup_populates_the_packaged_named_principal(monkeypatch):

@@ -921,14 +921,23 @@ async def discover_salesforce_ai_entry_points(
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="AI entry-point discovery currently supports Salesforce")
 
-    # BotDefinition is the Tooling API representation used by Agentforce/Einstein
-    # agents. Some trial orgs do not expose it, so this query is deliberately
-    # optional and its permission failure is returned as a warning.
+    # Current Agentforce orgs expose agents as GenAiPlannerDefinition records.
+    # Older Einstein Bots used BotDefinition/Bot, so retain those as fallbacks
+    # for orgs that have not moved to the Agentforce planner metadata model.
     agent_records, agent_error = await _salesforce_try_query(
         item,
-        "SELECT Id, DeveloperName, MasterLabel FROM BotDefinition ORDER BY MasterLabel",
+        (
+            "SELECT Id, DeveloperName, MasterLabel, PlannerType "
+            "FROM GenAiPlannerDefinition ORDER BY MasterLabel"
+        ),
         tooling=True,
     )
+    if agent_error:
+        agent_records, agent_error = await _salesforce_try_query(
+            item,
+            "SELECT Id, DeveloperName, MasterLabel FROM BotDefinition ORDER BY MasterLabel",
+            tooling=True,
+        )
     if agent_error:
         agent_records, agent_error = await _salesforce_try_query(
             item,
@@ -940,6 +949,7 @@ async def discover_salesforce_ai_entry_points(
             "id": record.get("Id"),
             "name": record.get("DeveloperName") or record.get("MasterLabel") or record.get("Id"),
             "label": record.get("MasterLabel") or record.get("DeveloperName") or record.get("Id"),
+            "planner_type": record.get("PlannerType"),
             "status": "discovered",
             "costpilot_status": "action_required",
         }
@@ -950,8 +960,8 @@ async def discover_salesforce_ai_entry_points(
     flow_records, flow_error = await _salesforce_try_query(
         item,
         (
-            "SELECT Id, DeveloperName, MasterLabel, ActiveVersionId, ProcessType "
-            "FROM FlowDefinitionView ORDER BY MasterLabel"
+            "SELECT Id, DeveloperName, MasterLabel, ActiveVersionId "
+            "FROM FlowDefinition ORDER BY DeveloperName"
         ),
         tooling=True,
     )
