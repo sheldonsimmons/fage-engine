@@ -63,6 +63,14 @@ class MappingUpdate(BaseModel):
     mapping: dict
 
 
+def _new_pkce_pair() -> tuple[str, str]:
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode("utf-8")).digest()
+    ).rstrip(b"=").decode("ascii")
+    return verifier, challenge
+
+
 def _new_salesforce_workspace(identity: dict, db: Session) -> TrialAccount:
     """Resolve the CostPilot workspace for a verified Salesforce administrator."""
     email = str(identity.get("email") or identity.get("username") or "").strip().lower()
@@ -170,6 +178,13 @@ def _decrypt(value: Optional[str]) -> Optional[str]:
 
 
 def _public_connection(item: IntegrationConnection) -> dict:
+    mapping = json.loads(item.mapping_json) if item.mapping_json else None
+    if isinstance(mapping, dict):
+        mapping = {
+            key: value
+            for key, value in mapping.items()
+            if not str(key).startswith("_")
+        }
     return {
         "id": item.id,
         "workspace_id": item.workspace_id,
@@ -180,7 +195,7 @@ def _public_connection(item: IntegrationConnection) -> dict:
         "instance_url": item.instance_url,
         "external_tenant_id": item.external_tenant_id,
         "selected_object": item.selected_object,
-        "mapping": json.loads(item.mapping_json) if item.mapping_json else None,
+        "mapping": mapping,
         "last_tested_at": item.last_tested_at,
         "last_success_at": item.last_success_at,
         "last_error": item.last_error,
@@ -347,6 +362,7 @@ def start_salesforce_package_setup(
         )
 
     state = secrets.token_urlsafe(32)
+    pkce_verifier, pkce_challenge = _new_pkce_pair()
     item = IntegrationConnection(
         workspace_id=f"pending-{secrets.token_hex(8)}",
         platform="salesforce",
@@ -357,6 +373,7 @@ def start_salesforce_package_setup(
         mapping_json=json.dumps({
             "package_setup": True,
             "requested_org_id": org_id,
+            "_oauth_pkce_verifier": pkce_verifier,
         }),
     )
     db.add(item)
@@ -369,6 +386,8 @@ def start_salesforce_package_setup(
         "scope": "api refresh_token",
         "state": state,
         "prompt": "login",
+        "code_challenge": pkce_challenge,
+        "code_challenge_method": "S256",
     })
     return RedirectResponse(url=f"{auth_base}/services/oauth2/authorize?{query}")
 
@@ -488,10 +507,14 @@ def begin_authorization(connection_id: int, db: Session = Depends(get_db)):
         return {
             "configured": False,
             "platform": "salesforce",
-            "required_environment": ["SALESFORCE_CLIENT_ID", "SALESFORCE_CLIENT_SECRET", "CONNECTION_ENCRYPTION_KEY"],
+            "required_environment": ["SALESFORCE_CLIENT_ID", "CONNECTION_ENCRYPTION_KEY"],
             "detail": "Salesforce OAuth credentials are not configured yet. Manual mapping remains available.",
         }
     state = secrets.token_urlsafe(32)
+    pkce_verifier, pkce_challenge = _new_pkce_pair()
+    mapping = json.loads(item.mapping_json) if item.mapping_json else {}
+    mapping["_oauth_pkce_verifier"] = pkce_verifier
+    item.mapping_json = json.dumps(mapping)
     item.oauth_state = state
     item.status = "authorizing"
     db.commit()
@@ -503,6 +526,8 @@ def begin_authorization(connection_id: int, db: Session = Depends(get_db)):
         "scope": "api refresh_token",
         "state": state,
         "prompt": "login",
+        "code_challenge": pkce_challenge,
+        "code_challenge_method": "S256",
     })
     return {"configured": True, "authorization_url": f"{auth_base}/services/oauth2/authorize?{query}"}
 
@@ -524,6 +549,9 @@ async def salesforce_callback(
         item.status = "error"
         item.last_error = description[:500]
         item.oauth_state = None
+        mapping = json.loads(item.mapping_json) if item.mapping_json else {}
+        mapping.pop("_oauth_pkce_verifier", None)
+        item.mapping_json = json.dumps(mapping)
         db.commit()
         reason = (
             "cross_org_oauth"
@@ -540,18 +568,30 @@ async def salesforce_callback(
         item.status = "error"
         item.last_error = "Salesforce returned neither an authorization code nor an OAuth error"
         item.oauth_state = None
+        mapping = json.loads(item.mapping_json) if item.mapping_json else {}
+        mapping.pop("_oauth_pkce_verifier", None)
+        item.mapping_json = json.dumps(mapping)
         db.commit()
         return RedirectResponse(
             url="/salesforce-setup.html?status=error&reason=oauth_incomplete"
         )
     client_id = os.getenv("SALESFORCE_CLIENT_ID")
-    client_secret = os.getenv("SALESFORCE_CLIENT_SECRET")
     redirect_uri = os.getenv(
         "SALESFORCE_REDIRECT_URI",
         "https://fage-engine-21cb49fe4806.herokuapp.com/api/integrations/connections/oauth/salesforce/callback",
     )
-    if not client_id or not client_secret:
-        raise HTTPException(status_code=503, detail="Salesforce OAuth credentials are incomplete")
+    if not client_id:
+        raise HTTPException(status_code=503, detail="Salesforce OAuth client ID is missing")
+    mapping = json.loads(item.mapping_json) if item.mapping_json else {}
+    pkce_verifier = str(mapping.get("_oauth_pkce_verifier") or "")
+    if not pkce_verifier:
+        item.status = "error"
+        item.last_error = "Salesforce OAuth session must be restarted"
+        item.oauth_state = None
+        db.commit()
+        return RedirectResponse(
+            url="/salesforce-setup.html?status=error&reason=oauth_incomplete"
+        )
     auth_base = _salesforce_auth_base(item.auth_base_url)
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.post(
@@ -560,7 +600,7 @@ async def salesforce_callback(
                 "grant_type": "authorization_code",
                 "code": code,
                 "client_id": client_id,
-                "client_secret": client_secret,
+                "code_verifier": pkce_verifier,
                 "redirect_uri": redirect_uri,
             },
         )
@@ -582,6 +622,8 @@ async def salesforce_callback(
         item.status = "error"
         item.last_error = f"{error_code}: {error_description}"
         item.oauth_state = None
+        mapping.pop("_oauth_pkce_verifier", None)
+        item.mapping_json = json.dumps(mapping)
         db.commit()
         logger.warning(
             "Salesforce OAuth token exchange failed: status=%s error=%s description=%s",
@@ -601,6 +643,9 @@ async def salesforce_callback(
     if not access_token or not token.get("instance_url"):
         item.status = "error"
         item.last_error = "Salesforce authorization did not return an access token and instance URL"
+        item.oauth_state = None
+        mapping.pop("_oauth_pkce_verifier", None)
+        item.mapping_json = json.dumps(mapping)
         db.commit()
         raise HTTPException(status_code=502, detail="Salesforce authorization was incomplete")
 
@@ -615,7 +660,8 @@ async def salesforce_callback(
         if identity_response.status_code < 400:
             identity = identity_response.json()
 
-    mapping = json.loads(item.mapping_json) if item.mapping_json else {}
+    mapping.pop("_oauth_pkce_verifier", None)
+    item.mapping_json = json.dumps(mapping)
     package_setup = bool(mapping.get("package_setup"))
     external_org_id = str(
         identity.get("organization_id")
