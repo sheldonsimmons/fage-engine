@@ -10,7 +10,7 @@
                     <span>{errorMessage}</span>
                 </div>
             </template>
-            <template lwc:else>
+            <template lwc:elseif={ready}>
                 <div class="intro">
                     <p class="eyebrow">Secure post-install setup</p>
                     <h1>Connect {state.orgName} to CostPilot</h1>
@@ -53,6 +53,12 @@
                     Salesforce will ask an administrator to approve API access. CostPilot
                     then stores a revocable workspace credential in Salesforce encrypted storage.
                 </p>
+            </template>
+            <template lwc:else>
+                <div class="notice error" role="alert">
+                    <strong>Setup details are unavailable.</strong>
+                    <span>Refresh this tab. If the problem continues, contact your Salesforce administrator.</span>
+                </div>
             </template>
         </div>
     </lightning-card>

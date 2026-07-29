@@ -8,14 +8,20 @@ export default class CostPilotSetup extends LightningElement {
 
     @wire(getSetupState)
     loadState({ data, error }) {
-        this.loading = false;
         if (data) {
             this.state = data;
             this.errorMessage = undefined;
+            this.loading = false;
         } else if (error) {
+            this.state = undefined;
             this.errorMessage =
                 error?.body?.message || 'Salesforce did not return the organization details.';
+            this.loading = false;
         }
+    }
+
+    get ready() {
+        return Boolean(this.state);
     }
 
     get environmentLabel() {
@@ -23,6 +29,8 @@ export default class CostPilotSetup extends LightningElement {
     }
 
     connect() {
-        window.open(this.state.connectUrl, '_blank', 'noopener,noreferrer');
+        if (this.state?.connectUrl) {
+            window.open(this.state.connectUrl, '_blank', 'noopener,noreferrer');
+        }
     }
 }
