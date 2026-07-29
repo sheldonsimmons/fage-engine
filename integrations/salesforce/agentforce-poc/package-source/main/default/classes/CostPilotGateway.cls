@@ -1,44 +1,84 @@
 public with sharing class CostPilotGateway {
     public class Request {
-        @InvocableVariable(label='Agent Name')
+        @InvocableVariable(
+            label='Agent Name'
+            description='Name of the Agentforce agent making this governed AI request.'
+        )
         public String agentName;
 
-        @InvocableVariable(label='Department')
+        @InvocableVariable(
+            label='Department'
+            description='Department responsible for this AI request, used for attribution and budget controls.'
+        )
         public String department;
 
-        @InvocableVariable(label='Business Unit')
+        @InvocableVariable(
+            label='Business Unit'
+            description='Business unit responsible for this AI request, used for reporting and attribution.'
+        )
         public String businessUnit;
 
-        @InvocableVariable(label='Record Id')
+        @InvocableVariable(
+            label='Record Id'
+            description='Salesforce record ID that provides business context and permanent attribution for this request.'
+        )
         public String recordId;
 
-        @InvocableVariable(label='Object Name')
+        @InvocableVariable(
+            label='Object Name'
+            description='Salesforce object API name for the related record, such as Account or Opportunity.'
+        )
         public String objectName;
 
-        @InvocableVariable(label='User Prompt' required=true)
+        @InvocableVariable(
+            label='User Prompt'
+            description='The user request that CostPilot must govern and send to the selected AI model.'
+            required=true
+        )
         public String prompt;
 
-        @InvocableVariable(label='Context JSON')
+        @InvocableVariable(
+            label='Context JSON'
+            description='Optional additional business context formatted as JSON.'
+        )
         public String contextJson;
     }
 
     public class Response {
-        @InvocableVariable(label='CostPilot Response')
+        @InvocableVariable(
+            label='CostPilot Response'
+            description='The governed AI response returned by CostPilot, or the reason the request was not allowed.'
+        )
         public String costPilotResponse;
 
-        @InvocableVariable(label='Model Tier')
+        @InvocableVariable(
+            label='Model Tier'
+            description='CostPilot model tier selected for the request, such as Scout, Analyst, Advisor, or Strategist.'
+        )
         public String modelTier;
 
-        @InvocableVariable(label='Risk Level')
+        @InvocableVariable(
+            label='Risk Level'
+            description='Governance risk classification assigned to the request by CostPilot.'
+        )
         public String riskLevel;
 
-        @InvocableVariable(label='Outcome')
+        @InvocableVariable(
+            label='Outcome'
+            description='Final CostPilot routing or governance outcome for the request.'
+        )
         public String outcome;
 
-        @InvocableVariable(label='Blocked')
+        @InvocableVariable(
+            label='Blocked'
+            description='True when CostPilot blocked the request from reaching an AI model.'
+        )
         public Boolean blocked;
 
-        @InvocableVariable(label='Audit Id')
+        @InvocableVariable(
+            label='Audit Id'
+            description='Unique CostPilot audit identifier for tracing this governed request.'
+        )
         public String auditId;
     }
 
