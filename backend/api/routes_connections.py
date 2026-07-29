@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -23,6 +24,7 @@ from database.models import IntegrationConnection, TrialAccount
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 SUPPORTED_PLATFORMS = {"salesforce", "servicenow", "hubspot"}
 SALESFORCE_API_VERSION = os.getenv("SALESFORCE_API_VERSION", "v65.0")
 SERVICENOW_DEFAULT_TABLES = {
@@ -563,10 +565,37 @@ async def salesforce_callback(
             },
         )
     if response.status_code >= 400:
+        try:
+            oauth_error = response.json()
+        except (ValueError, TypeError):
+            oauth_error = {}
+        error_code = re.sub(
+            r"[^A-Za-z0-9_.-]",
+            "_",
+            str(oauth_error.get("error") or f"http_{response.status_code}"),
+        )[:100]
+        error_description = str(
+            oauth_error.get("error_description")
+            or oauth_error.get("message")
+            or "Salesforce rejected the OAuth token exchange"
+        ).strip()[:400]
         item.status = "error"
-        item.last_error = "Salesforce authorization failed"
+        item.last_error = f"{error_code}: {error_description}"
+        item.oauth_state = None
         db.commit()
-        raise HTTPException(status_code=502, detail="Salesforce authorization failed")
+        logger.warning(
+            "Salesforce OAuth token exchange failed: status=%s error=%s description=%s",
+            response.status_code,
+            error_code,
+            error_description,
+        )
+        return RedirectResponse(
+            url=(
+                "/salesforce-setup.html?status=error"
+                "&reason=oauth_token_exchange"
+                f"&salesforce_error={quote(error_code)}"
+            )
+        )
     token = response.json()
     access_token = token.get("access_token")
     if not access_token or not token.get("instance_url"):
