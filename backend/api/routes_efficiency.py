@@ -165,6 +165,70 @@ def _ask_conversation_text(request: AskCostPilotRequest) -> str:
     return "\n".join(turns)
 
 
+def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
+    """Resolve deterministic follow-ups without carrying forward an entity scope."""
+    current = _ask_intent(request.question, request.days)
+    text = " ".join((request.question or "").lower().split())
+    has_explicit_metric = (
+        "token" in text
+        or any(term in text for term in (
+            "cost", "spend", "spent", "dollar", "money",
+            "request", "call", "volume", "usage",
+        ))
+    )
+    if has_explicit_metric:
+        return current
+
+    for message in reversed(request.conversation[-8:]):
+        if message.role != "user":
+            continue
+        prior_text = " ".join((message.content or "").lower().split())
+        if "token" in prior_text:
+            current["metric"] = "total_tokens"
+            break
+        if any(term in prior_text for term in ("cost", "spend", "spent", "dollar", "money")):
+            current["metric"] = "spend_usd"
+            break
+        if any(term in prior_text for term in ("request", "call", "volume", "usage")):
+            current["metric"] = "request_count"
+            break
+    return current
+
+
+def _ask_reporting_filters(request: AskCostPilotRequest, parsed: dict) -> dict:
+    """
+    Keep cross-cutting report filters while removing a stale same-entity scope.
+
+    A request for a people ranking cannot remain restricted to the person from
+    the previous lookup. The same rule applies to agents, departments, and
+    business contexts.
+    """
+    filters = {
+        "project_id": request.project_id,
+        "user_external_id": request.user_external_id,
+        "agent_id": request.agent_id,
+        "account_id": request.account_id,
+        "source_platform": request.source_platform,
+        "record_type": request.record_type,
+        "charged_unit": request.charged_unit,
+        "business_purpose": request.business_purpose,
+    }
+    if parsed.get("intent") != "ranking":
+        return filters
+
+    entity = parsed.get("entity")
+    if entity == "person":
+        filters["user_external_id"] = None
+    elif entity == "agent":
+        filters["agent_id"] = None
+    elif entity == "department":
+        filters["charged_unit"] = None
+    elif entity == "context":
+        filters["project_id"] = None
+        filters["account_id"] = None
+    return filters
+
+
 def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     """
     Let OpenAI interpret the reporting question, then validate the result.
@@ -172,7 +236,7 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     OpenAI never receives database rows and never calculates the answer. If the
     call is unavailable or invalid, the deterministic parser remains available.
     """
-    fallback = _ask_intent(request.question, request.days)
+    fallback = _ask_fallback_intent(request)
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
@@ -652,6 +716,7 @@ def ask_costpilot(
         }
 
     parsed, assistant_mode = _resolve_ask_intent(request)
+    reporting_filters = _ask_reporting_filters(request, parsed)
     has_question_period = any(
         phrase in question.lower()
         for phrase in (
@@ -664,14 +729,7 @@ def ask_costpilot(
         date_from=None if has_question_period else request.date_from,
         date_to=None if has_question_period else request.date_to,
         days=parsed["days"],
-        project_id=request.project_id,
-        user_external_id=request.user_external_id,
-        agent_id=request.agent_id,
-        account_id=request.account_id,
-        source_platform=request.source_platform,
-        record_type=request.record_type,
-        charged_unit=request.charged_unit,
-        business_purpose=request.business_purpose,
+        **reporting_filters,
         activity_limit=2000,
         db=db,
     )

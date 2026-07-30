@@ -1,8 +1,12 @@
 from api.routes_efficiency import (
     _ask_evidence,
+    _ask_fallback_intent,
     _ask_intent,
     _ask_named_entity,
     _ask_rank,
+    _ask_reporting_filters,
+    AskCostPilotMessage,
+    AskCostPilotRequest,
     _validated_ask_intent,
 )
 
@@ -112,6 +116,47 @@ def test_top_five_question_preserves_requested_result_count():
     assert intent["result_limit"] == 5
     assert len(evidence) == 5
     assert evidence[0]["label"] == "Person 7"
+
+
+def test_plural_followup_inherits_prior_token_metric():
+    request = AskCostPilotRequest(
+        question="Now show me the five lowest users",
+        days=31,
+        conversation=[
+            AskCostPilotMessage(
+                role="user",
+                content="How many tokens has Sheldon used?",
+            ),
+            AskCostPilotMessage(
+                role="assistant",
+                content="Sheldon Simmons used 5,558 tokens.",
+            ),
+        ],
+    )
+
+    intent = _ask_fallback_intent(request)
+
+    assert intent["intent"] == "ranking"
+    assert intent["entity"] == "person"
+    assert intent["metric"] == "total_tokens"
+    assert intent["direction"] == "asc"
+    assert intent["result_limit"] == 5
+
+
+def test_people_ranking_drops_stale_person_scope_but_keeps_department():
+    request = AskCostPilotRequest(
+        question="Now show me the five lowest users",
+        user_external_id="USER-SHELDON",
+        charged_unit="Sales",
+    )
+
+    filters = _ask_reporting_filters(
+        request,
+        _ask_fallback_intent(request),
+    )
+
+    assert filters["user_external_id"] is None
+    assert filters["charged_unit"] == "Sales"
 
 
 def test_openai_intent_is_bounded_before_it_reaches_reporting():
