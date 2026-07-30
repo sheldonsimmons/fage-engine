@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends
@@ -33,6 +34,16 @@ FLAGSHIP_IN  = 5.00  / 1_000_000
 FLAGSHIP_OUT = 15.00 / 1_000_000
 MICRO_IN     = 0.50  / 1_000_000
 MICRO_OUT    = 1.50  / 1_000_000
+
+_ASK_OPENAI_DISABLED_UNTIL = 0.0
+
+
+def _ask_env_seconds(name: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
 
 
 class AskCostPilotMessage(BaseModel):
@@ -96,6 +107,12 @@ def _ask_intent(question: str, default_days: int) -> dict:
 
     intent = "ranking" if entity != "overview" else "overview"
     if any(term in text for term in (
+        "prun", "tokens removed", "removed before model", "context removed"
+    )):
+        intent = "pruning"
+        metric = "total_tokens"
+        entity = "overview"
+    elif any(term in text for term in (
         "save money", "saving", "reduce cost", "cut cost", "optimize", "recommend", "advice"
     )):
         intent = "savings"
@@ -123,7 +140,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
     }
 
 
-_ASK_INTENTS = {"ranking", "overview", "savings", "budget"}
+_ASK_INTENTS = {"ranking", "overview", "savings", "budget", "pruning"}
 _ASK_ENTITIES = {"person", "agent", "department", "context", "overview"}
 _ASK_METRICS = {"spend_usd", "total_tokens", "request_count"}
 _ASK_DIRECTIONS = {"asc", "desc"}
@@ -236,12 +253,19 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     OpenAI never receives database rows and never calculates the answer. If the
     call is unavailable or invalid, the deterministic parser remains available.
     """
+    global _ASK_OPENAI_DISABLED_UNTIL
+
     fallback = _ask_fallback_intent(request)
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
     api_key = os.getenv("OPENAI_API_KEY", "")
-    if not enabled or not api_key or api_key.startswith("YOUR"):
+    if (
+        not enabled
+        or not api_key
+        or api_key.startswith("YOUR")
+        or time.monotonic() < _ASK_OPENAI_DISABLED_UNTIL
+    ):
         return fallback, "deterministic_fallback"
 
     tool = {
@@ -291,6 +315,7 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     instructions = """You interpret questions for a read-only enterprise AI usage report.
 Use the prior conversation to understand corrections and follow-up questions.
 Choose ranking for highest, lowest, top, bottom, most, least, or "who" questions.
+Choose pruning for questions about tokens or context removed before model calls.
 Use person for employees/users/people; agent for AI agents/bots; department for teams;
 context for accounts/projects/matters/opportunities/work; overview for company totals.
 Use total_tokens for token questions, spend_usd for cost/spend, and request_count for calls/usage.
@@ -300,7 +325,14 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
     try:
         from openai import OpenAI
 
-        client = OpenAI(api_key=api_key)
+        timeout_seconds = _ask_env_seconds(
+            "ASK_COSTPILOT_AI_TIMEOUT_SECONDS", 4.0, 1.0, 10.0
+        )
+        client = OpenAI(
+            api_key=api_key,
+            timeout=timeout_seconds,
+            max_retries=0,
+        )
         response = client.responses.create(
             model=os.getenv("ASK_COSTPILOT_MODEL", "gpt-4.1-mini"),
             instructions=instructions,
@@ -318,6 +350,10 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
                     "openai",
                 )
     except Exception as exc:
+        cooldown_seconds = _ask_env_seconds(
+            "ASK_COSTPILOT_AI_COOLDOWN_SECONDS", 300.0, 15.0, 3600.0
+        )
+        _ASK_OPENAI_DISABLED_UNTIL = time.monotonic() + cooldown_seconds
         logger.warning("Ask CostPilot OpenAI interpretation failed: %s", exc)
     return fallback, "deterministic_fallback"
 
@@ -753,7 +789,7 @@ def ask_costpilot(
         "context": ("project_breakdown", "project_id", context_plural),
     }
 
-    if named_entity and intent not in {"budget", "savings"}:
+    if named_entity and intent not in {"budget", "savings", "pruning"}:
         entity = named_entity["entity"]
         row = named_entity["row"]
         filter_name = named_entity["filter_name"]
@@ -821,6 +857,33 @@ def ask_costpilot(
             if budget_rows else
             "No active department is at or above 70% of its monthly AI budget."
         )
+    elif intent == "pruning":
+        saved_tokens = int(summary.get("tokens_saved") or 0)
+        input_tokens = int(summary.get("input_tokens") or 0)
+        request_count = int(summary.get("request_count") or 0)
+        candidate_tokens = input_tokens + saved_tokens
+        reduction_pct = (
+            saved_tokens / candidate_tokens * 100
+            if candidate_tokens > 0 else 0.0
+        )
+        title = "Pruning impact"
+        answer = (
+            f"CostPilot removed {saved_tokens:,} tokens before model calls "
+            f"over the last {parsed['days']} days. That reduced the candidate "
+            f"input context by {reduction_pct:.1f}% across "
+            f"{request_count:,} governed requests."
+        )
+        evidence = [{
+            "label": "Tokens removed before model calls",
+            "value": f"{saved_tokens:,}",
+            "metric_label": "tokens pruned",
+            "detail": (
+                f"{input_tokens:,} input tokens reached models · "
+                f"{request_count:,} governed requests"
+            ),
+            "filter_name": None,
+            "filter_value": None,
+        }]
     elif intent == "savings":
         activities = report.get("activities") or []
         premium = [

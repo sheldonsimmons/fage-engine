@@ -47,6 +47,22 @@ def test_budget_question_targets_departments():
     assert intent["entity"] == "department"
 
 
+def test_pruning_question_uses_exact_pruning_intent():
+    intent = _ask_intent(
+        "How many tokens did pruning remove?",
+        default_days=31,
+    )
+
+    assert intent == {
+        "intent": "pruning",
+        "entity": "overview",
+        "metric": "total_tokens",
+        "days": 31,
+        "direction": "desc",
+        "result_limit": 5,
+    }
+
+
 def test_rank_and_evidence_are_deterministic_and_drillable():
     rows = [
         {
