@@ -1119,6 +1119,7 @@ def project_activity_reporting(
         for bucket in grouped.values():
             bucket["total_tokens"] = bucket["input_tokens"] + bucket["output_tokens"]
             bucket["spend_usd"] = round(bucket["spend_usd"], 6)
+            bucket["live_count"] = bucket["request_count"] - bucket["simulation_count"]
             result.append(bucket)
         return sorted(
             result,
@@ -1176,6 +1177,16 @@ def project_activity_reporting(
         identity(row)["charged_unit"],
         {},
     ))
+    source_platform_breakdown = aggregate(lambda row: (
+        row[0].source_platform or "Unknown platform",
+        row[0].source_platform or "Unknown platform",
+        {},
+    ))
+    model_breakdown = aggregate(lambda row: (
+        row[0].model_name or row[0].model_tier or "Unknown model",
+        row[0].model_name or row[0].model_tier or "Unknown model",
+        {"model_tier": row[0].model_tier},
+    ))
 
     activities = []
     for tx, project, account, user, agent in rows[:activity_limit]:
@@ -1197,7 +1208,7 @@ def project_activity_reporting(
             "cost_usd": round(float(tx.cost_usd or 0.0), 6),
             "was_pruned": bool(tx.was_pruned),
             "routing_reason": tx.routing_reason,
-            "is_simulation": bool(tx.is_simulation),
+            "is_simulation": is_simulator_traffic((tx, project, account, user, agent)),
         })
 
     def unique_options(key, label, extra=None):
@@ -1292,6 +1303,8 @@ def project_activity_reporting(
         "agent_breakdown": agent_breakdown,
         "organizational_unit_breakdown": organizational_unit_breakdown,
         "business_purpose_breakdown": purpose_breakdown,
+        "source_platform_breakdown": source_platform_breakdown,
+        "model_breakdown": model_breakdown,
         "activities": activities,
         "activity_count": len(rows),
         "activity_limit": activity_limit,

@@ -56,7 +56,7 @@ def test_pruning_question_uses_exact_pruning_intent():
     assert intent == {
         "intent": "pruning",
         "entity": "overview",
-        "metric": "total_tokens",
+        "metric": "tokens_saved",
         "days": 31,
         "direction": "desc",
         "result_limit": 5,

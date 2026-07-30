@@ -1415,6 +1415,7 @@ async function loadDepartments() {
 // ── TAB 4: ASK COSTPILOT + AGENT FLEET REVIEW ─────────────────────────────────
 
 const askCostPilotHistory = [];
+let askCostPilotContext = null;
 
 function askCostPilotSuggestion(button) {
   const input = document.getElementById("askCostPilotInput");
@@ -1448,6 +1449,7 @@ function askCostPilotPayload(question) {
     charged_unit: askCostPilotFilterValue("ctxOrgFilter"),
     business_purpose: askCostPilotFilterValue("ctxPurposeFilter"),
     conversation: askCostPilotHistory.slice(-8),
+    context: askCostPilotContext,
   };
 }
 
@@ -1512,14 +1514,37 @@ function renderAskCostPilotAnswer(data) {
   const period = data.period && data.period.days
     ? `Last ${escapeHtml(String(data.period.days))} days`
     : "Selected reporting period";
+  const provenance = data.data_provenance || {};
+  const liveRequests = Number(provenance.live_requests || 0);
+  const simulatorRequests = Number(provenance.simulator_requests || 0);
+  const scopeLabel = provenance.scope === "live"
+    ? `Live data · ${liveRequests} requests`
+    : provenance.scope === "simulator"
+      ? `Simulator data · ${simulatorRequests} requests`
+      : provenance.scope === "mixed"
+        ? `Live + simulator · ${liveRequests} live / ${simulatorRequests} simulated`
+        : "No matching activity";
+  const activeFilters = Object.entries(provenance.active_filters || {})
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
+    .map(([key, value]) => `<span>${escapeHtml(key.replaceAll("_", " "))}: ${escapeHtml(String(value))}</span>`)
+    .join("");
+  const calculation = data.calculation
+    ? `<div class="ask-answer-section ask-calculation-detail">
+        <h4>Calculation</h4>
+        <p>${escapeHtml(data.calculation.formula || "")} across
+        ${escapeHtml(String(data.calculation.row_count || 0))} matching requests.</p>
+       </div>`
+    : "";
   return `
     <div class="ask-answer-header">
       <div><span class="ask-answer-kicker">${escapeHtml(period)}</span>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3></div>
-      <span class="ask-calculated">Calculated</span>
+      <span class="ask-calculated">${escapeHtml(scopeLabel)} · Calculated</span>
     </div>
     <p>${escapeHtml(data.answer || "No answer was returned.")}</p>
+    ${activeFilters ? `<div class="ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
     ${evidence}
+    ${calculation}
     ${recommendations}
     <div class="ask-answer-note">${escapeHtml(data.measurement_note || "Calculated from governed CostPilot activity.")}</div>
   `;
@@ -1548,6 +1573,7 @@ async function submitAskCostPilot(event) {
       { role: "user", content: question },
       { role: "assistant", content: data.answer || "" },
     );
+    askCostPilotContext = data.conversation_context || askCostPilotContext;
     if (askCostPilotHistory.length > 8) {
       askCostPilotHistory.splice(0, askCostPilotHistory.length - 8);
     }
@@ -1571,6 +1597,8 @@ async function drillFromAskCostPilot(filterName, filterValue) {
     account_id: "ctxAccountFilter",
     charged_unit: "ctxOrgFilter",
     business_purpose: "ctxPurposeFilter",
+    source_platform: "ctxSourceFilter",
+    record_type: "ctxRecordTypeFilter",
   };
   const selectId = selectIds[filterName];
   const tab = document.querySelector('.rpt-tab[data-tab="contexts"]');
@@ -1596,6 +1624,15 @@ async function drillFromAskCostPilot(filterName, filterValue) {
     select.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 }
+
+window.getCostPilotAskScope = function getCostPilotAskScope() {
+  const payload = askCostPilotPayload("");
+  delete payload.question;
+  delete payload.conversation;
+  delete payload.context;
+  return payload;
+};
+window.drillFromAskCostPilot = drillFromAskCostPilot;
 
 function getEfficiencyDays() {
   return (document.getElementById("effDaysSelect") || {}).value || "30";
@@ -2139,6 +2176,17 @@ document.addEventListener("DOMContentLoaded", () => {
     ? document.querySelector(`.rpt-tab[data-tab="${CSS.escape(requestedTab)}"]`)
     : null;
   if (requestedButton && requestedTab !== activeTab) requestedButton.click();
+  try {
+    const pendingDrill = JSON.parse(sessionStorage.getItem("cp_ask_pending_drill") || "null");
+    if (pendingDrill && pendingDrill.filterName) {
+      sessionStorage.removeItem("cp_ask_pending_drill");
+      setTimeout(() => {
+        drillFromAskCostPilot(pendingDrill.filterName, pendingDrill.filterValue);
+      }, 250);
+    }
+  } catch (_error) {
+    sessionStorage.removeItem("cp_ask_pending_drill");
+  }
   setTimeout(() => initDraggableReports("savings"), 100);
 });
 
