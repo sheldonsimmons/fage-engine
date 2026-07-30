@@ -1414,6 +1414,8 @@ async function loadDepartments() {
 
 // ── TAB 4: ASK COSTPILOT + AGENT FLEET REVIEW ─────────────────────────────────
 
+const askCostPilotHistory = [];
+
 function askCostPilotSuggestion(button) {
   const input = document.getElementById("askCostPilotInput");
   if (!input || !button) return;
@@ -1445,6 +1447,7 @@ function askCostPilotPayload(question) {
     record_type: askCostPilotFilterValue("ctxRecordTypeFilter"),
     charged_unit: askCostPilotFilterValue("ctxOrgFilter"),
     business_purpose: askCostPilotFilterValue("ctxPurposeFilter"),
+    conversation: askCostPilotHistory.slice(-8),
   };
 }
 
@@ -1541,6 +1544,13 @@ async function submitAskCostPilot(event) {
   try {
     const data = await apiPost("/api/reports/bot-efficiency/ask", askCostPilotPayload(question));
     if (pending) pending.querySelector(".ask-message-body").innerHTML = renderAskCostPilotAnswer(data);
+    askCostPilotHistory.push(
+      { role: "user", content: question },
+      { role: "assistant", content: data.answer || "" },
+    );
+    if (askCostPilotHistory.length > 8) {
+      askCostPilotHistory.splice(0, askCostPilotHistory.length - 8);
+    }
   } catch (error) {
     if (pending) {
       pending.querySelector(".ask-message-body").innerHTML =

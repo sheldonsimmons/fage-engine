@@ -12,10 +12,14 @@ Works with both live and simulated model modes:
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
+import json
+import logging
+import os
+import re
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -23,11 +27,19 @@ from database.db import get_db
 from database.models import TokenTransaction, RegisteredAgent, DepartmentBudget
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 FLAGSHIP_IN  = 5.00  / 1_000_000
 FLAGSHIP_OUT = 15.00 / 1_000_000
 MICRO_IN     = 0.50  / 1_000_000
 MICRO_OUT    = 1.50  / 1_000_000
+
+
+class AskCostPilotMessage(BaseModel):
+    """A bounded prior turn used only to understand follow-up questions."""
+
+    role: Literal["user", "assistant"]
+    content: str
 
 
 class AskCostPilotRequest(BaseModel):
@@ -46,6 +58,7 @@ class AskCostPilotRequest(BaseModel):
     record_type: Optional[str] = None
     charged_unit: Optional[str] = None
     business_purpose: Optional[str] = None
+    conversation: list[AskCostPilotMessage] = Field(default_factory=list)
 
 
 def _ask_intent(question: str, default_days: int) -> dict:
@@ -93,15 +106,165 @@ def _ask_intent(question: str, default_days: int) -> dict:
     elif any(term in text for term in ("overview", "summary", "where is", "breakdown")):
         intent = "overview"
 
-    return {"intent": intent, "entity": entity, "metric": metric, "days": days}
+    direction = "asc" if any(term in text for term in (
+        "fewest", "least", "lowest", "smallest", "bottom"
+    )) else "desc"
+    count_match = re.search(r"\b(?:top|bottom|first|last)\s+(\d{1,2})\b", text)
+    result_limit = int(count_match.group(1)) if count_match else 5
+    result_limit = max(1, min(result_limit, 20))
+
+    return {
+        "intent": intent,
+        "entity": entity,
+        "metric": metric,
+        "days": days,
+        "direction": direction,
+        "result_limit": result_limit,
+    }
 
 
-def _ask_rank(rows: list, metric: str) -> list:
+_ASK_INTENTS = {"ranking", "overview", "savings", "budget"}
+_ASK_ENTITIES = {"person", "agent", "department", "context", "overview"}
+_ASK_METRICS = {"spend_usd", "total_tokens", "request_count"}
+_ASK_DIRECTIONS = {"asc", "desc"}
+
+
+def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
+    """Accept only the small reporting vocabulary CostPilot can calculate."""
+    candidate = candidate if isinstance(candidate, dict) else {}
+    result = dict(fallback)
+    if candidate.get("intent") in _ASK_INTENTS:
+        result["intent"] = candidate["intent"]
+    if candidate.get("entity") in _ASK_ENTITIES:
+        result["entity"] = candidate["entity"]
+    if candidate.get("metric") in _ASK_METRICS:
+        result["metric"] = candidate["metric"]
+    if candidate.get("direction") in _ASK_DIRECTIONS:
+        result["direction"] = candidate["direction"]
+    try:
+        result["days"] = max(1, min(int(candidate.get("days")), 365))
+    except (TypeError, ValueError):
+        pass
+    try:
+        result["result_limit"] = max(
+            1, min(int(candidate.get("result_limit")), 20)
+        )
+    except (TypeError, ValueError):
+        pass
+    return result
+
+
+def _ask_conversation_text(request: AskCostPilotRequest) -> str:
+    """Create a small, non-sensitive transcript for conversational reference."""
+    turns = []
+    for message in request.conversation[-8:]:
+        content = " ".join((message.content or "").split())[:1200]
+        if content:
+            turns.append(f"{message.role.upper()}: {content}")
+    turns.append(f"USER: {' '.join((request.question or '').split())[:2000]}")
+    return "\n".join(turns)
+
+
+def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
+    """
+    Let OpenAI interpret the reporting question, then validate the result.
+
+    OpenAI never receives database rows and never calculates the answer. If the
+    call is unavailable or invalid, the deterministic parser remains available.
+    """
+    fallback = _ask_intent(request.question, request.days)
+    enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
+        "0", "false", "no", "off"
+    }
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not enabled or not api_key or api_key.startswith("YOUR"):
+        return fallback, "deterministic_fallback"
+
+    tool = {
+        "type": "function",
+        "name": "query_costpilot_usage",
+        "description": (
+            "Select the exact read-only CostPilot report needed to answer the "
+            "user's question. This tool selects a report; it does not calculate facts."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "enum": sorted(_ASK_INTENTS),
+                },
+                "entity": {
+                    "type": "string",
+                    "enum": sorted(_ASK_ENTITIES),
+                },
+                "metric": {
+                    "type": "string",
+                    "enum": sorted(_ASK_METRICS),
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": sorted(_ASK_DIRECTIONS),
+                },
+                "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                },
+                "result_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                },
+            },
+            "required": [
+                "intent", "entity", "metric", "direction", "days", "result_limit"
+            ],
+            "additionalProperties": False,
+        },
+    }
+    instructions = """You interpret questions for a read-only enterprise AI usage report.
+Use the prior conversation to understand corrections and follow-up questions.
+Choose ranking for highest, lowest, top, bottom, most, least, or "who" questions.
+Use person for employees/users/people; agent for AI agents/bots; department for teams;
+context for accounts/projects/matters/opportunities/work; overview for company totals.
+Use total_tokens for token questions, spend_usd for cost/spend, and request_count for calls/usage.
+Never infer employee productivity, performance, or business outcomes.
+Always call query_costpilot_usage. Do not answer the question yourself."""
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        response = client.responses.create(
+            model=os.getenv("ASK_COSTPILOT_MODEL", "gpt-4.1-mini"),
+            instructions=instructions,
+            input=_ask_conversation_text(request),
+            tools=[tool],
+            tool_choice="required",
+        )
+        for item in response.output:
+            item_type = getattr(item, "type", None)
+            item_name = getattr(item, "name", None)
+            if item_type == "function_call" and item_name == tool["name"]:
+                arguments = getattr(item, "arguments", "{}")
+                return (
+                    _validated_ask_intent(json.loads(arguments), fallback),
+                    "openai",
+                )
+    except Exception as exc:
+        logger.warning("Ask CostPilot OpenAI interpretation failed: %s", exc)
+    return fallback, "deterministic_fallback"
+
+
+def _ask_rank(rows: list, metric: str, direction: str = "desc") -> list:
+    ascending = direction == "asc"
     return sorted(
         rows or [],
         key=lambda row: (
-            -float(row.get(metric) or 0),
-            -float(row.get("request_count") or 0),
+            float(row.get(metric) or 0) * (1 if ascending else -1),
+            float(row.get("request_count") or 0) * (1 if ascending else -1),
             str(row.get("label") or ""),
         ),
     )
@@ -116,9 +279,15 @@ def _ask_metric_value(metric: str, value) -> tuple[str, str]:
     return f"{int(number):,}", "tokens"
 
 
-def _ask_evidence(rows: list, metric: str, filter_name: str) -> list:
+def _ask_evidence(
+    rows: list,
+    metric: str,
+    filter_name: str,
+    direction: str = "desc",
+    limit: int = 5,
+) -> list:
     evidence = []
-    for row in _ask_rank(rows, metric)[:5]:
+    for row in _ask_rank(rows, metric, direction)[:limit]:
         value, metric_label = _ask_metric_value(metric, row.get(metric))
         evidence.append({
             "label": row.get("label") or "Unknown",
@@ -409,7 +578,7 @@ def ask_costpilot(
             "recommendations": [],
         }
 
-    parsed = _ask_intent(question, request.days)
+    parsed, assistant_mode = _resolve_ask_intent(request)
     has_question_period = any(
         phrase in question.lower()
         for phrase in (
@@ -439,6 +608,8 @@ def ask_costpilot(
     metric = parsed["metric"]
     intent = parsed["intent"]
     entity = parsed["entity"]
+    direction = parsed["direction"]
+    result_limit = parsed["result_limit"]
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -547,16 +718,38 @@ def ask_costpilot(
         )
     elif intent == "ranking" and entity in entity_config:
         breakdown_key, filter_name, entity_label = entity_config[entity]
-        ranked = _ask_rank(report.get(breakdown_key) or [], metric)
-        evidence = _ask_evidence(ranked, metric, filter_name)
-        title = f"Top {entity_label.lower()} by {_ask_metric_value(metric, 0)[1]}"
+        ranked = _ask_rank(report.get(breakdown_key) or [], metric, direction)
+        evidence = _ask_evidence(
+            ranked,
+            metric,
+            filter_name,
+            direction=direction,
+            limit=result_limit,
+        )
+        rank_label = "Lowest" if direction == "asc" else "Top"
+        title = f"{rank_label} {entity_label.lower()} by {_ask_metric_value(metric, 0)[1]}"
         if ranked:
             value, metric_label = _ask_metric_value(metric, ranked[0].get(metric))
-            answer = (
-                f"{ranked[0].get('label') or 'Unknown'} had the highest {metric_label} "
-                f"over the last {parsed['days']} days: {value}. "
-                f"That includes {int(ranked[0].get('request_count') or 0):,} governed requests."
-            )
+            if result_limit > 1:
+                available = min(result_limit, len(ranked))
+                qualifier = (
+                    f"the {available} matching {entity_label.lower()}"
+                    if available == result_limit
+                    else f"all {available} matching {entity_label.lower()} available"
+                )
+                answer = (
+                    f"Showing {qualifier}, ordered from "
+                    f"{'lowest to highest' if direction == 'asc' else 'highest to lowest'} "
+                    f"{metric_label} over the last {parsed['days']} days. "
+                    f"{ranked[0].get('label') or 'Unknown'} is first at {value}."
+                )
+            else:
+                answer = (
+                    f"{ranked[0].get('label') or 'Unknown'} had the "
+                    f"{'lowest' if direction == 'asc' else 'highest'} {metric_label} "
+                    f"over the last {parsed['days']} days: {value}. "
+                    f"That includes {int(ranked[0].get('request_count') or 0):,} governed requests."
+                )
         else:
             answer = f"No {entity_label.lower()} had attributed AI activity in this period."
     else:
@@ -586,6 +779,8 @@ def ask_costpilot(
         "recommendations": recommendations,
         "measurement_note": report.get("measurement_note"),
         "calculation_source": "CostPilot deterministic attribution engine",
+        "assistant_mode": assistant_mode,
+        "interpreted_intent": parsed,
         "read_only": True,
     }
 
