@@ -1,6 +1,7 @@
 from api.routes_efficiency import (
     _ask_evidence,
     _ask_intent,
+    _ask_named_entity,
     _ask_rank,
     _validated_ask_intent,
 )
@@ -136,3 +137,47 @@ def test_openai_intent_is_bounded_before_it_reaches_reporting():
         "direction": "asc",
         "result_limit": 20,
     }
+
+
+def test_named_person_is_resolved_from_costpilot_breakdown():
+    report = {
+        "people_breakdown": [
+            {
+                "id": "USER-1",
+                "label": "Sheldon Simmons",
+                "request_count": 12,
+                "total_tokens": 4321,
+                "spend_usd": 0.19,
+            },
+            {
+                "id": "USER-2",
+                "label": "Marcus Reed",
+                "request_count": 8,
+                "total_tokens": 2100,
+                "spend_usd": 0.08,
+            },
+        ],
+        "agent_breakdown": [],
+        "organizational_unit_breakdown": [],
+        "project_breakdown": [],
+    }
+
+    match = _ask_named_entity("How many tokens has Sheldon used?", report)
+
+    assert match["entity"] == "person"
+    assert match["filter_name"] == "user_external_id"
+    assert match["row"]["label"] == "Sheldon Simmons"
+
+
+def test_ambiguous_name_is_not_guessed():
+    report = {
+        "people_breakdown": [
+            {"id": "USER-1", "label": "Alex Morgan"},
+            {"id": "USER-2", "label": "Alex Johnson"},
+        ],
+        "agent_breakdown": [],
+        "organizational_unit_breakdown": [],
+        "project_breakdown": [],
+    }
+
+    assert _ask_named_entity("How many tokens has Alex used?", report) is None

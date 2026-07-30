@@ -304,6 +304,79 @@ def _ask_evidence(
     return evidence
 
 
+_ASK_NAME_STOP_WORDS = {
+    "about", "account", "agent", "cost", "department", "employee", "has",
+    "have", "many", "much", "person", "project", "request", "requests",
+    "show", "spend", "team", "token", "tokens", "used", "usage", "user",
+    "what", "which", "who", "with",
+}
+
+
+def _ask_name_tokens(value: str) -> set[str]:
+    """Return meaningful tokens used to match a named reporting subject."""
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", (value or "").lower())
+        if len(token) >= 3 and token not in _ASK_NAME_STOP_WORDS
+    }
+
+
+def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
+    """
+    Resolve an explicitly named person, agent, department, or work item.
+
+    Matching happens only against labels already returned by CostPilot's
+    deterministic attribution report. A single first/last-name token can
+    identify a row only when it is unique across every candidate.
+    """
+    question_tokens = _ask_name_tokens(question)
+    if not question_tokens:
+        return None
+
+    candidates = []
+    configs = (
+        ("person", "people_breakdown", "user_external_id", "person"),
+        ("agent", "agent_breakdown", "agent_id", "agent"),
+        (
+            "department",
+            "organizational_unit_breakdown",
+            "charged_unit",
+            "department or team",
+        ),
+        (
+            "context",
+            "project_breakdown",
+            "project_id",
+            (report.get("context_label_singular") or "business context").lower(),
+        ),
+    )
+    for entity, breakdown_key, filter_name, entity_label in configs:
+        for row in report.get(breakdown_key) or []:
+            label = str(row.get("label") or "").strip()
+            label_tokens = _ask_name_tokens(label)
+            overlap = question_tokens & label_tokens
+            if not overlap:
+                continue
+            candidates.append({
+                "entity": entity,
+                "entity_label": entity_label,
+                "filter_name": filter_name,
+                "row": row,
+                "score": (
+                    len(overlap),
+                    1 if label_tokens and label_tokens.issubset(question_tokens) else 0,
+                    len(" ".join(overlap)),
+                ),
+            })
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+    if len(candidates) > 1 and candidates[0]["score"] == candidates[1]["score"]:
+        return None
+    return candidates[0]
+
+
 def _agent_stats(db: Session, agent: RegisteredAgent, days: int) -> dict:
     """Compute performance metrics for one agent over the given window."""
     since = datetime.utcnow() - timedelta(days=days)
@@ -613,6 +686,7 @@ def ask_costpilot(
     evidence = []
     recommendations = []
     title = "AI usage overview"
+    named_entity = _ask_named_entity(question, report)
 
     entity_config = {
         "person": ("people_breakdown", "user_external_id", "People"),
@@ -621,7 +695,28 @@ def ask_costpilot(
         "context": ("project_breakdown", "project_id", context_plural),
     }
 
-    if intent == "budget":
+    if named_entity and intent not in {"budget", "savings"}:
+        entity = named_entity["entity"]
+        row = named_entity["row"]
+        filter_name = named_entity["filter_name"]
+        entity_label = named_entity["entity_label"]
+        value, metric_label = _ask_metric_value(metric, row.get(metric))
+        title = f"{row.get('label') or 'Named entity'} AI usage"
+        answer = (
+            f"{row.get('label') or 'The selected entity'} used {value} "
+            f"{metric_label} over the last {parsed['days']} days. "
+            f"That includes {int(row.get('request_count') or 0):,} governed requests, "
+            f"{int(row.get('total_tokens') or 0):,} tokens, and "
+            f"${float(row.get('spend_usd') or 0):,.4f} in AI spend."
+        )
+        evidence = _ask_evidence(
+            [row],
+            metric,
+            filter_name,
+            limit=1,
+        )
+        intent = "lookup"
+    elif intent == "budget":
         budget_query = db.query(DepartmentBudget).filter(
             DepartmentBudget.archived.isnot(True)
         )
