@@ -337,6 +337,12 @@
   }
 
   function openAskDrill(filterName, filterValue) {
+    if (filterName === "audit_event_id") {
+      closeAskCostPilot();
+      writeSession("cp_audit_pending_event", String(filterValue));
+      location.href = "/operate.html#audit";
+      return;
+    }
     if (typeof window.drillFromAskCostPilot === "function") {
       closeAskCostPilot();
       window.drillFromAskCostPilot(filterName, filterValue);

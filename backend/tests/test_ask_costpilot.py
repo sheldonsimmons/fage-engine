@@ -63,6 +63,49 @@ def test_pruning_question_uses_exact_pruning_intent():
     }
 
 
+def test_blocked_question_uses_governance_intent():
+    intent = _ask_intent(
+        "Why were requests blocked?",
+        default_days=31,
+    )
+
+    assert intent["intent"] == "blocked"
+    assert intent["entity"] == "overview"
+    assert intent["metric"] == "request_count"
+
+
+def test_latest_risk_events_uses_risk_event_intent():
+    intent = _ask_intent(
+        "Show the latest risk events.",
+        default_days=31,
+    )
+
+    assert intent["intent"] == "risk_events"
+    assert intent["entity"] == "overview"
+    assert intent["metric"] == "request_count"
+
+
+def test_governance_question_is_not_overwritten_by_conversation_context():
+    request = AskCostPilotRequest(
+        question="Show the latest risk events.",
+        days=31,
+        conversation=[
+            AskCostPilotMessage(
+                role="user",
+                content="Which models handled the most requests?",
+            ),
+            AskCostPilotMessage(
+                role="assistant",
+                content="Claude Haiku handled the most requests.",
+            ),
+        ],
+    )
+
+    intent = _ask_fallback_intent(request)
+
+    assert intent["intent"] == "risk_events"
+
+
 def test_rank_and_evidence_are_deterministic_and_drillable():
     rows = [
         {

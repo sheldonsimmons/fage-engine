@@ -608,3 +608,16 @@ function _doJumpToAuditEntry(eventId) {
   // 5. Auto-expand the rationale inline
   setTimeout(() => toggleRationale(eventId), 400);
 }
+
+function openPendingAskCostPilotAuditEvent() {
+  const eventId = sessionStorage.getItem("cp_audit_pending_event");
+  if (!eventId) return;
+  sessionStorage.removeItem("cp_audit_pending_event");
+  setTimeout(() => jumpToMainAuditRow(eventId), 500);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", openPendingAskCostPilotAuditEvent);
+} else {
+  openPendingAskCostPilotAuditEvent();
+}

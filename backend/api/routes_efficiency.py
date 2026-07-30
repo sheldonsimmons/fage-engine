@@ -22,10 +22,16 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from database.db import get_db
-from database.models import TokenTransaction, RegisteredAgent, DepartmentBudget
+from database.models import (
+    AuditEvent,
+    DepartmentBudget,
+    RegisteredAgent,
+    TokenTransaction,
+    WorkItem,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -125,6 +131,21 @@ def _ask_intent(question: str, default_days: int) -> dict:
 
     intent = "ranking" if entity != "overview" else "overview"
     if any(term in text for term in (
+        "risk event", "risk events", "governance event", "governance events",
+        "latest risk", "recent risk",
+    )):
+        intent = "risk_events"
+        metric = "request_count"
+        entity = "overview"
+    elif any(term in text for term in (
+        "why were requests blocked", "why was the request blocked",
+        "blocked request", "blocked requests", "requests blocked",
+        "blocking reason", "block reason",
+    )):
+        intent = "blocked"
+        metric = "request_count"
+        entity = "overview"
+    elif any(term in text for term in (
         "prun", "tokens removed", "removed before model", "context removed"
     )):
         intent = "pruning"
@@ -165,7 +186,8 @@ def _ask_intent(question: str, default_days: int) -> dict:
 
 
 _ASK_INTENTS = {
-    "ranking", "overview", "savings", "budget", "pruning", "source_mix"
+    "ranking", "overview", "savings", "budget", "pruning", "source_mix",
+    "blocked", "risk_events",
 }
 _ASK_ENTITIES = {
     "person", "agent", "department", "context", "platform", "model", "overview"
@@ -215,6 +237,12 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
     current = _ask_intent(request.question, request.days)
     text = " ".join((request.question or "").lower().split())
     context = request.context.model_dump(exclude_none=True) if request.context else {}
+
+    # Governance questions are complete, explicit intents. A prior ranking
+    # context must never turn "show the latest risk events" into another model
+    # or person ranking.
+    if current["intent"] in {"blocked", "risk_events"}:
+        return current
 
     explicit_metric = (
         "token" in text
@@ -315,6 +343,8 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     global _ASK_OPENAI_DISABLED_UNTIL
 
     fallback = _ask_fallback_intent(request)
+    if fallback["intent"] in {"blocked", "risk_events"}:
+        return fallback, "deterministic_governance"
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
@@ -374,6 +404,8 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     instructions = """You interpret questions for a read-only enterprise AI usage report.
 Use the prior conversation to understand corrections and follow-up questions.
 Choose ranking for highest, lowest, top, bottom, most, least, or "who" questions.
+Choose blocked for questions asking why requests were blocked.
+Choose risk_events for questions asking for recent or latest governance risk events.
 Choose pruning for questions about tokens or context removed before model calls.
 Use person for employees/users/people; agent for AI agents/bots; department for teams;
 context for accounts/projects/matters/opportunities/work; platform for source systems;
@@ -467,6 +499,157 @@ def _ask_evidence(
             "filter_value": row.get("id"),
             "live_count": int(row.get("live_count") or 0),
             "simulation_count": int(row.get("simulation_count") or 0),
+        })
+    return evidence
+
+
+def _ask_audit_period(period: dict) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Convert the attribution report's inclusive dates to audit boundaries."""
+    try:
+        start = datetime.strptime(str(period.get("date_from"))[:10], "%Y-%m-%d")
+    except (TypeError, ValueError):
+        start = None
+    try:
+        end = (
+            datetime.strptime(str(period.get("date_to"))[:10], "%Y-%m-%d")
+            + timedelta(days=1)
+        )
+    except (TypeError, ValueError):
+        end = None
+    return start, end
+
+
+def _ask_audit_reason(event: AuditEvent) -> str:
+    """Give a conservative, evidence-derived reason for a governance event."""
+    text = " ".join((
+        str(event.event_type or ""),
+        str(event.decision_outcome or ""),
+        str(event.rationale or ""),
+        str(event.matched_keywords_json or ""),
+    )).lower()
+    if any(term in text for term in ("sensitive", "keyword", "pii", "policy term")):
+        return "Sensitive-data or keyword policy"
+    if any(term in text for term in ("budget", "cap", "throttle")):
+        return "Budget or throttle policy"
+    if any(term in text for term in ("collision", "concurr", "queue", "lock")):
+        return "Concurrency or collision policy"
+    return "Governance policy"
+
+
+def _ask_governance_events(
+    db: Session,
+    request: AskCostPilotRequest,
+    period: dict,
+    intent: str,
+) -> tuple[list[AuditEvent], int, int, int]:
+    """Query only meaningful audit events while preserving report scope."""
+    query = db.query(AuditEvent)
+    start, end = _ask_audit_period(period)
+    if start:
+        query = query.filter(AuditEvent.timestamp >= start)
+    if end:
+        query = query.filter(AuditEvent.timestamp < end)
+    if request.workspace_id:
+        query = query.filter(or_(
+            AuditEvent.workspace_id == request.workspace_id,
+            AuditEvent.department.like(f"{request.workspace_id}:%"),
+        ))
+    if request.user_external_id:
+        query = query.filter(
+            AuditEvent.actor_external_id == request.user_external_id
+        )
+    if request.agent_id:
+        query = query.filter(AuditEvent.agent_id == request.agent_id)
+    if request.source_platform:
+        query = query.filter(
+            func.lower(AuditEvent.actor_source_platform)
+            == request.source_platform.lower()
+        )
+    if request.record_type:
+        query = query.filter(
+            func.lower(AuditEvent.origin_record_type)
+            == request.record_type.lower()
+        )
+    if request.charged_unit:
+        query = query.filter(or_(
+            func.lower(AuditEvent.charged_org_unit_name)
+            == request.charged_unit.lower(),
+            func.lower(AuditEvent.department).like(
+                f"%:{request.charged_unit.lower()}"
+            ),
+            func.lower(AuditEvent.department) == request.charged_unit.lower(),
+        ))
+    if request.project_id:
+        query = query.filter(AuditEvent.work_item.has(or_(
+            WorkItem.external_id == request.project_id,
+            WorkItem.source_record_id == request.project_id,
+        )))
+
+    event_text = func.lower(func.coalesce(AuditEvent.event_type, ""))
+    outcome_text = func.lower(func.coalesce(AuditEvent.decision_outcome, ""))
+    rationale_text = func.lower(func.coalesce(AuditEvent.rationale, ""))
+    if intent == "blocked":
+        query = query.filter(or_(
+            outcome_text.like("%block%"),
+            event_text.like("%block%"),
+            rationale_text.like("%request blocked%"),
+            rationale_text.like("%blocked by%"),
+        ))
+    else:
+        risk_text = func.lower(func.coalesce(AuditEvent.risk_level, ""))
+        query = query.filter(or_(
+            risk_text.in_(("medium", "high", "critical")),
+            outcome_text.like("%block%"),
+            outcome_text.like("%lock%"),
+            outcome_text.like("%queue%"),
+            outcome_text.like("%skip%"),
+            outcome_text.like("%throttle%"),
+            event_text.like("%block%"),
+            event_text.like("%lock%"),
+            event_text.like("%collision%"),
+            event_text.like("%throttle%"),
+            rationale_text.like("%request blocked%"),
+            rationale_text.like("%collision%"),
+            rationale_text.like("%throttle%"),
+        ))
+
+    total = query.count()
+    live_total = query.filter(AuditEvent.is_simulation.isnot(True)).count()
+    simulation_total = query.filter(AuditEvent.is_simulation.is_(True)).count()
+    return (
+        query.order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc())
+        .limit(20)
+        .all(),
+        total,
+        live_total,
+        simulation_total,
+    )
+
+
+def _ask_governance_evidence(events: list[AuditEvent], limit: int) -> list:
+    """Render audit-backed evidence with a direct event drill key."""
+    evidence = []
+    for event in events[:limit]:
+        outcome = str(event.decision_outcome or event.event_type or "risk event")
+        timestamp = event.timestamp.strftime("%b %d, %Y %I:%M %p") if event.timestamp else "Unknown time"
+        subject = (
+            event.origin_record_name
+            or event.actor_name
+            or f"Audit event {event.id}"
+        )
+        department = str(event.charged_org_unit_name or event.department or "Unassigned")
+        evidence.append({
+            "label": subject,
+            "value": timestamp,
+            "metric_label": outcome.replace("_", " ").title(),
+            "detail": (
+                f"{_ask_audit_reason(event)} · {department} · "
+                f"{'simulator' if event.is_simulation else 'live'}"
+            ),
+            "filter_name": "audit_event_id",
+            "filter_value": event.id,
+            "live_count": 0 if event.is_simulation else 1,
+            "simulation_count": 1 if event.is_simulation else 0,
         })
     return evidence
 
@@ -850,6 +1033,8 @@ def ask_costpilot(
     evidence = []
     recommendations = []
     title = "AI usage overview"
+    calculation_formula = None
+    calculation_row_count = None
     named_entity = _ask_named_entity(question, report)
 
     entity_config = {
@@ -880,7 +1065,9 @@ def ask_costpilot(
     else:
         data_scope = "no_activity"
 
-    if named_entity and intent not in {"budget", "savings", "pruning"}:
+    if named_entity and intent not in {
+        "budget", "savings", "pruning", "blocked", "risk_events"
+    }:
         entity = named_entity["entity"]
         row = named_entity["row"]
         filter_name = named_entity["filter_name"]
@@ -901,6 +1088,66 @@ def ask_costpilot(
             limit=1,
         )
         intent = "lookup"
+    elif intent in {"blocked", "risk_events"}:
+        (
+            governance_events,
+            governance_total,
+            live_count,
+            simulation_count,
+        ) = _ask_governance_events(db, request, period, intent)
+        evidence = _ask_governance_evidence(governance_events, result_limit)
+        calculation_row_count = governance_total
+        if intent == "blocked":
+            title = "Why requests were blocked"
+            calculation_formula = (
+                "Count audit events with a blocked decision or blocking rationale"
+            )
+            if governance_total:
+                reasons = {}
+                for event in governance_events:
+                    reason = _ask_audit_reason(event)
+                    reasons[reason] = reasons.get(reason, 0) + 1
+                top_reason, top_reason_count = max(
+                    reasons.items(),
+                    key=lambda item: (item[1], item[0]),
+                )
+                answer = (
+                    f"CostPilot recorded {governance_total:,} blocked "
+                    f"request{'s' if governance_total != 1 else ''} for "
+                    f"{period_label}. Among the latest "
+                    f"{len(governance_events):,} matching events, the most common "
+                    f"reason was {top_reason.lower()} "
+                    f"({top_reason_count:,} event"
+                    f"{'s' if top_reason_count != 1 else ''})."
+                )
+                recommendations.append({
+                    "title": "Review the blocking evidence",
+                    "body": (
+                        "Open an event below before changing policy. The audit "
+                        "record shows the applied control, source, and business context."
+                    ),
+                })
+            else:
+                answer = (
+                    f"No blocked requests were recorded for {period_label} "
+                    "within the active filters."
+                )
+        else:
+            title = "Latest risk events"
+            calculation_formula = (
+                "Count meaningful audit events with elevated risk or a control outcome"
+            )
+            if governance_total:
+                answer = (
+                    f"Showing the latest {len(evidence):,} of "
+                    f"{governance_total:,} risk and control events for "
+                    f"{period_label}. Routine routing decisions are excluded."
+                )
+            else:
+                answer = (
+                    f"No meaningful risk or control events were recorded for "
+                    f"{period_label} within the active filters."
+                )
     elif intent == "budget":
         budget_query = db.query(DepartmentBudget).filter(
             DepartmentBudget.archived.isnot(True)
@@ -1104,13 +1351,22 @@ def ask_costpilot(
         )
         evidence = _ask_evidence(context_rows, "spend_usd", "project_id")
 
+    if live_count and simulation_count:
+        data_scope = "mixed"
+    elif simulation_count:
+        data_scope = "simulator"
+    elif live_count:
+        data_scope = "live"
+    else:
+        data_scope = "no_activity"
+
     active_filters = {
         key: value for key, value in (report.get("filters") or {}).items()
         if value not in (None, "")
     }
     calculation = {
         "metric": metric,
-        "formula": (
+        "formula": calculation_formula or (
             "Sum of input tokens plus output tokens"
             if metric == "total_tokens"
             else "Sum of tokens removed before model calls"
@@ -1119,7 +1375,11 @@ def ask_costpilot(
             if metric == "request_count"
             else "Sum of recorded model-call cost"
         ),
-        "row_count": int(summary.get("request_count") or 0),
+        "row_count": (
+            calculation_row_count
+            if calculation_row_count is not None
+            else int(summary.get("request_count") or 0)
+        ),
         "period_label": period_label,
     }
     conversation_context = {
