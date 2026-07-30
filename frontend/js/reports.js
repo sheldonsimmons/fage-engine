@@ -1412,7 +1412,180 @@ async function loadDepartments() {
   applyDeptChartVisibility();
 }
 
-// ── TAB 4: BOT EFFICIENCY REVIEW ──────────────────────────────────────────────
+// ── TAB 4: ASK COSTPILOT + AGENT FLEET REVIEW ─────────────────────────────────
+
+function askCostPilotSuggestion(button) {
+  const input = document.getElementById("askCostPilotInput");
+  if (!input || !button) return;
+  input.value = button.textContent.trim();
+  input.focus();
+  submitAskCostPilot();
+}
+
+function askCostPilotFilterValue(id) {
+  const element = document.getElementById(id);
+  return element ? element.value || null : null;
+}
+
+function askCostPilotPayload(question) {
+  const range = getActiveDateRange();
+  const workspaceId = localStorage.getItem("cp_workspace_id") || null;
+  const agentValue = askCostPilotFilterValue("ctxAgentFilter");
+  return {
+    question,
+    days: Math.min(365, range.days || 30),
+    workspace_id: workspaceId,
+    date_from: range.date_from || null,
+    date_to: range.date_to || null,
+    project_id: askCostPilotFilterValue("ctxProjectFilter"),
+    user_external_id: askCostPilotFilterValue("ctxPersonFilter"),
+    agent_id: agentValue ? Number(agentValue) : null,
+    account_id: askCostPilotFilterValue("ctxAccountFilter"),
+    source_platform: askCostPilotFilterValue("ctxSourceFilter"),
+    record_type: askCostPilotFilterValue("ctxRecordTypeFilter"),
+    charged_unit: askCostPilotFilterValue("ctxOrgFilter"),
+    business_purpose: askCostPilotFilterValue("ctxPurposeFilter"),
+  };
+}
+
+function askCostPilotComposerKeydown(event) {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    submitAskCostPilot(event);
+  }
+}
+
+function appendAskMessage(role, html) {
+  const conversation = document.getElementById("askConversation");
+  if (!conversation) return null;
+  const message = document.createElement("div");
+  message.className = `ask-message ${role}`;
+  message.innerHTML = role === "assistant"
+    ? `<div class="ask-avatar" aria-hidden="true">CP</div><div class="ask-message-body">${html}</div>`
+    : `<div class="ask-message-body">${html}</div>`;
+  conversation.appendChild(message);
+  message.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  return message;
+}
+
+function askEvidenceButton(item) {
+  const canDrill = item.filter_name && item.filter_value !== null && item.filter_value !== undefined;
+  const drill = canDrill
+    ? `<button type="button" class="ask-evidence-drill"
+         data-filter="${escapeHtml(item.filter_name)}"
+         data-value="${escapeHtml(String(item.filter_value))}"
+         onclick="drillFromAskCostPilot(this.dataset.filter, this.dataset.value)">
+         View activity <span aria-hidden="true">→</span>
+       </button>`
+    : "";
+  return `<div class="ask-evidence-row">
+    <div>
+      <strong>${escapeHtml(item.label || "Unknown")}</strong>
+      <span>${escapeHtml(item.detail || "")}</span>
+    </div>
+    <div class="ask-evidence-value">
+      <strong>${escapeHtml(item.value || "—")}</strong>
+      <span>${escapeHtml(item.metric_label || "")}</span>
+      ${drill}
+    </div>
+  </div>`;
+}
+
+function renderAskCostPilotAnswer(data) {
+  const evidence = (data.evidence || []).length
+    ? `<div class="ask-answer-section">
+        <h4>Evidence</h4>
+        <div class="ask-evidence-list">${data.evidence.map(askEvidenceButton).join("")}</div>
+       </div>`
+    : "";
+  const recommendations = (data.recommendations || []).length
+    ? `<div class="ask-answer-section">
+        <h4>Recommended next steps</h4>
+        <div class="ask-recommendations">${data.recommendations.map(item => `
+          <div><strong>${escapeHtml(item.title || "Review opportunity")}</strong>
+          <p>${escapeHtml(item.body || "")}</p></div>`).join("")}</div>
+       </div>`
+    : "";
+  const period = data.period && data.period.days
+    ? `Last ${escapeHtml(String(data.period.days))} days`
+    : "Selected reporting period";
+  return `
+    <div class="ask-answer-header">
+      <div><span class="ask-answer-kicker">${escapeHtml(period)}</span>
+      <h3>${escapeHtml(data.title || "CostPilot answer")}</h3></div>
+      <span class="ask-calculated">Calculated</span>
+    </div>
+    <p>${escapeHtml(data.answer || "No answer was returned.")}</p>
+    ${evidence}
+    ${recommendations}
+    <div class="ask-answer-note">${escapeHtml(data.measurement_note || "Calculated from governed CostPilot activity.")}</div>
+  `;
+}
+
+async function submitAskCostPilot(event) {
+  if (event) event.preventDefault();
+  const input = document.getElementById("askCostPilotInput");
+  const button = document.getElementById("askCostPilotSend");
+  const question = (input ? input.value : "").trim();
+  if (!question || !button) return;
+
+  appendAskMessage("user", `<p>${escapeHtml(question)}</p>`);
+  input.value = "";
+  button.disabled = true;
+  button.textContent = "Calculating…";
+  const pending = appendAskMessage(
+    "assistant",
+    `<div class="ask-thinking"><span></span><span></span><span></span> Checking governed activity</div>`
+  );
+
+  try {
+    const data = await apiPost("/api/reports/bot-efficiency/ask", askCostPilotPayload(question));
+    if (pending) pending.querySelector(".ask-message-body").innerHTML = renderAskCostPilotAnswer(data);
+  } catch (error) {
+    if (pending) {
+      pending.querySelector(".ask-message-body").innerHTML =
+        `<strong>CostPilot could not answer that question.</strong><p>${escapeHtml(error.message || "Please try again.")}</p>`;
+    }
+  } finally {
+    button.disabled = false;
+    button.innerHTML = `Ask CostPilot <span aria-hidden="true">→</span>`;
+    input.focus();
+  }
+}
+
+async function drillFromAskCostPilot(filterName, filterValue) {
+  const selectIds = {
+    project_id: "ctxProjectFilter",
+    user_external_id: "ctxPersonFilter",
+    agent_id: "ctxAgentFilter",
+    account_id: "ctxAccountFilter",
+    charged_unit: "ctxOrgFilter",
+    business_purpose: "ctxPurposeFilter",
+  };
+  const selectId = selectIds[filterName];
+  const tab = document.querySelector('.rpt-tab[data-tab="contexts"]');
+  if (!selectId || !tab) return;
+
+  // Activate the attribution view without firing the tab click handler. The
+  // click handler starts its own unawaited load, which can race this drill-down
+  // and overwrite the selected value with the previous report state.
+  document.querySelectorAll(".rpt-tab").forEach(button => button.classList.remove("active"));
+  document.querySelectorAll(".rpt-pane").forEach(pane => pane.classList.remove("active"));
+  tab.classList.add("active");
+  activeTab = "contexts";
+  const pane = document.getElementById("tab-contexts");
+  if (pane) pane.classList.add("active");
+
+  // Load once to populate the current report's valid filter values, then apply
+  // the evidence filter and reload the exact drill-down.
+  await loadBusinessContexts();
+  const select = document.getElementById(selectId);
+  if (select && [...select.options].some(option => option.value === String(filterValue))) {
+    select.value = String(filterValue);
+    await loadBusinessContexts();
+    select.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
 
 function getEfficiencyDays() {
   return (document.getElementById("effDaysSelect") || {}).value || "30";

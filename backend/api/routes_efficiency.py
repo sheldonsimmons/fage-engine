@@ -12,7 +12,10 @@ Works with both live and simulated model modes:
 """
 
 from datetime import datetime, timedelta
+from typing import Optional
+
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -25,6 +28,111 @@ FLAGSHIP_IN  = 5.00  / 1_000_000
 FLAGSHIP_OUT = 15.00 / 1_000_000
 MICRO_IN     = 0.50  / 1_000_000
 MICRO_OUT    = 1.50  / 1_000_000
+
+
+class AskCostPilotRequest(BaseModel):
+    """Read-only natural-language question over CostPilot's attributed usage."""
+
+    question: str
+    days: int = 30
+    workspace_id: Optional[str] = None
+    date_from: Optional[datetime] = None
+    date_to: Optional[datetime] = None
+    project_id: Optional[str] = None
+    user_external_id: Optional[str] = None
+    agent_id: Optional[int] = None
+    account_id: Optional[str] = None
+    source_platform: Optional[str] = None
+    record_type: Optional[str] = None
+    charged_unit: Optional[str] = None
+    business_purpose: Optional[str] = None
+
+
+def _ask_intent(question: str, default_days: int) -> dict:
+    """Translate common executive questions into a bounded reporting intent."""
+    text = " ".join((question or "").lower().split())
+    days = max(1, min(int(default_days or 30), 365))
+    if "yesterday" in text:
+        days = 1
+    elif "last week" in text or "past week" in text:
+        days = 7
+    elif "last quarter" in text or "past quarter" in text:
+        days = 90
+    elif "last year" in text or "past year" in text:
+        days = 365
+    elif "last month" in text or "past month" in text:
+        days = 30
+
+    metric = "spend_usd"
+    if "token" in text:
+        metric = "total_tokens"
+    elif any(term in text for term in ("request", "call", "volume", "used most", "usage")):
+        metric = "request_count"
+
+    entity = "overview"
+    if any(term in text for term in ("employee", "person", "people", "user", "who ")):
+        entity = "person"
+    elif any(term in text for term in ("agent", "bot")):
+        entity = "agent"
+    elif any(term in text for term in ("department", "team", "business unit", "cost center")):
+        entity = "department"
+    elif any(term in text for term in (
+        "account", "customer", "project", "matter", "opportunity", "business context", "work item"
+    )):
+        entity = "context"
+
+    intent = "ranking" if entity != "overview" else "overview"
+    if any(term in text for term in (
+        "save money", "saving", "reduce cost", "cut cost", "optimize", "recommend", "advice"
+    )):
+        intent = "savings"
+    elif any(term in text for term in (
+        "near budget", "close to budget", "budget limit", "over budget", "budget warning"
+    )):
+        intent = "budget"
+    elif any(term in text for term in ("overview", "summary", "where is", "breakdown")):
+        intent = "overview"
+
+    return {"intent": intent, "entity": entity, "metric": metric, "days": days}
+
+
+def _ask_rank(rows: list, metric: str) -> list:
+    return sorted(
+        rows or [],
+        key=lambda row: (
+            -float(row.get(metric) or 0),
+            -float(row.get("request_count") or 0),
+            str(row.get("label") or ""),
+        ),
+    )
+
+
+def _ask_metric_value(metric: str, value) -> tuple[str, str]:
+    number = float(value or 0)
+    if metric == "spend_usd":
+        return f"${number:,.4f}", "AI spend"
+    if metric == "request_count":
+        return f"{int(number):,}", "governed requests"
+    return f"{int(number):,}", "tokens"
+
+
+def _ask_evidence(rows: list, metric: str, filter_name: str) -> list:
+    evidence = []
+    for row in _ask_rank(rows, metric)[:5]:
+        value, metric_label = _ask_metric_value(metric, row.get(metric))
+        evidence.append({
+            "label": row.get("label") or "Unknown",
+            "value": value,
+            "metric_label": metric_label,
+            "detail": (
+                f"{int(row.get('request_count') or 0):,} requests · "
+                f"{int(row.get('total_tokens') or 0):,} tokens · "
+                f"${float(row.get('spend_usd') or 0):,.4f}"
+            ),
+            "filter_name": filter_name,
+            "filter_value": row.get("id"),
+        })
+    return evidence
 
 
 def _agent_stats(db: Session, agent: RegisteredAgent, days: int) -> dict:
@@ -275,6 +383,211 @@ Be specific. Reference actual numbers. Keep recommendations actionable."""
         result = _generate_simulated_review(stats)
         result["generated_by"] = f"simulated (fallback: {str(e)[:60]})"
         return result
+
+
+@router.post("/ask")
+def ask_costpilot(
+    request: AskCostPilotRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Answer executive questions using CostPilot-calculated facts.
+
+    The natural-language layer selects a bounded reporting intent; totals,
+    rankings, and evidence always come from the deterministic attribution
+    report. This endpoint is read-only and cannot change routing or policy.
+    """
+    from api.routes_work_items import project_activity_reporting
+
+    question = (request.question or "").strip()
+    if not question:
+        return {
+            "title": "Ask a question about your AI usage",
+            "answer": "Enter a question about spend, tokens, people, agents, departments, or business work.",
+            "intent": "help",
+            "evidence": [],
+            "recommendations": [],
+        }
+
+    parsed = _ask_intent(question, request.days)
+    has_question_period = any(
+        phrase in question.lower()
+        for phrase in (
+            "today", "yesterday", "this week", "last week", "past week",
+            "this month", "last month",
+        )
+    )
+    report = project_activity_reporting(
+        workspace_id=request.workspace_id,
+        date_from=None if has_question_period else request.date_from,
+        date_to=None if has_question_period else request.date_to,
+        days=parsed["days"],
+        project_id=request.project_id,
+        user_external_id=request.user_external_id,
+        agent_id=request.agent_id,
+        account_id=request.account_id,
+        source_platform=request.source_platform,
+        record_type=request.record_type,
+        charged_unit=request.charged_unit,
+        business_purpose=request.business_purpose,
+        activity_limit=2000,
+        db=db,
+    )
+    summary = report.get("summary") or {}
+    period = report.get("period") or {}
+    context_plural = report.get("context_label_plural") or "Business Contexts"
+    metric = parsed["metric"]
+    intent = parsed["intent"]
+    entity = parsed["entity"]
+    evidence = []
+    recommendations = []
+    title = "AI usage overview"
+
+    entity_config = {
+        "person": ("people_breakdown", "user_external_id", "People"),
+        "agent": ("agent_breakdown", "agent_id", "Agents"),
+        "department": ("organizational_unit_breakdown", "charged_unit", "Departments and teams"),
+        "context": ("project_breakdown", "project_id", context_plural),
+    }
+
+    if intent == "budget":
+        budget_query = db.query(DepartmentBudget).filter(
+            DepartmentBudget.archived.isnot(True)
+        )
+        budgets = budget_query.all()
+        if request.workspace_id:
+            workspace_prefix = f"{request.workspace_id}:"
+            scoped = [
+                budget for budget in budgets
+                if (budget.department or "").startswith(workspace_prefix)
+            ]
+            budgets = scoped or [
+                budget for budget in budgets
+                if ":" not in str(budget.department or "")
+            ]
+        budget_rows = []
+        for budget in budgets:
+            cap = float(budget.monthly_cap_usd or 0)
+            spent = float(budget.current_spend_usd or 0)
+            pct = spent / cap * 100 if cap > 0 else 0
+            if pct >= 70:
+                label = (budget.department or "Unassigned").split(":")[-1]
+                budget_rows.append({
+                    "id": budget.department,
+                    "label": label,
+                    "pct": pct,
+                    "spent": spent,
+                    "cap": cap,
+                    "throttled": bool(budget.throttled),
+                })
+        budget_rows.sort(key=lambda row: -row["pct"])
+        evidence = [{
+            "label": row["label"],
+            "value": f"{row['pct']:.1f}%",
+            "metric_label": "budget used",
+            "detail": f"${row['spent']:,.2f} of ${row['cap']:,.2f}" +
+                      (" · throttled" if row["throttled"] else ""),
+            "filter_name": "charged_unit",
+            "filter_value": row["label"],
+        } for row in budget_rows[:5]]
+        title = "Budget watch"
+        answer = (
+            f"{len(budget_rows)} department{'s are' if len(budget_rows) != 1 else ' is'} "
+            "at or above 70% of its monthly AI budget."
+            if budget_rows else
+            "No active department is at or above 70% of its monthly AI budget."
+        )
+    elif intent == "savings":
+        activities = report.get("activities") or []
+        premium = [
+            row for row in activities
+            if str(row.get("model_tier") or "").lower() in {
+                "advisor", "strategist", "flagship"
+            }
+        ]
+        premium_spend = sum(float(row.get("cost_usd") or 0) for row in premium)
+        premium_requests = len(premium)
+        premium_scope = (
+            f"Among the {len(activities):,} most recent matching requests, "
+            if int(report.get("activity_count") or 0) > len(activities)
+            else ""
+        )
+        total_spend = float(summary.get("spend_usd") or 0)
+        saved_tokens = int(summary.get("tokens_saved") or 0)
+        top_agents = _ask_rank(report.get("agent_breakdown") or [], "spend_usd")
+        title = "Cost-saving opportunities"
+        answer = (
+            f"{premium_scope}CostPilot found {premium_requests:,} premium-tier requests representing "
+            f"${premium_spend:,.4f} of ${total_spend:,.4f} total spend. "
+            f"Pruning removed {saved_tokens:,} tokens before model calls."
+        )
+        if premium_requests:
+            recommendations.append({
+                "title": "Review premium-tier routing",
+                "body": (
+                    f"Inspect the {premium_requests:,} Advisor or Strategist requests before "
+                    "changing thresholds. This is reviewable spend, not guaranteed savings."
+                ),
+            })
+        if top_agents:
+            recommendations.append({
+                "title": f"Start with {top_agents[0].get('label') or 'the top-cost agent'}",
+                "body": (
+                    f"It accounts for ${float(top_agents[0].get('spend_usd') or 0):,.4f} "
+                    "in this period. Compare its task mix and routing evidence before acting."
+                ),
+            })
+        if saved_tokens == 0:
+            recommendations.append({
+                "title": "Check pruning coverage",
+                "body": "No pruned tokens were recorded in this scope. Confirm pruning is enabled on the active agents.",
+            })
+        evidence = _ask_evidence(
+            report.get("agent_breakdown") or [], "spend_usd", "agent_id"
+        )
+    elif intent == "ranking" and entity in entity_config:
+        breakdown_key, filter_name, entity_label = entity_config[entity]
+        ranked = _ask_rank(report.get(breakdown_key) or [], metric)
+        evidence = _ask_evidence(ranked, metric, filter_name)
+        title = f"Top {entity_label.lower()} by {_ask_metric_value(metric, 0)[1]}"
+        if ranked:
+            value, metric_label = _ask_metric_value(metric, ranked[0].get(metric))
+            answer = (
+                f"{ranked[0].get('label') or 'Unknown'} had the highest {metric_label} "
+                f"over the last {parsed['days']} days: {value}. "
+                f"That includes {int(ranked[0].get('request_count') or 0):,} governed requests."
+            )
+        else:
+            answer = f"No {entity_label.lower()} had attributed AI activity in this period."
+    else:
+        context_rows = report.get("project_breakdown") or []
+        title = "Where your AI usage went"
+        answer = (
+            f"Over the last {parsed['days']} days, CostPilot governed "
+            f"{int(summary.get('request_count') or 0):,} requests using "
+            f"{int(summary.get('total_tokens') or 0):,} tokens at a cost of "
+            f"${float(summary.get('spend_usd') or 0):,.4f}. "
+            f"{int(summary.get('people_count') or 0):,} identified people and "
+            f"{int(summary.get('agent_count') or 0):,} agents contributed to that usage."
+        )
+        evidence = _ask_evidence(context_rows, "spend_usd", "project_id")
+
+    return {
+        "question": question,
+        "title": title,
+        "answer": answer,
+        "intent": intent,
+        "entity": entity,
+        "metric": metric,
+        "period": period,
+        "filters": report.get("filters") or {},
+        "summary": summary,
+        "evidence": evidence,
+        "recommendations": recommendations,
+        "measurement_note": report.get("measurement_note"),
+        "calculation_source": "CostPilot deterministic attribution engine",
+        "read_only": True,
+    }
 
 
 @router.post("")
