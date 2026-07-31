@@ -1,14 +1,18 @@
 import os
 import sys
+from datetime import datetime
 from types import SimpleNamespace
 
 from api.routes_efficiency import (
+    _ask_conversation_text,
     _ask_evidence,
     _ask_fallback_intent,
     _ask_grounded_narrative,
     _ask_has_explicit_named_subject,
     _ask_intent,
+    _ask_is_follow_up,
     _ask_named_entity,
+    _ask_period_bounds,
     _ask_rank,
     _ask_reporting_filters,
     AskCostPilotMessage,
@@ -380,6 +384,113 @@ def test_named_subject_does_not_inherit_prior_optimization_or_subject():
 def test_generic_subject_phrase_remains_a_follow_up():
     assert _ask_has_explicit_named_subject("Show activity for this account.") is False
     assert _ask_has_explicit_named_subject("Which agents contributed to that?") is False
+
+
+def test_independent_question_does_not_inherit_stale_context():
+    request = AskCostPilotRequest(
+        question="Which account had the highest AI spend?",
+        days=30,
+        context=AskCostPilotContext(
+            intent="ranking",
+            entity="agent",
+            metric="request_count",
+            direction="desc",
+            days=7,
+            result_limit=5,
+            period_key="last_week",
+            source_platform="salesforce",
+            subject_entity="agent",
+            subject_filter_name="agent_id",
+            subject_filter_value="668",
+        ),
+    )
+
+    parsed = _ask_fallback_intent(request)
+
+    assert parsed["intent"] == "ranking"
+    assert parsed["entity"] == "context"
+    assert parsed["metric"] == "spend_usd"
+    assert parsed["days"] == 30
+    assert parsed.get("period_key") is None
+    assert parsed.get("source_platform") is None
+    assert parsed.get("subject_filter_name") is None
+    assert parsed.get("subject_filter_value") is None
+
+
+def test_independent_question_hides_prior_transcript_from_planner():
+    request = AskCostPilotRequest(
+        question="How many tokens did pruning remove?",
+        conversation=[
+            AskCostPilotMessage(role="user", content="Only show last week."),
+            AskCostPilotMessage(role="assistant", content="Last week had no activity."),
+        ],
+    )
+
+    transcript = _ask_conversation_text(request)
+
+    assert transcript == "USER: How many tokens did pruning remove?"
+
+
+def test_clear_followup_keeps_prior_transcript_and_validated_context():
+    request = AskCostPilotRequest(
+        question="Now order them from lowest to highest.",
+        days=30,
+        conversation=[
+            AskCostPilotMessage(role="user", content="Show the top five users."),
+            AskCostPilotMessage(role="assistant", content="Here are the top five users."),
+        ],
+        context=AskCostPilotContext(
+            intent="ranking",
+            entity="person",
+            metric="total_tokens",
+            direction="desc",
+            days=7,
+            result_limit=5,
+            period_key="last_week",
+            source_platform="salesforce",
+        ),
+    )
+
+    transcript = _ask_conversation_text(request)
+    parsed = _ask_fallback_intent(request)
+
+    assert "Show the top five users." in transcript
+    assert parsed["entity"] == "person"
+    assert parsed["metric"] == "total_tokens"
+    assert parsed["direction"] == "asc"
+    assert parsed["days"] == 7
+    assert parsed["period_key"] == "last_week"
+    assert parsed["source_platform"] == "salesforce"
+
+
+def test_explicit_question_period_overrides_page_date_scope():
+    request = AskCostPilotRequest(
+        question="Which agents spent the most this month?",
+        date_from=datetime(2026, 7, 20),
+        date_to=datetime(2026, 7, 27),
+    )
+    parsed = _ask_intent(request.question, request.days)
+
+    start, end = _ask_period_bounds(request, parsed)
+
+    assert parsed["period_key"] == "this_month"
+    assert start.day == 1
+    assert (start, end) != (request.date_from, request.date_to)
+
+
+def test_last_seven_days_uses_rolling_period_bounds():
+    request = AskCostPilotRequest(
+        question="Narrow that to the last seven days.",
+        date_from=datetime(2026, 7, 1),
+        date_to=datetime(2026, 7, 2),
+    )
+    parsed = _ask_intent(request.question, request.days)
+
+    start, end = _ask_period_bounds(request, parsed)
+
+    assert _ask_is_follow_up(request.question) is True
+    assert parsed["period_key"] == "rolling_days"
+    assert 6.99 <= (end - start).total_seconds() / 86400 <= 7.01
 
 
 def test_openai_intent_is_bounded_before_it_reaches_reporting():

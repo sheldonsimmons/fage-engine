@@ -132,6 +132,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
             word_days = {"seven": 7, "thirty": 30}
             raw_days = rolling_match.group(1)
             days = max(1, min(word_days.get(raw_days, int(raw_days) if raw_days.isdigit() else days), 365))
+            period_key = "rolling_days"
 
     metric = "spend_usd"
     if any(term in text for term in ("prun", "tokens removed", "removed before model")):
@@ -321,6 +322,7 @@ _ASK_DIRECTIONS = {"asc", "desc"}
 _ASK_PERIOD_KEYS = {
     "today", "yesterday", "this_week", "last_week", "this_month",
     "last_month", "this_quarter", "last_quarter", "this_year", "last_year",
+    "rolling_days",
 }
 
 
@@ -368,10 +370,14 @@ def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
 def _ask_conversation_text(request: AskCostPilotRequest) -> str:
     """Create a small, non-sensitive transcript for conversational reference."""
     turns = []
-    for message in request.conversation[-8:]:
-        content = " ".join((message.content or "").split())[:1200]
-        if content:
-            turns.append(f"{message.role.upper()}: {content}")
+    # Previous turns are relevant only when the new prompt clearly refers to
+    # them.  Sending the transcript for every request lets an earlier account,
+    # agent, or date range silently constrain a new standalone question.
+    if _ask_is_follow_up(request.question):
+        for message in request.conversation[-8:]:
+            content = " ".join((message.content or "").split())[:1200]
+            if content:
+                turns.append(f"{message.role.upper()}: {content}")
     turns.append(f"USER: {' '.join((request.question or '').split())[:2000]}")
     return "\n".join(turns)
 
@@ -419,11 +425,55 @@ def _ask_has_explicit_named_subject(question: str) -> bool:
     return False
 
 
+def _ask_is_follow_up(question: str) -> bool:
+    """Return true only when a question clearly refers to an earlier answer.
+
+    Conversation context is useful for commands such as "order them lowest to
+    highest", but it must not silently constrain a new, self-contained question.
+    Keep this deliberately conservative so stale dates and entity filters cannot
+    leak from an earlier analysis into an unrelated request.
+    """
+    text = " ".join((question or "").lower().split())
+    if not text:
+        return False
+    if re.search(
+        r"\b(?:that|those|them|these|same|previous|prior|above|former|latter)\b",
+        text,
+    ):
+        return True
+    if re.match(
+        r"^(?:and|also|then|instead|what about|how about|"
+        r"only\s+show|narrow|filter|sort|order|reorder|drill\s+down)\b",
+        text,
+    ):
+        return True
+    if re.match(r"^now\b", text):
+        return True
+    if any(term in text for term in (
+        "supporting activity", "supporting evidence", "break it down",
+    )):
+        return True
+    # A bare result-count command has no subject of its own and therefore
+    # necessarily continues the previous ranking.
+    if re.fullmatch(
+        r"show(?:\s+me)?\s+(?:the\s+)?(?:top|bottom|first|last)\s+"
+        r"(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twenty)[?.!]?",
+        text,
+    ):
+        return True
+    return False
+
+
 def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
     """Resolve deterministic follow-ups using only prior validated report context."""
     current = _ask_intent(request.question, request.days)
     text = " ".join((request.question or "").lower().split())
-    context = request.context.model_dump(exclude_none=True) if request.context else {}
+    is_follow_up = _ask_is_follow_up(request.question)
+    context = (
+        request.context.model_dump(exclude_none=True)
+        if is_follow_up and request.context
+        else {}
+    )
     fresh_named_subject = _ask_has_explicit_named_subject(request.question)
 
     # Governance questions are complete, explicit intents. A prior ranking
@@ -503,6 +553,9 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
         return current
 
     if explicit_metric:
+        return current
+
+    if not is_follow_up:
         return current
 
     for message in reversed(request.conversation[-8:]):
@@ -711,12 +764,9 @@ def _ask_period_bounds(
     parsed: dict,
 ) -> tuple[Optional[datetime], Optional[datetime]]:
     """Return exact calendar boundaries for natural-language periods."""
-    if request.date_from or request.date_to:
-        return request.date_from, request.date_to
-
     key = parsed.get("period_key")
     if not key:
-        return None, None
+        return request.date_from, request.date_to
 
     now = datetime.utcnow()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -751,7 +801,9 @@ def _ask_period_bounds(
         return this_year, now
     if key == "last_year":
         return this_year.replace(year=this_year.year - 1), this_year
-    return None, None
+    if key == "rolling_days":
+        return now - timedelta(days=max(1, int(parsed.get("days") or 30))), now
+    return request.date_from, request.date_to
 
 
 def _ask_row_metric(row: dict, metric: str) -> float:
