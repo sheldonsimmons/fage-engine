@@ -68,6 +68,12 @@ class AskCostPilotContext(BaseModel):
     direction: Optional[str] = None
     days: Optional[int] = None
     result_limit: Optional[int] = None
+    source_platform: Optional[str] = None
+    subject_entity: Optional[str] = None
+    subject_filter_name: Optional[str] = None
+    subject_filter_value: Optional[str] = None
+    model_tier: Optional[str] = None
+    period_key: Optional[str] = None
 
 
 class AskCostPilotRequest(BaseModel):
@@ -84,6 +90,7 @@ class AskCostPilotRequest(BaseModel):
     account_id: Optional[str] = None
     source_platform: Optional[str] = None
     record_type: Optional[str] = None
+    model_tier: Optional[str] = None
     charged_unit: Optional[str] = None
     business_purpose: Optional[str] = None
     conversation: list[AskCostPilotMessage] = Field(default_factory=list)
@@ -94,22 +101,50 @@ def _ask_intent(question: str, default_days: int) -> dict:
     """Translate common executive questions into a bounded reporting intent."""
     text = " ".join((question or "").lower().split())
     days = max(1, min(int(default_days or 30), 365))
-    if "yesterday" in text:
-        days = 1
+    period_key = None
+    if "today" in text:
+        days, period_key = 1, "today"
+    elif "yesterday" in text:
+        days, period_key = 1, "yesterday"
+    elif "this week" in text:
+        days, period_key = 7, "this_week"
     elif "last week" in text or "past week" in text:
-        days = 7
-    elif "last quarter" in text or "past quarter" in text:
-        days = 90
-    elif "last year" in text or "past year" in text:
-        days = 365
+        days, period_key = 7, "last_week"
+    elif "this month" in text:
+        days, period_key = 31, "this_month"
     elif "last month" in text or "past month" in text:
-        days = 30
+        days, period_key = 31, "last_month"
+    elif "this quarter" in text:
+        days, period_key = 92, "this_quarter"
+    elif "last quarter" in text or "past quarter" in text:
+        days, period_key = 92, "last_quarter"
+    elif "this year" in text:
+        days, period_key = 365, "this_year"
+    elif "last year" in text or "past year" in text:
+        days, period_key = 365, "last_year"
+    else:
+        rolling_match = re.search(
+            r"\b(?:last|past)\s+(\d{1,3}|seven|thirty)\s+days?\b",
+            text,
+        )
+        if rolling_match:
+            word_days = {"seven": 7, "thirty": 30}
+            raw_days = rolling_match.group(1)
+            days = max(1, min(word_days.get(raw_days, int(raw_days) if raw_days.isdigit() else days), 365))
 
     metric = "spend_usd"
     if any(term in text for term in ("prun", "tokens removed", "removed before model")):
         metric = "tokens_saved"
+    elif any(term in text for term in ("risk event", "risk events")):
+        metric = "risk_event_count"
+    elif any(term in text for term in ("average cost", "avg cost", "cost per request")):
+        metric = "avg_cost_per_request"
     elif "token" in text:
         metric = "total_tokens"
+    elif any(term in text for term in (
+        "expensive", "costliest", "highest cost", "most cost", "spend", "spent"
+    )):
+        metric = "spend_usd"
     elif any(term in text for term in ("request", "call", "volume", "used most", "usage")):
         metric = "request_count"
 
@@ -128,23 +163,47 @@ def _ask_intent(question: str, default_days: int) -> dict:
         entity = "platform"
     elif any(term in text for term in ("model", "tier", "opus", "sonnet", "haiku", "gpt")):
         entity = "model"
+    elif "where did" in text and any(term in text for term in ("spend", "cost", "token", "usage")):
+        entity = "context"
 
-    intent = "ranking" if entity != "overview" else "overview"
+    ranking_terms = (
+        "highest", "most", "top", "largest", "lowest", "least", "fewest",
+        "smallest", "bottom",
+    )
+    intent = "ranking" if entity != "overview" and any(
+        term in text for term in ranking_terms
+    ) else "overview"
     if any(term in text for term in (
-        "risk event", "risk events", "governance event", "governance events",
-        "latest risk", "recent risk",
-    )):
-        intent = "risk_events"
-        metric = "request_count"
-        entity = "overview"
-    elif any(term in text for term in (
         "why were requests blocked", "why was the request blocked",
-        "blocked request", "blocked requests", "requests blocked",
+        "blocked request", "blocked requests", "request blocked", "requests blocked",
+        "request was blocked", "requests were blocked",
         "blocking reason", "block reason",
     )):
         intent = "blocked"
         metric = "request_count"
         entity = "overview"
+    elif any(term in text for term in (
+        "show risk events", "show the risk events", "latest risk",
+        "recent risk", "latest governance event", "recent governance event",
+    )):
+        intent = "risk_events"
+        metric = "request_count"
+        entity = "overview"
+    elif any(term in text for term in (
+        "show all ai activity", "show me the supporting activity",
+        "show supporting activity", "supporting activity", "latest activity",
+        "recent activity", "who used ai on", "which agents worked on",
+        "which agents contributed", "activity connected to",
+    )):
+        intent = "activity"
+    elif any(term in text for term in (
+        "not been used", "unused agent", "unused agents", "inactive agent",
+        "inactive agents", "not used recently",
+    )):
+        intent = "inactive"
+        entity = "agent"
+        metric = "request_count"
+        direction = "asc"
     elif any(term in text for term in (
         "prun", "tokens removed", "removed before model", "context removed"
     )):
@@ -158,22 +217,70 @@ def _ask_intent(question: str, default_days: int) -> dict:
         intent = "source_mix"
         entity = "overview"
     elif any(term in text for term in (
-        "save money", "saving", "reduce cost", "cut cost", "optimize", "recommend", "advice"
+        "save money", "saving", "reduce cost", "cut cost", "optimize",
+        "recommend", "advice", "cheaper model", "expensive model",
+        "cost-saving opportunit"
     )):
-        intent = "savings"
+        intent = "optimization"
     elif any(term in text for term in (
         "near budget", "close to budget", "budget limit", "over budget", "budget warning"
     )):
         intent = "budget"
+    elif any(term in text for term in (
+        "routed to the", "routed to strategist", "routed to advisor",
+        "strategist tier", "advisor tier", "scout tier", "analyst tier",
+    )):
+        intent = "tier_usage"
+        entity = "model"
+    elif any(term in text for term in (
+        "compare ", " compared ", " versus ", " vs. ", " vs "
+    )):
+        intent = "comparison"
+    elif (
+        any(term in text for term in ("how much", "how many", "what is our", "what's our"))
+        and not any(term in text for term in ranking_terms)
+    ):
+        intent = "total"
     elif any(term in text for term in ("overview", "summary", "where is", "breakdown")):
         intent = "overview"
 
     direction = "asc" if any(term in text for term in (
         "fewest", "least", "lowest", "smallest", "bottom"
     )) else "desc"
-    count_match = re.search(r"\b(?:top|bottom|first|last)\s+(\d{1,2})\b", text)
-    result_limit = int(count_match.group(1)) if count_match else 5
+    if intent == "inactive":
+        direction = "asc"
+    number_words = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "twenty": 20,
+    }
+    number_pattern = r"(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twenty)"
+    count_match = re.search(
+        rf"\b(?:top|bottom|first|last)\s+(?:the\s+)?{number_pattern}\b(?!\s+days?\b)",
+        text,
+    ) or re.search(
+        rf"\b{number_pattern}\s+(?:highest|lowest|top|bottom|most|least|fewest)\b",
+        text,
+    )
+    raw_count = count_match.group(1) if count_match else None
+    result_limit = (
+        int(raw_count) if raw_count and raw_count.isdigit()
+        else number_words.get(raw_count or "", 5)
+    )
     result_limit = max(1, min(result_limit, 20))
+    source_platform = None
+    for platform in (
+        "salesforce", "servicenow", "hubspot", "slack", "zendesk",
+        "sap", "netsuite", "microsoft teams", "shopify",
+    ):
+        if platform in text:
+            source_platform = platform
+            break
+    model_tier = None
+    for tier in ("strategist", "advisor", "analyst", "scout", "flagship"):
+        if tier in text:
+            model_tier = tier
+            break
 
     return {
         "intent": intent,
@@ -182,18 +289,29 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "days": days,
         "direction": direction,
         "result_limit": result_limit,
+        "period_key": period_key,
+        "source_platform": source_platform,
+        "model_tier": model_tier,
     }
 
 
 _ASK_INTENTS = {
     "ranking", "overview", "savings", "budget", "pruning", "source_mix",
-    "blocked", "risk_events",
+    "blocked", "risk_events", "total", "comparison", "activity", "inactive",
+    "tier_usage", "optimization",
 }
 _ASK_ENTITIES = {
     "person", "agent", "department", "context", "platform", "model", "overview"
 }
-_ASK_METRICS = {"spend_usd", "total_tokens", "request_count", "tokens_saved"}
+_ASK_METRICS = {
+    "spend_usd", "total_tokens", "request_count", "tokens_saved",
+    "risk_event_count", "avg_cost_per_request",
+}
 _ASK_DIRECTIONS = {"asc", "desc"}
+_ASK_PERIOD_KEYS = {
+    "today", "yesterday", "this_week", "last_week", "this_month",
+    "last_month", "this_quarter", "last_quarter", "this_year", "last_year",
+}
 
 
 def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
@@ -208,6 +326,15 @@ def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
         result["metric"] = candidate["metric"]
     if candidate.get("direction") in _ASK_DIRECTIONS:
         result["direction"] = candidate["direction"]
+    if candidate.get("period_key") in _ASK_PERIOD_KEYS:
+        result["period_key"] = candidate["period_key"]
+    for field in (
+        "source_platform", "model_tier", "subject_entity",
+        "subject_filter_name", "subject_filter_value",
+    ):
+        value = candidate.get(field)
+        if isinstance(value, str) and value.strip():
+            result[field] = value.strip().lower()
     try:
         result["days"] = max(1, min(int(candidate.get("days")), 365))
     except (TypeError, ValueError):
@@ -262,22 +389,47 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
         "smallest", "bottom",
     ))
     explicit_period = any(term in text for term in (
-        "today", "yesterday", "week", "month", "quarter", "year",
+        "today", "yesterday", "day", "week", "month", "quarter", "year",
     ))
-    explicit_count = bool(re.search(r"\b(?:top|bottom|first|last)\s+(\d{1,2})\b", text))
+    explicit_count = bool(re.search(
+        r"\b(?:top|bottom|first|last)\s+(?:the\s+)?(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twenty)\b(?!\s+days?\b)"
+        r"|\b(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twenty)\s+"
+        r"(?:highest|lowest|top|bottom|most|least|fewest)\b",
+        text,
+    ))
 
     if context:
         if not explicit_metric and context.get("metric") in _ASK_METRICS:
             current["metric"] = context["metric"]
         if not explicit_entity and context.get("entity") in _ASK_ENTITIES:
             current["entity"] = context["entity"]
+        if current["intent"] == "overview" and context.get("intent") in _ASK_INTENTS:
             current["intent"] = context.get("intent", current["intent"])
         if not explicit_direction and context.get("direction") in _ASK_DIRECTIONS:
             current["direction"] = context["direction"]
         if not explicit_period and context.get("days"):
             current["days"] = max(1, min(int(context["days"]), 365))
+            current["period_key"] = context.get("period_key")
         if not explicit_count and context.get("result_limit"):
             current["result_limit"] = max(1, min(int(context["result_limit"]), 20))
+        if not current.get("source_platform") and context.get("source_platform"):
+            current["source_platform"] = context["source_platform"]
+        if not current.get("model_tier") and context.get("model_tier"):
+            current["model_tier"] = context["model_tier"]
+        for field in ("subject_entity", "subject_filter_name", "subject_filter_value"):
+            if not current.get(field) and context.get(field):
+                current[field] = context[field]
+        # An explicit new ranking of the same entity starts a fresh scope. For
+        # example, "top five users" after looking up Sheldon must not remain
+        # restricted to Sheldon.
+        if (
+            current.get("intent") == "ranking"
+            and current.get("entity") == current.get("subject_entity")
+            and explicit_entity
+        ):
+            current.pop("subject_entity", None)
+            current.pop("subject_filter_name", None)
+            current.pop("subject_filter_value", None)
         return current
 
     if explicit_metric:
@@ -312,8 +464,9 @@ def _ask_reporting_filters(request: AskCostPilotRequest, parsed: dict) -> dict:
         "user_external_id": request.user_external_id,
         "agent_id": request.agent_id,
         "account_id": request.account_id,
-        "source_platform": request.source_platform,
+        "source_platform": parsed.get("source_platform") or request.source_platform,
         "record_type": request.record_type,
+        "model_tier": parsed.get("model_tier") or request.model_tier,
         "charged_unit": request.charged_unit,
         "business_purpose": request.business_purpose,
     }
@@ -343,8 +496,12 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     global _ASK_OPENAI_DISABLED_UNTIL
 
     fallback = _ask_fallback_intent(request)
-    if fallback["intent"] in {"blocked", "risk_events"}:
-        return fallback, "deterministic_governance"
+    if fallback["intent"] != "overview" or any((
+        fallback.get("period_key"),
+        fallback.get("source_platform"),
+        fallback.get("model_tier"),
+    )):
+        return fallback, "deterministic"
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
@@ -451,12 +608,68 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
     return fallback, "deterministic_fallback"
 
 
+def _ask_period_bounds(
+    request: AskCostPilotRequest,
+    parsed: dict,
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Return exact calendar boundaries for natural-language periods."""
+    if request.date_from or request.date_to:
+        return request.date_from, request.date_to
+
+    key = parsed.get("period_key")
+    if not key:
+        return None, None
+
+    now = datetime.utcnow()
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    this_week = today - timedelta(days=today.weekday())
+    this_month = today.replace(day=1)
+    this_quarter = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
+    this_year = today.replace(month=1, day=1)
+
+    if key == "today":
+        return today, now
+    if key == "yesterday":
+        return today - timedelta(days=1), today
+    if key == "this_week":
+        return this_week, now
+    if key == "last_week":
+        return this_week - timedelta(days=7), this_week
+    if key == "this_month":
+        return this_month, now
+    if key == "last_month":
+        previous = (this_month - timedelta(days=1)).replace(day=1)
+        return previous, this_month
+    if key == "this_quarter":
+        return this_quarter, now
+    if key == "last_quarter":
+        previous_end = this_quarter
+        previous_start = (previous_end - timedelta(days=1)).replace(
+            month=(((previous_end - timedelta(days=1)).month - 1) // 3) * 3 + 1,
+            day=1,
+        )
+        return previous_start, previous_end
+    if key == "this_year":
+        return this_year, now
+    if key == "last_year":
+        return this_year.replace(year=this_year.year - 1), this_year
+    return None, None
+
+
+def _ask_row_metric(row: dict, metric: str) -> float:
+    """Read or calculate the bounded metric used by rankings and evidence."""
+    if metric == "avg_cost_per_request":
+        requests = float(row.get("request_count") or 0)
+        return float(row.get("spend_usd") or 0) / requests if requests else 0.0
+    return float(row.get(metric) or 0)
+
+
 def _ask_rank(rows: list, metric: str, direction: str = "desc") -> list:
     ascending = direction == "asc"
     return sorted(
         rows or [],
         key=lambda row: (
-            float(row.get(metric) or 0) * (1 if ascending else -1),
+            _ask_row_metric(row, metric) * (1 if ascending else -1),
             float(row.get("request_count") or 0) * (1 if ascending else -1),
             str(row.get("label") or ""),
         ),
@@ -471,6 +684,10 @@ def _ask_metric_value(metric: str, value) -> tuple[str, str]:
         return f"{int(number):,}", "governed requests"
     if metric == "tokens_saved":
         return f"{int(number):,}", "tokens pruned"
+    if metric == "risk_event_count":
+        return f"{int(number):,}", "risk events"
+    if metric == "avg_cost_per_request":
+        return f"${number:,.6f}", "average cost per request"
     return f"{int(number):,}", "tokens"
 
 
@@ -483,7 +700,9 @@ def _ask_evidence(
 ) -> list:
     evidence = []
     for row in _ask_rank(rows, metric, direction)[:limit]:
-        value, metric_label = _ask_metric_value(metric, row.get(metric))
+        value, metric_label = _ask_metric_value(
+            metric, _ask_row_metric(row, metric)
+        )
         evidence.append({
             "label": row.get("label") or "Unknown",
             "value": value,
@@ -541,6 +760,7 @@ def _ask_governance_events(
     request: AskCostPilotRequest,
     period: dict,
     intent: str,
+    limit: int = 20,
 ) -> tuple[list[AuditEvent], int, int, int]:
     """Query only meaningful audit events while preserving report scope."""
     query = db.query(AuditEvent)
@@ -618,7 +838,7 @@ def _ask_governance_events(
     simulation_total = query.filter(AuditEvent.is_simulation.is_(True)).count()
     return (
         query.order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc())
-        .limit(20)
+        .limit(max(1, min(int(limit or 20), 5000)))
         .all(),
         total,
         live_total,
@@ -652,6 +872,59 @@ def _ask_governance_evidence(events: list[AuditEvent], limit: int) -> list:
             "simulation_count": 1 if event.is_simulation else 0,
         })
     return evidence
+
+
+def _ask_risk_breakdown(events: list[AuditEvent], entity: str) -> list[dict]:
+    """Aggregate risk events using only identities present on audit records."""
+    rows: dict[str, dict] = {}
+    for event in events:
+        if entity == "person":
+            row_id = event.actor_external_id or event.actor_email or event.actor_name
+            label = event.actor_name or event.actor_email or event.actor_external_id
+        elif entity == "agent":
+            row_id = str(event.agent_id or "")
+            label = getattr(event.agent, "name", None) or (
+                f"Agent {event.agent_id}" if event.agent_id else None
+            )
+        elif entity == "department":
+            row_id = event.charged_org_unit_name or event.department
+            label = str(row_id or "").split(":")[-1] or None
+        elif entity == "context":
+            row_id = event.origin_record_id or (
+                str(event.work_item_id) if event.work_item_id else None
+            )
+            label = event.origin_record_name or event.origin_record_id or row_id
+        elif entity == "platform":
+            row_id = event.actor_source_platform
+            label = event.actor_source_platform
+        elif entity == "model":
+            row_id = event.model_tier
+            label = event.model_tier
+        else:
+            continue
+        if not row_id:
+            continue
+        key = str(row_id)
+        row = rows.setdefault(key, {
+            "id": row_id,
+            "label": str(label or row_id),
+            "risk_event_count": 0,
+            "request_count": 0,
+            "count": 0,
+            "total_tokens": 0,
+            "tokens_saved": 0,
+            "spend_usd": 0.0,
+            "live_count": 0,
+            "simulation_count": 0,
+        })
+        row["risk_event_count"] += 1
+        row["request_count"] += 1
+        row["count"] += 1
+        if event.is_simulation:
+            row["simulation_count"] += 1
+        else:
+            row["live_count"] += 1
+    return list(rows.values())
 
 
 _ASK_NAME_STOP_WORDS = {
@@ -1005,18 +1278,24 @@ def ask_costpilot(
 
     parsed, assistant_mode = _resolve_ask_intent(request)
     reporting_filters = _ask_reporting_filters(request, parsed)
-    has_question_period = any(
-        phrase in question.lower()
-        for phrase in (
-            "today", "yesterday", "this week", "last week", "past week",
-            "this month", "last month", "this quarter", "last quarter",
-            "this year", "last year",
-        )
-    )
+    subject_filter_name = parsed.get("subject_filter_name")
+    subject_filter_value = parsed.get("subject_filter_value")
+    if (
+        subject_filter_name in reporting_filters
+        and subject_filter_value not in (None, "")
+        and reporting_filters.get(subject_filter_name) in (None, "")
+    ):
+        if subject_filter_name == "agent_id":
+            try:
+                subject_filter_value = int(subject_filter_value)
+            except (TypeError, ValueError):
+                subject_filter_value = None
+        reporting_filters[subject_filter_name] = subject_filter_value
+    date_from, date_to = _ask_period_bounds(request, parsed)
     report = project_activity_reporting(
         workspace_id=request.workspace_id,
-        date_from=None if has_question_period else request.date_from,
-        date_to=None if has_question_period else request.date_to,
+        date_from=date_from,
+        date_to=date_to,
         days=parsed["days"],
         **reporting_filters,
         activity_limit=2000,
@@ -1065,14 +1344,137 @@ def ask_costpilot(
     else:
         data_scope = "no_activity"
 
-    if named_entity and intent not in {
-        "budget", "savings", "pruning", "blocked", "risk_events"
+    if intent == "comparison":
+        current_value = _ask_row_metric(summary, metric)
+        current_start, current_end = _ask_audit_period(period)
+        if current_start and current_end:
+            span = max(current_end - current_start, timedelta(days=1))
+            previous_end = current_start
+            previous_start = previous_end - span
+            prior_report = project_activity_reporting(
+                workspace_id=request.workspace_id,
+                date_from=previous_start,
+                date_to=previous_end,
+                days=parsed["days"],
+                **reporting_filters,
+                activity_limit=1,
+                db=db,
+            )
+            prior_summary = prior_report.get("summary") or {}
+            prior_value = _ask_row_metric(prior_summary, metric)
+            change = current_value - prior_value
+            pct = (change / prior_value * 100) if prior_value else None
+            current_display, metric_label = _ask_metric_value(metric, current_value)
+            prior_display, _ = _ask_metric_value(metric, prior_value)
+            change_display, _ = _ask_metric_value(metric, abs(change))
+            direction_word = "increased" if change > 0 else "decreased" if change < 0 else "did not change"
+            title = f"{metric_label.title()} comparison"
+            answer = (
+                f"{metric_label.title()} was {current_display} for {period_label}, "
+                f"compared with {prior_display} in the immediately preceding period. "
+                f"It {direction_word} by {change_display}"
+                + (f" ({abs(pct):.1f}%)." if pct is not None else ".")
+            )
+            evidence = [
+                {"label": period_label, "value": current_display, "metric_label": metric_label,
+                 "detail": f"{int(summary.get('request_count') or 0):,} governed requests",
+                 "filter_name": None, "filter_value": None},
+                {"label": "Immediately preceding period", "value": prior_display, "metric_label": metric_label,
+                 "detail": f"{int(prior_summary.get('request_count') or 0):,} governed requests",
+                 "filter_name": None, "filter_value": None},
+            ]
+            calculation_formula = "Current period total minus the immediately preceding equal-length period total"
+        else:
+            title = "Period comparison"
+            answer = "Choose a date range or ask for this week, month, quarter, or year so CostPilot can calculate an equal-period comparison."
+    elif intent == "activity":
+        scoped_report = report
+        supported_filters = set(reporting_filters)
+        if (
+            named_entity
+            and named_entity.get("filter_name") in supported_filters
+        ):
+            scoped_filters = dict(reporting_filters)
+            scoped_filters[named_entity["filter_name"]] = named_entity["row"].get("id")
+            scoped_report = project_activity_reporting(
+                workspace_id=request.workspace_id,
+                date_from=date_from,
+                date_to=date_to,
+                days=parsed["days"],
+                **scoped_filters,
+                activity_limit=max(25, result_limit),
+                db=db,
+            )
+        activity_rows = scoped_report.get("activities") or []
+        text_lower = question.lower()
+        if "which agent" in text_lower or "agents contributed" in text_lower:
+            rows = scoped_report.get("agent_breakdown") or []
+            evidence = _ask_evidence(rows, metric, "agent_id", limit=result_limit)
+            title = "Agents contributing to this activity"
+        elif "who used" in text_lower or "which user" in text_lower or "which people" in text_lower:
+            rows = scoped_report.get("people_breakdown") or []
+            evidence = _ask_evidence(rows, metric, "user_external_id", limit=result_limit)
+            title = "People contributing to this activity"
+        else:
+            title = "Supporting AI activity"
+            evidence = [{
+                "label": row.get("project_name") or row.get("agent_name") or "AI request",
+                "value": str(row.get("timestamp") or "")[:19].replace("T", " "),
+                "metric_label": row.get("routing_decision") or "governed request",
+                "detail": (
+                    f"{row.get('user_name') or 'Unknown user'} · {row.get('agent_name') or 'Unknown agent'} · "
+                    f"{int(row.get('total_tokens') or 0):,} tokens · ${float(row.get('cost_usd') or 0):,.4f} · "
+                    f"{'simulator' if row.get('is_simulation') else 'live'}"
+                ),
+                "filter_name": "transaction_id",
+                "filter_value": row.get("transaction_id"),
+                "live_count": 0 if row.get("is_simulation") else 1,
+                "simulation_count": 1 if row.get("is_simulation") else 0,
+            } for row in activity_rows[:result_limit]]
+        answer = (
+            f"Showing {len(evidence):,} matching result{'s' if len(evidence) != 1 else ''} "
+            f"for {period_label}."
+            if evidence else f"No matching AI activity was recorded for {period_label}."
+        )
+    elif intent == "inactive":
+        used_ids = {row.get("id") for row in report.get("agent_breakdown") or []}
+        agent_query = db.query(RegisteredAgent)
+        if request.workspace_id:
+            agent_query = agent_query.filter(
+                RegisteredAgent.department.like(f"{request.workspace_id}:%")
+            )
+        agent_query = agent_query.filter(
+            RegisteredAgent.archived.isnot(True)
+        )
+        inactive_agents = [agent for agent in agent_query.all() if agent.id not in used_ids]
+        inactive_agents.sort(key=lambda agent: (agent.last_used_at or datetime.min, agent.name or ""))
+        evidence = [{
+            "label": agent.name or "Unnamed agent",
+            "value": "Never" if not agent.last_used_at else agent.last_used_at.strftime("%b %d, %Y"),
+            "metric_label": "last used",
+            "detail": f"{agent.source_platform or 'Unknown platform'} · {agent.department or 'Unassigned'}",
+            "filter_name": "agent_id",
+            "filter_value": agent.id,
+        } for agent in inactive_agents[:result_limit]]
+        title = "Agents without recent usage"
+        answer = f"{len(inactive_agents):,} registered agents had no governed requests for {period_label}."
+    elif intent == "tier_usage":
+        title = f"{(parsed.get('model_tier') or 'Selected tier').title()} routing usage"
+        value, metric_label = _ask_metric_value(metric, _ask_row_metric(summary, metric))
+        answer = (
+            f"CostPilot routed {int(summary.get('request_count') or 0):,} requests using "
+            f"{int(summary.get('total_tokens') or 0):,} tokens and ${float(summary.get('spend_usd') or 0):,.4f} "
+            f"in spend to the {(parsed.get('model_tier') or 'selected').title()} tier for {period_label}."
+        )
+        evidence = _ask_evidence(report.get("model_breakdown") or [], metric, None, limit=result_limit)
+    elif named_entity and intent not in {
+        "budget", "savings", "optimization", "pruning", "blocked", "risk_events", "ranking"
     }:
         entity = named_entity["entity"]
         row = named_entity["row"]
         filter_name = named_entity["filter_name"]
         entity_label = named_entity["entity_label"]
-        value, metric_label = _ask_metric_value(metric, row.get(metric))
+        value, metric_label = _ask_metric_value(metric, _ask_row_metric(row, metric))
         title = f"{row.get('label') or 'Named entity'} AI usage"
         answer = (
             f"{row.get('label') or 'The selected entity'} used {value} "
@@ -1088,6 +1490,27 @@ def ask_costpilot(
             limit=1,
         )
         intent = "lookup"
+    elif intent == "total":
+        value, metric_label = _ask_metric_value(metric, _ask_row_metric(summary, metric))
+        title = f"Total {metric_label}"
+        answer = (
+            f"CostPilot recorded {value} in {metric_label} for {period_label}, across "
+            f"{int(summary.get('request_count') or 0):,} governed requests."
+        )
+        evidence = [{
+            "label": period_label,
+            "value": value,
+            "metric_label": metric_label,
+            "detail": (
+                f"{int(summary.get('total_tokens') or 0):,} tokens · "
+                f"${float(summary.get('spend_usd') or 0):,.4f} · "
+                f"{live_count:,} live / {simulation_count:,} simulator"
+            ),
+            "filter_name": None,
+            "filter_value": None,
+            "live_count": live_count,
+            "simulation_count": simulation_count,
+        }]
     elif intent in {"blocked", "risk_events"}:
         (
             governance_events,
@@ -1163,12 +1586,16 @@ def ask_costpilot(
                 budget for budget in budgets
                 if ":" not in str(budget.department or "")
             ]
+        over_limit = any(term in question.lower() for term in (
+            "over budget", "exceeded", "over cap", "above budget"
+        ))
+        threshold = 100 if over_limit else 70
         budget_rows = []
         for budget in budgets:
             cap = float(budget.monthly_cap_usd or 0)
             spent = float(budget.current_spend_usd or 0)
             pct = spent / cap * 100 if cap > 0 else 0
-            if pct >= 70:
+            if pct >= threshold:
                 label = (budget.department or "Unassigned").split(":")[-1]
                 budget_rows.append({
                     "id": budget.department,
@@ -1191,9 +1618,9 @@ def ask_costpilot(
         title = "Budget watch"
         answer = (
             f"{len(budget_rows)} department{'s are' if len(budget_rows) != 1 else ' is'} "
-            "at or above 70% of its monthly AI budget."
+            f"at or above {threshold}% of its monthly AI budget."
             if budget_rows else
-            "No active department is at or above 70% of its monthly AI budget."
+            f"No active department is at or above {threshold}% of its monthly AI budget."
         )
     elif intent == "pruning":
         saved_tokens = int(summary.get("tokens_saved") or 0)
@@ -1204,17 +1631,41 @@ def ask_costpilot(
             saved_tokens / candidate_tokens * 100
             if candidate_tokens > 0 else 0.0
         )
-        title = "Pruning impact"
-        answer = (
-            f"CostPilot removed {saved_tokens:,} tokens before model calls "
-            f"for {period_label}. That reduced the candidate "
-            f"input context by {reduction_pct:.1f}% across "
-            f"{request_count:,} governed requests."
+        spend = float(summary.get("spend_usd") or 0)
+        total_tokens = int(summary.get("total_tokens") or 0)
+        estimated_saved_usd = (
+            saved_tokens * spend / total_tokens if total_tokens > 0 else 0.0
         )
+        asks_for_money = any(term in question.lower() for term in (
+            "money", "dollar", "cost", "save", "saving"
+        ))
+        title = "Pruning impact"
+        if asks_for_money:
+            answer = (
+                f"CostPilot removed {saved_tokens:,} tokens before model calls "
+                f"for {period_label}, representing an estimated ${estimated_saved_usd:,.4f} "
+                f"in avoided model cost at the period's blended token rate. "
+                f"That reduced candidate input context by {reduction_pct:.1f}%."
+            )
+            calculation_formula = (
+                "Tokens pruned multiplied by recorded spend divided by tokens sent to models"
+            )
+        else:
+            answer = (
+                f"CostPilot removed {saved_tokens:,} tokens before model calls "
+                f"for {period_label}. That reduced the candidate "
+                f"input context by {reduction_pct:.1f}% across "
+                f"{request_count:,} governed requests."
+            )
         evidence = [{
             "label": "Tokens removed before model calls",
-            "value": f"{saved_tokens:,}",
-            "metric_label": "tokens pruned",
+            "value": (
+                f"${estimated_saved_usd:,.4f}" if asks_for_money
+                else f"{saved_tokens:,}"
+            ),
+            "metric_label": (
+                "estimated avoided cost" if asks_for_money else "tokens pruned"
+            ),
             "detail": (
                 f"{input_tokens:,} input tokens reached models · "
                 f"{request_count:,} governed requests"
@@ -1254,7 +1705,7 @@ def ask_costpilot(
                 "simulation_count": simulation_count,
             },
         ]
-    elif intent == "savings":
+    elif intent in {"savings", "optimization"}:
         activities = report.get("activities") or []
         premium = [
             row for row in activities
@@ -1273,10 +1724,18 @@ def ask_costpilot(
         saved_tokens = int(summary.get("tokens_saved") or 0)
         top_agents = _ask_rank(report.get("agent_breakdown") or [], "spend_usd")
         title = "Cost-saving opportunities"
+        estimated_pruning_savings = (
+            saved_tokens * total_spend / int(summary.get("total_tokens") or 0)
+            if int(summary.get("total_tokens") or 0) > 0 else 0.0
+        )
+        period_days = max(1, int(parsed.get("days") or 30))
+        projected_annual = estimated_pruning_savings * 365 / period_days
         answer = (
             f"{premium_scope}CostPilot found {premium_requests:,} premium-tier requests representing "
             f"${premium_spend:,.4f} of ${total_spend:,.4f} total spend. "
-            f"Pruning removed {saved_tokens:,} tokens before model calls."
+            f"Pruning removed {saved_tokens:,} tokens before model calls, an estimated "
+            f"${estimated_pruning_savings:,.4f} avoided in this period and "
+            f"${projected_annual:,.2f} annualized at the same pace."
         )
         if premium_requests:
             recommendations.append({
@@ -1304,7 +1763,25 @@ def ask_costpilot(
         )
     elif intent == "ranking" and entity in entity_config:
         breakdown_key, filter_name, entity_label = entity_config[entity]
-        ranked = _ask_rank(report.get(breakdown_key) or [], metric, direction)
+        ranking_rows = report.get(breakdown_key) or []
+        if metric == "risk_event_count":
+            risk_request = request.model_copy(update={
+                key: value for key, value in reporting_filters.items()
+                if key in AskCostPilotRequest.model_fields
+            })
+            risk_events, risk_total, risk_live, risk_simulation = (
+                _ask_governance_events(
+                    db, risk_request, period, "risk_events", limit=5000
+                )
+            )
+            ranking_rows = _ask_risk_breakdown(risk_events, entity)
+            calculation_row_count = risk_total
+            calculation_formula = (
+                "Count meaningful audit events grouped by the selected entity"
+            )
+            live_count = risk_live
+            simulation_count = risk_simulation
+        ranked = _ask_rank(ranking_rows, metric, direction)
         evidence = _ask_evidence(
             ranked,
             metric,
@@ -1315,7 +1792,9 @@ def ask_costpilot(
         rank_label = "Lowest" if direction == "asc" else "Top"
         title = f"{rank_label} {entity_label.lower()} by {_ask_metric_value(metric, 0)[1]}"
         if ranked:
-            value, metric_label = _ask_metric_value(metric, ranked[0].get(metric))
+            value, metric_label = _ask_metric_value(
+                metric, _ask_row_metric(ranked[0], metric)
+            )
             if result_limit > 1:
                 available = min(result_limit, len(ranked))
                 qualifier = (
@@ -1373,6 +1852,10 @@ def ask_costpilot(
             if metric == "tokens_saved"
             else "Count of governed AI requests"
             if metric == "request_count"
+            else "Count of governance events marked as blocked or risky"
+            if metric == "risk_event_count"
+            else "Recorded model-call cost divided by governed request count"
+            if metric == "avg_cost_per_request"
             else "Sum of recorded model-call cost"
         ),
         "row_count": (
@@ -1389,7 +1872,19 @@ def ask_costpilot(
         "direction": direction,
         "days": int(parsed["days"]),
         "result_limit": int(result_limit),
+        "period_key": parsed.get("period_key"),
+        "source_platform": parsed.get("source_platform"),
+        "model_tier": parsed.get("model_tier"),
     }
+    for field in ("subject_entity", "subject_filter_name", "subject_filter_value"):
+        if parsed.get(field) not in (None, ""):
+            conversation_context[field] = parsed[field]
+    if named_entity and named_entity.get("filter_name") in reporting_filters:
+        conversation_context.update({
+            "subject_entity": named_entity.get("entity"),
+            "subject_filter_name": named_entity.get("filter_name"),
+            "subject_filter_value": named_entity.get("row", {}).get("id"),
+        })
 
     return {
         "question": question,
