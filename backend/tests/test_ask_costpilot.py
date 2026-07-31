@@ -1,6 +1,11 @@
+import os
+import sys
+from types import SimpleNamespace
+
 from api.routes_efficiency import (
     _ask_evidence,
     _ask_fallback_intent,
+    _ask_grounded_narrative,
     _ask_intent,
     _ask_named_entity,
     _ask_rank,
@@ -75,6 +80,8 @@ def _run_with_controlled_report(request, report=None):
 
     calls = []
     original = routes_work_items.project_activity_reporting
+    original_narration = os.environ.get("ASK_COSTPILOT_NARRATION_ENABLED")
+    os.environ["ASK_COSTPILOT_NARRATION_ENABLED"] = "false"
 
     def fake_reporting(**kwargs):
         calls.append(kwargs)
@@ -85,6 +92,10 @@ def _run_with_controlled_report(request, report=None):
         return ask_costpilot(request, db=None), calls
     finally:
         routes_work_items.project_activity_reporting = original
+        if original_narration is None:
+            os.environ.pop("ASK_COSTPILOT_NARRATION_ENABLED", None)
+        else:
+            os.environ["ASK_COSTPILOT_NARRATION_ENABLED"] = original_narration
 
 
 def test_employee_token_question_becomes_person_ranking_for_last_week():
@@ -327,6 +338,38 @@ def test_openai_intent_is_bounded_before_it_reaches_reporting():
     assert "unsafe_query" not in parsed
 
 
+def test_optional_none_values_clear_stale_filters_and_period():
+    fallback = {
+        **_ask_intent("Who used the most tokens?", default_days=30),
+        "period_key": "last_week",
+        "source_platform": "salesforce",
+        "model_tier": "strategist",
+    }
+
+    parsed = _validated_ask_intent(
+        {
+            "intent": "ranking",
+            "entity": "person",
+            "metric": "total_tokens",
+            "direction": "desc",
+            "days": 30,
+            "result_limit": 5,
+            "period_key": "none",
+            "source_platform": "none",
+            "model_tier": "none",
+            "subject_entity": "none",
+            "subject_filter_name": "none",
+            "subject_filter_value": "none",
+        },
+        fallback,
+    )
+
+    assert parsed.get("period_key") is None
+    assert parsed.get("source_platform") is None
+    assert parsed.get("model_tier") is None
+    assert parsed.get("subject_entity") is None
+
+
 def test_last_seven_days_is_a_period_not_a_result_count():
     request = AskCostPilotRequest(
         question="Narrow that to the last seven days.",
@@ -456,3 +499,88 @@ def test_endpoint_pruning_reports_tokens_and_estimated_avoided_cost():
     assert response["calculation"]["formula"].startswith("Tokens pruned multiplied")
     assert response["data_provenance"]["live_requests"] == 12
     assert response["data_provenance"]["simulator_requests"] == 8
+
+
+def test_endpoint_capability_question_does_not_run_stale_data_report():
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(
+            question="What all can you do?",
+            days=31,
+            context=AskCostPilotContext(
+                intent="comparison",
+                entity="agent",
+                metric="spend_usd",
+                days=5,
+                result_limit=5,
+                subject_filter_name="agent_id",
+                subject_filter_value="668",
+            ),
+        )
+    )
+
+    assert calls == []
+    assert response["intent"] == "help"
+    assert response["title"] == "What Ask CostPilot can answer"
+    assert len(response["evidence"]) >= 5
+    assert response["data_provenance"]["scope"] == "capabilities"
+
+
+def test_grounded_narrator_can_phrase_facts_but_not_replace_evidence():
+    class FakeResponses:
+        @staticmethod
+        def create(**kwargs):
+            assert '"total_tokens":4321' in kwargs["input"]
+            return SimpleNamespace(output=[SimpleNamespace(
+                type="function_call",
+                name="write_grounded_costpilot_answer",
+                arguments=(
+                    '{"title":"Sheldon token usage",'
+                    '"answer":"Sheldon used exactly 4,321 tokens in this period."}'
+                ),
+            )])
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    original_module = sys.modules.get("openai")
+    original_key = os.environ.get("OPENAI_API_KEY")
+    original_enabled = os.environ.get("ASK_COSTPILOT_NARRATION_ENABLED")
+    sys.modules["openai"] = SimpleNamespace(OpenAI=FakeOpenAI)
+    os.environ["OPENAI_API_KEY"] = "test-key"
+    os.environ["ASK_COSTPILOT_NARRATION_ENABLED"] = "true"
+    payload = {
+        "title": "Deterministic title",
+        "answer": "Deterministic answer with 4,321 tokens.",
+        "period": {"label": "Last 31 days"},
+        "filters": {},
+        "summary": {"total_tokens": 4321},
+        "evidence": [{"label": "Sheldon", "value": "4,321"}],
+        "recommendations": [],
+        "calculation": {"formula": "Sum of input and output tokens"},
+        "data_provenance": {"scope": "live"},
+        "measurement_note": "Consumption only.",
+    }
+    try:
+        title, answer, narrated = _ask_grounded_narrative(
+            AskCostPilotRequest(question="How many tokens has Sheldon used?"),
+            payload,
+        )
+    finally:
+        if original_module is None:
+            sys.modules.pop("openai", None)
+        else:
+            sys.modules["openai"] = original_module
+        if original_key is None:
+            os.environ.pop("OPENAI_API_KEY", None)
+        else:
+            os.environ["OPENAI_API_KEY"] = original_key
+        if original_enabled is None:
+            os.environ.pop("ASK_COSTPILOT_NARRATION_ENABLED", None)
+        else:
+            os.environ["ASK_COSTPILOT_NARRATION_ENABLED"] = original_enabled
+
+    assert narrated is True
+    assert title == "Sheldon token usage"
+    assert "4,321" in answer
+    assert payload["evidence"][0]["value"] == "4,321"

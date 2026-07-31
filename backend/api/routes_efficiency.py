@@ -42,6 +42,7 @@ MICRO_IN     = 0.50  / 1_000_000
 MICRO_OUT    = 1.50  / 1_000_000
 
 _ASK_OPENAI_DISABLED_UNTIL = 0.0
+_ASK_WRITER_DISABLED_UNTIL = 0.0
 
 
 def _ask_env_seconds(name: str, default: float, minimum: float, maximum: float) -> float:
@@ -166,6 +167,11 @@ def _ask_intent(question: str, default_days: int) -> dict:
     elif "where did" in text and any(term in text for term in ("spend", "cost", "token", "usage")):
         entity = "context"
 
+    asks_for_help = any(term in text for term in (
+        "what can you do", "what all can you do", "how can you help",
+        "what can i ask", "sample question", "example question",
+        "help me use", "your capabilities",
+    ))
     ranking_terms = (
         "highest", "most", "top", "largest", "lowest", "least", "fewest",
         "smallest", "bottom",
@@ -173,7 +179,11 @@ def _ask_intent(question: str, default_days: int) -> dict:
     intent = "ranking" if entity != "overview" and any(
         term in text for term in ranking_terms
     ) else "overview"
-    if any(term in text for term in (
+    if asks_for_help:
+        intent = "help"
+        metric = "request_count"
+        entity = "overview"
+    elif any(term in text for term in (
         "why were requests blocked", "why was the request blocked",
         "blocked request", "blocked requests", "request blocked", "requests blocked",
         "request was blocked", "requests were blocked",
@@ -298,7 +308,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
 _ASK_INTENTS = {
     "ranking", "overview", "savings", "budget", "pruning", "source_mix",
     "blocked", "risk_events", "total", "comparison", "activity", "inactive",
-    "tier_usage", "optimization",
+    "tier_usage", "optimization", "help",
 }
 _ASK_ENTITIES = {
     "person", "agent", "department", "context", "platform", "model", "overview"
@@ -326,15 +336,22 @@ def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
         result["metric"] = candidate["metric"]
     if candidate.get("direction") in _ASK_DIRECTIONS:
         result["direction"] = candidate["direction"]
-    if candidate.get("period_key") in _ASK_PERIOD_KEYS:
-        result["period_key"] = candidate["period_key"]
+    period_key = candidate.get("period_key")
+    if period_key in _ASK_PERIOD_KEYS:
+        result["period_key"] = period_key
+    elif period_key == "none":
+        result["period_key"] = None
     for field in (
         "source_platform", "model_tier", "subject_entity",
         "subject_filter_name", "subject_filter_value",
     ):
         value = candidate.get(field)
         if isinstance(value, str) and value.strip():
-            result[field] = value.strip().lower()
+            normalized = value.strip().lower()
+            if normalized == "none":
+                result.pop(field, None)
+            else:
+                result[field] = normalized
     try:
         result["days"] = max(1, min(int(candidate.get("days")), 365))
     except (TypeError, ValueError):
@@ -368,7 +385,7 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
     # Governance questions are complete, explicit intents. A prior ranking
     # context must never turn "show the latest risk events" into another model
     # or person ranking.
-    if current["intent"] in {"blocked", "risk_events"}:
+    if current["intent"] in {"blocked", "risk_events", "help"}:
         return current
 
     explicit_metric = (
@@ -490,18 +507,15 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     """
     Let OpenAI interpret the reporting question, then validate the result.
 
-    OpenAI never receives database rows and never calculates the answer. If the
-    call is unavailable or invalid, the deterministic parser remains available.
+    OpenAI never calculates the answer. It selects one bounded, read-only
+    analytics operation. If the call is unavailable or invalid, the
+    deterministic parser remains available.
     """
     global _ASK_OPENAI_DISABLED_UNTIL
 
     fallback = _ask_fallback_intent(request)
-    if fallback["intent"] != "overview" or any((
-        fallback.get("period_key"),
-        fallback.get("source_platform"),
-        fallback.get("model_tier"),
-    )):
-        return fallback, "deterministic"
+    if fallback["intent"] == "help":
+        return fallback, "capability_help"
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
@@ -551,15 +565,36 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
                     "minimum": 1,
                     "maximum": 20,
                 },
+                "period_key": {
+                    "type": "string",
+                    "enum": ["none", *sorted(_ASK_PERIOD_KEYS)],
+                },
+                "source_platform": {
+                    "type": "string",
+                    "enum": [
+                        "none", "salesforce", "servicenow", "hubspot",
+                        "slack", "zendesk", "sap", "netsuite",
+                        "microsoft teams", "shopify",
+                    ],
+                },
+                "model_tier": {
+                    "type": "string",
+                    "enum": [
+                        "none", "scout", "analyst", "advisor",
+                        "strategist", "flagship",
+                    ],
+                },
             },
             "required": [
-                "intent", "entity", "metric", "direction", "days", "result_limit"
+                "intent", "entity", "metric", "direction", "days",
+                "result_limit", "period_key", "source_platform", "model_tier",
             ],
             "additionalProperties": False,
         },
     }
     instructions = """You interpret questions for a read-only enterprise AI usage report.
 Use the prior conversation to understand corrections and follow-up questions.
+Choose help when the user asks what you can do, how you can help, or asks for examples.
 Choose ranking for highest, lowest, top, bottom, most, least, or "who" questions.
 Choose blocked for questions asking why requests were blocked.
 Choose risk_events for questions asking for recent or latest governance risk events.
@@ -597,7 +632,7 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
                 arguments = getattr(item, "arguments", "{}")
                 return (
                     _validated_ask_intent(json.loads(arguments), fallback),
-                    "openai",
+                    "openai_tool_planner",
                 )
     except Exception as exc:
         cooldown_seconds = _ask_env_seconds(
@@ -1252,6 +1287,190 @@ Be specific. Reference actual numbers. Keep recommendations actionable."""
         return result
 
 
+def _ask_help_response(
+    request: AskCostPilotRequest,
+    parsed: dict,
+    assistant_mode: str,
+) -> dict:
+    """Return product capabilities without running an unrelated data report."""
+    categories = [
+        (
+            "Spend and usage",
+            "How much did we spend this month? Compare this week with last week.",
+        ),
+        (
+            "People and agents",
+            "Who used the most tokens? Which agents have not been used recently?",
+        ),
+        (
+            "Accounts and business work",
+            "Show AI usage for ACME Test. Who and which agents worked on that account?",
+        ),
+        (
+            "Models, routing, and savings",
+            "Which model cost the most? What could move to a cheaper tier?",
+        ),
+        (
+            "Governance, budgets, and risk",
+            "Why were requests blocked? Which departments are close to budget?",
+        ),
+        (
+            "Pruning",
+            "How many tokens did pruning remove and how much did that save?",
+        ),
+    ]
+    evidence = [
+        {
+            "label": label,
+            "value": example,
+            "metric_label": "example question",
+            "detail": example,
+            "filter_name": None,
+            "filter_value": None,
+        }
+        for label, example in categories
+    ]
+    return {
+        "question": request.question.strip(),
+        "title": "What Ask CostPilot can answer",
+        "answer": (
+            "Ask CostPilot can analyze your governed AI spend, tokens, people, "
+            "agents, business contexts, models, routing, pruning, budgets, and "
+            "risk. You can ask follow-up questions to narrow the date range, "
+            "source platform, person, agent, department, or account."
+        ),
+        "intent": "help",
+        "entity": "overview",
+        "metric": "request_count",
+        "period": {},
+        "filters": {},
+        "summary": {},
+        "evidence": evidence,
+        "recommendations": [],
+        "measurement_note": (
+            "Answers describe measured AI consumption and governance activity; "
+            "they do not score employee productivity or infer business outcomes."
+        ),
+        "calculation": {
+            "metric": "capabilities",
+            "formula": "No calculation was required.",
+            "row_count": 0,
+            "period_label": None,
+        },
+        "calculation_source": "CostPilot capability catalog",
+        "data_provenance": {
+            "scope": "capabilities",
+            "live_requests": 0,
+            "simulator_requests": 0,
+            "active_filters": {},
+            "period_label": None,
+        },
+        "assistant_mode": assistant_mode,
+        "interpreted_intent": parsed,
+        "conversation_context": {
+            "intent": "help",
+            "entity": "overview",
+            "metric": "request_count",
+            "days": int(parsed.get("days") or request.days),
+            "direction": "desc",
+            "result_limit": 5,
+        },
+        "read_only": True,
+    }
+
+
+def _ask_grounded_narrative(
+    request: AskCostPilotRequest,
+    payload: dict,
+) -> tuple[str, str, bool]:
+    """Phrase verified CostPilot facts naturally without delegating calculation."""
+    global _ASK_WRITER_DISABLED_UNTIL
+
+    enabled = os.getenv(
+        "ASK_COSTPILOT_NARRATION_ENABLED", "true"
+    ).lower() not in {"0", "false", "no", "off"}
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if (
+        not enabled
+        or not api_key
+        or api_key.startswith("YOUR")
+        or time.monotonic() < _ASK_WRITER_DISABLED_UNTIL
+    ):
+        return payload["title"], payload["answer"], False
+
+    response_tool = {
+        "type": "function",
+        "name": "write_grounded_costpilot_answer",
+        "description": "Write a concise answer using only the supplied CostPilot facts.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "answer": {"type": "string"},
+            },
+            "required": ["title", "answer"],
+            "additionalProperties": False,
+        },
+    }
+    facts = {
+        "question": request.question,
+        "deterministic_title": payload.get("title"),
+        "deterministic_answer": payload.get("answer"),
+        "period": payload.get("period"),
+        "filters": payload.get("filters"),
+        "summary": payload.get("summary"),
+        "evidence": (payload.get("evidence") or [])[:10],
+        "recommendations": (payload.get("recommendations") or [])[:6],
+        "calculation": payload.get("calculation"),
+        "data_provenance": payload.get("data_provenance"),
+        "measurement_note": payload.get("measurement_note"),
+    }
+    instructions = """You are Ask CostPilot, an enterprise AI usage analyst.
+Answer the user's exact question in clear natural language using only the supplied JSON facts.
+CostPilot already performed every calculation. Never calculate a different value, invent a row,
+change a date range, or claim information not present in the facts. Preserve exact names and numbers.
+State when the scope is live, simulator, mixed, or has no activity when that distinction matters.
+Do not score employee productivity or infer business outcomes. Be concise and directly useful.
+Call write_grounded_costpilot_answer exactly once."""
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=api_key,
+            timeout=_ask_env_seconds(
+                "ASK_COSTPILOT_NARRATION_TIMEOUT_SECONDS", 4.0, 1.0, 10.0
+            ),
+            max_retries=0,
+        )
+        response = client.responses.create(
+            model=os.getenv(
+                "ASK_COSTPILOT_NARRATOR_MODEL",
+                os.getenv("ASK_COSTPILOT_MODEL", "gpt-4.1-mini"),
+            ),
+            instructions=instructions,
+            input=json.dumps(facts, default=str, separators=(",", ":")),
+            tools=[response_tool],
+            tool_choice="required",
+        )
+        for item in response.output:
+            if (
+                getattr(item, "type", None) == "function_call"
+                and getattr(item, "name", None) == response_tool["name"]
+            ):
+                written = json.loads(getattr(item, "arguments", "{}"))
+                title = str(written.get("title") or "").strip()
+                answer = str(written.get("answer") or "").strip()
+                if title and answer:
+                    return title[:180], answer[:4000], True
+    except Exception as exc:
+        _ASK_WRITER_DISABLED_UNTIL = time.monotonic() + _ask_env_seconds(
+            "ASK_COSTPILOT_NARRATION_COOLDOWN_SECONDS", 60.0, 5.0, 600.0
+        )
+        logger.warning("Ask CostPilot grounded narration failed: %s", exc)
+    return payload["title"], payload["answer"], False
+
+
 @router.post("/ask")
 def ask_costpilot(
     request: AskCostPilotRequest,
@@ -1277,6 +1496,9 @@ def ask_costpilot(
         }
 
     parsed, assistant_mode = _resolve_ask_intent(request)
+    if parsed.get("intent") == "help":
+        return _ask_help_response(request, parsed, assistant_mode)
+
     reporting_filters = _ask_reporting_filters(request, parsed)
     subject_filter_name = parsed.get("subject_filter_name")
     subject_filter_value = parsed.get("subject_filter_value")
@@ -1886,7 +2108,7 @@ def ask_costpilot(
             "subject_filter_value": named_entity.get("row", {}).get("id"),
         })
 
-    return {
+    payload = {
         "question": question,
         "title": title,
         "answer": answer,
@@ -1913,6 +2135,14 @@ def ask_costpilot(
         "conversation_context": conversation_context,
         "read_only": True,
     }
+    narrated_title, narrated_answer, narrated = _ask_grounded_narrative(
+        request, payload
+    )
+    payload["title"] = narrated_title
+    payload["answer"] = narrated_answer
+    if narrated:
+        payload["assistant_mode"] = f"{assistant_mode}+grounded_narrator"
+    return payload
 
 
 @router.post("")
