@@ -235,6 +235,71 @@
     };
   }
 
+  function cleanAskString(value) {
+    if (value === null || value === undefined) return null;
+    const cleaned = String(value).trim();
+    return cleaned || null;
+  }
+
+  function cleanAskDate(value) {
+    const cleaned = cleanAskString(value);
+    if (!cleaned || Number.isNaN(Date.parse(cleaned))) return null;
+    return cleaned;
+  }
+
+  function normalizedAskPayload(question, history, context, includeConversation = true) {
+    const scope = askScope() || {};
+    const daysValue = Number(scope.days);
+    const payload = {
+      question,
+      days: Number.isFinite(daysValue) ? Math.max(1, Math.min(365, Math.round(daysValue))) : 30,
+    };
+    [
+      "workspace_id", "project_id", "user_external_id", "account_id",
+      "source_platform", "record_type", "model_tier", "charged_unit", "business_purpose",
+    ].forEach((key) => {
+      const value = cleanAskString(scope[key]);
+      if (value !== null) payload[key] = value;
+    });
+    const agentId = Number(scope.agent_id);
+    if (Number.isInteger(agentId) && agentId > 0) payload.agent_id = agentId;
+    const dateFrom = cleanAskDate(scope.date_from);
+    const dateTo = cleanAskDate(scope.date_to);
+    if (dateFrom) payload.date_from = dateFrom;
+    if (dateTo) payload.date_to = dateTo;
+
+    if (!includeConversation) return payload;
+    payload.conversation = (Array.isArray(history) ? history : [])
+      .filter((item) => item && (item.role === "user" || item.role === "assistant"))
+      .map((item) => ({ role: item.role, content: cleanAskString(item.content) }))
+      .filter((item) => item.content)
+      .slice(-8);
+    if (context && typeof context === "object" && !Array.isArray(context)) {
+      const normalizedContext = {};
+      [
+        "intent", "entity", "metric", "direction", "source_platform", "subject_entity",
+        "subject_filter_name", "subject_filter_value", "model_tier", "period_key",
+      ].forEach((key) => {
+        const value = cleanAskString(context[key]);
+        if (value !== null) normalizedContext[key] = value;
+      });
+      ["days", "result_limit"].forEach((key) => {
+        const value = Number(context[key]);
+        if (Number.isInteger(value) && value > 0) normalizedContext[key] = value;
+      });
+      if (Object.keys(normalizedContext).length) payload.context = normalizedContext;
+    }
+    return payload;
+  }
+
+  async function postGlobalAsk(payload) {
+    return fetch("/api/reports/bot-efficiency/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
   function addAskMessage(role, content) {
     const messages = document.getElementById("cpAskMessages");
     const node = document.createElement("div");
@@ -305,16 +370,15 @@
     const history = readSession(ASK_HISTORY_KEY, []);
     const context = readSession(ASK_CONTEXT_KEY, null);
     try {
-      const response = await fetch("/api/reports/bot-efficiency/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...askScope(),
-          question,
-          conversation: history.slice(-8),
-          context,
-        }),
-      });
+      let response = await postGlobalAsk(normalizedAskPayload(question, history, context));
+      // Old browser sessions can contain conversation state from a previous
+      // response contract. A valid question must not fail because that optional
+      // context is stale, so retry once with the clean reporting scope only.
+      if (response.status === 422) {
+        writeSession(ASK_HISTORY_KEY, []);
+        writeSession(ASK_CONTEXT_KEY, null);
+        response = await postGlobalAsk(normalizedAskPayload(question, [], null, false));
+      }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const data = await response.json();
       pending.innerHTML = renderGlobalAnswer(data);
