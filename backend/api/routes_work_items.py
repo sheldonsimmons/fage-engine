@@ -991,6 +991,7 @@ def project_activity_reporting(
     account_id: Optional[str] = Query(None),
     source_platform: Optional[str] = Query(None),
     record_type: Optional[str] = Query(None),
+    model_tier: Optional[str] = Query(None),
     charged_unit: Optional[str] = None,
     business_purpose: Optional[str] = None,
     activity_limit: int = Query(500, ge=1, le=2000),
@@ -1071,9 +1072,11 @@ def project_activity_reporting(
             return False
         if account_id and item["account_external_id"] != account_id:
             return False
-        if source_platform and (tx.source_platform or "") != source_platform:
+        if source_platform and (tx.source_platform or "").lower() != source_platform.lower():
             return False
-        if record_type and (tx.origin_record_type or "") != record_type:
+        if record_type and (tx.origin_record_type or "").lower() != record_type.lower():
+            return False
+        if model_tier and (tx.model_tier or "").lower() != model_tier.lower():
             return False
         if charged_unit and item["charged_unit"] != charged_unit:
             return False
@@ -1265,6 +1268,7 @@ def project_activity_reporting(
             "account_id": account_id,
             "source_platform": source_platform,
             "record_type": record_type,
+            "model_tier": model_tier,
             "charged_unit": charged_unit,
             "business_purpose": business_purpose,
         },
