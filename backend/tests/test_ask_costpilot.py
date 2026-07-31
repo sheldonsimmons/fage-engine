@@ -6,6 +6,7 @@ from api.routes_efficiency import (
     _ask_evidence,
     _ask_fallback_intent,
     _ask_grounded_narrative,
+    _ask_has_explicit_named_subject,
     _ask_intent,
     _ask_named_entity,
     _ask_rank,
@@ -66,7 +67,20 @@ def _controlled_report():
         ],
         "agent_breakdown": [],
         "organizational_unit_breakdown": [],
-        "project_breakdown": [],
+        "project_breakdown": [
+            {
+                "id": "ACCOUNT-ACME",
+                "label": "ACME Test",
+                "request_count": 6,
+                "total_tokens": 2400,
+                "input_tokens": 1800,
+                "output_tokens": 600,
+                "tokens_saved": 300,
+                "spend_usd": 0.42,
+                "live_count": 6,
+                "simulation_count": 0,
+            },
+        ],
         "source_platform_breakdown": [],
         "model_breakdown": [],
         "activities": [],
@@ -312,6 +326,60 @@ def test_people_ranking_drops_stale_person_scope_but_keeps_department():
 
     assert filters["user_external_id"] is None
     assert filters["charged_unit"] == "Sales"
+
+
+def test_named_subject_starts_fresh_scope_but_keeps_cross_cutting_filters():
+    request = AskCostPilotRequest(
+        question="Show AI usage for ACME Test.",
+        days=31,
+        project_id="OLD-PROJECT",
+        account_id="OLD-ACCOUNT",
+        user_external_id="OLD-USER",
+        agent_id=668,
+        charged_unit="Sales",
+        source_platform="Salesforce",
+        model_tier="Scout",
+    )
+
+    assert _ask_has_explicit_named_subject(request.question) is True
+    filters = _ask_reporting_filters(request, _ask_fallback_intent(request))
+
+    assert filters["project_id"] is None
+    assert filters["account_id"] is None
+    assert filters["user_external_id"] is None
+    assert filters["agent_id"] is None
+    assert filters["charged_unit"] is None
+    assert filters["source_platform"] == "Salesforce"
+    assert filters["model_tier"] == "Scout"
+
+
+def test_named_subject_does_not_inherit_prior_optimization_or_subject():
+    request = AskCostPilotRequest(
+        question="Show AI usage for ACME Test.",
+        days=31,
+        context=AskCostPilotContext(
+            intent="optimization",
+            entity="agent",
+            metric="spend_usd",
+            direction="desc",
+            days=7,
+            subject_entity="agent",
+            subject_filter_name="agent_id",
+            subject_filter_value="668",
+        ),
+    )
+
+    parsed = _ask_fallback_intent(request)
+
+    assert parsed["intent"] == "overview"
+    assert parsed["entity"] == "overview"
+    assert parsed.get("subject_filter_name") is None
+    assert parsed.get("subject_filter_value") is None
+
+
+def test_generic_subject_phrase_remains_a_follow_up():
+    assert _ask_has_explicit_named_subject("Show activity for this account.") is False
+    assert _ask_has_explicit_named_subject("Which agents contributed to that?") is False
 
 
 def test_openai_intent_is_bounded_before_it_reaches_reporting():

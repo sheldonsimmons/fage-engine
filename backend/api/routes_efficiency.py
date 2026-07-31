@@ -376,11 +376,55 @@ def _ask_conversation_text(request: AskCostPilotRequest) -> str:
     return "\n".join(turns)
 
 
+def _ask_has_explicit_named_subject(question: str) -> bool:
+    """Return true when the user names a new reporting subject explicitly.
+
+    This is deliberately narrower than general entity detection.  A phrase
+    such as "this account" is a conversational follow-up, while "ACME Test"
+    in "show usage for ACME Test" starts a new subject and must not inherit a
+    hidden person, agent, account, or project selector from the prior turn.
+    """
+    text = " ".join((question or "").strip().split())
+    lowered = text.lower()
+    if not text:
+        return False
+
+    generic_subject = re.compile(
+        r"^(?:this|that|the|these|those|current|selected|same|my|our)\b",
+        re.IGNORECASE,
+    )
+    trailing_patterns = (
+        r"\b(?:for|on|connected to|associated with|attributed to)\s+(.+?)(?:[?.!]|$)",
+        r"\b(?:usage|activity|spend|tokens?|cost|requests?)\s+(?:for|on)\s+(.+?)(?:[?.!]|$)",
+    )
+    for pattern in trailing_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
+        candidate = match.group(1).strip(" .?!")
+        if candidate and not generic_subject.search(candidate):
+            return True
+
+    # Natural person-name construction: "How many tokens has Sheldon used?"
+    match = re.search(
+        r"\bhas\s+([A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){0,3})\s+"
+        r"(?:used|spent|generated|consumed)\b",
+        text,
+        re.IGNORECASE,
+    )
+    if match and not generic_subject.search(match.group(1)):
+        return True
+
+    # Avoid treating ordinary analytical phrases as names.
+    return False
+
+
 def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
     """Resolve deterministic follow-ups using only prior validated report context."""
     current = _ask_intent(request.question, request.days)
     text = " ".join((request.question or "").lower().split())
     context = request.context.model_dump(exclude_none=True) if request.context else {}
+    fresh_named_subject = _ask_has_explicit_named_subject(request.question)
 
     # Governance questions are complete, explicit intents. A prior ranking
     # context must never turn "show the latest risk events" into another model
@@ -418,9 +462,17 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
     if context:
         if not explicit_metric and context.get("metric") in _ASK_METRICS:
             current["metric"] = context["metric"]
-        if not explicit_entity and context.get("entity") in _ASK_ENTITIES:
+        if (
+            not fresh_named_subject
+            and not explicit_entity
+            and context.get("entity") in _ASK_ENTITIES
+        ):
             current["entity"] = context["entity"]
-        if current["intent"] == "overview" and context.get("intent") in _ASK_INTENTS:
+        if (
+            not fresh_named_subject
+            and current["intent"] == "overview"
+            and context.get("intent") in _ASK_INTENTS
+        ):
             current["intent"] = context.get("intent", current["intent"])
         if not explicit_direction and context.get("direction") in _ASK_DIRECTIONS:
             current["direction"] = context["direction"]
@@ -433,9 +485,10 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
             current["source_platform"] = context["source_platform"]
         if not current.get("model_tier") and context.get("model_tier"):
             current["model_tier"] = context["model_tier"]
-        for field in ("subject_entity", "subject_filter_name", "subject_filter_value"):
-            if not current.get(field) and context.get(field):
-                current[field] = context[field]
+        if not fresh_named_subject:
+            for field in ("subject_entity", "subject_filter_name", "subject_filter_value"):
+                if not current.get(field) and context.get(field):
+                    current[field] = context[field]
         # An explicit new ranking of the same entity starts a fresh scope. For
         # example, "top five users" after looking up Sheldon must not remain
         # restricted to Sheldon.
@@ -487,6 +540,16 @@ def _ask_reporting_filters(request: AskCostPilotRequest, parsed: dict) -> dict:
         "charged_unit": request.charged_unit,
         "business_purpose": request.business_purpose,
     }
+    if _ask_has_explicit_named_subject(request.question):
+        # A named subject must be discovered across the filtered workspace.
+        # Keep cross-cutting scope (date, platform, model, record type), but do
+        # not let an old person/agent/context/department selection hide it.
+        filters["project_id"] = None
+        filters["account_id"] = None
+        filters["user_external_id"] = None
+        filters["agent_id"] = None
+        filters["charged_unit"] = None
+        return filters
     if parsed.get("intent") != "ranking":
         return filters
 
