@@ -1,10 +1,16 @@
+import asyncio
 from datetime import datetime, timedelta
 import json
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from api.routes_agentforce import AgentforceGovernRequest, _resolve_or_create_project
+from api.routes_agentforce import (
+    AgentforceGovernRequest,
+    _apply_approved_relationship_mapping,
+    _approved_relationship,
+    _resolve_or_create_project,
+)
 from api.routes_trial import (
     BusinessContextSetupRequest,
     _trial_status_payload,
@@ -21,6 +27,7 @@ from database.db import Base
 from database.models import (
     TokenTransaction,
     TrialAccount,
+    IntegrationConnection,
     RegisteredAgent,
     WorkAccount,
     WorkItem,
@@ -29,10 +36,165 @@ from database.models import (
 )
 
 
+SALESFORCE_ACCOUNT_MAPPING = {
+    "parent_object": "Account",
+    "preserve_origin_record": True,
+    "unmapped_behavior": "separate",
+    "children": [
+        {
+            "child_object": "Contact",
+            "parent_field": "AccountId",
+            "behavior": "track_and_rollup",
+        },
+        {
+            "child_object": "Opportunity",
+            "parent_field": "AccountId",
+            "behavior": "track_and_rollup",
+        },
+        {
+            "child_object": "Case",
+            "parent_field": "AccountId",
+            "behavior": "track_and_rollup",
+        },
+    ],
+}
+
+
 def _session():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(bind=engine)
     return sessionmaker(bind=engine)()
+
+
+def test_standard_salesforce_relationship_options_are_resolved_case_insensitively():
+    for source_type in ("Contact", "opportunity", "CASE"):
+        relationship = _approved_relationship(SALESFORCE_ACCOUNT_MAPPING, source_type)
+        assert relationship is not None
+        assert relationship["parent_field"] == "AccountId"
+
+    separate_mapping = {
+        "children": [
+            {
+                "child_object": "Contact",
+                "parent_field": "AccountId",
+                "behavior": "separate",
+            }
+        ]
+    }
+    assert _approved_relationship(separate_mapping, "Contact")["behavior"] == "separate"
+
+
+def test_approved_contact_mapping_rolls_up_to_account_and_preserves_origin(monkeypatch):
+    db = _session()
+    db.add(
+        IntegrationConnection(
+            workspace_id="WORKSPACE-RELATIONSHIPS",
+            platform="salesforce",
+            display_name="Salesforce",
+            status="connected",
+            mapping_json=json.dumps(SALESFORCE_ACCOUNT_MAPPING),
+        )
+    )
+    db.commit()
+
+    requested_paths = []
+
+    async def fake_salesforce_get(_connection, path):
+        requested_paths.append(path)
+        if path.startswith("sobjects/Contact/"):
+            return {"AccountId": "001-ACME"}
+        if path == "sobjects/Account/describe":
+            return {"fields": [{"name": "Name", "nameField": True}]}
+        if path.startswith("sobjects/Account/"):
+            return {"Name": "Acme Corporation"}
+        raise AssertionError(f"Unexpected Salesforce path: {path}")
+
+    monkeypatch.setattr("api.routes_connections._salesforce_get", fake_salesforce_get)
+    body = AgentforceGovernRequest(
+        record_id="003-CONTACT-1",
+        task_description="Draft a follow-up message",
+        project_name="Maria Lopez",
+        source_type="Contact",
+        source_record_type="Contact",
+        department="Sales",
+    )
+
+    resolved = asyncio.run(
+        _apply_approved_relationship_mapping(db, "WORKSPACE-RELATIONSHIPS", body)
+    )
+
+    assert resolved is True
+    assert body.project_external_id == "001-ACME"
+    assert body.project_name == "Acme Corporation"
+    assert body.customer_external_id == "001-ACME"
+    assert body.customer_name == "Acme Corporation"
+    assert body.source_record_name == "Maria Lopez"
+    assert body.context_type == "account"
+    assert requested_paths == [
+        "sobjects/Contact/003-CONTACT-1?fields=AccountId",
+        "sobjects/Account/describe",
+        "sobjects/Account/001-ACME?fields=Name",
+    ]
+
+    project = _resolve_or_create_project(
+        db,
+        "WORKSPACE-RELATIONSHIPS",
+        body,
+        force_canonical_parent=True,
+    )
+    source_link = db.query(WorkItemSourceLink).one()
+
+    assert project.name == "Acme Corporation"
+    assert project.context_type == "account"
+    assert source_link.work_item_id == project.id
+    assert source_link.source_record_type == "Contact"
+    assert source_link.source_record_id == "003-CONTACT-1"
+    assert source_link.source_record_name == "Maria Lopez"
+
+
+def test_separate_relationship_behavior_keeps_the_origin_as_its_own_work(monkeypatch):
+    db = _session()
+    mapping = dict(SALESFORCE_ACCOUNT_MAPPING)
+    mapping["children"] = [
+        {
+            "child_object": "Case",
+            "parent_field": "AccountId",
+            "behavior": "separate",
+        }
+    ]
+    db.add(
+        IntegrationConnection(
+            workspace_id="WORKSPACE-SEPARATE",
+            platform="salesforce",
+            display_name="Salesforce",
+            status="connected",
+            mapping_json=json.dumps(mapping),
+        )
+    )
+    db.commit()
+
+    async def should_not_query_salesforce(_connection, path):
+        raise AssertionError(f"Separate behavior must not query Salesforce: {path}")
+
+    monkeypatch.setattr(
+        "api.routes_connections._salesforce_get",
+        should_not_query_salesforce,
+    )
+    body = AgentforceGovernRequest(
+        record_id="500-CASE-1",
+        task_description="Summarize the case",
+        project_name="Case 000123",
+        source_type="Case",
+        source_record_type="Case",
+    )
+
+    resolved = asyncio.run(
+        _apply_approved_relationship_mapping(db, "WORKSPACE-SEPARATE", body)
+    )
+
+    assert resolved is False
+    assert body.project_external_id is None
+    assert body.project_name == "Case 000123"
 
 
 def test_salesforce_template_resolves_universal_business_context():
