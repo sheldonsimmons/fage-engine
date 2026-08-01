@@ -63,6 +63,11 @@ class MappingUpdate(BaseModel):
     mapping: dict
 
 
+class ContextChangeDecision(BaseModel):
+    decision: str = Field(pattern="^(approve|ignore)$")
+    behavior: Optional[str] = Field(default=None, pattern="^(track_and_rollup|rollup_only|separate|ignore)$")
+
+
 class AiEntryPointSelection(BaseModel):
     kind: str = Field(pattern="^(agent|flow)$")
     id: str = Field(default="", max_length=160)
@@ -406,6 +411,78 @@ def recommend_child_relationships(relationships: list[dict]) -> list[dict]:
         })
     suggestions.sort(key=lambda item: (-item["score"], item["label"].lower(), item["object"]))
     return suggestions
+
+
+def _json_object(raw: Optional[str]) -> dict:
+    try:
+        value = json.loads(raw or "{}")
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _context_change_id(kind: str, value: dict) -> str:
+    identity = "|".join([
+        kind,
+        str(value.get("object") or ""),
+        str(value.get("parent_field") or ""),
+        str(value.get("relationship_name") or ""),
+    ])
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+
+
+def _build_context_snapshot(objects: list[dict], parent_object: str, relationships: list[dict]) -> dict:
+    captured_at = datetime.utcnow().isoformat()
+    return {
+        "captured_at": captured_at,
+        "parent_object": parent_object,
+        "objects": {
+            str(obj.get("name")): {
+                "object": str(obj.get("name")),
+                "label": str(obj.get("label") or obj.get("name")),
+                "custom": bool(obj.get("custom")),
+            }
+            for obj in objects if obj.get("name")
+        },
+        "relationships": {
+            _context_change_id("relationship_added", rel): {
+                "object": str(rel.get("object") or ""),
+                "label": str(rel.get("label") or rel.get("object") or ""),
+                "parent_field": str(rel.get("parent_field") or ""),
+                "relationship_name": rel.get("relationship_name"),
+                "parent_object": parent_object,
+            }
+            for rel in relationships if rel.get("object") and rel.get("parent_field")
+        },
+    }
+
+
+def _new_context_changes(previous: dict, current: dict) -> list[dict]:
+    discovered_at = current.get("captured_at") or datetime.utcnow().isoformat()
+    changes = []
+    for name, obj in current.get("objects", {}).items():
+        if name not in previous.get("objects", {}):
+            value = dict(obj)
+            value.update({
+                "id": _context_change_id("object_added", obj),
+                "kind": "object_added",
+                "status": "pending",
+                "discovered_at": discovered_at,
+                "suggested_behavior": "separate",
+            })
+            changes.append(value)
+    for change_id, relationship in current.get("relationships", {}).items():
+        if change_id not in previous.get("relationships", {}):
+            value = dict(relationship)
+            value.update({
+                "id": change_id,
+                "kind": "relationship_added",
+                "status": "pending",
+                "discovered_at": discovered_at,
+                "suggested_behavior": "track_and_rollup",
+            })
+            changes.append(value)
+    return changes
 
 
 @router.get("/salesforce/package/start")
@@ -1201,6 +1278,7 @@ async def discover_object_fields(
         child_relationships.sort(key=lambda value: (-value["score"], value["object"]))
         object_label = body.object_name.replace("_", " ").title()
     recommendations = recommend_business_mapping(fields)
+    previous_discovery = _json_object(item.discovery_json)
     discovery = {
         "object": body.object_name,
         "object_label": object_label,
@@ -1209,6 +1287,8 @@ async def discover_object_fields(
         "child_relationships": child_relationships,
         "discovered_at": datetime.utcnow().isoformat(),
     }
+    if isinstance(previous_discovery.get("context_monitor"), dict):
+        discovery["context_monitor"] = previous_discovery["context_monitor"]
     item.selected_object = body.object_name
     item.discovery_json = json.dumps(discovery)
     item.status = "mapping"
@@ -1216,6 +1296,121 @@ async def discover_object_fields(
     item.last_error = None
     db.commit()
     return discovery
+
+
+@router.get("/{connection_id}/context-discovery")
+def get_context_discovery(connection_id: int, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id)
+    discovery = _json_object(item.discovery_json)
+    monitor = discovery.get("context_monitor") or {}
+    return {
+        "connection_id": item.id,
+        "platform": item.platform,
+        "configured": bool(monitor.get("baseline")),
+        "last_scan_at": monitor.get("last_scan_at"),
+        "pending_changes": [
+            change for change in monitor.get("pending_changes", [])
+            if change.get("status") == "pending"
+        ],
+        "history": monitor.get("history", [])[-25:],
+    }
+
+
+@router.post("/{connection_id}/context-discovery/scan")
+async def scan_context_changes(connection_id: int, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id)
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=501, detail="Continuous context discovery currently supports Salesforce")
+    mapping = _json_object(item.mapping_json)
+    parent_object = str(mapping.get("parent_object") or item.selected_object or "").strip()
+    if not parent_object:
+        raise HTTPException(status_code=409, detail="Approve a parent object before scanning for changes")
+
+    objects_payload = await _salesforce_get(item, "sobjects")
+    objects = [
+        {"name": obj.get("name"), "label": obj.get("label") or obj.get("name"), "custom": obj.get("custom", False)}
+        for obj in objects_payload.get("sobjects", [])
+        if obj.get("name") and obj.get("queryable") and not obj.get("deprecatedAndHidden")
+    ]
+    describe = await _salesforce_get(item, f"sobjects/{quote(parent_object, safe='')}/describe")
+    relationships = recommend_child_relationships(describe.get("childRelationships", []))
+    current = _build_context_snapshot(objects, parent_object, relationships)
+    discovery = _json_object(item.discovery_json)
+    monitor = discovery.get("context_monitor") if isinstance(discovery.get("context_monitor"), dict) else {}
+    previous = monitor.get("baseline") if isinstance(monitor.get("baseline"), dict) else None
+    existing = monitor.get("pending_changes") if isinstance(monitor.get("pending_changes"), list) else []
+    existing_ids = {change.get("id") for change in existing}
+    additions = _new_context_changes(previous, current) if previous else []
+    existing.extend(change for change in additions if change.get("id") not in existing_ids)
+    monitor.update({
+        "schema_version": 1,
+        "baseline": current,
+        "last_scan_at": current["captured_at"],
+        "pending_changes": existing,
+    })
+    discovery["context_monitor"] = monitor
+    item.discovery_json = json.dumps(discovery)
+    item.last_success_at = datetime.utcnow()
+    item.last_error = None
+    db.commit()
+    return {
+        "connection_id": item.id,
+        "configured": True,
+        "baseline_created": previous is None,
+        "last_scan_at": monitor["last_scan_at"],
+        "new_change_count": len(additions),
+        "pending_changes": [change for change in existing if change.get("status") == "pending"],
+    }
+
+
+@router.post("/{connection_id}/context-discovery/changes/{change_id}")
+def decide_context_change(
+    connection_id: int,
+    change_id: str,
+    body: ContextChangeDecision,
+    db: Session = Depends(get_db),
+):
+    item = _get_connection(db, connection_id)
+    discovery = _json_object(item.discovery_json)
+    monitor = discovery.get("context_monitor") if isinstance(discovery.get("context_monitor"), dict) else {}
+    changes = monitor.get("pending_changes") if isinstance(monitor.get("pending_changes"), list) else []
+    change = next((value for value in changes if value.get("id") == change_id), None)
+    if not change:
+        raise HTTPException(status_code=404, detail="Discovered change not found")
+    if change.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="This change has already been reviewed")
+
+    behavior = body.behavior or change.get("suggested_behavior") or "separate"
+    change["status"] = "approved" if body.decision == "approve" else "ignored"
+    change["decision_at"] = datetime.utcnow().isoformat()
+    change["behavior"] = behavior if body.decision == "approve" else "ignore"
+    mapping = _json_object(item.mapping_json)
+    if body.decision == "approve" and change.get("kind") == "relationship_added":
+        children = mapping.get("children") if isinstance(mapping.get("children"), list) else []
+        key = (change.get("object"), change.get("parent_field"))
+        children = [child for child in children if (child.get("object"), child.get("parent_field")) != key]
+        children.append({
+            "object": change.get("object"),
+            "label": change.get("label") or change.get("object"),
+            "parent_field": change.get("parent_field"),
+            "relationship_name": change.get("relationship_name"),
+            "behavior": behavior,
+        })
+        mapping["children"] = children
+    elif body.decision == "approve" and change.get("kind") == "object_added":
+        approved = mapping.get("approved_objects") if isinstance(mapping.get("approved_objects"), list) else []
+        approved = [value for value in approved if value.get("object") != change.get("object")]
+        approved.append({"object": change.get("object"), "label": change.get("label"), "behavior": behavior})
+        mapping["approved_objects"] = approved
+    history = monitor.get("history") if isinstance(monitor.get("history"), list) else []
+    history.append(dict(change))
+    monitor["history"] = history[-100:]
+    discovery["context_monitor"] = monitor
+    item.discovery_json = json.dumps(discovery)
+    item.mapping_json = json.dumps(mapping)
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    return {"change": change, "connection": _public_connection(item)}
 
 
 @router.put("/{connection_id}/mapping")

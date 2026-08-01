@@ -8,7 +8,9 @@ from api.routes_connections import (
     AiEntryPointSelectionUpdate,
     ConnectionCreate,
     MappingUpdate,
+    _build_context_snapshot,
     _merge_salesforce_package_connection,
+    _new_context_changes,
     _new_salesforce_workspace,
     _populate_salesforce_costpilot_credential,
     _servicenow_auth_base,
@@ -49,6 +51,41 @@ def test_salesforce_field_metadata_produces_explainable_recommendations():
     assert mapping["status"]["field"] == "Status__c"
     assert mapping["content"]["field"] == "Description__c"
     assert all(value["confidence"] in {"high", "medium"} for value in mapping.values())
+
+
+def test_context_discovery_baseline_does_not_create_false_changes():
+    snapshot = _build_context_snapshot(
+        [{"name": "Account", "label": "Account", "custom": False}],
+        "Account",
+        [],
+    )
+    assert _new_context_changes(snapshot, snapshot) == []
+
+
+def test_context_discovery_detects_new_objects_and_parent_relationships():
+    previous = _build_context_snapshot(
+        [{"name": "Account", "label": "Account", "custom": False}],
+        "Account",
+        [],
+    )
+    current = _build_context_snapshot(
+        [
+            {"name": "Account", "label": "Account", "custom": False},
+            {"name": "Delivery__c", "label": "Delivery", "custom": True},
+        ],
+        "Account",
+        [{
+            "object": "Delivery__c",
+            "label": "Deliveries",
+            "parent_field": "Account__c",
+            "relationship_name": "Deliveries__r",
+            "recommended_behavior": "track_and_rollup",
+        }],
+    )
+    changes = _new_context_changes(previous, current)
+    assert {change["kind"] for change in changes} == {"object_added", "relationship_added"}
+    assert all(change["status"] == "pending" for change in changes)
+    assert len({change["id"] for change in changes}) == 2
 
 
 def test_connection_registry_is_workspace_scoped_and_never_returns_tokens():

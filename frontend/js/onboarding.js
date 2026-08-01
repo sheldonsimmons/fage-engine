@@ -997,6 +997,7 @@ async function approveDiscoveredMapping() {
       </div>`;
     if (button) button.textContent = "Relationship mapping approved ✓";
     if (obDiscoveryPlatform === "salesforce") {
+      await loadContextDiscoveryMonitor(true);
       await loadSalesforceAiEntryPoints();
     }
   } catch (error) {
@@ -1006,6 +1007,95 @@ async function approveDiscoveredMapping() {
       button.textContent = "Try approval again →";
     }
     status.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function ensureContextDiscoveryMonitorHost() {
+  let host = document.getElementById("obContextDiscoveryMonitor");
+  if (host) return host;
+  const results = document.getElementById("obDiscoveryResults");
+  if (!results) return null;
+  host = document.createElement("section");
+  host.id = "obContextDiscoveryMonitor";
+  host.className = "ob-context-monitor";
+  results.appendChild(host);
+  return host;
+}
+
+async function loadContextDiscoveryMonitor(scan = false) {
+  if (!obDiscoveryConnectionId || obDiscoveryPlatform !== "salesforce") return;
+  const host = ensureContextDiscoveryMonitorHost();
+  if (!host) return;
+  host.innerHTML = `<div class="ob-discovery-status">${scan ? "Scanning Salesforce metadata…" : "Loading context discovery…"}</div>`;
+  try {
+    const suffix = scan ? "/scan" : "";
+    const response = await fetch(
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/context-discovery${suffix}`,
+      { method: scan ? "POST" : "GET" }
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || `Context discovery failed (${response.status}).`);
+    renderContextDiscoveryMonitor(payload);
+  } catch (error) {
+    host.innerHTML = `<div class="ob-error"><strong>Context discovery could not run.</strong> ${_obEsc(error.message)}</div>`;
+  }
+}
+
+function renderContextDiscoveryMonitor(payload) {
+  const host = ensureContextDiscoveryMonitorHost();
+  if (!host) return;
+  const changes = payload.pending_changes || [];
+  const baselineNote = payload.baseline_created
+    ? "Baseline saved. Future scans will show only new objects and relationships."
+    : payload.configured
+      ? (changes.length ? `${changes.length} change${changes.length === 1 ? "" : "s"} need review.` : "Salesforce matches the approved context mapping.")
+      : "Run the first scan to save the current Salesforce structure as the baseline.";
+  const rows = changes.map(change => {
+    const isRelationship = change.kind === "relationship_added";
+    const title = isRelationship
+      ? `${change.label || change.object} can roll up to ${change.parent_object}`
+      : `${change.label || change.object} is a new Salesforce object`;
+    const detail = isRelationship
+      ? `${change.object}.${change.parent_field} references the approved parent.`
+      : `${change.object} was not present in the previous metadata scan.`;
+    return `<article class="ob-context-change">
+      <div><span class="ob-context-change-kind">${isRelationship ? "New relationship" : "New object"}</span>
+        <strong>${_obEsc(title)}</strong><small>${_obEsc(detail)}</small></div>
+      <div class="ob-context-change-actions">
+        ${isRelationship ? `<button type="button" class="ob-btn-secondary" onclick="reviewContextChange('${change.id}', 'approve', 'track_and_rollup')">Approve rollup</button>` : ""}
+        <button type="button" class="ob-btn-secondary" onclick="reviewContextChange('${change.id}', 'approve', 'separate')">Track separately</button>
+        <button type="button" class="ob-btn-ghost" onclick="reviewContextChange('${change.id}', 'ignore', 'ignore')">Ignore</button>
+      </div>
+    </article>`;
+  }).join("");
+  host.innerHTML = `<div class="ob-discovery-head">
+      <div><div class="ob-context-eyebrow">Keep context current</div>
+        <h3>Find new Salesforce objects and relationships</h3>
+        <p>CostPilot watches for metadata changes. Nothing begins attribution until an administrator approves it.</p></div>
+      <button type="button" class="ob-btn-secondary" onclick="loadContextDiscoveryMonitor(true)">Scan for changes</button>
+    </div>
+    <div class="ob-context-monitor-summary"><strong>${_obEsc(baselineNote)}</strong>
+      ${payload.last_scan_at ? `<span>Last scan: ${_obEsc(new Date(payload.last_scan_at).toLocaleString())}</span>` : ""}</div>
+    ${rows ? `<div class="ob-context-change-list">${rows}</div>` : ""}`;
+}
+
+async function reviewContextChange(changeId, decision, behavior) {
+  if (!obDiscoveryConnectionId) return;
+  const host = ensureContextDiscoveryMonitorHost();
+  try {
+    const response = await fetch(
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/context-discovery/changes/${changeId}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, behavior }),
+      }
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || `Review failed (${response.status}).`);
+    await loadContextDiscoveryMonitor(false);
+  } catch (error) {
+    if (host) host.insertAdjacentHTML("afterbegin", `<div class="ob-error"><strong>Change was not saved.</strong> ${_obEsc(error.message)}</div>`);
   }
 }
 
