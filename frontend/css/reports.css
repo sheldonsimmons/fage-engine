@@ -434,6 +434,27 @@
   font-size: 13px;
   line-height: 1.6;
 }
+.ask-hero-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.ask-clear-chat {
+  padding: 7px 11px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+.ask-clear-chat:hover,
+.ask-clear-chat:focus-visible {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
 .ask-safety-badge {
   display: inline-flex;
   align-items: center;

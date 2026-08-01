@@ -572,8 +572,11 @@
             <h2 id="askCostPilotTitle">Ask questions about your AI usage</h2>
             <p>Get factual answers about spend, tokens, people, agents, departments, and business work. Every number is calculated from your governed activity.</p>
           </div>
-          <div class="ask-safety-badge" title="Questions cannot change routing, policies, budgets, or data">
-            <span aria-hidden="true">✓</span> Read-only
+          <div class="ask-hero-actions">
+            <button type="button" class="ask-clear-chat" onclick="clearAskCostPilotConversation()">Clear chat</button>
+            <div class="ask-safety-badge" title="Questions cannot change routing, policies, budgets, or data">
+              <span aria-hidden="true">✓</span> Read-only
+            </div>
           </div>
         </div>
 
@@ -603,7 +606,7 @@
           <button type="submit" id="askCostPilotSend">Ask CostPilot <span aria-hidden="true">→</span></button>
         </form>
         <div class="ask-scope">
-          Uses the report date range and your active workspace. Answers measure AI consumption; they do not score employee productivity. Press Ctrl or ⌘ + Enter to send.
+          Uses the report date range and your active workspace. Answers measure AI consumption; they do not score employee productivity. Press Enter to send; Shift + Enter adds a new line.
         </div>
       </section>
 

@@ -34,7 +34,9 @@ async function apiPost(path, body) {
   if (!response.ok) {
     let detail = `Request failed (${response.status})`;
     try { const j = await response.json(); detail = j.detail || j.message || detail; } catch(_) {}
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }

@@ -151,6 +151,63 @@ def test_budget_question_targets_departments():
     assert intent["entity"] == "department"
 
 
+def test_all_department_budget_question_requests_complete_budget_list():
+    intent = _ask_intent(
+        "How much budget does each department have?",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "budget"
+    assert intent["entity"] == "department"
+    assert intent["budget_scope"] == "all"
+
+
+def test_agent_adoption_overview_uses_default_low_usage_threshold():
+    intent = _ask_intent(
+        "What have we built, and is anyone using it?",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "agent_adoption"
+    assert intent["entity"] == "agent"
+    assert intent["usage_status"] == "all"
+    assert intent["usage_threshold"] == 10
+
+
+def test_low_usage_agent_question_accepts_explicit_threshold():
+    intent = _ask_intent(
+        "Show low usage agents with fewer than 5 requests.",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "agent_adoption"
+    assert intent["usage_status"] == "low"
+    assert intent["usage_threshold"] == 5
+
+
+def test_threshold_followup_preserves_prior_adoption_status():
+    request = AskCostPilotRequest(
+        question="Change threshold to five.",
+        days=30,
+        context=AskCostPilotContext(
+            intent="agent_adoption",
+            entity="agent",
+            metric="request_count",
+            direction="asc",
+            days=30,
+            result_limit=5,
+            usage_status="low",
+            usage_threshold=10,
+        ),
+    )
+
+    intent = _ask_fallback_intent(request)
+
+    assert intent["intent"] == "agent_adoption"
+    assert intent["usage_status"] == "low"
+    assert intent["usage_threshold"] == 5
+
+
 def test_pruning_question_uses_exact_pruning_intent():
     intent = _ask_intent(
         "How many tokens did pruning remove?",

@@ -1414,8 +1414,47 @@ async function loadDepartments() {
 
 // ── TAB 4: ASK COSTPILOT + AGENT FLEET REVIEW ─────────────────────────────────
 
-const askCostPilotHistory = [];
-let askCostPilotContext = null;
+function askCostPilotActorScope() {
+  return localStorage.getItem("cp_user_external_id")
+    || localStorage.getItem("cp_user_email")
+    || localStorage.getItem("cp_actor_id")
+    || "anonymous";
+}
+
+function askCostPilotStorageKey(kind) {
+  const workspace = localStorage.getItem("cp_workspace_id") || "default";
+  return `cp_ask_costpilot_${kind}:${workspace}:${askCostPilotActorScope()}`;
+}
+
+function readAskCostPilotStorage(kind, fallback) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(askCostPilotStorageKey(kind)) || "null");
+    return stored === null ? fallback : stored;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function writeAskCostPilotStorage(kind, value) {
+  try {
+    localStorage.setItem(askCostPilotStorageKey(kind), JSON.stringify(value));
+  } catch (_error) {
+    // The assistant still works when browser storage is unavailable.
+  }
+}
+
+function removeAskCostPilotStorage() {
+  try {
+    localStorage.removeItem(askCostPilotStorageKey("history"));
+    localStorage.removeItem(askCostPilotStorageKey("context"));
+  } catch (_error) {
+    // Nothing else is required when storage is unavailable.
+  }
+}
+
+let askCostPilotHistory = readAskCostPilotStorage("history", []);
+if (!Array.isArray(askCostPilotHistory)) askCostPilotHistory = [];
+let askCostPilotContext = readAskCostPilotStorage("context", null);
 
 function askCostPilotSuggestion(button) {
   const input = document.getElementById("askCostPilotInput");
@@ -1448,17 +1487,53 @@ function askCostPilotPayload(question) {
     record_type: askCostPilotFilterValue("ctxRecordTypeFilter"),
     charged_unit: askCostPilotFilterValue("ctxOrgFilter"),
     business_purpose: askCostPilotFilterValue("ctxPurposeFilter"),
-    conversation: askCostPilotHistory.slice(-8),
+    conversation: askCostPilotHistory.slice(-12).map(({ role, content }) => ({ role, content })),
     context: askCostPilotContext,
   };
 }
 
 function askCostPilotComposerKeydown(event) {
-  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     submitAskCostPilot(event);
   }
 }
+
+function askCostPilotWelcomeMarkup() {
+  return `<div class="ask-message assistant">
+    <div class="ask-avatar" aria-hidden="true">CP</div>
+    <div class="ask-message-body">
+      <strong>What would you like to know?</strong>
+      <p>Ask what has been built, whether it is being used, who is using it, what it costs, or where governance needs attention.</p>
+    </div>
+  </div>`;
+}
+
+function restoreAskCostPilotConversation() {
+  const conversation = document.getElementById("askConversation");
+  if (!conversation || !askCostPilotHistory.length) return;
+  conversation.innerHTML = "";
+  askCostPilotHistory.slice(-12).forEach(item => {
+    if (item.role === "user") {
+      appendAskMessage("user", `<p>${escapeHtml(item.content || "")}</p>`);
+    } else if (item.role === "assistant") {
+      appendAskMessage(
+        "assistant",
+        item.data ? renderAskCostPilotAnswer(item.data) : `<p>${escapeHtml(item.content || "")}</p>`,
+      );
+    }
+  });
+}
+
+function clearAskCostPilotConversation() {
+  askCostPilotHistory = [];
+  askCostPilotContext = null;
+  removeAskCostPilotStorage();
+  const conversation = document.getElementById("askConversation");
+  if (conversation) conversation.innerHTML = askCostPilotWelcomeMarkup();
+}
+
+window.clearAskCostPilotConversation = clearAskCostPilotConversation;
 
 function appendAskMessage(role, html) {
   const conversation = document.getElementById("askConversation");
@@ -1567,16 +1642,39 @@ async function submitAskCostPilot(event) {
   );
 
   try {
-    const data = await apiPost("/api/reports/bot-efficiency/ask", askCostPilotPayload(question));
+    const payload = askCostPilotPayload(question);
+    let data;
+    try {
+      data = await apiPost("/api/reports/bot-efficiency/ask", payload);
+    } catch (error) {
+      // A saved conversation from an older release can fail validation after
+      // the assistant context schema evolves. Retry the same question once
+      // without stale context instead of making the user clear chat manually.
+      if (error && error.status === 422) {
+        askCostPilotHistory = [];
+        askCostPilotContext = null;
+        writeAskCostPilotStorage("history", askCostPilotHistory);
+        writeAskCostPilotStorage("context", askCostPilotContext);
+        data = await apiPost("/api/reports/bot-efficiency/ask", {
+          ...payload,
+          conversation: [],
+          context: null,
+        });
+      } else {
+        throw error;
+      }
+    }
     if (pending) pending.querySelector(".ask-message-body").innerHTML = renderAskCostPilotAnswer(data);
     askCostPilotHistory.push(
       { role: "user", content: question },
-      { role: "assistant", content: data.answer || "" },
+      { role: "assistant", content: data.answer || "", data },
     );
     askCostPilotContext = data.conversation_context || askCostPilotContext;
-    if (askCostPilotHistory.length > 8) {
-      askCostPilotHistory.splice(0, askCostPilotHistory.length - 8);
+    if (askCostPilotHistory.length > 12) {
+      askCostPilotHistory.splice(0, askCostPilotHistory.length - 12);
     }
+    writeAskCostPilotStorage("history", askCostPilotHistory);
+    writeAskCostPilotStorage("context", askCostPilotContext);
   } catch (error) {
     if (pending) {
       pending.querySelector(".ask-message-body").innerHTML =
@@ -2171,6 +2269,7 @@ function randomizeReportCards() {
 
 // Init drag for the default (savings) tab on load
 document.addEventListener("DOMContentLoaded", () => {
+  restoreAskCostPilotConversation();
   const requestedTab = new URLSearchParams(window.location.search).get("tab");
   const requestedButton = requestedTab
     ? document.querySelector(`.rpt-tab[data-tab="${CSS.escape(requestedTab)}"]`)

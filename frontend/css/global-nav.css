@@ -242,6 +242,30 @@
   margin: 0;
 }
 
+.cp-ask-header-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.cp-ask-clear {
+  background: transparent;
+  border: 1px solid var(--border, #334155);
+  border-radius: 999px;
+  color: var(--text-muted, #9aa7b8);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 7px 10px;
+}
+
+.cp-ask-clear:hover,
+.cp-ask-clear:focus-visible {
+  border-color: var(--accent, #60a5fa);
+  color: var(--text-primary, #e5edf7);
+}
+
 .cp-ask-kicker {
   color: var(--accent, #60a5fa);
   font-size: 10px;

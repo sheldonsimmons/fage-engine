@@ -75,6 +75,9 @@ class AskCostPilotContext(BaseModel):
     subject_filter_value: Optional[str] = None
     model_tier: Optional[str] = None
     period_key: Optional[str] = None
+    usage_status: Optional[str] = None
+    usage_threshold: Optional[int] = None
+    budget_scope: Optional[str] = None
 
 
 class AskCostPilotRequest(BaseModel):
@@ -208,13 +211,17 @@ def _ask_intent(question: str, default_days: int) -> dict:
     )):
         intent = "activity"
     elif any(term in text for term in (
-        "not been used", "unused agent", "unused agents", "inactive agent",
-        "inactive agents", "not used recently",
+        "what have we built", "is anyone using", "agent adoption",
+        "agent usage status", "adoption overview",
+        "not been used", "never used", "unused agent", "unused agents",
+        "inactive agent", "inactive agents", "not used recently",
+        "recently inactive", "low usage", "low-use", "low use",
+        "not being used much", "used infrequently", "high usage",
+        "change threshold", "set threshold", "usage threshold",
     )):
-        intent = "inactive"
+        intent = "agent_adoption"
         entity = "agent"
         metric = "request_count"
-        direction = "asc"
     elif any(term in text for term in (
         "prun", "tokens removed", "removed before model", "context removed"
     )):
@@ -234,7 +241,9 @@ def _ask_intent(question: str, default_days: int) -> dict:
     )):
         intent = "optimization"
     elif any(term in text for term in (
-        "near budget", "close to budget", "budget limit", "over budget", "budget warning"
+        "near budget", "close to budget", "budget limit", "over budget", "budget warning",
+        "department budget", "departments budget", "budget does each", "budget does every",
+        "budget by department", "all budgets",
     )):
         intent = "budget"
     elif any(term in text for term in (
@@ -258,7 +267,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
     direction = "asc" if any(term in text for term in (
         "fewest", "least", "lowest", "smallest", "bottom"
     )) else "desc"
-    if intent == "inactive":
+    if intent in {"inactive", "agent_adoption"}:
         direction = "asc"
     number_words = {
         "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -293,6 +302,44 @@ def _ask_intent(question: str, default_days: int) -> dict:
             model_tier = tier
             break
 
+    usage_status = None
+    usage_threshold = 10
+    if intent == "agent_adoption":
+        if "never used" in text or "never been used" in text:
+            usage_status = "never"
+        elif "recently inactive" in text or "not used recently" in text:
+            usage_status = "recently_inactive"
+        elif any(term in text for term in (
+            "low usage", "low-use", "low use", "not being used much",
+            "used infrequently", "fewer than", "less than", "under ", "below ",
+        )):
+            usage_status = "low"
+        elif "high usage" in text or "most used" in text:
+            usage_status = "active"
+        elif "unused" in text or "not been used" in text or "inactive agent" in text:
+            usage_status = "unused"
+        else:
+            usage_status = "all"
+        threshold_match = re.search(
+            rf"\b(?:under|below|fewer than|less than|threshold(?:\s+to)?|fewer than)\s+{number_pattern}\b",
+            text,
+        )
+        if threshold_match:
+            raw_threshold = threshold_match.group(1)
+            usage_threshold = (
+                int(raw_threshold) if raw_threshold.isdigit()
+                else number_words.get(raw_threshold, 10)
+            )
+        usage_threshold = max(1, min(usage_threshold, 100000))
+
+    budget_scope = None
+    if intent == "budget":
+        budget_scope = "all" if any(term in text for term in (
+            "each department", "every department", "all department",
+            "department budget", "departments budget", "budget by department",
+            "all budgets",
+        )) else "alerts"
+
     return {
         "intent": intent,
         "entity": entity,
@@ -303,12 +350,16 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "period_key": period_key,
         "source_platform": source_platform,
         "model_tier": model_tier,
+        "usage_status": usage_status,
+        "usage_threshold": usage_threshold,
+        "budget_scope": budget_scope,
     }
 
 
 _ASK_INTENTS = {
     "ranking", "overview", "savings", "budget", "pruning", "source_mix",
     "blocked", "risk_events", "total", "comparison", "activity", "inactive",
+    "agent_adoption",
     "tier_usage", "optimization", "help",
 }
 _ASK_ENTITIES = {
@@ -324,6 +375,8 @@ _ASK_PERIOD_KEYS = {
     "last_month", "this_quarter", "last_quarter", "this_year", "last_year",
     "rolling_days",
 }
+_ASK_USAGE_STATUSES = {"all", "unused", "never", "recently_inactive", "low", "active"}
+_ASK_BUDGET_SCOPES = {"all", "alerts"}
 
 
 def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
@@ -338,6 +391,10 @@ def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
         result["metric"] = candidate["metric"]
     if candidate.get("direction") in _ASK_DIRECTIONS:
         result["direction"] = candidate["direction"]
+    if candidate.get("usage_status") in _ASK_USAGE_STATUSES:
+        result["usage_status"] = candidate["usage_status"]
+    if candidate.get("budget_scope") in _ASK_BUDGET_SCOPES:
+        result["budget_scope"] = candidate["budget_scope"]
     period_key = candidate.get("period_key")
     if period_key in _ASK_PERIOD_KEYS:
         result["period_key"] = period_key
@@ -364,6 +421,12 @@ def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
         )
     except (TypeError, ValueError):
         pass
+    try:
+        result["usage_threshold"] = max(
+            1, min(int(candidate.get("usage_threshold")), 100000)
+        )
+    except (TypeError, ValueError):
+        pass
     return result
 
 
@@ -374,7 +437,7 @@ def _ask_conversation_text(request: AskCostPilotRequest) -> str:
     # them.  Sending the transcript for every request lets an earlier account,
     # agent, or date range silently constrain a new standalone question.
     if _ask_is_follow_up(request.question):
-        for message in request.conversation[-8:]:
+        for message in request.conversation[-12:]:
             content = " ".join((message.content or "").split())[:1200]
             if content:
                 turns.append(f"{message.role.upper()}: {content}")
@@ -451,6 +514,7 @@ def _ask_is_follow_up(question: str) -> bool:
         return True
     if any(term in text for term in (
         "supporting activity", "supporting evidence", "break it down",
+        "change threshold", "set threshold", "usage threshold",
     )):
         return True
     # A bare result-count command has no subject of its own and therefore
@@ -535,6 +599,25 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
             current["source_platform"] = context["source_platform"]
         if not current.get("model_tier") and context.get("model_tier"):
             current["model_tier"] = context["model_tier"]
+        if current.get("intent") == "agent_adoption":
+            explicit_usage_status = any(term in text for term in (
+                "never used", "never been used", "recently inactive",
+                "not used recently", "low usage", "low-use", "low use",
+                "not being used much", "used infrequently", "fewer than",
+                "less than", "under ", "below ", "high usage",
+                "most used", "unused", "not been used", "inactive agent",
+            ))
+            explicit_threshold = bool(re.search(
+                r"\b(?:under|below|fewer than|less than|threshold(?:\s+to)?)\s+"
+                r"(?:\d{1,5}|one|two|three|four|five|six|seven|eight|nine|ten|twenty)\b",
+                text,
+            ))
+            if not explicit_usage_status and context.get("usage_status"):
+                current["usage_status"] = context["usage_status"]
+            if not explicit_threshold and context.get("usage_threshold") is not None:
+                current["usage_threshold"] = max(
+                    1, min(int(context["usage_threshold"]), 100000)
+                )
         if not fresh_named_subject:
             for field in ("subject_entity", "subject_filter_name", "subject_filter_value"):
                 if not current.get(field) and context.get(field):
@@ -558,7 +641,7 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
     if not is_follow_up:
         return current
 
-    for message in reversed(request.conversation[-8:]):
+    for message in reversed(request.conversation[-12:]):
         if message.role != "user":
             continue
         prior_text = " ".join((message.content or "").lower().split())
@@ -700,10 +783,24 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
                         "strategist", "flagship",
                     ],
                 },
+                "usage_status": {
+                    "type": "string",
+                    "enum": ["none", *sorted(_ASK_USAGE_STATUSES)],
+                },
+                "usage_threshold": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000,
+                },
+                "budget_scope": {
+                    "type": "string",
+                    "enum": ["none", *sorted(_ASK_BUDGET_SCOPES)],
+                },
             },
             "required": [
                 "intent", "entity", "metric", "direction", "days",
                 "result_limit", "period_key", "source_platform", "model_tier",
+                "usage_status", "usage_threshold", "budget_scope",
             ],
             "additionalProperties": False,
         },
@@ -720,6 +817,13 @@ context for accounts/projects/matters/opportunities/work; platform for source sy
 model for model names or tiers; overview for company totals. Choose source_mix for
 questions comparing live activity with simulator or test traffic.
 Use total_tokens for token questions, spend_usd for cost/spend, and request_count for calls/usage.
+Choose agent_adoption when the user asks what agents have been built, whether they are being used,
+or asks for unused, never-used, inactive, low-usage, or active agents. Use usage_status never for
+agents with no governed activity ever; recently_inactive for agents with history but no activity in
+the selected period; unused for both groups; low for agents above zero but below usage_threshold;
+and all for an adoption overview. The default low-usage threshold is 10 requests.
+For budget questions, choose budget_scope all when the user asks what budget each department has;
+otherwise choose alerts for departments nearing or exceeding their cap.
 Never infer employee productivity, performance, or business outcomes.
 Always call query_costpilot_usage. Do not answer the question yourself."""
 
@@ -1773,8 +1877,13 @@ def ask_costpilot(
             f"for {period_label}."
             if evidence else f"No matching AI activity was recorded for {period_label}."
         )
-    elif intent == "inactive":
-        used_ids = {row.get("id") for row in report.get("agent_breakdown") or []}
+    elif intent in {"inactive", "agent_adoption"}:
+        current_rows = report.get("agent_breakdown") or []
+        current_by_id = {
+            str(row.get("id")): row
+            for row in current_rows
+            if row.get("id") is not None
+        }
         agent_query = db.query(RegisteredAgent)
         if request.workspace_id:
             agent_query = agent_query.filter(
@@ -1783,18 +1892,146 @@ def ask_costpilot(
         agent_query = agent_query.filter(
             RegisteredAgent.archived.isnot(True)
         )
-        inactive_agents = [agent for agent in agent_query.all() if agent.id not in used_ids]
-        inactive_agents.sort(key=lambda agent: (agent.last_used_at or datetime.min, agent.name or ""))
-        evidence = [{
-            "label": agent.name or "Unnamed agent",
-            "value": "Never" if not agent.last_used_at else agent.last_used_at.strftime("%b %d, %Y"),
-            "metric_label": "last used",
-            "detail": f"{agent.source_platform or 'Unknown platform'} · {agent.department or 'Unassigned'}",
-            "filter_name": "agent_id",
-            "filter_value": agent.id,
-        } for agent in inactive_agents[:result_limit]]
-        title = "Agents without recent usage"
-        answer = f"{len(inactive_agents):,} registered agents had no governed requests for {period_label}."
+        agents = agent_query.all()
+        lifetime_query = db.query(
+            AuditEvent.agent_id,
+            func.count(AuditEvent.id),
+            func.max(AuditEvent.timestamp),
+        ).filter(AuditEvent.agent_id.isnot(None))
+        if request.workspace_id:
+            lifetime_query = lifetime_query.filter(
+                AuditEvent.workspace_id == request.workspace_id
+            )
+        lifetime_rows = {
+            str(agent_id): {
+                "request_count": int(request_count or 0),
+                "last_used_at": last_used_at,
+            }
+            for agent_id, request_count, last_used_at in lifetime_query.group_by(
+                AuditEvent.agent_id
+            ).all()
+        }
+        threshold = max(1, int(parsed.get("usage_threshold") or 10))
+        requested_status = parsed.get("usage_status") or (
+            "unused" if intent == "inactive" else "all"
+        )
+        adoption_rows = []
+        status_counts = {
+            "never": 0,
+            "recently_inactive": 0,
+            "low": 0,
+            "active": 0,
+        }
+        for agent in agents:
+            agent_key = str(agent.id)
+            current = current_by_id.get(agent_key) or {}
+            lifetime = lifetime_rows.get(agent_key) or {}
+            current_count = int(current.get("request_count") or 0)
+            lifetime_count = int(lifetime.get("request_count") or 0)
+            last_used_at = lifetime.get("last_used_at") or agent.last_used_at
+            if lifetime_count == 0:
+                status = "never"
+            elif current_count == 0:
+                status = "recently_inactive"
+            elif current_count < threshold:
+                status = "low"
+            else:
+                status = "active"
+            status_counts[status] += 1
+            if requested_status == "unused" and status not in {
+                "never", "recently_inactive"
+            }:
+                continue
+            if requested_status not in {"all", "unused", status}:
+                continue
+            department = str(agent.department or "Unassigned").split(":")[-1]
+            live_count_for_agent = int(current.get("live_count") or 0)
+            simulation_count_for_agent = int(current.get("simulation_count") or 0)
+            adoption_rows.append({
+                "agent": agent,
+                "status": status,
+                "current_count": current_count,
+                "lifetime_count": lifetime_count,
+                "last_used_at": last_used_at,
+                "department": department,
+                "live_count": live_count_for_agent,
+                "simulation_count": simulation_count_for_agent,
+            })
+
+        status_order = {
+            "never": 0,
+            "recently_inactive": 1,
+            "low": 2,
+            "active": 3,
+        }
+        adoption_rows.sort(key=lambda row: (
+            status_order[row["status"]],
+            row["current_count"] if row["status"] == "low" else -row["current_count"],
+            row["agent"].name or "",
+        ))
+        status_labels = {
+            "never": "Never used",
+            "recently_inactive": "Recently inactive",
+            "low": f"Low usage (1–{threshold - 1} requests)",
+            "active": f"Active ({threshold}+ requests)",
+        }
+        evidence = []
+        for row in adoption_rows[:result_limit]:
+            last_used = row["last_used_at"]
+            detail_parts = [
+                status_labels[row["status"]],
+                row["agent"].source_platform or "Unknown platform",
+                row["department"],
+                f"{row['lifetime_count']:,} lifetime requests",
+            ]
+            if last_used:
+                detail_parts.append(f"last used {last_used.strftime('%b %d, %Y')}")
+            evidence.append({
+                "label": row["agent"].name or "Unnamed agent",
+                "value": f"{row['current_count']:,}",
+                "metric_label": "requests in period",
+                "detail": " · ".join(detail_parts),
+                "filter_name": "agent_id",
+                "filter_value": row["agent"].id,
+                "live_count": row["live_count"],
+                "simulation_count": row["simulation_count"],
+            })
+        if requested_status == "all":
+            title = "Agent adoption overview"
+            answer = (
+                f"CostPilot found {len(agents):,} registered agents: "
+                f"{status_counts['active']:,} active, {status_counts['low']:,} low usage, "
+                f"{status_counts['recently_inactive']:,} recently inactive, and "
+                f"{status_counts['never']:,} never used. Low usage means fewer than "
+                f"{threshold:,} governed requests in {period_label}."
+            )
+        else:
+            title_by_status = {
+                "unused": "Unused agents",
+                "never": "Agents never used",
+                "recently_inactive": "Recently inactive agents",
+                "low": "Low-usage agents",
+                "active": "Active agents",
+            }
+            definition_by_status = {
+                "unused": "no requests in the selected period",
+                "never": "no governed requests at any time",
+                "recently_inactive": "historical usage but no requests in the selected period",
+                "low": f"between 1 and {max(threshold - 1, 1):,} requests in the selected period",
+                "active": f"at least {threshold:,} requests in the selected period",
+            }
+            title = title_by_status[requested_status]
+            answer = (
+                f"{len(adoption_rows):,} registered agent"
+                f"{'s match' if len(adoption_rows) != 1 else ' matches'} this definition: "
+                f"{definition_by_status[requested_status]}."
+            )
+        calculation_formula = (
+            "Classify every non-archived registered agent using lifetime activity and "
+            f"governed requests in the selected period; low-usage threshold is {threshold:,}"
+        )
+        calculation_row_count = len(agents)
+        intent = "agent_adoption"
     elif intent == "tier_usage":
         title = f"{(parsed.get('model_tier') or 'Selected tier').title()} routing usage"
         value, metric_label = _ask_metric_value(metric, _ask_row_metric(summary, metric))
@@ -1923,6 +2160,7 @@ def ask_costpilot(
                 budget for budget in budgets
                 if ":" not in str(budget.department or "")
             ]
+        budget_scope = parsed.get("budget_scope") or "alerts"
         over_limit = any(term in question.lower() for term in (
             "over budget", "exceeded", "over cap", "above budget"
         ))
@@ -1932,7 +2170,7 @@ def ask_costpilot(
             cap = float(budget.monthly_cap_usd or 0)
             spent = float(budget.current_spend_usd or 0)
             pct = spent / cap * 100 if cap > 0 else 0
-            if pct >= threshold:
+            if budget_scope == "all" or pct >= threshold:
                 label = (budget.department or "Unassigned").split(":")[-1]
                 budget_rows.append({
                     "id": budget.department,
@@ -1942,23 +2180,56 @@ def ask_costpilot(
                     "cap": cap,
                     "throttled": bool(budget.throttled),
                 })
-        budget_rows.sort(key=lambda row: -row["pct"])
+        budget_rows.sort(
+            key=(
+                (lambda row: row["label"].lower())
+                if budget_scope == "all"
+                else (lambda row: -row["pct"])
+            )
+        )
         evidence = [{
             "label": row["label"],
-            "value": f"{row['pct']:.1f}%",
-            "metric_label": "budget used",
-            "detail": f"${row['spent']:,.2f} of ${row['cap']:,.2f}" +
+            "value": (
+                f"${row['cap']:,.2f}"
+                if budget_scope == "all"
+                else f"{row['pct']:.1f}%"
+            ),
+            "metric_label": (
+                "monthly budget"
+                if budget_scope == "all"
+                else "budget used"
+            ),
+            "detail": f"${row['spent']:,.2f} used · {row['pct']:.1f}% · " +
+                      f"${max(row['cap'] - row['spent'], 0):,.2f} remaining" +
                       (" · throttled" if row["throttled"] else ""),
             "filter_name": "charged_unit",
             "filter_value": row["label"],
-        } for row in budget_rows[:5]]
-        title = "Budget watch"
-        answer = (
-            f"{len(budget_rows)} department{'s are' if len(budget_rows) != 1 else ' is'} "
-            f"at or above {threshold}% of its monthly AI budget."
-            if budget_rows else
-            f"No active department is at or above {threshold}% of its monthly AI budget."
-        )
+        } for row in budget_rows[:result_limit]]
+        if budget_scope == "all":
+            total_cap = sum(row["cap"] for row in budget_rows)
+            total_spent = sum(row["spent"] for row in budget_rows)
+            title = "Department AI budgets"
+            answer = (
+                f"{len(budget_rows):,} active departments have ${total_cap:,.2f} "
+                f"in combined monthly AI budget, with ${total_spent:,.2f} used."
+                if budget_rows else
+                "No active department budgets are configured."
+            )
+            calculation_formula = (
+                "List each active department's configured monthly cap and current usage"
+            )
+        else:
+            title = "Budget watch"
+            answer = (
+                f"{len(budget_rows)} department{'s are' if len(budget_rows) != 1 else ' is'} "
+                f"at or above {threshold}% of its monthly AI budget."
+                if budget_rows else
+                f"No active department is at or above {threshold}% of its monthly AI budget."
+            )
+            calculation_formula = (
+                f"Current department spend divided by monthly cap; include departments at or above {threshold}%"
+            )
+        calculation_row_count = len(budget_rows)
     elif intent == "pruning":
         saved_tokens = int(summary.get("tokens_saved") or 0)
         input_tokens = int(summary.get("input_tokens") or 0)
@@ -2213,6 +2484,11 @@ def ask_costpilot(
         "source_platform": parsed.get("source_platform"),
         "model_tier": parsed.get("model_tier"),
     }
+    for field in ("usage_status", "budget_scope"):
+        if parsed.get(field) not in (None, ""):
+            conversation_context[field] = parsed[field]
+    if parsed.get("usage_threshold") not in (None, ""):
+        conversation_context["usage_threshold"] = int(parsed["usage_threshold"])
     for field in ("subject_entity", "subject_filter_name", "subject_filter_value"):
         if parsed.get(field) not in (None, ""):
             conversation_context[field] = parsed[field]

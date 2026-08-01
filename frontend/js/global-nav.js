@@ -130,9 +130,6 @@
     updateStatus(nav);
   }
 
-  const ASK_HISTORY_KEY = "cp_ask_costpilot_history";
-  const ASK_CONTEXT_KEY = "cp_ask_costpilot_context";
-
   function readSession(key, fallback) {
     try {
       const parsed = JSON.parse(sessionStorage.getItem(key) || "null");
@@ -144,6 +141,38 @@
 
   function writeSession(key, value) {
     try { sessionStorage.setItem(key, JSON.stringify(value)); } catch (_error) {}
+  }
+
+  function askActorScope() {
+    return localStorage.getItem("cp_user_external_id")
+      || localStorage.getItem("cp_user_email")
+      || localStorage.getItem("cp_actor_id")
+      || "anonymous";
+  }
+
+  function askStorageKey(kind) {
+    const workspace = localStorage.getItem("cp_workspace_id") || "default";
+    return `cp_ask_costpilot_${kind}:${workspace}:${askActorScope()}`;
+  }
+
+  function readAskStorage(kind, fallback) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(askStorageKey(kind)) || "null");
+      return parsed === null ? fallback : parsed;
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
+  function writeAskStorage(kind, value) {
+    try { localStorage.setItem(askStorageKey(kind), JSON.stringify(value)); } catch (_error) {}
+  }
+
+  function clearAskStorage() {
+    try {
+      localStorage.removeItem(askStorageKey("history"));
+      localStorage.removeItem(askStorageKey("context"));
+    } catch (_error) {}
   }
 
   function installAskCostPilot() {
@@ -158,7 +187,10 @@
             <h2 id="cpAskTitle">Ask CostPilot</h2>
             <p>Answers calculated from your governed AI activity.</p>
           </div>
-          <button type="button" class="cp-ask-close" id="cpAskClose" aria-label="Close Ask CostPilot">×</button>
+          <div class="cp-ask-header-actions">
+            <button type="button" class="cp-ask-clear" id="cpAskClear">Clear chat</button>
+            <button type="button" class="cp-ask-close" id="cpAskClose" aria-label="Close Ask CostPilot">×</button>
+          </div>
         </header>
         <div class="cp-ask-suggestions" aria-label="Suggested questions">
           <button type="button">Who used the most tokens last week?</button>
@@ -187,7 +219,14 @@
 
     document.getElementById("cpAskBackdrop").addEventListener("click", closeAskCostPilot);
     document.getElementById("cpAskClose").addEventListener("click", closeAskCostPilot);
+    document.getElementById("cpAskClear").addEventListener("click", clearGlobalAskConversation);
     document.getElementById("cpAskForm").addEventListener("submit", submitGlobalAsk);
+    document.getElementById("cpAskInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        document.getElementById("cpAskForm")?.requestSubmit();
+      }
+    });
     document.querySelectorAll(".cp-ask-suggestions button").forEach((button) => {
       button.addEventListener("click", () => {
         document.getElementById("cpAskInput").value = button.textContent.trim();
@@ -201,6 +240,7 @@
         openAskCostPilot();
       }
     });
+    restoreGlobalAskConversation();
   }
 
   function openAskCostPilot() {
@@ -273,17 +313,18 @@
       .filter((item) => item && (item.role === "user" || item.role === "assistant"))
       .map((item) => ({ role: item.role, content: cleanAskString(item.content) }))
       .filter((item) => item.content)
-      .slice(-8);
+      .slice(-12);
     if (context && typeof context === "object" && !Array.isArray(context)) {
       const normalizedContext = {};
       [
         "intent", "entity", "metric", "direction", "source_platform", "subject_entity",
         "subject_filter_name", "subject_filter_value", "model_tier", "period_key",
+        "usage_status", "budget_scope",
       ].forEach((key) => {
         const value = cleanAskString(context[key]);
         if (value !== null) normalizedContext[key] = value;
       });
-      ["days", "result_limit"].forEach((key) => {
+      ["days", "result_limit", "usage_threshold"].forEach((key) => {
         const value = Number(context[key]);
         if (Number.isInteger(value) && value > 0) normalizedContext[key] = value;
       });
@@ -356,6 +397,42 @@
     </article>`;
   }
 
+  function bindGlobalAskDrills(container) {
+    container?.querySelectorAll("[data-ask-filter]").forEach((button) => {
+      button.addEventListener("click", () => openAskDrill(button.dataset.askFilter, button.dataset.askValue));
+    });
+  }
+
+  function restoreGlobalAskConversation() {
+    const history = readAskStorage("history", []);
+    if (!Array.isArray(history) || !history.length) return;
+    const messages = document.getElementById("cpAskMessages");
+    if (!messages) return;
+    messages.innerHTML = "";
+    history.slice(-12).forEach((item) => {
+      if (!item || !item.content) return;
+      if (item.role === "user") {
+        addAskMessage("user", `<p>${escapeHtml(item.content)}</p>`);
+      } else if (item.role === "assistant") {
+        const node = addAskMessage(
+          "assistant",
+          item.data ? renderGlobalAnswer(item.data) : `<p>${escapeHtml(item.content)}</p>`,
+        );
+        bindGlobalAskDrills(node);
+      }
+    });
+  }
+
+  function clearGlobalAskConversation() {
+    clearAskStorage();
+    const messages = document.getElementById("cpAskMessages");
+    if (!messages) return;
+    messages.innerHTML = `<div class="cp-ask-welcome">
+      <strong>What would you like to know?</strong>
+      <span>Ask about people, agents, departments, business contexts, models, spend, tokens, pruning, or risk.</span>
+    </div>`;
+  }
+
   async function submitGlobalAsk(event) {
     event?.preventDefault();
     const input = document.getElementById("cpAskInput");
@@ -367,30 +444,27 @@
     send.disabled = true;
     send.textContent = "Checking…";
     const pending = addAskMessage("assistant", `<div class="cp-ask-thinking">Calculating from governed activity…</div>`);
-    const history = readSession(ASK_HISTORY_KEY, []);
-    const context = readSession(ASK_CONTEXT_KEY, null);
+    const history = readAskStorage("history", []);
+    const context = readAskStorage("context", null);
     try {
       let response = await postGlobalAsk(normalizedAskPayload(question, history, context));
       // Old browser sessions can contain conversation state from a previous
       // response contract. A valid question must not fail because that optional
       // context is stale, so retry once with the clean reporting scope only.
       if (response.status === 422) {
-        writeSession(ASK_HISTORY_KEY, []);
-        writeSession(ASK_CONTEXT_KEY, null);
+        clearAskStorage();
         response = await postGlobalAsk(normalizedAskPayload(question, [], null, false));
       }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const data = await response.json();
       pending.innerHTML = renderGlobalAnswer(data);
-      pending.querySelectorAll("[data-ask-filter]").forEach((button) => {
-        button.addEventListener("click", () => openAskDrill(button.dataset.askFilter, button.dataset.askValue));
-      });
+      bindGlobalAskDrills(pending);
       history.push(
         { role: "user", content: question },
-        { role: "assistant", content: data.answer || "" },
+        { role: "assistant", content: data.answer || "", data },
       );
-      writeSession(ASK_HISTORY_KEY, history.slice(-8));
-      writeSession(ASK_CONTEXT_KEY, data.conversation_context || context);
+      writeAskStorage("history", history.slice(-12));
+      writeAskStorage("context", data.conversation_context || context);
     } catch (error) {
       pending.innerHTML = `<div class="cp-ask-error"><strong>I couldn't calculate that answer.</strong><span>${escapeHtml(error.message || "Please try again.")}</span></div>`;
     } finally {
