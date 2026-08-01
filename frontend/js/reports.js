@@ -8,6 +8,19 @@
 
 let activeTab  = "savings";
 const charts   = {};
+let reportDrillDateRange = null;
+
+const ASK_DRILL_FILTER_IDS = {
+  project_id: "ctxProjectFilter",
+  user_external_id: "ctxPersonFilter",
+  account_id: "ctxAccountFilter",
+  agent_id: "ctxAgentFilter",
+  source_platform: "ctxSourceFilter",
+  record_type: "ctxRecordTypeFilter",
+  charged_unit: "ctxOrgFilter",
+  business_purpose: "ctxPurposeFilter",
+};
+const ASK_DRILL_KEYS = ["date_from", "date_to", ...Object.keys(ASK_DRILL_FILTER_IDS)];
 
 // Cached API data for export
 let _rptRiskEvents  = [];
@@ -420,14 +433,25 @@ function resolveDatePreset(preset) {
 }
 
 function getActiveDateRange() {
+  if (reportDrillDateRange) return { ...reportDrillDateRange };
   const preset = (document.getElementById("rptDatePreset") || {}).value || "last_30";
   return resolveDatePreset(preset);
 }
 
 function onDatePresetChange() {
+  reportDrillDateRange = null;
   const preset = document.getElementById("rptDatePreset").value;
   document.getElementById("rptCustomDates").style.display = preset === "custom" ? "flex" : "none";
-  if (preset !== "custom") loadActiveTab();
+  if (preset !== "custom") {
+    if (activeTab === "contexts") syncAskDrillQuery();
+    loadActiveTab();
+  }
+}
+
+function onCustomReportDateChange() {
+  reportDrillDateRange = null;
+  if (activeTab === "contexts") syncAskDrillQuery();
+  loadActiveTab();
 }
 
 function loadActiveTab() {
@@ -458,6 +482,7 @@ function projectAttributionFilterValue(id) {
 }
 
 function resetProjectAttributionFilters() {
+  reportDrillDateRange = null;
   [
     "ctxOrgFilter", "ctxProjectFilter", "ctxPersonFilter", "ctxAccountFilter",
     "ctxAgentFilter", "ctxSourceFilter", "ctxRecordTypeFilter", "ctxPurposeFilter",
@@ -465,6 +490,7 @@ function resetProjectAttributionFilters() {
     const select = document.getElementById(id);
     if (select) select.value = "";
   });
+  clearAskDrillQuery();
   loadBusinessContexts();
 }
 
@@ -478,6 +504,7 @@ function selectOrganizationalUnit(name) {
 function clearProjectAttributionFilter(id) {
   const select = document.getElementById(id);
   if (select) select.value = "";
+  syncAskDrillQuery();
   loadBusinessContexts();
 }
 
@@ -1548,13 +1575,73 @@ function appendAskMessage(role, html) {
   return message;
 }
 
-function askEvidenceButton(item) {
+function normalizeAskDrillScope(scopeOrName, filterValue) {
+  let source = scopeOrName;
+  if (typeof source === "string" && source.trim().startsWith("{")) {
+    try { source = JSON.parse(source); } catch (_error) { source = {}; }
+  } else if (typeof source === "string") {
+    source = { [source]: filterValue };
+  }
+  if (source?.scope) source = source.scope;
+  if (source?.filterName) source = { [source.filterName]: source.filterValue };
+  const normalized = {};
+  ASK_DRILL_KEYS.forEach(key => {
+    const value = source?.[key];
+    if (value !== null && value !== undefined && String(value).trim() !== "") {
+      normalized[key] = key === "date_from" || key === "date_to"
+        ? String(value).trim().slice(0, 10)
+        : String(value);
+    }
+  });
+  return normalized;
+}
+
+function askDrillScopeForEvidence(data, item) {
+  const provenance = data?.data_provenance || {};
+  const scope = normalizeAskDrillScope({
+    ...(data?.filters || {}),
+    ...(provenance.active_filters || {}),
+    date_from: data?.period?.date_from,
+    date_to: data?.period?.date_to,
+  });
+  if (item?.filter_name && item.filter_value !== null && item.filter_value !== undefined) {
+    scope[item.filter_name] = String(item.filter_value);
+  }
+  return normalizeAskDrillScope(scope);
+}
+
+function askDrillScopeFromLocation() {
+  const params = new URLSearchParams(location.search);
+  const scope = {};
+  ASK_DRILL_KEYS.forEach(key => { if (params.get(key)) scope[key] = params.get(key); });
+  return normalizeAskDrillScope(scope);
+}
+
+function syncAskDrillQuery(scope = null) {
+  const params = new URLSearchParams(location.search);
+  ASK_DRILL_KEYS.forEach(key => params.delete(key));
+  params.set("tab", "contexts");
+  const current = scope || {
+    ...getActiveDateRange(),
+    ...Object.fromEntries(Object.entries(ASK_DRILL_FILTER_IDS).map(([key, id]) => [key, projectAttributionFilterValue(id)])),
+  };
+  Object.entries(normalizeAskDrillScope(current)).forEach(([key, value]) => params.set(key, value));
+  history.replaceState(null, "", `${location.pathname}?${params.toString()}${location.hash}`);
+}
+
+function clearAskDrillQuery() {
+  const params = new URLSearchParams(location.search);
+  ASK_DRILL_KEYS.forEach(key => params.delete(key));
+  history.replaceState(null, "", `${location.pathname}?${params.toString()}${location.hash}`);
+}
+
+function askEvidenceButton(item, data) {
   const canDrill = item.filter_name && item.filter_value !== null && item.filter_value !== undefined;
+  const encodedScope = encodeURIComponent(JSON.stringify(askDrillScopeForEvidence(data, item)));
   const drill = canDrill
     ? `<button type="button" class="ask-evidence-drill"
-         data-filter="${escapeHtml(item.filter_name)}"
-         data-value="${escapeHtml(String(item.filter_value))}"
-         onclick="drillFromAskCostPilot(this.dataset.filter, this.dataset.value)">
+         data-scope="${escapeHtml(encodedScope)}"
+         onclick="drillFromAskCostPilot(decodeURIComponent(this.dataset.scope))">
          View activity <span aria-hidden="true">→</span>
        </button>`
     : "";
@@ -1575,7 +1662,7 @@ function renderAskCostPilotAnswer(data) {
   const evidence = (data.evidence || []).length
     ? `<div class="ask-answer-section">
         <h4>Evidence</h4>
-        <div class="ask-evidence-list">${data.evidence.map(askEvidenceButton).join("")}</div>
+        <div class="ask-evidence-list">${data.evidence.map(item => askEvidenceButton(item, data)).join("")}</div>
        </div>`
     : "";
   const recommendations = (data.recommendations || []).length
@@ -1687,20 +1774,10 @@ async function submitAskCostPilot(event) {
   }
 }
 
-async function drillFromAskCostPilot(filterName, filterValue) {
-  const selectIds = {
-    project_id: "ctxProjectFilter",
-    user_external_id: "ctxPersonFilter",
-    agent_id: "ctxAgentFilter",
-    account_id: "ctxAccountFilter",
-    charged_unit: "ctxOrgFilter",
-    business_purpose: "ctxPurposeFilter",
-    source_platform: "ctxSourceFilter",
-    record_type: "ctxRecordTypeFilter",
-  };
-  const selectId = selectIds[filterName];
+async function drillFromAskCostPilot(scopeOrName, filterValue) {
+  const scope = normalizeAskDrillScope(scopeOrName, filterValue);
   const tab = document.querySelector('.rpt-tab[data-tab="contexts"]');
-  if (!selectId || !tab) return;
+  if (!Object.keys(scope).length || !tab) return;
 
   // Activate the attribution view without firing the tab click handler. The
   // click handler starts its own unawaited load, which can race this drill-down
@@ -1712,16 +1789,48 @@ async function drillFromAskCostPilot(filterName, filterValue) {
   const pane = document.getElementById("tab-contexts");
   if (pane) pane.classList.add("active");
 
-  // Load once to populate the current report's valid filter values, then apply
-  // the evidence filter and reload the exact drill-down.
-  await loadBusinessContexts();
-  const select = document.getElementById(selectId);
-  if (select && [...select.options].some(option => option.value === String(filterValue))) {
-    select.value = String(filterValue);
-    await loadBusinessContexts();
-    select.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (scope.date_from && scope.date_to) {
+    const from = new Date(`${scope.date_from}T00:00:00`);
+    const to = new Date(`${scope.date_to}T00:00:00`);
+    if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && to > from) {
+      reportDrillDateRange = {
+        date_from: scope.date_from,
+        date_to: scope.date_to,
+        days: Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86400000)),
+      };
+      const preset = document.getElementById("rptDatePreset");
+      const custom = document.getElementById("rptCustomDates");
+      const start = document.getElementById("rptDateFrom");
+      const end = document.getElementById("rptDateTo");
+      if (preset) preset.value = "custom";
+      if (custom) custom.style.display = "flex";
+      if (start) start.value = scope.date_from;
+      if (end) end.value = new Date(to.getTime() - 1).toISOString().slice(0, 10);
+    }
   }
+
+  // Populate valid values first, then preserve every filter represented by the
+  // answer. If a historical entity is absent from the current option set, add
+  // it so the evidence link still produces the exact calculated scope.
+  const applyScopeSelects = () => Object.entries(ASK_DRILL_FILTER_IDS).forEach(([key, selectId]) => {
+      const value = scope[key];
+      if (!value) return;
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      if (![...select.options].some(option => option.value === value)) {
+        select.add(new Option(value, value));
+      }
+      select.value = value;
+    });
+  await loadBusinessContexts();
+  applyScopeSelects();
+  await loadBusinessContexts();
+  applyScopeSelects();
+  syncAskDrillQuery(scope);
+  pane?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+window.drillFromAskCostPilot = drillFromAskCostPilot;
 
 window.getCostPilotAskScope = function getCostPilotAskScope() {
   const payload = askCostPilotPayload("");
@@ -1730,7 +1839,6 @@ window.getCostPilotAskScope = function getCostPilotAskScope() {
   delete payload.context;
   return payload;
 };
-window.drillFromAskCostPilot = drillFromAskCostPilot;
 
 function getEfficiencyDays() {
   return (document.getElementById("effDaysSelect") || {}).value || "30";
@@ -2274,17 +2382,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const requestedButton = requestedTab
     ? document.querySelector(`.rpt-tab[data-tab="${CSS.escape(requestedTab)}"]`)
     : null;
-  if (requestedButton && requestedTab !== activeTab) requestedButton.click();
+  let pendingScope = {};
   try {
     const pendingDrill = JSON.parse(sessionStorage.getItem("cp_ask_pending_drill") || "null");
-    if (pendingDrill && pendingDrill.filterName) {
+    if (pendingDrill) {
       sessionStorage.removeItem("cp_ask_pending_drill");
-      setTimeout(() => {
-        drillFromAskCostPilot(pendingDrill.filterName, pendingDrill.filterValue);
-      }, 250);
+      pendingScope = normalizeAskDrillScope(pendingDrill);
     }
   } catch (_error) {
     sessionStorage.removeItem("cp_ask_pending_drill");
+  }
+  const locationScope = askDrillScopeFromLocation();
+  const drillScope = Object.keys(locationScope).length ? locationScope : pendingScope;
+  if (Object.keys(drillScope).length) {
+    setTimeout(() => drillFromAskCostPilot(drillScope), 100);
+  } else if (requestedButton && requestedTab !== activeTab) {
+    requestedButton.click();
   }
   setTimeout(() => initDraggableReports("savings"), 100);
 });

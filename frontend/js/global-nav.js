@@ -351,10 +351,58 @@
     return node;
   }
 
-  function renderGlobalEvidence(item) {
+  const GLOBAL_ASK_DRILL_KEYS = [
+    "date_from", "date_to", "project_id", "user_external_id", "account_id", "agent_id",
+    "source_platform", "record_type", "charged_unit", "business_purpose", "audit_event_id",
+  ];
+
+  function normalizeGlobalAskDrillScope(scopeOrName, filterValue) {
+    let source = scopeOrName;
+    if (typeof source === "string" && source.trim().startsWith("{")) {
+      try { source = JSON.parse(source); } catch (_) { source = {}; }
+    } else if (typeof source === "string") {
+      source = { [source]: filterValue };
+    }
+    if (source?.scope) source = source.scope;
+    if (source?.filterName) source = { [source.filterName]: source.filterValue };
+    const normalized = {};
+    GLOBAL_ASK_DRILL_KEYS.forEach((key) => {
+      const value = source?.[key];
+      if (value !== null && value !== undefined && String(value).trim() !== "") {
+        normalized[key] = key === "date_from" || key === "date_to"
+          ? String(value).trim().slice(0, 10)
+          : String(value).trim();
+      }
+    });
+    return normalized;
+  }
+
+  function globalAskDrillScope(data, item) {
+    const provenance = data?.data_provenance || {};
+    const scope = normalizeGlobalAskDrillScope({
+      ...(data?.filters || {}),
+      ...(provenance.active_filters || {}),
+      date_from: data?.period?.date_from,
+      date_to: data?.period?.date_to,
+    });
+    if (item?.filter_name && item.filter_value !== null && item.filter_value !== undefined) {
+      scope[item.filter_name] = String(item.filter_value);
+    }
+    return normalizeGlobalAskDrillScope(scope);
+  }
+
+  function globalAskDrillUrl(scope) {
+    const params = new URLSearchParams({ tab: "contexts" });
+    Object.entries(scope).forEach(([key, value]) => {
+      if (key !== "audit_event_id") params.set(key, value);
+    });
+    return `/reports.html?${params.toString()}`;
+  }
+
+  function renderGlobalEvidence(item, data) {
+    const scope = globalAskDrillScope(data, item);
     const drill = item.filter_name && item.filter_value !== null && item.filter_value !== undefined
-      ? `<button type="button" data-ask-filter="${escapeHtml(item.filter_name)}"
-          data-ask-value="${escapeHtml(String(item.filter_value))}">View activity →</button>`
+      ? `<button type="button" data-ask-scope="${escapeHtml(encodeURIComponent(JSON.stringify(scope)))}">View activity →</button>`
       : "";
     return `<div class="cp-ask-evidence">
       <div><strong>${escapeHtml(item.label || "Unknown")}</strong><span>${escapeHtml(item.detail || "")}</span></div>
@@ -372,7 +420,7 @@
       mixed: `Live + simulator · ${liveRequests} live / ${simulatorRequests} simulated`,
       no_activity: "No matching activity",
     }[provenance.scope] || "Governed activity";
-    const evidence = (data.evidence || []).map(renderGlobalEvidence).join("");
+    const evidence = (data.evidence || []).map((item) => renderGlobalEvidence(item, data)).join("");
     const activeFilters = Object.entries(provenance.active_filters || {})
       .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
       .map(([key, value]) => `<span>${escapeHtml(key.replaceAll("_", " "))}: ${escapeHtml(String(value))}</span>`)
@@ -398,8 +446,13 @@
   }
 
   function bindGlobalAskDrills(container) {
-    container?.querySelectorAll("[data-ask-filter]").forEach((button) => {
-      button.addEventListener("click", () => openAskDrill(button.dataset.askFilter, button.dataset.askValue));
+    container?.querySelectorAll("[data-ask-scope],[data-ask-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const scope = button.dataset.askScope
+          ? decodeURIComponent(button.dataset.askScope)
+          : { [button.dataset.askFilter]: button.dataset.askValue };
+        openAskDrill(scope);
+      });
     });
   }
 
@@ -474,20 +527,21 @@
     }
   }
 
-  function openAskDrill(filterName, filterValue) {
-    if (filterName === "audit_event_id") {
+  function openAskDrill(scopeOrName, filterValue) {
+    const scope = normalizeGlobalAskDrillScope(scopeOrName, filterValue);
+    if (scope.audit_event_id) {
       closeAskCostPilot();
-      writeSession("cp_audit_pending_event", String(filterValue));
+      writeSession("cp_audit_pending_event", scope.audit_event_id);
       location.href = "/operate.html#audit";
       return;
     }
     if (typeof window.drillFromAskCostPilot === "function") {
       closeAskCostPilot();
-      window.drillFromAskCostPilot(filterName, filterValue);
+      window.drillFromAskCostPilot(scope);
       return;
     }
-    writeSession("cp_ask_pending_drill", { filterName, filterValue });
-    location.href = "/reports.html?tab=contexts";
+    writeSession("cp_ask_pending_drill", { scope });
+    location.href = globalAskDrillUrl(scope);
   }
 
   function closeMenus(nav) {

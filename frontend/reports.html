@@ -79,9 +79,9 @@
             </optgroup>
           </select>
           <div class="rpt-custom-dates" id="rptCustomDates" style="display:none">
-            <input type="date" id="rptDateFrom" class="rpt-date-input" onchange="loadActiveTab()" />
+            <input type="date" id="rptDateFrom" class="rpt-date-input" onchange="onCustomReportDateChange()" />
             <span class="rpt-date-sep">→</span>
-            <input type="date" id="rptDateTo" class="rpt-date-input" onchange="loadActiveTab()" />
+            <input type="date" id="rptDateTo" class="rpt-date-input" onchange="onCustomReportDateChange()" />
           </div>
         </div>
       </div>
@@ -351,28 +351,28 @@
 
       <div class="project-attribution-filters">
         <label>Department / Team
-          <select id="ctxOrgFilter" onchange="loadBusinessContexts()"><option value="">All Departments &amp; Teams</option></select>
+          <select id="ctxOrgFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All Departments &amp; Teams</option></select>
         </label>
         <label>Project
-          <select id="ctxProjectFilter" onchange="loadBusinessContexts()"><option value="">All Projects</option></select>
+          <select id="ctxProjectFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All Projects</option></select>
         </label>
         <label>Person
-          <select id="ctxPersonFilter" onchange="loadBusinessContexts()"><option value="">All People</option></select>
+          <select id="ctxPersonFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All People</option></select>
         </label>
         <label>Account
-          <select id="ctxAccountFilter" onchange="loadBusinessContexts()"><option value="">All Accounts</option></select>
+          <select id="ctxAccountFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All Accounts</option></select>
         </label>
         <label>Agent
-          <select id="ctxAgentFilter" onchange="loadBusinessContexts()"><option value="">All Agents</option></select>
+          <select id="ctxAgentFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All Agents</option></select>
         </label>
         <label>Source
-          <select id="ctxSourceFilter" onchange="loadBusinessContexts()"><option value="">All Sources</option></select>
+          <select id="ctxSourceFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All Sources</option></select>
         </label>
         <label>Record Type
-          <select id="ctxRecordTypeFilter" onchange="loadBusinessContexts()"><option value="">All Record Types</option></select>
+          <select id="ctxRecordTypeFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All Record Types</option></select>
         </label>
         <label>Business Purpose
-          <select id="ctxPurposeFilter" onchange="loadBusinessContexts()"><option value="">All Business Purposes</option></select>
+          <select id="ctxPurposeFilter" onchange="syncAskDrillQuery(); loadBusinessContexts()"><option value="">All Business Purposes</option></select>
         </label>
         <button type="button" class="act-reset-btn" onclick="resetProjectAttributionFilters()">Clear Filters</button>
       </div>
