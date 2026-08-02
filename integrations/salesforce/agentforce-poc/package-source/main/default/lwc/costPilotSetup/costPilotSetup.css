@@ -70,7 +70,7 @@ small {
 
 .steps {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: .75rem;
     margin: 1.5rem 0;
 }
@@ -165,6 +165,100 @@ small {
     border-radius: 999px;
     font-size: .72rem;
     font-weight: 800;
+}
+
+.relationship-toolbar {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1fr) auto;
+    align-items: end;
+    gap: .75rem;
+    margin: 1rem 0;
+}
+
+.relationship-list {
+    display: grid;
+    gap: .6rem;
+    margin-bottom: 1rem;
+}
+
+.relationship-row {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) minmax(14rem, 1.15fr);
+    align-items: center;
+    gap: 1rem;
+    padding: .8rem;
+    border: 1px solid var(--cp-border);
+    border-radius: .65rem;
+    background: #fbfcfe;
+}
+
+.relationship-path {
+    display: grid;
+    gap: .1rem;
+}
+
+.relationship-path span {
+    color: var(--cp-muted);
+    font-size: .76rem;
+}
+
+.notice.verification {
+    margin-top: 1rem;
+    border-color: #64748b;
+    background: #f8fafc;
+}
+
+.go-live-success {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #a7d8c2;
+    border-radius: .75rem;
+    background: #f2fbf7;
+}
+
+.go-live-icon {
+    display: grid;
+    flex: 0 0 2.75rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    place-items: center;
+    border-radius: 50%;
+    background: #0b6b43;
+    color: #fff;
+    font-size: 1.4rem;
+    font-weight: 800;
+}
+
+.management-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin: 1rem 0;
+}
+
+.management-card {
+    display: grid;
+    gap: .25rem;
+    padding: 1rem;
+    border: 1px solid var(--cp-border);
+    border-radius: .7rem;
+    background: #fff;
+    color: var(--cp-ink);
+    text-align: left;
+    cursor: pointer;
+}
+
+.management-card:hover,
+.management-card:focus-visible {
+    border-color: var(--cp-blue);
+    background: var(--cp-blue-soft);
+}
+
+.management-card span {
+    color: var(--cp-muted);
+    font-size: .78rem;
 }
 
 .status,
@@ -332,7 +426,10 @@ small {
 
 @media (max-width: 48rem) {
     .steps,
-    .entry-grid {
+    .entry-grid,
+    .relationship-toolbar,
+    .relationship-row,
+    .management-grid {
         grid-template-columns: 1fr;
     }
 

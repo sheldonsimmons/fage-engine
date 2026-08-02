@@ -49,6 +49,34 @@ private class CostPilotSetupControllerTest {
                 requestValue.getEndpoint().endsWith('/ai-entry-points/selection')
             ) {
                 responseValue.setBody('{"count":1}');
+            } else if (requestValue.getEndpoint().contains('/package-setup')) {
+                responseValue.setBody(JSON.serialize(new Map<String, Object>{
+                    'selected' => new List<Object>{
+                        new Map<String, Object>{
+                            'kind' => 'agent',
+                            'id' => '0Xx000000000001'
+                        }
+                    },
+                    'relationships' => new Map<String, Object>{
+                        'approved' => true,
+                        'parent_object' => 'Account',
+                        'children' => new List<Object>{
+                            new Map<String, Object>{
+                                'object_name' => 'Contact',
+                                'label' => 'Contact',
+                                'parent_field' => 'AccountId',
+                                'behavior' => 'track_and_rollup'
+                            }
+                        }
+                    },
+                    'verification' => new Map<String, Object>{
+                        'verified' => true,
+                        'message' => 'Live request verified.',
+                        'audit_id' => 99
+                    },
+                    'active' => true,
+                    'go_live_at' => '2026-08-01T12:00:00Z'
+                }));
             } else {
                 responseValue.setStatusCode(404);
                 responseValue.setBody('{"detail":"Not found"}');
@@ -80,6 +108,14 @@ private class CostPilotSetupControllerTest {
         System.assertEquals(1, state.flows.size());
         System.assertEquals('Draft Follow Up', state.flows[0].label);
         System.assertEquals(false, state.flows[0].selected);
+        System.assertEquals(true, state.selectionsSaved);
+        System.assertEquals(true, state.relationshipsApproved);
+        System.assertEquals('Account', state.parentObject);
+        System.assertEquals(1, state.relationshipChildren.size());
+        System.assertEquals('Contact', state.relationshipChildren[0].objectName);
+        System.assertEquals(true, state.verificationPassed);
+        System.assertEquals(99, state.verificationAuditId);
+        System.assertEquals(true, state.activated);
     }
 
     @IsTest
@@ -93,5 +129,31 @@ private class CostPilotSetupControllerTest {
             '"name":"Sales_Assistant","label":"Sales Assistant"}]'
         );
         Test.stopTest();
+    }
+
+    @IsTest
+    static void approvesVerifiesAndActivatesPackageSetup() {
+        Test.setMock(HttpCalloutMock.class, new SetupCalloutMock());
+
+        Test.startTest();
+        CostPilotSetupController.SetupState relationshipState =
+            CostPilotSetupController.approveRelationships(
+                42,
+                'Account',
+                '[{"objectName":"Contact","label":"Contact",' +
+                '"parentField":"AccountId","behavior":"track_and_rollup"}]'
+            );
+        CostPilotSetupController.SetupState verificationState =
+            CostPilotSetupController.verifyConnection(42);
+        CostPilotSetupController.SetupState activeState =
+            CostPilotSetupController.activateConnection(42);
+        Test.stopTest();
+
+        System.assertEquals(true, relationshipState.relationshipsApproved);
+        System.assertEquals('Account', relationshipState.parentObject);
+        System.assertEquals(true, verificationState.verificationPassed);
+        System.assertEquals('Live request verified.', verificationState.verificationMessage);
+        System.assertEquals(true, activeState.activated);
+        System.assertNotEquals(null, activeState.goLiveAt);
     }
 }

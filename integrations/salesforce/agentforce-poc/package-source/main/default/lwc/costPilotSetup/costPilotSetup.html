@@ -10,109 +10,52 @@
 
             <template lwc:elseif={ready}>
                 <header class="intro">
-                    <p class="eyebrow">Secure post-install setup</p>
+                    <p class="eyebrow">Guided post-install setup</p>
                     <h1>Connect {state.orgName} to CostPilot</h1>
-                    <p>
-                        Connect this organization, choose which AI entry points CostPilot
-                        should govern, and complete one guided test.
-                    </p>
+                    <p>Connect, choose AI entry points, approve record relationships, run one live test, and go live.</p>
                 </header>
 
                 <nav class="steps" aria-label="CostPilot setup progress">
-                    <button
-                        class={stepOneClass}
-                        type="button"
-                        data-step="1"
-                        onclick={openStep}>
-                        <span class="step-number">1</span>
-                        <span>
-                            <strong>Connect</strong>
-                            <small>Authorize Salesforce</small>
-                        </span>
+                    <button class={stepOneClass} type="button" data-step="1" onclick={openStep}>
+                        <span class="step-number">1</span><span><strong>Connect</strong><small>Authorize Salesforce</small></span>
                     </button>
-                    <button
-                        class={stepTwoClass}
-                        type="button"
-                        data-step="2"
-                        onclick={openStep}
-                        disabled={loading}>
-                        <span class="step-number">2</span>
-                        <span>
-                            <strong>Select AI entry points</strong>
-                            <small>Choose agents and Flows</small>
-                        </span>
+                    <button class={stepTwoClass} type="button" data-step="2" onclick={openStep} disabled={loading}>
+                        <span class="step-number">2</span><span><strong>Select</strong><small>Agents and Flows</small></span>
                     </button>
-                    <button
-                        class={stepThreeClass}
-                        type="button"
-                        data-step="3"
-                        onclick={openStep}
-                        disabled={continueDisabled}>
-                        <span class="step-number">3</span>
-                        <span>
-                            <strong>Activate</strong>
-                            <small>Add the packaged action</small>
-                        </span>
+                    <button class={stepThreeClass} type="button" data-step="3" onclick={openStep} disabled={relationshipsStepDisabled}>
+                        <span class="step-number">3</span><span><strong>Relate</strong><small>Map business records</small></span>
+                    </button>
+                    <button class={stepFourClass} type="button" data-step="4" onclick={openStep} disabled={verificationStepDisabled}>
+                        <span class="step-number">4</span><span><strong>Test</strong><small>Verify a live request</small></span>
+                    </button>
+                    <button class={stepFiveClass} type="button" data-step="5" onclick={openStep} disabled={goLiveStepDisabled}>
+                        <span class="step-number">5</span><span><strong>Go live</strong><small>Activate governance</small></span>
                     </button>
                 </nav>
 
                 <template lwc:if={errorMessage}>
-                    <div class="notice error section-gap" role="alert">
-                        <strong>CostPilot needs attention</strong>
-                        <span>{errorMessage}</span>
-                    </div>
+                    <div class="notice error section-gap" role="alert"><strong>CostPilot needs attention</strong><span>{errorMessage}</span></div>
                 </template>
 
                 <template lwc:if={showConnect}>
                     <section class="panel">
                         <div class="panel-heading">
-                            <div>
-                                <p class="label">Salesforce organization</p>
-                                <h2>{state.orgName}</h2>
-                                <p class="meta">{environmentLabel} · {state.orgId}</p>
-                            </div>
-                            <template lwc:if={connected}>
-                                <span class="status success">Connected</span>
-                            </template>
-                            <template lwc:else>
-                                <span class="status neutral">Not connected</span>
-                            </template>
+                            <div><p class="label">Step 1 · Salesforce organization</p><h2>{state.orgName}</h2><p class="meta">{environmentLabel} · {state.orgId}</p></div>
+                            <template lwc:if={connected}><span class="status success">Connected</span></template>
+                            <template lwc:else><span class="status neutral">Not connected</span></template>
                         </div>
-
                         <template lwc:if={connected}>
-                            <div class="notice success">
-                                <strong>Connection verified</strong>
-                                <span>Workspace {state.workspaceId} is ready.</span>
-                            </div>
+                            <div class="notice success"><strong>Connection verified</strong><span>Workspace {state.workspaceId} is ready.</span></div>
                             <div class="actions">
-                                <lightning-button
-                                    variant="brand"
-                                    label="Choose agents and Flows"
-                                    data-step="2"
-                                    onclick={openStep}>
-                                </lightning-button>
-                                <lightning-button
-                                    label="Refresh connection"
-                                    onclick={refreshConnection}>
-                                </lightning-button>
+                                <lightning-button variant="brand" label="Choose agents and Flows" data-step="2" onclick={openStep}></lightning-button>
+                                <lightning-button label="Refresh connection" onclick={refreshConnection}></lightning-button>
                             </div>
                         </template>
                         <template lwc:else>
-                            <p class="body-copy">
-                                Salesforce will ask an administrator to approve API access.
-                                CostPilot stores the resulting workspace credential in encrypted
-                                Salesforce storage.
-                            </p>
+                            <p class="body-copy">An administrator approves Salesforce API access. CostPilot stores the workspace credential in encrypted Salesforce storage.</p>
                             <div class="actions">
-                                <lightning-button
-                                    variant="brand"
-                                    label="Connect to CostPilot"
-                                    onclick={connect}>
-                                </lightning-button>
-                                <lightning-button
-                                    label="I finished authorization — refresh"
-                                    onclick={refreshConnection}>
-                                </lightning-button>
+                                <lightning-button variant="brand" label="Connect to CostPilot" onclick={connect}></lightning-button>
+                                <lightning-button label="I finished authorization — refresh" onclick={refreshConnection}></lightning-button>
                             </div>
                         </template>
                     </section>
@@ -121,213 +64,79 @@
                 <template lwc:if={showEntryPoints}>
                     <section class="panel">
                         <div class="panel-heading">
-                            <div>
-                                <p class="label">Step 2</p>
-                                <h2>Which AI entry points should CostPilot govern?</h2>
-                                <p class="meta">
-                                    Select every Agentforce agent or Flow that sends work to an AI model.
-                                </p>
-                            </div>
+                            <div><p class="label">Step 2</p><h2>Which AI entry points should CostPilot govern?</h2><p class="meta">Choose Agentforce agents and Flows that send work to an AI model.</p></div>
                             <span class="selection-count">{selectionSummary}</span>
                         </div>
-
-                        <template for:each={warnings} for:item="warning">
-                            <div class="notice warning compact" role="status" key={warning}>
-                                <strong>Discovery note</strong>
-                                <span>{warning}</span>
-                            </div>
-                        </template>
-
+                        <template for:each={warnings} for:item="warning"><div class="notice warning compact" role="status" key={warning}><strong>Discovery note</strong><span>{warning}</span></div></template>
                         <div class="entry-grid">
                             <article class="entry-section">
-                                <div class="entry-heading">
-                                    <div>
-                                        <h3>Agentforce agents</h3>
-                                        <p>Agents that can use the Route Through CostPilot action.</p>
-                                    </div>
-                                    <span class="kind-badge">Agentforce</span>
-                                </div>
-
-                                <template lwc:if={hasAgents}>
-                                    <div class="entry-list">
-                                        <template for:each={agents} for:item="agent">
-                                            <div class="entry-row" key={agent.id}>
-                                                <lightning-input
-                                                    type="checkbox"
-                                                    label={agent.label}
-                                                    checked={agent.selected}
-                                                    data-kind="agent"
-                                                    data-id={agent.id}
-                                                    onchange={handleSelection}>
-                                                </lightning-input>
-                                                <span class="entry-meta">{agent.status}</span>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-                                <template lwc:else>
-                                    <p class="empty">
-                                        No agents were returned by Salesforce metadata discovery.
-                                        You can still add one by name.
-                                    </p>
-                                </template>
-
-                                <div class="manual-entry">
-                                    <lightning-input
-                                        type="text"
-                                        label="Agent not listed?"
-                                        placeholder="Enter the Agentforce agent name"
-                                        value={manualAgentName}
-                                        data-kind="agent"
-                                        onchange={handleManualName}>
-                                    </lightning-input>
-                                    <lightning-button
-                                        label="Add agent"
-                                        data-kind="agent"
-                                        onclick={addManualEntry}>
-                                    </lightning-button>
-                                </div>
+                                <div class="entry-heading"><div><h3>Agentforce agents</h3><p>Agents that can use Route Through CostPilot.</p></div><span class="kind-badge">Agentforce</span></div>
+                                <template lwc:if={hasAgents}><div class="entry-list"><template for:each={agents} for:item="agent"><div class="entry-row" key={agent.id}><lightning-input type="checkbox" label={agent.label} checked={agent.selected} data-kind="agent" data-id={agent.id} onchange={handleSelection}></lightning-input><span class="entry-meta">{agent.status}</span></div></template></div></template>
+                                <template lwc:else><p class="empty">No agents were returned. Add one by name if metadata access is limited.</p></template>
+                                <div class="manual-entry"><lightning-input type="text" label="Agent not listed?" placeholder="Enter the agent name" value={manualAgentName} data-kind="agent" onchange={handleManualName}></lightning-input><lightning-button label="Add agent" data-kind="agent" onclick={addManualEntry}></lightning-button></div>
                             </article>
-
                             <article class="entry-section">
-                                <div class="entry-heading">
-                                    <div>
-                                        <h3>Salesforce Flows</h3>
-                                        <p>Flows that invoke AI and should route that request through CostPilot.</p>
-                                    </div>
-                                    <span class="kind-badge">Flow</span>
-                                </div>
-
-                                <template lwc:if={hasFlows}>
-                                    <div class="entry-list">
-                                        <template for:each={flows} for:item="flow">
-                                            <div class="entry-row" key={flow.id}>
-                                                <lightning-input
-                                                    type="checkbox"
-                                                    label={flow.label}
-                                                    checked={flow.selected}
-                                                    data-kind="flow"
-                                                    data-id={flow.id}
-                                                    onchange={handleSelection}>
-                                                </lightning-input>
-                                                <span class="entry-meta">{flow.processType}</span>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-                                <template lwc:else>
-                                    <p class="empty">
-                                        No eligible Flows were returned. Add one by name if Salesforce
-                                        metadata access is limited.
-                                    </p>
-                                </template>
-
-                                <div class="manual-entry">
-                                    <lightning-input
-                                        type="text"
-                                        label="Flow not listed?"
-                                        placeholder="Enter the Flow label"
-                                        value={manualFlowName}
-                                        data-kind="flow"
-                                        onchange={handleManualName}>
-                                    </lightning-input>
-                                    <lightning-button
-                                        label="Add Flow"
-                                        data-kind="flow"
-                                        onclick={addManualEntry}>
-                                    </lightning-button>
-                                </div>
+                                <div class="entry-heading"><div><h3>Salesforce Flows</h3><p>Flows that invoke AI and should route through CostPilot.</p></div><span class="kind-badge">Flow</span></div>
+                                <template lwc:if={hasFlows}><div class="entry-list"><template for:each={flows} for:item="flow"><div class="entry-row" key={flow.id}><lightning-input type="checkbox" label={flow.label} checked={flow.selected} data-kind="flow" data-id={flow.id} onchange={handleSelection}></lightning-input><span class="entry-meta">{flow.processType}</span></div></template></div></template>
+                                <template lwc:else><p class="empty">No eligible Flows were returned. Add one by name if needed.</p></template>
+                                <div class="manual-entry"><lightning-input type="text" label="Flow not listed?" placeholder="Enter the Flow label" value={manualFlowName} data-kind="flow" onchange={handleManualName}></lightning-input><lightning-button label="Add Flow" data-kind="flow" onclick={addManualEntry}></lightning-button></div>
                             </article>
                         </div>
-
-                        <div class="footer-actions">
-                            <p>
-                                Selection does not change an agent or Flow. It records what your
-                                administrator intends to govern.
-                            </p>
-                            <lightning-button
-                                variant="brand"
-                                label="Save selections and continue"
-                                disabled={continueDisabled}
-                                onclick={continueToActivation}>
-                            </lightning-button>
-                        </div>
+                        <div class="footer-actions"><p>This records what the administrator intends to govern; it does not change an agent or Flow.</p><lightning-button variant="brand" label="Save and map records" disabled={continueDisabled} onclick={saveEntryPoints}></lightning-button></div>
                     </section>
                 </template>
 
-                <template lwc:if={showActivation}>
+                <template lwc:if={showRelationships}>
                     <section class="panel">
-                        <div class="panel-heading">
-                            <div>
-                                <p class="label">Final Salesforce step</p>
-                                <h2>Add Route Through CostPilot</h2>
-                                <p class="meta">
-                                    Salesforce requires an administrator to place packaged actions
-                                    into the selected agent topics or Flows.
-                                </p>
+                        <div class="panel-heading"><div><p class="label">Step 3</p><h2>How should related records roll up?</h2><p class="meta">CostPilot suggests relationships. Nothing changes until you approve them.</p></div><span class="status neutral">Admin approval required</span></div>
+                        <div class="relationship-toolbar">
+                            <lightning-input type="text" label="Parent business record" value={parentObject} placeholder="Account or a custom object API name" onchange={handleParentObject}></lightning-input>
+                            <lightning-button label="Find related objects" onclick={findRelationships} disabled={working}></lightning-button>
+                        </div>
+                        <template lwc:if={hasRelationships}>
+                            <div class="relationship-list">
+                                <template for:each={relationshipChildren} for:item="item">
+                                    <article class="relationship-row" key={item.key}>
+                                        <lightning-input type="checkbox" label={item.label} checked={item.selected} data-key={item.key} onchange={handleRelationshipSelection}></lightning-input>
+                                        <div class="relationship-path"><strong>{item.objectName}</strong><span>{item.parentField} → {parentObject}</span></div>
+                                        <lightning-combobox label="When AI uses this record" variant="label-hidden" value={item.behavior} options={relationshipBehaviorOptions} data-key={item.key} onchange={handleRelationshipBehavior}></lightning-combobox>
+                                    </article>
+                                </template>
                             </div>
-                            <span class="status success">Selections saved</span>
-                        </div>
-
-                        <template lwc:if={hasSelectedAgents}>
-                            <article class="instruction-card">
-                                <h3>For each selected Agentforce agent</h3>
-                                <ol>
-                                    <li>Open the agent in Agentforce Builder.</li>
-                                    <li>Open the topic that handles governed AI work.</li>
-                                    <li>Select <strong>Add Action → Apex → Route Through CostPilot</strong>.</li>
-                                    <li>Map the request and record context, then use the returned AI Response.</li>
-                                </ol>
-                                <div class="selected-chips">
-                                    <template for:each={selectedAgents} for:item="agent">
-                                        <span class="selected-chip" key={agent.id}>{agent.label}</span>
-                                    </template>
-                                </div>
-                            </article>
                         </template>
+                        <template lwc:else><p class="empty">Select Find related objects. Standard Account relationships include Contact, Opportunity, and Case; custom relationships can be approved the same way.</p></template>
+                        <div class="notice info"><strong>Safe change control</strong><span>Existing approved mappings remain live. New standard or custom objects can be discovered and approved later without reinstalling the package.</span></div>
+                        <div class="footer-actions"><p>Only selected relationships are sent to CostPilot.</p><lightning-button variant="brand" label="Approve relationships and continue" disabled={relationshipDisabled} onclick={approveRelationshipMap}></lightning-button></div>
+                    </section>
+                </template>
 
-                        <template lwc:if={hasSelectedFlows}>
-                            <article class="instruction-card">
-                                <h3>For each selected Flow</h3>
-                                <ol>
-                                    <li>Open the Flow in Flow Builder.</li>
-                                    <li>Add an <strong>Action</strong> element where the AI request should run.</li>
-                                    <li>Choose <strong>Route Through CostPilot</strong>.</li>
-                                    <li>Map the prompt, record ID, object name, agent name, and department.</li>
-                                </ol>
-                                <div class="selected-chips">
-                                    <template for:each={selectedFlows} for:item="flow">
-                                        <span class="selected-chip" key={flow.id}>{flow.label}</span>
-                                    </template>
-                                </div>
-                            </article>
+                <template lwc:if={showVerification}>
+                    <section class="panel">
+                        <div class="panel-heading"><div><p class="label">Step 4</p><h2>Send one governed AI request</h2><p class="meta">Add the packaged action once, then send a normal live request from a selected agent or Flow.</p></div><template lwc:if={verificationPassed}><span class="status success">Verified</span></template><template lwc:else><span class="status neutral">Waiting for test</span></template></div>
+                        <template lwc:if={hasSelectedAgents}><article class="instruction-card"><h3>Selected Agentforce agents</h3><ol><li>Open the agent and its governed-work topic.</li><li>Select <strong>Add Action → Apex → Route Through CostPilot</strong>.</li><li>Use the returned AI Response in the conversation, then send one request.</li></ol><div class="selected-chips"><template for:each={selectedAgents} for:item="agent"><span class="selected-chip" key={agent.id}>{agent.label}</span></template></div></article></template>
+                        <template lwc:if={hasSelectedFlows}><article class="instruction-card"><h3>Selected Flows</h3><ol><li>Add an Action element at the AI request point.</li><li>Choose <strong>Route Through CostPilot</strong> and map prompt plus record context.</li><li>Run the Flow once.</li></ol><div class="selected-chips"><template for:each={selectedFlows} for:item="flow"><span class="selected-chip" key={flow.id}>{flow.label}</span></template></div></article></template>
+                        <div class="notice info"><strong>The only manual Salesforce step</strong><span>An installed package cannot silently modify an existing agent topic or active Flow. The action is already included.</span></div>
+                        <template lwc:if={state.verificationMessage}><div class="notice verification"><strong>Verification result</strong><span>{state.verificationMessage}</span></div></template>
+                        <div class="footer-actions"><p>CostPilot checks for a live Salesforce-originated governed request after setup began.</p><lightning-button variant="brand" label={actionLabel} onclick={runVerification} disabled={working}></lightning-button></div>
+                    </section>
+                </template>
+
+                <template lwc:if={showGoLive}>
+                    <section class="panel">
+                        <template lwc:if={activated}>
+                            <div class="go-live-success"><span class="go-live-icon">✓</span><div><p class="label">Setup complete</p><h2>CostPilot is live for {state.orgName}</h2><p class="meta">Selected AI entry points and approved business relationships are governed and measurable.</p></div></div>
                         </template>
-
-                        <div class="notice info">
-                            <strong>Why this is the only manual step</strong>
-                            <span>
-                                Salesforce does not allow an installed package to silently alter an
-                                existing agent topic or active Flow. The action itself is already
-                                included in the package.
-                            </span>
-                        </div>
-
-                        <div class="actions">
-                            <lightning-button
-                                label="Back to selections"
-                                onclick={backToEntryPoints}>
-                            </lightning-button>
-                        </div>
+                        <template lwc:else>
+                            <div class="panel-heading"><div><p class="label">Step 5</p><h2>Ready to go live</h2><p class="meta">Connection, AI entry points, relationships, and the live request have been verified.</p></div><span class="status success">Verification passed</span></div>
+                            <div class="actions"><lightning-button variant="brand" label="Activate CostPilot" onclick={goLive} disabled={working}></lightning-button></div>
+                        </template>
+                        <div class="management-grid"><button type="button" class="management-card" onclick={reviewEntryPoints}><strong>Manage agents and Flows</strong><span>Add or remove governed AI entry points.</span></button><button type="button" class="management-card" onclick={manageRelationships}><strong>Manage objects and relationships</strong><span>Discover new objects and approve how they roll up.</span></button></div>
+                        <div class="notice info"><strong>Built for change</strong><span>When your business adds a standard or custom Salesforce object, return here to discover, classify, approve, test, and activate it—without reinstalling CostPilot.</span></div>
                     </section>
                 </template>
             </template>
 
-            <template lwc:else>
-                <div class="notice error" role="alert">
-                    <strong>Setup details are unavailable</strong>
-                    <span>Refresh this tab. If the problem continues, contact your Salesforce administrator.</span>
-                </div>
-            </template>
+            <template lwc:else><div class="notice error" role="alert"><strong>Setup details are unavailable</strong><span>Refresh this tab. If the problem continues, contact your Salesforce administrator.</span></div></template>
         </div>
     </lightning-card>
 </template>

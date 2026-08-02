@@ -17,10 +17,11 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import IntegrationConnection, TrialAccount
+from database.models import AuditEvent, IntegrationConnection, TrialAccount
 
 
 router = APIRouter()
@@ -77,6 +78,20 @@ class AiEntryPointSelection(BaseModel):
 
 class AiEntryPointSelectionUpdate(BaseModel):
     entries: list[AiEntryPointSelection] = Field(default_factory=list, max_length=250)
+
+
+class PackageRelationshipChild(BaseModel):
+    object_name: str = Field(min_length=1, max_length=160)
+    parent_field: str = Field(min_length=1, max_length=160)
+    behavior: str = Field(
+        default="track_and_rollup",
+        pattern="^(track_and_rollup|rollup_only|separate|ignore)$",
+    )
+
+
+class PackageRelationshipApproval(BaseModel):
+    parent_object: str = Field(default="Account", min_length=1, max_length=160)
+    children: list[PackageRelationshipChild] = Field(default_factory=list, max_length=100)
 
 
 def _new_pkce_pair() -> tuple[str, str]:
@@ -1115,6 +1130,164 @@ def save_salesforce_ai_entry_points(
         "selected": mapping["selected_ai_entry_points"],
         "count": len(mapping["selected_ai_entry_points"]),
     }
+
+
+def _salesforce_package_setup(item: IntegrationConnection) -> dict:
+    mapping = _json_object(item.mapping_json)
+    package_setup = mapping.get("package_setup")
+    if not isinstance(package_setup, dict):
+        package_setup = {}
+    relationships = package_setup.get("relationships")
+    if not isinstance(relationships, dict):
+        relationships = {
+            "approved": False,
+            "parent_object": mapping.get("parent_object") or "Account",
+            "children": mapping.get("children") or [
+                {"object_name": "Contact", "parent_field": "AccountId", "behavior": "track_and_rollup"},
+                {"object_name": "Opportunity", "parent_field": "AccountId", "behavior": "track_and_rollup"},
+                {"object_name": "Case", "parent_field": "AccountId", "behavior": "track_and_rollup"},
+            ],
+        }
+    verification = package_setup.get("verification")
+    if not isinstance(verification, dict):
+        verification = {"verified": False}
+    selected = mapping.get("selected_ai_entry_points")
+    if not isinstance(selected, list):
+        selected = []
+    return {
+        "connection_id": item.id,
+        "workspace_id": item.workspace_id,
+        "selected": selected,
+        "relationships": relationships,
+        "verification": verification,
+        "active": bool(package_setup.get("active")),
+        "go_live_at": package_setup.get("go_live_at"),
+    }
+
+
+@router.get("/{connection_id}/package-setup")
+def get_salesforce_package_setup(
+    connection_id: int,
+    db: Session = Depends(get_db),
+):
+    """Return the durable state used by the packaged five-step Salesforce wizard."""
+    item = _get_connection(db, connection_id)
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
+    return _salesforce_package_setup(item)
+
+
+@router.post("/{connection_id}/package-setup/relationships")
+def approve_salesforce_package_relationships(
+    connection_id: int,
+    payload: PackageRelationshipApproval,
+    db: Session = Depends(get_db),
+):
+    """Approve the parent and related records that share one business context."""
+    item = _get_connection(db, connection_id)
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
+    mapping = _json_object(item.mapping_json)
+    package_setup = mapping.setdefault("package_setup", {})
+    children = [child.model_dump() for child in payload.children]
+    package_setup["relationships"] = {
+        "approved": True,
+        "approved_at": datetime.utcnow().isoformat(),
+        "parent_object": payload.parent_object,
+        "children": children,
+    }
+    # Keep the universal mapper and the package wizard on the same contract.
+    mapping["parent_object"] = payload.parent_object
+    mapping["children"] = children
+    mapping["preserve_origin_record"] = True
+    mapping.setdefault("unmapped_behavior", "separate")
+    item.selected_object = payload.parent_object
+    item.mapping_json = json.dumps(mapping)
+    db.commit()
+    return _salesforce_package_setup(item)
+
+
+@router.post("/{connection_id}/package-setup/verify")
+def verify_salesforce_package_request(
+    connection_id: int,
+    db: Session = Depends(get_db),
+):
+    """Confirm that a real Salesforce request reached the governed audit pipeline."""
+    item = _get_connection(db, connection_id)
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
+    mapping = _json_object(item.mapping_json)
+    selected_at_raw = mapping.get("entry_points_selected_at")
+    selected_at = None
+    if selected_at_raw:
+        try:
+            selected_at = datetime.fromisoformat(str(selected_at_raw).replace("Z", "+00:00")).replace(tzinfo=None)
+        except (TypeError, ValueError):
+            selected_at = None
+    query = db.query(AuditEvent).filter(
+        AuditEvent.workspace_id == item.workspace_id,
+        AuditEvent.is_simulation.is_(False),
+        func.lower(AuditEvent.actor_source_platform) == "salesforce",
+    )
+    if selected_at is not None:
+        query = query.filter(AuditEvent.timestamp >= selected_at)
+    event = query.order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc()).first()
+    package_setup = mapping.setdefault("package_setup", {})
+    if event is None:
+        package_setup["verification"] = {
+            "verified": False,
+            "checked_at": datetime.utcnow().isoformat(),
+            "message": "No new live Salesforce request has reached CostPilot yet.",
+        }
+        item.mapping_json = json.dumps(mapping)
+        db.commit()
+        return _salesforce_package_setup(item)
+    package_setup["verification"] = {
+        "verified": True,
+        "verified_at": datetime.utcnow().isoformat(),
+        "audit_id": event.id,
+        "record_name": event.origin_record_name,
+        "agent_id": event.agent_id,
+        "message": "A live Salesforce request completed the governed CostPilot pipeline.",
+    }
+    item.last_tested_at = datetime.utcnow()
+    item.last_success_at = datetime.utcnow()
+    item.last_error = None
+    item.mapping_json = json.dumps(mapping)
+    db.commit()
+    return _salesforce_package_setup(item)
+
+
+@router.post("/{connection_id}/package-setup/activate")
+def activate_salesforce_package_connection(
+    connection_id: int,
+    db: Session = Depends(get_db),
+):
+    """Mark setup live only after selection, relationship approval, and verification."""
+    item = _get_connection(db, connection_id)
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
+    mapping = _json_object(item.mapping_json)
+    package_setup = mapping.setdefault("package_setup", {})
+    selected = mapping.get("selected_ai_entry_points") or []
+    relationships = package_setup.get("relationships") or {}
+    verification = package_setup.get("verification") or {}
+    missing = []
+    if not selected:
+        missing.append("choose at least one Agentforce agent or Flow")
+    if not relationships.get("approved"):
+        missing.append("approve the relationship mapping")
+    if not verification.get("verified"):
+        missing.append("run and verify one governed Salesforce request")
+    if missing:
+        raise HTTPException(status_code=409, detail="Before going live, " + ", ".join(missing) + ".")
+    package_setup["active"] = True
+    package_setup["go_live_at"] = datetime.utcnow().isoformat()
+    item.status = "active"
+    item.last_success_at = datetime.utcnow()
+    item.mapping_json = json.dumps(mapping)
+    db.commit()
+    return _salesforce_package_setup(item)
 
 
 async def _servicenow_table_get(

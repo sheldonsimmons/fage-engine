@@ -13,6 +13,23 @@ public with sharing class CostPilotSetupController {
         @AuraEnabled public List<EntryPoint> agents = new List<EntryPoint>();
         @AuraEnabled public List<EntryPoint> flows = new List<EntryPoint>();
         @AuraEnabled public List<String> warnings = new List<String>();
+        @AuraEnabled public Boolean selectionsSaved = false;
+        @AuraEnabled public Boolean relationshipsApproved = false;
+        @AuraEnabled public String parentObject = 'Account';
+        @AuraEnabled public List<RelationshipChild> relationshipChildren = new List<RelationshipChild>();
+        @AuraEnabled public Boolean verificationPassed = false;
+        @AuraEnabled public String verificationMessage;
+        @AuraEnabled public Integer verificationAuditId;
+        @AuraEnabled public Boolean activated = false;
+        @AuraEnabled public String goLiveAt;
+    }
+
+    public class RelationshipChild {
+        @AuraEnabled public String objectName;
+        @AuraEnabled public String label;
+        @AuraEnabled public String parentField;
+        @AuraEnabled public String behavior;
+        @AuraEnabled public Boolean selected;
     }
 
     public class EntryPoint {
@@ -70,6 +87,7 @@ public with sharing class CostPilotSetupController {
 
             if (state.connected && state.connectionId != null) {
                 populateEntryPoints(state);
+                populatePackageSetup(state);
             }
         } catch (Exception exceptionValue) {
             // Before the first authorization the packaged named principal is
@@ -119,6 +137,107 @@ public with sharing class CostPilotSetupController {
         }
     }
 
+    @AuraEnabled
+    public static SetupState approveRelationships(
+        Integer connectionId,
+        String parentObject,
+        String childrenJson
+    ) {
+        if (connectionId == null) {
+            throw new AuraHandledException('Connect Salesforce before approving relationships.');
+        }
+        Object children;
+        try {
+            children = JSON.deserializeUntyped(childrenJson);
+        } catch (Exception ignored) {
+            throw new AuraHandledException('The relationship suggestions could not be read.');
+        }
+        HttpResponse responseValue = sendPost(
+            '/api/integrations/connections/' + connectionId + '/package-setup/relationships',
+            new Map<String, Object>{
+                'parent_object' => String.isBlank(parentObject) ? 'Account' : parentObject.trim(),
+                'children' => children
+            }
+        );
+        assertSuccess(responseValue, 'approve the relationship mapping');
+        SetupState state = new SetupState();
+        state.connectionId = connectionId;
+        applyPackageSetup(state, responseValue.getBody());
+        return state;
+    }
+
+    @AuraEnabled
+    public static SetupState verifyConnection(Integer connectionId) {
+        HttpResponse responseValue = sendPost(
+            '/api/integrations/connections/' + connectionId + '/package-setup/verify',
+            new Map<String, Object>()
+        );
+        assertSuccess(responseValue, 'verify the governed request');
+        SetupState state = new SetupState();
+        state.connectionId = connectionId;
+        applyPackageSetup(state, responseValue.getBody());
+        return state;
+    }
+
+    @AuraEnabled
+    public static SetupState activateConnection(Integer connectionId) {
+        HttpResponse responseValue = sendPost(
+            '/api/integrations/connections/' + connectionId + '/package-setup/activate',
+            new Map<String, Object>()
+        );
+        assertSuccess(responseValue, 'activate this connection');
+        SetupState state = new SetupState();
+        state.connectionId = connectionId;
+        applyPackageSetup(state, responseValue.getBody());
+        return state;
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static List<RelationshipChild> discoverRelationships(String parentObject) {
+        String parentName = String.isBlank(parentObject) ? 'Account' : parentObject.trim();
+        Map<String, Schema.SObjectType> globalDescribe = Schema.getGlobalDescribe();
+        if (!globalDescribe.containsKey(parentName)) {
+            throw new AuraHandledException('Salesforce object ' + parentName + ' was not found.');
+        }
+        List<RelationshipChild> candidates = new List<RelationshipChild>();
+        for (String objectName : globalDescribe.keySet()) {
+            if (objectName == parentName || objectName.endsWith('History') ||
+                objectName.endsWith('Share') || objectName.endsWith('Feed') ||
+                objectName.endsWith('ChangeEvent')) {
+                continue;
+            }
+            Schema.DescribeSObjectResult objectDescribe = globalDescribe.get(objectName).getDescribe();
+            if (!objectDescribe.isQueryable() || objectDescribe.isDeprecatedAndHidden()) {
+                continue;
+            }
+            for (Schema.SObjectField fieldToken : objectDescribe.fields.getMap().values()) {
+                Schema.DescribeFieldResult fieldDescribe = fieldToken.getDescribe();
+                if (fieldDescribe.getType() != Schema.DisplayType.Reference) {
+                    continue;
+                }
+                Boolean pointsToParent = false;
+                for (Schema.SObjectType referenceType : fieldDescribe.getReferenceTo()) {
+                    if (referenceType.getDescribe().getName() == parentName) {
+                        pointsToParent = true;
+                        break;
+                    }
+                }
+                if (pointsToParent) {
+                    RelationshipChild child = new RelationshipChild();
+                    child.objectName = objectName;
+                    child.label = objectDescribe.getLabel();
+                    child.parentField = fieldDescribe.getName();
+                    child.behavior = 'track_and_rollup';
+                    child.selected = true;
+                    candidates.add(child);
+                    break;
+                }
+            }
+            if (candidates.size() >= 75) break;
+        }
+        return candidates;
+    }
+
     private static void populateEntryPoints(SetupState state) {
         HttpResponse responseValue = sendGet(
             '/api/integrations/connections/' + state.connectionId + '/ai-entry-points'
@@ -157,6 +276,54 @@ public with sharing class CostPilotSetupController {
         }
     }
 
+    private static void populatePackageSetup(SetupState state) {
+        HttpResponse responseValue = sendGet(
+            '/api/integrations/connections/' + state.connectionId + '/package-setup'
+        );
+        if (!isSuccess(responseValue)) {
+            state.warnings.add('CostPilot could not load the saved onboarding progress.');
+            return;
+        }
+        applyPackageSetup(state, responseValue.getBody());
+    }
+
+    private static void applyPackageSetup(SetupState state, String responseBody) {
+        Map<String, Object> payload =
+            (Map<String, Object>) JSON.deserializeUntyped(responseBody);
+        List<Object> selected = (List<Object>) payload.get('selected');
+        state.selectionsSaved = selected != null && !selected.isEmpty();
+        Map<String, Object> relationships = (Map<String, Object>) payload.get('relationships');
+        if (relationships != null) {
+            state.relationshipsApproved = Boolean.valueOf(
+                stringValue(relationships.get('approved'), 'false')
+            );
+            state.parentObject = stringValue(relationships.get('parent_object'), 'Account');
+            List<Object> children = (List<Object>) relationships.get('children');
+            if (children != null) {
+                for (Object childValue : children) {
+                    Map<String, Object> source = (Map<String, Object>) childValue;
+                    RelationshipChild child = new RelationshipChild();
+                    child.objectName = stringValue(source.get('object_name'), '');
+                    child.label = stringValue(source.get('label'), child.objectName);
+                    child.parentField = stringValue(source.get('parent_field'), '');
+                    child.behavior = stringValue(source.get('behavior'), 'track_and_rollup');
+                    child.selected = child.behavior != 'ignore';
+                    state.relationshipChildren.add(child);
+                }
+            }
+        }
+        Map<String, Object> verification = (Map<String, Object>) payload.get('verification');
+        if (verification != null) {
+            state.verificationPassed = Boolean.valueOf(
+                stringValue(verification.get('verified'), 'false')
+            );
+            state.verificationMessage = stringValue(verification.get('message'), null);
+            state.verificationAuditId = integerValue(verification.get('audit_id'));
+        }
+        state.activated = Boolean.valueOf(stringValue(payload.get('active'), 'false'));
+        state.goLiveAt = stringValue(payload.get('go_live_at'), null);
+    }
+
     private static List<EntryPoint> toEntryPoints(
         List<Object> values,
         String kind,
@@ -188,6 +355,30 @@ public with sharing class CostPilotSetupController {
         requestValue.setHeader('Accept', 'application/json');
         requestValue.setTimeout(30000);
         return new Http().send(requestValue);
+    }
+
+    private static HttpResponse sendPost(String path, Object bodyValue) {
+        HttpRequest requestValue = new HttpRequest();
+        requestValue.setEndpoint('callout:CostPilot' + path);
+        requestValue.setMethod('POST');
+        requestValue.setHeader('Content-Type', 'application/json');
+        requestValue.setTimeout(30000);
+        requestValue.setBody(JSON.serialize(bodyValue));
+        try {
+            return new Http().send(requestValue);
+        } catch (Exception exceptionValue) {
+            throw new AuraHandledException('CostPilot could not be reached: ' + exceptionValue.getMessage());
+        }
+    }
+
+    private static void assertSuccess(HttpResponse responseValue, String actionLabel) {
+        if (!isSuccess(responseValue)) {
+            String detail = responseValue.getBody();
+            throw new AuraHandledException(
+                'CostPilot could not ' + actionLabel + ' (HTTP ' +
+                responseValue.getStatusCode() + '). ' + detail
+            );
+        }
     }
 
     private static Boolean isSuccess(HttpResponse responseValue) {
