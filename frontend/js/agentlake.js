@@ -773,16 +773,21 @@ function agentlakeProjectStatusLabel(status) {
 
 function agentlakeWorkLabels() {
   const visible = _agentlakeProjects.filter(project => project.status !== "archived");
-  const configured = [...new Set(visible
-    .map(project => project.business_context?.work_label)
-    .filter(Boolean)
-    .map(label => String(label).trim())
-    .filter(Boolean))];
-  // A workspace containing more than one business-context grain is "Work".
-  // Selecting the first row made this label depend on API ordering and caused
-  // Account workspaces to intermittently appear as Projects.
-  const singular = configured.length === 1 ? configured[0] : "Work";
-  const plural = /[^aeiou]y$/i.test(singular)
+  const counts = visible.reduce((result, project) => {
+    const label = String(project.business_context?.work_label || "").trim();
+    if (label) result.set(label, (result.get(label) || 0) + 1);
+    return result;
+  }, new Map());
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  // Use the dominant resolved context instead of whichever API row happened
+  // to arrive first. A tie remains generic until onboarding chooses an
+  // authoritative workspace context.
+  const singular = ranked.length && (ranked.length === 1 || ranked[0][1] > ranked[1][1])
+    ? ranked[0][0]
+    : "Work";
+  const plural = singular.toLowerCase() === "work"
+    ? "Work"
+    : /[^aeiou]y$/i.test(singular)
     ? `${singular.slice(0, -1)}ies`
     : /(s|x|z|ch|sh)$/i.test(singular)
       ? `${singular}es`
