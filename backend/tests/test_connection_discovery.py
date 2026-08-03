@@ -269,11 +269,18 @@ def _ready_salesforce_connection(db):
         item.id,
         PackageRelationshipApproval(
             parent_object="Account",
-            children=[{
-                "object_name": "Case",
-                "parent_field": "AccountId",
-                "behavior": "track_and_rollup",
-            }],
+            children=[
+                {
+                    "object_name": "Account",
+                    "parent_field": "ParentId",
+                    "behavior": "track_and_rollup",
+                },
+                {
+                    "object_name": "Case",
+                    "parent_field": "AccountId",
+                    "behavior": "track_and_rollup",
+                },
+            ],
         ),
         db=db,
     )

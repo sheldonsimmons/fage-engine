@@ -1283,6 +1283,9 @@ def verify_salesforce_package_request(
         for child in relationships.get("children") or []
         if child.get("behavior") in {"track_and_rollup", "rollup_only"}
     }
+    # Salesforce exposes Account.ParentId as a child relationship. A parent
+    # request must never satisfy the separate related-record readiness check.
+    child_types.discard(parent_type)
     events = query.order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc()).all()
     parent_events = [row for row in events if str(row.origin_record_type or "").lower() == parent_type]
     child_events = [row for row in events if str(row.origin_record_type or "").lower() in child_types]
@@ -1291,7 +1294,9 @@ def verify_salesforce_package_request(
             (parent, child)
             for parent in parent_events
             for child in child_events
-            if parent.work_item_id and parent.work_item_id == child.work_item_id
+            if parent.id != child.id
+            and parent.work_item_id
+            and parent.work_item_id == child.work_item_id
         ),
         None,
     )
