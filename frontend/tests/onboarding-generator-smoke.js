@@ -51,6 +51,7 @@ globalThis.__onboardingGenerators = {
   ruby: _genRuby,
   rest: _genRest
 };
+globalThis.__setSalesforceAiMode = mode => { obSalesforceAiMode = mode; };
 globalThis.__universalSetup = {
   renderConnectionPlan: renderObConnectionPlan,
   verificationHtml: _universalVerificationHtml,
@@ -79,6 +80,10 @@ for (const [name, generator] of Object.entries(sandbox.__onboardingGenerators)) 
   }
 }
 
+// The default Salesforce experience is the installed Agentforce action, which
+// intentionally contains no generated Apex. Exercise the custom Flow/Apex path
+// when validating the universal request envelope.
+sandbox.__setSalesforceAiMode("flow");
 for (const name of ["salesforce", "servicenow", "hubspot"]) {
   const output = sandbox.__onboardingGenerators[name](
     "ExampleRecord",
@@ -99,6 +104,15 @@ for (const name of ["salesforce", "servicenow", "hubspot"]) {
     if (!output.includes(marker)) {
       throw new Error(`${name} generator is missing universal contract marker: ${marker}`);
     }
+  }
+}
+sandbox.__setSalesforceAiMode("agentforce");
+const packagedSalesforceOutput = sandbox.__onboardingGenerators.salesforce(
+  "ExampleRecord", "Sales", "Context Agent", fields, []
+);
+for (const marker of ["Route Through CostPilot", "CostPilot Governed AI Work", "No Apex code to copy"]) {
+  if (!packagedSalesforceOutput.includes(marker)) {
+    throw new Error(`salesforce packaged onboarding is missing: ${marker}`);
   }
 }
 

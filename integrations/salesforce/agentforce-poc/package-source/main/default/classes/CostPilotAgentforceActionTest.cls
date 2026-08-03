@@ -4,6 +4,13 @@ private class CostPilotAgentforceActionTest {
 
     private class CostPilotMock implements HttpCalloutMock {
         public HttpResponse respond(HttpRequest request) {
+            if (request.getMethod() == 'GET') {
+                System.assert(request.getEndpoint().contains('/salesforce/package/status'));
+                HttpResponse statusResponse = new HttpResponse();
+                statusResponse.setStatusCode(200);
+                statusResponse.setBody('{"connected":true,"workspace_id":"TEST-WORKSPACE"}');
+                return statusResponse;
+            }
             System.assertEquals('POST', request.getMethod());
             System.assert(request.getEndpoint().contains('/agentforce/TEST-WORKSPACE/govern'));
 
@@ -48,9 +55,18 @@ private class CostPilotAgentforceActionTest {
         }
     }
 
+    private class DisconnectedMock implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest request) {
+            HttpResponse response = new HttpResponse();
+            response.setStatusCode(200);
+            response.setBody('{"connected":false,"status":"not_started"}');
+            return response;
+        }
+    }
+
     @IsTest
     static void returnsStructuredGovernanceResult() {
-        CostPilotAgentforceAction.workspaceId = 'TEST-WORKSPACE';
+        CostPilotAgentforceAction.workspaceId = null;
         Test.setMock(HttpCalloutMock.class, new CostPilotMock());
 
         CostPilotAgentforceAction.GovernanceRequest input =
@@ -100,6 +116,25 @@ private class CostPilotAgentforceActionTest {
     }
 
     @IsTest
+    static void requiresSubscriberWorkspaceSetup() {
+        CostPilotAgentforceAction.workspaceId = null;
+        Test.setMock(HttpCalloutMock.class, new DisconnectedMock());
+        CostPilotAgentforceAction.GovernanceRequest input =
+            new CostPilotAgentforceAction.GovernanceRequest();
+        input.recordId = '006000000000001AAA';
+        input.taskDescription = 'Summarize this opportunity.';
+
+        List<CostPilotAgentforceAction.GovernanceResult> results =
+            CostPilotAgentforceAction.govern(
+                new List<CostPilotAgentforceAction.GovernanceRequest>{ input }
+            );
+
+        System.assertEquals(false, results[0].allowed);
+        System.assertEquals('SETUP_REQUIRED', results[0].decision);
+        System.assert(results[0].reason.contains('CostPilot Setup'));
+    }
+
+    @IsTest
     static void resolvesProjectContextAndWritesResponseToProject() {
         CostPilot_Project__c project = new CostPilot_Project__c(
             Name = 'Automatically Resolved Project',
@@ -119,7 +154,7 @@ private class CostPilotAgentforceActionTest {
             Can_Use_AI__c = true
         );
 
-        CostPilotAgentforceAction.workspaceId = 'TEST-WORKSPACE';
+        CostPilotAgentforceAction.workspaceId = null;
         Test.setMock(HttpCalloutMock.class, new CostPilotMock());
         CostPilotAgentforceAction.GovernanceRequest input =
             new CostPilotAgentforceAction.GovernanceRequest();

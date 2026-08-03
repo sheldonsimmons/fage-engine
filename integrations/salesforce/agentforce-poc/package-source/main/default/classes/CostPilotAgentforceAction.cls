@@ -1,8 +1,8 @@
 public with sharing class CostPilotAgentforceAction {
-    // Non-secret workspace identifier. The API key belongs in the CostPilot
-    // Named Credential as an X-CostPilot-Key custom header.
+    // Test-only override. Subscriber orgs resolve their workspace from the
+    // package OAuth connection created by the CostPilot Setup wizard.
     @TestVisible
-    private static String workspaceId = '4BE43240A6674314';
+    private static String workspaceId;
 
     @InvocableMethod(
         label='Govern AI Work with CostPilot'
@@ -41,10 +41,19 @@ public with sharing class CostPilotAgentforceAction {
 
         hydrateProjectRequest(request);
         MembershipContext membership = membershipFor(request.recordId);
+        String connectedWorkspaceId;
+        try {
+            connectedWorkspaceId = resolveWorkspaceId();
+        } catch (Exception exceptionValue) {
+            output.allowed = false;
+            output.decision = 'SETUP_REQUIRED';
+            output.reason = exceptionValue.getMessage();
+            return output;
+        }
         HttpRequest httpRequest = new HttpRequest();
         httpRequest.setEndpoint(
             'callout:CostPilot/api/integrations/salesforce/agentforce/' +
-            EncodingUtil.urlEncode(workspaceId, 'UTF-8') + '/govern'
+            EncodingUtil.urlEncode(connectedWorkspaceId, 'UTF-8') + '/govern'
         );
         httpRequest.setMethod('POST');
         httpRequest.setHeader('Content-Type', 'application/json');
@@ -116,6 +125,39 @@ public with sharing class CostPilotAgentforceAction {
         }
         return output;
     }
+
+    private static String resolveWorkspaceId() {
+        if (!String.isBlank(workspaceId)) return workspaceId;
+
+        HttpRequest statusRequest = new HttpRequest();
+        statusRequest.setEndpoint(
+            'callout:CostPilot/api/integrations/connections/salesforce/package/status' +
+            '?org_id=' + EncodingUtil.urlEncode(UserInfo.getOrganizationId(), 'UTF-8')
+        );
+        statusRequest.setMethod('GET');
+        statusRequest.setTimeout(30000);
+        HttpResponse statusResponse = new Http().send(statusRequest);
+        if (statusResponse.getStatusCode() < 200 || statusResponse.getStatusCode() >= 300) {
+            throw new CostPilotSetupException(
+                'CostPilot setup could not be verified (HTTP ' +
+                statusResponse.getStatusCode() + '). Open the CostPilot Setup tab.'
+            );
+        }
+        Map<String, Object> statusPayload =
+            (Map<String, Object>) JSON.deserializeUntyped(statusResponse.getBody());
+        Boolean connected = statusPayload.get('connected') == null
+            ? false : (Boolean) statusPayload.get('connected');
+        String resolved = (String) statusPayload.get('workspace_id');
+        if (!connected || String.isBlank(resolved)) {
+            throw new CostPilotSetupException(
+                'Salesforce is not connected to a CostPilot workspace. Open the CostPilot Setup tab.'
+            );
+        }
+        workspaceId = resolved;
+        return workspaceId;
+    }
+
+    private class CostPilotSetupException extends Exception {}
 
     private static void hydrateProjectRequest(GovernanceRequest request) {
         try {

@@ -1,6 +1,6 @@
-# CostPilot + Salesforce Agentforce proof of concept
+# CostPilot Salesforce Connector
 
-This proof connects one Agentforce Apex action to CostPilot. It resolves or
+This package connects Agentforce and Salesforce Flow actions to CostPilot. It resolves or
 creates a CostPilot project, runs the existing governance and model-routing
 pipeline, attributes the resulting transaction to that project, and returns a
 structured result to Agentforce.
@@ -11,7 +11,9 @@ The Salesforce DX package also creates:
 - `CostPilot_Project_Member__c`, the project-to-Salesforce-user membership;
 - all project, attribution, and optional CostPilot response fields;
 - tabs for projects and project members; and
-- the `CostPilot_Agentforce_User` permission set.
+- the `CostPilot_Connector_User` permission set; and
+- a guided **CostPilot Setup** tab for OAuth, AI entry-point selection,
+  relationship approval, verification, and activation.
 
 ## Proof scenario
 
@@ -30,50 +32,40 @@ receives:
 
 The project and request then appear in CostPilot Work Attribution.
 
-## 1. Configure the CostPilot Named Credential
+## 1. Install and assign access
 
-In the Salesforce sandbox:
+Assign `CostPilot_Connector_User` to the Salesforce administrators and users
+who will configure or invoke CostPilot. The package supplies the Named
+Credential and External Credential definitions; no key belongs in Apex.
 
-1. Open **Setup → Named Credentials**.
-2. Create an External Credential using a named principal suitable for the
-   sandbox proof.
-3. Add the CostPilot workspace secret as the custom request header
-   `X-CostPilot-Key`.
-4. Create a Named Credential:
-   - Label: `CostPilot`
-   - Name: `CostPilot`
-   - URL: `https://fage-engine-21cb49fe4806.herokuapp.com`
-   - External Credential: the credential from step 2
-5. Grant the test user access to the External Credential principal using a
-   permission set.
+## 2. Connect and activate
 
-Do not place the CostPilot key in Apex.
+1. Open **App Launcher → CostPilot Setup**.
+2. Choose **Connect Salesforce** and approve Salesforce OAuth.
+3. Select the Agentforce agents and Flows CostPilot should govern.
+4. Approve the parent and related-record mapping used for attribution.
+5. Run verification, then activate the connection.
 
-## 2. Confirm the workspace ID
+The action resolves the CostPilot workspace from the connected Salesforce
+organization. It does not contain a customer or demo workspace ID.
 
-`CostPilotAgentforceAction.cls` is configured for the internal proof workspace
-`4BE43240A6674314`. The workspace ID is not a secret. Change it only when
-connecting this package to a different CostPilot workspace.
-
-## 3. Deploy the Apex action
+## 3. Validate package source during development
 
 From this `agentforce-poc` directory, authenticate the sandbox and deploy:
 
 ```bash
 sf org login web --instance-url https://test.salesforce.com --alias costpilot-sandbox
-sf project deploy start --target-org costpilot-sandbox
+sf project deploy start --source-dir package-source --target-org costpilot-sandbox
 sf apex run test --target-org costpilot-sandbox \
-  --tests CostPilotAgentforceActionTest --result-format human --wait 10
+  --tests CostPilotAgentforceActionTest,CostPilotGatewayTest,CostPilotSetupControllerTest \
+  --result-format human --wait 10
 sf org assign permset --target-org costpilot-sandbox \
-  --name CostPilot_Agentforce_User
+  --name CostPilot_Connector_User
 ```
 
 That single `sf project deploy start` command creates the objects and fields as
 well as deploying the Apex action. There is no manual Object Manager field
 creation.
-
-Also grant the test user access to the External Credential principal. Salesforce
-keeps that credential permission separate from Apex class access.
 
 ## 4. Create the first project and membership
 
@@ -129,14 +121,15 @@ In Agentforce Preview, request a summary. Confirm:
 Set Project Status to `On Hold` and repeat. CostPilot should return
 `allowed = false` without creating an AI transaction.
 
-## 7. Generate attributed Salesforce activity
+## 7. Generate attributed Salesforce activity (internal demo source only)
 
-The package includes a **CostPilot Load Generator** Lightning tab for repeatable
-proof data. It uses Salesforce records and users rather than anonymous browser
-traffic.
+The unpackaged `force-app` demo source includes a **CostPilot Load Generator**
+Lightning tab for repeatable proof data. It is intentionally excluded from the
+customer connector package. It uses Salesforce records and users rather than
+anonymous browser traffic.
 
 1. Deploy the CostPilot backend change that accepts `simulation_mode`.
-2. Deploy this Salesforce DX source and assign
+2. Deploy the `force-app` Salesforce DX source and assign
    `CostPilot_Agentforce_User` to the test user.
 3. Open **App Launcher → CostPilot Load Generator**.
 4. Select an Account, Opportunity, or CostPilot Project.

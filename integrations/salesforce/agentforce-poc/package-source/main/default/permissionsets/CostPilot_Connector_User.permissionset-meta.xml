@@ -28,9 +28,13 @@
     <fieldPermissions><editable>true</editable><field>CostPilot_Project__c.Project_ID__c</field><readable>true</readable></fieldPermissions>
     <fieldPermissions><editable>true</editable><field>CostPilot_Project__c.Project_Owner__c</field><readable>true</readable></fieldPermissions>
     <fieldPermissions><editable>true</editable><field>CostPilot_Project__c.Selected_Model__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>CostPilot_Project__c.Status__c</field><readable>true</readable></fieldPermissions>
     <fieldPermissions><editable>true</editable><field>CostPilot_Project_Member__c.Added_At__c</field><readable>true</readable></fieldPermissions>
     <fieldPermissions><editable>true</editable><field>CostPilot_Project_Member__c.Can_Use_AI__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>CostPilot_Project_Member__c.Project__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>CostPilot_Project_Member__c.Role__c</field><readable>true</readable></fieldPermissions>
     <fieldPermissions><editable>true</editable><field>CostPilot_Project_Member__c.Salesforce_User__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>CostPilot_Project_Member__c.Status__c</field><readable>true</readable></fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
     <label>CostPilot Connector User</label>
     <objectPermissions>
