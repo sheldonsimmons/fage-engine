@@ -221,12 +221,11 @@ def reset_historical_demo(db, workspace_id):
         TokenTransaction.workspace_id == workspace_id,
         TokenTransaction.usage_source == MARKER,
     )
-    request_ids = [row[0] for row in tx_query.with_entities(TokenTransaction.governed_request_id)]
     result = {
         "transactions_deleted": tx_query.delete(synchronize_session=False),
         "audits_deleted": db.query(AuditEvent).filter(
             AuditEvent.workspace_id == workspace_id,
-            AuditEvent.governed_request_id.in_(request_ids) if request_ids else False,
+            AuditEvent.governed_request_id.like(f"{MARKER}:{workspace_id}:%"),
         ).delete(synchronize_session=False),
     }
     work_ids = [row[0] for row in db.query(WorkItem.id).filter(
@@ -279,16 +278,47 @@ def reset_historical_demo(db, workspace_id):
     return result
 
 
-def seed_historical_demo(db, workspace_id, start=date(2024, 8, 3), end=date(2026, 8, 3)):
+def seed_historical_demo(
+    db, workspace_id, start=date(2024, 8, 3), end=date(2026, 8, 3),
+    commit_batches=False,
+):
     existing = db.query(TokenTransaction).filter(
         TokenTransaction.workspace_id == workspace_id,
         TokenTransaction.usage_source == MARKER,
     ).count()
     if existing:
-        return {"status": "already_seeded", "transactions": existing, "audits": existing}
+        settings = db.query(WorkspaceAnalyticsSettings).filter_by(workspace_id=workspace_id).first()
+        complete = bool(
+            settings and settings.collection_started_at
+            and settings.latest_complete_at
+            and settings.collection_started_at <= datetime.combine(start, time())
+            and settings.latest_complete_at >= datetime.combine(end + timedelta(days=1), time())
+        )
+        if complete:
+            return {"status": "already_seeded", "transactions": existing, "audits": existing}
+        reset_historical_demo(db, workspace_id)
+        if commit_batches:
+            db.commit()
 
     rng = random.Random(RANDOM_SEED)
     org_units, agents, users, work_items = _get_or_create_entities(db, workspace_id)
+    settings = db.query(WorkspaceAnalyticsSettings).filter_by(workspace_id=workspace_id).first()
+    seed_state = HistoricalDemoSeedState(
+        workspace_id=workspace_id,
+        marker=MARKER,
+        settings_existed=bool(settings),
+        settings_snapshot=json.dumps({
+            "timezone_name": settings.timezone_name,
+            "week_starts_on": settings.week_starts_on,
+            "fiscal_year_start_month": settings.fiscal_year_start_month,
+            "default_window_days": settings.default_window_days,
+            "collection_started_at": settings.collection_started_at.isoformat() if settings.collection_started_at else None,
+            "latest_complete_at": settings.latest_complete_at.isoformat() if settings.latest_complete_at else None,
+        }) if settings else None,
+    )
+    db.add(seed_state)
+    if commit_batches:
+        db.commit()
     inserted = 0
     monthly = {}
     for month_index, month in enumerate(_month_starts(start, end)):
@@ -298,6 +328,8 @@ def seed_historical_demo(db, workspace_id, start=date(2024, 8, 3), end=date(2026
         month_key = month.strftime("%Y-%m")
         monthly[month_key] = {"requests": calls, "tokens": 0, "cost_usd": 0.0}
         available_agents = [entry for entry in agents if entry[1] <= month]
+        transaction_batch = []
+        audit_batch = []
         for index in range(calls):
             timestamp_day = days[index % len(days)]
             timestamp = datetime(month.year, month.month, timestamp_day, 8 + index % 11, (index * 17) % 60)
@@ -354,7 +386,7 @@ def seed_historical_demo(db, workspace_id, start=date(2024, 8, 3), end=date(2026
                 attribution_source="historical_demo",
                 attribution_confidence="verified",
             )
-            db.add(TokenTransaction(
+            transaction_batch.append(TokenTransaction(
                 **common, department=department_key,
                 source_platform=DEPARTMENTS[department]["platform"],
                 model_tier=tier, model_name=model_name, resolved_model_tier=tier,
@@ -366,7 +398,7 @@ def seed_historical_demo(db, workspace_id, start=date(2024, 8, 3), end=date(2026
                 execution_status="blocked" if blocked else "succeeded",
                 was_pruned=True, tokens_saved=tokens_saved,
             ))
-            db.add(AuditEvent(
+            audit_batch.append(AuditEvent(
                 **common, event_type=event_type, department=department_key,
                 model_tier=tier, selected_model_name=model_name,
                 selected_model_tier=tier, routing_policy_version="historical-demo-v1",
@@ -385,22 +417,12 @@ def seed_historical_demo(db, workspace_id, start=date(2024, 8, 3), end=date(2026
             inserted += 1
             monthly[month_key]["tokens"] += input_tokens + output_tokens
             monthly[month_key]["cost_usd"] += cost
+        db.bulk_save_objects(transaction_batch)
+        db.bulk_save_objects(audit_batch)
+        if commit_batches:
+            db.commit()
 
     settings = db.query(WorkspaceAnalyticsSettings).filter_by(workspace_id=workspace_id).first()
-    seed_state = HistoricalDemoSeedState(
-        workspace_id=workspace_id,
-        marker=MARKER,
-        settings_existed=bool(settings),
-        settings_snapshot=json.dumps({
-            "timezone_name": settings.timezone_name,
-            "week_starts_on": settings.week_starts_on,
-            "fiscal_year_start_month": settings.fiscal_year_start_month,
-            "default_window_days": settings.default_window_days,
-            "collection_started_at": settings.collection_started_at.isoformat() if settings.collection_started_at else None,
-            "latest_complete_at": settings.latest_complete_at.isoformat() if settings.latest_complete_at else None,
-        }) if settings else None,
-    )
-    db.add(seed_state)
     if not settings:
         settings = WorkspaceAnalyticsSettings(workspace_id=workspace_id)
         db.add(settings)
@@ -434,7 +456,10 @@ def main():
         if args.reset:
             result = reset_historical_demo(db, args.workspace_id)
         else:
-            result = seed_historical_demo(db, args.workspace_id, args.start_date, args.end_date)
+            result = seed_historical_demo(
+                db, args.workspace_id, args.start_date, args.end_date,
+                commit_batches=not args.dry_run,
+            )
         if args.dry_run:
             db.rollback()
             result["status"] = "dry_run"
