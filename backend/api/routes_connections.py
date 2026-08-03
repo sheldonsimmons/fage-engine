@@ -1150,6 +1150,14 @@ def save_salesforce_ai_entry_points(
     mapping["selected_ai_entry_points"] = selected
     if selected != previous or not mapping.get("entry_points_selected_at"):
         mapping["entry_points_selected_at"] = datetime.utcnow().isoformat()
+        package_setup = mapping.get("package_setup")
+        if isinstance(package_setup, dict):
+            package_setup["verification"] = {
+                "verified": False,
+                "parent_verified": False,
+                "child_verified": False,
+                "message": "AI entry-point selection changed; run fresh parent and related-record checks.",
+            }
     item.mapping_json = json.dumps(mapping)
     db.commit()
     return {
@@ -1281,6 +1289,11 @@ def verify_salesforce_package_request(
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
     mapping = _json_object(item.mapping_json)
+    package_setup = mapping.get("package_setup")
+    if not isinstance(package_setup, dict):
+        package_setup = {}
+        mapping["package_setup"] = package_setup
+    prior_verification = package_setup.get("verification") or {}
     selected_at_raw = mapping.get("entry_points_selected_at")
     selected_at = None
     if selected_at_raw:
@@ -1293,12 +1306,10 @@ def verify_salesforce_package_request(
         AuditEvent.is_simulation.is_(False),
         func.lower(AuditEvent.actor_source_platform) == "salesforce",
     )
-    if selected_at is not None:
+    # A completed verification is durable across a page reload. A real
+    # selection change clears verification in save_salesforce_ai_entry_points.
+    if selected_at is not None and not prior_verification.get("verified"):
         query = query.filter(AuditEvent.timestamp >= selected_at)
-    package_setup = mapping.get("package_setup")
-    if not isinstance(package_setup, dict):
-        package_setup = {}
-        mapping["package_setup"] = package_setup
     relationships = package_setup.get("relationships") or {}
     parent_type = str(relationships.get("parent_object") or "Account").lower()
     child_types = {

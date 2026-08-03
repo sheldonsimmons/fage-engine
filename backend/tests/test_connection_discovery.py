@@ -256,6 +256,7 @@ def test_salesforce_entry_point_save_is_idempotent_and_deduplicates_agents():
         display_name="Salesforce Production",
         status="connected",
         mapping_json=json.dumps({
+            "package_setup": {"verification": {"verified": True}},
             "selected_ai_entry_points": [{
                 "kind": "agent", "id": "agent-1", "name": "Quoting_Agent",
                 "label": "CostPilot Agent", "activation_status": "action_required",
@@ -281,6 +282,19 @@ def test_salesforce_entry_point_save_is_idempotent_and_deduplicates_agents():
     assert result["count"] == 1
     assert result["selected"][0]["id"] == "agent-1"
     assert mapping["entry_points_selected_at"] == "2026-08-03T22:50:05.158597"
+    assert mapping["package_setup"]["verification"]["verified"] is True
+
+    save_salesforce_ai_entry_points(
+        item.id,
+        AiEntryPointSelectionUpdate(entries=[
+            {"kind": "flow", "id": "flow-2", "name": "Quote_Flow", "label": "Quote Flow"},
+        ]),
+        db=db,
+    )
+    db.refresh(item)
+    changed = json.loads(item.mapping_json)
+    assert changed["package_setup"]["verification"]["verified"] is False
+    assert changed["entry_points_selected_at"] != "2026-08-03T22:50:05.158597"
 
 
 def _ready_salesforce_connection(db):
