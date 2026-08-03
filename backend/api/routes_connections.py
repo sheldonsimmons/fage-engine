@@ -185,6 +185,93 @@ def _merge_salesforce_package_connection(
     return existing
 
 
+def _salesforce_connection_progress(item: IntegrationConnection) -> tuple:
+    mapping = _json_object(item.mapping_json)
+    package_setup = mapping.get("package_setup")
+    if not isinstance(package_setup, dict):
+        package_setup = {}
+    verification = package_setup.get("verification") or {}
+    relationships = package_setup.get("relationships") or {}
+    return (
+        bool(package_setup.get("active")),
+        bool(verification.get("verified")),
+        bool(relationships.get("approved")),
+        bool(mapping.get("selected_ai_entry_points")),
+        bool(item.selected_object),
+        item.updated_at or item.created_at or datetime.min,
+    )
+
+
+def _merge_salesforce_org_connection(
+    pending: IntegrationConnection,
+    db: Session,
+) -> IntegrationConnection:
+    """Reuse the most-progressed connection for a Salesforce org and workspace."""
+    if not pending.external_tenant_id or not pending.workspace_id:
+        return pending
+    candidates = (
+        db.query(IntegrationConnection)
+        .filter(
+            IntegrationConnection.id != pending.id,
+            IntegrationConnection.workspace_id == pending.workspace_id,
+            IntegrationConnection.platform == "salesforce",
+            IntegrationConnection.external_tenant_id == pending.external_tenant_id,
+            IntegrationConnection.status != "superseded",
+        )
+        .all()
+    )
+    if not candidates:
+        return pending
+    canonical = max(candidates, key=_salesforce_connection_progress)
+    pending_mapping = _json_object(pending.mapping_json)
+    canonical_mapping = _json_object(canonical.mapping_json)
+    if isinstance(pending_mapping.get("salesforce_identity"), dict):
+        canonical_mapping["salesforce_identity"] = pending_mapping["salesforce_identity"]
+    canonical.auth_base_url = pending.auth_base_url or canonical.auth_base_url
+    canonical.instance_url = pending.instance_url or canonical.instance_url
+    canonical.access_token_encrypted = pending.access_token_encrypted
+    canonical.refresh_token_encrypted = pending.refresh_token_encrypted or canonical.refresh_token_encrypted
+    canonical.external_tenant_id = pending.external_tenant_id
+    canonical.mapping_json = json.dumps(canonical_mapping)
+    canonical.last_success_at = datetime.utcnow()
+    canonical.last_error = None
+
+    pending.status = "superseded"
+    pending.last_error = f"Superseded by Salesforce connection {canonical.id}"
+    pending.access_token_encrypted = None
+    pending.refresh_token_encrypted = None
+    pending.oauth_state = None
+    pending_mapping["superseded_by_connection_id"] = canonical.id
+    pending.mapping_json = json.dumps(pending_mapping)
+    db.flush()
+    return canonical
+
+
+def _supersede_salesforce_siblings(item: IntegrationConnection, db: Session) -> None:
+    """Retain duplicate history while removing it from the active lifecycle."""
+    if not item.external_tenant_id:
+        return
+    siblings = (
+        db.query(IntegrationConnection)
+        .filter(
+            IntegrationConnection.id != item.id,
+            IntegrationConnection.workspace_id == item.workspace_id,
+            IntegrationConnection.platform == "salesforce",
+            IntegrationConnection.external_tenant_id == item.external_tenant_id,
+            IntegrationConnection.status != "superseded",
+        )
+        .all()
+    )
+    for sibling in siblings:
+        mapping = _json_object(sibling.mapping_json)
+        mapping["superseded_by_connection_id"] = item.id
+        sibling.mapping_json = json.dumps(mapping)
+        sibling.status = "superseded"
+        sibling.last_error = f"Superseded by active Salesforce connection {item.id}"
+        sibling.access_token_encrypted = None
+        sibling.refresh_token_encrypted = None
+
+
 async def _populate_salesforce_costpilot_credential(
     *,
     instance_url: str,
@@ -617,13 +704,15 @@ async def salesforce_package_status(
 
 
 @router.get("")
-def list_connections(workspace_id: str = Query(default="default"), db: Session = Depends(get_db)):
-    items = (
-        db.query(IntegrationConnection)
-        .filter(IntegrationConnection.workspace_id == workspace_id)
-        .order_by(IntegrationConnection.created_at.desc())
-        .all()
-    )
+def list_connections(
+    workspace_id: str = Query(default="default"),
+    include_superseded: bool = False,
+    db: Session = Depends(get_db),
+):
+    query = db.query(IntegrationConnection).filter(IntegrationConnection.workspace_id == workspace_id)
+    if not include_superseded:
+        query = query.filter(IntegrationConnection.status != "superseded")
+    items = query.order_by(IntegrationConnection.created_at.desc()).all()
     return {"connections": [_public_connection(item) for item in items]}
 
 
@@ -917,6 +1006,9 @@ async def salesforce_callback(
     item.status = "connected"
     item.last_success_at = datetime.utcnow()
     item.last_error = None
+    item = _merge_salesforce_org_connection(item, db)
+    if item.status not in {"active", "mapping"}:
+        item.status = "connected"
     db.commit()
     return RedirectResponse(url=f"/onboarding.html?connection_id={item.id}&oauth=success")
 
@@ -1386,7 +1478,7 @@ def activate_salesforce_package_connection(
     relationships = package_setup.get("relationships") or {}
     verification = package_setup.get("verification") or {}
     missing = []
-    if not item.external_tenant_id or not item.instance_url or item.status not in {"connected", "active"}:
+    if not item.external_tenant_id or not item.instance_url or item.status not in {"connected", "mapping", "active"}:
         missing.append("connect and verify the installed Salesforce org")
     if not item.workspace_id or item.workspace_id.startswith("pending-"):
         missing.append("bind the Salesforce org to one CostPilot workspace")
@@ -1405,6 +1497,7 @@ def activate_salesforce_package_connection(
     item.status = "active"
     item.last_success_at = datetime.utcnow()
     item.mapping_json = json.dumps(mapping)
+    _supersede_salesforce_siblings(item, db)
     db.commit()
     return _salesforce_package_setup(item)
 
@@ -1737,7 +1830,7 @@ def approve_mapping(connection_id: int, body: MappingUpdate, db: Session = Depen
     mapping.setdefault("unmapped_behavior", "separate")
     item.selected_object = body.selected_object
     item.mapping_json = json.dumps(mapping)
-    item.status = "active"
+    item.status = "mapping" if item.platform == "salesforce" else "active"
     item.last_tested_at = datetime.utcnow()
     item.last_success_at = datetime.utcnow()
     item.last_error = None

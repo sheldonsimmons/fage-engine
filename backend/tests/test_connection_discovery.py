@@ -11,6 +11,7 @@ from api.routes_connections import (
     PackageRelationshipApproval,
     _build_context_snapshot,
     _merge_salesforce_package_connection,
+    _merge_salesforce_org_connection,
     _new_context_changes,
     _new_salesforce_workspace,
     _populate_salesforce_costpilot_credential,
@@ -174,6 +175,42 @@ def test_salesforce_package_reconnect_merges_the_pending_connection():
     assert merged.access_token_encrypted == "new-access"
     assert merged.refresh_token_encrypted == "new-refresh"
     assert merged.instance_url == "https://acme.my.salesforce.com"
+
+
+def test_salesforce_org_reconnect_reuses_the_active_connection():
+    db = _session()
+    active = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Salesforce original",
+        status="active",
+        instance_url="https://acme.my.salesforce.com",
+        external_tenant_id="00D000000000001AAA",
+        access_token_encrypted="old-token",
+        mapping_json=json.dumps({"package_setup": {"active": True}}),
+    )
+    pending = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Salesforce reconnect",
+        status="connected",
+        instance_url="https://acme.my.salesforce.com",
+        external_tenant_id="00D000000000001AAA",
+        access_token_encrypted="fresh-token",
+        mapping_json=json.dumps({"salesforce_identity": {"username": "admin@acme.example"}}),
+    )
+    db.add_all([active, pending])
+    db.commit()
+
+    canonical = _merge_salesforce_org_connection(pending, db)
+    db.commit()
+
+    assert canonical.id == active.id
+    assert canonical.access_token_encrypted == "fresh-token"
+    assert json.loads(canonical.mapping_json)["package_setup"]["active"] is True
+    assert pending.status == "superseded"
+    assert pending.access_token_encrypted is None
+    assert json.loads(pending.mapping_json)["superseded_by_connection_id"] == active.id
 
 
 def test_salesforce_package_status_prefers_a_working_connection():
@@ -408,6 +445,51 @@ def test_salesforce_package_does_not_accept_unrelated_child_rollup():
     assert result["ready_to_activate"] is False
 
 
+def test_salesforce_activation_supersedes_only_same_org_duplicates():
+    db = _session()
+    item = _ready_salesforce_connection(db)
+    mapping = json.loads(item.mapping_json)
+    mapping["package_setup"]["verification"] = {
+        "verified": True,
+        "parent_verified": True,
+        "child_verified": True,
+    }
+    item.mapping_json = json.dumps(mapping)
+    duplicate = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Older same org",
+        status="mapping",
+        external_tenant_id="00D000000000001AAA",
+        access_token_encrypted="duplicate-token",
+        mapping_json="{}",
+    )
+    other_org = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Different org",
+        status="connected",
+        external_tenant_id="00D000000000002AAA",
+        access_token_encrypted="other-token",
+        mapping_json="{}",
+    )
+    db.add_all([duplicate, other_org])
+    db.commit()
+
+    result = activate_salesforce_package_connection(item.id, db=db)
+    db.refresh(duplicate)
+    db.refresh(other_org)
+
+    assert result["active"] is True
+    assert duplicate.status == "superseded"
+    assert duplicate.access_token_encrypted is None
+    assert other_org.status == "connected"
+    visible_ids = {row["id"] for row in list_connections("WORKSPACE-A", db=db)["connections"]}
+    assert duplicate.id not in visible_ids
+    assert item.id in visible_ids
+    assert other_org.id in visible_ids
+
+
 def test_salesforce_ai_entry_points_use_current_agentforce_metadata(monkeypatch):
     db = _session()
     item = IntegrationConnection(
@@ -568,7 +650,7 @@ def test_parent_metadata_produces_useful_child_relationship_suggestions():
     assert all(item["confidence"] == "high" for item in suggestions)
 
 
-def test_approved_mapping_is_persisted_as_active_connection():
+def test_approved_salesforce_mapping_remains_in_mapping_status():
     db = _session()
     item = create_connection(
         ConnectionCreate(
@@ -601,7 +683,7 @@ def test_approved_mapping_is_persisted_as_active_connection():
         ),
         db=db,
     )
-    assert updated["status"] == "active"
+    assert updated["status"] == "mapping"
     assert updated["selected_object"] == "CostPilot_Project__c"
     assert updated["mapping"]["content"] == "Description__c"
     assert updated["mapping"]["parent_object"] == "CostPilot_Project__c"
