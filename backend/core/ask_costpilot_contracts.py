@@ -167,9 +167,29 @@ def ask_interpretation_label(parsed: dict) -> str:
 def validate_ask_answer_contract(parsed: dict, payload: dict) -> list[str]:
     """Return violations that make a polished response unsafe to display."""
     canonical_name = parsed.get("canonical_intent")
-    if not canonical_name:
-        return []
     issues = []
+    if parsed.get("intent") == "comparison":
+        calculation = payload.get("calculation") or {}
+        plan = calculation.get("comparison_plan") or {}
+        metric_contract = calculation.get("metric_contract") or {}
+        if not plan.get("primary") or not plan.get("comparison"):
+            issues.append("comparison answer is missing explicit paired periods")
+        if plan.get("mode") != (parsed.get("comparison_key") or "previous_period"):
+            issues.append("comparison answer used the wrong temporal rule")
+        if metric_contract.get("id") != parsed.get("metric"):
+            issues.append("comparison answer used the wrong metric contract")
+        if len(payload.get("evidence") or []) < 2:
+            issues.append("comparison answer is missing period evidence")
+        elif plan.get("primary") and plan.get("comparison"):
+            evidence_labels = [str(item.get("label") or "") for item in payload["evidence"][:2]]
+            expected_labels = [plan["primary"].get("label"), plan["comparison"].get("label")]
+            if evidence_labels != expected_labels:
+                issues.append("comparison evidence does not match the planned periods")
+        coverage = (payload.get("data_provenance") or {}).get("coverage")
+        if not isinstance(coverage, dict) or not coverage.get("status"):
+            issues.append("comparison answer is missing coverage status")
+    if not canonical_name:
+        return issues
     for field in ("intent", "entity", "metric"):
         expected = parsed.get(field)
         actual = payload.get(field)

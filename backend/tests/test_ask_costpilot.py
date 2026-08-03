@@ -1,5 +1,6 @@
 import os
 import sys
+from copy import deepcopy
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -7,6 +8,8 @@ from core.ask_costpilot_contracts import (
     canonical_ask_intent,
     validate_ask_answer_contract,
 )
+from core.analytics_metrics import metric_definition
+from core.analytics_periods import comparison_coverage, comparison_plan, resolve_primary_period
 
 from api.routes_efficiency import (
     _ask_conversation_text,
@@ -110,6 +113,10 @@ def _run_with_controlled_report(request, report=None):
 
     def fake_reporting(**kwargs):
         calls.append(kwargs)
+        if callable(report):
+            return report(**kwargs)
+        if isinstance(report, list):
+            return report[len(calls) - 1]
         return report or _controlled_report()
 
     routes_work_items.project_activity_reporting = fake_reporting
@@ -146,6 +153,105 @@ def test_savings_question_uses_read_only_optimization_intent():
 
     assert intent["intent"] == "optimization"
     assert intent["days"] == 30
+
+
+def test_around_this_time_last_year_uses_same_calendar_period_comparison():
+    intent = _ask_intent(
+        "What was my token usage around this time last year and compare the two?",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "comparison"
+    assert intent["metric"] == "total_tokens"
+    assert intent["period_key"] is None
+    assert intent["comparison_key"] == "same_period_previous_year"
+
+
+def test_metric_registry_exposes_versioned_token_contract():
+    contract = metric_definition("total_tokens")
+
+    assert contract.formula == "SUM(input_tokens + output_tokens)"
+    assert contract.source == "token_transactions"
+    assert contract.version == "1.0"
+
+
+def test_temporal_plan_shifts_exact_workspace_period_back_one_year():
+    primary = resolve_primary_period(
+        period_key=None,
+        days=30,
+        timezone_name="America/Chicago",
+        now=datetime(2026, 8, 3, 15, 0, 0),
+    )
+    plan = comparison_plan(primary, "same_period_previous_year")
+    contract = plan.contract()
+
+    assert contract["primary"]["label"] == "2026-07-04 through 2026-08-03"
+    assert contract["comparison"]["label"] == "2025-07-04 through 2025-08-03"
+    assert contract["primary"]["timezone_name"] == "America/Chicago"
+    assert contract["primary"]["interval"] == "half_open"
+
+
+def test_month_over_month_uses_calendar_aligned_month_period():
+    intent = _ask_intent("Compare this month vs last month", default_days=30)
+    primary = resolve_primary_period(
+        period_key=intent["period_key"],
+        days=intent["days"],
+        timezone_name="UTC",
+        now=datetime(2026, 8, 3, 12, 0, 0),
+    )
+    plan = comparison_plan(primary, intent["comparison_key"]).contract()
+
+    assert intent["comparison_key"] == "previous_month"
+    assert plan["primary"]["label"] == "2026-08-01 through 2026-08-03"
+    assert plan["comparison"]["label"] == "2026-07-01 through 2026-07-03"
+
+
+def test_quarter_over_quarter_uses_calendar_aligned_quarter_period():
+    intent = _ask_intent("What changed quarter over quarter?", default_days=30)
+
+    assert intent["intent"] == "comparison"
+    assert intent["comparison_key"] == "previous_quarter"
+
+
+def test_comparison_coverage_rejects_live_simulator_scope_mismatch():
+    coverage = comparison_coverage(
+        {"request_count": 10, "live_count": 10, "simulation_count": 0},
+        {"request_count": 8, "live_count": 0, "simulation_count": 8},
+    )
+
+    assert coverage["status"] == "traffic_scope_mismatch"
+    assert coverage["comparable"] is False
+    assert coverage["primary_traffic_scope"] == "live"
+    assert coverage["comparison_traffic_scope"] == "simulator"
+
+
+def test_endpoint_compares_same_period_last_year_with_metric_and_coverage_contracts():
+    current = deepcopy(_controlled_report())
+    current["summary"]["total_tokens"] = 8000
+    current["summary"]["request_count"] = 20
+    prior = deepcopy(_controlled_report())
+    prior["summary"]["total_tokens"] = 5000
+    prior["summary"]["request_count"] = 10
+
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(
+            question="Compare our token usage with around this time last year.",
+            days=30,
+            timezone_name="America/Chicago",
+        ),
+        report=[current, prior],
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["date_from"].year == calls[1]["date_from"].year + 1
+    assert calls[0]["source_platform"] == calls[1]["source_platform"]
+    assert response["contract_status"] == "passed"
+    assert response["calculation"]["metric_contract"]["id"] == "total_tokens"
+    assert response["calculation"]["comparison_plan"]["mode"] == "same_period_previous_year"
+    assert response["calculation"]["absolute_change"] == 3000
+    assert response["calculation"]["percent_change"] == 60.0
+    assert response["data_provenance"]["coverage"]["status"] == "observed_both_periods"
+    assert len(response["evidence"]) == 2
 
 
 def test_product_question_uses_costpilot_knowledge_intent():

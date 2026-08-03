@@ -194,6 +194,7 @@
         </header>
         <div class="cp-ask-suggestions" aria-label="Suggested questions">
           <button type="button">Who used the most tokens last week?</button>
+          <button type="button">Compare token usage with around this time last year.</button>
           <button type="button">Where is our AI spend going?</button>
           <button type="button">How many tokens did pruning remove?</button>
           <button type="button">Show live versus simulator usage.</button>
@@ -312,6 +313,7 @@
     const payload = {
       question,
       days: Number.isFinite(daysValue) ? Math.max(1, Math.min(365, Math.round(daysValue))) : 30,
+      timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       screen_context: currentAskScreenContext(),
     };
     [
@@ -342,7 +344,7 @@
       [
         "intent", "entity", "metric", "direction", "source_platform", "subject_entity",
         "subject_filter_name", "subject_filter_value", "model_tier", "period_key",
-        "usage_status", "budget_scope",
+        "comparison_key", "usage_status", "budget_scope",
       ].forEach((key) => {
         const value = cleanAskString(context[key]);
         if (value !== null) normalizedContext[key] = value;

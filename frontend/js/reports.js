@@ -1503,6 +1503,7 @@ function askCostPilotPayload(question) {
   return {
     question,
     days: Math.min(365, range.days || 30),
+    timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     workspace_id: workspaceId,
     date_from: range.date_from || null,
     date_to: range.date_to || null,

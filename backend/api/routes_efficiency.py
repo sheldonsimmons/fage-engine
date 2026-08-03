@@ -38,6 +38,12 @@ from core.ask_costpilot_contracts import (
     canonical_ask_intent,
     validate_ask_answer_contract,
 )
+from core.analytics_metrics import metric_definition
+from core.analytics_periods import (
+    comparison_coverage,
+    comparison_plan,
+    resolve_primary_period,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -81,6 +87,7 @@ class AskCostPilotContext(BaseModel):
     subject_filter_value: Optional[str] = None
     model_tier: Optional[str] = None
     period_key: Optional[str] = None
+    comparison_key: Optional[str] = None
     usage_status: Optional[str] = None
     usage_threshold: Optional[int] = None
     budget_scope: Optional[str] = None
@@ -104,6 +111,7 @@ class AskCostPilotRequest(BaseModel):
     workspace_id: Optional[str] = None
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
+    timezone_name: str = "UTC"
     project_id: Optional[str] = None
     user_external_id: Optional[str] = None
     agent_id: Optional[int] = None
@@ -125,7 +133,15 @@ def _ask_intent(question: str, default_days: int) -> dict:
     text = " ".join((question or "").lower().split())
     days = max(1, min(int(default_days or 30), 365))
     period_key = None
-    if "today" in text:
+    if any(term in text for term in ("month over month", "month-over-month")):
+        days, period_key = 31, "this_month"
+    elif any(term in text for term in ("quarter over quarter", "quarter-over-quarter")):
+        days, period_key = 92, "this_quarter"
+    elif any(term in text for term in ("year over year", "year-over-year")):
+        days, period_key = 365, "this_year"
+    elif "year to date" in text or re.search(r"\bytd\b", text):
+        days, period_key = 365, "this_year"
+    elif "today" in text:
         days, period_key = 1, "today"
     elif "yesterday" in text:
         days, period_key = 1, "yesterday"
@@ -143,7 +159,12 @@ def _ask_intent(question: str, default_days: int) -> dict:
         days, period_key = 92, "last_quarter"
     elif "this year" in text:
         days, period_key = 365, "this_year"
-    elif "last year" in text or "past year" in text:
+    elif (
+        ("last year" in text or "past year" in text)
+        and not any(term in text for term in (
+            "same period last year", "this time last year", "around this time last year",
+        ))
+    ):
         days, period_key = 365, "last_year"
     else:
         rolling_match = re.search(
@@ -282,6 +303,10 @@ def _ask_intent(question: str, default_days: int) -> dict:
         entity = "model"
     elif any(term in text for term in (
         "compare ", " compared ", " versus ", " vs. ", " vs "
+    )) or any(term in text for term in (
+        "same period last year", "this time last year", "around this time last year",
+        "year over year", "year-over-year", "month over month", "month-over-month",
+        "quarter over quarter", "quarter-over-quarter",
     )):
         intent = "comparison"
     elif (
@@ -368,6 +393,26 @@ def _ask_intent(question: str, default_days: int) -> dict:
             "all budgets",
         )) else "alerts"
 
+    comparison_key = None
+    if intent == "comparison":
+        if any(term in text for term in (
+                "same period last year", "this time last year", "around this time last year",
+                "year over year", "year-over-year", "year to date", "ytd",
+        )):
+            comparison_key = "same_period_previous_year"
+        elif any(term in text for term in (
+            "month over month", "month-over-month", "this month vs last month",
+            "this month versus last month",
+        )):
+            comparison_key = "previous_month"
+        elif any(term in text for term in (
+            "quarter over quarter", "quarter-over-quarter", "this quarter vs last quarter",
+            "this quarter versus last quarter",
+        )):
+            comparison_key = "previous_quarter"
+        else:
+            comparison_key = "previous_period"
+
     result = {
         "intent": intent,
         "entity": entity,
@@ -376,6 +421,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "direction": direction,
         "result_limit": result_limit,
         "period_key": period_key,
+        "comparison_key": comparison_key,
         "source_platform": source_platform,
         "model_tier": model_tier,
         "usage_status": usage_status,
@@ -411,6 +457,9 @@ _ASK_PERIOD_KEYS = {
     "last_month", "this_quarter", "last_quarter", "this_year", "last_year",
     "rolling_days",
 }
+_ASK_COMPARISON_KEYS = {
+    "previous_period", "same_period_previous_year", "previous_month", "previous_quarter",
+}
 _ASK_USAGE_STATUSES = {"all", "unused", "never", "recently_inactive", "low", "active"}
 _ASK_BUDGET_SCOPES = {"all", "alerts"}
 
@@ -436,6 +485,11 @@ def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
         result["period_key"] = period_key
     elif period_key == "none":
         result["period_key"] = None
+    comparison_key = candidate.get("comparison_key")
+    if comparison_key in _ASK_COMPARISON_KEYS:
+        result["comparison_key"] = comparison_key
+    elif comparison_key == "none":
+        result["comparison_key"] = None
     for field in (
         "source_platform", "model_tier", "subject_entity",
         "subject_filter_name", "subject_filter_value",
@@ -633,6 +687,12 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
         if not explicit_period and context.get("days"):
             current["days"] = max(1, min(int(context["days"]), 365))
             current["period_key"] = context.get("period_key")
+        if (
+            current.get("intent") == "comparison"
+            and not current.get("comparison_key")
+            and context.get("comparison_key") in _ASK_COMPARISON_KEYS
+        ):
+            current["comparison_key"] = context["comparison_key"]
         if not explicit_count and context.get("result_limit"):
             current["result_limit"] = max(1, min(int(context["result_limit"]), 20))
         if not current.get("source_platform") and context.get("source_platform"):
@@ -816,6 +876,10 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
                     "type": "string",
                     "enum": ["none", *sorted(_ASK_PERIOD_KEYS)],
                 },
+                "comparison_key": {
+                    "type": "string",
+                    "enum": ["none", *sorted(_ASK_COMPARISON_KEYS)],
+                },
                 "source_platform": {
                     "type": "string",
                     "enum": [
@@ -847,7 +911,7 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
             },
             "required": [
                 "intent", "entity", "metric", "direction", "days",
-                "result_limit", "period_key", "source_platform", "model_tier",
+                "result_limit", "period_key", "comparison_key", "source_platform", "model_tier",
                 "usage_status", "usage_threshold", "budget_scope",
             ],
             "additionalProperties": False,
@@ -867,6 +931,9 @@ context for accounts/projects/matters/opportunities/work; platform for source sy
 model for model names or tiers; overview for company totals. Choose source_mix for
 questions comparing live activity with simulator or test traffic.
 Use total_tokens for token questions, spend_usd for cost/spend, and request_count for calls/usage.
+Choose comparison with comparison_key same_period_previous_year for year-over-year, same-period-last-year,
+"around this time last year", and year-to-date versus last-year questions. Choose previous_period for an
+immediately preceding equal-length comparison. Never invent date boundaries; the server resolves them.
 Choose agent_adoption when the user asks what agents have been built, whether they are being used,
 or asks for unused, never-used, inactive, low-usage, or active agents. Use usage_status never for
 agents with no governed activity ever; recently_inactive for agents with history but no activity in
@@ -1829,7 +1896,7 @@ def _ask_help_response(
     categories = [
         (
             "Spend and usage",
-            "How much did we spend this month? Compare this week with last week.",
+            "How much did we spend this month? Compare token usage with around this time last year.",
         ),
         (
             "People and agents",
@@ -2052,7 +2119,23 @@ def ask_costpilot(
             except (TypeError, ValueError):
                 subject_filter_value = None
         reporting_filters[subject_filter_name] = subject_filter_value
+    comparison_execution_plan = None
+    comparison_coverage_result = None
     date_from, date_to = _ask_period_bounds(request, parsed)
+    if parsed.get("intent") == "comparison":
+        primary_period = resolve_primary_period(
+            period_key=parsed.get("period_key"),
+            days=parsed["days"],
+            timezone_name=request.timezone_name,
+            date_from=request.date_from,
+            date_to=request.date_to,
+        )
+        comparison_execution_plan = comparison_plan(
+            primary_period,
+            parsed.get("comparison_key") or "previous_period",
+        )
+        date_from = comparison_execution_plan.primary.start
+        date_to = comparison_execution_plan.primary.end
     report = project_activity_reporting(
         workspace_id=request.workspace_id,
         date_from=date_from,
@@ -2066,6 +2149,7 @@ def ask_costpilot(
     period = report.get("period") or {}
     context_plural = report.get("context_label_plural") or "Business Contexts"
     metric = parsed["metric"]
+    metric_contract = metric_definition(metric)
     intent = parsed["intent"]
     entity = parsed["entity"]
     direction = parsed["direction"]
@@ -2107,21 +2191,19 @@ def ask_costpilot(
 
     if intent == "comparison":
         current_value = _ask_row_metric(summary, metric)
-        current_start, current_end = _ask_audit_period(period)
-        if current_start and current_end:
-            span = max(current_end - current_start, timedelta(days=1))
-            previous_end = current_start
-            previous_start = previous_end - span
+        if comparison_execution_plan:
+            prior_period = comparison_execution_plan.comparison
             prior_report = project_activity_reporting(
                 workspace_id=request.workspace_id,
-                date_from=previous_start,
-                date_to=previous_end,
+                date_from=prior_period.start,
+                date_to=prior_period.end,
                 days=parsed["days"],
                 **reporting_filters,
                 activity_limit=1,
                 db=db,
             )
             prior_summary = prior_report.get("summary") or {}
+            comparison_coverage_result = comparison_coverage(summary, prior_summary)
             prior_value = _ask_row_metric(prior_summary, metric)
             change = current_value - prior_value
             pct = (change / prior_value * 100) if prior_value else None
@@ -2129,22 +2211,38 @@ def ask_costpilot(
             prior_display, _ = _ask_metric_value(metric, prior_value)
             change_display, _ = _ask_metric_value(metric, abs(change))
             direction_word = "increased" if change > 0 else "decreased" if change < 0 else "did not change"
+            plan_contract = comparison_execution_plan.contract()
+            primary_label = plan_contract["primary"]["label"]
+            comparison_label = plan_contract["comparison"]["label"]
+            comparison_descriptions = {
+                "same_period_previous_year": "the same calendar period last year",
+                "previous_month": "the calendar-aligned period one month earlier",
+                "previous_quarter": "the calendar-aligned period one quarter earlier",
+                "previous_period": "the immediately preceding equal-length period",
+            }
+            comparison_description = comparison_descriptions[comparison_execution_plan.mode]
             title = f"{metric_label.title()} comparison"
             answer = (
-                f"{metric_label.title()} was {current_display} for {period_label}, "
-                f"compared with {prior_display} in the immediately preceding period. "
+                f"{metric_label.title()} was {current_display} for {primary_label}, "
+                f"compared with {prior_display} for {comparison_label}, {comparison_description}. "
                 f"It {direction_word} by {change_display}"
                 + (f" ({abs(pct):.1f}%)." if pct is not None else ".")
             )
+            if not comparison_coverage_result["comparable"]:
+                answer += f" Coverage note: {comparison_coverage_result['limitation']}"
             evidence = [
-                {"label": period_label, "value": current_display, "metric_label": metric_label,
+                {"label": primary_label, "value": current_display, "metric_label": metric_label,
                  "detail": f"{int(summary.get('request_count') or 0):,} governed requests",
                  "filter_name": None, "filter_value": None},
-                {"label": "Immediately preceding period", "value": prior_display, "metric_label": metric_label,
+                {"label": comparison_label, "value": prior_display, "metric_label": metric_label,
                  "detail": f"{int(prior_summary.get('request_count') or 0):,} governed requests",
                  "filter_name": None, "filter_value": None},
             ]
-            calculation_formula = "Current period total minus the immediately preceding equal-length period total"
+            calculation_formula = "Primary period metric minus comparison period metric"
+            calculation_row_count = (
+                int(summary.get("request_count") or 0)
+                + int(prior_summary.get("request_count") or 0)
+            )
         else:
             title = "Period comparison"
             answer = "Choose a date range or ask for this week, month, quarter, or year so CostPilot can calculate an equal-period comparison."
@@ -2777,6 +2875,7 @@ def ask_costpilot(
     }
     calculation = {
         "metric": metric,
+        "metric_contract": metric_contract.public_contract(),
         "formula": calculation_formula or (
             "Sum of input tokens plus output tokens"
             if metric == "total_tokens"
@@ -2797,6 +2896,10 @@ def ask_costpilot(
         ),
         "period_label": period_label,
     }
+    if comparison_execution_plan:
+        calculation["comparison_plan"] = comparison_execution_plan.contract()
+        calculation["absolute_change"] = change
+        calculation["percent_change"] = pct
     conversation_context = {
         "intent": intent,
         "entity": entity,
@@ -2805,6 +2908,7 @@ def ask_costpilot(
         "days": int(parsed["days"]),
         "result_limit": int(result_limit),
         "period_key": parsed.get("period_key"),
+        "comparison_key": parsed.get("comparison_key"),
         "source_platform": parsed.get("source_platform"),
         "model_tier": parsed.get("model_tier"),
     }
@@ -2844,6 +2948,7 @@ def ask_costpilot(
             "simulator_requests": simulation_count,
             "active_filters": active_filters,
             "period_label": period_label,
+            "coverage": comparison_coverage_result,
         },
         "assistant_mode": assistant_mode,
         "interpreted_as": ask_interpretation_label(parsed),
