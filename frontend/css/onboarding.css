@@ -250,7 +250,18 @@
   margin-bottom: 2px;
 }
 .ob-relationship-row div > span { color: var(--text-muted); display: block; font-size: 9px; }
+.ob-relationship-row div > small { color: var(--text-muted); display: block; font-size: 8px; margin-top: 3px; opacity: .78; }
+.ob-relationship-row.recommended { border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); }
+.ob-relationship-row.recommended .ob-confidence { color: var(--accent); font-weight: 750; }
 .ob-child-behavior { min-width: 0; }
+.ob-advanced-relationships {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.ob-advanced-relationships summary { color: var(--text-primary); cursor: pointer; font-size: 11px; font-weight: 700; }
+.ob-advanced-relationships summary span { color: var(--text-muted); font-size: 9px; font-weight: 500; margin-left: 5px; }
+.ob-advanced-relationships > p { color: var(--text-muted); font-size: 9px; line-height: 1.45; margin: 7px 0 10px; }
 .ob-unmapped-choice {
   align-items: center;
   color: var(--text-primary);

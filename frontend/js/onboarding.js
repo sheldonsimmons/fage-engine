@@ -953,6 +953,33 @@ function renderDiscoveredMapping(payload) {
     `<option value="${_obEsc(field.name)}">${_obEsc(field.label)} · ${_obEsc(field.name)}</option>`
   ).join("");
   const children = (payload.child_relationships || []).slice(0, 30);
+  const isSalesforce = obDiscoveryPlatform === "salesforce";
+  const recommendedChildren = isSalesforce
+    ? children.filter(child => child.recommended).slice(0, 8)
+    : children;
+  const advancedChildren = isSalesforce
+    ? children.filter(child => !child.recommended)
+    : [];
+  const relationshipRow = (child, index, recommended) => `
+    <div class="ob-relationship-row${recommended ? " recommended" : " advanced"}"
+         data-child-index="${index}"
+         data-child-object="${_obEsc(child.object)}"
+         data-child-label="${_obEsc(child.label)}"
+         data-parent-field="${_obEsc(child.parent_field)}"
+         data-relationship-name="${_obEsc(child.relationship_name || "")}">
+      <div>
+        <strong>${_obEsc(child.label)}</strong>
+        <span>${_obEsc(child.recommendation_reason || `${child.object} links through ${child.parent_field}`)}</span>
+        <small>${_obEsc(child.object)} → ${_obEsc(child.parent_field)} → ${_obEsc(payload.object)}</small>
+      </div>
+      <select class="ob-input ob-child-behavior" aria-label="Attribution behavior for ${_obEsc(child.label)}">
+        <option value="track_and_rollup" ${recommended ? "selected" : ""}>Track separately + roll up</option>
+        <option value="rollup_only">Roll up to parent only</option>
+        <option value="separate">Track separately only</option>
+        <option value="ignore" ${recommended ? "" : "selected"}>Ignore for attribution</option>
+      </select>
+      <span class="ob-confidence">${recommended ? "Recommended" : "Optional"}</span>
+    </div>`;
   document.getElementById("obDiscoveryResults").innerHTML = `<div class="ob-discovery-mapping">
     <div class="ob-discovery-section-head">
       <span class="ob-context-eyebrow">Step 2 of 2</span>
@@ -971,30 +998,21 @@ function renderDiscoveredMapping(payload) {
     }).join("")}</div>
     </details>
     <div class="ob-discovery-section-head">
-      <strong>Related records to include</strong>
-      <span>Choose how AI activity from each related object should appear beneath the parent.</span>
+      <strong>Recommended business relationships</strong>
+      <span>CostPilot selected the records most likely to carry meaningful AI work. Recommended records remain visible separately and also roll up to the parent.</span>
     </div>
     <div class="ob-relationship-list">
-      ${children.length ? children.map((child, index) => `
-        <div class="ob-relationship-row"
-             data-child-index="${index}"
-             data-child-object="${_obEsc(child.object)}"
-             data-child-label="${_obEsc(child.label)}"
-             data-parent-field="${_obEsc(child.parent_field)}"
-             data-relationship-name="${_obEsc(child.relationship_name || "")}">
-          <div>
-            <strong>${_obEsc(child.label)}</strong>
-            <span>${_obEsc(child.object)} → ${_obEsc(child.parent_field)} → ${_obEsc(payload.object)}</span>
-          </div>
-          <select class="ob-input ob-child-behavior" aria-label="Attribution behavior for ${_obEsc(child.label)}">
-            <option value="track_and_rollup" ${child.confidence === "high" ? "selected" : ""}>Track separately + roll up</option>
-            <option value="rollup_only">Roll up to parent only</option>
-            <option value="separate">Track separately only</option>
-            <option value="ignore" ${child.confidence !== "high" ? "selected" : ""}>Ignore for attribution</option>
-          </select>
-          <span class="ob-confidence">${_obEsc(child.confidence)} match</span>
-        </div>`).join("") : '<div class="ob-discovery-status">No direct child relationships were found. You can continue with the parent object and add relationships later.</div>'}
+      ${recommendedChildren.length
+        ? recommendedChildren.map((child, index) => relationshipRow(child, index, true)).join("")
+        : '<div class="ob-discovery-status">No high-value business relationships were recommended. The parent can still be used by itself.</div>'}
     </div>
+    ${advancedChildren.length ? `<details class="ob-advanced-relationships">
+      <summary>Other valid relationships <span>${advancedChildren.length} hidden</span></summary>
+      <p>These are direct Salesforce relationships, but they are less likely to represent executive business work. They remain ignored unless you explicitly include them.</p>
+      <div class="ob-relationship-list">
+        ${advancedChildren.map((child, index) => relationshipRow(child, recommendedChildren.length + index, false)).join("")}
+      </div>
+    </details>` : ""}
     <label class="ob-unmapped-choice">
       <span>Records without an approved relationship</span>
       <select class="ob-input" id="obUnmappedBehavior">

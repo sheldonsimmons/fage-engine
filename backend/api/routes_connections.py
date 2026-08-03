@@ -456,8 +456,11 @@ def recommend_business_mapping(fields: list[dict]) -> dict:
     return recommendations
 
 
-def recommend_child_relationships(relationships: list[dict]) -> list[dict]:
-    """Return useful direct children from a platform parent-object description."""
+def recommend_child_relationships(
+    relationships: list[dict],
+    parent_object: Optional[str] = None,
+) -> list[dict]:
+    """Rank business-useful direct children and remove Salesforce schema noise."""
     suggestions = []
     ignored_suffixes = (
         "ChangeEvent",
@@ -477,6 +480,24 @@ def recommend_child_relationships(relationships: list[dict]) -> list[dict]:
         "ProcessInstance",
         "Task",
     }
+    ignored_prefixes = (
+        "Apex", "Async", "Auth", "CollaborationGroup", "Content", "Cron",
+        "DuplicateRecord", "Email", "EntitySubscription", "Flow", "Login",
+        "Network", "Permission", "Process", "RecordAction", "RecordAlert",
+        "Setup", "User",
+    )
+    business_scores = {
+        "Opportunity": (100, "Revenue and pipeline activity"),
+        "Case": (98, "Customer service activity"),
+        "Contact": (94, "Customer stakeholder activity"),
+        "Contract": (92, "Commercial agreement activity"),
+        "Order": (90, "Customer order activity"),
+        "Quote": (88, "Pricing and proposal activity"),
+        "WorkOrder": (88, "Service delivery activity"),
+        "Asset": (86, "Customer asset activity"),
+        "Campaign": (84, "Marketing activity"),
+    }
+    normalized_parent = str(parent_object or "").strip().lower()
     for relationship in relationships:
         child_object = str(relationship.get("childSObject") or "").strip()
         parent_field = str(relationship.get("field") or "").strip()
@@ -484,31 +505,31 @@ def recommend_child_relationships(relationships: list[dict]) -> list[dict]:
         if (
             not child_object
             or not parent_field
+            or (normalized_parent and child_object.lower() == normalized_parent)
             or child_object in ignored_objects
             or child_object.endswith(ignored_suffixes)
+            or child_object.startswith(ignored_prefixes)
+            or not relationship_name
         ):
             continue
         is_custom = child_object.endswith("__c")
-        common_child = child_object in {
-            "Account",
-            "Case",
-            "Contact",
-            "Contract",
-            "Lead",
-            "Opportunity",
-            "Order",
-            "Quote",
-            "WorkOrder",
-        }
-        score = 100 if is_custom else 90 if common_child else 60
+        if child_object in business_scores:
+            score, reason = business_scores[child_object]
+        elif is_custom:
+            score, reason = 82, "Custom business record linked to this parent"
+        else:
+            score, reason = 45, "Direct Salesforce relationship"
+        recommended = score >= 80
         suggestions.append({
             "object": child_object,
             "label": child_object.removesuffix("__c").replace("_", " "),
             "parent_field": parent_field,
             "relationship_name": relationship_name or None,
             "cascade_delete": bool(relationship.get("cascadeDelete")),
-            "confidence": "high" if score >= 90 else "medium",
+            "confidence": "high" if score >= 90 else "medium" if score >= 80 else "low",
             "score": score,
+            "recommended": recommended,
+            "recommendation_reason": reason,
             "recommended_behavior": "track_and_rollup",
         })
     suggestions.sort(key=lambda item: (-item["score"], item["label"].lower(), item["object"]))
@@ -1609,7 +1630,10 @@ async def discover_object_fields(
             for field in payload.get("fields", [])
         ]
         object_label = payload.get("label", body.object_name)
-        child_relationships = recommend_child_relationships(payload.get("childRelationships", []))
+        child_relationships = recommend_child_relationships(
+            payload.get("childRelationships", []),
+            parent_object=body.object_name,
+        )
     else:
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", body.object_name):
             raise HTTPException(status_code=400, detail="Invalid ServiceNow table name")
@@ -1718,7 +1742,10 @@ async def scan_context_changes(connection_id: int, db: Session = Depends(get_db)
         if obj.get("name") and obj.get("queryable") and not obj.get("deprecatedAndHidden")
     ]
     describe = await _salesforce_get(item, f"sobjects/{quote(parent_object, safe='')}/describe")
-    relationships = recommend_child_relationships(describe.get("childRelationships", []))
+    relationships = recommend_child_relationships(
+        describe.get("childRelationships", []),
+        parent_object=parent_object,
+    )
     current = _build_context_snapshot(objects, parent_object, relationships)
     discovery = _json_object(item.discovery_json)
     monitor = discovery.get("context_monitor") if isinstance(discovery.get("context_monitor"), dict) else {}

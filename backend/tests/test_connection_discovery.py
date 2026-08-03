@@ -641,13 +641,31 @@ def test_parent_metadata_produces_useful_child_relationship_suggestions():
             "field": "AccountId",
             "relationshipName": "Histories",
         },
+        {
+            "childSObject": "Account",
+            "field": "ParentId",
+            "relationshipName": "ChildAccounts",
+        },
+        {
+            "childSObject": "ContentDocumentLink",
+            "field": "LinkedEntityId",
+            "relationshipName": "ContentDocumentLinks",
+        },
+        {
+            "childSObject": "ForecastingItem",
+            "field": "AccountId",
+            "relationshipName": "ForecastingItems",
+        },
     ]
-    suggestions = recommend_child_relationships(relationships)
+    suggestions = recommend_child_relationships(relationships, parent_object="Account")
 
-    assert [item["object"] for item in suggestions] == ["Project_Task__c", "Opportunity"]
-    assert suggestions[0]["parent_field"] == "Project__c"
+    assert [item["object"] for item in suggestions] == ["Opportunity", "Project_Task__c", "ForecastingItem"]
+    assert suggestions[0]["recommendation_reason"] == "Revenue and pipeline activity"
     assert suggestions[0]["recommended_behavior"] == "track_and_rollup"
-    assert all(item["confidence"] == "high" for item in suggestions)
+    assert suggestions[0]["recommended"] is True
+    assert suggestions[1]["recommended"] is True
+    assert suggestions[2]["recommended"] is False
+    assert suggestions[2]["confidence"] == "low"
 
 
 def test_approved_salesforce_mapping_remains_in_mapping_status():
