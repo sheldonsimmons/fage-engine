@@ -108,6 +108,28 @@ def test_universal_work_records_are_tenant_scoped_and_synced():
     assert db.query(WorkItem).count() == 2
 
 
+def test_work_source_identity_is_stable_across_agent_platforms_and_reruns():
+    db = _session()
+    first = _universal_payload("Salesforce", "SIM-WORKSPACE", "NORTHSTAR-AUDIT")
+    second = _universal_payload("Microsoft Teams", "SIM-WORKSPACE", "NORTHSTAR-AUDIT")
+    first["work"]["source_platform"] = "CostPilot Simulator"
+    second["work"]["source_platform"] = "CostPilot Simulator"
+
+    first_request = RouteRequest(**first)
+    second_request = RouteRequest(**second)
+    _normalize_universal_request(first_request)
+    _normalize_universal_request(second_request)
+
+    item_a = _resolve_work_item(db, first_request, "Legal")
+    item_b = _resolve_work_item(db, second_request, "Legal")
+    rerun_item = _resolve_work_item(db, first_request, "Legal")
+
+    assert item_a.id == item_b.id == rerun_item.id
+    assert item_a.source_platform == "CostPilot Simulator"
+    assert item_a.source_record_id == "NORTHSTAR-AUDIT"
+    assert db.query(WorkItem).count() == 1
+
+
 def test_platform_native_record_type_is_preserved_with_safe_custom_category():
     db = _session()
     request = RouteRequest(

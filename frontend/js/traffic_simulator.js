@@ -624,6 +624,7 @@
           external_id: item.work.id,
           type: item.work.type,
           name: `${item.work.account} — ${item.work.name}`,
+          source_platform: "CostPilot Simulator",
           sync_if_missing: true,
           department: item.work.department,
         },

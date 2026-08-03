@@ -57,6 +57,7 @@ class UniversalWorkContext(BaseModel):
     external_id: str
     type: str = "project"
     name: Optional[str] = None
+    source_platform: Optional[str] = None
     sync_if_missing: bool = False
     department: Optional[str] = None
 
@@ -162,7 +163,10 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
 
     if req.work_context:
         work = req.work_context
-        platform = (req.source_platform or "Custom").strip() or "Custom"
+        # A request can run on a different platform from the system that owns
+        # its business record. Keep those identities separate so two agents
+        # working the same record do not create duplicate work items.
+        platform = (work.source_platform or req.source_platform or "Custom").strip() or "Custom"
         workspace_id = (req.actor_workspace_id or "default").strip() or "default"
         source_record_id = work.external_id.strip()
         item = (
