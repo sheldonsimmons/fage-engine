@@ -957,6 +957,7 @@ def business_context_reporting(
         "case": ("Case", "Cases"),
         "opportunity": ("Opportunity", "Opportunities"),
         "engagement": ("Engagement", "Engagements"),
+        "custom": ("Business Context", "Business Contexts"),
     }
     singular_label, plural_label = labels.get(
         context_type,
@@ -1329,6 +1330,7 @@ def project_activity_reporting(
         "case": ("Case", "Cases"),
         "opportunity": ("Opportunity", "Opportunities"),
         "engagement": ("Engagement", "Engagements"),
+        "custom": ("Business Context", "Business Contexts"),
         "work": ("Work", "Work"),
     }
     context_label, context_label_plural = context_labels.get(

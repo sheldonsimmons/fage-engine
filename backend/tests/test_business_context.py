@@ -417,6 +417,32 @@ def test_business_context_reporting_counts_transactions_once_and_keeps_origin():
     assert report["attribution"]["coverage_pct"] == 66.7
 
 
+def test_custom_context_uses_business_context_label_instead_of_customs():
+    db = _session()
+    item = WorkItem(
+        external_id="CUSTOM-1",
+        name="Configured business record",
+        context_type="custom",
+        status="active",
+    )
+    db.add(item)
+    db.flush()
+    db.add(TokenTransaction(
+        department="Operations",
+        work_item_id=item.id,
+        model_tier="Scout",
+        input_tokens=10,
+        output_tokens=5,
+        cost_usd=0.01,
+    ))
+    db.commit()
+
+    report = business_context_reporting(workspace_id=None, days=30, limit=10, db=db)
+
+    assert report["context_label"] == "Business Context"
+    assert report["context_label_plural"] == "Business Contexts"
+
+
 def test_project_activity_report_links_person_agent_account_project_and_cost():
     db = _session()
     account = WorkAccount(

@@ -2479,6 +2479,14 @@ function executiveAttributionUrl() {
   return `/api/work-items/organizational-usage?${params.toString()}`;
 }
 
+function executiveScopedUrl(path, params = {}) {
+  const query = new URLSearchParams(params);
+  const workspaceId = localStorage.getItem("cp_workspace_id") || "";
+  if (workspaceId) query.set("workspace_id", workspaceId);
+  const suffix = query.toString();
+  return suffix ? `${path}?${suffix}` : path;
+}
+
 async function refreshExecutiveAttribution() {
   if (!execData) return;
   try {
@@ -4330,15 +4338,19 @@ function setExecGlanceConcentration(view) {
   execGlanceConcentrationView = ["department", "project", "person", "agent", "model"].includes(view)
     ? view
     : "department";
+  updateExecGlanceConcentrationHeading();
+  renderExecGlanceConcentration();
+}
+
+function updateExecGlanceConcentrationHeading(contextPluralLabel = "Business Contexts") {
   const headings = {
     department: "AI activity by department",
-    project: "AI activity by business context",
+    project: `AI activity by ${String(contextPluralLabel).toLowerCase()}`,
     person: "AI activity by person",
     agent: "AI activity by agent",
     model: "AI activity by model",
   };
   setText("execGlanceConcentrationHeading", headings[execGlanceConcentrationView]);
-  renderExecGlanceConcentration();
 }
 
 function execChangeLabel(current, previous, formatter = value => fmtNum(value)) {
@@ -4543,7 +4555,7 @@ function renderExecutiveGlance(events, data, context) {
   };
   const pluralLabel = contextReport?.context_label_plural || "Business Contexts";
   setText("execGlanceProjectButton", pluralLabel);
-  setText("execGlanceConcentrationHeading", `AI activity by ${pluralLabel.toLowerCase()}`);
+  updateExecGlanceConcentrationHeading(pluralLabel);
   const attribution = contextReport?.attribution;
   const attributionEl = document.getElementById("execGlanceAttribution");
   if (attributionEl) {
@@ -4963,19 +4975,19 @@ function renderExecFallback(data, error) {
 async function loadExec() {
   try {
     const [dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage] = await Promise.all([
-      apiGet("/api/dashboard"),
-      apiGet("/api/timeseries?days=180"),
-      apiGet("/api/audit?limit=5000"),
+      apiGet(executiveScopedUrl("/api/dashboard")),
+      apiGet(executiveScopedUrl("/api/timeseries", { days: "180" })),
+      apiGet(executiveScopedUrl("/api/audit", { limit: "5000" })),
       apiGet("/api/agents"),
       apiGet("/api/models").catch(err => {
         console.warn("Model registry load failed; using tier labels:", err.message);
         return [];
       }),
-      apiGet("/api/audit/review-status").catch(err => {
+      apiGet(executiveScopedUrl("/api/audit/review-status")).catch(err => {
         console.warn("Blocked review status load failed:", err.message);
         return { reviewed_through_id: 0, unreviewed_blocked_count: 0 };
       }),
-      apiGet("/api/work-items/reporting?days=30&limit=10").catch(err => {
+      apiGet(executiveScopedUrl("/api/work-items/reporting", { days: "30", limit: "10" })).catch(err => {
         console.warn("Business-context reporting load failed:", err.message);
         return null;
       }),
