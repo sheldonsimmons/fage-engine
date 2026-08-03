@@ -100,6 +100,15 @@ def _run_migrations():
                 ensure_column(conn, "token_transactions", column, definition)
             except Exception:
                 pass
+        for table in ("token_transactions", "audit_events"):
+            try:
+                conn.execute(text(
+                    f"CREATE INDEX IF NOT EXISTS ix_{table}_governed_request_id "
+                    f"ON {table} (governed_request_id)"
+                ))
+                conn.commit()
+            except Exception:
+                pass
         try:
             ensure_column(conn, "token_transactions", "work_item_id", "INTEGER REFERENCES work_items(id)")
         except Exception:
@@ -131,6 +140,34 @@ def _run_migrations():
                     ensure_column(conn, table, column, definition)
                 except Exception:
                     pass
+        for table in ("token_transactions", "audit_events"):
+            for column, definition in (
+                ("governed_request_id", "VARCHAR"),
+                ("requested_model_name", "VARCHAR"),
+                ("requested_model_tier", "VARCHAR"),
+                ("routing_policy_version", "VARCHAR"),
+                ("execution_status", "VARCHAR"),
+            ):
+                try:
+                    ensure_column(conn, table, column, definition)
+                except Exception:
+                    pass
+        for column, definition in (
+            ("provider_status_code", "INTEGER"),
+        ):
+            try:
+                ensure_column(conn, "token_transactions", column, definition)
+            except Exception:
+                pass
+        for column, definition in (
+            ("selected_model_name", "VARCHAR"),
+            ("selected_model_tier", "VARCHAR"),
+            ("routing_reason_code", "VARCHAR"),
+        ):
+            try:
+                ensure_column(conn, "audit_events", column, definition)
+            except Exception:
+                pass
         for table, column, definition in (
             ("registered_agents", "owner_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
             ("work_items", "org_unit_id", "INTEGER REFERENCES organizational_units(id)"),

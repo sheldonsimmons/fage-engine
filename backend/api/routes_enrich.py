@@ -46,6 +46,7 @@ class SalesforceEnrichRequest(BaseModel):
 
 
 class EnrichResponse(BaseModel):
+    governed_request_id:        Optional[str] = None
     # Routing fields (same as RouteResponse)
     department:                 str
     complexity:                 str
@@ -195,6 +196,8 @@ async def enrich_and_route_salesforce(
       6. Write transaction + audit event
       7. Return routing result + enrichment metadata
     """
+    from core.governed_requests import new_governed_request_id, ROUTING_POLICY_VERSION
+    governed_request_id = new_governed_request_id()
     # ── Step 1+2: Fetch and assemble ──────────────────────────────────────────
     try:
         case_data, comments, emails = await _fetch_sf_context(
@@ -254,6 +257,10 @@ async def enrich_and_route_salesforce(
             matched_keywords = [m["term"] for m in term_result["matches"]],
             cost_usd         = 0.0,
             decision_outcome = "Request blocked by sensitive term policy",
+            governed_request_id = governed_request_id,
+            routing_policy_version = ROUTING_POLICY_VERSION,
+            routing_reason_code = "SENSITIVE_TERM_BLOCK",
+            execution_status = "blocked",
         )
         raise HTTPException(
             status_code=451,
@@ -305,6 +312,7 @@ async def enrich_and_route_salesforce(
 
     # ── Step 6: Persist transaction ───────────────────────────────────────────
     tx = TokenTransaction(
+        governed_request_id = governed_request_id,
         department      = req.department,
         source_platform = req.source_platform,
         agent_id        = agent.id if agent else None,
@@ -318,6 +326,8 @@ async def enrich_and_route_salesforce(
         cost_usd        = result["cost_usd"],
         timestamp       = datetime.utcnow(),
         routing_reason  = result["routing_decision"],
+        routing_policy_version = ROUTING_POLICY_VERSION,
+        execution_status = "succeeded",
         was_pruned      = True,
         tokens_saved    = pruned["tokens_saved"],
     )
@@ -371,6 +381,10 @@ async def enrich_and_route_salesforce(
                 resolved_model_tier = result.get("resolved_model_tier"),
                 model_source     = result.get("model_source"),
                 routing_cascaded = result.get("routing_cascaded", False),
+                governed_request_id = governed_request_id,
+                routing_policy_version = ROUTING_POLICY_VERSION,
+                routing_reason_code = result["routing_decision"],
+                execution_status = "succeeded",
             )
         except Exception:
             pass
@@ -384,6 +398,7 @@ async def enrich_and_route_salesforce(
         budget_remaining_usd = 0.0
 
     return EnrichResponse(
+        governed_request_id        = governed_request_id,
         **result,
         budget_used_pct           = budget_used_pct,
         budget_remaining_usd      = budget_remaining_usd,

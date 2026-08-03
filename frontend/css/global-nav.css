@@ -490,6 +490,30 @@
   font-size: .75rem;
 }
 
+.cp-ask-interpretation {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: .75rem 0;
+  padding: .6rem .7rem;
+  border: 1px solid var(--border, #2c3b4d);
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--accent, #3b82f6) 7%, transparent);
+}
+
+.cp-ask-interpretation strong {
+  color: var(--accent, #60a5fa);
+  font-size: .65rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cp-ask-interpretation span {
+  color: var(--text, #e7edf6);
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
 .cp-ask-recommendations {
   display: grid;
   gap: .5rem;

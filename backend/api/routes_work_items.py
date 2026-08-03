@@ -998,6 +998,9 @@ def project_activity_reporting(
     db: Session = Depends(get_db),
 ):
     """Factual user → agent → account/project → token-cost attribution."""
+    # Direct internal/test calls do not receive FastAPI's dependency coercion.
+    if not isinstance(model_tier, (str, type(None))):
+        model_tier = None
     period_end = date_to or datetime.utcnow()
     period_start = date_from or (period_end - timedelta(days=days))
     if period_start >= period_end:
@@ -1085,6 +1088,20 @@ def project_activity_reporting(
         return True
 
     rows = [row for row in base_rows if matches(row)]
+    governed_ids = {
+        row[0].governed_request_id for row in rows
+        if row[0].governed_request_id
+    }
+    audit_by_request = {}
+    if governed_ids:
+        audit_rows = (
+            db.query(AuditEvent)
+            .filter(AuditEvent.governed_request_id.in_(governed_ids))
+            .order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc())
+            .all()
+        )
+        for audit in audit_rows:
+            audit_by_request.setdefault(audit.governed_request_id, audit)
 
     def is_simulator_traffic(row):
         tx, project, _, user, agent = row
@@ -1194,8 +1211,10 @@ def project_activity_reporting(
     activities = []
     for tx, project, account, user, agent in rows[:activity_limit]:
         item = identity((tx, project, account, user, agent))
+        audit = audit_by_request.get(tx.governed_request_id)
         activities.append({
             "transaction_id": tx.id,
+            "governed_request_id": tx.governed_request_id,
             "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
             **item,
             "source_platform": tx.source_platform,
@@ -1211,6 +1230,16 @@ def project_activity_reporting(
             "cost_usd": round(float(tx.cost_usd or 0.0), 6),
             "was_pruned": bool(tx.was_pruned),
             "routing_reason": tx.routing_reason,
+            "routing_policy_version": tx.routing_policy_version,
+            "requested_model_name": tx.requested_model_name,
+            "requested_model_tier": tx.requested_model_tier,
+            "execution_status": tx.execution_status,
+            "provider_status_code": tx.provider_status_code,
+            "audit_event_id": audit.id if audit else None,
+            "audit_rationale": audit.rationale if audit else None,
+            "decision_outcome": audit.decision_outcome if audit else None,
+            "risk_level": audit.risk_level if audit else None,
+            "routing_reason_code": audit.routing_reason_code if audit else None,
             "is_simulation": is_simulator_traffic((tx, project, account, user, agent)),
         })
 
@@ -1312,6 +1341,16 @@ def project_activity_reporting(
         "activities": activities,
         "activity_count": len(rows),
         "activity_limit": activity_limit,
+        "evidence_quality": {
+            "request_identity_count": sum(
+                1 for row in rows if row[0].governed_request_id
+            ),
+            "correlated_request_count": sum(
+                1 for row in rows
+                if row[0].governed_request_id in audit_by_request
+            ),
+            "total_request_count": len(rows),
+        },
         "measurement_note": (
             "This report attributes AI consumption only. It does not score employee "
             "productivity or infer business outcomes."

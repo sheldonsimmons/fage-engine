@@ -3,6 +3,11 @@ import sys
 from datetime import datetime
 from types import SimpleNamespace
 
+from core.ask_costpilot_contracts import (
+    canonical_ask_intent,
+    validate_ask_answer_contract,
+)
+
 from api.routes_efficiency import (
     _ask_conversation_text,
     _ask_evidence,
@@ -15,6 +20,7 @@ from api.routes_efficiency import (
     _ask_period_bounds,
     _ask_rank,
     _ask_reporting_filters,
+    _resolve_ask_intent,
     AskCostPilotMessage,
     AskCostPilotRequest,
     AskCostPilotContext,
@@ -194,6 +200,111 @@ def test_low_usage_agent_question_accepts_explicit_threshold():
     assert intent["intent"] == "agent_adoption"
     assert intent["usage_status"] == "low"
     assert intent["usage_threshold"] == 5
+
+
+def test_never_been_used_question_is_exact_agent_adoption_query():
+    intent = _ask_intent(
+        "Which agents have never been used?",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "agent_adoption"
+    assert intent["entity"] == "agent"
+    assert intent["metric"] == "request_count"
+    assert intent["usage_status"] == "never"
+
+    resolved, mode = _resolve_ask_intent(
+        AskCostPilotRequest(question="Which agents have never been used?")
+    )
+    assert resolved["intent"] == "agent_adoption"
+    assert resolved["usage_status"] == "never"
+    assert mode == "canonical_intent"
+
+
+def test_demo_critical_never_used_paraphrases_share_one_contract():
+    questions = (
+        "Which agents have never been used?",
+        "Show me agents with zero lifetime usage.",
+        "Which registered agents have no lifetime activity?",
+        "Are there bots nobody has run?",
+        "Show unused agents.",
+        "Which bots have never executed?",
+    )
+
+    for question in questions:
+        intent = _ask_intent(question, default_days=30)
+        assert intent["canonical_intent"] == "agents_never_used", question
+        assert intent["intent"] == "agent_adoption", question
+        assert intent["entity"] == "agent", question
+        assert intent["usage_status"] == "never", question
+        assert "zero lifetime" in intent["interpreted_as"].lower(), question
+
+
+def test_demo_critical_questions_use_canonical_contracts():
+    cases = (
+        ("Which agents cost the most this month?", "agent_cost_ranking", "agent", "spend_usd"),
+        ("Which department spent the most this month?", "department_spend_ranking", "department", "spend_usd"),
+        ("Which model generated the highest cost?", "model_cost_ranking", "model", "spend_usd"),
+        ("Why were requests blocked?", "blocked_reasons", "overview", "request_count"),
+        ("How much did pruning save?", "pruning_impact", "overview", "tokens_saved"),
+        ("Which departments are close to budget?", "budget_alerts", "department", "spend_usd"),
+        ("How much has CostPilot saved?", "savings_total", "overview", "spend_usd"),
+        ("Compare live activity with simulator traffic.", "source_mix", "overview", "request_count"),
+    )
+
+    for question, contract, entity, metric in cases:
+        intent = _ask_intent(question, default_days=30)
+        assert intent["canonical_intent"] == contract, question
+        assert intent["entity"] == entity, question
+        assert intent["metric"] == metric, question
+        resolved, mode = _resolve_ask_intent(AskCostPilotRequest(question=question))
+        assert resolved["canonical_intent"] == contract, question
+        assert mode == "canonical_intent", question
+
+
+def test_never_used_answer_contract_rejects_project_spend_response():
+    parsed = {
+        **canonical_ask_intent("Which agents have never been used?"),
+        "canonical_intent": "agents_never_used",
+    }
+    wrong_payload = {
+        "intent": "overview",
+        "entity": "context",
+        "metric": "spend_usd",
+        "evidence": [{
+            "label": "Apex Industrial — Warranty Claim",
+            "value": "$0.2376",
+            "metric_label": "AI spend",
+            "detail": "9 requests",
+            "filter_name": "project_id",
+        }],
+    }
+
+    issues = validate_ask_answer_contract(parsed, wrong_payload)
+
+    assert issues
+    assert any("non-agent evidence" in issue for issue in issues)
+
+
+def test_never_used_answer_contract_accepts_zero_lifetime_agent_rows():
+    parsed = {
+        **canonical_ask_intent("Which agents have never been used?"),
+        "canonical_intent": "agents_never_used",
+    }
+    payload = {
+        "intent": "agent_adoption",
+        "entity": "agent",
+        "metric": "request_count",
+        "evidence": [{
+            "label": "Contract Review Agent",
+            "value": "0",
+            "metric_label": "requests in period",
+            "detail": "Never used · Salesforce · Legal · 0 lifetime requests",
+            "filter_name": "agent_id",
+        }],
+    }
+
+    assert validate_ask_answer_contract(parsed, payload) == []
 
 
 def test_threshold_followup_preserves_prior_adoption_status():

@@ -65,12 +65,15 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
     Input is pruned first (strips HTML, email headers, reply chains, legal
     disclaimers, and signatures) so Voice Guard scans clean content only.
     """
+    from core.governed_requests import new_governed_request_id, ROUTING_POLICY_VERSION
+    governed_request_id = new_governed_request_id()
     pruned = prune(req.transcript)
     result = process_transcript(pruned["cleaned_text"])
 
     # Record pruning savings in TokenTransaction so dashboard KPIs reflect them
     if pruned["tokens_saved"] > 0:
         prune_tx = TokenTransaction(
+            governed_request_id=governed_request_id,
             department=req.department or "Voice Guard",
             source_platform=req.platform or "Voice Guard",
             model_tier="micro",
@@ -78,6 +81,8 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
             output_tokens=0,
             cost_usd=0.0,
             routing_reason="VOICE_GUARD_PRUNE",
+            routing_policy_version=ROUTING_POLICY_VERSION,
+            execution_status="succeeded",
             was_pruned=True,
             tokens_saved=pruned["tokens_saved"],
         )

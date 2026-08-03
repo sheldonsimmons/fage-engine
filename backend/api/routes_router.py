@@ -224,6 +224,7 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
 
 
 class RouteResponse(BaseModel):
+    governed_request_id:        Optional[str] = None
     department:                 str
     complexity:                 str
     routing_decision:           str
@@ -472,6 +473,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       6. Record transaction and update department spend in the DB
     """
     req = _normalize_universal_request(req)
+    from core.governed_requests import new_governed_request_id, ROUTING_POLICY_VERSION
+    governed_request_id = new_governed_request_id()
     department = _resolve_department(db, req)
 
     # ── Resolve optional project/matter/engagement context ───────────────────
@@ -580,6 +583,10 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             origin_record_name = req.origin_record_name,
             is_simulation    = bool(req.synthetic_simulation),
             attribution      = attribution,
+            governed_request_id = governed_request_id,
+            routing_policy_version = ROUTING_POLICY_VERSION,
+            routing_reason_code = "SENSITIVE_TERM_BLOCK",
+            execution_status = "blocked",
         )
         from fastapi import HTTPException
         raise HTTPException(
@@ -660,6 +667,10 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 origin_record_name=req.origin_record_name,
                 is_simulation=bool(req.synthetic_simulation),
                 attribution=attribution,
+                governed_request_id=governed_request_id,
+                routing_policy_version=ROUTING_POLICY_VERSION,
+                routing_reason_code="PROJECT_BUDGET_BLOCK",
+                execution_status="blocked",
             )
             raise HTTPException(
                 status_code=429,
@@ -692,6 +703,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         # ── Persist the token transaction ──────────────────────────────────────
         from core.agentlake import infer_platform
         tx = TokenTransaction(
+            governed_request_id = governed_request_id,
             department      = department,
             source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
             agent_id        = agent.id if agent else req.agent_id,
@@ -717,6 +729,8 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             cost_usd       = result["cost_usd"],
             timestamp      = datetime.utcnow(),
             routing_reason = result["routing_decision"],
+            routing_policy_version = ROUTING_POLICY_VERSION,
+            execution_status = "succeeded",
             was_pruned     = result["was_pruned"],
             tokens_saved   = result["tokens_saved_by_pruning"],
         )
@@ -805,6 +819,10 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 origin_record_name = req.origin_record_name,
                 is_simulation    = bool(req.synthetic_simulation),
                 attribution      = attribution,
+                governed_request_id = governed_request_id,
+                routing_policy_version = ROUTING_POLICY_VERSION,
+                routing_reason_code = result["routing_decision"],
+                execution_status = "succeeded",
             )
         except Exception:
             pass  # Never let audit write failure break the routing response
@@ -841,6 +859,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         budget_remaining_usd = 0.0
 
     return RouteResponse(
+        governed_request_id        = governed_request_id,
         **result,
         budget_used_pct           = budget_used_pct,
         budget_remaining_usd      = budget_remaining_usd,

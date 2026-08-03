@@ -390,6 +390,26 @@
 .badge-event    { background: rgba(188,140,255,0.12); color: var(--accent-purple); }
 
 /* ── Ask CostPilot ───────────────────────────────────────────────────────────── */
+.ask-interpretation {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 10px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-base);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.ask-interpretation strong {
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
 .sr-only {
   position: absolute !important;
   width: 1px; height: 1px;

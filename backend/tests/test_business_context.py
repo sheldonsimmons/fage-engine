@@ -423,6 +423,8 @@ def test_project_activity_report_links_person_agent_account_project_and_cost():
         "people_count": 1,
         "agent_count": 1,
         "project_count": 1,
+        "simulation_count": 0,
+        "live_count": 1,
     }
     activity = report["activities"][0]
     assert activity["user_name"] == "Maria Lopez"

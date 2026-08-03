@@ -254,6 +254,12 @@ def write_audit_event(
     origin_record_name: str      = None,
     is_simulation:    bool       = False,
     attribution:      dict       = None,
+    governed_request_id: str     = None,
+    requested_model_name: str    = None,
+    requested_model_tier: str    = None,
+    routing_policy_version: str  = None,
+    routing_reason_code: str     = None,
+    execution_status: str        = None,
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
@@ -282,6 +288,14 @@ def write_audit_event(
     if model_source:
         context["model_source"] = model_source
     context["routing_cascaded"] = bool(routing_cascaded)
+    if governed_request_id:
+        context["governed_request_id"] = governed_request_id
+    if requested_model_name:
+        context["requested_model_name"] = requested_model_name
+    if requested_model_tier:
+        context["requested_model_tier"] = requested_model_tier
+    if routing_policy_version:
+        context["routing_policy_version"] = routing_policy_version
     if work_item:
         context["work_item_id"] = work_item.external_id
         context["work_item_name"] = work_item.name
@@ -304,6 +318,7 @@ def write_audit_event(
     now = datetime.utcnow()
 
     event = AuditEvent(
+        governed_request_id = governed_request_id,
         event_type       = event_type,
         agent_id         = agent_id,
         work_item_id     = work_item.id if work_item else None,
@@ -328,6 +343,13 @@ def write_audit_event(
         attribution_confidence = attribution.get("attribution_confidence"),
         department       = department,
         model_tier       = model_tier,
+        requested_model_name = requested_model_name,
+        requested_model_tier = requested_model_tier,
+        selected_model_name = model_name,
+        selected_model_tier = resolved_model_tier or model_tier,
+        routing_policy_version = routing_policy_version,
+        routing_reason_code = routing_reason_code or routing_decision,
+        execution_status = execution_status,
         context_snapshot = json.dumps(context),
         prompt_payload   = prompt_payload[:2000],
         raw_payload      = raw_payload[:5000] if raw_payload else None,
@@ -346,6 +368,7 @@ def write_audit_event(
 
     file_record = {
         "audit_id":         event.id,
+        "governed_request_id": governed_request_id,
         "timestamp":        now.isoformat(),
         "event_type":       event_type,
         "department":       department,

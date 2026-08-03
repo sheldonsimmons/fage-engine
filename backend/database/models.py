@@ -311,6 +311,7 @@ class TokenTransaction(Base):
     __tablename__ = "token_transactions"
 
     id              = Column(Integer,  primary_key=True, index=True)
+    governed_request_id = Column(String, nullable=True, index=True)
     department      = Column(String,   nullable=False)
     source_platform = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     agent_id        = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
@@ -335,6 +336,8 @@ class TokenTransaction(Base):
     attribution_source = Column(String, nullable=True)
     attribution_confidence = Column(String, nullable=True)
     model_tier      = Column(String,   nullable=False)    # micro | flagship
+    requested_model_name = Column(String, nullable=True)
+    requested_model_tier = Column(String, nullable=True)
     model_name      = Column(String,   nullable=True)     # exact provider/registry model used
     resolved_model_tier = Column(String, nullable=True)   # actual tier after cascade
     model_source    = Column(String,   nullable=True)     # registry | built_in_fallback | provider_proxy
@@ -346,6 +349,9 @@ class TokenTransaction(Base):
     cost_usd       = Column(Float,    nullable=False)
     timestamp      = Column(DateTime, default=datetime.utcnow)
     routing_reason = Column(String,   nullable=True)     # ROUTINE | COMPLEX | THROTTLED
+    routing_policy_version = Column(String, nullable=True)
+    execution_status = Column(String, nullable=True)     # succeeded | failed | blocked
+    provider_status_code = Column(Integer, nullable=True)
     was_pruned     = Column(Boolean,  default=False)
     tokens_saved   = Column(Integer,  default=0)
 
@@ -362,6 +368,7 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
 
     id               = Column(Integer,  primary_key=True, index=True)
+    governed_request_id = Column(String, nullable=True, index=True)
     event_type       = Column(String,   nullable=False)   # ROUTING | THROTTLE | LOCK | DECISION
     agent_id         = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
     work_item_id     = Column(Integer,  ForeignKey("work_items.id"), nullable=True, index=True)
@@ -386,6 +393,13 @@ class AuditEvent(Base):
     attribution_confidence = Column(String, nullable=True)
     department       = Column(String,   nullable=False)
     model_tier       = Column(String,   nullable=True)
+    requested_model_name = Column(String, nullable=True)
+    requested_model_tier = Column(String, nullable=True)
+    selected_model_name = Column(String, nullable=True)
+    selected_model_tier = Column(String, nullable=True)
+    routing_policy_version = Column(String, nullable=True)
+    routing_reason_code = Column(String, nullable=True)
+    execution_status = Column(String, nullable=True)
     context_snapshot = Column(Text,     nullable=True)    # JSON string — frozen system state
     prompt_payload   = Column(Text,     nullable=True)    # The exact pruned text sent to the model
     raw_payload           = Column(Text,     nullable=True)    # The original text before pruning

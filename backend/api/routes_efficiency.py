@@ -33,6 +33,11 @@ from database.models import (
     WorkItem,
 )
 from core.costpilot_knowledge import search_costpilot_knowledge
+from core.ask_costpilot_contracts import (
+    ask_interpretation_label,
+    canonical_ask_intent,
+    validate_ask_answer_contract,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -108,6 +113,8 @@ class AskCostPilotRequest(BaseModel):
     model_tier: Optional[str] = None
     charged_unit: Optional[str] = None
     business_purpose: Optional[str] = None
+    governed_request_id: Optional[str] = None
+    audit_event_id: Optional[int] = None
     conversation: list[AskCostPilotMessage] = Field(default_factory=list)
     context: Optional[AskCostPilotContext] = None
     screen_context: Optional[AskCostPilotScreenContext] = None
@@ -234,7 +241,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
     elif any(term in text for term in (
         "what have we built", "is anyone using", "agent adoption",
         "agent usage status", "adoption overview",
-        "not been used", "never used", "unused agent", "unused agents",
+        "not been used", "never used", "never been used", "unused agent", "unused agents",
         "inactive agent", "inactive agents", "not used recently",
         "recently inactive", "low usage", "low-use", "low use",
         "not being used much", "used infrequently", "high usage",
@@ -361,7 +368,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
             "all budgets",
         )) else "alerts"
 
-    return {
+    result = {
         "intent": intent,
         "entity": entity,
         "metric": metric,
@@ -375,16 +382,24 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "usage_threshold": usage_threshold,
         "budget_scope": budget_scope,
     }
+    canonical = canonical_ask_intent(question)
+    if canonical:
+        result.update({
+            key: value for key, value in canonical.items()
+            if key not in {"name"}
+        })
+        result["canonical_intent"] = canonical["name"]
+    return result
 
 
 _ASK_INTENTS = {
     "ranking", "overview", "savings", "budget", "pruning", "source_mix",
     "blocked", "risk_events", "total", "comparison", "activity", "inactive",
     "agent_adoption",
-    "tier_usage", "optimization", "help", "product",
+    "tier_usage", "optimization", "help", "product", "decision",
 }
 _ASK_ENTITIES = {
-    "person", "agent", "department", "context", "platform", "model", "overview"
+    "person", "agent", "department", "context", "platform", "model", "overview", "request"
 }
 _ASK_METRICS = {
     "spend_usd", "total_tokens", "request_count", "tokens_saved",
@@ -742,6 +757,12 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
         return fallback, "capability_help"
     if fallback["intent"] == "product":
         return fallback, "costpilot_knowledge"
+    if fallback.get("canonical_intent"):
+        return fallback, "canonical_intent"
+    # Adoption-status questions have an exact deterministic meaning and must
+    # not be broadened into a general usage overview by the language planner.
+    if fallback["intent"] == "agent_adoption":
+        return fallback, "deterministic_agent_adoption"
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
@@ -1535,6 +1556,61 @@ Be specific. Reference actual numbers. Keep recommendations actionable."""
         return result
 
 
+def _ask_contract_failure_response(
+    request: AskCostPilotRequest,
+    parsed: dict,
+    issues: list[str],
+) -> dict:
+    """Fail closed instead of showing a valid report for the wrong question."""
+    interpreted_as = ask_interpretation_label(parsed)
+    return {
+        "question": request.question.strip(),
+        "title": "I need to verify this analysis",
+        "answer": (
+            f"I interpreted your question as: {interpreted_as}. "
+            "The calculated result did not match that reporting contract, so I did not display it. "
+            "Please try again or narrow the subject and time period."
+        ),
+        "intent": "clarification",
+        "entity": parsed.get("entity") or "overview",
+        "metric": parsed.get("metric") or "request_count",
+        "period": {},
+        "filters": {},
+        "summary": {},
+        "evidence": [],
+        "recommendations": [],
+        "measurement_note": "No mismatched customer result was displayed.",
+        "calculation": {
+            "metric": "contract_validation",
+            "formula": "Validate the calculated report against the interpreted question before display.",
+            "row_count": 0,
+            "period_label": None,
+        },
+        "calculation_source": "Ask CostPilot answer contract",
+        "data_provenance": {
+            "scope": "clarification_required",
+            "live_requests": 0,
+            "simulator_requests": 0,
+            "active_filters": {},
+            "period_label": None,
+        },
+        "assistant_mode": "contract_guardrail",
+        "interpreted_as": interpreted_as,
+        "interpreted_intent": parsed,
+        "contract_status": "failed",
+        "contract_issues": issues,
+        "conversation_context": {
+            "intent": parsed.get("intent"),
+            "entity": parsed.get("entity"),
+            "metric": parsed.get("metric"),
+            "days": int(parsed.get("days") or request.days),
+            "direction": parsed.get("direction") or "desc",
+            "result_limit": int(parsed.get("result_limit") or 5),
+        },
+        "read_only": True,
+    }
+
+
 def _ask_product_response(
     request: AskCostPilotRequest,
     parsed: dict,
@@ -1610,6 +1686,8 @@ def _ask_product_response(
             "knowledge_topics": [topic["id"] for topic in topics],
         },
         "assistant_mode": assistant_mode,
+        "interpreted_as": ask_interpretation_label(parsed),
+        "contract_status": "passed",
         "interpreted_intent": parsed,
         "conversation_context": {
             "intent": "product",
@@ -1621,6 +1699,122 @@ def _ask_product_response(
             "subject_entity": "product_topic",
             "subject_filter_name": "knowledge_topic",
             "subject_filter_value": primary["id"],
+        },
+        "read_only": True,
+    }
+
+
+def _ask_decision_response(
+    request: AskCostPilotRequest,
+    parsed: dict,
+    db: Session,
+    assistant_mode: str,
+) -> dict:
+    """Explain one request from correlated cost and immutable audit evidence."""
+    audit = None
+    if request.audit_event_id:
+        audit = db.query(AuditEvent).filter(AuditEvent.id == request.audit_event_id).first()
+    if not audit and request.governed_request_id:
+        audit = (
+            db.query(AuditEvent)
+            .filter(AuditEvent.governed_request_id == request.governed_request_id)
+            .order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc())
+            .first()
+        )
+    governed_request_id = request.governed_request_id or (
+        audit.governed_request_id if audit else None
+    )
+    tx = None
+    if governed_request_id:
+        tx = (
+            db.query(TokenTransaction)
+            .filter(TokenTransaction.governed_request_id == governed_request_id)
+            .order_by(TokenTransaction.timestamp.desc(), TokenTransaction.id.desc())
+            .first()
+        )
+    if not audit and not tx:
+        return _ask_contract_failure_response(
+            request,
+            parsed,
+            ["a selected governed request or audit event is required"],
+        )
+
+    selected_model = (
+        (audit.selected_model_name if audit else None)
+        or (tx.model_name if tx else None)
+        or "No model"
+    )
+    selected_tier = (
+        (audit.selected_model_tier if audit else None)
+        or (tx.resolved_model_tier if tx else None)
+        or (tx.model_tier if tx else None)
+        or "none"
+    )
+    rationale = (audit.rationale if audit else None) or (
+        tx.routing_reason if tx else None
+    ) or "No additional rationale was recorded."
+    outcome = (audit.decision_outcome if audit else None) or (
+        tx.execution_status if tx else None
+    ) or "Recorded"
+    answer = (
+        f"CostPilot selected {selected_model} at the {selected_tier} tier. "
+        f"Recorded rationale: {rationale} Outcome: {outcome}."
+    )
+    evidence = [{
+        "label": governed_request_id or f"Audit event {audit.id}",
+        "value": selected_model,
+        "metric_label": selected_tier,
+        "detail": rationale,
+        "filter_name": "audit_event_id" if audit else None,
+        "filter_value": audit.id if audit else None,
+        "governed_request_id": governed_request_id,
+    }]
+    return {
+        "question": request.question.strip(),
+        "title": "Why CostPilot made this decision",
+        "answer": answer,
+        "intent": "decision",
+        "entity": "request",
+        "metric": "request_count",
+        "period": {},
+        "filters": {"governed_request_id": governed_request_id},
+        "summary": {
+            "cost_usd": float(tx.cost_usd or 0.0) if tx else float(audit.cost_usd or 0.0),
+            "input_tokens": int(tx.input_tokens or 0) if tx else 0,
+            "output_tokens": int(tx.output_tokens or 0) if tx else 0,
+        },
+        "evidence": evidence,
+        "recommendations": [],
+        "measurement_note": "Explanation uses the correlated immutable audit and cost records; raw prompt text is not supplied to the assistant.",
+        "calculation": {
+            "metric": "request_decision",
+            "formula": "Join the governed request's latest audit event with its token transaction.",
+            "row_count": int(bool(audit)) + int(bool(tx)),
+            "period_label": None,
+        },
+        "calculation_source": "CostPilot governed request record",
+        "data_provenance": {
+            "scope": "governed_request",
+            "live_requests": 0 if (tx and tx.is_simulation) else 1,
+            "simulator_requests": 1 if (tx and tx.is_simulation) else 0,
+            "active_filters": {"governed_request_id": governed_request_id},
+            "period_label": None,
+            "audit_event_id": audit.id if audit else None,
+        },
+        "assistant_mode": assistant_mode,
+        "interpreted_as": ask_interpretation_label(parsed),
+        "contract_status": "passed",
+        "interpreted_intent": parsed,
+        "conversation_context": {
+            "intent": "decision",
+            "entity": "request",
+            "metric": "request_count",
+            "days": int(parsed.get("days") or request.days),
+            "direction": "desc",
+            "result_limit": 1,
+            "subject_entity": "request",
+            "subject_filter_name": "governed_request_id",
+            "subject_filter_value": governed_request_id,
         },
         "read_only": True,
     }
@@ -1705,6 +1899,8 @@ def _ask_help_response(
             "period_label": None,
         },
         "assistant_mode": assistant_mode,
+        "interpreted_as": "Ask CostPilot capability and example-question guide",
+        "contract_status": "passed",
         "interpreted_intent": parsed,
         "conversation_context": {
             "intent": "help",
@@ -1839,6 +2035,8 @@ def ask_costpilot(
         return _ask_help_response(request, parsed, assistant_mode)
     if parsed.get("intent") == "product":
         return _ask_product_response(request, parsed, assistant_mode)
+    if parsed.get("intent") == "decision":
+        return _ask_decision_response(request, parsed, db, assistant_mode)
 
     reporting_filters = _ask_reporting_filters(request, parsed)
     subject_filter_name = parsed.get("subject_filter_name")
@@ -1988,9 +2186,13 @@ def ask_costpilot(
                     f"{row.get('user_name') or 'Unknown user'} · {row.get('agent_name') or 'Unknown agent'} · "
                     f"{int(row.get('total_tokens') or 0):,} tokens · ${float(row.get('cost_usd') or 0):,.4f} · "
                     f"{'simulator' if row.get('is_simulation') else 'live'}"
+                    + (f" · {row.get('audit_rationale')}" if row.get("audit_rationale") else "")
                 ),
-                "filter_name": "transaction_id",
-                "filter_value": row.get("transaction_id"),
+                "filter_name": "audit_event_id" if row.get("audit_event_id") else "transaction_id",
+                "filter_value": row.get("audit_event_id") or row.get("transaction_id"),
+                "governed_request_id": row.get("governed_request_id"),
+                "decision_outcome": row.get("decision_outcome"),
+                "risk_level": row.get("risk_level"),
                 "live_count": 0 if row.get("is_simulation") else 1,
                 "simulation_count": 1 if row.get("is_simulation") else 0,
             } for row in activity_rows[:result_limit]]
@@ -2644,10 +2846,20 @@ def ask_costpilot(
             "period_label": period_label,
         },
         "assistant_mode": assistant_mode,
+        "interpreted_as": ask_interpretation_label(parsed),
+        "contract_status": "passed",
         "interpreted_intent": parsed,
         "conversation_context": conversation_context,
         "read_only": True,
     }
+    contract_issues = validate_ask_answer_contract(parsed, payload)
+    if contract_issues:
+        logger.warning(
+            "Ask CostPilot answer contract rejected intent=%s issues=%s",
+            parsed.get("canonical_intent"),
+            contract_issues,
+        )
+        return _ask_contract_failure_response(request, parsed, contract_issues)
     narrated_title, narrated_answer, narrated = _ask_grounded_narrative(
         request, payload
     )

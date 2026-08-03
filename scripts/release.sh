@@ -61,6 +61,34 @@ with engine.connect() as conn:
         ADD COLUMN IF NOT EXISTS raw_payload TEXT
     '''))
     conn.execute(text('''
+        ALTER TABLE token_transactions
+        ADD COLUMN IF NOT EXISTS governed_request_id VARCHAR,
+        ADD COLUMN IF NOT EXISTS requested_model_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS requested_model_tier VARCHAR,
+        ADD COLUMN IF NOT EXISTS routing_policy_version VARCHAR,
+        ADD COLUMN IF NOT EXISTS execution_status VARCHAR,
+        ADD COLUMN IF NOT EXISTS provider_status_code INTEGER
+    '''))
+    conn.execute(text('''
+        ALTER TABLE audit_events
+        ADD COLUMN IF NOT EXISTS governed_request_id VARCHAR,
+        ADD COLUMN IF NOT EXISTS requested_model_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS requested_model_tier VARCHAR,
+        ADD COLUMN IF NOT EXISTS selected_model_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS selected_model_tier VARCHAR,
+        ADD COLUMN IF NOT EXISTS routing_policy_version VARCHAR,
+        ADD COLUMN IF NOT EXISTS routing_reason_code VARCHAR,
+        ADD COLUMN IF NOT EXISTS execution_status VARCHAR
+    '''))
+    conn.execute(text('''
+        CREATE INDEX IF NOT EXISTS ix_token_transactions_governed_request_id
+        ON token_transactions (governed_request_id)
+    '''))
+    conn.execute(text('''
+        CREATE INDEX IF NOT EXISTS ix_audit_events_governed_request_id
+        ON audit_events (governed_request_id)
+    '''))
+    conn.execute(text('''
         ALTER TABLE audit_events
         ADD COLUMN IF NOT EXISTS raw_logged_at TIMESTAMP
     '''))

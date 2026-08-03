@@ -265,12 +265,15 @@
   }
 
   function askScope() {
+    const query = new URLSearchParams(location.search);
     const pageScope = typeof window.getCostPilotAskScope === "function"
       ? window.getCostPilotAskScope()
       : {};
     return {
       days: 30,
       workspace_id: localStorage.getItem("cp_workspace_id") || null,
+      governed_request_id: query.get("governed_request_id"),
+      audit_event_id: query.get("audit_event_id"),
       ...pageScope,
     };
   }
@@ -314,12 +317,15 @@
     [
       "workspace_id", "project_id", "user_external_id", "account_id",
       "source_platform", "record_type", "model_tier", "charged_unit", "business_purpose",
+      "governed_request_id",
     ].forEach((key) => {
       const value = cleanAskString(scope[key]);
       if (value !== null) payload[key] = value;
     });
     const agentId = Number(scope.agent_id);
     if (Number.isInteger(agentId) && agentId > 0) payload.agent_id = agentId;
+    const auditEventId = Number(scope.audit_event_id);
+    if (Number.isInteger(auditEventId) && auditEventId > 0) payload.audit_event_id = auditEventId;
     const dateFrom = cleanAskDate(scope.date_from);
     const dateTo = cleanAskDate(scope.date_to);
     if (dateFrom) payload.date_from = dateFrom;
@@ -437,6 +443,7 @@
       mixed: `Live + simulator · ${liveRequests} live / ${simulatorRequests} simulated`,
       no_activity: "No matching activity",
       product_knowledge: "CostPilot product knowledge",
+      clarification_required: "Answer withheld for verification",
     }[provenance.scope] || "Governed activity";
     const evidence = (data.evidence || []).map((item) => renderGlobalEvidence(item, data)).join("");
     const activeFilters = Object.entries(provenance.active_filters || {})
@@ -454,6 +461,7 @@
     return `<article class="cp-ask-answer">
       <div class="cp-ask-answer-head"><span>${escapeHtml(provenance.period_label || "Selected period")}</span><b>${escapeHtml(sourceLabel)} · Calculated</b></div>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3>
+      ${data.interpreted_as ? `<div class="cp-ask-interpretation"><strong>Interpreted as</strong><span>${escapeHtml(data.interpreted_as)}</span></div>` : ""}
       <p>${escapeHtml(data.answer || "No answer was returned.")}</p>
       ${activeFilters ? `<div class="cp-ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
       ${evidence ? `<section><h4>Evidence</h4>${evidence}</section>` : ""}

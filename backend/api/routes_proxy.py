@@ -323,19 +323,27 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
                      cost_usd: float, routing_reason: str,
                      tokens_saved: int = 0, matched_keywords: list = None,
                      prompt_text: str = "", risk_override: str = None,
-                     agent_id: int = None, usage_source: str = "estimated"):
+                     agent_id: int = None, usage_source: str = "estimated",
+                     requested_model: str = None, provider_status_code: int = None):
     from database.models import DepartmentBudget
+    from core.governed_requests import new_governed_request_id, ROUTING_POLICY_VERSION
     import json
 
     dept_key = f"{workspace_id}:{department}"
     now = datetime.utcnow()
+    governed_request_id = new_governed_request_id()
+    execution_status = "blocked" if routing_reason == "BLOCKED" else (
+        "succeeded" if provider_status_code is None or provider_status_code < 400 else "failed"
+    )
 
     # Token transaction
     txn = TokenTransaction(
+        governed_request_id = governed_request_id,
         department     = dept_key,
         source_platform= "trial-proxy",
         agent_id       = agent_id,
         model_tier     = tier,
+        requested_model_name = requested_model,
         model_name     = model,
         resolved_model_tier = tier,
         model_source   = "provider_proxy",
@@ -346,6 +354,9 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         cost_usd       = cost_usd,
         timestamp      = now,
         routing_reason = routing_reason,
+        routing_policy_version = ROUTING_POLICY_VERSION,
+        execution_status = execution_status,
+        provider_status_code = provider_status_code,
         was_pruned     = tokens_saved > 0,
         tokens_saved   = tokens_saved,
     )
@@ -407,10 +418,17 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     outcome = f"ROUTED_TO_{tier.upper().replace(' ', '_')}"
 
     audit = AuditEvent(
+        governed_request_id  = governed_request_id,
         event_type            = "ROUTING",
         agent_id              = agent_id,
         department            = dept_key,
         model_tier            = tier,
+        requested_model_name  = requested_model,
+        selected_model_name   = model,
+        selected_model_tier   = tier,
+        routing_policy_version = ROUTING_POLICY_VERSION,
+        routing_reason_code   = routing_reason.split(" ", 1)[0],
+        execution_status      = execution_status,
         rationale             = rationale,
         decision_outcome      = outcome,
         risk_level            = risk_level,
@@ -421,6 +439,7 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
     )
     db.add(audit)
     db.commit()
+    return governed_request_id
 
 
 
@@ -590,11 +609,12 @@ async def proxy_openai(workspace_id: str, request: Request):
         risk       = "high" if st["action"] in ("flag","escalate") else ("medium" if complex_ else "low")
 
         # 5. Log the completed request
-        _log_transaction(db, workspace_id, department, routed_model,
+        governed_request_id = _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
                          matched_kw + st["matched"], prompt_text, risk_override=risk,
-                         agent_id=agent.id if agent else None, usage_source=usage_source)
+                         agent_id=agent.id if agent else None, usage_source=usage_source,
+                         requested_model=requested_model, provider_status_code=resp.status_code)
 
         # 6. Return response + CostPilot metadata headers
         return JSONResponse(
@@ -607,6 +627,7 @@ async def proxy_openai(workspace_id: str, request: Request):
                 "X-CostPilot-Cost":         str(cost),
                 "X-CostPilot-Tokens-Saved": str(tokens_saved),
                 "X-CostPilot-Workspace":    workspace_id,
+                "X-CostPilot-Request-Id":   governed_request_id,
             }
         )
 
@@ -713,11 +734,12 @@ async def proxy_anthropic(workspace_id: str, request: Request):
         cost       = round((in_tokens * tier_meta["input"] + out_tokens * tier_meta["output"]) / 1_000_000, 8)
 
         # 4. Log the completed request
-        _log_transaction(db, workspace_id, department, routed_model,
+        governed_request_id = _log_transaction(db, workspace_id, department, routed_model,
                          tier_meta["tier"], in_tokens, out_tokens, cost,
                          routing_reason, tokens_saved,
                          matched_kw + st["matched"], prompt_text, risk_override=risk,
-                         agent_id=agent.id if agent else None, usage_source=usage_source)
+                         agent_id=agent.id if agent else None, usage_source=usage_source,
+                         requested_model=requested_model, provider_status_code=resp.status_code)
 
         # 6. Return response + CostPilot metadata headers
         return JSONResponse(
@@ -730,6 +752,7 @@ async def proxy_anthropic(workspace_id: str, request: Request):
                 "X-CostPilot-Cost":         str(cost),
                 "X-CostPilot-Tokens-Saved": str(tokens_saved),
                 "X-CostPilot-Workspace":    workspace_id,
+                "X-CostPilot-Request-Id":   governed_request_id,
             }
         )
 

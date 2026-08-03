@@ -1712,6 +1712,7 @@ function renderAskCostPilotAnswer(data) {
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3></div>
       <span class="ask-calculated">${escapeHtml(scopeLabel)} · Calculated</span>
     </div>
+    ${data.interpreted_as ? `<div class="ask-interpretation"><strong>Interpreted as</strong><span>${escapeHtml(data.interpreted_as)}</span></div>` : ""}
     <p>${escapeHtml(data.answer || "No answer was returned.")}</p>
     ${activeFilters ? `<div class="ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
     ${evidence}
