@@ -857,6 +857,13 @@ function reportWorkspaceId() {
   return params.get("workspace_id") || localStorage.getItem("cp_workspace_id") || "";
 }
 
+function reportScopedPath(path) {
+  const workspaceId = reportWorkspaceId();
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspace_id=${encodeURIComponent(workspaceId)}`;
+}
+
 function updateReportWorkspaceBanner() {
   const banner = document.getElementById("rptScopeBanner");
   if (!banner) return;
@@ -1111,7 +1118,7 @@ async function loadRisk() {
 
   // Load governance summary panels from dashboard API
   try {
-    const d = await apiGet("/api/dashboard");
+    const d = await apiGet(reportScopedPath("/api/dashboard"));
     renderComplianceGrid(d);
     renderExecSummary(d);
   } catch (e) {
@@ -2131,7 +2138,7 @@ function initActivityTab() {
 
 async function populateActivityDropdowns() {
   try {
-    const agents = await apiGet("/api/agents");
+    const agents = await apiGet(reportScopedPath("/api/agents"));
 
     // Populate agent dropdown
     const agentSel = document.getElementById("actAgent");
@@ -2488,7 +2495,7 @@ setInterval(() => {
 
 async function refreshTodayCounter() {
   try {
-    const d = await apiGet("/api/dashboard");
+    const d = await apiGet(reportScopedPath("/api/dashboard"));
     countUp(document.getElementById("td-calls"),  String(d.calls_today ?? 0));
     countUp(document.getElementById("td-cost"),   "$" + (d.spend_today_usd ?? 0).toFixed(4));
     countUp(document.getElementById("td-tokens"), fmtNum(d.tokens_saved_today ?? 0));

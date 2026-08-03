@@ -25,6 +25,41 @@
   padding-left: 7px;
 }
 
+.cp-workspace-switcher {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: inline-flex;
+  min-height: 32px;
+  overflow: hidden;
+}
+
+.cp-workspace-switcher__label {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding-left: 8px;
+  text-transform: uppercase;
+}
+
+.cp-workspace-switcher select {
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  min-height: 30px;
+  max-width: 140px;
+  padding: 0 6px;
+}
+
+.cp-workspace-switcher select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .cp-global-nav__link,
 .cp-global-nav__trigger,
 .cp-global-nav__ask,
@@ -590,6 +625,15 @@
 
   .cp-global-nav__help {
     width: 100%;
+  }
+
+  .cp-workspace-switcher {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .cp-workspace-switcher select {
+    max-width: none;
   }
 
   .cp-global-nav__menu {

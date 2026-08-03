@@ -22,6 +22,11 @@
     { label: "Live Monitor", href: "/live-landing.html" },
   ];
 
+  const workspaceOptions = [
+    { id: "4BE43240A6674314", label: "Salesforce Pilot", kind: "Live workspace" },
+    { id: "SIM-HISTORICAL-2Y", label: "Executive Demo", kind: "Simulated history" },
+  ];
+
   const currentPath = location.pathname || "/";
   const isCurrent = (item) => (item.paths || [item.href]).includes(currentPath);
   const escapeHtml = (value) => String(value)
@@ -46,6 +51,37 @@
           ${items.map((item) => linkMarkup(item, "")).join("")}
         </div>
       </div>`;
+  }
+
+  function activeWorkspace() {
+    const id = localStorage.getItem("cp_workspace_id") || workspaceOptions[0].id;
+    return workspaceOptions.find((workspace) => workspace.id === id)
+      || { id, label: localStorage.getItem("cp_workspace_name") || "Current workspace", kind: "Workspace" };
+  }
+
+  function workspaceMarkup() {
+    const active = activeWorkspace();
+    const options = workspaceOptions.some((workspace) => workspace.id === active.id)
+      ? workspaceOptions
+      : [active, ...workspaceOptions];
+    return `
+      <label class="cp-workspace-switcher" title="Choose which isolated workspace CostPilot should display">
+        <span class="cp-workspace-switcher__label">Workspace</span>
+        <select id="cpWorkspaceSwitcher" aria-label="Active CostPilot workspace">
+          ${options.map((workspace) => `<option value="${escapeHtml(workspace.id)}"${workspace.id === active.id ? " selected" : ""}>${escapeHtml(workspace.label)}</option>`).join("")}
+        </select>
+      </label>`;
+  }
+
+  function switchWorkspace(workspaceId) {
+    const selected = workspaceOptions.find((workspace) => workspace.id === workspaceId);
+    if (!selected || selected.id === activeWorkspace().id) return;
+    localStorage.setItem("cp_workspace_id", selected.id);
+    localStorage.setItem("cp_workspace_name", selected.label);
+    localStorage.removeItem("costpilot_exec_filters");
+    const url = new URL(location.href);
+    url.searchParams.delete("workspace_id");
+    location.assign(url.href);
   }
 
   function findHeader() {
@@ -83,6 +119,7 @@
         ${dropdownMarkup("cpToolsMenu", "Tools", toolItems)}
       </div>
       <div class="cp-global-nav__utilities">
+        ${workspaceMarkup()}
         <button class="cp-global-nav__ask" id="cpGlobalAsk" type="button"
           aria-label="Ask CostPilot about this workspace" title="Ask CostPilot">Ask CostPilot</button>
         <a class="cp-global-nav__status" id="cpGlobalStatus" href="/live-landing.html" title="Open live system monitor">
@@ -121,6 +158,9 @@
       }
     });
     nav.querySelector("#cpGlobalAsk").addEventListener("click", openAskCostPilot);
+    nav.querySelector("#cpWorkspaceSwitcher").addEventListener("change", (event) => {
+      switchWorkspace(event.target.value);
+    });
 
     document.addEventListener("click", () => closeMenus(nav));
     document.addEventListener("keydown", (event) => {
@@ -185,7 +225,7 @@
           <div>
             <span class="cp-ask-kicker">Workspace intelligence</span>
             <h2 id="cpAskTitle">Ask CostPilot</h2>
-            <p>Answers calculated from your governed AI activity.</p>
+            <p>Answers calculated from <strong id="cpAskWorkspaceName">this workspace</strong>.</p>
           </div>
           <div class="cp-ask-header-actions">
             <button type="button" class="cp-ask-clear" id="cpAskClear">Clear chat</button>
@@ -247,6 +287,8 @@
 
   function openAskCostPilot() {
     installAskCostPilot();
+    const workspaceName = document.getElementById("cpAskWorkspaceName");
+    if (workspaceName) workspaceName.textContent = activeWorkspace().label;
     const drawer = document.getElementById("cpAskDrawer");
     const backdrop = document.getElementById("cpAskBackdrop");
     drawer.classList.add("open");

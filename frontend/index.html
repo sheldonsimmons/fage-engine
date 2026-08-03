@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/vendor/tabler/tabler.min.css?v=1.4.0" />
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/tokens.css" />
-  <link rel="stylesheet" href="css/global-nav.css?v=20260730-ask" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
   <style>
     /* ── Executive landing layout ─────────────────────────────────────────────── */
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-base); }
@@ -4978,7 +4978,7 @@ async function loadExec() {
       apiGet(executiveScopedUrl("/api/dashboard")),
       apiGet(executiveScopedUrl("/api/timeseries", { days: "180" })),
       apiGet(executiveScopedUrl("/api/audit", { limit: "5000" })),
-      apiGet("/api/agents"),
+      apiGet(executiveScopedUrl("/api/agents")),
       apiGet("/api/models").catch(err => {
         console.warn("Model registry load failed; using tier labels:", err.message);
         return [];
@@ -5084,6 +5084,6 @@ setInterval(loadExec, 30000);
 })();
 </script>
 <script src="/vendor/tabler/tabler.min.js?v=1.4.0"></script>
-<script src="/js/global-nav.js?v=20260731-askfix"></script>
+<script src="/js/global-nav.js?v=20260803-workspaces"></script>
 </body>
 </html>

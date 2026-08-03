@@ -7,7 +7,7 @@
   <title>CostPilot — Work Attribution</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/tokens.css" />
-  <link rel="stylesheet" href="css/global-nav.css?v=20260730-ask" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
   <style>
     body { min-height:100vh; background:var(--bg-base); color:var(--text-primary); }
     .wa-header {
@@ -1063,7 +1063,7 @@
         [waItems, waSummary, waAgents] = await Promise.all([
           apiGet(`/api/work-items${workspaceQuery}`),
           apiGet(`/api/work-items/summary${workspaceQuery}`),
-          apiGet("/api/agents"),
+          apiGet(`/api/agents${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""}`),
         ]);
         const active = waItems.filter(item => item.status === "active");
         const select = document.getElementById("waRouteProject");
@@ -1188,6 +1188,6 @@
     waShowView(initialView);
     waLoadProjects();
   </script>
-  <script src="/js/global-nav.js?v=20260731-askfix"></script>
+  <script src="/js/global-nav.js?v=20260803-workspaces"></script>
 </body>
 </html>
