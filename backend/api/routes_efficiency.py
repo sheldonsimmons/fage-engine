@@ -32,6 +32,7 @@ from database.models import (
     TokenTransaction,
     WorkItem,
 )
+from core.costpilot_knowledge import search_costpilot_knowledge
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -80,6 +81,16 @@ class AskCostPilotContext(BaseModel):
     budget_scope: Optional[str] = None
 
 
+class AskCostPilotScreenContext(BaseModel):
+    """Non-sensitive UI context that lets the agent understand "this" and "here"."""
+
+    page_path: Optional[str] = None
+    page_title: Optional[str] = None
+    section: Optional[str] = None
+    visible_metric: Optional[str] = None
+    selected_label: Optional[str] = None
+
+
 class AskCostPilotRequest(BaseModel):
     """Read-only natural-language question over CostPilot's attributed usage."""
 
@@ -99,6 +110,7 @@ class AskCostPilotRequest(BaseModel):
     business_purpose: Optional[str] = None
     conversation: list[AskCostPilotMessage] = Field(default_factory=list)
     context: Optional[AskCostPilotContext] = None
+    screen_context: Optional[AskCostPilotScreenContext] = None
 
 
 def _ask_intent(question: str, default_days: int) -> dict:
@@ -176,6 +188,12 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "what can i ask", "sample question", "example question",
         "help me use", "your capabilities",
     ))
+    asks_about_product = any(term in text for term in (
+        "how does costpilot", "how costpilot", "what is costpilot", "explain costpilot",
+        "what does this mean", "explain this", "this number", "this chart",
+        "how is this calculated", "how was this calculated", "why did costpilot",
+        "how does routing", "how does pruning", "how do savings", "how is savings",
+    ))
     ranking_terms = (
         "highest", "most", "top", "largest", "lowest", "least", "fewest",
         "smallest", "bottom",
@@ -186,6 +204,9 @@ def _ask_intent(question: str, default_days: int) -> dict:
     if asks_for_help:
         intent = "help"
         metric = "request_count"
+        entity = "overview"
+    elif asks_about_product:
+        intent = "product"
         entity = "overview"
     elif any(term in text for term in (
         "why were requests blocked", "why was the request blocked",
@@ -360,7 +381,7 @@ _ASK_INTENTS = {
     "ranking", "overview", "savings", "budget", "pruning", "source_mix",
     "blocked", "risk_events", "total", "comparison", "activity", "inactive",
     "agent_adoption",
-    "tier_usage", "optimization", "help",
+    "tier_usage", "optimization", "help", "product",
 }
 _ASK_ENTITIES = {
     "person", "agent", "department", "context", "platform", "model", "overview"
@@ -441,6 +462,10 @@ def _ask_conversation_text(request: AskCostPilotRequest) -> str:
             content = " ".join((message.content or "").split())[:1200]
             if content:
                 turns.append(f"{message.role.upper()}: {content}")
+    if request.screen_context:
+        screen = request.screen_context.model_dump(exclude_none=True)
+        if screen:
+            turns.append(f"CURRENT_SCREEN: {json.dumps(screen, separators=(',', ':'))[:1200]}")
     turns.append(f"USER: {' '.join((request.question or '').split())[:2000]}")
     return "\n".join(turns)
 
@@ -715,6 +740,8 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     fallback = _ask_fallback_intent(request)
     if fallback["intent"] == "help":
         return fallback, "capability_help"
+    if fallback["intent"] == "product":
+        return fallback, "costpilot_knowledge"
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
@@ -805,9 +832,11 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
             "additionalProperties": False,
         },
     }
-    instructions = """You interpret questions for a read-only enterprise AI usage report.
+    instructions = """You interpret questions for a read-only enterprise AI usage report and product guide.
 Use the prior conversation to understand corrections and follow-up questions.
 Choose help when the user asks what you can do, how you can help, or asks for examples.
+Choose product when the user asks how CostPilot works, what a product term means, how a displayed
+metric is calculated, or refers to the current screen with words such as this, here, or this chart.
 Choose ranking for highest, lowest, top, bottom, most, least, or "who" questions.
 Choose blocked for questions asking why requests were blocked.
 Choose risk_events for questions asking for recent or latest governance risk events.
@@ -1506,6 +1535,97 @@ Be specific. Reference actual numbers. Keep recommendations actionable."""
         return result
 
 
+def _ask_product_response(
+    request: AskCostPilotRequest,
+    parsed: dict,
+    assistant_mode: str,
+) -> dict:
+    """Answer product questions from curated CostPilot knowledge, not model memory."""
+    screen = request.screen_context.model_dump(exclude_none=True) if request.screen_context else {}
+    topics = search_costpilot_knowledge(
+        request.question,
+        page_path=screen.get("page_path"),
+        limit=3,
+    )
+    if not topics and screen.get("page_path"):
+        topics = search_costpilot_knowledge(
+            f"current page {screen.get('page_title') or ''} {screen.get('section') or ''}",
+            page_path=screen.get("page_path"),
+            limit=3,
+        )
+    if not topics:
+        topics = search_costpilot_knowledge("dashboard audit routing", limit=3)
+
+    primary = topics[0]
+    location = ""
+    if screen:
+        label = screen.get("section") or screen.get("visible_metric") or screen.get("page_title")
+        if label:
+            location = f" In the current {label} context, verify the active scope before comparing values."
+    answer = f"{primary['summary']} {primary['details']}{location}"
+    evidence = [
+        {
+            "label": topic["title"],
+            "value": "CostPilot product knowledge",
+            "metric_label": "grounded explanation",
+            "detail": topic["details"],
+            "filter_name": None,
+            "filter_value": None,
+            "page": topic["page"],
+        }
+        for topic in topics
+    ]
+    return {
+        "question": request.question.strip(),
+        "title": primary["title"],
+        "answer": answer,
+        "intent": "product",
+        "entity": "overview",
+        "metric": "product_knowledge",
+        "period": {},
+        "filters": {},
+        "summary": {},
+        "evidence": evidence,
+        "recommendations": [
+            {"title": "Recommended next step", "body": primary["action"]}
+        ],
+        "measurement_note": (
+            "This explanation comes from CostPilot's curated product knowledge. "
+            "Customer-specific numbers require a governed activity query."
+        ),
+        "calculation": {
+            "metric": "product_knowledge",
+            "formula": "No customer-data calculation was required.",
+            "row_count": 0,
+            "period_label": None,
+        },
+        "calculation_source": "CostPilot product knowledge catalog",
+        "data_provenance": {
+            "scope": "product_knowledge",
+            "live_requests": 0,
+            "simulator_requests": 0,
+            "active_filters": {},
+            "period_label": None,
+            "screen_context": screen,
+            "knowledge_topics": [topic["id"] for topic in topics],
+        },
+        "assistant_mode": assistant_mode,
+        "interpreted_intent": parsed,
+        "conversation_context": {
+            "intent": "product",
+            "entity": "overview",
+            "metric": "product_knowledge",
+            "days": int(parsed.get("days") or request.days),
+            "direction": "desc",
+            "result_limit": len(topics),
+            "subject_entity": "product_topic",
+            "subject_filter_name": "knowledge_topic",
+            "subject_filter_value": primary["id"],
+        },
+        "read_only": True,
+    }
+
+
 def _ask_help_response(
     request: AskCostPilotRequest,
     parsed: dict,
@@ -1717,6 +1837,8 @@ def ask_costpilot(
     parsed, assistant_mode = _resolve_ask_intent(request)
     if parsed.get("intent") == "help":
         return _ask_help_response(request, parsed, assistant_mode)
+    if parsed.get("intent") == "product":
+        return _ask_product_response(request, parsed, assistant_mode)
 
     reporting_filters = _ask_reporting_filters(request, parsed)
     subject_filter_name = parsed.get("subject_filter_name")

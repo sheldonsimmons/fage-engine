@@ -201,7 +201,7 @@
         <div class="cp-ask-messages" id="cpAskMessages" aria-live="polite">
           <div class="cp-ask-welcome">
             <strong>What would you like to know?</strong>
-            <span>Ask about people, agents, departments, business contexts, models, spend, tokens, pruning, or risk.</span>
+            <span>Ask how CostPilot works, what this page means, or about people, agents, models, spend, pruning, and risk.</span>
           </div>
         </div>
         <form class="cp-ask-composer" id="cpAskForm">
@@ -287,12 +287,29 @@
     return cleaned;
   }
 
+  function currentAskScreenContext() {
+    const activeSection = document.querySelector(
+      "[aria-current='page'], .rpt-tab.active, .cp-exec-subnav a.active, [role='tab'][aria-selected='true']"
+    );
+    const visibleHeading = document.querySelector(
+      "main h1, main h2, .exec-body h1, .exec-body h2, .page-title"
+    );
+    return {
+      page_path: `${location.pathname}${location.search}`.slice(0, 500),
+      page_title: (document.title || "CostPilot").slice(0, 200),
+      section: (activeSection?.textContent || visibleHeading?.textContent || "").trim().slice(0, 200) || null,
+      visible_metric: document.activeElement?.dataset?.metric || null,
+      selected_label: document.activeElement?.getAttribute?.("aria-label") || null,
+    };
+  }
+
   function normalizedAskPayload(question, history, context, includeConversation = true) {
     const scope = askScope() || {};
     const daysValue = Number(scope.days);
     const payload = {
       question,
       days: Number.isFinite(daysValue) ? Math.max(1, Math.min(365, Math.round(daysValue))) : 30,
+      screen_context: currentAskScreenContext(),
     };
     [
       "workspace_id", "project_id", "user_external_id", "account_id",
@@ -419,6 +436,7 @@
       simulator: `Simulator data · ${simulatorRequests} requests`,
       mixed: `Live + simulator · ${liveRequests} live / ${simulatorRequests} simulated`,
       no_activity: "No matching activity",
+      product_knowledge: "CostPilot product knowledge",
     }[provenance.scope] || "Governed activity";
     const evidence = (data.evidence || []).map((item) => renderGlobalEvidence(item, data)).join("");
     const activeFilters = Object.entries(provenance.active_filters || {})
@@ -482,7 +500,7 @@
     if (!messages) return;
     messages.innerHTML = `<div class="cp-ask-welcome">
       <strong>What would you like to know?</strong>
-      <span>Ask about people, agents, departments, business contexts, models, spend, tokens, pruning, or risk.</span>
+      <span>Ask how CostPilot works, what this page means, or about people, agents, models, spend, pruning, and risk.</span>
     </div>`;
   }
 

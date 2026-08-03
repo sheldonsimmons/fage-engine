@@ -1514,6 +1514,13 @@ function askCostPilotPayload(question) {
     record_type: askCostPilotFilterValue("ctxRecordTypeFilter"),
     charged_unit: askCostPilotFilterValue("ctxOrgFilter"),
     business_purpose: askCostPilotFilterValue("ctxPurposeFilter"),
+    screen_context: {
+      page_path: `${location.pathname}${location.search}`.slice(0, 500),
+      page_title: (document.title || "CostPilot Reports").slice(0, 200),
+      section: (document.querySelector(".rpt-tab.active")?.textContent || "Ask CostPilot").trim().slice(0, 200),
+      visible_metric: null,
+      selected_label: null,
+    },
     conversation: askCostPilotHistory.slice(-12).map(({ role, content }) => ({ role, content })),
     context: askCostPilotContext,
   };
@@ -1531,7 +1538,7 @@ function askCostPilotWelcomeMarkup() {
     <div class="ask-avatar" aria-hidden="true">CP</div>
     <div class="ask-message-body">
       <strong>What would you like to know?</strong>
-      <p>Ask what has been built, whether it is being used, who is using it, what it costs, or where governance needs attention.</p>
+      <p>Ask how CostPilot works, what a metric means, what has been built, who is using it, what it costs, or where governance needs attention.</p>
     </div>
   </div>`;
 }
@@ -1679,7 +1686,9 @@ function renderAskCostPilotAnswer(data) {
   const provenance = data.data_provenance || {};
   const liveRequests = Number(provenance.live_requests || 0);
   const simulatorRequests = Number(provenance.simulator_requests || 0);
-  const scopeLabel = provenance.scope === "live"
+  const scopeLabel = provenance.scope === "product_knowledge"
+    ? "CostPilot product knowledge"
+    : provenance.scope === "live"
     ? `Live data · ${liveRequests} requests`
     : provenance.scope === "simulator"
       ? `Simulator data · ${simulatorRequests} requests`

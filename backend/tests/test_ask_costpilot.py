@@ -18,6 +18,7 @@ from api.routes_efficiency import (
     AskCostPilotMessage,
     AskCostPilotRequest,
     AskCostPilotContext,
+    AskCostPilotScreenContext,
     ask_costpilot,
     _validated_ask_intent,
 )
@@ -139,6 +140,16 @@ def test_savings_question_uses_read_only_optimization_intent():
 
     assert intent["intent"] == "optimization"
     assert intent["days"] == 30
+
+
+def test_product_question_uses_costpilot_knowledge_intent():
+    intent = _ask_intent(
+        "How does CostPilot decide which model tier to use?",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "product"
+    assert intent["entity"] == "overview"
 
 
 def test_budget_question_targets_departments():
@@ -759,6 +770,28 @@ def test_endpoint_capability_question_does_not_run_stale_data_report():
     assert response["title"] == "What Ask CostPilot can answer"
     assert len(response["evidence"]) >= 5
     assert response["data_provenance"]["scope"] == "capabilities"
+
+
+def test_endpoint_product_question_uses_curated_knowledge_and_screen_context():
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(
+            question="What does this chart mean and how does CostPilot calculate savings?",
+            screen_context=AskCostPilotScreenContext(
+                page_path="/index.html",
+                page_title="CostPilot Executive Summary",
+                section="Spend and savings",
+                visible_metric="Annual Savings",
+            ),
+        )
+    )
+
+    assert calls == []
+    assert response["intent"] == "product"
+    assert response["assistant_mode"] == "costpilot_knowledge"
+    assert response["data_provenance"]["scope"] == "product_knowledge"
+    assert response["data_provenance"]["screen_context"]["visible_metric"] == "Annual Savings"
+    assert "savings" in response["data_provenance"]["knowledge_topics"]
+    assert response["recommendations"]
 
 
 def test_grounded_narrator_can_phrase_facts_but_not_replace_evidence():
