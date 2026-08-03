@@ -359,17 +359,41 @@ function chartDefaults() {
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
-document.querySelectorAll(".rpt-tab").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".rpt-tab").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".rpt-pane").forEach(p => p.classList.remove("active"));
-    btn.classList.add("active");
-    activeTab = btn.dataset.tab;
-    document.getElementById(`tab-${activeTab}`).classList.add("active");
-    loadActiveTab();
-    // Re-init drag for newly shown tab (Sortable needs visible elements)
-    setTimeout(() => initDraggableReports(activeTab), 50);
+const REPORT_PARENT_TABS = {
+  savings: "savings",
+  departments: "savings",
+  contexts: "contexts",
+  activity: "contexts",
+  risk: "risk",
+};
+
+function openReportView(tab, options = {}) {
+  const pane = document.getElementById(`tab-${tab}`);
+  if (!pane) return;
+  document.querySelectorAll(".rpt-tab").forEach(button => {
+    button.classList.toggle("active", button.dataset.tab === REPORT_PARENT_TABS[tab]);
   });
+  document.querySelectorAll("[data-report-utility]").forEach(button => {
+    button.classList.toggle("active", button.dataset.reportUtility === tab);
+  });
+  document.querySelectorAll(".rpt-pane").forEach(item => item.classList.remove("active"));
+  pane.classList.add("active");
+  activeTab = tab;
+  if (tab === "activity") initActivityTab();
+  if (tab === "roi") initRoiTab();
+  loadActiveTab();
+  updateReportRangeSummary();
+  setTimeout(() => initDraggableReports(activeTab), 50);
+  if (!options.preserveUrl) {
+    const url = new URL(window.location.href);
+    if (tab === "savings") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tab);
+    history.replaceState({}, "", url);
+  }
+}
+
+document.querySelectorAll(".rpt-tab").forEach(btn => {
+  btn.addEventListener("click", () => openReportView(btn.dataset.tab));
 });
 
 // ── Date preset picker ────────────────────────────────────────────────────────
@@ -418,18 +442,32 @@ function resolveDatePreset(preset) {
   } else if (preset === "last_year") {
     from = new Date(today.getFullYear() - 1, 0, 1);
     to   = new Date(today.getFullYear(), 0, 1);
-  } else if (preset === "last_7")   { from = addDays(today, -7);   to = addDays(today, 1); }
-  else if (preset === "last_14")    { from = addDays(today, -14);  to = addDays(today, 1); }
-  else if (preset === "last_60")    { from = addDays(today, -60);  to = addDays(today, 1); }
-  else if (preset === "last_90")    { from = addDays(today, -90);  to = addDays(today, 1); }
-  else if (preset === "last_120")   { from = addDays(today, -120); to = addDays(today, 1); }
+  } else if (preset === "last_7")   { from = addDays(today, -6);   to = addDays(today, 1); }
+  else if (preset === "last_14")    { from = addDays(today, -13);  to = addDays(today, 1); }
+  else if (preset === "last_60")    { from = addDays(today, -59);  to = addDays(today, 1); }
+  else if (preset === "last_90")    { from = addDays(today, -89);  to = addDays(today, 1); }
+  else if (preset === "last_120")   { from = addDays(today, -119); to = addDays(today, 1); }
   else if (preset === "last_6m")    { from = addMonths(today, -6); to = addDays(today, 1); }
+  else if (preset === "last_365")   { from = addDays(today, -364); to = addDays(today, 1); }
   else { // last_30 (default)
-    from = addDays(today, -30); to = addDays(today, 1);
+    from = addDays(today, -29); to = addDays(today, 1);
   }
 
   const days = Math.max(1, Math.ceil((to - from) / 86400000));
   return { date_from: from.toISOString(), date_to: to.toISOString(), days };
+}
+
+function updateReportRangeSummary() {
+  const host = document.getElementById("rptRangeSummary");
+  if (!host) return;
+  const range = getActiveDateRange();
+  const from = new Date(range.date_from);
+  const exclusiveTo = new Date(range.date_to);
+  exclusiveTo.setDate(exclusiveTo.getDate() - 1);
+  const format = value => value.toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+  host.textContent = `${format(from)} – ${format(exclusiveTo)} · ${range.days} day${range.days === 1 ? "" : "s"}`;
 }
 
 function getActiveDateRange() {
@@ -442,6 +480,7 @@ function onDatePresetChange() {
   reportDrillDateRange = null;
   const preset = document.getElementById("rptDatePreset").value;
   document.getElementById("rptCustomDates").style.display = preset === "custom" ? "flex" : "none";
+  updateReportRangeSummary();
   if (preset !== "custom") {
     if (activeTab === "contexts") syncAskDrillQuery();
     loadActiveTab();
@@ -450,6 +489,7 @@ function onDatePresetChange() {
 
 function onCustomReportDateChange() {
   reportDrillDateRange = null;
+  updateReportRangeSummary();
   if (activeTab === "contexts") syncAskDrillQuery();
   loadActiveTab();
 }
@@ -2390,9 +2430,6 @@ function randomizeReportCards() {
 document.addEventListener("DOMContentLoaded", () => {
   restoreAskCostPilotConversation();
   const requestedTab = new URLSearchParams(window.location.search).get("tab");
-  const requestedButton = requestedTab
-    ? document.querySelector(`.rpt-tab[data-tab="${CSS.escape(requestedTab)}"]`)
-    : null;
   let pendingScope = {};
   try {
     const pendingDrill = JSON.parse(sessionStorage.getItem("cp_ask_pending_drill") || "null");
@@ -2407,9 +2444,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const drillScope = Object.keys(locationScope).length ? locationScope : pendingScope;
   if (Object.keys(drillScope).length) {
     setTimeout(() => drillFromAskCostPilot(drillScope), 100);
-  } else if (requestedButton && requestedTab !== activeTab) {
-    requestedButton.click();
+  } else if (requestedTab && document.getElementById(`tab-${requestedTab}`)) {
+    openReportView(requestedTab, { preserveUrl: true });
   }
+  updateReportRangeSummary();
   setTimeout(() => initDraggableReports("savings"), 100);
 });
 

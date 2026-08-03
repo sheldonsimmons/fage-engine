@@ -41,9 +41,6 @@
         <h1 class="rpt-title">AI Governance Reports</h1>
         <p class="rpt-subtitle">Savings, risk events, and department performance over time.</p>
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <button onclick="randomizeReportCards()" style="background:transparent;color:var(--accent-purple);border:1px solid var(--accent-purple);border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer" title="Shuffle card order in active tab">⊛ Randomize</button>
-      </div>
       <div class="rpt-controls">
         <label class="rpt-range-label">Time Range</label>
         <div class="rpt-date-picker">
@@ -73,6 +70,7 @@
               <option value="last_90">Last 90 Days</option>
               <option value="last_120">Last 120 Days</option>
               <option value="last_6m">Last 6 Months</option>
+              <option value="last_365">Last 12 Months</option>
             </optgroup>
             <optgroup label="Custom">
               <option value="custom">Custom Range...</option>
@@ -83,19 +81,22 @@
             <span class="rpt-date-sep">→</span>
             <input type="date" id="rptDateTo" class="rpt-date-input" onchange="onCustomReportDateChange()" />
           </div>
+          <div class="rpt-range-summary" id="rptRangeSummary">Last 30 days</div>
         </div>
       </div>
     </div>
 
     <!-- ── Tabs ───────────────────────────────────────────────────────── -->
-    <div class="rpt-tabs" id="rptTabRow">
-      <button id="rptTabSavings"    class="rpt-tab active" data-tab="savings">💰 Savings</button>
-      <button id="rptTabRisk"       class="rpt-tab" data-tab="risk">🛡 Risk &amp; Compliance</button>
-      <button id="rptTabContexts"   class="rpt-tab" data-tab="contexts">AI Usage Attribution</button>
-      <button id="rptTabDepts"      class="rpt-tab" data-tab="departments">🏢 Departments</button>
-      <button id="rptTabEfficiency" class="rpt-tab" data-tab="efficiency">Ask CostPilot</button>
-      <button id="rptTabActivity"   class="rpt-tab" data-tab="activity" onclick="initActivityTab()">📡 Agent Activity</button>
-      <button id="rptTabRoi"        class="rpt-tab" data-tab="roi" onclick="initRoiTab()">📈 ROI Calculator</button>
+    <div class="rpt-navigation">
+      <div class="rpt-tabs" id="rptTabRow" aria-label="Report areas">
+        <button id="rptTabSavings"  class="rpt-tab active" data-tab="savings">Executive Performance</button>
+        <button id="rptTabContexts" class="rpt-tab" data-tab="contexts">Usage &amp; Attribution</button>
+        <button id="rptTabRisk"     class="rpt-tab" data-tab="risk">Governance &amp; Risk</button>
+      </div>
+      <div class="rpt-utilities" aria-label="Reporting tools">
+        <button id="rptTabEfficiency" type="button" data-report-utility="efficiency" onclick="openReportView('efficiency')">Ask CostPilot</button>
+        <a id="rptTabRoi" href="/roi.html">ROI planning →</a>
+      </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
@@ -104,6 +105,7 @@
     <div class="rpt-pane active" id="tab-savings">
 
       <div class="rpt-export-bar">
+        <button id="rptTabDepts" class="export-btn" onclick="openReportView('departments')">Department detail</button>
         <button class="export-btn" onclick="exportSavingsCsv()">⬇ CSV</button>
         <button class="export-btn" onclick="exportSavingsPdf()">🖨 PDF</button>
       </div>
@@ -346,7 +348,10 @@
           <h2>AI Usage Attribution</h2>
           <p>Start with the company, drill into a department or team, then see the people, agents, projects, records, tokens, and cost behind every AI request.</p>
         </div>
-        <button class="export-btn" onclick="exportContextCsv()">⬇ Activity CSV</button>
+        <div class="rpt-inline-actions">
+          <button id="rptTabActivity" class="export-btn" onclick="openReportView('activity')">Agent activity</button>
+          <button class="export-btn" onclick="exportContextCsv()">⬇ Activity CSV</button>
+        </div>
       </div>
 
       <div class="project-attribution-filters">
@@ -513,6 +518,7 @@
     <div class="rpt-pane" id="tab-departments">
 
       <div class="rpt-export-bar">
+        <button class="export-btn" onclick="openReportView('savings')">← Executive Performance</button>
         <button class="export-btn" onclick="exportDeptCsv()">⬇ CSV</button>
         <button class="export-btn" onclick="exportDeptPdf()">🖨 PDF</button>
       </div>
@@ -573,6 +579,7 @@
             <p>Get factual answers about spend, tokens, people, agents, departments, and business work. Every number is calculated from your governed activity.</p>
           </div>
           <div class="ask-hero-actions">
+            <button type="button" class="ask-clear-chat" onclick="openReportView('savings')">Close assistant</button>
             <button type="button" class="ask-clear-chat" onclick="clearAskCostPilotConversation()">Clear chat</button>
             <div class="ask-safety-badge" title="Questions cannot change routing, policies, budgets, or data">
               <span aria-hidden="true">✓</span> Read-only
@@ -669,6 +676,10 @@
          TAB 5: AGENT ACTIVITY
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-pane" id="tab-activity">
+
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="openReportView('contexts')">← Usage &amp; Attribution</button>
+      </div>
 
       <!-- Filter bar -->
       <div class="act-filter-bar">
@@ -1051,15 +1062,16 @@
   <script>
   window.PAGE_TOUR_STEPS = [
     { target:"rptDatePreset",    title:"Time Range",              body:"Change the reporting period — every chart and KPI updates instantly. Choose from presets or set a custom date range.",                                                           position:"bottom" },
-    { target:"rptTabSavings",    title:"💰 Savings Tab",          body:"Active now. Shows total cost saved vs. a full-flagship baseline, broken into pruning savings and tier routing savings. Export to CSV or PDF.",                                   position:"bottom" },
+    { target:"rptTabSavings",    title:"Executive Performance",  body:"Start with spend, savings, request volume, and model routing. Open department detail when you need the organizational breakdown.",                                                   position:"bottom" },
     { target:"sv-total-saved",   title:"Total Saved",             body:"Headline ROI — tokens pruned plus the cost difference between economy and flagship tiers across all routed calls.",                                                             position:"bottom" },
     { target:"sv-no-fage",       title:"Without CostPilot Baseline",   body:"Estimated cost if every call had gone to flagship with no pruning. The gap between this and Actual Cost is your CostPilot ROI.",                                                    position:"bottom" },
     { target:"sv-calls",         title:"Call Volume Split",       body:"Total calls routed this period with economy vs. flagship breakdown. High economy % = strong routing efficiency.",                                                               position:"bottom" },
-    { target:"rptTabRisk",       title:"🛡 Risk & Compliance",    body:"Click this tab to see every governance event — blocked PII, high-risk escalations, collision locks, and a board-ready executive summary.",                                       position:"bottom" },
-    { target:"rptTabDepts",      title:"🏢 Departments",          body:"Click to see a scorecard per department — call volume, economy-tier %, actual cost, and budget bar. Throttled departments flagged.",                                             position:"bottom" },
+    { target:"rptTabContexts",   title:"Usage & Attribution",    body:"Trace governed AI usage to departments, people, agents, accounts, and business records with a filterable evidence ledger.",                                                       position:"bottom" },
+    { target:"rptTabRisk",       title:"Governance & Risk",      body:"Review blocked requests, escalations, sensitive events, collision locks, and supporting compliance evidence.",                                                                    position:"bottom" },
+    { target:"rptTabDepts",      title:"Department Detail",      body:"Open the department scorecard for call volume, routing mix, actual cost, savings, and budget status.",                                                                             position:"bottom" },
     { target:"rptTabEfficiency", title:"Ask CostPilot",            body:"Ask factual questions about AI spend, tokens, people, agents, departments, and business work. Every answer includes calculated evidence.",                                       position:"bottom" },
-    { target:"rptTabActivity",   title:"📡 Agent Activity",       body:"Click to filter by platform, agent, or tier. Expand any agent row to see its full transaction log.",                                                                           position:"bottom" },
-    { target:"rptTabRoi",        title:"📈 ROI Calculator",       body:"Click to model your own AI usage — calls, token counts, model tier, CostPilot plan. See payback period and net annual savings.", position:"bottom", last:true },
+    { target:"rptTabActivity",   title:"Agent Activity",         body:"From Usage & Attribution, filter by platform, agent, department, or tier and inspect the transaction history.",                                                                  position:"bottom" },
+    { target:"rptTabRoi",        title:"ROI Planning",           body:"Open the separate planning tool to model calls, tokens, model tiers, payback, and potential annual savings.", position:"bottom", last:true },
   ];
   </script>
 <script src="/js/mobile-guard.js"></script>
