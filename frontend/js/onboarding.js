@@ -806,6 +806,26 @@ async function restoreServerOnboardingProgress() {
   const params = new URLSearchParams(window.location.search || "");
   if (params.get("oauth") === "success" || !obDiscoveryConnectionId || obDiscoveryPlatform !== "salesforce") return;
   try {
+    const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "";
+    if (workspaceId) {
+      const registryResponse = await fetch(
+        `${CostPilot_URL}/api/integrations/connections?workspace_id=${encodeURIComponent(workspaceId)}`
+      );
+      if (registryResponse.ok) {
+        const registry = await registryResponse.json();
+        const connections = registry.connections || [];
+        const stored = connections.find(item => item.id === obDiscoveryConnectionId);
+        const canonical = connections.find(item =>
+          item.platform === "salesforce"
+          && item.external_tenant_id === stored?.external_tenant_id
+          && item.mapping?.package_setup?.active === true
+        );
+        if (canonical) {
+          obDiscoveryConnectionId = canonical.id;
+          localStorage.setItem("cp_discovery_connection_id", String(canonical.id));
+        }
+      }
+    }
     const response = await fetch(
       `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup`
     );
