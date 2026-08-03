@@ -576,6 +576,39 @@ let _agentlakeProjects = [];
 let _agentlakeProjectSummary = {};
 let _agentlakeProjectsLoadedAt = 0;
 
+function agentlakeWorkspaceId() {
+  const requested = new URLSearchParams(window.location.search).get("workspace_id");
+  return String(requested || localStorage.getItem("cp_workspace_id") || "").trim();
+}
+
+function renderAgentlakeWorkspaceScope() {
+  const workspaceId = agentlakeWorkspaceId();
+  const input = document.getElementById("agentlakeWorkspaceInput");
+  const kind = document.getElementById("agentlakeWorkspaceKind");
+  if (input && document.activeElement !== input) input.value = workspaceId;
+  if (kind) {
+    const override = new URLSearchParams(window.location.search).has("workspace_id");
+    const simulator = workspaceId.startsWith("SIM-");
+    kind.textContent = simulator
+      ? "Simulator data"
+      : override
+        ? "Page override"
+        : workspaceId
+          ? "Saved operational workspace"
+          : "All workspaces — select one";
+    kind.classList.toggle("warning", simulator || !workspaceId);
+  }
+}
+
+function applyAgentlakeWorkspace() {
+  const workspaceId = String(document.getElementById("agentlakeWorkspaceInput")?.value || "").trim();
+  if (!workspaceId) return;
+  localStorage.setItem("cp_workspace_id", workspaceId);
+  const url = new URL(window.location.href);
+  url.searchParams.set("workspace_id", workspaceId);
+  window.location.href = url.toString();
+}
+
 // Whether to include archived agents in the table (toggled by supervisor)
 let _showArchived = false;
 
@@ -624,7 +657,8 @@ async function loadAgentlakeProjects() {
   const stale = Date.now() - _agentlakeProjectsLoadedAt > 30000;
   if (!stale) return;
   try {
-    const workspaceId = localStorage.getItem("cp_workspace_id") || "";
+    const workspaceId = agentlakeWorkspaceId();
+    renderAgentlakeWorkspaceScope();
     const workspaceQuery = workspaceId
       ? `?workspace_id=${encodeURIComponent(workspaceId)}`
       : "";
@@ -774,7 +808,8 @@ function agentlakeProjectStatusLabel(status) {
 function agentlakeWorkLabels() {
   const visible = _agentlakeProjects.filter(project => project.status !== "archived");
   const counts = visible.reduce((result, project) => {
-    const label = String(project.business_context?.work_label || "").trim();
+    const rawLabel = String(project.business_context?.work_label || "").trim();
+    const label = rawLabel.toLowerCase() === "custom" ? "Work" : rawLabel;
     if (label) result.set(label, (result.get(label) || 0) + 1);
     return result;
   }, new Map());

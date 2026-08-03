@@ -130,7 +130,7 @@ def business_context_json(item) -> dict:
     work_labels = {
         "account": "Account", "customer": "Customer", "matter": "Matter",
         "project": "Project", "case": "Case", "opportunity": "Opportunity",
-        "engagement": "Engagement", "work": "Work",
+        "engagement": "Engagement", "custom": "Work", "work": "Work",
     }
     return {
         "id": item.external_id,

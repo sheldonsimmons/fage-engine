@@ -292,6 +292,25 @@ def test_salesforce_case_with_customer_is_a_stable_account_rollup_with_origin_ac
     }]
 
 
+def test_unknown_custom_context_uses_work_language_not_customs():
+    db = _session()
+    item = WorkItem(
+        external_id="SIM-WORK-1",
+        name="Historical demo context",
+        workspace_id="SIM-HISTORICAL-2Y",
+        context_type="custom",
+        context_template="historical_demo",
+        status="active",
+    )
+    db.add(item)
+    db.commit()
+
+    payload = _work_item_json(item, db)
+
+    assert payload["context_type"] == "custom"
+    assert payload["business_context"]["work_label"] == "Work"
+
+
 def test_existing_project_is_upgraded_without_replacing_its_identity():
     db = _session()
     project = WorkItem(

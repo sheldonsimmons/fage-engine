@@ -339,6 +339,13 @@
               <div class="agentlake-view-description" id="agentlakeViewDescription">
                 Operational summary of the agents that need attention or are being used.
               </div>
+              <div class="agentlake-workspace-scope" id="agentlakeWorkspaceScope">
+                <span>Workspace</span>
+                <input id="agentlakeWorkspaceInput" type="text" aria-label="AgentLake workspace ID"
+                  placeholder="Workspace ID" />
+                <button type="button" onclick="applyAgentlakeWorkspace()">Apply</button>
+                <small id="agentlakeWorkspaceKind"></small>
+              </div>
             </div>
             <div class="agentlake-tabs" role="tablist" aria-label="Agentlake views">
               <button id="agentlakeTabOverview" class="agentlake-tab active" type="button" role="tab" aria-selected="true" aria-controls="agentlakeOverview" onclick="setAgentlakeView('overview')">Overview</button>

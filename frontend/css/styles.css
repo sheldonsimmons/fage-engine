@@ -290,6 +290,38 @@ body {
   font-size: 11px;
   line-height: 1.45;
 }
+.agentlake-workspace-scope {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.agentlake-workspace-scope > span,
+.agentlake-workspace-scope small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.agentlake-workspace-scope small.warning { color: var(--accent-yellow); }
+.agentlake-workspace-scope input {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font: 10px/1.2 monospace;
+  min-width: 190px;
+  padding: 5px 7px;
+}
+.agentlake-workspace-scope button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 8px;
+}
 .agentlake-tabs {
   display: inline-flex;
   padding: 3px;
