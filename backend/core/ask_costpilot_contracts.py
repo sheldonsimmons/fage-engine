@@ -6,6 +6,31 @@ from typing import Optional
 
 _CANONICAL_INTENTS = (
     {
+        "name": "token_change_drivers",
+        "patterns": (
+            r"\bwhy\b.*\b(?:tokens?|token usage|ai usage)\b.*\b(?:chang|increas|decreas|grew|fell|spik|drop)",
+            r"\bwhat (?:drove|caused|contributed to)\b.*\b(?:tokens?|token usage|ai usage)\b.*\b(?:chang|increas|decreas)",
+            r"\bwhy did our ai spend or token usage change\b",
+        ),
+        "intent": "change_drivers",
+        "entity": "overview",
+        "metric": "total_tokens",
+        "comparison_key": "previous_period",
+        "interpreted_as": "Measured token-usage changes and their recorded contributors across equal periods",
+    },
+    {
+        "name": "spend_change_drivers",
+        "patterns": (
+            r"\bwhy\b.*\b(?:spend|cost|costs)\b.*\b(?:chang|increas|decreas|grew|fell|spik|drop)",
+            r"\bwhat (?:drove|caused|contributed to)\b.*\b(?:spend|cost|costs)\b.*\b(?:chang|increas|decreas)",
+        ),
+        "intent": "change_drivers",
+        "entity": "overview",
+        "metric": "spend_usd",
+        "comparison_key": "previous_period",
+        "interpreted_as": "Measured AI-spend changes and their recorded contributors across equal periods",
+    },
+    {
         "name": "request_decision_explanation",
         "patterns": (
             r"\bwhy\b.*\b(?:this|that|the) request\b.*\b(?:rout|block|throttl|model|tier)",
@@ -168,6 +193,15 @@ def validate_ask_answer_contract(parsed: dict, payload: dict) -> list[str]:
     """Return violations that make a polished response unsafe to display."""
     canonical_name = parsed.get("canonical_intent")
     issues = []
+    if parsed.get("intent") == "change_drivers":
+        calculation = payload.get("calculation") or {}
+        coverage = (payload.get("data_provenance") or {}).get("coverage") or {}
+        if not calculation.get("comparison_plan"):
+            issues.append("change-driver answer is missing explicit paired periods")
+        if coverage.get("comparable") and not calculation.get("driver_analysis"):
+            issues.append("comparable change-driver answer is missing deterministic decomposition")
+        if not coverage.get("status"):
+            issues.append("change-driver answer is missing coverage status")
     if parsed.get("intent") == "comparison":
         calculation = payload.get("calculation") or {}
         plan = calculation.get("comparison_plan") or {}

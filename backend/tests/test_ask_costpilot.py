@@ -10,6 +10,7 @@ from core.ask_costpilot_contracts import (
 )
 from core.analytics_metrics import metric_definition
 from core.analytics_periods import comparison_coverage, comparison_plan, resolve_primary_period
+from core.analytics_drivers import change_decomposition, dimension_contributors
 
 from api.routes_efficiency import (
     _ask_conversation_text,
@@ -165,6 +166,93 @@ def test_around_this_time_last_year_uses_same_calendar_period_comparison():
     assert intent["metric"] == "total_tokens"
     assert intent["period_key"] is None
     assert intent["comparison_key"] == "same_period_previous_year"
+
+
+def test_exact_change_driver_question_never_falls_back_to_overview():
+    intent = _ask_intent(
+        "Why did our AI spend or token usage change?",
+        default_days=30,
+    )
+    canonical = canonical_ask_intent(
+        "Why did our AI spend or token usage change?"
+    )
+
+    assert intent["intent"] == "change_drivers"
+    assert canonical["name"] == "token_change_drivers"
+    assert canonical["intent"] == "change_drivers"
+    assert canonical["metric"] == "total_tokens"
+
+
+def test_change_decomposition_reconciles_to_total_change():
+    result = change_decomposition(
+        {"request_count": 20, "total_tokens": 8000},
+        {"request_count": 10, "total_tokens": 3000},
+        "total_tokens",
+    )
+
+    assert result["absolute_change"] == 5000
+    assert round(result["request_volume_effect"] + result["per_request_effect"], 6) == 5000
+    assert result["method"] == "two-factor Shapley decomposition"
+
+
+def test_dimension_contributors_rank_absolute_measured_deltas():
+    rows = dimension_contributors(
+        [
+            {"id": 1, "label": "Agent A", "total_tokens": 5000},
+            {"id": 2, "label": "Agent B", "total_tokens": 1000},
+        ],
+        [
+            {"id": 1, "label": "Agent A", "total_tokens": 1000},
+            {"id": 2, "label": "Agent B", "total_tokens": 2000},
+        ],
+        "total_tokens",
+        "agent",
+        total_change=3000,
+    )
+
+    assert rows[0]["label"] == "Agent A"
+    assert rows[0]["absolute_change"] == 4000
+    assert rows[1]["absolute_change"] == -1000
+
+
+def test_endpoint_answers_change_driver_question_with_deterministic_decomposition():
+    current = deepcopy(_controlled_report())
+    current["summary"].update({
+        "request_count": 20,
+        "total_tokens": 8000,
+        "spend_usd": 3.0,
+    })
+    current["agent_breakdown"] = [
+        {"id": 1, "label": "Support Agent", "request_count": 12, "total_tokens": 6000, "spend_usd": 2.0}
+    ]
+    prior = deepcopy(_controlled_report())
+    prior["summary"].update({
+        "request_count": 10,
+        "total_tokens": 3000,
+        "spend_usd": 1.0,
+    })
+    prior["agent_breakdown"] = [
+        {"id": 1, "label": "Support Agent", "request_count": 5, "total_tokens": 1000, "spend_usd": 0.4}
+    ]
+
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(
+            question="Why did our AI spend or token usage change?",
+            days=30,
+            timezone_name="America/Chicago",
+        ),
+        report=[current, prior],
+    )
+
+    assert len(calls) == 2
+    assert response["intent"] == "change_drivers"
+    assert response["title"] == "Tokens change drivers"
+    assert response["contract_status"] == "passed"
+    assert response["calculation"]["absolute_change"] == 5000
+    assert response["calculation"]["driver_analysis"]["primary_metric"]["method"] == "two-factor Shapley decomposition"
+    assert response["calculation"]["driver_analysis"]["contributors"][0]["label"] == "Support Agent"
+    assert "measured contributors" in response["answer"].lower()
+    assert "Recorded AI spend moved" in response["answer"]
 
 
 def test_metric_registry_exposes_versioned_token_contract():

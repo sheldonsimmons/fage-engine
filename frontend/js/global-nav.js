@@ -195,6 +195,7 @@
         <div class="cp-ask-suggestions" aria-label="Suggested questions">
           <button type="button">Who used the most tokens last week?</button>
           <button type="button">Compare token usage with around this time last year.</button>
+          <button type="button">Why did our AI spend or token usage change?</button>
           <button type="button">Where is our AI spend going?</button>
           <button type="button">How many tokens did pruning remove?</button>
           <button type="button">Show live versus simulator usage.</button>

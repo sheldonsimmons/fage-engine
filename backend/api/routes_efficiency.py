@@ -50,6 +50,7 @@ from core.analytics_coverage import (
     workspace_analytics_settings,
     workspace_collection_profile,
 )
+from core.analytics_drivers import change_decomposition, dimension_contributors
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -388,6 +389,18 @@ def _ask_intent(question: str, default_days: int) -> dict:
     )):
         intent = "tier_usage"
         entity = "model"
+    elif (
+        any(term in text for term in ("why ", "what drove", "what caused", "contributed to"))
+        and any(term in text for term in (
+            "change", "changed", "increase", "increased", "decrease", "decreased",
+            "spike", "spiked", "drop", "dropped", "grew", "fell",
+        ))
+        and any(term in text for term in (
+            "spend", "cost", "token", "request", "usage", "volume",
+        ))
+    ):
+        intent = "change_drivers"
+        entity = "overview"
     elif any(term in text for term in (
         "compare ", " compared ", " versus ", " vs. ", " vs "
     )) or any(term in text for term in (
@@ -481,7 +494,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         )) else "alerts"
 
     comparison_key = None
-    if intent == "comparison":
+    if intent in {"comparison", "change_drivers"}:
         if any(term in text for term in (
                 "same period last year", "this time last year", "around this time last year",
                 "year over year", "year-over-year", "year to date", "ytd",
@@ -529,7 +542,7 @@ _ASK_INTENTS = {
     "ranking", "overview", "savings", "budget", "pruning", "source_mix",
     "blocked", "risk_events", "total", "comparison", "activity", "inactive",
     "agent_adoption",
-    "tier_usage", "optimization", "help", "product", "decision",
+    "tier_usage", "optimization", "change_drivers", "help", "product", "decision",
 }
 _ASK_ENTITIES = {
     "person", "agent", "department", "context", "platform", "model", "overview", "request"
@@ -1018,6 +1031,9 @@ context for accounts/projects/matters/opportunities/work; platform for source sy
 model for model names or tiers; overview for company totals. Choose source_mix for
 questions comparing live activity with simulator or test traffic.
 Use total_tokens for token questions, spend_usd for cost/spend, and request_count for calls/usage.
+Choose change_drivers when the user asks why a measured spend, cost, token, request, or usage value
+changed, increased, decreased, spiked, or dropped. This selects deterministic contribution analysis;
+never invent a business cause.
 Choose comparison with comparison_key same_period_previous_year for year-over-year, same-period-last-year,
 "around this time last year", and year-to-date versus last-year questions. Choose previous_period for an
 immediately preceding equal-length comparison. Never invent date boundaries; the server resolves them.
@@ -1986,6 +2002,10 @@ def _ask_help_response(
             "How much did we spend this month? Compare token usage with around this time last year.",
         ),
         (
+            "Change drivers",
+            "Why did our AI spend or token usage change? Which measured contributors drove the difference?",
+        ),
+        (
             "People and agents",
             "Who used the most tokens? Which agents have not been used recently?",
         ),
@@ -2209,7 +2229,7 @@ def ask_costpilot(
     comparison_execution_plan = None
     comparison_coverage_result = None
     date_from, date_to = _ask_period_bounds(request, parsed)
-    if parsed.get("intent") == "comparison":
+    if parsed.get("intent") in {"comparison", "change_drivers"}:
         stored_analytics_settings = workspace_analytics_settings(db, request.workspace_id)
         effective_timezone = (
             stored_analytics_settings.timezone_name
@@ -2251,6 +2271,7 @@ def ask_costpilot(
     title = "AI usage overview"
     calculation_formula = None
     calculation_row_count = None
+    driver_analysis = None
     named_entity = _ask_named_entity(question, report)
 
     entity_config = {
@@ -2281,7 +2302,143 @@ def ask_costpilot(
     else:
         data_scope = "no_activity"
 
-    if intent == "comparison":
+    if intent == "change_drivers":
+        prior_period = comparison_execution_plan.comparison
+        prior_report = project_activity_reporting(
+            workspace_id=request.workspace_id,
+            date_from=prior_period.start,
+            date_to=prior_period.end,
+            days=parsed["days"],
+            **reporting_filters,
+            activity_limit=1,
+            db=db,
+        )
+        prior_summary = prior_report.get("summary") or {}
+        if db is not None and request.workspace_id:
+            comparison_coverage_result = comparison_data_coverage(
+                comparison_execution_plan,
+                summary,
+                prior_summary,
+                workspace_collection_profile(db, request.workspace_id),
+            )
+        else:
+            comparison_coverage_result = comparison_coverage(summary, prior_summary)
+        plan_contract = comparison_execution_plan.contract()
+        primary_label = plan_contract["primary"]["label"]
+        comparison_label = plan_contract["comparison"]["label"]
+        primary_decomposition = change_decomposition(summary, prior_summary, metric)
+        token_decomposition = change_decomposition(summary, prior_summary, "total_tokens")
+        spend_decomposition = change_decomposition(summary, prior_summary, "spend_usd")
+        change = primary_decomposition["absolute_change"]
+        pct = primary_decomposition["percent_change"]
+        current_display, metric_label = _ask_metric_value(
+            metric, primary_decomposition["current_value"]
+        )
+        prior_display, _ = _ask_metric_value(
+            metric, primary_decomposition["comparison_value"]
+        )
+        title = f"{metric_label.title()} change drivers"
+        evidence = [
+            {
+                "label": primary_label,
+                "value": current_display,
+                "metric_label": metric_label,
+                "detail": f"{int(summary.get('request_count') or 0):,} governed requests",
+                "filter_name": None,
+                "filter_value": None,
+            },
+            {
+                "label": comparison_label,
+                "value": prior_display,
+                "metric_label": metric_label,
+                "detail": f"{int(prior_summary.get('request_count') or 0):,} governed requests",
+                "filter_name": None,
+                "filter_value": None,
+            },
+        ]
+        if comparison_coverage_result["comparable"]:
+            dimension_specs = (
+                ("agent", "agent_breakdown", "agent_id"),
+                ("department", "organizational_unit_breakdown", "charged_unit"),
+                ("business context", "project_breakdown", "project_id"),
+                ("platform", "source_platform_breakdown", "source_platform"),
+                ("model", "model_breakdown", None),
+            )
+            contributors = []
+            for dimension, report_key, filter_name in dimension_specs:
+                rows = dimension_contributors(
+                    report.get(report_key) or [],
+                    prior_report.get(report_key) or [],
+                    metric,
+                    dimension,
+                    change,
+                    limit=5,
+                )
+                for row in rows:
+                    row["filter_name"] = filter_name
+                contributors.extend(rows)
+            contributors.sort(
+                key=lambda row: (-abs(row["absolute_change"]), row["dimension"], row["label"])
+            )
+            contributors = contributors[:5]
+            for row in contributors:
+                delta_display, _ = _ask_metric_value(metric, row["absolute_change"])
+                evidence.append({
+                    "label": row["label"],
+                    "value": delta_display,
+                    "metric_label": f"{metric_label} change",
+                    "detail": f"Measured {row['dimension']} contribution across the two periods",
+                    "filter_name": row["filter_name"],
+                    "filter_value": row["id"],
+                    "dimension": row["dimension"],
+                    "net_change_contribution_pct": row["net_change_contribution_pct"],
+                })
+            volume_display, _ = _ask_metric_value(
+                metric, primary_decomposition["request_volume_effect"]
+            )
+            intensity_display, _ = _ask_metric_value(
+                metric, primary_decomposition["per_request_effect"]
+            )
+            direction_word = "increased" if change > 0 else "decreased" if change < 0 else "did not change"
+            answer = (
+                f"{metric_label.title()} {direction_word} from {prior_display} for {comparison_label} "
+                f"to {current_display} for {primary_label}"
+                + (f" ({abs(pct):.1f}%). " if pct is not None else ". ")
+                + f"The measured request-volume effect was {volume_display}, and the per-request effect was {intensity_display}."
+            )
+            if contributors:
+                contributor_text = ", ".join(
+                    f"{row['label']} ({row['dimension']})" for row in contributors[:3]
+                )
+                answer += f" The largest recorded contributors were {contributor_text}."
+            if metric == "total_tokens" and "spend" in question.lower():
+                spend_current, _ = _ask_metric_value("spend_usd", spend_decomposition["current_value"])
+                spend_prior, _ = _ask_metric_value("spend_usd", spend_decomposition["comparison_value"])
+                answer += f" Recorded AI spend moved from {spend_prior} to {spend_current}."
+            answer += " These are measured contributors, not inferred business causes."
+            driver_analysis = {
+                "primary_metric": primary_decomposition,
+                "tokens": token_decomposition,
+                "spend": spend_decomposition,
+                "contributors": contributors,
+                "causality_note": "Contribution does not establish the underlying business cause.",
+            }
+        else:
+            answer = (
+                f"CostPilot cannot determine why {metric_label} changed between {comparison_label} "
+                f"and {primary_label}. {comparison_coverage_result['limitation']}"
+            )
+            change = None
+            pct = None
+        calculation_formula = (
+            "Two-factor Shapley decomposition of request volume and metric per request, "
+            "plus entity deltas calculated with identical filters"
+        )
+        calculation_row_count = (
+            int(summary.get("request_count") or 0)
+            + int(prior_summary.get("request_count") or 0)
+        )
+    elif intent == "comparison":
         current_value = _ask_row_metric(summary, metric)
         if comparison_execution_plan:
             prior_period = comparison_execution_plan.comparison
@@ -3007,6 +3164,8 @@ def ask_costpilot(
         calculation["comparison_plan"] = comparison_execution_plan.contract()
         calculation["absolute_change"] = change
         calculation["percent_change"] = pct
+    if driver_analysis:
+        calculation["driver_analysis"] = driver_analysis
     conversation_context = {
         "intent": intent,
         "entity": entity,
