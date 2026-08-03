@@ -1,7 +1,7 @@
 import os
 import sys
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from core.ask_costpilot_contracts import (
@@ -144,6 +144,65 @@ def test_employee_token_question_becomes_person_ranking_for_last_week():
     assert intent["period_key"] == "last_week"
     assert intent["direction"] == "desc"
     assert intent["result_limit"] == 5
+
+
+def test_highest_token_spend_yesterday_is_an_exact_person_token_ranking():
+    intent = _ask_intent(
+        "who had the highest token spend yesterday?",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "ranking"
+    assert intent["entity"] == "person"
+    assert intent["metric"] == "total_tokens"
+    assert intent["period_key"] == "yesterday"
+
+
+def test_last_year_on_this_date_means_one_calendar_day_not_the_prior_year():
+    request = AskCostPilotRequest(
+        question="What was my AI spend last year on this date?",
+    )
+    intent = _ask_intent(request.question, request.days)
+    start, end = _ask_period_bounds(request, intent)
+
+    assert intent["metric"] == "spend_usd"
+    assert intent["period_key"] == "same_date_last_year"
+    assert end - start == timedelta(days=1)
+    assert start.year == datetime.utcnow().year - 1
+
+
+def test_all_time_person_spend_ranking_does_not_use_default_window():
+    intent = _ask_intent(
+        "Who has the most AI spend of all time?",
+        default_days=30,
+    )
+
+    assert intent["intent"] == "ranking"
+    assert intent["entity"] == "person"
+    assert intent["metric"] == "spend_usd"
+    assert intent["period_key"] == "all_time"
+
+
+def test_all_time_endpoint_uses_configured_collection_boundaries(monkeypatch):
+    from api import routes_efficiency
+
+    monkeypatch.setattr(
+        routes_efficiency,
+        "workspace_analytics_settings",
+        lambda db, workspace_id: SimpleNamespace(
+            collection_started_at=datetime(2024, 8, 3),
+            latest_complete_at=datetime(2026, 8, 4),
+        ),
+    )
+    response, calls = _run_with_controlled_report(AskCostPilotRequest(
+        question="Who has the most AI spend of all time?",
+        workspace_id="SIM-HISTORICAL-2Y",
+    ))
+
+    assert calls[0]["date_from"] == datetime(2024, 8, 3)
+    assert calls[0]["date_to"] == datetime(2026, 8, 4)
+    assert response["assistant_mode"] == "deterministic_period_contract"
+    assert response["interpreted_intent"]["period_key"] == "all_time"
 
 
 def test_savings_question_uses_read_only_optimization_intent():

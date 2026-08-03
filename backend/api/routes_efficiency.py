@@ -221,7 +221,14 @@ def _ask_intent(question: str, default_days: int) -> dict:
     text = " ".join((question or "").lower().split())
     days = max(1, min(int(default_days or 30), 365))
     period_key = None
-    if any(term in text for term in ("month over month", "month-over-month")):
+    if any(term in text for term in ("all time", "all-time", "ever recorded", "since inception")):
+        days, period_key = 365, "all_time"
+    elif (
+        ("last year" in text or "a year ago" in text)
+        and any(term in text for term in ("on this date", "this date", "on this day", "that day"))
+    ):
+        days, period_key = 1, "same_date_last_year"
+    elif any(term in text for term in ("month over month", "month-over-month")):
         days, period_key = 31, "this_month"
     elif any(term in text for term in ("quarter over quarter", "quarter-over-quarter")):
         days, period_key = 92, "this_quarter"
@@ -555,7 +562,7 @@ _ASK_DIRECTIONS = {"asc", "desc"}
 _ASK_PERIOD_KEYS = {
     "today", "yesterday", "this_week", "last_week", "this_month",
     "last_month", "this_quarter", "last_quarter", "this_year", "last_year",
-    "rolling_days",
+    "same_date_last_year", "all_time", "rolling_days",
 }
 _ASK_COMPARISON_KEYS = {
     "previous_period", "same_period_previous_year", "previous_month", "previous_quarter",
@@ -923,6 +930,12 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     # not be broadened into a general usage overview by the language planner.
     if fallback["intent"] == "agent_adoption":
         return fallback, "deterministic_agent_adoption"
+    # Exact calendar and lifetime phrases are reporting contracts. A language
+    # model must not widen one day to a year or shrink all history to 30 days.
+    if fallback.get("period_key") in {
+        "yesterday", "same_date_last_year", "all_time",
+    }:
+        return fallback, "deterministic_period_contract"
     enabled = os.getenv("ASK_COSTPILOT_AI_ENABLED", "true").lower() not in {
         "0", "false", "no", "off"
     }
@@ -1125,6 +1138,12 @@ def _ask_period_bounds(
         return this_year, now
     if key == "last_year":
         return this_year.replace(year=this_year.year - 1), this_year
+    if key == "same_date_last_year":
+        try:
+            start = today.replace(year=today.year - 1)
+        except ValueError:
+            start = today.replace(year=today.year - 1, day=28)
+        return start, start + timedelta(days=1)
     if key == "rolling_days":
         return now - timedelta(days=max(1, int(parsed.get("days") or 30))), now
     return request.date_from, request.date_to
@@ -2229,6 +2248,20 @@ def ask_costpilot(
     comparison_execution_plan = None
     comparison_coverage_result = None
     date_from, date_to = _ask_period_bounds(request, parsed)
+    if parsed.get("period_key") == "all_time":
+        settings = workspace_analytics_settings(db, request.workspace_id)
+        if settings and settings.collection_started_at:
+            date_from = settings.collection_started_at
+            date_to = settings.latest_complete_at or datetime.utcnow()
+        else:
+            profile = workspace_collection_profile(db, request.workspace_id)
+            observed_start = profile.get("earliest_observed_at")
+            observed_end = profile.get("latest_observed_at")
+            date_from = datetime.fromisoformat(observed_start) if observed_start else None
+            date_to = (
+                datetime.fromisoformat(observed_end) + timedelta(microseconds=1)
+                if observed_end else datetime.utcnow()
+            )
     if parsed.get("intent") in {"comparison", "change_drivers"}:
         stored_analytics_settings = workspace_analytics_settings(db, request.workspace_id)
         effective_timezone = (
@@ -3231,9 +3264,14 @@ def ask_costpilot(
             contract_issues,
         )
         return _ask_contract_failure_response(request, parsed, contract_issues)
-    narrated_title, narrated_answer, narrated = _ask_grounded_narrative(
-        request, payload
-    )
+    if assistant_mode == "deterministic_period_contract":
+        narrated_title, narrated_answer, narrated = (
+            payload["title"], payload["answer"], False
+        )
+    else:
+        narrated_title, narrated_answer, narrated = _ask_grounded_narrative(
+            request, payload
+        )
     payload["title"] = narrated_title
     payload["answer"] = narrated_answer
     if narrated:
