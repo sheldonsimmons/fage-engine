@@ -241,6 +241,57 @@ def test_salesforce_template_resolves_universal_business_context():
     }
 
 
+def test_salesforce_case_with_customer_is_a_stable_account_rollup_with_origin_activity():
+    db = _session()
+    body = AgentforceGovernRequest(
+        record_id="500-CASE-1",
+        task_description="Summarize the case",
+        project_name="Repeated motor breakdown while shutting off",
+        source_record_name="Repeated motor breakdown while shutting off",
+        source_type="Case",
+        source_record_type="Case",
+        customer_external_id="001-ARIZONA",
+        customer_name="University of Arizona",
+    )
+
+    item = _resolve_or_create_project(db, "WORKSPACE-ACCOUNT-ROLLUP", body)
+    db.add(TokenTransaction(
+        department="Sales",
+        workspace_id="WORKSPACE-ACCOUNT-ROLLUP",
+        work_item_id=item.id,
+        source_platform="Salesforce Agentforce",
+        origin_record_id="500-CASE-1",
+        origin_record_type="Case",
+        origin_record_name="Repeated motor breakdown while shutting off",
+        model_tier="Scout",
+        input_tokens=100,
+        output_tokens=50,
+        cost_usd=0.003,
+    ))
+    db.commit()
+
+    payload = _work_item_json(item, db)
+
+    assert item.external_id == "SF-ACCOUNT-001-ARIZONA"
+    assert item.name == "University of Arizona"
+    assert item.context_type == "account"
+    assert item.source_record_type == "Account"
+    assert item.source_record_id == "001-ARIZONA"
+    assert payload["name"] == "University of Arizona"
+    assert payload["business_context"]["work_label"] == "Account"
+    assert payload["related_record_activity"] == [{
+        "source_record_id": "500-CASE-1",
+        "source_record_type": "Case",
+        "source_record_name": "Repeated motor breakdown while shutting off",
+        "request_count": 1,
+        "total_tokens": 150,
+        "spend_usd": 0.003,
+        "last_activity_at": payload["related_record_activity"][0]["last_activity_at"],
+        "source_platform": "Salesforce",
+        "is_primary": True,
+    }]
+
+
 def test_existing_project_is_upgraded_without_replacing_its_identity():
     db = _session()
     project = WorkItem(

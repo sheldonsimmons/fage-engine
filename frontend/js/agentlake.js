@@ -773,10 +773,15 @@ function agentlakeProjectStatusLabel(status) {
 
 function agentlakeWorkLabels() {
   const visible = _agentlakeProjects.filter(project => project.status !== "archived");
-  const configured = visible
+  const configured = [...new Set(visible
     .map(project => project.business_context?.work_label)
-    .find(Boolean);
-  const singular = String(configured || "Work").trim() || "Work";
+    .filter(Boolean)
+    .map(label => String(label).trim())
+    .filter(Boolean))];
+  // A workspace containing more than one business-context grain is "Work".
+  // Selecting the first row made this label depend on API ordering and caused
+  // Account workspaces to intermittently appear as Projects.
+  const singular = configured.length === 1 ? configured[0] : "Work";
   const plural = /[^aeiou]y$/i.test(singular)
     ? `${singular.slice(0, -1)}ies`
     : /(s|x|z|ch|sh)$/i.test(singular)
@@ -902,6 +907,11 @@ function renderAgentlakeProjects() {
     const risks = Number(project.risk_event_count || 0);
     const team = project.agent_team || [];
     const assignedCount = Number(project.assigned_agent_count || 0);
+    const observedCount = Number(project.agent_count || 0);
+    const relatedRecords = Array.isArray(project.related_record_activity)
+      ? project.related_record_activity
+      : [];
+    const contextLabel = project.business_context?.work_label || "Work";
     const platforms = project.activity_platforms?.length
       ? project.activity_platforms
       : [project.source_platform].filter(Boolean);
@@ -916,6 +926,13 @@ function renderAgentlakeProjects() {
         }).join("")
       : '<span class="agentlake-empty-agent">No agents assigned or observed</span>';
     const tierNames = project.model_tiers?.length ? project.model_tiers.join(", ") : "—";
+    const relatedRecordRows = relatedRecords.length
+      ? relatedRecords.map(record => `
+          <span class="agentlake-project-agent">
+            <b>${agentlakeEscape(record.source_record_name || record.source_record_id || "Salesforce record")}</b>
+            <i class="${Number(record.request_count || 0) ? "used" : ""}">${agentlakeEscape(record.source_record_type || "Record")} · ${Number(record.request_count || 0).toLocaleString()} requests · $${Number(record.spend_usd || 0).toFixed(4)}</i>
+          </span>`).join("")
+      : '<span class="agentlake-empty-agent">No related source records observed</span>';
     return `
       <details
         class="agentlake-project-card${risks ? " has-risk" : ""}"
@@ -926,9 +943,9 @@ function renderAgentlakeProjects() {
           <div class="agentlake-project-identity">
             <span class="agentlake-project-status status-${agentlakeEscape(project.status)}">${agentlakeEscape(agentlakeProjectStatusLabel(project.status))}</span>
             <h3>${agentlakeEscape(project.name)}</h3>
-            <p>${agentlakeEscape(project.external_id)} · ${agentlakeEscape(project.department || "No department")}</p>
+            <p>${agentlakeEscape(project.external_id)} · ${agentlakeEscape(contextLabel)}${relatedRecords.length ? ` · ${relatedRecords.length.toLocaleString()} related records` : ""} · ${agentlakeEscape(project.department || "No department")}</p>
           </div>
-          <div class="agentlake-project-stat"><strong>${assignedCount.toLocaleString()}</strong><span>assigned agents</span></div>
+          <div class="agentlake-project-stat"><strong>${assignedCount.toLocaleString()}</strong><span>assigned agents${observedCount > assignedCount ? ` · ${observedCount.toLocaleString()} observed` : ""}</span></div>
           <div class="agentlake-project-stat"><strong>${Number(project.request_count || 0).toLocaleString()}</strong><span>requests</span></div>
           <div class="agentlake-project-stat"><strong>$${spend.toFixed(2)}</strong><span>total spend</span></div>
           <div class="agentlake-project-stat${risks ? " risk" : ""}"><strong>${risks.toLocaleString()}</strong><span>risk events</span></div>
@@ -937,6 +954,7 @@ function renderAgentlakeProjects() {
         </summary>
         <div class="agentlake-project-detail">
           <div><span>Agent team</span><div class="agentlake-project-agent-list">${agentTeamRows}</div></div>
+          <div><span>Related record activity</span><div class="agentlake-project-agent-list">${relatedRecordRows}</div></div>
           <div><span>Platforms</span><strong>${agentlakeEscape(platforms.join(", ") || "—")}</strong></div>
           <div><span>Model tiers</span><strong>${agentlakeEscape(tierNames)}</strong></div>
           <div><span>Owner</span><strong>${agentlakeEscape(project.owner || "Unassigned")}</strong></div>

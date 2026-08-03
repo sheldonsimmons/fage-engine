@@ -191,8 +191,20 @@ def _resolve_or_create_project(
             detail=f"project_status must be one of: {', '.join(sorted(valid_statuses))}",
         )
 
+    # A non-project Salesforce record carrying an Account relationship is
+    # stored as an Account rollup. Keep the canonical row's identity stable;
+    # the originating Case, Contact, or Opportunity remains available through
+    # its source link and per-origin transaction fields.
+    is_account_rollup = bool(account and not is_explicit_project)
+    if is_account_rollup:
+        context_type = "account"
+
     if project:
-        if body.project_name and not grouped_by_account:
+        if is_account_rollup:
+            project.name = account.name
+            project.source_record_type = "Account"
+            project.source_record_id = account.external_id
+        elif body.project_name and not grouped_by_account:
             project.name = body.project_name.strip()
         if body.project_owner:
             project.owner = body.project_owner.strip()
@@ -226,8 +238,8 @@ def _resolve_or_create_project(
             workspace_id=workspace_id,
             context_type=context_type,
             context_template=body.context_template,
-            source_record_type=source_record_type,
-            source_record_id=source_record_id,
+            source_record_type="Account" if is_account_rollup else source_record_type,
+            source_record_id=account.external_id if is_account_rollup else source_record_id,
             account_id=account.id if account else None,
         )
         db.add(project)

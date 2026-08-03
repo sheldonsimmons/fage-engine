@@ -357,10 +357,63 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         item.source_links,
         key=lambda link: (not bool(link.is_primary), link.source_platform, link.source_record_type or "", link.source_record_name or link.source_record_id),
     )
+    context = business_context_json(item)
+    origin_rows = (
+        db.query(
+            TokenTransaction.origin_record_id,
+            TokenTransaction.origin_record_type,
+            TokenTransaction.origin_record_name,
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.max(TokenTransaction.timestamp),
+        )
+        .filter(
+            TokenTransaction.work_item_id == item.id,
+            TokenTransaction.origin_record_id.isnot(None),
+        )
+        .group_by(
+            TokenTransaction.origin_record_id,
+            TokenTransaction.origin_record_type,
+            TokenTransaction.origin_record_name,
+        )
+        .all()
+    )
+    origin_by_id = {
+        str(row[0]): {
+            "source_record_id": row[0],
+            "source_record_type": row[1],
+            "source_record_name": row[2] or row[0],
+            "request_count": int(row[3] or 0),
+            "total_tokens": int(row[4] or 0) + int(row[5] or 0),
+            "spend_usd": round(float(row[6] or 0.0), 6),
+            "last_activity_at": row[7].isoformat() if row[7] else None,
+        }
+        for row in origin_rows
+    }
+    related_record_activity = []
+    for link in source_links:
+        activity = origin_by_id.pop(str(link.source_record_id), None) or {
+            "source_record_id": link.source_record_id,
+            "source_record_type": link.source_record_type,
+            "source_record_name": link.source_record_name or link.source_record_id,
+            "request_count": 0,
+            "total_tokens": 0,
+            "spend_usd": 0.0,
+            "last_activity_at": None,
+        }
+        activity["source_platform"] = link.source_platform
+        activity["is_primary"] = bool(link.is_primary)
+        related_record_activity.append(activity)
+    related_record_activity.extend(origin_by_id.values())
+    related_record_activity.sort(
+        key=lambda row: (-row["spend_usd"], -row["request_count"], row["source_record_name"])
+    )
     return {
         "id": item.id,
         "external_id": item.external_id,
-        "name": item.name,
+        "name": context["name"],
         "account_id": item.account_id,
         "account_name": item.account.name if item.account else None,
         "owner": item.owner,
@@ -372,13 +425,14 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "cost_treatment": item.cost_treatment,
         "source_platform": item.source_platform,
         "workspace_id": item.workspace_id,
-        "context_type": item.context_type or "project",
+        "context_type": context["type"],
         "context_template": item.context_template,
         "source_record_type": item.source_record_type,
         "source_record_id": item.source_record_id,
         "source_links": [_source_link_json(link) for link in source_links],
+        "related_record_activity": related_record_activity,
         "merged_into_work_item_id": item.merged_into_work_item_id,
-        "business_context": business_context_json(item),
+        "business_context": context,
         "request_count": int(request_count or 0),
         "input_tokens": int(input_tokens or 0),
         "output_tokens": int(output_tokens or 0),

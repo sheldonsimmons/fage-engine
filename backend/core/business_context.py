@@ -118,12 +118,29 @@ def business_context_json(item) -> dict:
     """Return the universal contract without changing legacy project fields."""
     template = get_context_template(getattr(item, "context_template", None))
     account = getattr(item, "account", None)
+    stored_type = getattr(item, "context_type", None) or "project"
+    is_account_rollup = bool(
+        account
+        and (
+            str(getattr(item, "external_id", "") or "").startswith("SF-ACCOUNT-")
+            or str(getattr(item, "source_record_type", "") or "").lower() == "account"
+        )
+    )
+    resolved_type = "account" if is_account_rollup else stored_type
+    work_labels = {
+        "account": "Account", "customer": "Customer", "matter": "Matter",
+        "project": "Project", "case": "Case", "opportunity": "Opportunity",
+        "engagement": "Engagement", "work": "Work",
+    }
     return {
         "id": item.external_id,
-        "type": getattr(item, "context_type", None) or "project",
-        "name": item.name,
+        "type": resolved_type,
+        "name": account.name if is_account_rollup else item.name,
         "template": getattr(item, "context_template", None),
-        "work_label": template.work_label if template else "Project",
+        "work_label": work_labels.get(
+            resolved_type,
+            template.work_label if template else resolved_type.replace("_", " ").title(),
+        ),
         "customer": (
             {
                 "id": account.external_id,
