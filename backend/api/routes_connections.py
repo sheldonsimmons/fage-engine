@@ -1116,23 +1116,46 @@ def save_salesforce_ai_entry_points(
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="AI entry-point selection currently supports Salesforce")
     mapping = json.loads(item.mapping_json or "{}")
-    mapping["selected_ai_entry_points"] = [
+
+    def normalize(entries: list[dict]) -> list[dict]:
+        unique = {}
+        for entry in entries:
+            normalized = {
+                "kind": str(entry.get("kind") or ""),
+                "id": str(entry.get("id") or ""),
+                "name": str(entry.get("name") or "").strip(),
+                "label": str(entry.get("label") or entry.get("name") or "").strip(),
+                "activation_status": "action_required",
+            }
+            key = (normalized["kind"].lower(), normalized["name"].lower())
+            current = unique.get(key)
+            current_id = str(current.get("id") or "") if current else ""
+            candidate_id = normalized["id"]
+            candidate_is_discovered = bool(candidate_id and not candidate_id.startswith("manual:"))
+            current_is_discovered = bool(current_id and not current_id.startswith("manual:"))
+            if current is None or (candidate_is_discovered and not current_is_discovered):
+                unique[key] = normalized
+        return list(unique.values())
+
+    selected = normalize([
         {
             "kind": entry.kind,
             "id": entry.id,
             "name": entry.name,
             "label": entry.label or entry.name,
-            "activation_status": "action_required",
         }
         for entry in payload.entries
-    ]
-    mapping["entry_points_selected_at"] = datetime.utcnow().isoformat()
+    ])
+    previous = normalize(mapping.get("selected_ai_entry_points") or [])
+    mapping["selected_ai_entry_points"] = selected
+    if selected != previous or not mapping.get("entry_points_selected_at"):
+        mapping["entry_points_selected_at"] = datetime.utcnow().isoformat()
     item.mapping_json = json.dumps(mapping)
     db.commit()
     return {
         "connection_id": item.id,
-        "selected": mapping["selected_ai_entry_points"],
-        "count": len(mapping["selected_ai_entry_points"]),
+        "selected": selected,
+        "count": len(selected),
     }
 
 

@@ -248,6 +248,41 @@ def test_salesforce_package_saves_selected_agents_and_flows():
     ]
 
 
+def test_salesforce_entry_point_save_is_idempotent_and_deduplicates_agents():
+    db = _session()
+    item = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Salesforce Production",
+        status="connected",
+        mapping_json=json.dumps({
+            "selected_ai_entry_points": [{
+                "kind": "agent", "id": "agent-1", "name": "Quoting_Agent",
+                "label": "CostPilot Agent", "activation_status": "action_required",
+            }],
+            "entry_points_selected_at": "2026-08-03T22:50:05.158597",
+        }),
+    )
+    db.add(item)
+    db.commit()
+
+    result = save_salesforce_ai_entry_points(
+        item.id,
+        AiEntryPointSelectionUpdate(entries=[
+            {"kind": "agent", "id": "agent-1", "name": "Quoting_Agent", "label": "CostPilot Agent"},
+            {"kind": "agent", "id": "manual:Quoting_Agent", "name": "Quoting_Agent", "label": "Quoting Agent"},
+            {"kind": "agent", "id": "", "name": "Quoting_Agent", "label": "Quoting Agent"},
+        ]),
+        db=db,
+    )
+
+    db.refresh(item)
+    mapping = json.loads(item.mapping_json)
+    assert result["count"] == 1
+    assert result["selected"][0]["id"] == "agent-1"
+    assert mapping["entry_points_selected_at"] == "2026-08-03T22:50:05.158597"
+
+
 def _ready_salesforce_connection(db):
     item = IntegrationConnection(
         workspace_id="WORKSPACE-A",

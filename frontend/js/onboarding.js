@@ -1238,16 +1238,31 @@ async function saveSalesforceEntryPointSelection() {
   existingManual.forEach(item => {
     if (!selected.some(selectedItem => selectedItem.key === item.key)) selected.push(item);
   });
-  localStorage.setItem("cp_salesforce_entry_points", JSON.stringify(selected));
+  const deduplicated = [];
+  selected.forEach(item => {
+    const existingIndex = deduplicated.findIndex(existing =>
+      existing.kind === item.kind && existing.name.toLowerCase() === item.name.toLowerCase()
+    );
+    if (existingIndex < 0) {
+      deduplicated.push(item);
+      return;
+    }
+    const existingId = deduplicated[existingIndex].id || "";
+    const itemId = item.id || "";
+    if (itemId && !itemId.startsWith("manual:") && (!existingId || existingId.startsWith("manual:"))) {
+      deduplicated[existingIndex] = item;
+    }
+  });
+  localStorage.setItem("cp_salesforce_entry_points", JSON.stringify(deduplicated));
   const count = document.getElementById("obEntryPointCount");
-  if (count) count.textContent = `${selected.length} selected`;
+  if (count) count.textContent = `${deduplicated.length} selected`;
   if (!obDiscoveryConnectionId) return;
   try {
     const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points/selection`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        entries: selected.map(item => ({
+        entries: deduplicated.map(item => ({
           kind: item.kind,
           id: item.id || "",
           name: item.name,
@@ -1257,9 +1272,9 @@ async function saveSalesforceEntryPointSelection() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.detail || `Selection was not saved (${response.status}).`);
-    if (count) count.textContent = `${selected.length} selected · saved`;
+    if (count) count.textContent = `${deduplicated.length} selected · saved`;
   } catch (error) {
-    if (count) count.textContent = `${selected.length} selected · ${error.message}`;
+    if (count) count.textContent = `${deduplicated.length} selected · ${error.message}`;
   }
 }
 
