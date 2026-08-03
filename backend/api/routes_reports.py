@@ -32,16 +32,18 @@ def _tier_bucket(tier: str) -> str:
     return "micro" if tier in ECONOMY_TIERS else "flagship"
 
 
-def _parse_range(days: int):
-    end   = datetime.utcnow()
-    start = end - timedelta(days=days)
+def _parse_range(days: int, date_from: Optional[datetime] = None, date_to: Optional[datetime] = None):
+    end = date_to or datetime.utcnow()
+    start = date_from or (end - timedelta(days=days))
+    if start >= end:
+        raise ValueError("date_from must be before date_to")
     return start, end
 
 
 def _timeline_dates(start: datetime, end: datetime):
     """Return calendar dates covered by the report window, including today."""
     current = start.date()
-    last = end.date()
+    last = (end - timedelta(microseconds=1)).date()
     while current <= last:
         yield current.strftime("%Y-%m-%d")
         current += timedelta(days=1)
@@ -52,12 +54,14 @@ def _timeline_dates(start: datetime, end: datetime):
 @router.get("/savings")
 def savings_report(days: int = Query(30, ge=1, le=365),
                    workspace_id: str = Query(None),
+                   date_from: Optional[datetime] = Query(None),
+                   date_to: Optional[datetime] = Query(None),
                    db: Session = Depends(get_db)):
-    start, end = _parse_range(days)
+    start, end = _parse_range(days, date_from, date_to)
 
     q = db.query(TokenTransaction).filter(
         TokenTransaction.timestamp >= start,
-        TokenTransaction.timestamp <= end,
+        TokenTransaction.timestamp < end,
     )
     if workspace_id:
         q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))
@@ -121,12 +125,14 @@ def savings_report(days: int = Query(30, ge=1, le=365),
 @router.get("/risk")
 def risk_report(days: int = Query(30, ge=1, le=365),
                 workspace_id: str = Query(None),
+                date_from: Optional[datetime] = Query(None),
+                date_to: Optional[datetime] = Query(None),
                 db: Session = Depends(get_db)):
-    start, end = _parse_range(days)
+    start, end = _parse_range(days, date_from, date_to)
 
     q = db.query(AuditEvent).filter(
         AuditEvent.timestamp >= start,
-        AuditEvent.timestamp <= end,
+        AuditEvent.timestamp < end,
     )
     if workspace_id:
         q = q.filter(AuditEvent.department.like(f"{workspace_id}:%"))
@@ -229,12 +235,14 @@ def risk_report(days: int = Query(30, ge=1, le=365),
 @router.get("/departments")
 def dept_scorecard(days: int = Query(30, ge=1, le=365),
                    workspace_id: str = Query(None),
+                   date_from: Optional[datetime] = Query(None),
+                   date_to: Optional[datetime] = Query(None),
                    db: Session = Depends(get_db)):
-    start, end = _parse_range(days)
+    start, end = _parse_range(days, date_from, date_to)
 
     q = db.query(TokenTransaction).filter(
         TokenTransaction.timestamp >= start,
-        TokenTransaction.timestamp <= end,
+        TokenTransaction.timestamp < end,
     )
     if workspace_id:
         q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))

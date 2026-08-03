@@ -708,7 +708,7 @@ function renderContextBreakdowns(data) {
 
 async function loadBusinessContexts() {
   const { date_from, date_to, days } = getActiveDateRange();
-  const wsId = localStorage.getItem("cp_workspace_id") || "";
+  const wsId = reportWorkspaceId();
   const params = new URLSearchParams({
     date_from,
     date_to,
@@ -852,14 +852,40 @@ function isReportFilterActive() {
 
 // ── TAB 1: SAVINGS ────────────────────────────────────────────────────────────
 
-// Workspace filter — set when a trial user clicks through from workspace.html
-const _wsParam = new URLSearchParams(window.location.search).get("ws")
-  ? `&workspace_id=${localStorage.getItem("cp_workspace_id") || ""}`
-  : "";
+function reportWorkspaceId() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("workspace_id") || localStorage.getItem("cp_workspace_id") || "";
+}
+
+function updateReportWorkspaceBanner() {
+  const banner = document.getElementById("rptScopeBanner");
+  if (!banner) return;
+  const workspaceId = new URLSearchParams(window.location.search).get("workspace_id");
+  banner.hidden = !workspaceId;
+  if (workspaceId) {
+    const isHistoricalDemo = workspaceId === "SIM-HISTORICAL-2Y";
+    banner.innerHTML = isHistoricalDemo
+      ? `<strong>Historical date-testing workspace</strong><span>Two years of deterministic simulated activity · no live customer usage</span>`
+      : `<strong>Workspace scope</strong><span>${escapeHtml(workspaceId)}</span>`;
+  }
+}
+
+function reportApiParams(range) {
+  const params = new URLSearchParams({
+    days: String(Math.min(365, range.days || 30)),
+    date_from: range.date_from,
+    date_to: range.date_to,
+  });
+  const workspaceId = reportWorkspaceId();
+  const explicitlyScoped = new URLSearchParams(window.location.search).has("workspace_id")
+    || new URLSearchParams(window.location.search).get("ws");
+  if (workspaceId && explicitlyScoped) params.set("workspace_id", workspaceId);
+  return params.toString();
+}
 
 async function loadSavings() {
-  const { days } = getActiveDateRange();
-  const data = await apiGet(`/api/reports/savings?days=${days}${_wsParam}`);
+  const range = getActiveDateRange();
+  const data = await apiGet(`/api/reports/savings?${reportApiParams(range)}`);
   _rptSavingsData = data;
 
   setKpi("sv-total-saved",  fmtUsd(data.total_saved_usd));
@@ -971,8 +997,8 @@ async function loadSavings() {
 // ── TAB 2: RISK ───────────────────────────────────────────────────────────────
 
 async function loadRisk() {
-  const { days } = getActiveDateRange();
-  const data = await apiGet(`/api/reports/risk?days=${days}${_wsParam}`);
+  const range = getActiveDateRange();
+  const data = await apiGet(`/api/reports/risk?${reportApiParams(range)}`);
   _rptRiskEvents = data.recent_events || [];
   populateRiskEventFilters(_rptRiskEvents);
 
@@ -1348,8 +1374,8 @@ function renderExecSummary(d) {
 // ── TAB 3: DEPARTMENTS ────────────────────────────────────────────────────────
 
 async function loadDepartments() {
-  const { days } = getActiveDateRange();
-  const rawData = await apiGet(`/api/reports/departments?days=${days}${_wsParam}`);
+  const range = getActiveDateRange();
+  const rawData = await apiGet(`/api/reports/departments?${reportApiParams(range)}`);
   const data = mergeDepartmentReportRows(rawData);
   _rptDeptData = data.scorecards || [];
 
@@ -1489,7 +1515,7 @@ function askCostPilotActorScope() {
 }
 
 function askCostPilotStorageKey(kind) {
-  const workspace = localStorage.getItem("cp_workspace_id") || "default";
+  const workspace = reportWorkspaceId() || "default";
   return `cp_ask_costpilot_${kind}:${workspace}:${askCostPilotActorScope()}`;
 }
 
@@ -1538,7 +1564,7 @@ function askCostPilotFilterValue(id) {
 
 function askCostPilotPayload(question) {
   const range = getActiveDateRange();
-  const workspaceId = localStorage.getItem("cp_workspace_id") || null;
+  const workspaceId = reportWorkspaceId() || null;
   const agentValue = askCostPilotFilterValue("ctxAgentFilter");
   return {
     question,
@@ -2428,6 +2454,7 @@ function randomizeReportCards() {
 
 // Init drag for the default (savings) tab on load
 document.addEventListener("DOMContentLoaded", () => {
+  updateReportWorkspaceBanner();
   restoreAskCostPilotConversation();
   const requestedTab = new URLSearchParams(window.location.search).get("tab");
   let pendingScope = {};

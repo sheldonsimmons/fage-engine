@@ -166,6 +166,19 @@
 .rpt-utilities button.active,
 .rpt-utilities a:hover { border-color: var(--accent); color: var(--accent); }
 .rpt-inline-actions { display: flex; gap: 8px; }
+.rpt-scope-banner {
+  align-items: center;
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.32);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  margin: -8px 0 18px;
+  padding: 10px 14px;
+}
+.rpt-scope-banner[hidden] { display: none; }
+.rpt-scope-banner strong { color: var(--accent); font-size: 12px; }
+.rpt-scope-banner span { color: var(--text-muted); font-size: 12px; }
 
 /* Report order is intentionally curated for executive readability. */
 .rpt-drag-bar { display: none; }

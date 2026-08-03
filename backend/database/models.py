@@ -252,6 +252,21 @@ class WorkspaceAnalyticsSettings(Base):
     updated_at              = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class HistoricalDemoSeedState(Base):
+    """Reversible snapshot of analytics settings changed by a historical demo seed."""
+    __tablename__ = "historical_demo_seed_states"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "marker", name="uq_historical_demo_seed_state"),
+    )
+
+    id                = Column(Integer, primary_key=True, index=True)
+    workspace_id      = Column(String, nullable=False, index=True)
+    marker            = Column(String, nullable=False)
+    settings_existed  = Column(Boolean, nullable=False, default=False)
+    settings_snapshot = Column(Text, nullable=True)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+
+
 class WorkItemAgent(Base):
     """An agent expected or approved to work on a project."""
     __tablename__ = "work_item_agents"
