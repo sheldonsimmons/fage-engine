@@ -860,6 +860,10 @@ async def salesforce_callback(
             identity = identity_response.json()
 
     mapping.pop("_oauth_pkce_verifier", None)
+    mapping["salesforce_identity"] = {
+        "username": identity.get("username") or identity.get("email"),
+        "display_name": identity.get("display_name") or identity.get("name"),
+    }
     item.mapping_json = json.dumps(mapping)
     package_setup = bool(mapping.get("package_setup"))
     external_org_id = str(
@@ -1134,6 +1138,9 @@ def save_salesforce_ai_entry_points(
 
 def _salesforce_package_setup(item: IntegrationConnection) -> dict:
     mapping = _json_object(item.mapping_json)
+    identity = mapping.get("salesforce_identity")
+    if not isinstance(identity, dict):
+        identity = {}
     package_setup = mapping.get("package_setup")
     if not isinstance(package_setup, dict):
         package_setup = {}
@@ -1154,12 +1161,43 @@ def _salesforce_package_setup(item: IntegrationConnection) -> dict:
     selected = mapping.get("selected_ai_entry_points")
     if not isinstance(selected, list):
         selected = []
+    org_verified = bool(item.external_tenant_id and item.instance_url and item.status in {"connected", "active"})
+    workspace_bound = bool(item.workspace_id and not item.workspace_id.startswith("pending-"))
+    parent_verified = bool(verification.get("parent_verified"))
+    child_verified = bool(verification.get("child_verified"))
+    checklist = {
+        "org_verified": org_verified,
+        "workspace_bound": workspace_bound,
+        "relationships_approved": bool(relationships.get("approved")),
+        "entry_points_selected": bool(selected),
+        "parent_request_verified": parent_verified,
+        "child_request_verified": child_verified,
+    }
+    labels = {
+        "org_verified": "connect and verify the installed Salesforce org",
+        "workspace_bound": "bind the Salesforce org to one CostPilot workspace",
+        "relationships_approved": "approve the Account and related-record mapping",
+        "entry_points_selected": "choose at least one Agentforce agent or Flow",
+        "parent_request_verified": "run one live request from an Account",
+        "child_request_verified": "run one live request from an approved related record",
+    }
+    missing = [labels[key] for key, passed in checklist.items() if not passed]
     return {
         "connection_id": item.id,
         "workspace_id": item.workspace_id,
+        "connection_status": item.status,
+        "org": {
+            "organization_id": item.external_tenant_id,
+            "instance_url": item.instance_url,
+            "username": identity.get("username"),
+            "display_name": identity.get("display_name"),
+        },
         "selected": selected,
         "relationships": relationships,
         "verification": verification,
+        "checklist": checklist,
+        "missing": missing,
+        "ready_to_activate": not missing,
         "active": bool(package_setup.get("active")),
         "go_live_at": package_setup.get("go_live_at"),
     }
@@ -1188,7 +1226,10 @@ def approve_salesforce_package_relationships(
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
     mapping = _json_object(item.mapping_json)
-    package_setup = mapping.setdefault("package_setup", {})
+    package_setup = mapping.get("package_setup")
+    if not isinstance(package_setup, dict):
+        package_setup = {}
+        mapping["package_setup"] = package_setup
     children = [child.model_dump() for child in payload.children]
     package_setup["relationships"] = {
         "approved": True,
@@ -1231,28 +1272,58 @@ def verify_salesforce_package_request(
     )
     if selected_at is not None:
         query = query.filter(AuditEvent.timestamp >= selected_at)
-    event = query.order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc()).first()
-    package_setup = mapping.setdefault("package_setup", {})
-    if event is None:
-        package_setup["verification"] = {
-            "verified": False,
-            "checked_at": datetime.utcnow().isoformat(),
-            "message": "No new live Salesforce request has reached CostPilot yet.",
-        }
-        item.mapping_json = json.dumps(mapping)
-        db.commit()
-        return _salesforce_package_setup(item)
+    package_setup = mapping.get("package_setup")
+    if not isinstance(package_setup, dict):
+        package_setup = {}
+        mapping["package_setup"] = package_setup
+    relationships = package_setup.get("relationships") or {}
+    parent_type = str(relationships.get("parent_object") or "Account").lower()
+    child_types = {
+        str(child.get("object_name") or child.get("object") or "").lower()
+        for child in relationships.get("children") or []
+        if child.get("behavior") in {"track_and_rollup", "rollup_only"}
+    }
+    events = query.order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc()).all()
+    parent_events = [row for row in events if str(row.origin_record_type or "").lower() == parent_type]
+    child_events = [row for row in events if str(row.origin_record_type or "").lower() in child_types]
+    matching_pair = next(
+        (
+            (parent, child)
+            for parent in parent_events
+            for child in child_events
+            if parent.work_item_id and parent.work_item_id == child.work_item_id
+        ),
+        None,
+    )
+    parent_event = matching_pair[0] if matching_pair else (parent_events[0] if parent_events else None)
+    child_event = matching_pair[1] if matching_pair else (child_events[0] if child_events else None)
+    rolled_up = matching_pair is not None
+    parent_verified = parent_event is not None
+    child_verified = child_event is not None and rolled_up
+    verified = parent_verified and child_verified
+    missing = []
+    if not parent_verified:
+        missing.append(f"a live {relationships.get('parent_object') or 'Account'} request")
+    if not child_verified:
+        missing.append("a live approved related-record request rolled up to the same Account")
     package_setup["verification"] = {
-        "verified": True,
-        "verified_at": datetime.utcnow().isoformat(),
-        "audit_id": event.id,
-        "record_name": event.origin_record_name,
-        "agent_id": event.agent_id,
-        "message": "A live Salesforce request completed the governed CostPilot pipeline.",
+        "verified": verified,
+        "parent_verified": parent_verified,
+        "child_verified": child_verified,
+        "checked_at": datetime.utcnow().isoformat(),
+        "parent_audit_id": parent_event.id if parent_event else None,
+        "parent_record_name": parent_event.origin_record_name if parent_event else None,
+        "child_audit_id": child_event.id if child_event else None,
+        "child_record_name": child_event.origin_record_name if child_event else None,
+        "message": (
+            "Both a parent and related Salesforce request completed the governed pipeline and rolled up together."
+            if verified else "Still waiting for " + " and ".join(missing) + "."
+        ),
     }
     item.last_tested_at = datetime.utcnow()
-    item.last_success_at = datetime.utcnow()
-    item.last_error = None
+    if verified:
+        item.last_success_at = datetime.utcnow()
+        item.last_error = None
     item.mapping_json = json.dumps(mapping)
     db.commit()
     return _salesforce_package_setup(item)
@@ -1268,17 +1339,26 @@ def activate_salesforce_package_connection(
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
     mapping = _json_object(item.mapping_json)
-    package_setup = mapping.setdefault("package_setup", {})
+    package_setup = mapping.get("package_setup")
+    if not isinstance(package_setup, dict):
+        package_setup = {}
+        mapping["package_setup"] = package_setup
     selected = mapping.get("selected_ai_entry_points") or []
     relationships = package_setup.get("relationships") or {}
     verification = package_setup.get("verification") or {}
     missing = []
+    if not item.external_tenant_id or not item.instance_url or item.status not in {"connected", "active"}:
+        missing.append("connect and verify the installed Salesforce org")
+    if not item.workspace_id or item.workspace_id.startswith("pending-"):
+        missing.append("bind the Salesforce org to one CostPilot workspace")
     if not selected:
         missing.append("choose at least one Agentforce agent or Flow")
     if not relationships.get("approved"):
         missing.append("approve the relationship mapping")
-    if not verification.get("verified"):
-        missing.append("run and verify one governed Salesforce request")
+    if not verification.get("parent_verified"):
+        missing.append("run and verify one governed request from the parent Account")
+    if not verification.get("child_verified"):
+        missing.append("run and verify one governed request from an approved related record")
     if missing:
         raise HTTPException(status_code=409, detail="Before going live, " + ", ".join(missing) + ".")
     package_setup["active"] = True

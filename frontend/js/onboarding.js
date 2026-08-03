@@ -970,6 +970,24 @@ async function approveDiscoveredMapping() {
     if (!response.ok) {
       throw new Error(payload.detail || `Could not save mapping (${response.status}).`);
     }
+    if (obDiscoveryPlatform === "salesforce") {
+      const packageResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/relationships`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parent_object: selectedObject,
+          children: mapping.children.map(child => ({
+            object_name: child.object,
+            parent_field: child.parent_field,
+            behavior: child.behavior,
+          })),
+        }),
+      });
+      const packagePayload = await packageResponse.json().catch(() => ({}));
+      if (!packageResponse.ok) {
+        throw new Error(packagePayload.detail || `Could not save Salesforce readiness mapping (${packageResponse.status}).`);
+      }
+    }
     const approvedRelationshipMapping = {
       platform: obDiscoveryPlatform,
       connection_id: obDiscoveryConnectionId,
@@ -1206,7 +1224,7 @@ function addManualSalesforceEntryPoint(kind) {
   });
 }
 
-function saveSalesforceEntryPointSelection() {
+async function saveSalesforceEntryPointSelection() {
   const existingManual = _getSelectedSalesforceEntryPoints().filter(item => item.source === "manual");
   const selected = [...document.querySelectorAll("[data-entry-kind]:checked")].map(input => ({
     key: `${input.dataset.entryKind}:${input.dataset.entryId || input.dataset.entryName}`,
@@ -1223,6 +1241,26 @@ function saveSalesforceEntryPointSelection() {
   localStorage.setItem("cp_salesforce_entry_points", JSON.stringify(selected));
   const count = document.getElementById("obEntryPointCount");
   if (count) count.textContent = `${selected.length} selected`;
+  if (!obDiscoveryConnectionId) return;
+  try {
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points/selection`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entries: selected.map(item => ({
+          kind: item.kind,
+          id: item.id || "",
+          name: item.name,
+          label: item.label || item.name,
+        })),
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.detail || `Selection was not saved (${response.status}).`);
+    if (count) count.textContent = `${selected.length} selected · saved`;
+  } catch (error) {
+    if (count) count.textContent = `${selected.length} selected · ${error.message}`;
+  }
 }
 
 function _getSelectedSalesforceEntryPoints() {
@@ -2129,6 +2167,11 @@ function _universalVerificationHtml() {
   const installText = obSelectedPlatform === "salesforce"
     ? `I added <strong>CostPilot Governed AI Work</strong> to every selected Agentforce agent and Salesforce Flow that I want governed.`
     : `I installed the generated setup in ${_obEsc(platform)}. This confirms the external platform step that CostPilot cannot inspect directly.`;
+  const liveRows = obSelectedPlatform === "salesforce"
+    ? `<div class="ob-verification-row" id="obVerifySalesforceOrg"><span>○</span> Correct Salesforce org and CostPilot workspace <span class="status">Checking</span></div>
+       <div class="ob-verification-row" id="obVerifyParentRequest"><span>○</span> Live Account request received <span class="status">Waiting</span></div>
+       <div class="ob-verification-row" id="obVerifyChildRequest"><span>○</span> Live related-record request received and rolled up <span class="status">Waiting</span></div>`
+    : `<div class="ob-verification-row" id="obVerifyRoute"><span>○</span> Routing and pruning test <span class="status">Not tested</span></div>`;
   return `<section class="ob-verification" id="obUniversalVerification">
     <h3>Verify your CostPilot connection</h3>
     <p>This test validates CostPilot's live contract, routing, governance, pruning, and attribution envelope. It does not claim that an external agent is connected until you confirm that platform step.</p>
@@ -2136,7 +2179,7 @@ function _universalVerificationHtml() {
       <div class="ob-verification-row pass"><span>✓</span> Business context configured <span class="status">Ready</span></div>
       <div class="ob-verification-row pass"><span>✓</span> ${_obEsc(platform)} mapping generated <span class="status">Ready</span></div>
       <div class="ob-verification-row" id="obVerifyContract"><span>○</span> Universal contract available <span class="status">Not tested</span></div>
-      <div class="ob-verification-row" id="obVerifyRoute"><span>○</span> Routing and pruning test <span class="status">Not tested</span></div>
+      ${liveRows}
       ${actionRow}
     </div>
     <button type="button" class="ob-btn-primary" id="obRunTestBtn" onclick="runUniversalSetupTest()">Run CostPilot Test →</button>
@@ -2182,6 +2225,42 @@ async function runUniversalSetupTest() {
     if (contract.contract_version !== "2026-07-26") throw new Error("Unexpected connector contract version.");
     _markVerificationRow("obVerifyContract", "Connected");
 
+    if (obSelectedPlatform === "salesforce") {
+      if (!obDiscoveryConnectionId) throw new Error("Reconnect Salesforce so CostPilot can verify the correct org and workspace.");
+      const verifyResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/verify`, {
+        method: "POST",
+      });
+      const setup = await verifyResponse.json().catch(() => ({}));
+      if (!verifyResponse.ok) throw new Error(setup.detail || `Salesforce verification failed (${verifyResponse.status}).`);
+      if (setup.checklist?.org_verified && setup.checklist?.workspace_bound) {
+        _markVerificationRow(
+          "obVerifySalesforceOrg",
+          `${setup.org?.organization_id || "Org verified"} · ${setup.workspace_id || "Workspace verified"}`,
+        );
+      }
+      if (setup.verification?.parent_verified) {
+        _markVerificationRow("obVerifyParentRequest", setup.verification.parent_record_name || "Received");
+      }
+      if (setup.verification?.child_verified) {
+        _markVerificationRow("obVerifyChildRequest", setup.verification.child_record_name || "Received and rolled up");
+      }
+      if (!setup.verification?.verified) {
+        throw new Error(setup.verification?.message || "Run one request from the Account and one from an approved related record, then check again.");
+      }
+      localStorage.setItem("cp_connection_test", JSON.stringify({
+        platform: "salesforce",
+        connection_id: obDiscoveryConnectionId,
+        workspace_id: setup.workspace_id,
+        organization_id: setup.org?.organization_id,
+        tested_at: new Date().toISOString(),
+        parent_audit_id: setup.verification.parent_audit_id,
+        child_audit_id: setup.verification.child_audit_id,
+      }));
+      button.textContent = "Live Requests Verified ✓";
+      refreshActivationButton();
+      return;
+    }
+
     const testResponse = await fetch(`${CostPilot_URL}/api/route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2224,13 +2303,34 @@ async function runUniversalSetupTest() {
 }
 
 function refreshActivationButton() {
-  const tested = document.getElementById("obVerifyRoute")?.classList.contains("pass");
+  const tested = obSelectedPlatform === "salesforce"
+    ? document.getElementById("obVerifyParentRequest")?.classList.contains("pass")
+      && document.getElementById("obVerifyChildRequest")?.classList.contains("pass")
+    : document.getElementById("obVerifyRoute")?.classList.contains("pass");
   const installed = document.getElementById("obPlatformInstalled")?.checked;
   const button = document.getElementById("obActivateBtn");
   if (button) button.disabled = !(tested && installed);
 }
 
-function activateUniversalConnection() {
+async function activateUniversalConnection() {
+  const button = document.getElementById("obActivateBtn");
+  const error = document.getElementById("obVerificationError");
+  if (obSelectedPlatform === "salesforce") {
+    button.disabled = true;
+    button.textContent = "Activating…";
+    try {
+      const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/activate`, {
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || `Activation failed (${response.status}).`);
+    } catch (activationError) {
+      error.textContent = activationError.message;
+      button.disabled = false;
+      button.textContent = "Activate Connection";
+      return;
+    }
+  }
   const record = {
     platform: obSelectedPlatform,
     platform_label: OB_PLATFORMS[obSelectedPlatform]?.label || obSelectedPlatform,

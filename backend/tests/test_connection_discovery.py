@@ -8,6 +8,7 @@ from api.routes_connections import (
     AiEntryPointSelectionUpdate,
     ConnectionCreate,
     MappingUpdate,
+    PackageRelationshipApproval,
     _build_context_snapshot,
     _merge_salesforce_package_connection,
     _new_context_changes,
@@ -15,6 +16,8 @@ from api.routes_connections import (
     _populate_salesforce_costpilot_credential,
     _servicenow_auth_base,
     approve_mapping,
+    approve_salesforce_package_relationships,
+    activate_salesforce_package_connection,
     create_connection,
     discover_salesforce_ai_entry_points,
     list_connections,
@@ -22,10 +25,11 @@ from api.routes_connections import (
     recommend_child_relationships,
     save_salesforce_ai_entry_points,
     salesforce_package_status,
+    verify_salesforce_package_request,
 )
 from fastapi import HTTPException
 from database.db import Base
-from database.models import IntegrationConnection
+from database.models import AuditEvent, IntegrationConnection
 
 
 def _session():
@@ -242,6 +246,110 @@ def test_salesforce_package_saves_selected_agents_and_flows():
         "agent",
         "flow",
     ]
+
+
+def _ready_salesforce_connection(db):
+    item = IntegrationConnection(
+        workspace_id="WORKSPACE-A",
+        platform="salesforce",
+        display_name="Salesforce package setup 00D000000000001AAA",
+        status="connected",
+        instance_url="https://acme.my.salesforce.com",
+        external_tenant_id="00D000000000001AAA",
+        mapping_json=json.dumps({
+            "package_setup": {},
+            "selected_ai_entry_points": [{
+                "kind": "agent", "id": "agent-1", "name": "Sales Agent", "label": "Sales Agent",
+            }],
+        }),
+    )
+    db.add(item)
+    db.commit()
+    approve_salesforce_package_relationships(
+        item.id,
+        PackageRelationshipApproval(
+            parent_object="Account",
+            children=[{
+                "object_name": "Case",
+                "parent_field": "AccountId",
+                "behavior": "track_and_rollup",
+            }],
+        ),
+        db=db,
+    )
+    return item
+
+
+def test_salesforce_package_requires_parent_and_related_requests_on_same_work():
+    db = _session()
+    item = _ready_salesforce_connection(db)
+    db.add(AuditEvent(
+        event_type="ROUTING",
+        department="Sales",
+        workspace_id="WORKSPACE-A",
+        actor_source_platform="salesforce",
+        origin_record_type="Account",
+        origin_record_name="University of Arizona",
+        work_item_id=41,
+        is_simulation=False,
+    ))
+    db.commit()
+
+    parent_only = verify_salesforce_package_request(item.id, db=db)
+    assert parent_only["verification"]["parent_verified"] is True
+    assert parent_only["verification"]["child_verified"] is False
+    assert parent_only["ready_to_activate"] is False
+    try:
+        activate_salesforce_package_connection(item.id, db=db)
+    except HTTPException as error:
+        assert error.status_code == 409
+        assert "related record" in error.detail
+    else:
+        raise AssertionError("Activation should require a related-record request")
+
+    db.add(AuditEvent(
+        event_type="ROUTING",
+        department="Support",
+        workspace_id="WORKSPACE-A",
+        actor_source_platform="salesforce",
+        origin_record_type="Case",
+        origin_record_name="Repeated motor breakdown",
+        work_item_id=41,
+        is_simulation=False,
+    ))
+    db.commit()
+
+    verified = verify_salesforce_package_request(item.id, db=db)
+    assert verified["verification"]["verified"] is True
+    assert verified["checklist"]["parent_request_verified"] is True
+    assert verified["checklist"]["child_request_verified"] is True
+    assert verified["ready_to_activate"] is True
+    active = activate_salesforce_package_connection(item.id, db=db)
+    assert active["active"] is True
+    assert active["connection_status"] == "active"
+
+
+def test_salesforce_package_does_not_accept_unrelated_child_rollup():
+    db = _session()
+    item = _ready_salesforce_connection(db)
+    db.add_all([
+        AuditEvent(
+            event_type="ROUTING", department="Sales", workspace_id="WORKSPACE-A",
+            actor_source_platform="salesforce", origin_record_type="Account",
+            origin_record_name="University of Arizona", work_item_id=41, is_simulation=False,
+        ),
+        AuditEvent(
+            event_type="ROUTING", department="Support", workspace_id="WORKSPACE-A",
+            actor_source_platform="salesforce", origin_record_type="Case",
+            origin_record_name="Unrelated case", work_item_id=99, is_simulation=False,
+        ),
+    ])
+    db.commit()
+
+    result = verify_salesforce_package_request(item.id, db=db)
+    assert result["verification"]["parent_verified"] is True
+    assert result["verification"]["child_verified"] is False
+    assert result["ready_to_activate"] is False
 
 
 def test_salesforce_ai_entry_points_use_current_agentforce_metadata(monkeypatch):
