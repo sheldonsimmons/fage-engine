@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   restoreBusinessContextOnboarding();
   restoreOAuthDiscovery();
+  restoreServerOnboardingProgress();
 });
 
 const businessFirstState = {
@@ -799,6 +800,64 @@ function restoreOAuthDiscovery() {
   setUniversalSetupStage(3);
   loadDiscoveryObjects();
   window.history.replaceState({}, "", "/onboarding.html");
+}
+
+async function restoreServerOnboardingProgress() {
+  const params = new URLSearchParams(window.location.search || "");
+  if (params.get("oauth") === "success" || !obDiscoveryConnectionId || obDiscoveryPlatform !== "salesforce") return;
+  try {
+    const response = await fetch(
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup`
+    );
+    if (!response.ok) return;
+    const setup = await response.json();
+    if (!setup.relationships?.approved && !setup.active) return;
+
+    document.body.classList.add("ob-connection-mode");
+    document.querySelectorAll(".ob-screen").forEach(screen => screen.classList.remove("active"));
+    document.getElementById("screen-5")?.classList.add("active");
+    selectObPlatform("salesforce");
+    const objectInput = document.getElementById("obPlatObject");
+    const agentInput = document.getElementById("obPlatAgent");
+    if (objectInput) objectInput.value = setup.relationships?.parent_object || "Account";
+    if (agentInput) agentInput.value = setup.selected?.[0]?.name || "CostPilot Agent";
+
+    const out = document.getElementById("obPlatOutput");
+    if (!out) return;
+    out.style.display = "block";
+    if (setup.active) {
+      setUniversalSetupStage(5);
+      out.innerHTML = `<section class="ob-verification" id="obUniversalVerification">
+        <div class="ob-context-eyebrow">Connection active</div>
+        <h3>Salesforce is ready for CostPilot</h3>
+        <p>Org ${_obEsc(setup.org?.organization_id || "verified")} is connected to workspace ${_obEsc(setup.workspace_id)}.</p>
+        <div class="ob-actions"><button class="ob-btn-primary" onclick="goToDashboard()">Open Dashboard →</button></div>
+      </section>`;
+      return;
+    }
+
+    setUniversalSetupStage(4);
+    out.innerHTML = _businessContextSummaryHtml() + _universalVerificationHtml();
+    if (setup.checklist?.org_verified && setup.checklist?.workspace_bound) {
+      _markVerificationRow(
+        "obVerifySalesforceOrg",
+        `${setup.org?.organization_id || "Org verified"} · ${setup.workspace_id}`,
+      );
+    }
+    if (setup.verification?.parent_verified) {
+      _markVerificationRow("obVerifyParentRequest", setup.verification.parent_record_name || "Received");
+    }
+    if (setup.verification?.child_verified) {
+      _markVerificationRow("obVerifyChildRequest", setup.verification.child_record_name || "Received and rolled up");
+    }
+    if (setup.verification?.verified) {
+      const button = document.getElementById("obRunTestBtn");
+      if (button) button.textContent = "Live Requests Verified ✓";
+    }
+    refreshActivationButton();
+  } catch (_) {
+    // Keep the normal first step available when durable progress cannot load.
+  }
 }
 
 async function loadSalesforceObjects() {
