@@ -15,7 +15,10 @@ print('   DB tables ready')
 
 # Column migrations — safe to run on every deploy (IF NOT EXISTS)
 from sqlalchemy import text
-with engine.connect() as conn:
+# Run each idempotent DDL statement in its own transaction. Keeping locks from
+# several unrelated ALTER TABLE checks until the end can deadlock with normal
+# production reads during a release.
+with engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:
     conn.execute(text('''
         ALTER TABLE registered_agents
         ADD COLUMN IF NOT EXISTS pruning_enabled BOOLEAN DEFAULT TRUE
@@ -132,7 +135,6 @@ with engine.connect() as conn:
         ADD COLUMN IF NOT EXISTS source_record_type VARCHAR,
         ADD COLUMN IF NOT EXISTS source_record_id VARCHAR
     '''))
-    conn.commit()
 print('   Column migrations applied')
 
 # Table migrations — create new tables if not present
