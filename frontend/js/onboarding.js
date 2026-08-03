@@ -691,8 +691,11 @@ function renderObConnectionPlan(platform) {
     <div class="ob-connection-plan-item"><strong>3 · Attribute</strong>${_obEsc(plan.identity)}</div>`;
 }
 
-let obDiscoveryConnectionId = null;
-let obDiscoveryPlatform = null;
+const obStoredDiscoveryConnectionId = Number(localStorage.getItem("cp_discovery_connection_id") || 0);
+let obDiscoveryConnectionId = Number.isInteger(obStoredDiscoveryConnectionId) && obStoredDiscoveryConnectionId > 0
+  ? obStoredDiscoveryConnectionId
+  : null;
+let obDiscoveryPlatform = localStorage.getItem("cp_discovery_platform") || null;
 let obDiscoveredFields = [];
 let obDiscoveredRelationships = [];
 let obDiscoveredObjectName = null;
