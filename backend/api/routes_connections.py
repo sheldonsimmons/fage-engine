@@ -532,8 +532,29 @@ def recommend_child_relationships(
             "recommendation_reason": reason,
             "recommended_behavior": "track_and_rollup",
         })
-    suggestions.sort(key=lambda item: (-item["score"], item["label"].lower(), item["object"]))
-    return suggestions
+    canonical_fields = {
+        f"{str(parent_object or '').strip()}Id".lower(),
+        f"{str(parent_object or '').strip()}__c".lower(),
+    } if parent_object else set()
+    deduplicated: dict[str, dict] = {}
+    for suggestion in suggestions:
+        key = suggestion["object"].lower()
+        current = deduplicated.get(key)
+        preference = (
+            suggestion["parent_field"].lower() in canonical_fields,
+            suggestion["score"],
+            bool(suggestion["relationship_name"]),
+        )
+        current_preference = (
+            current["parent_field"].lower() in canonical_fields,
+            current["score"],
+            bool(current["relationship_name"]),
+        ) if current else None
+        if current is None or preference > current_preference:
+            deduplicated[key] = suggestion
+    ranked = list(deduplicated.values())
+    ranked.sort(key=lambda item: (-item["score"], item["label"].lower(), item["object"]))
+    return ranked
 
 
 def _json_object(raw: Optional[str]) -> dict:

@@ -954,11 +954,14 @@ function renderDiscoveredMapping(payload) {
   ).join("");
   const children = (payload.child_relationships || []).slice(0, 30);
   const isSalesforce = obDiscoveryPlatform === "salesforce";
+  const allRecommendedChildren = isSalesforce
+    ? children.filter(child => child.recommended)
+    : children;
   const recommendedChildren = isSalesforce
-    ? children.filter(child => child.recommended).slice(0, 8)
+    ? allRecommendedChildren.slice(0, 8)
     : children;
   const advancedChildren = isSalesforce
-    ? children.filter(child => !child.recommended)
+    ? [...allRecommendedChildren.slice(8), ...children.filter(child => !child.recommended)]
     : [];
   const relationshipRow = (child, index, recommended) => `
     <div class="ob-relationship-row${recommended ? " recommended" : " advanced"}"

@@ -656,11 +656,17 @@ def test_parent_metadata_produces_useful_child_relationship_suggestions():
             "field": "AccountId",
             "relationshipName": "ForecastingItems",
         },
+        {
+            "childSObject": "Opportunity",
+            "field": "PartnerAccountId",
+            "relationshipName": "PartnerOpportunities",
+        },
     ]
     suggestions = recommend_child_relationships(relationships, parent_object="Account")
 
     assert [item["object"] for item in suggestions] == ["Opportunity", "Project_Task__c", "ForecastingItem"]
     assert suggestions[0]["recommendation_reason"] == "Revenue and pipeline activity"
+    assert suggestions[0]["parent_field"] == "AccountId"
     assert suggestions[0]["recommended_behavior"] == "track_and_rollup"
     assert suggestions[0]["recommended"] is True
     assert suggestions[1]["recommended"] is True
