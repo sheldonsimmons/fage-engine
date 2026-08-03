@@ -19,7 +19,7 @@ import re
 import time
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -31,6 +31,7 @@ from database.models import (
     RegisteredAgent,
     TokenTransaction,
     WorkItem,
+    WorkspaceAnalyticsSettings,
 )
 from core.costpilot_knowledge import search_costpilot_knowledge
 from core.ask_costpilot_contracts import (
@@ -43,6 +44,11 @@ from core.analytics_periods import (
     comparison_coverage,
     comparison_plan,
     resolve_primary_period,
+)
+from core.analytics_coverage import (
+    comparison_data_coverage,
+    workspace_analytics_settings,
+    workspace_collection_profile,
 )
 
 router = APIRouter()
@@ -126,6 +132,87 @@ class AskCostPilotRequest(BaseModel):
     conversation: list[AskCostPilotMessage] = Field(default_factory=list)
     context: Optional[AskCostPilotContext] = None
     screen_context: Optional[AskCostPilotScreenContext] = None
+
+
+class WorkspaceAnalyticsSettingsRequest(BaseModel):
+    workspace_id: str
+    timezone_name: str = "UTC"
+    week_starts_on: int = Field(default=0, ge=0, le=6)
+    fiscal_year_start_month: int = Field(default=1, ge=1, le=12)
+    default_window_days: int = Field(default=30, ge=1, le=365)
+    collection_started_at: Optional[datetime] = None
+    latest_complete_at: Optional[datetime] = None
+
+
+def _analytics_settings_payload(item: WorkspaceAnalyticsSettings) -> dict:
+    return {
+        "workspace_id": item.workspace_id,
+        "timezone_name": item.timezone_name,
+        "week_starts_on": item.week_starts_on,
+        "fiscal_year_start_month": item.fiscal_year_start_month,
+        "default_window_days": item.default_window_days,
+        "collection_started_at": item.collection_started_at,
+        "latest_complete_at": item.latest_complete_at,
+        "updated_at": item.updated_at,
+    }
+
+
+@router.get("/analytics-settings")
+def get_workspace_analytics_settings(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+):
+    item = workspace_analytics_settings(db, workspace_id)
+    if not item:
+        return {
+            "workspace_id": workspace_id,
+            "timezone_name": "UTC",
+            "week_starts_on": 0,
+            "fiscal_year_start_month": 1,
+            "default_window_days": 30,
+            "collection_started_at": None,
+            "latest_complete_at": None,
+            "configured": False,
+        }
+    return {**_analytics_settings_payload(item), "configured": True}
+
+
+@router.put("/analytics-settings")
+def update_workspace_analytics_settings(
+    request: WorkspaceAnalyticsSettingsRequest,
+    db: Session = Depends(get_db),
+):
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    workspace_id = request.workspace_id.strip()
+    if not workspace_id:
+        raise HTTPException(status_code=400, detail="workspace_id is required")
+    try:
+        ZoneInfo(request.timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise HTTPException(status_code=400, detail="Unknown timezone_name") from exc
+    if (
+        request.collection_started_at
+        and request.latest_complete_at
+        and request.latest_complete_at < request.collection_started_at
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="latest_complete_at cannot be before collection_started_at",
+        )
+    item = workspace_analytics_settings(db, workspace_id)
+    if not item:
+        item = WorkspaceAnalyticsSettings(workspace_id=workspace_id)
+        db.add(item)
+    for field in (
+        "timezone_name", "week_starts_on", "fiscal_year_start_month",
+        "default_window_days", "collection_started_at", "latest_complete_at",
+    ):
+        setattr(item, field, getattr(request, field))
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(item)
+    return {**_analytics_settings_payload(item), "configured": True}
 
 
 def _ask_intent(question: str, default_days: int) -> dict:
@@ -2123,10 +2210,15 @@ def ask_costpilot(
     comparison_coverage_result = None
     date_from, date_to = _ask_period_bounds(request, parsed)
     if parsed.get("intent") == "comparison":
+        stored_analytics_settings = workspace_analytics_settings(db, request.workspace_id)
+        effective_timezone = (
+            stored_analytics_settings.timezone_name
+            if stored_analytics_settings else request.timezone_name
+        )
         primary_period = resolve_primary_period(
             period_key=parsed.get("period_key"),
             days=parsed["days"],
-            timezone_name=request.timezone_name,
+            timezone_name=effective_timezone,
             date_from=request.date_from,
             date_to=request.date_to,
         )
@@ -2203,7 +2295,15 @@ def ask_costpilot(
                 db=db,
             )
             prior_summary = prior_report.get("summary") or {}
-            comparison_coverage_result = comparison_coverage(summary, prior_summary)
+            if db is not None and request.workspace_id:
+                comparison_coverage_result = comparison_data_coverage(
+                    comparison_execution_plan,
+                    summary,
+                    prior_summary,
+                    workspace_collection_profile(db, request.workspace_id),
+                )
+            else:
+                comparison_coverage_result = comparison_coverage(summary, prior_summary)
             prior_value = _ask_row_metric(prior_summary, metric)
             change = current_value - prior_value
             pct = (change / prior_value * 100) if prior_value else None
@@ -2222,14 +2322,21 @@ def ask_costpilot(
             }
             comparison_description = comparison_descriptions[comparison_execution_plan.mode]
             title = f"{metric_label.title()} comparison"
-            answer = (
-                f"{metric_label.title()} was {current_display} for {primary_label}, "
-                f"compared with {prior_display} for {comparison_label}, {comparison_description}. "
-                f"It {direction_word} by {change_display}"
-                + (f" ({abs(pct):.1f}%)." if pct is not None else ".")
-            )
-            if not comparison_coverage_result["comparable"]:
-                answer += f" Coverage note: {comparison_coverage_result['limitation']}"
+            if comparison_coverage_result["comparable"]:
+                answer = (
+                    f"{metric_label.title()} was {current_display} for {primary_label}, "
+                    f"compared with {prior_display} for {comparison_label}, {comparison_description}. "
+                    f"It {direction_word} by {change_display}"
+                    + (f" ({abs(pct):.1f}%)." if pct is not None else ".")
+                )
+            else:
+                answer = (
+                    f"{metric_label.title()} was {current_display} for {primary_label}. "
+                    f"A valid comparison with {comparison_label} is not available. "
+                    f"{comparison_coverage_result['limitation']}"
+                )
+                change = None
+                pct = None
             evidence = [
                 {"label": primary_label, "value": current_display, "metric_label": metric_label,
                  "detail": f"{int(summary.get('request_count') or 0):,} governed requests",

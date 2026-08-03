@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import TrialAccount
+from database.models import TrialAccount, WorkspaceAnalyticsSettings
 
 router = APIRouter()
 
@@ -290,6 +290,38 @@ class RegisterTrialRequest(BaseModel):
     company:  str = ""
     api_key:  str = ""   # optional legacy/BYOK field; trials use CostPilot-managed provider keys
     provider: str = "openai"
+    timezone_name: str = "UTC"
+
+
+def _valid_timezone_name(value: str) -> str:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        ZoneInfo(value or "UTC")
+        return value or "UTC"
+    except ZoneInfoNotFoundError:
+        return "UTC"
+
+
+def _ensure_workspace_analytics_settings(
+    db: Session,
+    workspace_id: str,
+    timezone_name: str,
+    collection_started_at: datetime,
+) -> WorkspaceAnalyticsSettings:
+    item = (
+        db.query(WorkspaceAnalyticsSettings)
+        .filter(WorkspaceAnalyticsSettings.workspace_id == workspace_id)
+        .first()
+    )
+    if not item:
+        item = WorkspaceAnalyticsSettings(
+            workspace_id=workspace_id,
+            timezone_name=_valid_timezone_name(timezone_name),
+            collection_started_at=collection_started_at,
+        )
+        db.add(item)
+    return item
 
 
 class UpgradeRequest(BaseModel):
@@ -316,6 +348,13 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
         if req.api_key:
             existing.api_key_enc = b64encode(req.api_key.encode()).decode()
             db.commit()
+        _ensure_workspace_analytics_settings(
+            db,
+            existing.workspace_id,
+            req.timezone_name,
+            existing.created_at or existing.trial_start or datetime.utcnow(),
+        )
+        db.commit()
         now = datetime.utcnow()
         status = _trial_status_payload(existing, db)
         is_expired = status["is_expired"] or not existing.is_active
@@ -359,6 +398,9 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
         trial_spend_cap_usd = DEFAULT_TRIAL_SPEND_CAP_USD,
     )
     db.add(account)
+    _ensure_workspace_analytics_settings(
+        db, workspace_id, req.timezone_name, trial_start
+    )
     db.commit()
     db.refresh(account)
 

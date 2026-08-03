@@ -236,6 +236,22 @@ class WorkItemSourceLink(Base):
     work_item = relationship("WorkItem", back_populates="source_links")
 
 
+class WorkspaceAnalyticsSettings(Base):
+    """Tenant-specific calendar and verified ingestion boundaries for analytics."""
+    __tablename__ = "workspace_analytics_settings"
+
+    id                      = Column(Integer, primary_key=True, index=True)
+    workspace_id            = Column(String, nullable=False, unique=True, index=True)
+    timezone_name           = Column(String, nullable=False, default="UTC")
+    week_starts_on          = Column(Integer, nullable=False, default=0)  # 0=Monday
+    fiscal_year_start_month = Column(Integer, nullable=False, default=1)
+    default_window_days     = Column(Integer, nullable=False, default=30)
+    collection_started_at   = Column(DateTime, nullable=True)
+    latest_complete_at      = Column(DateTime, nullable=True)
+    created_at              = Column(DateTime, default=datetime.utcnow)
+    updated_at              = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class WorkItemAgent(Base):
     """An agent expected or approved to work on a project."""
     __tablename__ = "work_item_agents"

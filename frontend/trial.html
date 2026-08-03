@@ -876,7 +876,8 @@ async function registerTrial() {
 
   try {
     const data = await apiPost("/api/trial/register", {
-      email, name, company, api_key: _apiKey, provider: _provider
+      email, name, company, api_key: _apiKey, provider: _provider,
+      timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
     });
 
     _workspace = data.workspace_id;
@@ -937,6 +938,7 @@ async function saveGoLiveKey() {
       company:  "",
       api_key:  key,
       provider: _provider,
+      timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     });
     document.getElementById("goLiveKeyMsg").style.display = "block";
     document.getElementById("goLiveKey").value = "";
