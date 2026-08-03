@@ -1806,6 +1806,16 @@
     </section>
   </main>
 
+  <details class="exec-evidence" id="execSupportingEvidence" ontoggle="refreshExecutiveEvidenceCharts(this)">
+    <summary class="exec-evidence-summary">
+      <span>
+        <strong>Supporting metrics and calculation detail</strong>
+        <small>Open the full savings proof, spend breakdowns, recommendations, and operating metrics.</small>
+      </span>
+      <span class="exec-evidence-action" aria-hidden="true">View detail</span>
+    </summary>
+    <div class="exec-evidence-body">
+
   <!-- Hero row: Savings impact + baseline proof -->
   <div class="hero-row">
 
@@ -2341,6 +2351,9 @@
     </div>
   </div>
 
+    </div>
+  </details>
+
 </div>
 
 <!-- ── Footer ─────────────────────────────────────────────────────────────────── -->
@@ -2383,6 +2396,16 @@ function fmtNum(v) {
   if (v >= 1000000) return (v / 1000000).toFixed(1) + "M";
   if (v >= 1000)    return (v / 1000).toFixed(1) + "K";
   return v.toLocaleString();
+}
+
+function refreshExecutiveEvidenceCharts(details) {
+  if (!details?.open || typeof Chart === "undefined") return;
+  requestAnimationFrame(() => {
+    details.querySelectorAll("canvas").forEach(canvas => {
+      const chart = typeof Chart.getChart === "function" ? Chart.getChart(canvas) : null;
+      chart?.resize();
+    });
+  });
 }
 
 const EXEC_FILTER_KEY = "costpilot_exec_filters";
