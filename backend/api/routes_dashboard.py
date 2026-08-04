@@ -94,6 +94,16 @@ def get_dashboard(
     )
     if budget_scope is not None:
         budget_query = budget_query.filter(budget_scope)
+    else:
+        # No workspace selected: show only the unscoped/global budgets, not
+        # every workspace's rows pooled together. Without this, a department
+        # name that exists in multiple workspaces (e.g. "Engineering") shows
+        # up once per workspace here, each with a different — often stale,
+        # near-zero — spend figure, producing a confusing/contradictory
+        # health strip. Mirrors the same fix already applied to Ask
+        # CostPilot's budget lookups in api/routes_efficiency.py and
+        # api/ask_costpilot_tools.py.
+        budget_query = budget_query.filter(~DepartmentBudget.department.like("%:%"))
     budgets_for_spend = budget_query.all()
 
     # ── Token savings from pruning ─────────────────────────────────────────────
