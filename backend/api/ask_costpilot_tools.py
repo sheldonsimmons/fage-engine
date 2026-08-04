@@ -249,6 +249,10 @@ def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) ->
     )
     if workspace_id:
         query = query.filter(DepartmentBudget.department.like(f"{workspace_id}:%"))
+    else:
+        # Without this, every workspace's budget rows for the same department
+        # name (e.g. "Engineering") would all be returned together.
+        query = query.filter(~DepartmentBudget.department.like("%:%"))
     rows = []
     for budget in query.all():
         cap = float(budget.monthly_cap_usd or 0)

@@ -3128,6 +3128,19 @@ def ask_costpilot(
                 budget for budget in budgets
                 if ":" not in str(budget.department or "")
             ]
+        else:
+            # No workspace selected: use only the unscoped/global budgets, not
+            # every workspace's budgets pooled together. Without this, a
+            # department name that exists in multiple workspaces (e.g.
+            # "Engineering") produced one evidence row per workspace, each
+            # dividing the SAME globally-aggregated activity spend by a
+            # different (often stale/tiny) cap — yielding nonsensical
+            # percentages like 400%+ that also contradicted other budget
+            # answers computed against a single workspace's own rows.
+            budgets = [
+                budget for budget in budgets
+                if ":" not in str(budget.department or "")
+            ]
         budget_scope = parsed.get("budget_scope") or "status"
         over_limit = any(term in question.lower() for term in (
             "over budget", "exceeded", "over cap", "above budget"
