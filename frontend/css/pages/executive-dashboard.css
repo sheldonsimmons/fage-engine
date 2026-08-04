@@ -1710,7 +1710,15 @@ html.cp-executive-theme {
 .cp-executive-page .home-panel-head { border-bottom: 1px solid var(--cp-color-border); margin-bottom: 14px; padding-bottom: 12px; }
 .cp-executive-page .home-panel-head p { color: var(--cp-color-text-secondary); font-size: 11px; margin: 0; }
 .cp-executive-page .home-panel-head a { color: var(--cp-color-primary); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.cp-executive-page .home-panel-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.cp-executive-page .home-panel-actions button { background: #17293a; border: 1px solid #31506d; border-radius: 7px; color: #79baff; cursor: pointer; font-size: 10px; font-weight: 800; padding: 8px 10px; white-space: nowrap; }
+.cp-executive-page .home-panel-actions button:hover,
+.cp-executive-page .home-panel-actions button:focus-visible { background: #1d3852; border-color: var(--cp-color-primary); outline: none; }
+.cp-executive-page .home-panel-actions button:disabled { cursor: default; opacity: .45; }
 .cp-executive-page .home-spend-answer { color: var(--cp-color-text); font-size: 15px; font-weight: 700; line-height: 1.45; margin-bottom: 12px; }
+.cp-executive-page .home-insight-footer { align-items: center; border-top: 1px solid var(--cp-color-border); display: flex; justify-content: space-between; margin-top: 12px; padding-top: 10px; }
+.cp-executive-page .home-insight-footer span { color: var(--cp-color-text-muted); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.cp-executive-page .home-insight-footer a { color: var(--cp-color-primary); font-size: 10px; font-weight: 700; }
 .cp-executive-page .home-driver-list,
 .cp-executive-page .home-attention-list,
 .cp-executive-page .home-risk-list,

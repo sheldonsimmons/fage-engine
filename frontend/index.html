@@ -1601,11 +1601,15 @@
   <section class="home-insight-grid" aria-label="AI usage insights">
     <article class="home-panel card" id="homeSpendChangePanel">
       <div class="home-panel-head">
-        <div><h2>Why did spend change?</h2><p id="homeSpendChangeScope">Comparing the current and previous period.</p></div>
-        <a href="/reports.html?tab=efficiency">Ask CostPilot →</a>
+        <div><h2 id="homeInsightTitle">Why did spend change?</h2><p id="homeSpendChangeScope">Comparing the current and previous period.</p></div>
+        <div class="home-panel-actions">
+          <button id="homeNextInsightButton" type="button" onclick="showNextHomeInsight()">What else stands out? ↻</button>
+          <a href="/reports.html?tab=efficiency">Ask CostPilot →</a>
+        </div>
       </div>
-      <div class="home-spend-answer" id="homeSpendAnswer">Waiting for enough activity to compare periods.</div>
+      <div class="home-spend-answer" id="homeSpendAnswer" aria-live="polite">Waiting for enough activity to compare periods.</div>
       <div class="home-driver-list" id="homeSpendDrivers"></div>
+      <div class="home-insight-footer"><span id="homeInsightPosition">Insight 1</span><a id="homeInsightEvidenceLink" href="/reports.html">View supporting records →</a></div>
     </article>
 
     <article class="home-panel card" id="homeAttentionPanel">
@@ -4568,6 +4572,8 @@ function renderExecGlanceAccountability(data) {
 let homeTopView = "department";
 let homeTopRows = { department: [], person: [], agent: [], account: [] };
 let homeConnectionHealthy = null;
+let homeInsightIndex = 0;
+let homeInsights = [];
 
 function homePeriodComparison(events) {
   const valid = (events || []).filter(event => eventTs(event) > 0).sort((a, b) => eventTs(a) - eventTs(b));
@@ -4593,6 +4599,148 @@ function homeAttentionItems(context, data) {
   const attribution = data.businessContexts?.attribution;
   if (Number(attribution?.unattributed_request_count || 0) > 0) items.push({ state: "warning", title: `${fmtNum(attribution.unattributed_request_count)} requests are unattributed`, meta: "Add business context so usage rolls up correctly." });
   return items;
+}
+
+function homeInsightRow(title, meta, value, state = "") {
+  return { title, meta, value, state };
+}
+
+function buildHomeInsights(events, data, context, comparison) {
+  const insights = [];
+  if (comparison) {
+    const direction = comparison.currentSpend > comparison.previousSpend
+      ? "increased"
+      : comparison.currentSpend < comparison.previousSpend ? "decreased" : "did not change";
+    const drivers = topCostDrivers(comparison.current, data).slice(0, 3);
+    insights.push({
+      title: "Why did spend change?",
+      scope: "Current half of the selected period compared with the previous half.",
+      answer: `AI spend ${direction} from ${fmtUsd(comparison.previousSpend)} to ${fmtUsd(comparison.currentSpend)} between the two halves of this view.${drivers[0] ? ` ${drivers[0].agent} was the largest current cost driver.` : ""}`,
+      rows: drivers.map(driver => homeInsightRow(driver.agent, `${driver.dept} · ${fmtNum(driver.calls)} requests`, fmtUsd(driver.cost))),
+      href: "/reports.html?tab=efficiency",
+    });
+  }
+
+  const dashboard = data.dashboard || {};
+  const budgetCap = Number(dashboard.total_cap_usd || 0);
+  const monthSpend = Number(dashboard.spend_month_usd || 0);
+  if (budgetCap > 0) {
+    const budgetPct = monthSpend / budgetCap * 100;
+    const remaining = Math.max(0, budgetCap - monthSpend);
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEvents = (events || []).filter(event => eventTs(event) >= monthStart.getTime());
+    const spendByDepartment = new Map();
+    monthEvents.forEach(event => {
+      const department = displayDeptName(event.department || event.source_department) || "Unassigned";
+      spendByDepartment.set(department, (spendByDepartment.get(department) || 0) + totalEventCost([event]));
+    });
+    const budgetRows = (dashboard.budget_summaries || []).map(row => {
+      const department = displayDeptName(row.department) || "Unassigned";
+      const cap = Number(row.monthly_cap_usd || 0);
+      const spend = Number(spendByDepartment.get(department) || 0);
+      return { department, cap, spend, pct: cap > 0 ? spend / cap * 100 : 0 };
+    }).sort((a, b) => b.pct - a.pct).slice(0, 3);
+    insights.push({
+      title: "How is the budget tracking?",
+      scope: "Month-to-date attributed spend compared with configured monthly budgets.",
+      answer: `${fmtUsd(monthSpend)} of the ${fmtUsd(budgetCap)} monthly AI budget has been used (${budgetPct < .1 && budgetPct > 0 ? budgetPct.toFixed(2) : budgetPct.toFixed(1)}%). ${fmtUsd(remaining)} remains.`,
+      rows: budgetRows.map(row => homeInsightRow(row.department, `${fmtUsd(row.spend)} used of ${fmtUsd(row.cap)}`, `${row.pct < .1 && row.pct > 0 ? row.pct.toFixed(2) : row.pct.toFixed(1)}%`)),
+      href: "/reports.html?tab=activity",
+    });
+  }
+
+  const drivers = topCostDrivers(events, data).slice(0, 3);
+  if (drivers.length) {
+    const driverSpend = drivers.reduce((sum, row) => sum + Number(row.cost || 0), 0);
+    const share = context.actualCost > 0 ? driverSpend / context.actualCost * 100 : 0;
+    insights.push({
+      title: "What is driving the most cost?",
+      scope: "Top recorded agent contributors in the selected period and filters.",
+      answer: `${drivers[0].agent} is the largest recorded cost contributor at ${fmtUsd(drivers[0].cost)}. The top ${drivers.length} agents account for ${share.toFixed(1)}% of selected spend.`,
+      rows: drivers.map(driver => homeInsightRow(driver.agent, `${driver.dept} · ${fmtNum(driver.calls)} requests`, fmtUsd(driver.cost))),
+      href: "/reports.html?tab=activity",
+    });
+  }
+
+  const activeAgentIds = new Set((events || []).map(event => String(event.agent_id || "")).filter(Boolean));
+  const canAssessInactiveAgents = !execFilters.dept && !execFilters.platform && !execFilters.agent
+    && !execFilters.businessUnit && !execFilters.tier && !execFilters.model && !execFilters.risk;
+  const inactiveAgents = canAssessInactiveAgents ? (data.agents || []).filter(agent =>
+    !agent.archived && !activeAgentIds.has(String(agent.id || ""))
+  ) : [];
+  if (inactiveAgents.length) {
+    insights.push({
+      title: "Which agents are inactive?",
+      scope: "Registered agents with no governed activity in the selected period and filters.",
+      answer: `${fmtNum(inactiveAgents.length)} registered agent${inactiveAgents.length === 1 ? " has" : "s have"} no matching governed activity in this view.`,
+      rows: inactiveAgents.slice(0, 3).map(agent => homeInsightRow(customerFacingAgentName(agent.display_name || agent.name || "Unnamed agent"), displayDeptName(agent.display_department || agent.department) || "Unassigned", "No activity")),
+      href: "/operate.html",
+    });
+  }
+
+  const attribution = data.businessContexts?.attribution;
+  if (attribution) {
+    const coverage = Number(attribution.coverage_pct || 0);
+    const unattributed = Number(attribution.unattributed_request_count || 0);
+    insights.push({
+      title: "How complete is attribution?",
+      scope: "Governed requests connected to business context in the last 30 days.",
+      answer: `${coverage.toFixed(1)}% of requests are attributed to business context. ${fmtNum(unattributed)} request${unattributed === 1 ? " remains" : "s remain"} unattributed.`,
+      rows: (data.businessContexts?.parents || []).slice(0, 3).map(row => homeInsightRow(row.name || "Business context", `${fmtNum(Number(row.request_count || 0))} requests`, fmtUsd(Number(row.spend_usd || 0)))),
+      href: "/reports.html?tab=contexts#business-contexts",
+    });
+  }
+
+  const riskEvents = (events || []).filter(event => isBlockedEvent(event) || ["critical", "high"].includes(norm(event.risk_level))).sort((a, b) => eventTs(b) - eventTs(a));
+  if (riskEvents.length) {
+    const blockedEvents = riskEvents.filter(isBlockedEvent);
+    insights.push({
+      title: "What needs policy attention?",
+      scope: "Recorded blocks, controls, and elevated-risk events in the selected period.",
+      answer: `${fmtNum(riskEvents.length)} blocked or elevated-risk event${riskEvents.length === 1 ? " was" : "s were"} recorded, including ${fmtNum(blockedEvents.length)} blocked request${blockedEvents.length === 1 ? "" : "s"}.`,
+      rows: riskEvents.slice(0, 3).map(event => homeInsightRow(customerFacingAgentName(event.agent_name || event.agent || event.source || "Governed request"), event.decision_outcome || event.risk_level || "Policy signal", event.timestamp ? new Date(event.timestamp + "Z").toLocaleDateString() : "Recent", isBlockedEvent(event) ? "danger" : "warning")),
+      href: "/operate.html",
+    });
+  }
+
+  return insights.filter(insight => insight.answer && (insight.rows.length || insight.title === "How is the budget tracking?"));
+}
+
+function renderHomeInsight() {
+  const nextButton = document.getElementById("homeNextInsightButton");
+  if (nextButton) nextButton.disabled = homeInsights.length < 2;
+  if (!homeInsights.length) {
+    setText("homeInsightTitle", "What stands out?");
+    setText("homeSpendChangeScope", "Insights appear after CostPilot records enough governed activity.");
+    setText("homeSpendAnswer", "No evidence-backed insight is available for this view yet.");
+    setText("homeInsightPosition", "No insights available");
+    const rows = document.getElementById("homeSpendDrivers");
+    if (rows) rows.innerHTML = "";
+    const evidence = document.getElementById("homeInsightEvidenceLink");
+    if (evidence) evidence.hidden = true;
+    return;
+  }
+  homeInsightIndex = ((homeInsightIndex % homeInsights.length) + homeInsights.length) % homeInsights.length;
+  const insight = homeInsights[homeInsightIndex];
+  setText("homeInsightTitle", insight.title);
+  setText("homeSpendChangeScope", insight.scope);
+  setText("homeSpendAnswer", insight.answer);
+  setText("homeInsightPosition", `Insight ${homeInsightIndex + 1} of ${homeInsights.length}`);
+  const rows = document.getElementById("homeSpendDrivers");
+  if (rows) rows.innerHTML = insight.rows.map(row => `<div class="home-list-row ${escapeHtml(row.state || "")}"><div><strong>${escapeHtml(row.title)}</strong><span>${escapeHtml(row.meta)}</span></div><b>${escapeHtml(row.value)}</b></div>`).join("");
+  const evidence = document.getElementById("homeInsightEvidenceLink");
+  if (evidence) {
+    evidence.hidden = false;
+    evidence.href = insight.href || "/reports.html";
+  }
+}
+
+function showNextHomeInsight() {
+  if (!homeInsights.length) return;
+  homeInsightIndex = (homeInsightIndex + 1) % homeInsights.length;
+  renderHomeInsight();
 }
 
 function renderHomeTopActivity() {
@@ -4624,13 +4772,10 @@ function renderHomeOverview(events, data, context) {
     setText("homeSpendChange", comparison.change.value);
     setText("homeSpendChangeMeta", comparison.change.meta);
     document.getElementById("homeSpendChange")?.setAttribute("class", comparison.change.state);
-    const direction = comparison.currentSpend > comparison.previousSpend ? "increased" : comparison.currentSpend < comparison.previousSpend ? "decreased" : "did not change";
-    const currentDrivers = topCostDrivers(comparison.current, data).slice(0, 3);
-    setText("homeSpendAnswer", `AI spend ${direction} from ${fmtUsd(comparison.previousSpend)} to ${fmtUsd(comparison.currentSpend)} between the two halves of this view.${currentDrivers[0] ? ` ${currentDrivers[0].agent} was the largest current cost driver.` : ""}`);
-    setText("homeSpendChangeScope", "Current half of the selected period compared with the previous half.");
-    const driverContainer = document.getElementById("homeSpendDrivers");
-    if (driverContainer) driverContainer.innerHTML = currentDrivers.map(driver => `<div class="home-list-row"><div><strong>${escapeHtml(driver.agent)}</strong><span>${escapeHtml(driver.dept)} · ${fmtNum(driver.calls)} requests</span></div><b>${fmtUsd(driver.cost)}</b></div>`).join("");
   }
+  homeInsights = buildHomeInsights(events, data, context, comparison);
+  if (homeInsightIndex >= homeInsights.length) homeInsightIndex = 0;
+  renderHomeInsight();
 
   const attention = homeAttentionItems(context, data);
   setText("homeAttention", fmtNum(attention.length));
