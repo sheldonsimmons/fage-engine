@@ -889,6 +889,45 @@
   color: var(--text-muted);
   font-size: 9px;
 }
+.ask-answer-body p { margin: 8px 0; }
+.ask-answer-body p:first-child { margin-top: 0; }
+.ask-answer-body h3, .ask-answer-body h4, .ask-answer-body h5, .ask-answer-body h6 {
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+.ask-answer-body ul, .ask-answer-body ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+.ask-answer-body li { margin: 4px 0; }
+.ask-answer-body code {
+  padding: 1px 5px;
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.ask-markdown-table {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  overflow-x: auto;
+  font-size: 12px;
+}
+.ask-markdown-table th, .ask-markdown-table td {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.ask-markdown-table th {
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
 .ask-proactive-note {
   margin-top: 14px;
   padding: 11px 12px;

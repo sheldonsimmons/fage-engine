@@ -287,6 +287,81 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function renderAskMarkdown(text) {
+  const escaped = escapeHtml(text);
+  const inline = (line) => line
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+?)`/g, "<code>$1</code>");
+
+  const lines = escaped.split("\n");
+  const html = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      const tableLines = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      const rows = tableLines
+        .map(row => row.trim().replace(/^\||\|$/g, "").split("|").map(cell => cell.trim()))
+        .filter(cells => !cells.every(cell => /^:?-{2,}:?$/.test(cell)));
+      if (rows.length) {
+        const [head, ...body] = rows;
+        html.push(`<div style="overflow-x:auto"><table class="ask-markdown-table"><thead><tr>${
+          head.map(cell => `<th>${inline(cell)}</th>`).join("")
+        }</tr></thead><tbody>${
+          body.map(cells => `<tr>${cells.map(cell => `<td>${inline(cell)}</td>`).join("")}</tr>`).join("")
+        }</tbody></table></div>`);
+      }
+      continue;
+    }
+
+    if (/^#{1,4}\s+/.test(line)) {
+      const level = Math.min(4, line.match(/^#+/)[0].length) + 2;
+      html.push(`<h${level}>${inline(line.replace(/^#{1,4}\s+/, ""))}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(`<li>${inline(lines[i].replace(/^\s*[-*]\s+/, ""))}</li>`);
+        i++;
+      }
+      html.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(`<li>${inline(lines[i].replace(/^\s*\d+\.\s+/, ""))}</li>`);
+        i++;
+      }
+      html.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+    const paragraph = [line];
+    i++;
+    while (i < lines.length && lines[i].trim() !== "" && !/^\s*[-*|#]/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i])) {
+      paragraph.push(lines[i]);
+      i++;
+    }
+    html.push(`<p>${inline(paragraph.join(" "))}</p>`);
+  }
+  return html.join("");
+}
+
 function selectValue(id) {
   return (document.getElementById(id)?.value || "").trim();
 }
@@ -2011,7 +2086,9 @@ function renderAskCostPilotAnswer(data) {
       <div><strong>Date range</strong><span>${escapeHtml(period)}</span></div>
       <div><strong>Scope</strong><span>${escapeHtml(scopeLabel)}</span></div>
     </div>
-    <p class="${clarification ? "ask-clarification" : ""}">${escapeHtml(data.answer || "No answer was returned.")}</p>
+    <div class="ask-answer-body${clarification ? " ask-clarification" : ""}">${
+      data.answer ? renderAskMarkdown(data.answer) : "<p>No answer was returned.</p>"
+    }</div>
     ${activeFilters ? `<div class="ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
     ${evidence}
     ${calculation}
