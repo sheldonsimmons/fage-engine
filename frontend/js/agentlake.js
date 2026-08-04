@@ -576,6 +576,7 @@ let _agentlakeView = "overview";
 let _agentlakeProjects = [];
 let _agentlakeProjectSummary = {};
 let _agentlakeProjectsLoadedAt = 0;
+const AGENTLAKE_SALESFORCE_WORKSPACE_ID = "4BE43240A6674314";
 
 function agentlakeWorkspaceId() {
   const requested = new URLSearchParams(window.location.search).get("workspace_id");
@@ -586,19 +587,29 @@ function renderAgentlakeWorkspaceScope() {
   const workspaceId = agentlakeWorkspaceId();
   const input = document.getElementById("agentlakeWorkspaceInput");
   const kind = document.getElementById("agentlakeWorkspaceKind");
+  const liveButton = document.getElementById("agentlakeLiveWorkspaceButton");
   if (input && document.activeElement !== input) input.value = workspaceId;
   if (kind) {
     const override = new URLSearchParams(window.location.search).has("workspace_id");
     const simulator = workspaceId.startsWith("SIM-");
     kind.textContent = simulator
-      ? "Simulator data"
+      ? "Simulator data — live Salesforce requests are hidden"
       : override
         ? "Page override"
         : workspaceId
           ? "Saved operational workspace"
           : "All workspaces — select one";
     kind.classList.toggle("warning", simulator || !workspaceId);
+    if (liveButton) liveButton.hidden = !simulator;
   }
+}
+
+function switchAgentlakeToSalesforce() {
+  localStorage.setItem("cp_workspace_id", AGENTLAKE_SALESFORCE_WORKSPACE_ID);
+  localStorage.setItem("cp_workspace_name", "Salesforce Pilot");
+  const url = new URL(window.location.href);
+  url.searchParams.set("workspace_id", AGENTLAKE_SALESFORCE_WORKSPACE_ID);
+  window.location.href = url.toString();
 }
 
 function applyAgentlakeWorkspace() {
