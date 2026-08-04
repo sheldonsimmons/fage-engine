@@ -5,8 +5,8 @@
       "default": true
     },
     {
-      "versionName": "ver 0.1",
-      "versionNumber": "0.1.0.NEXT",
+      "versionName": "ver 0.1.1",
+      "versionNumber": "0.1.1.NEXT",
       "path": "package-source",
       "default": false,
       "package": "CostPilot Salesforce Connector",
@@ -25,6 +25,7 @@
     "CostPilot Salesforce Connector@0.1.0-4": "04tfj000000Oi1VAAS",
     "CostPilot Salesforce Connector@0.1.0-5": "04tfj000000OlXFAA0",
     "CostPilot Salesforce Connector@0.1.0-6": "04tfj000000P9hdAAC",
-    "CostPilot Salesforce Connector@0.1.0-7": "04tfj000000PZCHAA4"
+    "CostPilot Salesforce Connector@0.1.0-7": "04tfj000000PZCHAA4",
+    "CostPilot Salesforce Connector@0.1.1-1": "04tfj000000PZSPAA4"
   }
 }
