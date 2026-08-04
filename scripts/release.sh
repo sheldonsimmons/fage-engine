@@ -53,6 +53,10 @@ with engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:
     '''))
     conn.execute(text('''
         ALTER TABLE department_budgets
+        ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE
+    '''))
+    conn.execute(text('''
+        ALTER TABLE department_budgets
         ADD COLUMN IF NOT EXISTS raw_payload_logging_enabled BOOLEAN DEFAULT FALSE
     '''))
     conn.execute(text('''
