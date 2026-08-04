@@ -232,13 +232,17 @@
             <button type="button" class="cp-ask-close" id="cpAskClose" aria-label="Close Ask CostPilot">×</button>
           </div>
         </header>
+        <div class="cp-ask-scope-summary">
+          <span><b>Scope</b><strong id="cpAskScopeWorkspace">Current workspace</strong></span>
+          <span><b>Date range</b><strong id="cpAskScopeDate">Last 30 days</strong></span>
+          <span><b>Data</b><strong id="cpAskScopeData">Checking…</strong></span>
+        </div>
         <div class="cp-ask-suggestions" aria-label="Suggested questions">
-          <button type="button">Who used the most tokens last week?</button>
-          <button type="button">Compare token usage with around this time last year.</button>
-          <button type="button">Why did our AI spend or token usage change?</button>
-          <button type="button">Where is our AI spend going?</button>
-          <button type="button">How many tokens did pruning remove?</button>
-          <button type="button">Show live versus simulator usage.</button>
+          <button type="button" data-question="Why did our AI spend increase compared with the previous period?">Why did AI spend increase?</button>
+          <button type="button" data-requires="people" data-question="Who used the most tokens this month?">Who used the most tokens?</button>
+          <button type="button" data-requires="agents" data-question="Which agents have not been used in this period?">Which agents are inactive?</button>
+          <button type="button" data-question="Compare our token usage and AI spend this month with last month.">Compare with last month</button>
+          <button type="button" data-requires="accounts" data-question="Which accounts generated the most AI activity this month?">Top accounts by activity</button>
         </div>
         <div class="cp-ask-messages" id="cpAskMessages" aria-live="polite">
           <div class="cp-ask-welcome">
@@ -269,11 +273,17 @@
         document.getElementById("cpAskForm")?.requestSubmit();
       }
     });
-    document.querySelectorAll(".cp-ask-suggestions button").forEach((button) => {
-      button.addEventListener("click", () => {
-        document.getElementById("cpAskInput").value = button.textContent.trim();
-        submitGlobalAsk();
-      });
+    document.querySelector(".cp-ask-suggestions").addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      document.getElementById("cpAskInput").value = button.dataset.question || button.textContent.trim();
+      submitGlobalAsk();
+    });
+    document.getElementById("cpAskMessages").addEventListener("click", (event) => {
+      const followUp = event.target.closest("[data-ask-question]");
+      if (!followUp) return;
+      document.getElementById("cpAskInput").value = followUp.dataset.askQuestion;
+      submitGlobalAsk();
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeAskCostPilot();
@@ -295,7 +305,59 @@
     drawer.setAttribute("aria-hidden", "false");
     backdrop.hidden = false;
     document.body.classList.add("cp-ask-open");
+    refreshGlobalAskExperience();
     setTimeout(() => document.getElementById("cpAskInput")?.focus(), 30);
+  }
+
+  function compactDateLabel(value) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleDateString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+    });
+  }
+
+  async function refreshGlobalAskExperience() {
+    const scope = askScope();
+    const workspace = activeWorkspace();
+    const workspaceNode = document.getElementById("cpAskScopeWorkspace");
+    const dateNode = document.getElementById("cpAskScopeDate");
+    const dataNode = document.getElementById("cpAskScopeData");
+    if (workspaceNode) workspaceNode.textContent = workspace.label;
+    if (dateNode) {
+      const from = compactDateLabel(scope.date_from);
+      const to = compactDateLabel(scope.date_to);
+      dateNode.textContent = from && to ? `${from} – ${to}` : `Last ${Number(scope.days) || 30} days`;
+    }
+    const params = new URLSearchParams({
+      days: String(Math.max(1, Math.min(365, Number(scope.days) || 30))),
+      activity_limit: "1",
+    });
+    if (scope.workspace_id) params.set("workspace_id", scope.workspace_id);
+    if (scope.date_from) params.set("date_from", scope.date_from);
+    if (scope.date_to) params.set("date_to", scope.date_to);
+    try {
+      const response = await fetch(`/api/work-items/activity-report?${params.toString()}`);
+      if (!response.ok) throw new Error("Availability check failed");
+      const data = await response.json();
+      const summary = data.summary || {};
+      const live = Number(summary.live_count || 0);
+      const simulated = Number(summary.simulation_count || 0);
+      if (dataNode) dataNode.textContent = live && simulated
+        ? `${live.toLocaleString()} live · ${simulated.toLocaleString()} sample`
+        : live ? `${live.toLocaleString()} live`
+          : simulated ? `${simulated.toLocaleString()} sample`
+            : "No matching activity";
+      const availability = {
+        people: Number(summary.people_count || 0) > 0,
+        agents: (data.filter_options?.agents || []).length > 0,
+        accounts: (data.filter_options?.accounts || []).length > 0,
+      };
+      document.querySelectorAll(".cp-ask-suggestions [data-requires]").forEach((button) => {
+        button.hidden = !availability[button.dataset.requires];
+      });
+    } catch (_error) {
+      if (dataNode) dataNode.textContent = "Could not verify";
+    }
   }
 
   function closeAskCostPilot() {
@@ -490,6 +552,7 @@
       product_knowledge: "CostPilot product knowledge",
       clarification_required: "Answer withheld for verification",
     }[provenance.scope] || "Governed activity";
+    const clarification = provenance.scope === "clarification_required" || data.intent === "clarification";
     const evidence = (data.evidence || []).map((item) => renderGlobalEvidence(item, data)).join("");
     const activeFilters = Object.entries(provenance.active_filters || {})
       .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
@@ -503,17 +566,39 @@
           <div><strong>${escapeHtml(item.title || "Review opportunity")}</strong><span>${escapeHtml(item.body || "")}</span></div>
         `).join("")}</div></section>`
       : "";
+    const rowCount = Number(data.calculation?.row_count || data.summary?.request_count || 0);
+    const answerScope = globalAskDrillScope(data, null);
+    const supportingRecords = rowCount > 0
+      ? `<button type="button" class="cp-ask-supporting" data-ask-scope="${escapeHtml(encodeURIComponent(JSON.stringify(answerScope)))}">View ${rowCount.toLocaleString()} supporting ${rowCount === 1 ? "record" : "records"} →</button>`
+      : "";
+    const followUps = globalAskFollowUps(data);
     return `<article class="cp-ask-answer">
-      <div class="cp-ask-answer-head"><span>${escapeHtml(provenance.period_label || "Selected period")}</span><b>${escapeHtml(sourceLabel)} · Calculated</b></div>
+      <div class="cp-ask-answer-head"><span>${escapeHtml(provenance.period_label || "Selected period")}</span><b class="${clarification ? "clarification" : ""}">${clarification ? "Needs clarification" : "Calculated"}</b></div>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3>
       ${data.interpreted_as ? `<div class="cp-ask-interpretation"><strong>Interpreted as</strong><span>${escapeHtml(data.interpreted_as)}</span></div>` : ""}
+      <div class="cp-ask-answer-scope"><span><b>Date range</b>${escapeHtml(provenance.period_label || "Selected period")}</span><span><b>Scope</b>${escapeHtml(sourceLabel)}</span></div>
       <p>${escapeHtml(data.answer || "No answer was returned.")}</p>
       ${activeFilters ? `<div class="cp-ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
       ${evidence ? `<section><h4>Evidence</h4>${evidence}</section>` : ""}
       ${calculation}
+      ${supportingRecords}
       ${recommendations}
+      ${followUps.length ? `<section><h4>You might also ask</h4><div class="cp-ask-followups">${followUps.map(question => `<button type="button" data-ask-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}</div></section>` : ""}
       <small>${escapeHtml(data.measurement_note || "Calculated from governed CostPilot activity.")}</small>
     </article>`;
+  }
+
+  function globalAskFollowUps(data) {
+    if (Array.isArray(data.suggested_questions) && data.suggested_questions.length) {
+      return data.suggested_questions.slice(0, 2).map(String);
+    }
+    if (data.intent === "clarification") return [];
+    if (data.intent === "comparison" || data.intent === "drivers") {
+      return ["Which department contributed most to the change?", "Was the change within budget?"];
+    }
+    if (data.entity === "people") return ["Compare the top people with the previous period."];
+    if (data.entity === "agents") return ["Which models did the top agents use?"];
+    return ["What changed compared with the previous period?"];
   }
 
   function bindGlobalAskDrills(container) {
@@ -590,7 +675,10 @@
       writeAskStorage("history", history.slice(-12));
       writeAskStorage("context", data.conversation_context || context);
     } catch (error) {
-      pending.innerHTML = `<div class="cp-ask-error"><strong>I couldn't calculate that answer.</strong><span>${escapeHtml(error.message || "Please try again.")}</span></div>`;
+      const statusMessage = /503/.test(error.message || "")
+        ? "The analytics service is temporarily unavailable. No answer was generated."
+        : error.message || "CostPilot could not safely calculate this answer.";
+      pending.innerHTML = `<div class="cp-ask-error"><strong>CostPilot did not generate an answer.</strong><span>${escapeHtml(statusMessage)}</span><small>Your question and existing data were not changed.</small></div>`;
     } finally {
       send.disabled = false;
       send.textContent = "Ask";

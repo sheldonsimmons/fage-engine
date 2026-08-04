@@ -525,7 +525,10 @@ function loadActiveTab() {
   if (activeTab === "contexts")    loadBusinessContexts();
   if (activeTab === "departments") loadDepartments();
   if (activeTab === "activity")    loadAgentActivity();
-  if (activeTab === "efficiency")  restoreEfficiencyReviewForSelectedDays();
+  if (activeTab === "efficiency") {
+    restoreEfficiencyReviewForSelectedDays();
+    refreshAskCostPilotExperience();
+  }
   // efficiency tab remains on-demand. Restore cached reviews, but do not rerun analysis automatically.
 }
 
@@ -1582,13 +1585,161 @@ let askCostPilotHistory = readAskCostPilotStorage("history", []);
 if (!Array.isArray(askCostPilotHistory)) askCostPilotHistory = [];
 let askCostPilotContext = readAskCostPilotStorage("context", null);
 
-function askCostPilotSuggestion(button) {
+const ASK_STARTER_QUESTIONS = [
+  {
+    id: "spend-change",
+    category: "Spend",
+    title: "Why did AI spend increase?",
+    question: "Why did our AI spend increase compared with the previous period?",
+    description: "Compare periods and identify the largest measured contributors.",
+    available: () => true,
+  },
+  {
+    id: "top-people",
+    category: "People",
+    title: "Who used the most tokens this month?",
+    question: "Who used the most tokens this month?",
+    description: "Rank attributed people using recorded token consumption.",
+    available: data => Number(data?.summary?.people_count || 0) > 0,
+  },
+  {
+    id: "inactive-agents",
+    category: "Agents",
+    title: "Which agents are inactive?",
+    question: "Which agents have not been used in this period?",
+    description: "Find registered agents with no matching governed activity.",
+    available: data => (data?.filter_options?.agents || []).length > 0,
+  },
+  {
+    id: "period-compare",
+    category: "Trend",
+    title: "Compare this month with last month",
+    question: "Compare our token usage and AI spend this month with last month.",
+    description: "See the absolute and percentage change between periods.",
+    available: () => true,
+  },
+  {
+    id: "top-accounts",
+    category: "Accounts",
+    title: "Which accounts generated the most AI activity?",
+    question: "Which accounts generated the most AI activity this month?",
+    description: "Rank customer accounts using attributed governed requests.",
+    available: data => (data?.filter_options?.accounts || []).length > 0,
+  },
+  {
+    id: "budget-forecast",
+    category: "Budget",
+    title: "Are we on track to exceed our budget?",
+    question: "Are we on track to exceed our AI budget this month?",
+    description: "Compare current spend pace with configured monthly limits.",
+    available: (_data, departments) => (departments?.scorecards || [])
+      .some(row => Number(row.monthly_cap_usd || 0) > 0),
+  },
+];
+
+let askCostPilotAvailability = null;
+
+function askCostPilotQuestion(question) {
   const input = document.getElementById("askCostPilotInput");
-  if (!input || !button) return;
-  input.value = button.textContent.trim();
+  if (!input || !question) return;
+  input.value = question;
   input.focus();
   submitAskCostPilot();
 }
+
+function askCostPilotSuggestion(button) {
+  if (!button) return;
+  askCostPilotQuestion(button.dataset.question || button.textContent.trim());
+}
+
+function askCostPilotDateLabel(range = getActiveDateRange()) {
+  const from = new Date(range.date_from);
+  const exclusiveTo = new Date(range.date_to);
+  exclusiveTo.setDate(exclusiveTo.getDate() - 1);
+  const format = value => value.toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+  return `${format(from)} – ${format(exclusiveTo)}`;
+}
+
+function askCostPilotWorkspaceLabel() {
+  const active = typeof getActiveWorkspace === "function" ? getActiveWorkspace() : null;
+  return active?.name || active?.label || localStorage.getItem("cp_workspace_name") || "Current workspace";
+}
+
+function updateAskCostPilotScope(data = askCostPilotAvailability?.activity) {
+  const workspace = document.getElementById("askWorkspaceScope");
+  const date = document.getElementById("askDateScope");
+  const source = document.getElementById("askDataScope");
+  if (workspace) workspace.textContent = askCostPilotWorkspaceLabel();
+  if (date) date.textContent = askCostPilotDateLabel();
+  if (source && data) {
+    const summary = data.summary || {};
+    const live = Number(summary.live_count || 0);
+    const simulated = Number(summary.simulation_count || 0);
+    source.textContent = live && simulated
+      ? `${fmtNum(live)} live · ${fmtNum(simulated)} sample`
+      : live
+        ? `${fmtNum(live)} live requests`
+        : simulated
+          ? `${fmtNum(simulated)} sample requests`
+          : "No matching activity";
+  }
+}
+
+function renderAskCostPilotSuggestions(activity, departments) {
+  const host = document.getElementById("askSuggestions");
+  if (!host) return;
+  const available = ASK_STARTER_QUESTIONS.filter(item => item.available(activity, departments));
+  host.innerHTML = available.length
+    ? available.map(item => `<button type="button" class="ask-starter-card"
+        data-question="${escapeHtml(item.question)}" onclick="askCostPilotSuggestion(this)">
+        <span>${escapeHtml(item.category)}</span>
+        <strong>${escapeHtml(item.title)}</strong>
+        <small>${escapeHtml(item.description)}</small>
+        <b>Ask CostPilot <span aria-hidden="true">→</span></b>
+      </button>`).join("")
+    : `<div class="ask-suggestions-empty">
+        <strong>No governed activity matches this scope yet.</strong>
+        <span>Change the date range or send a governed request, then CostPilot can suggest data-backed questions.</span>
+      </div>`;
+}
+
+async function refreshAskCostPilotExperience() {
+  updateAskCostPilotScope();
+  const range = getActiveDateRange();
+  const params = new URLSearchParams({
+    date_from: range.date_from,
+    date_to: range.date_to,
+    days: String(Math.min(365, range.days || 30)),
+    activity_limit: "1",
+  });
+  const workspaceId = reportWorkspaceId();
+  if (workspaceId) params.set("workspace_id", workspaceId);
+  try {
+    const [activityResult, departmentResult] = await Promise.allSettled([
+      apiGet(`/api/work-items/activity-report?${params.toString()}`),
+      apiGet(`/api/reports/departments?${reportApiParams(range)}`),
+    ]);
+    const activity = activityResult.status === "fulfilled" ? activityResult.value : null;
+    const departments = departmentResult.status === "fulfilled" ? departmentResult.value : null;
+    askCostPilotAvailability = { activity, departments };
+    updateAskCostPilotScope(activity);
+    renderAskCostPilotSuggestions(activity, departments);
+  } catch (_error) {
+    renderAskCostPilotSuggestions(null, null);
+    const source = document.getElementById("askDataScope");
+    if (source) source.textContent = "Availability check failed";
+  }
+}
+
+function focusAskCostPilotScope() {
+  const control = document.getElementById("rptDatePreset");
+  control?.scrollIntoView({ behavior: "smooth", block: "center" });
+  control?.focus();
+}
+
+window.focusAskCostPilotScope = focusAskCostPilotScope;
 
 function askCostPilotFilterValue(id) {
   const element = document.getElementById(id);
@@ -1637,8 +1788,8 @@ function askCostPilotWelcomeMarkup() {
   return `<div class="ask-message assistant">
     <div class="ask-avatar" aria-hidden="true">CP</div>
     <div class="ask-message-body">
-      <strong>What would you like to know?</strong>
-      <p>Ask how CostPilot works, what a metric means, what has been built, who is using it, what it costs, or where governance needs attention.</p>
+      <strong>Ask a question or choose one above.</strong>
+      <p>CostPilot will show how it understood the question, the exact date range, supporting records, and the calculation behind the answer.</p>
     </div>
   </div>`;
 }
@@ -1766,6 +1917,8 @@ function askEvidenceButton(item, data) {
 }
 
 function renderAskCostPilotAnswer(data) {
+  const provenance = data.data_provenance || {};
+  const clarification = provenance.scope === "clarification_required" || data.intent === "clarification";
   const evidence = (data.evidence || []).length
     ? `<div class="ask-answer-section">
         <h4>Evidence</h4>
@@ -1780,10 +1933,9 @@ function renderAskCostPilotAnswer(data) {
           <p>${escapeHtml(item.body || "")}</p></div>`).join("")}</div>
        </div>`
     : "";
-  const period = data.period && data.period.days
-    ? `Last ${escapeHtml(String(data.period.days))} days`
-    : "Selected reporting period";
-  const provenance = data.data_provenance || {};
+  const period = provenance.period_label || (data.period?.date_from && data.period?.date_to
+    ? `${String(data.period.date_from).slice(0, 10)} through ${String(data.period.date_to).slice(0, 10)}`
+    : "Selected reporting period");
   const liveRequests = Number(provenance.live_requests || 0);
   const simulatorRequests = Number(provenance.simulator_requests || 0);
   const scopeLabel = provenance.scope === "product_knowledge"
@@ -1806,20 +1958,70 @@ function renderAskCostPilotAnswer(data) {
         ${escapeHtml(String(data.calculation.row_count || 0))} matching requests.</p>
        </div>`
     : "";
+  const supportingCount = Number(data.calculation?.row_count || data.summary?.request_count || 0);
+  const supportingScope = encodeURIComponent(JSON.stringify(askDrillScopeForEvidence(data, null)));
+  const supportingRecords = supportingCount > 0
+    ? `<button type="button" class="ask-supporting-records" data-scope="${escapeHtml(supportingScope)}"
+         onclick="drillFromAskCostPilot(decodeURIComponent(this.dataset.scope))">
+         View ${fmtNum(supportingCount)} supporting ${supportingCount === 1 ? "record" : "records"} <span aria-hidden="true">→</span>
+       </button>`
+    : "";
+  const followUps = askCostPilotFollowUps(data);
+  const followUpMarkup = followUps.length
+    ? `<div class="ask-answer-section ask-follow-ups"><h4>You might also ask</h4><div>${followUps.map(question => `
+        <button type="button" data-question="${escapeHtml(question)}" onclick="askCostPilotSuggestion(this)">${escapeHtml(question)}</button>
+      `).join("")}</div></div>`
+    : "";
+  const statusLabel = clarification ? "Needs clarification" : "Calculated";
   return `
     <div class="ask-answer-header">
       <div><span class="ask-answer-kicker">${escapeHtml(period)}</span>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3></div>
-      <span class="ask-calculated">${escapeHtml(scopeLabel)} · Calculated</span>
+      <span class="ask-calculated${clarification ? " needs-clarification" : ""}">${escapeHtml(statusLabel)}</span>
     </div>
     ${data.interpreted_as ? `<div class="ask-interpretation"><strong>Interpreted as</strong><span>${escapeHtml(data.interpreted_as)}</span></div>` : ""}
-    <p>${escapeHtml(data.answer || "No answer was returned.")}</p>
+    <div class="ask-answer-meta">
+      <div><strong>Date range</strong><span>${escapeHtml(period)}</span></div>
+      <div><strong>Scope</strong><span>${escapeHtml(scopeLabel)}</span></div>
+    </div>
+    <p class="${clarification ? "ask-clarification" : ""}">${escapeHtml(data.answer || "No answer was returned.")}</p>
     ${activeFilters ? `<div class="ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
     ${evidence}
     ${calculation}
+    ${supportingRecords}
     ${recommendations}
+    ${followUpMarkup}
     <div class="ask-answer-note">${escapeHtml(data.measurement_note || "Calculated from governed CostPilot activity.")}</div>
   `;
+}
+
+function askCostPilotFollowUps(data) {
+  if (Array.isArray(data.suggested_questions) && data.suggested_questions.length) {
+    return data.suggested_questions.slice(0, 3).map(String);
+  }
+  if (data.intent === "clarification") return [];
+  if (data.intent === "comparison" || data.intent === "drivers") {
+    return ["Which department contributed most to the change?", "Was the change within budget?"];
+  }
+  if (data.entity === "people") {
+    return ["Compare the top people with the previous period.", "Which agents did they use?"];
+  }
+  if (data.entity === "agents") {
+    return ["Which agents have not been used?", "Which models did the top agents use?"];
+  }
+  if (data.entity === "account") {
+    return ["Which records drove the top account's usage?", "Compare the top accounts with last month."];
+  }
+  return ["What changed compared with the previous period?", "Where is most of this activity coming from?"];
+}
+
+function askCostPilotErrorMessage(error) {
+  const status = Number(error?.status || 0);
+  if (status === 503) return "The analytics service is temporarily unavailable. No answer was generated. Please try again shortly.";
+  if (status === 403) return "You do not have access to the requested workspace or records.";
+  if (status === 404) return "CostPilot could not find matching activity for that request.";
+  if (status === 422) return "CostPilot could not safely interpret that question. Add a subject and date range, then try again.";
+  return error?.message || "CostPilot could not calculate the answer. Please try again.";
 }
 
 async function submitAskCostPilot(event) {
@@ -1875,7 +2077,7 @@ async function submitAskCostPilot(event) {
   } catch (error) {
     if (pending) {
       pending.querySelector(".ask-message-body").innerHTML =
-        `<strong>CostPilot could not answer that question.</strong><p>${escapeHtml(error.message || "Please try again.")}</p>`;
+        `<div class="ask-error-state"><strong>CostPilot did not generate an answer.</strong><p>${escapeHtml(askCostPilotErrorMessage(error))}</p><span>Your question and existing data were not changed.</span></div>`;
     }
   } finally {
     button.disabled = false;

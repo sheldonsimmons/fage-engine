@@ -588,22 +588,41 @@
           </div>
         </div>
 
-        <div class="ask-suggestions" aria-label="Suggested questions">
-          <button type="button" onclick="askCostPilotSuggestion(this)">Who had the highest token spend last week?</button>
-          <button type="button" onclick="askCostPilotSuggestion(this)">Compare token usage with around this time last year.</button>
-          <button type="button" onclick="askCostPilotSuggestion(this)">Why did our AI spend or token usage change?</button>
-          <button type="button" onclick="askCostPilotSuggestion(this)">Which agents cost the most?</button>
-          <button type="button" onclick="askCostPilotSuggestion(this)">How can we save money?</button>
-          <button type="button" onclick="askCostPilotSuggestion(this)">Which departments are near budget?</button>
-          <button type="button" onclick="askCostPilotSuggestion(this)">Where is our AI spend going?</button>
+        <div class="ask-scope-bar" aria-label="Current Ask CostPilot scope">
+          <div>
+            <span class="ask-scope-label">Answering from</span>
+            <strong id="askWorkspaceScope">Current workspace</strong>
+          </div>
+          <div>
+            <span class="ask-scope-label">Date range</span>
+            <strong id="askDateScope">Selected report period</strong>
+          </div>
+          <div>
+            <span class="ask-scope-label">Data</span>
+            <strong id="askDataScope">Checking available activity…</strong>
+          </div>
+          <button type="button" onclick="focusAskCostPilotScope()">Change scope</button>
+        </div>
+
+        <div class="ask-starters">
+          <div class="ask-starters-heading">
+            <div>
+              <span class="ask-eyebrow">SUGGESTED FOR YOU</span>
+              <h3>Start with a question</h3>
+            </div>
+            <span id="askSuggestionReason">Based on the data available in this workspace</span>
+          </div>
+          <div class="ask-suggestions" id="askSuggestions" aria-label="Suggested questions">
+            <div class="ask-suggestions-loading">Finding useful questions for this workspace…</div>
+          </div>
         </div>
 
         <div class="ask-conversation" id="askConversation" aria-live="polite">
           <div class="ask-message assistant">
             <div class="ask-avatar" aria-hidden="true">CP</div>
             <div class="ask-message-body">
-              <strong>What would you like to know?</strong>
-              <p>Try asking who used the most tokens, which agents cost the most, where spend is accumulating, or how to reduce unnecessary cost.</p>
+              <strong>Ask a question or choose one above.</strong>
+              <p>CostPilot will show how it understood the question, the exact date range, supporting records, and the calculation behind the answer.</p>
             </div>
           </div>
         </div>
