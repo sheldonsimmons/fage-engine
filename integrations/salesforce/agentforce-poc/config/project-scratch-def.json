@@ -1,0 +1,10 @@
+{
+  "orgName": "CostPilot Package Validation",
+  "edition": "Developer",
+  "features": [],
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    }
+  }
+}

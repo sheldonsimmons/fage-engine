@@ -11,7 +11,9 @@ The Salesforce DX package also creates:
 - `CostPilot_Project_Member__c`, the project-to-Salesforce-user membership;
 - all project, attribution, and optional CostPilot response fields;
 - tabs for projects and project members; and
-- the `CostPilot_Connector_User` permission set; and
+- the `CostPilot_Connector_User` permission set;
+- the least-privilege `CostPilot_Agent_Credential_User` permission set for
+  Agentforce execution users; and
 - a guided **CostPilot Setup** tab for OAuth, AI entry-point selection,
   relationship approval, verification, and activation.
 
@@ -38,6 +40,11 @@ Assign `CostPilot_Connector_User` to the Salesforce administrators and users
 who will configure or invoke CostPilot. The package supplies the Named
 Credential and External Credential definitions; no key belongs in Apex.
 
+Also assign `CostPilot_Agent_Credential_User` to each Agentforce execution
+user that invokes CostPilot. This grants read-only access to the user's assigned
+external credential; it does not grant credential administration, create,
+edit, delete, or view-all access.
+
 ## 2. Connect and activate
 
 1. Open **App Launcher → CostPilot Setup**.
@@ -61,6 +68,9 @@ sf apex run test --target-org costpilot-sandbox \
   --result-format human --wait 10
 sf org assign permset --target-org costpilot-sandbox \
   --name CostPilot_Connector_User
+sf org assign permset --target-org costpilot-sandbox \
+  --name CostPilot_Agent_Credential_User \
+  --on-behalf-of your_agent_execution_user@example.com
 ```
 
 That single `sf project deploy start` command creates the objects and fields as
