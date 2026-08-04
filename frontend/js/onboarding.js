@@ -12,14 +12,25 @@ let selectedProvider  = "anthropic";
 let voiceGuardEnabled = false;
 
 // ── Trial detection ────────────────────────────────────────────────────────────
-const TRIAL_WS  = localStorage.getItem("cp_workspace_id") || "";
-const TRIAL_SK  = localStorage.getItem("cp_secret_key")   || "";
+let TRIAL_WS  = localStorage.getItem("cp_workspace_id") || "";
+let TRIAL_SK  = localStorage.getItem("cp_secret_key")   || "";
 const TRIAL_PRV = localStorage.getItem("cp_provider")     || "";
 const TRIAL_NAME= localStorage.getItem("cp_trial_name")   || "";
-const IS_TRIAL  = !!TRIAL_WS && !!TRIAL_SK;
-const TRIAL_PROXY = IS_TRIAL
+let IS_TRIAL  = !!TRIAL_WS && !!TRIAL_SK;
+let TRIAL_PROXY = IS_TRIAL
   ? `https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-${TRIAL_WS}`
   : "";
+
+function updateObTrialSession(workspaceId, secretKey) {
+  TRIAL_WS = String(workspaceId || "");
+  TRIAL_SK = String(secretKey || "");
+  IS_TRIAL = !!TRIAL_WS && !!TRIAL_SK;
+  TRIAL_PROXY = IS_TRIAL
+    ? `https://fage-engine-21cb49fe4806.herokuapp.com/v1/ws-${TRIAL_WS}`
+    : "";
+  if (TRIAL_WS) localStorage.setItem("cp_workspace_id", TRIAL_WS);
+  if (TRIAL_SK) localStorage.setItem("cp_secret_key", TRIAL_SK);
+}
 
 function goToDashboard() {
   window.location.href = "/operate.html";
@@ -1570,11 +1581,31 @@ function updateObBusinessContext(setObjectDefault = false) {
 
 async function persistObBusinessContext() {
   if (!IS_TRIAL || !obBusinessContext) return;
-  await apiPost("/api/trial/business-context", {
-    workspace_id: TRIAL_WS,
-    secret_key: TRIAL_SK,
-    ...obBusinessContext,
-  });
+  const save = () => apiPost("/api/trial/business-context", {
+      workspace_id: TRIAL_WS,
+      secret_key: TRIAL_SK,
+      ...obBusinessContext,
+    });
+  try {
+    await save();
+  } catch (error) {
+    if (!String(error?.message || "").toLowerCase().includes("workspace not found")) throw error;
+    const email = localStorage.getItem("cp_trial_email") || "";
+    const name = localStorage.getItem("cp_trial_name") || "Salesforce Administrator";
+    const company = localStorage.getItem("cp_trial_company") || "My Company";
+    if (!email) {
+      throw new Error("Your CostPilot session expired. Sign in again to restore setup automatically.");
+    }
+    const restored = await apiPost("/api/trial/register", {
+      email,
+      name,
+      company,
+      provider: TRIAL_PRV || "openai",
+      timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    });
+    updateObTrialSession(restored.workspace_id, restored.secret_key);
+    await save();
+  }
 }
 
 const OB_PLATFORM_COPY = {
