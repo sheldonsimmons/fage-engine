@@ -154,8 +154,13 @@ def _get_or_create_entities(db, workspace_id):
 
     agents = []
     for name, department, launched_at in AGENTS:
-        stored_name = f"Historical Demo [{workspace_id}] — {name}"
-        agent = db.query(RegisteredAgent).filter_by(name=stored_name).first()
+        # Workspace identity belongs in workspace_id, not the customer-facing name.
+        stored_name = name
+        legacy_name = f"Historical Demo [{workspace_id}] — {name}"
+        agent = db.query(RegisteredAgent).filter(
+            RegisteredAgent.name.in_([stored_name, legacy_name]),
+            RegisteredAgent.department == f"{workspace_id}:{department}",
+        ).first()
         if not agent:
             agent = RegisteredAgent(
                 name=stored_name, department=f"{workspace_id}:{department}",
@@ -167,6 +172,8 @@ def _get_or_create_entities(db, workspace_id):
             )
             db.add(agent)
             db.flush()
+        elif agent.name == legacy_name:
+            agent.name = stored_name
         agents.append((agent, launched_at, department))
 
     users = []

@@ -9,6 +9,7 @@ Responsibilities:
   - Allow a supervisor to release a lock manually
 """
 
+import re
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -57,6 +58,7 @@ def display_agent_name(name: str, department: str = None, platform: str = None) 
     source = (platform or "").strip()
     if not text:
         return f"{source or 'AI'} {dept} Agent".strip()
+    text = re.sub(r"^Historical Demo \[SIM-HISTORICAL-2Y\]\s*[—-]\s*", "", text)
     if ":" in text:
         prefix, label = text.split(":", 1)
         if len(prefix) >= 12 and prefix.replace("-", "").isalnum():

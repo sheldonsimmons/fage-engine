@@ -1498,7 +1498,7 @@ def organizational_usage_reporting(
                 "charged_unit": unit_name,
             }),
             agents.setdefault((unit_name, agent_key), {
-                **blank_bucket(agent.name if agent else "Unknown agent"),
+                **blank_bucket(display_agent_name(agent.name, agent.department, agent.source_platform) if agent else "Unknown agent"),
                 "agent_id": agent.id if agent else tx.agent_id,
                 "charged_unit": unit_name,
             }),

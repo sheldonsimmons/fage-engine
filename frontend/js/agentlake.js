@@ -5,7 +5,8 @@
 const AGENT_ACTIVE_WINDOW_MS = 5000;
 
 function displayAgentName(agent) {
-  return agent?.display_name || agent?.agent_name || agent?.name || "Unnamed agent";
+  const value = agent?.display_name || agent?.agent_name || agent?.name || "Unnamed agent";
+  return String(value).replace(/^Historical Demo \[SIM-HISTORICAL-2Y\]\s*[—-]\s*/, "");
 }
 
 function displayAgentDept(agent) {

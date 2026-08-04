@@ -3614,12 +3614,16 @@ function escapeHtml(value) {
   }[ch]));
 }
 
+function customerFacingAgentName(value) {
+  return String(value || "Unknown agent").replace(/^Historical Demo \[SIM-HISTORICAL-2Y\]\s*[—-]\s*/, "");
+}
+
 function agentNameForEvent(e, data) {
-  if (e.agent_name) return e.agent_name;
-  if (e.agent) return e.agent;
+  if (e.agent_name) return customerFacingAgentName(e.agent_name);
+  if (e.agent) return customerFacingAgentName(e.agent);
   const id = String(e.agent_id || "");
   const agent = (data.agents || []).find(a => String(a.id) === id);
-  return agent?.display_name || agent?.name || (id ? `Agent ${id}` : "Unknown agent");
+  return customerFacingAgentName(agent?.display_name || agent?.name || (id ? `Agent ${id}` : "Unknown agent"));
 }
 
 function platformNameForEvent(e) {
@@ -4596,7 +4600,7 @@ function renderHomeTopActivity() {
   const buttonIds = { department: "homeTopDepartmentButton", person: "homeTopPersonButton", agent: "homeTopAgentButton", account: "homeTopAccountButton" };
   Object.entries(buttonIds).forEach(([view, id]) => document.getElementById(id)?.classList.toggle("active", homeTopView === view));
   const rows = (homeTopRows[homeTopView] || []).slice(0, 5);
-  container.innerHTML = rows.length ? rows.map(row => `<div class="home-list-row"><div><strong>${escapeHtml(row.label || "Unassigned")}</strong><span>${fmtNum(Number(row.request_count || row.calls || 0))} requests · ${fmtNum(Number(row.total_tokens || row.tokens || 0))} tokens</span></div><b>${fmtUsd(Number(row.spend_usd || row.value || 0))}</b></div>`).join("") : `<div class="home-empty">No ${homeTopView} activity is recorded in this view yet.</div>`;
+  container.innerHTML = rows.length ? rows.map(row => `<div class="home-list-row"><div><strong>${escapeHtml(homeTopView === "agent" ? customerFacingAgentName(row.label) : (row.label || "Unassigned"))}</strong><span>${fmtNum(Number(row.request_count || row.calls || 0))} requests · ${fmtNum(Number(row.total_tokens || row.tokens || 0))} tokens</span></div><b>${fmtUsd(Number(row.spend_usd || row.value || 0))}</b></div>`).join("") : `<div class="home-empty">No ${homeTopView} activity is recorded in this view yet.</div>`;
 }
 
 function setHomeTopView(view) {
@@ -4641,7 +4645,7 @@ function renderHomeOverview(events, data, context) {
 
   const riskEvents = (events || []).filter(event => isBlockedEvent(event) || ["critical", "high"].includes(norm(event.risk_level))).sort((a, b) => eventTs(b) - eventTs(a)).slice(0, 4);
   const riskList = document.getElementById("homeRiskList");
-  if (riskList) riskList.innerHTML = riskEvents.length ? riskEvents.map(event => `<div class="home-list-row ${norm(event.risk_level) === "critical" || isBlockedEvent(event) ? "danger" : "warning"}"><div><strong>${escapeHtml(event.agent_name || event.agent || event.source || "Governed request")}</strong><span>${escapeHtml(event.decision_outcome || event.risk_level || "Policy signal")}</span></div><b>${event.timestamp ? new Date(event.timestamp + "Z").toLocaleDateString() : "Recent"}</b></div>`).join("") : '<div class="home-empty">No recent high-risk or blocked events.</div>';
+  if (riskList) riskList.innerHTML = riskEvents.length ? riskEvents.map(event => `<div class="home-list-row ${norm(event.risk_level) === "critical" || isBlockedEvent(event) ? "danger" : "warning"}"><div><strong>${escapeHtml(customerFacingAgentName(event.agent_name || event.agent || event.source || "Governed request"))}</strong><span>${escapeHtml(event.decision_outcome || event.risk_level || "Policy signal")}</span></div><b>${event.timestamp ? new Date(event.timestamp + "Z").toLocaleDateString() : "Recent"}</b></div>`).join("") : '<div class="home-empty">No recent high-risk or blocked events.</div>';
 }
 
 function renderExecutiveGlance(events, data, context) {
