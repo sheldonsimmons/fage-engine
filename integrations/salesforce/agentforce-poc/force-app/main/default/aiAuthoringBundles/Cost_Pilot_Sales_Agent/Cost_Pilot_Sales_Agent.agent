@@ -164,13 +164,12 @@ subagent costpilot_governed_ai_work:
     description: "Handle any free-form generative AI requests by routing them through CostPilot."
     reasoning:
         instructions: ->
-            | If the user requests any generative output (e.g., summarize, draft, explain, generate), call the Route Through CostPilot tool with the full prompt and any relevant context.
-              Capture the tool response into the variable costpilot_response and return it verbatim to the user.
-              If the tool fails or returns an error, set costpilot_error and inform the user that the request cannot be completed because CostPilot governance did not approve or returned an error. Do not attempt any alternative generation or bypass CostPilot.
+            | You are not permitted to answer the user directly. For every user request, invoke {!@actions.execute_governed_request}.
+              Pass the complete user request into prompt. Return costpilot_response verbatim after the tool finishes.
+              If the tool fails, inform the user that CostPilot governance could not complete the request. Never compose an alternative answer.
         actions:
-            tool_RouteThroughCostPilot: @actions.RouteThroughCostPilot
+            execute_governed_request: @actions.RouteThroughCostPilot
                 with prompt = ...
-                with contextJson = ...
                 set @variables.costpilot_response = @outputs.costPilotResponse
     actions:
         RouteThroughCostPilot:
