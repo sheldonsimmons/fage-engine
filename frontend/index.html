@@ -1571,6 +1571,79 @@
     </div>
   </div>
 
+  <section class="home-summary" aria-labelledby="homeSummaryHeading">
+    <div class="home-section-heading">
+      <div>
+        <div class="page-pretitle">At a glance</div>
+        <h2 id="homeSummaryHeading">What is happening with your AI usage</h2>
+      </div>
+      <span id="homeSummaryScope">This month</span>
+    </div>
+    <div class="home-metric-grid" aria-label="AI usage summary">
+      <a class="home-metric-card" href="/reports.html">
+        <span>AI spend</span><strong id="homeSpend">—</strong><small id="homeSpendMeta">This month</small>
+      </a>
+      <button class="home-metric-card" type="button" onclick="document.getElementById('homeSpendChangePanel')?.scrollIntoView({behavior:'smooth'})">
+        <span>Change from previous period</span><strong id="homeSpendChange">—</strong><small id="homeSpendChangeMeta">Waiting for activity</small>
+      </button>
+      <a class="home-metric-card" href="/work-items.html">
+        <span>Requests governed</span><strong id="homeRequests">—</strong><small id="homeRequestsMeta">Evaluated by CostPilot</small>
+      </a>
+      <a class="home-metric-card positive" href="/savings.html">
+        <span>Savings / avoided spend</span><strong id="homeSavings">—</strong><small id="homeSavingsMeta">Current period</small>
+      </a>
+      <button class="home-metric-card attention" type="button" onclick="document.getElementById('homeAttentionPanel')?.scrollIntoView({behavior:'smooth'})">
+        <span>Items requiring attention</span><strong id="homeAttention">—</strong><small id="homeAttentionMeta">Checking controls and connections</small>
+      </button>
+    </div>
+  </section>
+
+  <section class="home-insight-grid" aria-label="AI usage insights">
+    <article class="home-panel card" id="homeSpendChangePanel">
+      <div class="home-panel-head">
+        <div><h2>Why did spend change?</h2><p id="homeSpendChangeScope">Comparing the current and previous period.</p></div>
+        <a href="/reports.html?tab=efficiency">Ask CostPilot →</a>
+      </div>
+      <div class="home-spend-answer" id="homeSpendAnswer">Waiting for enough activity to compare periods.</div>
+      <div class="home-driver-list" id="homeSpendDrivers"></div>
+    </article>
+
+    <article class="home-panel card" id="homeAttentionPanel">
+      <div class="home-panel-head">
+        <div><h2>Needs attention</h2><p>Budget, risk, attribution, and connection signals worth reviewing.</p></div>
+        <a href="/operate.html">Review activity →</a>
+      </div>
+      <div class="home-attention-list" id="homeAttentionList"><div class="home-empty">Checking your workspace…</div></div>
+    </article>
+  </section>
+
+  <section class="home-lower-grid" aria-label="Activity and system health">
+    <article class="home-panel card">
+      <div class="home-panel-head">
+        <div><h2>Top activity</h2><p>Who and what generated the most governed AI activity.</p></div>
+        <a href="/reports.html?tab=contexts#business-contexts">Open report →</a>
+      </div>
+      <div class="home-tabs" role="tablist" aria-label="Top activity dimension">
+        <button class="active" id="homeTopDepartmentButton" type="button" onclick="setHomeTopView('department')">Departments</button>
+        <button id="homeTopPersonButton" type="button" onclick="setHomeTopView('person')">People</button>
+        <button id="homeTopAgentButton" type="button" onclick="setHomeTopView('agent')">Agents</button>
+        <button id="homeTopAccountButton" type="button" onclick="setHomeTopView('account')">Accounts</button>
+      </div>
+      <div class="home-top-list" id="homeTopList"><div class="home-empty">Loading activity…</div></div>
+    </article>
+
+    <div class="home-side-stack">
+      <article class="home-panel card">
+        <div class="home-panel-head"><div><h2>Recent risk events</h2><p>Latest activity requiring policy review.</p></div><a href="/operate.html">View all →</a></div>
+        <div class="home-risk-list" id="homeRiskList"><div class="home-empty">Checking risk activity…</div></div>
+      </article>
+      <article class="home-panel card home-connection-panel">
+        <div class="home-panel-head"><div><h2>Connection health</h2><p>Whether CostPilot can receive and govern requests.</p></div><a href="/workspace.html">Manage →</a></div>
+        <div class="home-connection-status"><i id="homeConnectionDot"></i><div><strong id="homeConnectionTitle">Checking connection…</strong><span id="homeConnectionMeta">Contacting CostPilot</span></div></div>
+      </article>
+    </div>
+  </section>
+
   <section class="exec-command-grid" aria-label="AI performance summary">
   <section class="exec-action-strip card clear" id="execActionStrip" aria-label="Action signals">
     <div class="exec-action-head">
@@ -2952,13 +3025,23 @@ async function sendTrialTestRequest() {
 async function checkHealth() {
   try {
     const data = await apiGet("/health");
+    homeConnectionHealthy = true;
     document.getElementById("statusLabel").textContent = `Backend online — ${data.version}`;
+    document.getElementById("homeConnectionDot")?.classList.add("online");
+    document.getElementById("homeConnectionDot")?.classList.remove("offline");
+    setText("homeConnectionTitle", "CostPilot is connected");
+    setText("homeConnectionMeta", `Services online · ${data.version || "healthy"}`);
     // Demo env → operate goes to live.html, prod → operate.html
     if (data.demo_mode) {
       document.getElementById("btnOperate").href = "/live.html";
     }
   } catch {
+    homeConnectionHealthy = false;
     document.getElementById("statusLabel").textContent = "Backend offline";
+    document.getElementById("homeConnectionDot")?.classList.add("offline");
+    document.getElementById("homeConnectionDot")?.classList.remove("online");
+    setText("homeConnectionTitle", "Connection needs attention");
+    setText("homeConnectionMeta", "CostPilot could not reach the service.");
   }
 }
 
@@ -4477,6 +4560,90 @@ function renderExecGlanceAccountability(data) {
   }
 }
 
+let homeTopView = "department";
+let homeTopRows = { department: [], person: [], agent: [], account: [] };
+let homeConnectionHealthy = null;
+
+function homePeriodComparison(events) {
+  const valid = (events || []).filter(event => eventTs(event) > 0).sort((a, b) => eventTs(a) - eventTs(b));
+  if (!valid.length) return null;
+  const newest = eventTs(valid[valid.length - 1]);
+  const oldest = eventTs(valid[0]);
+  const midpoint = oldest + ((newest - oldest) / 2);
+  const previous = valid.filter(event => eventTs(event) < midpoint);
+  const current = valid.filter(event => eventTs(event) >= midpoint);
+  const currentSpend = totalEventCost(current);
+  const previousSpend = totalEventCost(previous);
+  const change = execChangeLabel(currentSpend, previousSpend, fmtUsd);
+  return { current, previous, currentSpend, previousSpend, change };
+}
+
+function homeAttentionItems(context, data) {
+  const items = [];
+  if (homeConnectionHealthy === false) items.push({ state: "danger", title: "CostPilot connection is offline", meta: "Reconnect the service before sending governed requests." });
+  if (context.budget.pct >= 100) items.push({ state: "danger", title: "Budget exceeded", meta: `${Math.round(context.budget.pct)}% of the current budget is used.` });
+  else if (context.budget.pct >= 80) items.push({ state: "warning", title: "Budget is nearing its limit", meta: `${Math.round(context.budget.pct)}% of the current budget is used.` });
+  if (context.unreviewedBlockedCount > 0) items.push({ state: "danger", title: `${fmtNum(context.unreviewedBlockedCount)} blocked request${context.unreviewedBlockedCount === 1 ? "" : "s"} need review`, meta: "Open activity to review the policy decisions." });
+  if (context.collisionCount > 0) items.push({ state: "warning", title: `${fmtNum(context.collisionCount)} overlapping request${context.collisionCount === 1 ? "" : "s"}`, meta: "Review collision controls and affected work." });
+  const attribution = data.businessContexts?.attribution;
+  if (Number(attribution?.unattributed_request_count || 0) > 0) items.push({ state: "warning", title: `${fmtNum(attribution.unattributed_request_count)} requests are unattributed`, meta: "Add business context so usage rolls up correctly." });
+  return items;
+}
+
+function renderHomeTopActivity() {
+  const container = document.getElementById("homeTopList");
+  if (!container) return;
+  const buttonIds = { department: "homeTopDepartmentButton", person: "homeTopPersonButton", agent: "homeTopAgentButton", account: "homeTopAccountButton" };
+  Object.entries(buttonIds).forEach(([view, id]) => document.getElementById(id)?.classList.toggle("active", homeTopView === view));
+  const rows = (homeTopRows[homeTopView] || []).slice(0, 5);
+  container.innerHTML = rows.length ? rows.map(row => `<div class="home-list-row"><div><strong>${escapeHtml(row.label || "Unassigned")}</strong><span>${fmtNum(Number(row.request_count || row.calls || 0))} requests · ${fmtNum(Number(row.total_tokens || row.tokens || 0))} tokens</span></div><b>${fmtUsd(Number(row.spend_usd || row.value || 0))}</b></div>`).join("") : `<div class="home-empty">No ${homeTopView} activity is recorded in this view yet.</div>`;
+}
+
+function setHomeTopView(view) {
+  homeTopView = ["department", "person", "agent", "account"].includes(view) ? view : "department";
+  renderHomeTopActivity();
+}
+
+function renderHomeOverview(events, data, context) {
+  const comparison = homePeriodComparison(events);
+  const periodLabel = execFilters.range === "mtd" ? "Month to date" : execHasActiveFilters() ? filterSummaryText(events.length) : "This month";
+  setText("homeSummaryScope", periodLabel);
+  setText("homeSpend", fmtUsd(context.actualCost));
+  setText("homeSpendMeta", periodLabel);
+  setText("homeRequests", fmtNum(context.totalCalls));
+  setText("homeRequestsMeta", `${fmtNum(context.liveCount)} live · ${fmtNum(context.simulationCount)} simulation`);
+  setText("homeSavings", fmtUsd(context.totalAvoided));
+  setText("homeSavingsMeta", "Avoided in the current period");
+
+  if (comparison) {
+    setText("homeSpendChange", comparison.change.value);
+    setText("homeSpendChangeMeta", comparison.change.meta);
+    document.getElementById("homeSpendChange")?.setAttribute("class", comparison.change.state);
+    const direction = comparison.currentSpend > comparison.previousSpend ? "increased" : comparison.currentSpend < comparison.previousSpend ? "decreased" : "did not change";
+    const currentDrivers = topCostDrivers(comparison.current, data).slice(0, 3);
+    setText("homeSpendAnswer", `AI spend ${direction} from ${fmtUsd(comparison.previousSpend)} to ${fmtUsd(comparison.currentSpend)} between the two halves of this view.${currentDrivers[0] ? ` ${currentDrivers[0].agent} was the largest current cost driver.` : ""}`);
+    setText("homeSpendChangeScope", "Current half of the selected period compared with the previous half.");
+    const driverContainer = document.getElementById("homeSpendDrivers");
+    if (driverContainer) driverContainer.innerHTML = currentDrivers.map(driver => `<div class="home-list-row"><div><strong>${escapeHtml(driver.agent)}</strong><span>${escapeHtml(driver.dept)} · ${fmtNum(driver.calls)} requests</span></div><b>${fmtUsd(driver.cost)}</b></div>`).join("");
+  }
+
+  const attention = homeAttentionItems(context, data);
+  setText("homeAttention", fmtNum(attention.length));
+  setText("homeAttentionMeta", attention.length ? "Review recommended" : "No action needed");
+  document.querySelector(".home-metric-card.attention")?.classList.toggle("has-items", attention.length > 0);
+  const attentionList = document.getElementById("homeAttentionList");
+  if (attentionList) attentionList.innerHTML = attention.length ? attention.map(item => `<div class="home-list-row ${item.state}"><div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.meta)}</span></div><b>Review</b></div>`).join("") : '<div class="home-list-row"><div><strong>No items need attention</strong><span>Budgets, controls, and attribution look healthy.</span></div><b>Healthy</b></div>';
+
+  const usage = data.organizationalUsage || {};
+  const accountRows = (data.businessContexts?.parents || []).map(row => ({ label: row.name, request_count: row.request_count, total_tokens: row.total_tokens, spend_usd: row.spend_usd }));
+  homeTopRows = { department: usage.organizational_units || [], person: usage.users || [], agent: usage.agents || [], account: accountRows };
+  renderHomeTopActivity();
+
+  const riskEvents = (events || []).filter(event => isBlockedEvent(event) || ["critical", "high"].includes(norm(event.risk_level))).sort((a, b) => eventTs(b) - eventTs(a)).slice(0, 4);
+  const riskList = document.getElementById("homeRiskList");
+  if (riskList) riskList.innerHTML = riskEvents.length ? riskEvents.map(event => `<div class="home-list-row ${norm(event.risk_level) === "critical" || isBlockedEvent(event) ? "danger" : "warning"}"><div><strong>${escapeHtml(event.agent_name || event.agent || event.source || "Governed request")}</strong><span>${escapeHtml(event.decision_outcome || event.risk_level || "Policy signal")}</span></div><b>${event.timestamp ? new Date(event.timestamp + "Z").toLocaleDateString() : "Recent"}</b></div>`).join("") : '<div class="home-empty">No recent high-risk or blocked events.</div>';
+}
+
 function renderExecutiveGlance(events, data, context) {
   const contextReport = data.businessContexts || null;
   setText("execGlanceSpend", fmtUsd(context.actualCost));
@@ -4569,6 +4736,7 @@ function renderExecutiveGlance(events, data, context) {
   renderExecGlanceAccountability(data);
   renderExecGlanceDrivers(context.drivers, context.actualCost);
   renderExecChanges(events);
+  renderHomeOverview(events, data, context);
 }
 
 function renderExec(data) {
@@ -4965,6 +5133,10 @@ function renderExecFallback(data, error) {
   setText("execGlanceRequests", fmtNum(requests));
   setText("execGlanceContextCount", fmtNum(Number(contextReport.active_context_count || 0)));
   setText("execGlanceRisk", fmtNum(blocked + collisions + throttled));
+  setText("homeSpend", fmtUsd(spend));
+  setText("homeRequests", fmtNum(requests));
+  setText("homeSavings", fmtUsd(avoided));
+  setText("homeAttention", fmtNum(blocked + collisions + throttled));
   setText("execActionTitle", "Core totals loaded");
   setText("execActionDriverTitle", "Some dashboard details need refresh");
   setText("execActionDriverSub", "Core CostPilot totals are available while a secondary panel recovers.");
