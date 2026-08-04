@@ -432,6 +432,28 @@ def test_all_department_budget_question_requests_complete_budget_list():
     assert intent["budget_scope"] == "all"
 
 
+def test_natural_budget_status_follow_up_does_not_fall_back_to_overview():
+    intent = _ask_intent("Was the change within budget?", default_days=30)
+
+    assert intent["intent"] == "budget"
+    assert intent["entity"] == "department"
+    assert intent["budget_scope"] == "status"
+
+
+def test_budget_remaining_question_uses_remaining_view():
+    intent = _ask_intent("How much AI budget is left this month?", default_days=30)
+
+    assert intent["intent"] == "budget"
+    assert intent["budget_scope"] == "remaining"
+
+
+def test_budget_forecast_question_uses_forecast_view():
+    intent = _ask_intent("Are we on track to exceed our AI budget this month?", default_days=30)
+
+    assert intent["intent"] == "budget"
+    assert intent["budget_scope"] == "forecast"
+
+
 def test_agent_adoption_overview_uses_default_low_usage_threshold():
     intent = _ask_intent(
         "What have we built, and is anyone using it?",

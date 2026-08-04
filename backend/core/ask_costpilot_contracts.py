@@ -108,6 +108,54 @@ _CANONICAL_INTENTS = (
         "interpreted_as": "Departments approaching or exceeding their configured budget",
     },
     {
+        "name": "budget_status",
+        "patterns": (
+            r"\b(?:are|were|was|is)\b.*\b(?:within|inside|under|on) budget\b",
+            r"\b(?:budget status|against (?:our |the )?budget)\b",
+        ),
+        "intent": "budget",
+        "entity": "department",
+        "metric": "spend_usd",
+        "budget_scope": "status",
+        "interpreted_as": "Current AI spend compared with configured monthly budgets",
+    },
+    {
+        "name": "budget_remaining",
+        "patterns": (
+            r"\bhow much\b.*\bbudget\b.*\b(?:left|remaining|available)\b",
+            r"\b(?:remaining|available) budget\b",
+        ),
+        "intent": "budget",
+        "entity": "department",
+        "metric": "spend_usd",
+        "budget_scope": "remaining",
+        "interpreted_as": "Remaining configured AI budget for the current month",
+    },
+    {
+        "name": "budget_forecast",
+        "patterns": (
+            r"\b(?:on track|on pace|projected|forecast)\b.*\bbudget\b",
+            r"\bbudget\b.*\b(?:on track|on pace|projected|forecast|exceed)\b",
+        ),
+        "intent": "budget",
+        "entity": "department",
+        "metric": "spend_usd",
+        "budget_scope": "forecast",
+        "interpreted_as": "Month-end AI spend projected from current budget pace",
+    },
+    {
+        "name": "budget_variance",
+        "patterns": (
+            r"\b(?:budget variance|variance (?:from|to|against) budget)\b",
+            r"\b(?:ahead of|behind)\b.*\bbudget pace\b",
+        ),
+        "intent": "budget",
+        "entity": "department",
+        "metric": "spend_usd",
+        "budget_scope": "variance",
+        "interpreted_as": "Current AI spend variance from the time-phased monthly budget",
+    },
+    {
         "name": "agent_cost_ranking",
         "patterns": (
             r"\bwhich (?:agents?|bots?)\b.*\b(?:cost|spend|spent|expensive|costliest)\b.*\b(?:most|highest|top)?",

@@ -12,6 +12,7 @@ Works with both live and simulated model modes:
 """
 
 from datetime import datetime, timedelta
+import calendar
 import json
 import logging
 import os
@@ -384,12 +385,10 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "cost-saving opportunit"
     )):
         intent = "optimization"
-    elif any(term in text for term in (
-        "near budget", "close to budget", "budget limit", "over budget", "budget warning",
-        "department budget", "departments budget", "budget does each", "budget does every",
-        "budget by department", "all budgets",
-    )):
+    elif "budget" in text:
         intent = "budget"
+        entity = "department"
+        metric = "spend_usd"
     elif any(term in text for term in (
         "routed to the", "routed to strategist", "routed to advisor",
         "strategist tier", "advisor tier", "scout tier", "analyst tier",
@@ -494,11 +493,25 @@ def _ask_intent(question: str, default_days: int) -> dict:
 
     budget_scope = None
     if intent == "budget":
-        budget_scope = "all" if any(term in text for term in (
+        if any(term in text for term in (
             "each department", "every department", "all department",
             "department budget", "departments budget", "budget by department",
             "all budgets",
-        )) else "alerts"
+        )):
+            budget_scope = "all"
+        elif any(term in text for term in ("how much", "left", "remaining", "available")):
+            budget_scope = "remaining"
+        elif any(term in text for term in ("on track", "on pace", "projected", "forecast")):
+            budget_scope = "forecast"
+        elif "variance" in text or "budget pace" in text:
+            budget_scope = "variance"
+        elif any(term in text for term in (
+            "near budget", "close to budget", "budget limit", "over budget",
+            "budget warning", "budget alert", "at risk",
+        )):
+            budget_scope = "alerts"
+        else:
+            budget_scope = "status"
 
     comparison_key = None
     if intent in {"comparison", "change_drivers"}:
@@ -568,7 +581,7 @@ _ASK_COMPARISON_KEYS = {
     "previous_period", "same_period_previous_year", "previous_month", "previous_quarter",
 }
 _ASK_USAGE_STATUSES = {"all", "unused", "never", "recently_inactive", "low", "active"}
-_ASK_BUDGET_SCOPES = {"all", "alerts"}
+_ASK_BUDGET_SCOPES = {"all", "alerts", "status", "remaining", "forecast", "variance"}
 
 
 def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
@@ -1056,7 +1069,9 @@ agents with no governed activity ever; recently_inactive for agents with history
 the selected period; unused for both groups; low for agents above zero but below usage_threshold;
 and all for an adoption overview. The default low-usage threshold is 10 requests.
 For budget questions, choose budget_scope all when the user asks what budget each department has;
-otherwise choose alerts for departments nearing or exceeding their cap.
+remaining for budget left or available; forecast for projected month-end spend or whether spend is
+on track; variance for spend compared with the time-phased budget; alerts for departments nearing
+or exceeding their cap; and status for a general within-budget question.
 Never infer employee productivity, performance, or business outcomes.
 Always call query_costpilot_usage. Do not answer the question yourself."""
 
@@ -2879,7 +2894,7 @@ def ask_costpilot(
                 budget for budget in budgets
                 if ":" not in str(budget.department or "")
             ]
-        budget_scope = parsed.get("budget_scope") or "alerts"
+        budget_scope = parsed.get("budget_scope") or "status"
         over_limit = any(term in question.lower() for term in (
             "over budget", "exceeded", "over cap", "above budget"
         ))
@@ -2889,16 +2904,20 @@ def ask_costpilot(
             cap = float(budget.monthly_cap_usd or 0)
             spent = float(budget.current_spend_usd or 0)
             pct = spent / cap * 100 if cap > 0 else 0
-            if budget_scope == "all" or pct >= threshold:
-                label = (budget.department or "Unassigned").split(":")[-1]
-                budget_rows.append({
-                    "id": budget.department,
-                    "label": label,
-                    "pct": pct,
-                    "spent": spent,
-                    "cap": cap,
-                    "throttled": bool(budget.throttled),
-                })
+            if cap <= 0:
+                continue
+            label = (budget.department or "Unassigned").split(":")[-1]
+            budget_rows.append({
+                "id": budget.department,
+                "label": label,
+                "pct": pct,
+                "spent": spent,
+                "cap": cap,
+                "remaining": max(cap - spent, 0),
+                "throttled": bool(budget.throttled),
+            })
+        if budget_scope == "alerts":
+            budget_rows = [row for row in budget_rows if row["pct"] >= threshold]
         budget_rows.sort(
             key=(
                 (lambda row: row["label"].lower())
@@ -2906,16 +2925,31 @@ def ask_costpilot(
                 else (lambda row: -row["pct"])
             )
         )
+        total_cap = sum(row["cap"] for row in budget_rows)
+        total_spent = sum(row["spent"] for row in budget_rows)
+        total_remaining = max(total_cap - total_spent, 0)
+        total_pct = total_spent / total_cap * 100 if total_cap else 0
+        now = datetime.utcnow()
+        days_in_month = calendar.monthrange(now.year, now.month)[1]
+        elapsed_fraction = min(max(now.day / days_in_month, 1 / days_in_month), 1)
+        expected_to_date = total_cap * elapsed_fraction
+        pace_variance = total_spent - expected_to_date
+        projected_spend = total_spent / elapsed_fraction if elapsed_fraction else total_spent
+        projected_variance = projected_spend - total_cap
         evidence = [{
             "label": row["label"],
             "value": (
                 f"${row['cap']:,.2f}"
                 if budget_scope == "all"
+                else f"${row['remaining']:,.2f}"
+                if budget_scope == "remaining"
                 else f"{row['pct']:.1f}%"
             ),
             "metric_label": (
                 "monthly budget"
                 if budget_scope == "all"
+                else "budget remaining"
+                if budget_scope == "remaining"
                 else "budget used"
             ),
             "detail": f"${row['spent']:,.2f} used · {row['pct']:.1f}% · " +
@@ -2925,8 +2959,6 @@ def ask_costpilot(
             "filter_value": row["label"],
         } for row in budget_rows[:result_limit]]
         if budget_scope == "all":
-            total_cap = sum(row["cap"] for row in budget_rows)
-            total_spent = sum(row["spent"] for row in budget_rows)
             title = "Department AI budgets"
             answer = (
                 f"{len(budget_rows):,} active departments have ${total_cap:,.2f} "
@@ -2937,6 +2969,53 @@ def ask_costpilot(
             calculation_formula = (
                 "List each active department's configured monthly cap and current usage"
             )
+        elif budget_scope == "remaining":
+            title = "AI budget remaining"
+            answer = (
+                f"${total_remaining:,.2f} remains from ${total_cap:,.2f} in configured "
+                f"monthly AI budgets. ${total_spent:,.2f} has been used ({total_pct:.1f}%)."
+                if budget_rows else
+                "No active department budgets are configured, so remaining budget cannot be calculated."
+            )
+            calculation_formula = "Combined monthly budget minus current recorded budget spend"
+        elif budget_scope == "forecast":
+            title = "AI budget forecast"
+            if budget_rows:
+                direction_word = "over" if projected_variance > 0 else "under"
+                answer = (
+                    f"At the current pace, month-end AI spend is projected at "
+                    f"${projected_spend:,.2f}, which is ${abs(projected_variance):,.2f} "
+                    f"{direction_word} the ${total_cap:,.2f} configured budget."
+                )
+            else:
+                answer = "No active department budgets are configured, so a budget forecast cannot be calculated."
+            calculation_formula = (
+                f"Current monthly spend divided by {elapsed_fraction:.1%} of the calendar month elapsed"
+            )
+        elif budget_scope == "variance":
+            title = "AI budget pace variance"
+            if budget_rows:
+                direction_word = "above" if pace_variance > 0 else "below"
+                answer = (
+                    f"AI spend is ${abs(pace_variance):,.2f} {direction_word} the "
+                    f"time-phased budget pace. ${total_spent:,.2f} has been used versus "
+                    f"${expected_to_date:,.2f} expected by this point in the month."
+                )
+            else:
+                answer = "No active department budgets are configured, so budget variance cannot be calculated."
+            calculation_formula = "Current spend minus the monthly budget multiplied by calendar time elapsed"
+        elif budget_scope == "status":
+            title = "AI budget status"
+            if budget_rows:
+                status = "within" if total_spent <= total_cap else "over"
+                answer = (
+                    f"AI spend is {status} the configured monthly budget: "
+                    f"${total_spent:,.2f} of ${total_cap:,.2f} used ({total_pct:.1f}%), "
+                    f"with ${total_remaining:,.2f} remaining."
+                )
+            else:
+                answer = "No active department budgets are configured, so budget status cannot be calculated."
+            calculation_formula = "Combined current department spend divided by combined configured monthly budget"
         else:
             title = "Budget watch"
             answer = (
@@ -3254,6 +3333,25 @@ def ask_costpilot(
         "contract_status": "passed",
         "interpreted_intent": parsed,
         "conversation_context": conversation_context,
+        "suggested_questions": (
+            [
+                "How much AI budget is left this month?",
+                "Are we on track to exceed budget this month?",
+                "Which departments are closest to their budget limits?",
+                "What is our budget variance so far this month?",
+                "How much budget does each department have?",
+            ]
+            if intent == "budget"
+            else [
+                "Which department contributed most to the change?",
+                "Was the change within budget?",
+                "Which people contributed most to the change?",
+                "Which agents contributed most to the change?",
+                "Which accounts contributed most to the change?",
+            ]
+            if intent in {"comparison", "change_drivers"}
+            else []
+        ),
         "read_only": True,
     }
     contract_issues = validate_ask_answer_contract(parsed, payload)

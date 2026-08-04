@@ -1635,6 +1635,24 @@ const ASK_STARTER_QUESTIONS = [
     available: (_data, departments) => (departments?.scorecards || [])
       .some(row => Number(row.monthly_cap_usd || 0) > 0),
   },
+  {
+    id: "budget-remaining",
+    category: "Budget",
+    title: "How much budget is left this month?",
+    question: "How much AI budget is left this month?",
+    description: "See current spend, remaining budget, and configured limits.",
+    available: (_data, departments) => (departments?.scorecards || [])
+      .some(row => Number(row.monthly_cap_usd || 0) > 0),
+  },
+  {
+    id: "budget-alerts",
+    category: "Budget",
+    title: "Which departments are close to their limits?",
+    question: "Which departments are closest to their AI budget limits?",
+    description: "Find teams that need attention before they exceed budget.",
+    available: (_data, departments) => (departments?.scorecards || [])
+      .some(row => Number(row.monthly_cap_usd || 0) > 0),
+  },
 ];
 
 let askCostPilotAvailability = null;
@@ -1951,16 +1969,19 @@ function renderAskCostPilotAnswer(data) {
     .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
     .map(([key, value]) => `<span>${escapeHtml(key.replaceAll("_", " "))}: ${escapeHtml(String(value))}</span>`)
     .join("");
+  const calculationUnit = data.intent === "budget"
+    ? `${escapeHtml(String(data.calculation?.row_count || 0))} configured departments`
+    : `${escapeHtml(String(data.calculation?.row_count || 0))} matching requests`;
   const calculation = data.calculation
     ? `<div class="ask-answer-section ask-calculation-detail">
         <h4>Calculation</h4>
         <p>${escapeHtml(data.calculation.formula || "")} across
-        ${escapeHtml(String(data.calculation.row_count || 0))} matching requests.</p>
+        ${calculationUnit}.</p>
        </div>`
     : "";
   const supportingCount = Number(data.calculation?.row_count || data.summary?.request_count || 0);
   const supportingScope = encodeURIComponent(JSON.stringify(askDrillScopeForEvidence(data, null)));
-  const supportingRecords = supportingCount > 0
+  const supportingRecords = supportingCount > 0 && data.intent !== "budget"
     ? `<button type="button" class="ask-supporting-records" data-scope="${escapeHtml(supportingScope)}"
          onclick="drillFromAskCostPilot(decodeURIComponent(this.dataset.scope))">
          View ${fmtNum(supportingCount)} supporting ${supportingCount === 1 ? "record" : "records"} <span aria-hidden="true">→</span>
@@ -1997,22 +2018,42 @@ function renderAskCostPilotAnswer(data) {
 
 function askCostPilotFollowUps(data) {
   if (Array.isArray(data.suggested_questions) && data.suggested_questions.length) {
-    return data.suggested_questions.slice(0, 3).map(String);
+    return data.suggested_questions.slice(0, 6).map(String);
   }
   if (data.intent === "clarification") return [];
-  if (data.intent === "comparison" || data.intent === "drivers") {
-    return ["Which department contributed most to the change?", "Was the change within budget?"];
+  if (data.intent === "budget") {
+    return [
+      "How much AI budget is left this month?",
+      "Are we on track to exceed budget this month?",
+      "Which departments are closest to their budget limits?",
+      "What is our budget variance so far this month?",
+      "How much budget does each department have?",
+    ];
   }
-  if (data.entity === "people") {
-    return ["Compare the top people with the previous period.", "Which agents did they use?"];
+  if (["comparison", "drivers", "change_drivers"].includes(data.intent)) {
+    return [
+      "Which department contributed most to the change?",
+      "Was the change within budget?",
+      "Which people contributed most to the change?",
+      "Which agents contributed most to the change?",
+      "Which accounts contributed most to the change?",
+    ];
   }
-  if (data.entity === "agents") {
-    return ["Which agents have not been used?", "Which models did the top agents use?"];
+  if (["person", "people"].includes(data.entity)) {
+    return ["Compare the top people with the previous period.", "Which agents did they use?", "How much did the top people spend?"];
   }
-  if (data.entity === "account") {
-    return ["Which records drove the top account's usage?", "Compare the top accounts with last month."];
+  if (["agent", "agents"].includes(data.entity)) {
+    return ["Which agents have not been used?", "Which models did the top agents use?", "How much did these agents cost?"];
   }
-  return ["What changed compared with the previous period?", "Where is most of this activity coming from?"];
+  if (["account", "context"].includes(data.entity)) {
+    return ["Which records drove the top account's usage?", "Compare the top accounts with last month.", "Which agents worked on these accounts?"];
+  }
+  return [
+    "What changed compared with the previous period?",
+    "Where is most of this activity coming from?",
+    "Are we on track to exceed budget this month?",
+    "Who used the most tokens this month?",
+  ];
 }
 
 function askCostPilotErrorMessage(error) {
