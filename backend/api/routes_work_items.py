@@ -774,7 +774,7 @@ def work_item_summary(
 @router.get("/reporting")
 def business_context_reporting(
     workspace_id: Optional[str] = Query(None),
-    days: int = Query(30, ge=1, le=365),
+    days: int = Query(30, ge=1, le=730),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
@@ -900,6 +900,31 @@ def business_context_reporting(
         )
         risk_by_item = {row[0]: int(row[1] or 0) for row in risk_rows}
 
+    assigned_agents_by_item = {}
+    observed_agents_by_item = {}
+    if item_ids:
+        assigned_agents_by_item = {
+            row[0]: int(row[1] or 0)
+            for row in db.query(WorkItemAgent.work_item_id, func.count(WorkItemAgent.id))
+            .filter(WorkItemAgent.work_item_id.in_(item_ids))
+            .group_by(WorkItemAgent.work_item_id)
+            .all()
+        }
+        observed_agents_by_item = {
+            row[0]: int(row[1] or 0)
+            for row in db.query(
+                TokenTransaction.work_item_id,
+                func.count(func.distinct(TokenTransaction.agent_id)),
+            )
+            .filter(
+                *tx_filters,
+                TokenTransaction.work_item_id.in_(item_ids),
+                TokenTransaction.agent_id.isnot(None),
+            )
+            .group_by(TokenTransaction.work_item_id)
+            .all()
+        }
+
     parents = []
     for item in items:
         stats = parent_stats.get(item.id, {
@@ -938,6 +963,8 @@ def business_context_reporting(
             "last_activity_at": stats["last_activity_at"].isoformat()
                 if stats["last_activity_at"] else None,
             "related_record_count": len(item.source_links),
+            "assigned_agent_count": assigned_agents_by_item.get(item.id, 0),
+            "agent_count": observed_agents_by_item.get(item.id, 0),
             "origin_coverage_pct": round(
                 sum(child["request_count"] for child in children if child["origin_recorded"])
                 / stats["request_count"] * 100,

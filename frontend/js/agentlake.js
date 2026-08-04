@@ -671,15 +671,25 @@ async function loadAgentlakeProjects() {
   try {
     const workspaceId = agentlakeWorkspaceId();
     renderAgentlakeWorkspaceScope();
-    const workspaceQuery = workspaceId
-      ? `?workspace_id=${encodeURIComponent(workspaceId)}`
-      : "";
-    const [projects, summary] = await Promise.all([
-      apiGet(`/api/work-items${workspaceQuery}`),
-      apiGet(`/api/work-items/summary${workspaceQuery}`)
-    ]);
-    _agentlakeProjects = Array.isArray(projects) ? projects : [];
-    _agentlakeProjectSummary = summary || {};
+    const report = await apiGet(`/api/work-items/reporting?days=730&limit=100${workspaceId ? `&workspace_id=${encodeURIComponent(workspaceId)}` : ""}`);
+    _agentlakeProjects = (report?.parents || []).map(project => ({
+      ...project,
+      spend_month_usd: project.spend_usd,
+      related_record_activity: project.children || [],
+      business_context: {
+        type: project.context_type || "work",
+        work_label: report.context_label || "Work"
+      },
+      agent_team: [],
+      model_tiers: [],
+      activity_platforms: [project.source_platform].filter(Boolean)
+    }));
+    _agentlakeProjectSummary = {
+      attributed_spend_pct: Number(report?.attribution?.coverage_pct || 0),
+      attributed_spend_usd: Number(report?.attribution?.attributed_spend_usd || 0),
+      unattributed_spend_usd: Number(report?.attribution?.unattributed_spend_usd || 0),
+      tokens_saved: Number(report?.company_totals?.tokens_saved || 0)
+    };
     _agentlakeProjectsLoadedAt = Date.now();
   } catch (error) {
     console.warn("AgentLake project summary unavailable:", error);
@@ -976,7 +986,9 @@ function renderAgentlakeProjects() {
             <i class="${unexpected ? "unexpected" : member.usage_status === "used" ? "used" : ""}">${agentlakeEscape(state)}</i>
           </span>`;
         }).join("")
-      : '<span class="agentlake-empty-agent">No agents assigned or observed</span>';
+      : observedCount > 0
+        ? '<span class="agentlake-empty-agent">Open Work Attribution for agent details</span>'
+        : '<span class="agentlake-empty-agent">No agents assigned or observed</span>';
     const tierNames = project.model_tiers?.length ? project.model_tiers.join(", ") : "—";
     const relatedRecordRows = relatedRecords.length
       ? relatedRecords.map(record => `
