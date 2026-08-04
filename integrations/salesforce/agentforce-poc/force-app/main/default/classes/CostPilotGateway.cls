@@ -54,6 +54,9 @@ public with sharing class CostPilotGateway {
         for (Request requestValue : requests) {
             CostPilotAgentforceAction.GovernanceRequest governanceRequest =
                 new CostPilotAgentforceAction.GovernanceRequest();
+            String resolvedAgentName = String.isBlank(requestValue.agentName)
+                ? 'Salesforce Agentforce'
+                : requestValue.agentName;
             governanceRequest.recordId = requestValue.recordId;
             RecordIdentity identity = recordIdentity(requestValue.recordId);
             if (identity != null) {
@@ -63,15 +66,26 @@ public with sharing class CostPilotGateway {
                 if (identity.objectName != 'CostPilot_Project__c') {
                     governanceRequest.projectExternalId = requestValue.recordId;
                 }
+            } else if (String.isBlank(requestValue.recordId)) {
+                String agentContextId = 'AGENT-' + UserInfo.getOrganizationId() +
+                    '-' + EncodingUtil.convertToHex(
+                        Crypto.generateDigest(
+                            'SHA-256',
+                            Blob.valueOf(resolvedAgentName)
+                        )
+                    ).substring(0, 12);
+                governanceRequest.recordId = agentContextId;
+                governanceRequest.projectExternalId = agentContextId;
+                governanceRequest.projectName = resolvedAgentName;
+                governanceRequest.sourceType = 'AgentforceAgent';
+                governanceRequest.sourceSystem = 'Salesforce';
             }
             String groundedContext = recordContext(requestValue.recordId);
             governanceRequest.taskDescription = String.isBlank(groundedContext)
                 ? requestValue.prompt
                 : requestValue.prompt + '\n\nSalesforce record context:\n' +
                     groundedContext;
-            governanceRequest.agentName = String.isBlank(requestValue.agentName)
-                ? 'Salesforce Agentforce'
-                : requestValue.agentName;
+            governanceRequest.agentName = resolvedAgentName;
             governanceRequest.department = requestValue.department;
             governanceRequests.add(governanceRequest);
         }

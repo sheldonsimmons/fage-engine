@@ -38,6 +38,35 @@ private class CostPilotGatewayTest {
         }
     }
 
+    private class GeneralAgentMock implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest requestValue) {
+            Map<String, Object> requestBody =
+                (Map<String, Object>) JSON.deserializeUntyped(requestValue.getBody());
+            String recordId = String.valueOf(requestBody.get('record_id'));
+            System.assert(recordId.startsWith('AGENT-' + UserInfo.getOrganizationId()));
+            System.assertEquals(recordId, requestBody.get('project_external_id'));
+            System.assertEquals('Salesforce Agentforce', requestBody.get('project_name'));
+            System.assertEquals('AgentforceAgent', requestBody.get('source_type'));
+            HttpResponse responseValue = new HttpResponse();
+            responseValue.setStatusCode(200);
+            responseValue.setHeader('Content-Type', 'application/json');
+            responseValue.setBody(JSON.serialize(new Map<String, Object>{
+                'allowed' => true,
+                'decision' => 'ROUTINE',
+                'reason' => 'Approved',
+                'project_id' => recordId,
+                'project_name' => 'Salesforce Agentforce',
+                'selected_model' => 'claude-haiku-4-5-20251001',
+                'selected_tier' => 'Scout',
+                'estimated_cost_usd' => 0.0001,
+                'tracking_id' => 'CP-TX-GENERAL-AGENT',
+                'ai_response' => 'General agent response through CostPilot.',
+                'execution_mode' => 'live'
+            }));
+            return responseValue;
+        }
+    }
+
     @IsTest
     static void adaptsTheExistingAgentforceActionToCostPilot() {
         CostPilot_Project__c project = new CostPilot_Project__c(
@@ -75,5 +104,23 @@ private class CostPilotGatewayTest {
             'This response came through CostPilot.',
             responses[0].costPilotResponse
         );
+    }
+
+    @IsTest
+    static void governsStandaloneAgentChatWithoutSalesforceRecordContext() {
+        CostPilotAgentforceAction.workspaceId = 'TEST-WORKSPACE';
+        CostPilotGateway.Request requestValue = new CostPilotGateway.Request();
+        requestValue.prompt = 'Draft a customer follow-up email.';
+
+        Test.setMock(HttpCalloutMock.class, new GeneralAgentMock());
+        Test.startTest();
+        List<CostPilotGateway.Response> responses = CostPilotGateway.send(
+            new List<CostPilotGateway.Request>{ requestValue }
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, responses.size());
+        System.assertEquals(false, responses[0].blocked);
+        System.assertEquals('CP-TX-GENERAL-AGENT', responses[0].auditId);
     }
 }
