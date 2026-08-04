@@ -117,6 +117,33 @@ function fmtNum(v) {
   return v.toLocaleString();
 }
 
+function reportTimestampDate(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const parsed = new Date(hasTimeZone ? raw : `${raw}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatReportTimestamp(value, options = {}) {
+  const parsed = reportTimestampDate(value);
+  if (!parsed) return value ? String(value) : "—";
+  return parsed.toLocaleString("en-US", {
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+    ...options,
+  });
+}
+
+function reportTimeZoneLabel() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "Local time";
+}
+
 function roundMoney(v) {
   return Math.round((Number(v) || 0) * 1000000) / 1000000;
 }
@@ -328,11 +355,9 @@ function toggleDeptChartLabel(label) {
 }
 
 function fmtTs(iso) {
-  if (!iso) return "—";
-  return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", {
-    timeZone: "America/Chicago",
+  return formatReportTimestamp(iso, {
     month: "numeric", day: "numeric",
-    hour: "numeric", minute: "2-digit", hour12: true,
+    year: undefined, second: undefined,
   });
 }
 
@@ -802,7 +827,7 @@ async function loadBusinessContexts() {
     const activities = data.activities || [];
     activityBody.innerHTML = activities.length
       ? activities.map(row => `<tr>
-          <td class="ctx-mono">${escapeHtml(row.timestamp ? new Date(row.timestamp).toLocaleString() : "—")}</td>
+          <td class="ctx-mono">${escapeHtml(formatReportTimestamp(row.timestamp))}</td>
           <td>${contextDrillButton("ctxOrgFilter", row.charged_unit, row.charged_unit || "Unassigned", row.attribution_source || "")}</td>
           <td>${contextDrillButton("ctxPersonFilter", row.user_external_id, row.user_name || "Unknown user", row.user_source_platform || "")}</td>
           <td>${contextDrillButton("ctxAgentFilter", row.agent_id, row.agent_name || "Unknown agent", row.agent_platform || "")}</td>
@@ -818,7 +843,8 @@ async function loadBusinessContexts() {
       : '<tr><td colspan="12">No AI activity matches these filters.</td></tr>';
     document.getElementById("ctx-activity-count").textContent =
       `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"} · ` +
-      `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation`;
+      `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation · ` +
+      `${reportTimeZoneLabel()}`;
   } catch (err) {
     document.getElementById("ctx-activity-rows").innerHTML =
       `<tr><td colspan="12">Could not load AI usage attribution: ${escapeHtml(err.message)}</td></tr>`;
