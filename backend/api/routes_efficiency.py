@@ -2320,6 +2320,7 @@ def ask_costpilot(
     calculation_formula = None
     calculation_row_count = None
     driver_analysis = None
+    budget_coverage = None
     named_entity = _ask_named_entity(question, report)
 
     entity_config = {
@@ -2899,10 +2900,34 @@ def ask_costpilot(
             "over budget", "exceeded", "over cap", "above budget"
         ))
         threshold = 100 if over_limit else 70
+        activity_by_department = {}
+        for activity_row in report.get("organizational_unit_breakdown") or []:
+            raw_department = str(
+                activity_row.get("id") or activity_row.get("label") or ""
+            ).strip()
+            if request.workspace_id and raw_department.startswith(f"{request.workspace_id}:"):
+                raw_department = raw_department[len(request.workspace_id) + 1:]
+            elif ":" in raw_department:
+                raw_department = raw_department.rsplit(":", 1)[-1]
+            department_key = raw_department.casefold()
+            if not department_key:
+                continue
+            bucket = activity_by_department.setdefault(
+                department_key, {"spend": 0.0, "requests": 0}
+            )
+            bucket["spend"] += float(activity_row.get("spend_usd") or 0)
+            bucket["requests"] += int(activity_row.get("request_count") or 0)
         budget_rows = []
         for budget in budgets:
             cap = float(budget.monthly_cap_usd or 0)
-            spent = float(budget.current_spend_usd or 0)
+            raw_budget_department = str(budget.department or "").strip()
+            if request.workspace_id and raw_budget_department.startswith(f"{request.workspace_id}:"):
+                raw_budget_department = raw_budget_department[len(request.workspace_id) + 1:]
+            elif ":" in raw_budget_department:
+                raw_budget_department = raw_budget_department.rsplit(":", 1)[-1]
+            activity = activity_by_department.get(raw_budget_department.casefold(), {})
+            spent = float(activity.get("spend") or 0)
+            matched_requests = int(activity.get("requests") or 0)
             pct = spent / cap * 100 if cap > 0 else 0
             if cap <= 0:
                 continue
@@ -2914,8 +2939,10 @@ def ask_costpilot(
                 "spent": spent,
                 "cap": cap,
                 "remaining": max(cap - spent, 0),
+                "request_count": matched_requests,
                 "throttled": bool(budget.throttled),
             })
+        all_budget_rows = list(budget_rows)
         if budget_scope == "alerts":
             budget_rows = [row for row in budget_rows if row["pct"] >= threshold]
         budget_rows.sort(
@@ -2929,6 +2956,21 @@ def ask_costpilot(
         total_spent = sum(row["spent"] for row in budget_rows)
         total_remaining = max(total_cap - total_spent, 0)
         total_pct = total_spent / total_cap * 100 if total_cap else 0
+        all_matched_requests = sum(row["request_count"] for row in all_budget_rows)
+        all_matched_spend = sum(row["spent"] for row in all_budget_rows)
+        report_requests = int(summary.get("request_count") or 0)
+        report_spend = float(summary.get("spend_usd") or 0)
+        unmatched_requests = max(report_requests - all_matched_requests, 0)
+        unmatched_spend = max(report_spend - all_matched_spend, 0)
+        attribution_available = report_requests == 0 or all_matched_requests > 0
+        budget_coverage = {
+            "source": "filtered_activity_ledger",
+            "matched_requests": all_matched_requests,
+            "unmatched_requests": unmatched_requests,
+            "matched_spend_usd": round(all_matched_spend, 6),
+            "unmatched_spend_usd": round(unmatched_spend, 6),
+            "complete": unmatched_requests == 0,
+        }
         now = datetime.utcnow()
         days_in_month = calendar.monthrange(now.year, now.month)[1]
         elapsed_fraction = min(max(now.day / days_in_month, 1 / days_in_month), 1)
@@ -2936,6 +2978,9 @@ def ask_costpilot(
         pace_variance = total_spent - expected_to_date
         projected_spend = total_spent / elapsed_fraction if elapsed_fraction else total_spent
         projected_variance = projected_spend - total_cap
+        def budget_pct_display(value):
+            return f"{value:.2f}%" if 0 < value < 0.1 else f"{value:.1f}%"
+
         evidence = [{
             "label": row["label"],
             "value": (
@@ -2943,7 +2988,7 @@ def ask_costpilot(
                 if budget_scope == "all"
                 else f"${row['remaining']:,.2f}"
                 if budget_scope == "remaining"
-                else f"{row['pct']:.1f}%"
+                else budget_pct_display(row["pct"])
             ),
             "metric_label": (
                 "monthly budget"
@@ -2952,17 +2997,24 @@ def ask_costpilot(
                 if budget_scope == "remaining"
                 else "budget used"
             ),
-            "detail": f"${row['spent']:,.2f} used · {row['pct']:.1f}% · " +
+            "detail": f"${row['spent']:,.4f} used · {budget_pct_display(row['pct'])} · " +
                       f"${max(row['cap'] - row['spent'], 0):,.2f} remaining" +
                       (" · throttled" if row["throttled"] else ""),
             "filter_name": "charged_unit",
             "filter_value": row["label"],
         } for row in budget_rows[:result_limit]]
+        coverage_note = (
+            f" ${unmatched_spend:,.4f} across {unmatched_requests:,} request"
+            f"{'s were' if unmatched_requests != 1 else ' was'} excluded because no configured "
+            "department budget matched the activity attribution."
+            if unmatched_requests else ""
+        )
         if budget_scope == "all":
             title = "Department AI budgets"
             answer = (
                 f"{len(budget_rows):,} active departments have ${total_cap:,.2f} "
-                f"in combined monthly AI budget, with ${total_spent:,.2f} used."
+                f"in combined monthly AI budget, with ${total_spent:,.4f} in attributed "
+                f"activity spend used.{coverage_note}"
                 if budget_rows else
                 "No active department budgets are configured."
             )
@@ -2972,20 +3024,29 @@ def ask_costpilot(
         elif budget_scope == "remaining":
             title = "AI budget remaining"
             answer = (
+                f"Budget usage cannot be calculated because none of the {report_requests:,} "
+                "matching requests has a department that matches a configured budget."
+                if budget_rows and not attribution_available else
                 f"${total_remaining:,.2f} remains from ${total_cap:,.2f} in configured "
-                f"monthly AI budgets. ${total_spent:,.2f} has been used ({total_pct:.1f}%)."
+                f"monthly AI budgets. ${total_spent:,.4f} has been used ({budget_pct_display(total_pct)})."
+                f"{coverage_note}"
                 if budget_rows else
                 "No active department budgets are configured, so remaining budget cannot be calculated."
             )
             calculation_formula = "Combined monthly budget minus current recorded budget spend"
         elif budget_scope == "forecast":
             title = "AI budget forecast"
-            if budget_rows:
+            if budget_rows and not attribution_available:
+                answer = (
+                    f"A budget forecast cannot be calculated because none of the {report_requests:,} "
+                    "matching requests has a department that matches a configured budget."
+                )
+            elif budget_rows:
                 direction_word = "over" if projected_variance > 0 else "under"
                 answer = (
                     f"At the current pace, month-end AI spend is projected at "
                     f"${projected_spend:,.2f}, which is ${abs(projected_variance):,.2f} "
-                    f"{direction_word} the ${total_cap:,.2f} configured budget."
+                    f"{direction_word} the ${total_cap:,.2f} configured budget.{coverage_note}"
                 )
             else:
                 answer = "No active department budgets are configured, so a budget forecast cannot be calculated."
@@ -2994,24 +3055,34 @@ def ask_costpilot(
             )
         elif budget_scope == "variance":
             title = "AI budget pace variance"
-            if budget_rows:
+            if budget_rows and not attribution_available:
+                answer = (
+                    f"Budget variance cannot be calculated because none of the {report_requests:,} "
+                    "matching requests has a department that matches a configured budget."
+                )
+            elif budget_rows:
                 direction_word = "above" if pace_variance > 0 else "below"
                 answer = (
                     f"AI spend is ${abs(pace_variance):,.2f} {direction_word} the "
-                    f"time-phased budget pace. ${total_spent:,.2f} has been used versus "
-                    f"${expected_to_date:,.2f} expected by this point in the month."
+                    f"time-phased budget pace. ${total_spent:,.4f} has been used versus "
+                    f"${expected_to_date:,.2f} expected by this point in the month.{coverage_note}"
                 )
             else:
                 answer = "No active department budgets are configured, so budget variance cannot be calculated."
             calculation_formula = "Current spend minus the monthly budget multiplied by calendar time elapsed"
         elif budget_scope == "status":
             title = "AI budget status"
-            if budget_rows:
+            if budget_rows and not attribution_available:
+                answer = (
+                    f"Budget status cannot be calculated because none of the {report_requests:,} "
+                    "matching requests has a department that matches a configured budget."
+                )
+            elif budget_rows:
                 status = "within" if total_spent <= total_cap else "over"
                 answer = (
                     f"AI spend is {status} the configured monthly budget: "
-                    f"${total_spent:,.2f} of ${total_cap:,.2f} used ({total_pct:.1f}%), "
-                    f"with ${total_remaining:,.2f} remaining."
+                    f"${total_spent:,.4f} of ${total_cap:,.2f} used ({budget_pct_display(total_pct)}), "
+                    f"with ${total_remaining:,.2f} remaining.{coverage_note}"
                 )
             else:
                 answer = "No active department budgets are configured, so budget status cannot be calculated."
@@ -3327,6 +3398,7 @@ def ask_costpilot(
             "active_filters": active_filters,
             "period_label": period_label,
             "coverage": comparison_coverage_result,
+            "budget_coverage": budget_coverage,
         },
         "assistant_mode": assistant_mode,
         "interpreted_as": ask_interpretation_label(parsed),

@@ -104,7 +104,7 @@ def _controlled_report():
     }
 
 
-def _run_with_controlled_report(request, report=None):
+def _run_with_controlled_report(request, report=None, db=None):
     from api import routes_work_items
 
     calls = []
@@ -122,7 +122,7 @@ def _run_with_controlled_report(request, report=None):
 
     routes_work_items.project_activity_reporting = fake_reporting
     try:
-        return ask_costpilot(request, db=None), calls
+        return ask_costpilot(request, db=db), calls
     finally:
         routes_work_items.project_activity_reporting = original
         if original_narration is None:
@@ -452,6 +452,87 @@ def test_budget_forecast_question_uses_forecast_view():
 
     assert intent["intent"] == "budget"
     assert intent["budget_scope"] == "forecast"
+
+
+class _BudgetQueryStub:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def all(self):
+        return self.rows
+
+
+class _BudgetDbStub:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def query(self, *_args, **_kwargs):
+        return _BudgetQueryStub(self.rows)
+
+
+def test_budget_forecast_uses_filtered_activity_spend_not_stale_budget_counter():
+    report = _controlled_report()
+    report["summary"].update({"request_count": 20, "spend_usd": 0.5})
+    report["organizational_unit_breakdown"] = [
+        {"id": "WORKSPACE-1:Sales", "label": "Sales", "request_count": 12, "spend_usd": 0.4},
+        {"id": "WORKSPACE-1:Operations", "label": "Operations", "request_count": 8, "spend_usd": 0.1},
+    ]
+    db = _BudgetDbStub([
+        SimpleNamespace(
+            department="WORKSPACE-1:Sales", monthly_cap_usd=100.0,
+            current_spend_usd=0.0, throttled=False,
+        ),
+        SimpleNamespace(
+            department="WORKSPACE-1:Operations", monthly_cap_usd=50.0,
+            current_spend_usd=0.0, throttled=False,
+        ),
+    ])
+
+    response, _calls = _run_with_controlled_report(
+        AskCostPilotRequest(
+            question="Are we on track to exceed our AI budget this month?",
+            workspace_id="WORKSPACE-1",
+        ),
+        report=report,
+        db=db,
+    )
+
+    assert response["intent"] == "budget"
+    assert response["data_provenance"]["budget_coverage"]["matched_requests"] == 20
+    assert response["data_provenance"]["budget_coverage"]["matched_spend_usd"] == 0.5
+    assert response["data_provenance"]["budget_coverage"]["complete"] is True
+    assert "projected at $0.00" not in response["answer"]
+    assert response["evidence"][0]["detail"].startswith("$0.4000 used")
+
+
+def test_budget_forecast_refuses_false_zero_when_activity_is_unattributed():
+    report = _controlled_report()
+    report["summary"].update({"request_count": 20, "spend_usd": 0.5})
+    report["organizational_unit_breakdown"] = [
+        {"id": "WORKSPACE-1:Unknown", "label": "Unknown", "request_count": 20, "spend_usd": 0.5},
+    ]
+    db = _BudgetDbStub([
+        SimpleNamespace(
+            department="WORKSPACE-1:Sales", monthly_cap_usd=100.0,
+            current_spend_usd=0.0, throttled=False,
+        ),
+    ])
+
+    response, _calls = _run_with_controlled_report(
+        AskCostPilotRequest(
+            question="Are we on track to exceed our AI budget this month?",
+            workspace_id="WORKSPACE-1",
+        ),
+        report=report,
+        db=db,
+    )
+
+    assert "cannot be calculated" in response["answer"]
+    assert response["data_provenance"]["budget_coverage"]["matched_requests"] == 0
+    assert response["data_provenance"]["budget_coverage"]["unmatched_requests"] == 20
 
 
 def test_agent_adoption_overview_uses_default_low_usage_threshold():
