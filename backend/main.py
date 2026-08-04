@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.requests import Request
 
 from database.db import engine, SessionLocal
@@ -414,6 +415,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(CSPMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 # ── API Routes (registered BEFORE static mount so they take priority) ──────────
 
