@@ -47,21 +47,12 @@ knowledge:
 
 start_agent agent_router:
     label: "Agent Router"
-    description: "Welcome the user and determine the appropriate subagent based on user input"
+    description: "Send every request through the CostPilot-governed execution path."
     model_config:
         model: "model://sfdc_ai__DefaultEinsteinHyperClassifier"
     reasoning:
         instructions: ->
-            | Select the best tool to call based on conversation history and user's intent.
-        actions:
-            go_to_escalation: @utils.transition to @subagent.escalation
-            go_to_off_topic: @utils.transition to @subagent.off_topic
-            go_to_ambiguous_question: @utils.transition to @subagent.ambiguous_question
-            go_to_account_management: @utils.transition to @subagent.account_management
-            go_to_opportunity_management: @utils.transition to @subagent.opportunity_management
-            go_to_contact_management: @utils.transition to @subagent.contact_management
-            go_to_case_management: @utils.transition to @subagent.case_management
-            go_to_costpilot_governed_ai_work: @utils.transition to @subagent.costpilot_governed_ai_work
+            transition to @subagent.costpilot_governed_ai_work
 
 subagent escalation:
     label: "Escalation"
@@ -181,13 +172,6 @@ subagent costpilot_governed_ai_work:
                 with prompt = ...
                 with contextJson = ...
                 set @variables.costpilot_response = @outputs.costPilotResponse
-        run @actions.RouteThroughCostPilot
-            with prompt="{conversation}" # Replace at call-time with the user's request and relevant context
-            with contextJson="{context}" # Replace at call-time with any additional contextual data
-        if @outputs.costPilotResponse is not None:
-            set @variables.costpilot_response = @outputs.costPilotResponse
-        if @outputs.blocked == True:
-            set @variables.costpilot_error = @outputs.costPilotResponse
     actions:
         RouteThroughCostPilot:
             description: "Routes a generative prompt through the CostPilot governance layer and returns the governed response."
