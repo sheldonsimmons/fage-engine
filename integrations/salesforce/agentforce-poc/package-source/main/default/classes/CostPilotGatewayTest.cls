@@ -73,6 +73,7 @@ private class CostPilotGatewayTest {
 
     @IsTest
     static void adaptsTheExistingAgentforceActionToCostPilot() {
+        CostPilotAgentforceAction.workspaceId = 'TEST-WORKSPACE';
         CostPilot_Project__c project = new CostPilot_Project__c(
             Name = 'Gateway Test',
             Project_ID__c = 'CP-TEST-1',
