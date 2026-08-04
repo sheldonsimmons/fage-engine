@@ -8,137 +8,14 @@ set -e
 echo "→ Running DB setup..."
 cd backend
 python -c "
-from database.db import engine
-from database import models
-models.Base.metadata.create_all(bind=engine)
+from database.migrate import create_tables, run_migrations
+create_tables()
 print('   DB tables ready')
 
-# Column migrations — safe to run on every deploy (IF NOT EXISTS)
-from sqlalchemy import text
-# Run each idempotent DDL statement in its own transaction. Keeping locks from
-# several unrelated ALTER TABLE checks until the end can deadlock with normal
-# production reads during a release.
-with engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:
-    conn.execute(text('''
-        ALTER TABLE registered_agents
-        ADD COLUMN IF NOT EXISTS pruning_enabled BOOLEAN DEFAULT TRUE
-    '''))
-    conn.execute(text('''
-        ALTER TABLE routing_configs
-        ADD COLUMN IF NOT EXISTS tier_names_json TEXT
-    '''))
-    conn.execute(text('''
-        ALTER TABLE trial_accounts
-        ADD COLUMN IF NOT EXISTS trial_call_cap INTEGER DEFAULT 500
-    '''))
-    conn.execute(text('''
-        ALTER TABLE trial_accounts
-        ADD COLUMN IF NOT EXISTS trial_spend_cap_usd FLOAT DEFAULT 10.0
-    '''))
-    conn.execute(text('''
-        ALTER TABLE trial_accounts
-        ADD COLUMN IF NOT EXISTS requested_plan VARCHAR
-    '''))
-    conn.execute(text('''
-        ALTER TABLE trial_accounts
-        ADD COLUMN IF NOT EXISTS upgrade_requested_at TIMESTAMP
-    '''))
-    conn.execute(text('''
-        ALTER TABLE trial_accounts
-        ADD COLUMN IF NOT EXISTS business_context_config_json TEXT
-    '''))
-    conn.execute(text('''
-        ALTER TABLE department_budgets
-        ADD COLUMN IF NOT EXISTS throttle_tier INTEGER DEFAULT 1
-    '''))
-    conn.execute(text('''
-        ALTER TABLE department_budgets
-        ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE
-    '''))
-    conn.execute(text('''
-        ALTER TABLE department_budgets
-        ADD COLUMN IF NOT EXISTS raw_payload_logging_enabled BOOLEAN DEFAULT FALSE
-    '''))
-    conn.execute(text('''
-        ALTER TABLE department_budgets
-        ADD COLUMN IF NOT EXISTS raw_retention_days INTEGER DEFAULT 30
-    '''))
-    conn.execute(text('''
-        ALTER TABLE audit_events
-        ADD COLUMN IF NOT EXISTS raw_payload TEXT
-    '''))
-    conn.execute(text('''
-        ALTER TABLE token_transactions
-        ADD COLUMN IF NOT EXISTS governed_request_id VARCHAR,
-        ADD COLUMN IF NOT EXISTS requested_model_name VARCHAR,
-        ADD COLUMN IF NOT EXISTS requested_model_tier VARCHAR,
-        ADD COLUMN IF NOT EXISTS routing_policy_version VARCHAR,
-        ADD COLUMN IF NOT EXISTS execution_status VARCHAR,
-        ADD COLUMN IF NOT EXISTS provider_status_code INTEGER
-    '''))
-    conn.execute(text('''
-        ALTER TABLE audit_events
-        ADD COLUMN IF NOT EXISTS governed_request_id VARCHAR,
-        ADD COLUMN IF NOT EXISTS requested_model_name VARCHAR,
-        ADD COLUMN IF NOT EXISTS requested_model_tier VARCHAR,
-        ADD COLUMN IF NOT EXISTS selected_model_name VARCHAR,
-        ADD COLUMN IF NOT EXISTS selected_model_tier VARCHAR,
-        ADD COLUMN IF NOT EXISTS routing_policy_version VARCHAR,
-        ADD COLUMN IF NOT EXISTS routing_reason_code VARCHAR,
-        ADD COLUMN IF NOT EXISTS execution_status VARCHAR
-    '''))
-    conn.execute(text('''
-        CREATE INDEX IF NOT EXISTS ix_token_transactions_governed_request_id
-        ON token_transactions (governed_request_id)
-    '''))
-    conn.execute(text('''
-        CREATE INDEX IF NOT EXISTS ix_audit_events_governed_request_id
-        ON audit_events (governed_request_id)
-    '''))
-    conn.execute(text('''
-        ALTER TABLE audit_events
-        ADD COLUMN IF NOT EXISTS raw_logged_at TIMESTAMP
-    '''))
-    conn.execute(text('''
-        ALTER TABLE audit_events
-        ADD COLUMN IF NOT EXISTS matched_keywords_json TEXT
-    '''))
-    conn.execute(text('''
-        ALTER TABLE token_transactions
-        ADD COLUMN IF NOT EXISTS work_user_id INTEGER REFERENCES work_users(id)
-    '''))
-    conn.execute(text('''
-        ALTER TABLE token_transactions
-        ADD COLUMN IF NOT EXISTS actor_external_id VARCHAR,
-        ADD COLUMN IF NOT EXISTS actor_name VARCHAR,
-        ADD COLUMN IF NOT EXISTS actor_email VARCHAR,
-        ADD COLUMN IF NOT EXISTS actor_source_platform VARCHAR
-    '''))
-    conn.execute(text('''
-        ALTER TABLE token_transactions
-        ADD COLUMN IF NOT EXISTS model_name VARCHAR,
-        ADD COLUMN IF NOT EXISTS resolved_model_tier VARCHAR,
-        ADD COLUMN IF NOT EXISTS model_source VARCHAR,
-        ADD COLUMN IF NOT EXISTS routing_cascaded BOOLEAN DEFAULT FALSE
-    '''))
-    conn.execute(text('''
-        ALTER TABLE audit_events
-        ADD COLUMN IF NOT EXISTS work_user_id INTEGER REFERENCES work_users(id)
-    '''))
-    conn.execute(text('''
-        ALTER TABLE audit_events
-        ADD COLUMN IF NOT EXISTS actor_external_id VARCHAR,
-        ADD COLUMN IF NOT EXISTS actor_name VARCHAR,
-        ADD COLUMN IF NOT EXISTS actor_email VARCHAR,
-        ADD COLUMN IF NOT EXISTS actor_source_platform VARCHAR
-    '''))
-    conn.execute(text('''
-        ALTER TABLE work_items
-        ADD COLUMN IF NOT EXISTS context_type VARCHAR DEFAULT 'project' NOT NULL,
-        ADD COLUMN IF NOT EXISTS context_template VARCHAR,
-        ADD COLUMN IF NOT EXISTS source_record_type VARCHAR,
-        ADD COLUMN IF NOT EXISTS source_record_id VARCHAR
-    '''))
+# Same migration function main.py runs on every dyno boot — kept as a single
+# source of truth so release-phase and startup-phase migrations can't drift
+# out of sync with each other (see database/migrate.py).
+run_migrations()
 print('   Column migrations applied')
 
 # Table migrations — create new tables if not present
