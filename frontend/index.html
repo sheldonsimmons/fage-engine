@@ -2728,10 +2728,25 @@ function eventTs(e) {
   return e.timestamp ? new Date(e.timestamp + "Z").getTime() : 0;
 }
 
+function dataAnchorNow() {
+  const events = (execData && execData.audits) || [];
+  let latest = 0;
+  for (const e of events) {
+    const ts = eventTs(e);
+    if (ts > latest) latest = ts;
+  }
+  // Live data always wins; only fall back to the dataset's latest timestamp
+  // when it is stale (e.g. a demo workspace seeded in the past), so
+  // relative ranges like "Last 24 Hours" still line up with real activity.
+  const wallClockDayMs = 24 * 60 * 60 * 1000;
+  if (latest && latest < Date.now() - wallClockDayMs) return latest;
+  return Date.now();
+}
+
 function rangeCutoff(range) {
-  const now = Date.now();
+  const now = dataAnchorNow();
   if (range === "mtd") {
-    const d = new Date();
+    const d = new Date(now);
     return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
   }
   return now - Number(range || 30) * 24 * 60 * 60 * 1000;
@@ -3659,7 +3674,7 @@ function eventIsoDay(e) {
 }
 
 function eventsSince(events, days) {
-  const cutoff = Date.now() - Number(days || 0) * 24 * 60 * 60 * 1000;
+  const cutoff = dataAnchorNow() - Number(days || 0) * 24 * 60 * 60 * 1000;
   return events.filter(e => eventTs(e) >= cutoff);
 }
 

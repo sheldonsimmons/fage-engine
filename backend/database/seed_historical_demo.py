@@ -39,6 +39,20 @@ MARKER = "historical_demo_2y_v1"
 ENTITY_PREFIX = "HIST2Y"
 RANDOM_SEED = 208032026
 
+
+def _years_before(value, years):
+    """Return the same calendar day safely across leap years."""
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        return value.replace(year=value.year - years, day=28)
+
+
+def default_historical_window(today=None):
+    """Keep the demo's two-year story aligned with the day it is seeded."""
+    end = today or date.today()
+    return _years_before(end, 2), end
+
 DEPARTMENTS = {
     "Sales": {"team": "Revenue Operations", "platform": "Salesforce", "weight": 1.15},
     "Support": {"team": "Customer Operations", "platform": "ServiceNow", "weight": 1.25},
@@ -286,9 +300,12 @@ def reset_historical_demo(db, workspace_id):
 
 
 def seed_historical_demo(
-    db, workspace_id, start=date(2024, 8, 3), end=date(2026, 8, 3),
+    db, workspace_id, start=None, end=None,
     commit_batches=False,
 ):
+    default_start, default_end = default_historical_window()
+    start = start or default_start
+    end = end or default_end
     existing = db.query(TokenTransaction).filter(
         TokenTransaction.workspace_id == workspace_id,
         TokenTransaction.usage_source == MARKER,
@@ -448,10 +465,11 @@ def seed_historical_demo(
 
 
 def main():
+    default_start, default_end = default_historical_window()
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace-id", required=True)
-    parser.add_argument("--start-date", type=date.fromisoformat, default=date(2024, 8, 3))
-    parser.add_argument("--end-date", type=date.fromisoformat, default=date(2026, 8, 3))
+    parser.add_argument("--start-date", type=date.fromisoformat, default=default_start)
+    parser.add_argument("--end-date", type=date.fromisoformat, default=default_end)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--reset", action="store_true")
     args = parser.parse_args()

@@ -10,7 +10,9 @@ from database.models import (
     AuditEvent, HistoricalDemoSeedState, TokenTransaction,
     WorkItem, WorkUser, WorkspaceAnalyticsSettings,
 )
-from database.seed_historical_demo import MARKER, reset_historical_demo, seed_historical_demo
+from database.seed_historical_demo import (
+    MARKER, default_historical_window, reset_historical_demo, seed_historical_demo,
+)
 
 
 def _session():
@@ -21,6 +23,16 @@ def _session():
     )
     Base.metadata.create_all(bind=engine)
     return sessionmaker(bind=engine)()
+
+
+def test_default_historical_window_rolls_through_today_and_handles_leap_day():
+    start, end = default_historical_window(date(2026, 8, 4))
+    assert start == date(2024, 8, 4)
+    assert end == date(2026, 8, 4)
+
+    leap_start, leap_end = default_historical_window(date(2024, 2, 29))
+    assert leap_start == date(2022, 2, 28)
+    assert leap_end == date(2024, 2, 29)
 
 
 def test_historical_seed_is_attributed_deterministic_and_idempotent():
