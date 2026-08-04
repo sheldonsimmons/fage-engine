@@ -1994,6 +1994,12 @@ function renderAskCostPilotAnswer(data) {
       `).join("")}</div></div>`
     : "";
   const statusLabel = clarification ? "Needs clarification" : "Calculated";
+  const proactiveNote = data.proactive_note
+    ? `<div class="ask-proactive-note severity-${escapeHtml(data.proactive_note.severity || "info")}">
+        <strong>${escapeHtml(data.proactive_note.title || "Worth a look")}</strong>
+        <p>${escapeHtml(data.proactive_note.detail || "")}</p>
+       </div>`
+    : "";
   return `
     <div class="ask-answer-header">
       <div><span class="ask-answer-kicker">${escapeHtml(period)}</span>
@@ -2011,6 +2017,7 @@ function renderAskCostPilotAnswer(data) {
     ${calculation}
     ${supportingRecords}
     ${recommendations}
+    ${proactiveNote}
     ${followUpMarkup}
     <div class="ask-answer-note">${escapeHtml(data.measurement_note || "Calculated from governed CostPilot activity.")}</div>
   `;

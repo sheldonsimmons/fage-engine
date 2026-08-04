@@ -49,6 +49,7 @@ from core.analytics_periods import (
 from core.analytics_coverage import (
     comparison_data_coverage,
     workspace_analytics_settings,
+    workspace_attention_signals,
     workspace_collection_profile,
 )
 from core.analytics_drivers import change_decomposition, dimension_contributors
@@ -63,6 +64,7 @@ MICRO_OUT    = 1.50  / 1_000_000
 
 _ASK_OPENAI_DISABLED_UNTIL = 0.0
 _ASK_WRITER_DISABLED_UNTIL = 0.0
+_ASK_AGENT_DISABLED_UNTIL = 0.0
 
 
 def _ask_env_seconds(name: str, default: float, minimum: float, maximum: float) -> float:
@@ -2214,6 +2216,225 @@ Call write_grounded_costpilot_answer exactly once."""
     return payload["title"], payload["answer"], False
 
 
+def _ask_agent_mode_enabled() -> bool:
+    return os.getenv("ASK_COSTPILOT_AGENT_MODE", "false").lower() not in {
+        "0", "false", "no", "off"
+    }
+
+
+def _ask_agent_reporting_filters(request: "AskCostPilotRequest") -> dict:
+    return {
+        "project_id": request.project_id,
+        "user_external_id": request.user_external_id,
+        "agent_id": request.agent_id,
+        "account_id": request.account_id,
+        "source_platform": request.source_platform,
+        "record_type": request.record_type,
+        "model_tier": request.model_tier,
+        "charged_unit": request.charged_unit,
+        "business_purpose": request.business_purpose,
+    }
+
+
+def _ask_run_agent_tool(
+    name: str, args: dict, db: Session, request: "AskCostPilotRequest", reporting_filters: dict,
+) -> dict:
+    from api.ask_costpilot_tools import EXECUTORS
+
+    executor = EXECUTORS.get(name)
+    if executor is None:
+        return {"error": f"unknown tool: {name}"}
+    if name == "get_usage_report":
+        return executor(
+            db, request.workspace_id, reporting_filters,
+            int(args.get("days") or 30), args.get("period_key") or "none",
+        )
+    if name == "get_change_drivers":
+        return executor(
+            db, request.workspace_id, reporting_filters,
+            int(args.get("days") or 30), args.get("period_key") or "none",
+            args.get("comparison_key") or "previous_period",
+            args.get("metric") or "spend_usd",
+            args.get("dimension") or "organizational_unit_breakdown",
+        )
+    if name == "get_budget_status":
+        return executor(db, request.workspace_id, bool(args.get("alerts_only")))
+    if name == "get_product_help":
+        return executor(args.get("topic") or request.question)
+    return {"error": f"unhandled tool: {name}"}
+
+
+def _ask_agent_final_payload(
+    request: "AskCostPilotRequest", db: Session, final_args: dict, tool_call_log: list,
+) -> Optional[dict]:
+    """
+    Build the response payload from the model's final_answer call. Title and
+    answer text come from the model; every number in `evidence`/`calculation`
+    comes from tool_call_log — the actual deterministic tool results — never
+    from the model's own arguments.
+    """
+    title = str(final_args.get("title") or "").strip()[:180]
+    answer = str(final_args.get("answer") or "").strip()[:4000]
+    if not title or not answer or not tool_call_log:
+        return None
+
+    evidence = []
+    calculation = None
+    data_scope = None
+    cited_departments: set[str] = set()
+    for tool_name, _args, result in tool_call_log:
+        if tool_name == "get_usage_report":
+            data_scope = result.get("data_scope") or data_scope
+            for row in (result.get("top_departments") or [])[:3]:
+                evidence.append({
+                    "label": row.get("label"),
+                    "value": row.get("spend_usd"),
+                    "filter_name": "charged_unit",
+                    "filter_value": row.get("id"),
+                })
+                if row.get("label"):
+                    cited_departments.add(str(row["label"]).lower())
+        elif tool_name == "get_change_drivers":
+            calculation = result.get("decomposition")
+            for row in (result.get("top_contributors") or [])[:3]:
+                evidence.append({
+                    "label": row.get("label"),
+                    "value": row.get("absolute_change"),
+                    "filter_name": None,
+                    "filter_value": row.get("id"),
+                })
+                if row.get("label"):
+                    cited_departments.add(str(row["label"]).lower())
+        elif tool_name == "get_budget_status":
+            for row in (result.get("departments") or [])[:3]:
+                evidence.append({
+                    "label": row.get("label"),
+                    "value": row.get("used_pct"),
+                    "filter_name": "charged_unit",
+                    "filter_value": row.get("id"),
+                })
+                if row.get("label"):
+                    cited_departments.add(str(row["label"]).lower())
+
+    payload = {
+        "title": title,
+        "answer": answer,
+        "intent": "agent",
+        "evidence": evidence,
+        "recommendations": [],
+        "calculation": calculation,
+        "data_provenance": {"data_scope": data_scope or "unknown"},
+        "assistant_mode": "agent_tool_loop",
+    }
+
+    try:
+        for signal in workspace_attention_signals(db, request.workspace_id, limit=3):
+            department = (signal.get("department") or "").lower()
+            if department and department in cited_departments:
+                continue  # already the subject of this answer — don't repeat it
+            payload["proactive_note"] = signal
+            break
+    except Exception as exc:
+        logger.warning("Ask CostPilot proactive signal lookup failed: %s", exc)
+
+    return payload
+
+
+def _ask_costpilot_agent(request: "AskCostPilotRequest", db: Session) -> Optional[dict]:
+    """
+    Bounded tool-calling loop: the model chooses which deterministic lookups
+    to run (max 4), then must call final_answer using only facts those
+    lookups returned. Any failure/timeout/malformed turn returns None so
+    ask_costpilot() falls straight back to the existing deterministic
+    18-intent path — this path is purely additive.
+    """
+    global _ASK_AGENT_DISABLED_UNTIL
+
+    if not _ask_agent_mode_enabled():
+        return None
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if (
+        not api_key
+        or api_key.startswith("YOUR")
+        or time.monotonic() < _ASK_AGENT_DISABLED_UNTIL
+    ):
+        return None
+
+    from api.ask_costpilot_tools import TOOL_SCHEMAS, FINAL_ANSWER_TOOL, to_anthropic_tools
+
+    reporting_filters = _ask_agent_reporting_filters(request)
+    tool_call_log: list = []
+    max_tool_calls = 4
+
+    instructions = """You are CostPilot's usage analyst. Answer the user's question about their
+attributed AI spend and usage by calling tools to retrieve real numbers — never state a figure
+you did not retrieve from a tool in this conversation.
+Call get_usage_report for totals, rankings, or "how much/who/what" questions.
+Call get_change_drivers for questions about why a number changed, increased, or decreased.
+Call get_budget_status for budget, cap, or "on track" questions.
+Call get_product_help only for questions about how CostPilot itself works.
+You may call more than one tool if the question needs it — for example checking change drivers
+and then budget status. Once you have enough information, call final_answer. Do not call
+final_answer without having called at least one data tool first, unless the question is purely
+about CostPilot the product. Always call exactly one tool per turn."""
+
+    try:
+        import anthropic
+
+        timeout_seconds = _ask_env_seconds(
+            "ASK_COSTPILOT_AGENT_TIMEOUT_SECONDS", 20.0, 5.0, 45.0
+        )
+        client = anthropic.Anthropic(api_key=api_key, timeout=timeout_seconds, max_retries=0)
+        model = os.getenv(
+            "ASK_COSTPILOT_AGENT_MODEL", os.getenv("ANTHROPIC_FLAGSHIP_MODEL", "claude-sonnet-4-6")
+        )
+        all_tools = to_anthropic_tools(TOOL_SCHEMAS + [FINAL_ANSWER_TOOL])
+        messages: list = [
+            {"role": "user", "content": _ask_conversation_text(request)}
+        ]
+
+        for _turn in range(max_tool_calls + 1):
+            response = client.messages.create(
+                model=model,
+                max_tokens=1024,
+                system=instructions,
+                messages=messages,
+                tools=all_tools,
+                tool_choice={"type": "any"},
+            )
+            tool_uses = [block for block in response.content if getattr(block, "type", None) == "tool_use"]
+            if not tool_uses:
+                return None
+
+            messages.append({"role": "assistant", "content": response.content})
+
+            final_call = next((block for block in tool_uses if block.name == "final_answer"), None)
+            if final_call is not None:
+                return _ask_agent_final_payload(request, db, dict(final_call.input or {}), tool_call_log)
+
+            tool_results = []
+            for call in tool_uses:
+                if len(tool_call_log) >= max_tool_calls:
+                    return None
+                call_args = dict(call.input or {})
+                result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters)
+                tool_call_log.append((call.name, call_args, result))
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": call.id,
+                    "content": json.dumps(result, default=str),
+                })
+            messages.append({"role": "user", "content": tool_results})
+        return None
+    except Exception as exc:
+        cooldown_seconds = _ask_env_seconds(
+            "ASK_COSTPILOT_AGENT_COOLDOWN_SECONDS", 300.0, 15.0, 3600.0
+        )
+        _ASK_AGENT_DISABLED_UNTIL = time.monotonic() + cooldown_seconds
+        logger.warning("Ask CostPilot agent loop failed: %s", exc)
+        return None
+
+
 @router.post("/ask")
 def ask_costpilot(
     request: AskCostPilotRequest,
@@ -2237,6 +2458,12 @@ def ask_costpilot(
             "evidence": [],
             "recommendations": [],
         }
+
+    if _ask_agent_mode_enabled():
+        agent_result = _ask_costpilot_agent(request, db)
+        if agent_result is not None:
+            return agent_result
+        # Falls through to the deterministic path below unchanged.
 
     parsed, assistant_mode = _resolve_ask_intent(request)
     if parsed.get("intent") == "help":
@@ -2350,6 +2577,12 @@ def ask_costpilot(
         data_scope = "live"
     else:
         data_scope = "no_activity"
+
+    latest_available_at = None
+    if int(summary.get("request_count") or 0) == 0 and request.workspace_id:
+        latest_available_at = db.query(func.max(TokenTransaction.timestamp)).filter(
+            TokenTransaction.workspace_id == request.workspace_id,
+        ).scalar()
 
     if intent == "change_drivers":
         prior_period = comparison_execution_plan.comparison
@@ -3293,7 +3526,15 @@ def ask_costpilot(
                     f"That includes {int(ranked[0].get('request_count') or 0):,} governed requests."
                 )
         else:
-            answer = f"No {entity_label.lower()} had attributed AI activity in this period."
+            if latest_available_at:
+                latest_date = latest_available_at.strftime("%B %-d, %Y")
+                answer = (
+                    f"No {entity_label.lower()} had attributed AI activity for {period_label}. "
+                    f"The latest available activity in this workspace is from {latest_date}. "
+                    "Expand the date range to include that activity."
+                )
+            else:
+                answer = f"No {entity_label.lower()} had attributed AI activity in this period."
     else:
         context_rows = report.get("project_breakdown") or []
         title = "Where your AI usage went"
@@ -3399,6 +3640,9 @@ def ask_costpilot(
             "period_label": period_label,
             "coverage": comparison_coverage_result,
             "budget_coverage": budget_coverage,
+            "latest_available_at": (
+                latest_available_at.isoformat() if latest_available_at else None
+            ),
         },
         "assistant_mode": assistant_mode,
         "interpreted_as": ask_interpretation_label(parsed),
@@ -3406,6 +3650,13 @@ def ask_costpilot(
         "interpreted_intent": parsed,
         "conversation_context": conversation_context,
         "suggested_questions": (
+            [
+                "Who had the most AI spend yesterday?",
+                "Who had the most AI spend in the last 7 days?",
+                "Show the latest AI activity.",
+            ]
+            if data_scope == "no_activity" and latest_available_at
+            else
             [
                 "How much AI budget is left this month?",
                 "Are we on track to exceed budget this month?",

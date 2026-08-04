@@ -1,11 +1,13 @@
 """Workspace historical coverage contracts for executive analytics."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func, or_
 
 from database.models import (
+    AuditEvent,
+    DepartmentBudget,
     IntegrationConnection,
     TokenTransaction,
     TrialAccount,
@@ -208,3 +210,92 @@ def comparison_data_coverage(plan, primary_summary: dict, comparison_summary: di
         result["status"] = "verified_comparable_periods"
         result["limitation"] = None
     return result
+
+
+def _workspace_department_filter(model, workspace_id: Optional[str]):
+    """Match routes_dashboard._workspace_filter's department-prefix convention."""
+    if not workspace_id:
+        return None
+    return model.department.like(f"{workspace_id}:%")
+
+
+def workspace_attention_signals(db, workspace_id: Optional[str], limit: int = 5) -> list[dict]:
+    """
+    Cheap, workspace-scoped signals worth flagging unprompted — the backend
+    equivalent of the dashboard's client-side "Needs attention" panel
+    (frontend/index.html homeAttentionItems), so Ask CostPilot can surface
+    the same thresholds without recomputing a full report.
+
+    Each signal: {type, severity, title, detail, department}.
+    Thresholds mirror the dashboard: budget >=80% warning, >=100% critical.
+    """
+    if db is None:
+        return []
+
+    from database.models import AuditReviewState
+
+    signals: list[dict] = []
+
+    # ── Budget caps ──────────────────────────────────────────────────────
+    budget_query = db.query(DepartmentBudget).filter(
+        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))  # noqa: E712
+    )
+    dept_clause = _workspace_department_filter(DepartmentBudget, workspace_id)
+    if dept_clause is not None:
+        budget_query = budget_query.filter(dept_clause)
+    for budget in budget_query.all():
+        cap = float(budget.monthly_cap_usd or 0)
+        if cap <= 0:
+            continue
+        spend = float(budget.current_spend_usd or 0)
+        pct = round(spend / cap * 100, 1)
+        label = (budget.department or "Unassigned").split(":")[-1]
+        if pct >= 100:
+            signals.append({
+                "type": "budget_exceeded", "severity": "critical", "department": label,
+                "title": f"{label} is over its monthly AI budget",
+                "detail": f"${spend:,.2f} spent against a ${cap:,.2f} cap ({pct:.0f}%).",
+            })
+        elif pct >= 80:
+            signals.append({
+                "type": "budget_near_cap", "severity": "warning", "department": label,
+                "title": f"{label} is approaching its monthly AI budget",
+                "detail": f"${spend:,.2f} spent against a ${cap:,.2f} cap ({pct:.0f}%).",
+            })
+
+    # ── Unreviewed blocked requests ─────────────────────────────────────
+    scope_key = f"workspace:{workspace_id}" if workspace_id else "global"
+    state = db.query(AuditReviewState).filter_by(scope_key=scope_key).first()
+    reviewed_through_id = int(state.reviewed_through_id or 0) if state else 0
+    blocked_query = db.query(func.count(AuditEvent.id)).filter(
+        AuditEvent.decision_outcome.ilike("%blocked%"),
+        AuditEvent.id > reviewed_through_id,
+    )
+    audit_dept_clause = _workspace_department_filter(AuditEvent, workspace_id)
+    if audit_dept_clause is not None:
+        blocked_query = blocked_query.filter(audit_dept_clause)
+    unreviewed_blocked = blocked_query.scalar() or 0
+    if unreviewed_blocked:
+        signals.append({
+            "type": "blocked_unreviewed", "severity": "warning", "department": None,
+            "title": f"{unreviewed_blocked} blocked request{'s' if unreviewed_blocked != 1 else ''} awaiting review",
+            "detail": "Governance blocked these requests and they haven't been acknowledged yet.",
+        })
+
+    # ── Recent collisions ────────────────────────────────────────────────
+    cutoff = datetime.utcnow() - timedelta(days=7)
+    collision_query = db.query(func.count(AuditEvent.id)).filter(
+        AuditEvent.timestamp >= cutoff,
+        AuditEvent.event_type.in_(("LOCK", "COLLISION_LOCK", "COLLISION_QUEUE", "COLLISION_SKIP")),
+    )
+    if audit_dept_clause is not None:
+        collision_query = collision_query.filter(audit_dept_clause)
+    collision_count = collision_query.scalar() or 0
+    if collision_count:
+        signals.append({
+            "type": "collisions", "severity": "info", "department": None,
+            "title": f"{collision_count} agent collision{'s' if collision_count != 1 else ''} in the last 7 days",
+            "detail": "Two or more agents targeted the same record and were locked, queued, or skipped.",
+        })
+
+    return signals[:limit]
