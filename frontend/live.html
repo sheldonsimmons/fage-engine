@@ -4,14 +4,9 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script>
-    // Always enter through the landing page; live.html is accessible via nav from there
-    if (!document.referrer.includes('/live-landing.html') && !document.referrer.includes('/live.html')) {
-      window.location.replace('/live-landing.html');
-    }
-  </script>
-  <title>CostPilot — Live Operations Center</title>
+  <title>CostPilot — Day-in-the-Life Demo</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
   <style>
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
@@ -23,6 +18,7 @@
     .live-indicator { display: flex; align-items: center; gap: 8px; }
     .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green);
       box-shadow: 0 0 6px var(--accent-green); animation: live-pulse 1.5s infinite; }
+    .live-dot.paused { background: var(--text-muted); box-shadow: none; animation: none; }
     @keyframes live-pulse {
       0%,100% { opacity:1; box-shadow:0 0 6px var(--accent-green); }
       50%      { opacity:.6; box-shadow:0 0 14px var(--accent-green); }
@@ -127,6 +123,47 @@
     .pruning-ticker.show { opacity: 1; }
 
     .sortable-ghost { opacity: 0.3; background: rgba(88,166,255,0.05); }
+
+    /* Current guided-demo shell */
+    body { overflow: auto; height: auto; min-height: 100vh; }
+    .header { min-height: 64px; height: auto; padding: 10px 24px; }
+    .header-sub { text-transform: none; letter-spacing: 0; font-size: 11px; }
+    .demo-shell { padding: 22px 24px 16px; background: linear-gradient(180deg,rgba(36,92,145,.13),transparent); border-bottom: 1px solid var(--border); }
+    .demo-hero { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 28px; align-items: end; max-width: 1500px; margin: 0 auto 18px; }
+    .demo-eyebrow { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .demo-title { color: var(--text-primary); font-size: 28px; line-height: 1.12; margin: 6px 0 7px; }
+    .demo-copy { color: var(--text-muted); font-size: 12px; line-height: 1.55; max-width: 760px; margin: 0; }
+    .demo-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .demo-button { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 7px; color: var(--text-primary); cursor: pointer; font-size: 11px; font-weight: 700; padding: 8px 12px; text-decoration: none; }
+    .demo-button.primary { background: #1f6feb; border-color: #2f81f7; color: white; }
+    .demo-button.active { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,.09); }
+    .demo-scenario-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: 1500px; margin: 0 auto; }
+    .demo-scenario-label { color: var(--text-muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; margin-right: 4px; text-transform: uppercase; }
+    .demo-scenario { background: var(--bg-base); border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 6px 10px; }
+    .demo-scenario.active { background: rgba(88,166,255,.12); border-color: var(--accent); color: var(--accent); }
+    .demo-story { color: var(--text-muted); font-size: 10px; margin-left: auto; }
+    .demo-story strong { color: var(--accent-green); }
+    .demo-summary { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; padding: 14px 24px; border-bottom: 1px solid var(--border); }
+    .demo-metric { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 9px; padding: 14px 16px; min-height: 88px; }
+    .demo-metric.savings { border-top: 3px solid var(--accent-green); }
+    .demo-metric.attention { border-top: 3px solid var(--accent-yellow); }
+    .demo-metric span { color: var(--text-muted); display: block; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .demo-metric strong { color: var(--text-primary); display: block; font-size: 23px; margin: 8px 0 2px; }
+    .demo-metric small { color: var(--text-muted); font-size: 9px; }
+    .demo-handoff { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--bg-base); }
+    .demo-handoff > span { align-self: center; color: var(--text-muted); font-size: 10px; font-weight: 800; margin-right: 4px; text-transform: uppercase; }
+    .dash-kpi, #liveCeoBanner, .dash-stat { display: none !important; }
+    .dash-content { min-height: 720px; height: calc(100vh - 340px); }
+    .dash-sec-head { font-size: 11px; }
+    .dash-right { background: #101923; }
+    @media (max-width: 1000px) {
+      .demo-hero { grid-template-columns: 1fr; }
+      .demo-actions { justify-content: flex-start; }
+      .demo-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .dash-content { grid-template-columns: 1fr; height: auto; }
+      .dash-left, .dash-right { overflow: visible; border: 0; }
+      .dash-right { min-height: 520px; }
+    }
   </style>
 </head>
 <body>
@@ -139,14 +176,14 @@
   <div class="header-brand">
     <img src="/assets/costpilot-logo-transparent.svg" alt="CostPilot" class="brand-logo-img" width="320" />
     <div>
-      <div class="header-sub">AI Cost Control · CRM &nbsp;·&nbsp; Support &nbsp;·&nbsp; Engineering &nbsp;·&nbsp; Finance — Enterprise Demo</div>
+      <div class="header-sub">Interactive product demonstration</div>
     </div>
   </div>
   <div class="live-indicator">
     <div class="live-dot"></div>
-    <span style="color:var(--accent-green);font-size:12px;font-weight:700;letter-spacing:0.08em">LIVE</span>
+    <span id="demoRunStatus" style="color:var(--accent-green);font-size:12px;font-weight:700;letter-spacing:0.08em">RUNNING</span>
     <span class="live-clock" id="liveClock">--:--:--</span>
-    <span style="font-size:10px;color:var(--text-muted);background:var(--bg-panel);border:1px solid var(--border);border-radius:4px;padding:2px 8px;margin-left:6px;letter-spacing:0.06em">SIMULATED ENVIRONMENT</span>
+    <span style="font-size:10px;color:var(--text-muted);background:var(--bg-panel);border:1px solid var(--border);border-radius:4px;padding:2px 8px;margin-left:6px;letter-spacing:0.06em">SIMULATED · NO CUSTOMER DATA</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <a href="/live-landing.html" class="header-nav-link" style="color:var(--accent-green)">◈ Overview</a>
@@ -157,6 +194,46 @@
     <button class="tour-btn" onclick="startTour()">? Guide</button>
   </div>
 </header>
+
+<section class="demo-shell" aria-labelledby="demoTitle">
+  <div class="demo-hero">
+    <div>
+      <div class="demo-eyebrow">CostPilot day-in-the-life demo</div>
+      <h1 class="demo-title" id="demoTitle">See CostPilot govern a regular workday.</h1>
+      <p class="demo-copy">Watch people and agents generate AI activity across departments. CostPilot selects models, removes unnecessary tokens, enforces budgets, blocks sensitive requests, and records the evidence behind every decision.</p>
+    </div>
+    <div class="demo-actions">
+      <button class="demo-button primary" id="demoRunButton" type="button" onclick="toggleDemoRun()">Pause demo</button>
+      <button class="demo-button" id="demoSpeedButton" type="button" onclick="cycleDemoSpeed()">Speed: 1×</button>
+      <button class="demo-button" type="button" onclick="resetDemo()">Reset</button>
+    </div>
+  </div>
+  <div class="demo-scenario-bar" role="group" aria-label="Demo scenario">
+    <span class="demo-scenario-label">Choose a scenario</span>
+    <button class="demo-scenario active" data-demo-scenario="normal" onclick="setDemoScenario('normal')">Regular workday</button>
+    <button class="demo-scenario" data-demo-scenario="budget" onclick="setDemoScenario('budget')">Budget pressure</button>
+    <button class="demo-scenario" data-demo-scenario="security" onclick="setDemoScenario('security')">Security events</button>
+    <button class="demo-scenario" data-demo-scenario="collision" onclick="setDemoScenario('collision')">Agent conflicts</button>
+    <span class="demo-story" id="demoStory"><strong>Regular workday:</strong> balanced routing, pruning, and occasional controls.</span>
+  </div>
+</section>
+
+<section class="demo-summary" aria-label="Simulated workday summary">
+  <article class="demo-metric"><span>Requests governed</span><strong id="demoRequests">0</strong><small>evaluated by CostPilot</small></article>
+  <article class="demo-metric"><span>AI spend</span><strong id="demoSpend">$0.00</strong><small>simulated today</small></article>
+  <article class="demo-metric savings"><span>Savings / avoided spend</span><strong id="demoSaved">$0.00</strong><small>routing and pruning</small></article>
+  <article class="demo-metric"><span>Active agents</span><strong id="demoAgents">0</strong><small>working now</small></article>
+  <article class="demo-metric attention"><span>Items requiring attention</span><strong id="demoAttention">0</strong><small>blocked, budget, or conflicts</small></article>
+</section>
+
+<nav class="demo-handoff" aria-label="Explore simulated activity">
+  <span>Explore the product</span>
+  <a class="demo-button" href="/index.html">Home</a>
+  <a class="demo-button" href="/operate.html">AgentLake</a>
+  <a class="demo-button" href="/reports.html?tab=efficiency">Ask CostPilot</a>
+  <a class="demo-button" href="/reports.html">Reports</a>
+  <a class="demo-button" href="/work-items.html">Work Attribution</a>
+</nav>
 
 <!-- ── KPI Strip ──────────────────────────────────────────────────────────────── -->
 <div class="dash-kpi">
@@ -310,11 +387,11 @@
       <div class="dp-wrap dash-section" data-panel-id="l-agents-budget">
         <div class="dash-sec-head" onclick="togglePanel('lAgentBudgetBody','lAgentBudgetChev')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Agentlake Registry &amp; Budget</span>
+          <span>▸ Agents and budget controls</span>
           <span class="sec-right"><span class="sec-chev" id="lAgentBudgetChev">▾</span></span>
         </div>
         <div id="lAgentBudgetBody" class="dash-sec-body">
-          <div class="sec-sub-label">Agentlake Registry — Simulated Fleet</div>
+          <div class="sec-sub-label">Agents participating in this simulated workday</div>
           <div class="agent-grid-6" id="lAgentGrid"></div>
           <div class="sec-sub-label">Department Budget Utilization</div>
           <div id="lBudgetRows"></div>
@@ -325,7 +402,7 @@
       <div class="dp-wrap dash-section" data-panel-id="l-timeseries">
         <div class="dash-sec-head" onclick="togglePanel('lTimeseriesBody','lTimeseriesChev')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ 30-Day Spend &amp; Activity Trends</span>
+          <span>▸ Spend and activity trends</span>
           <span class="sec-right"><span class="sec-chev" id="lTimeseriesChev">▸</span></span>
         </div>
         <div id="lTimeseriesBody" class="dash-sec-body" style="display:none">
@@ -346,7 +423,7 @@
       <div class="dp-wrap dash-section" data-panel-id="l-routing-feed">
         <div class="dash-sec-head" onclick="togglePanel('lRoutingFeedBody','lRoutingFeedChev')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ Routing Decision Feed</span>
+          <span>▸ What CostPilot decided</span>
           <span style="font-size:10px;font-weight:400;color:var(--accent-green);margin-left:8px">● LIVE</span>
           <span class="sec-right">
             <span style="font-size:10px;color:var(--text-muted);font-style:italic">Click row → expand rationale</span>
@@ -356,7 +433,7 @@
         <div id="lRoutingFeedBody" class="dash-sec-body">
           <table class="audit-table routing-table">
             <thead>
-              <tr><th>Time</th><th>Agent</th><th>Dept</th><th>Model Tier</th><th>Detail</th><th>Cost</th></tr>
+              <tr><th>Time</th><th>Agent</th><th>Department</th><th>Model tier</th><th>Decision</th><th>Cost</th></tr>
             </thead>
             <tbody id="lRoutingBody"></tbody>
           </table>
@@ -367,7 +444,7 @@
       <div class="dp-wrap dash-section" data-panel-id="l-audit">
         <div class="dash-sec-head" onclick="togglePanel('lAuditPanel','lAuditChev')">
           <span class="drag-handle" onclick="event.stopPropagation()">⠿</span>
-          <span>▸ AI Decision Audit Log</span>
+          <span>▸ Supporting evidence</span>
           <span class="sec-right"><span class="sec-chev" id="lAuditChev">▾</span></span>
         </div>
         <div id="lAuditPanel" class="dash-sec-body">
@@ -387,7 +464,7 @@
   <div class="dash-right">
     <div class="stream-head">
       <div class="stream-head-row">
-        <div class="stream-head-label">▸ Governance Event Stream</div>
+        <div class="stream-head-label">▸ Live workday activity</div>
         <span style="font-size:10px;color:var(--accent-green);font-weight:700">● LIVE</span>
       </div>
       <div class="stream-filters">
@@ -563,6 +640,48 @@ let state = {
 };
 
 let tickCount = 0, lastBlockedAt = -20, lastCollisionAt = -30, lastComplexAt = -5;
+let demoScenario = "normal";
+let demoRunning = true;
+let demoSpeedIndex = 1;
+let demoTimer = null;
+const DEMO_SPEEDS = [5000, 2500, 1000];
+const DEMO_SCENARIOS = {
+  normal: "<strong>Regular workday:</strong> balanced routing, pruning, and occasional controls.",
+  budget: "<strong>Budget pressure:</strong> CostPilot applies caps and moves eligible work to lower-cost models.",
+  security: "<strong>Security events:</strong> sensitive data and credentials are stopped before reaching a model.",
+  collision: "<strong>Agent conflicts:</strong> CostPilot prevents overlapping agents from changing the same record.",
+};
+
+function scheduleDemo() {
+  clearInterval(demoTimer);
+  if (demoRunning) demoTimer = setInterval(tick, DEMO_SPEEDS[demoSpeedIndex]);
+}
+
+function toggleDemoRun() {
+  demoRunning = !demoRunning;
+  document.getElementById("demoRunButton").textContent = demoRunning ? "Pause demo" : "Resume demo";
+  document.getElementById("demoRunStatus").textContent = demoRunning ? "RUNNING" : "PAUSED";
+  document.querySelector(".live-dot")?.classList.toggle("paused", !demoRunning);
+  scheduleDemo();
+}
+
+function cycleDemoSpeed() {
+  demoSpeedIndex = (demoSpeedIndex + 1) % DEMO_SPEEDS.length;
+  document.getElementById("demoSpeedButton").textContent = `Speed: ${["0.5×", "1×", "2.5×"][demoSpeedIndex]}`;
+  scheduleDemo();
+}
+
+function setDemoScenario(scenario) {
+  demoScenario = DEMO_SCENARIOS[scenario] ? scenario : "normal";
+  document.querySelectorAll("[data-demo-scenario]").forEach(button => {
+    button.classList.toggle("active", button.dataset.demoScenario === demoScenario);
+  });
+  document.getElementById("demoStory").innerHTML = DEMO_SCENARIOS[demoScenario];
+}
+
+function resetDemo() {
+  window.location.reload();
+}
 
 // ── Governance Event Data Store ────────────────────────────────────────────────
 // Keyed by eventId so clicking any stream event can show full detail
@@ -648,6 +767,12 @@ function updateKPIs() {
   const active    = state.agentStatuses.filter(s => s === "active").length;
   const locked    = state.agentStatuses.filter(s => s === "locked").length;
   const totalSaved = state.tierSavings + state.pruningSavings;
+
+  document.getElementById("demoRequests").textContent = state.callsToday.toLocaleString();
+  document.getElementById("demoSpend").textContent = `$${state.spend.toFixed(2)}`;
+  document.getElementById("demoSaved").textContent = `$${totalSaved.toFixed(2)}`;
+  document.getElementById("demoAgents").textContent = (active + locked).toLocaleString();
+  document.getElementById("demoAttention").textContent = (state.blocked + throttled + locked).toLocaleString();
 
   document.getElementById("lKpiSpend").textContent      = `$${state.spend.toFixed(2)}`;
   document.getElementById("lKpiSpendSub").textContent   = `$${state.spendMonth.toFixed(2)} this month`;
@@ -1132,6 +1257,12 @@ function tick() {
   else if (rand < 0.12)                 { eventType = "pruning"; }
   else                                  { eventType = "routine"; }
 
+  // Guided scenarios increase the frequency of the selected CostPilot control
+  // while retaining normal work between notable events.
+  if (demoScenario === "budget" && tickCount % 3 === 0) eventType = "throttled";
+  if (demoScenario === "security" && tickCount % 4 === 0) eventType = agent.dept === "Engineering" ? "code-blocked" : "blocked";
+  if (demoScenario === "collision" && tickCount % 5 === 0) eventType = "collision";
+
   if (eventType === "blocked") {
     const b     = BLOCKED_PAYLOADS[Math.floor(Math.random() * BLOCKED_PAYLOADS.length)];
     const saved = calcCost("Advisor", 1500, 0);
@@ -1467,7 +1598,7 @@ function init() {
     "Real pricing: Scout $0.25/$1.25 · Advisor $3/$15 · Strategist $15/$75 per 1M tokens",
     { dept:"Operations", tier:"Scout", agent:"SN-IncidentRouter", payload:"CostPilot Enterprise Demo initialized. All 16 Agentlake agents registered across Support, Sales, Marketing, Operations, Engineering. Real Anthropic pricing active. Engineering code lane enabled — pruner bypassed for code payloads.", keywords:[], cost:0, saved:0 });
 
-  setInterval(tick, 2500);
+  scheduleDemo();
   setInterval(() => { document.getElementById("liveClock").textContent = nowTime(); }, 1000);
 }
 
@@ -1611,14 +1742,15 @@ if (_lBudgetPanelHead) {
   });
 }
 </script>
+<script src="/js/global-nav.js?v=20260803-workspaces"></script>
 <script src="js/help.js"></script>
 <script>
 window.PAGE_TOUR_STEPS = [
-  { target:"lKpiSpend",       title:"Live Spend",              body:"Total AI spend today across all departments, updating every 2.5 seconds as agents process requests.",                                        position:"bottom" },
-  { target:"lKpiSaved",       title:"CostPilot Savings",            body:"Combined savings from tier routing and context pruning — accumulates live with every tick.",                                                 position:"bottom" },
-  { target:"lKpiBlocked",     title:"Blocked Requests",        body:"Requests stopped before reaching any AI model. Zero tokens consumed, full audit record created.",                                           position:"bottom" },
-  { target:"lKpiThrottled",   title:"Throttled Departments",   body:"Departments at or over their monthly budget cap. CostPilot downgrades them to Scout — work continues, budget stays controlled.",                 position:"bottom" },
-  { target:"lStatScout",      title:"Model Tier Bar",          body:"Real-time call breakdown by tier. Scout handles routine volume cheaply. Advisor and Strategist activate only when complexity or compliance requires it.", position:"bottom" },
+  { target:"demoTitle",       title:"Day-in-the-Life Demo",     body:"This is an isolated simulation. It demonstrates CostPilot without using customer data.", position:"bottom" },
+  { target:"demoRunButton",   title:"Control the Workday",      body:"Pause, resume, speed up, or reset the workday whenever you want to explain an event.", position:"bottom" },
+  { target:"demoRequests",    title:"Requests Governed",        body:"The summary updates as simulated requests move through CostPilot.", position:"bottom" },
+  { target:"demoSaved",       title:"Savings and Avoided Spend",body:"Routing and pruning savings accumulate as CostPilot chooses efficient model paths.", position:"bottom" },
+  { target:"demoAttention",   title:"Items Requiring Attention",body:"Blocked requests, budget controls, and agent conflicts are combined into a clear action signal.", position:"bottom" },
   { target:"lAgentGrid",      title:"Agent Status",            body:"Live status of every agent — idle, active, or locked. Cards pulse green when active, yellow when locked by a concurrency collision.",        position:"bottom" },
   { target:"lBudgetRows",     title:"Department Budgets",      body:"Budget bars fill as departments spend. Red = at or over cap, yellow = approaching limit. Marketing is currently throttled.",                  position:"bottom" },
   { target:"lRoutingBody",    title:"Routing Decision Feed",   body:"Every AI call logged as it happens. Click any row to jump to its matching audit log entry — CostPilot scrolls, highlights, and opens the rationale.", position:"top" },
