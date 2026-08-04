@@ -120,6 +120,14 @@ def _salesforce_package_install_error(payload: dict) -> str:
     return message[:500] or "Salesforce could not complete the CostPilot installation."
 
 
+def _salesforce_oauth_error_reason(error: str, description: str) -> str:
+    if error == "OAUTH_EC_APP_NOT_FOUND":
+        return "package_required"
+    if error == "OAUTH_AUTHORIZATION_BLOCKED" and "Cross-org" in description:
+        return "cross_org_oauth"
+    return "oauth_denied"
+
+
 def _new_pkce_pair() -> tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(
@@ -1023,11 +1031,7 @@ async def salesforce_callback(
         mapping.pop("_oauth_pkce_verifier", None)
         item.mapping_json = json.dumps(mapping)
         db.commit()
-        reason = (
-            "cross_org_oauth"
-            if error == "OAUTH_AUTHORIZATION_BLOCKED" and "Cross-org" in description
-            else "oauth_denied"
-        )
+        reason = _salesforce_oauth_error_reason(error, description)
         return RedirectResponse(
             url=(
                 f"/salesforce-setup.html?status=error"

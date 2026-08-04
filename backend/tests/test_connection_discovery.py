@@ -17,6 +17,7 @@ from api.routes_connections import (
     _new_salesforce_workspace,
     _populate_salesforce_costpilot_credential,
     _salesforce_package_install_error,
+    _salesforce_oauth_error_reason,
     _servicenow_auth_base,
     approve_mapping,
     approve_salesforce_package_relationships,
@@ -67,6 +68,14 @@ def test_salesforce_package_compile_failure_never_tells_customer_to_fix_code():
     })
     assert "CostPilot did not change that code" in message
     assert "no CostPilot user should edit unrelated code" in message
+
+
+def test_salesforce_missing_external_app_has_dedicated_customer_reason():
+    assert _salesforce_oauth_error_reason(
+        "OAUTH_EC_APP_NOT_FOUND",
+        "External client app is not installed in this org",
+    ) == "package_required"
+    assert _salesforce_oauth_error_reason("access_denied", "User denied access") == "oauth_denied"
 
 
 def test_salesforce_package_install_compiles_only_costpilot_apex(monkeypatch):

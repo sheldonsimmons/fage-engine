@@ -75,6 +75,7 @@
       font-weight: 750;
       text-decoration: none;
     }
+    #errorAction[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -94,6 +95,7 @@
       </ol>
       <a class="button" href="javascript:window.close()">Return to Salesforce</a>
     </div>
+    <a class="button" id="errorAction" href="/onboarding.html" hidden>Return to CostPilot</a>
   </main>
   <script>
     const params = new URLSearchParams(location.search);
@@ -119,12 +121,20 @@
       const messages = {
         oauth_not_configured: "CostPilot's Salesforce authorization service is not configured.",
         cross_org_oauth: "This CostPilot OAuth app is currently restricted to its publisher org. CostPilot must use the packaged, customer-installable authorization app before this org can connect.",
+        package_required: "CostPilot for Salesforce must be installed in this Salesforce org before the secure connection can be authorized. You did not deny access, and no customer code needs to be changed.",
         oauth_denied: "Salesforce did not authorize CostPilot. Return to Salesforce and try the connection again.",
         oauth_incomplete: "Salesforce returned an incomplete authorization response. Return to Salesforce and try the connection again.",
         org_mismatch: "The Salesforce organization you authorized was not the organization where the package is installed.",
         credential_provisioning: "Salesforce authorization succeeded, but the packaged encrypted credential could not be activated."
       };
       detail.textContent = messages[reason] || "The secure connection could not be completed.";
+      const action = document.getElementById("errorAction");
+      action.hidden = false;
+      if (reason === "package_required") {
+        document.getElementById("summary").textContent =
+          "Nothing was activated. Salesforce requires the CostPilot package before it can authorize the packaged connection app.";
+        action.textContent = "Return to CostPilot setup";
+      }
     }
   </script>
 </body>
