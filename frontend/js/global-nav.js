@@ -2,7 +2,7 @@
   "use strict";
 
   const primaryItems = [
-    { label: "Executive", href: "/index.html", paths: ["/", "/index.html"] },
+    { label: "Overview", href: "/index.html", paths: ["/", "/index.html"] },
     { label: "Operate", href: "/operate.html", paths: ["/operate.html"] },
     { label: "Projects", href: "/work-items.html", paths: ["/work-items.html"] },
     { label: "Reports", href: "/reports.html", paths: ["/reports.html"] },
@@ -24,7 +24,7 @@
 
   const workspaceOptions = [
     { id: "4BE43240A6674314", label: "Salesforce Pilot", kind: "Live workspace" },
-    { id: "SIM-HISTORICAL-2Y", label: "Executive Demo", kind: "Simulated history" },
+    { id: "SIM-HISTORICAL-2Y", label: "Historical Demo", kind: "Simulated history" },
   ];
 
   const currentPath = location.pathname || "/";

@@ -235,7 +235,7 @@
   box-shadow: -20px 0 50px rgba(0, 0, 0, .35);
   color: var(--text-primary, #e8eef7);
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   height: 100dvh;
   max-width: 100%;
   position: fixed;
@@ -322,9 +322,9 @@
 }
 
 .cp-ask-suggestions {
-  display: flex;
-  gap: 7px;
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   padding: 12px 20px;
 }
 .cp-ask-scope-summary {
@@ -362,13 +362,21 @@
 .cp-ask-suggestions button {
   background: var(--bg-card, #182231);
   border: 1px solid var(--border, #334155);
-  border-radius: 999px;
+  border-radius: 8px;
   color: inherit;
   cursor: pointer;
-  flex: 0 0 auto;
   font: inherit;
   font-size: 11px;
-  padding: 7px 10px;
+  line-height: 1.35;
+  min-height: 54px;
+  padding: 10px 11px;
+  text-align: left;
+}
+
+.cp-ask-suggestions button:hover,
+.cp-ask-suggestions button:focus-visible {
+  background: color-mix(in srgb, var(--accent, #3b82f6) 8%, var(--bg-card, #182231));
+  border-color: var(--accent, #60a5fa);
 }
 
 .cp-ask-messages {
@@ -513,6 +521,7 @@
 @media (max-width: 560px) {
   .cp-ask-scope-summary,
   .cp-ask-answer-scope { grid-template-columns: 1fr; }
+  .cp-ask-suggestions { grid-template-columns: 1fr; }
 }
 
 .cp-ask-error {

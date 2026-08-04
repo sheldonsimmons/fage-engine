@@ -1057,7 +1057,7 @@ function renderDiscoveredMapping(payload) {
     </div>
     ${advancedChildren.length ? `<details class="ob-advanced-relationships">
       <summary>Other valid relationships <span>${advancedChildren.length} hidden</span></summary>
-      <p>These are direct Salesforce relationships, but they are less likely to represent executive business work. They remain ignored unless you explicitly include them.</p>
+      <p>These are direct Salesforce relationships, but they are less likely to represent meaningful business work. They remain ignored unless you explicitly include them.</p>
       <div class="ob-relationship-list">
         ${advancedChildren.map((child, index) => relationshipRow(child, recommendedChildren.length + index, false)).join("")}
       </div>

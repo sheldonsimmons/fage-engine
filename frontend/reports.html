@@ -90,7 +90,7 @@
     <!-- ── Tabs ───────────────────────────────────────────────────────── -->
     <div class="rpt-navigation">
       <div class="rpt-tabs" id="rptTabRow" aria-label="Report areas">
-        <button id="rptTabSavings"  class="rpt-tab active" data-tab="savings">Executive Performance</button>
+        <button id="rptTabSavings"  class="rpt-tab active" data-tab="savings">Performance</button>
         <button id="rptTabContexts" class="rpt-tab" data-tab="contexts">Usage &amp; Attribution</button>
         <button id="rptTabRisk"     class="rpt-tab" data-tab="risk">Governance &amp; Risk</button>
       </div>
@@ -278,7 +278,7 @@
         <div class="rpt-drag-card" data-card-id="rk-exec">
           <div class="rpt-drag-bar"><span class="drag-handle" title="Drag to reorder">⠿</span></div>
           <div class="rpt-table-card">
-            <div class="rpt-table-title">Executive Summary — AI Governance ROI</div>
+            <div class="rpt-table-title">AI Governance ROI Summary</div>
             <div class="demo-exec-grid" id="execGrid" style="margin-top:16px">
               <p class="placeholder">Loading...</p>
             </div>
@@ -519,7 +519,7 @@
     <div class="rpt-pane" id="tab-departments">
 
       <div class="rpt-export-bar">
-        <button class="export-btn" onclick="openReportView('savings')">← Executive Performance</button>
+        <button class="export-btn" onclick="openReportView('savings')">← Performance</button>
         <button class="export-btn" onclick="exportDeptCsv()">⬇ CSV</button>
         <button class="export-btn" onclick="exportDeptPdf()">🖨 PDF</button>
       </div>
@@ -1082,7 +1082,7 @@
   <script>
   window.PAGE_TOUR_STEPS = [
     { target:"rptDatePreset",    title:"Time Range",              body:"Change the reporting period — every chart and KPI updates instantly. Choose from presets or set a custom date range.",                                                           position:"bottom" },
-    { target:"rptTabSavings",    title:"Executive Performance",  body:"Start with spend, savings, request volume, and model routing. Open department detail when you need the organizational breakdown.",                                                   position:"bottom" },
+    { target:"rptTabSavings",    title:"Performance",            body:"Start with spend, savings, request volume, and model routing. Open department detail when you need the organizational breakdown.",                                                   position:"bottom" },
     { target:"sv-total-saved",   title:"Total Saved",             body:"Headline ROI — tokens pruned plus the cost difference between economy and flagship tiers across all routed calls.",                                                             position:"bottom" },
     { target:"sv-no-fage",       title:"Without CostPilot Baseline",   body:"Estimated cost if every call had gone to flagship with no pruning. The gap between this and Actual Cost is your CostPilot ROI.",                                                    position:"bottom" },
     { target:"sv-calls",         title:"Call Volume Split",       body:"Total calls routed this period with economy vs. flagship breakdown. High economy % = strong routing efficiency.",                                                               position:"bottom" },
