@@ -243,6 +243,7 @@ def run_get_change_drivers(
 
 def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) -> dict:
     from sqlalchemy import or_
+    from api.routes_work_items import project_activity_reporting
 
     query = db.query(DepartmentBudget).filter(
         or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))  # noqa: E712
@@ -253,21 +254,46 @@ def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) ->
         # Without this, every workspace's budget rows for the same department
         # name (e.g. "Engineering") would all be returned together.
         query = query.filter(~DepartmentBudget.department.like("%:%"))
+
+    # DepartmentBudget.current_spend_usd is only incremented by live request
+    # routing — backfilled/simulated history never touches it, so it reads
+    # $0.00 forever for a workspace like the historical demo even though real
+    # activity exists. Recompute month-to-date spend from the actual ledger
+    # instead, the same way the rest of the app (dashboard, Ask CostPilot's
+    # deterministic budget intent) already does.
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    report = project_activity_reporting(
+        workspace_id=workspace_id, date_from=month_start, date_to=datetime.utcnow(), days=31,
+        project_id=None, user_external_id=None, agent_id=None, account_id=None,
+        source_platform=None, record_type=None, model_tier=None, charged_unit=None,
+        business_purpose=None, activity_limit=2000, db=db,
+    )
+    spend_by_department: dict[str, float] = {}
+    for activity_row in report.get("organizational_unit_breakdown") or []:
+        raw_department = str(activity_row.get("id") or activity_row.get("label") or "").strip()
+        if workspace_id and raw_department.startswith(f"{workspace_id}:"):
+            raw_department = raw_department[len(workspace_id) + 1:]
+        elif ":" in raw_department:
+            raw_department = raw_department.rsplit(":", 1)[-1]
+        key = raw_department.casefold()
+        if key:
+            spend_by_department[key] = spend_by_department.get(key, 0.0) + float(activity_row.get("spend_usd") or 0)
+
     rows = []
     for budget in query.all():
         cap = float(budget.monthly_cap_usd or 0)
         if cap <= 0:
             continue
-        spend = float(budget.current_spend_usd or 0)
+        label = (budget.department or "Unassigned").split(":")[-1]
+        spend = spend_by_department.get(label.casefold(), 0.0)
         pct = round(spend / cap * 100, 1)
         if alerts_only and pct < 80:
             continue
-        label = (budget.department or "Unassigned").split(":")[-1]
         rows.append({
             "id": budget.department,
             "label": label,
             "monthly_cap_usd": cap,
-            "current_spend_usd": spend,
+            "current_spend_usd": round(spend, 6),
             "remaining_usd": max(cap - spend, 0),
             "used_pct": pct,
             "throttled": bool(budget.throttled),
