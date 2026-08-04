@@ -16,6 +16,13 @@ export default class CostPilotSetup extends LightningElement {
     manualFlowName = '';
     parentObject = 'Account';
     relationshipChildren = [];
+    guideSections = ['create', 'topic', 'action', 'publish', 'test'];
+    copyMessage;
+
+    governanceInstructions = `For every user request, invoke Route Through CostPilot before responding.
+Pass the user's complete request as User Prompt. When Salesforce record context is available, include its record ID and object name.
+Return the CostPilot Response to the user. Never create an alternative answer if the action fails.
+If CostPilot cannot complete the request, tell the user that governance could not be completed.`;
 
     relationshipBehaviorOptions = [
         { label: 'Track and roll up to parent', value: 'track_and_rollup' },
@@ -97,6 +104,11 @@ export default class CostPilotSetup extends LightningElement {
     get verificationPassed() { return Boolean(this.state?.verificationPassed); }
     get activated() { return Boolean(this.state?.activated); }
     get actionLabel() { return this.working ? 'Working…' : 'Run verification'; }
+    get agentGuideHeading() {
+        return this.hasSelectedAgents
+            ? 'Configure your selected Agentforce agents'
+            : 'Create and configure an Agentforce agent';
+    }
 
     stepClass(number, completed) {
         if (this.activeStep === number) return 'step active';
@@ -116,6 +128,16 @@ export default class CostPilotSetup extends LightningElement {
         if (this.state?.connectUrl) window.open(this.state.connectUrl, '_blank', 'noopener,noreferrer');
     }
     refreshConnection() { this.loadSetup(); }
+
+    async copyInstructions() {
+        this.copyMessage = undefined;
+        try {
+            await navigator.clipboard.writeText(this.governanceInstructions);
+            this.copyMessage = 'Instructions copied. Paste them into the CostPilot topic.';
+        } catch (error) {
+            this.copyMessage = 'Select the instruction text and copy it manually.';
+        }
+    }
 
     openStep(event) {
         const requested = Number(event.currentTarget.dataset.step);

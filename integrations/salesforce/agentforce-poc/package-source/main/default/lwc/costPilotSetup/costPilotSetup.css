@@ -376,6 +376,10 @@ small {
     background: #f3f5f8;
 }
 
+.empty p {
+    margin: .3rem 0 0;
+}
+
 .manual-entry {
     align-items: flex-end;
     margin-top: .9rem;
@@ -400,6 +404,132 @@ small {
 
 .instruction-card {
     margin-bottom: 1rem;
+}
+
+.selected-agents {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .65rem;
+    margin: 1rem 0;
+    color: var(--cp-muted);
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.agent-guide {
+    display: block;
+    margin: 1rem 0;
+}
+
+.guide-body {
+    padding: .25rem .25rem .9rem;
+}
+
+.guide-body ol {
+    margin: .25rem 0 1rem;
+    padding-left: 1.35rem;
+}
+
+.guide-body li + li {
+    margin-top: .45rem;
+}
+
+.mapping-table {
+    overflow: hidden;
+    border: 1px solid var(--cp-border);
+    border-radius: .65rem;
+    background: #fff;
+}
+
+.mapping-table > div {
+    display: grid;
+    grid-template-columns: minmax(9rem, .7fr) minmax(16rem, 1.8fr);
+    gap: 1rem;
+    padding: .65rem .8rem;
+    border-bottom: 1px solid #e8edf3;
+}
+
+.mapping-table > div:last-child {
+    border-bottom: 0;
+}
+
+.mapping-table > .mapping-header {
+    background: #eef3f9;
+    color: #35445a;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.mapping-table.three-column > div {
+    grid-template-columns: minmax(8rem, .7fr) minmax(14rem, 1.6fr) minmax(6rem, .55fr);
+}
+
+.table-heading {
+    margin-top: 1rem;
+}
+
+.instruction-copy {
+    margin: 0;
+    padding: 1rem;
+    overflow: auto;
+    border: 1px solid #9db9dc;
+    border-radius: .65rem;
+    background: #f5f9ff;
+    color: #172033;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: .78rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+.copy-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-top: .75rem;
+}
+
+.copy-message {
+    color: #0b6b43;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.challenge-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: 1rem;
+}
+
+.challenge {
+    display: flex;
+    gap: .75rem;
+    padding: .9rem;
+    border: 1px solid var(--cp-border);
+    border-radius: .65rem;
+    background: #fbfcfe;
+}
+
+.challenge p {
+    margin: .25rem 0 0;
+    color: var(--cp-muted);
+}
+
+.challenge-number {
+    display: grid;
+    flex: 0 0 1.8rem;
+    width: 1.8rem;
+    height: 1.8rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--cp-blue);
+    color: #fff;
+    font-weight: 800;
 }
 
 .instruction-card ol {
@@ -429,8 +559,15 @@ small {
     .entry-grid,
     .relationship-toolbar,
     .relationship-row,
-    .management-grid {
+    .management-grid,
+    .challenge-grid {
         grid-template-columns: 1fr;
+    }
+
+    .mapping-table > div,
+    .mapping-table.three-column > div {
+        grid-template-columns: 1fr;
+        gap: .2rem;
     }
 
     .panel-heading,

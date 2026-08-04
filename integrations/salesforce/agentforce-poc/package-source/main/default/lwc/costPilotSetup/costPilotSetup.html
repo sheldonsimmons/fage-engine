@@ -72,7 +72,7 @@
                             <article class="entry-section">
                                 <div class="entry-heading"><div><h3>Agentforce agents</h3><p>Agents that can use Route Through CostPilot.</p></div><span class="kind-badge">Agentforce</span></div>
                                 <template lwc:if={hasAgents}><div class="entry-list"><template for:each={agents} for:item="agent"><div class="entry-row" key={agent.id}><lightning-input type="checkbox" label={agent.label} checked={agent.selected} data-kind="agent" data-id={agent.id} onchange={handleSelection}></lightning-input><span class="entry-meta">{agent.status}</span></div></template></div></template>
-                                <template lwc:else><p class="empty">No agents were returned. Add one by name if metadata access is limited.</p></template>
+                                <template lwc:else><div class="empty"><strong>No Agentforce agents found</strong><p>Create an agent in Setup → Agentforce Agents, then return and refresh this page. You can also add an existing agent by name below.</p></div></template>
                                 <div class="manual-entry"><lightning-input type="text" label="Agent not listed?" placeholder="Enter the agent name" value={manualAgentName} data-kind="agent" onchange={handleManualName}></lightning-input><lightning-button label="Add agent" data-kind="agent" onclick={addManualEntry}></lightning-button></div>
                             </article>
                             <article class="entry-section">
@@ -112,10 +112,95 @@
 
                 <template lwc:if={showVerification}>
                     <section class="panel">
-                        <div class="panel-heading"><div><p class="label">Step 4</p><h2>Send one governed AI request</h2><p class="meta">Add the packaged action once, then send a normal live request from a selected agent or Flow.</p></div><template lwc:if={verificationPassed}><span class="status success">Verified</span></template><template lwc:else><span class="status neutral">Waiting for test</span></template></div>
-                        <template lwc:if={hasSelectedAgents}><article class="instruction-card"><h3>Selected Agentforce agents</h3><ol><li>Open the agent and its governed-work topic.</li><li>Select <strong>Add Action → Apex → Route Through CostPilot</strong>.</li><li>Use the returned AI Response in the conversation, then send one request.</li></ol><div class="selected-chips"><template for:each={selectedAgents} for:item="agent"><span class="selected-chip" key={agent.id}>{agent.label}</span></template></div></article></template>
+                        <div class="panel-heading"><div><p class="label">Step 4 · Guided Agentforce build</p><h2>{agentGuideHeading}</h2><p class="meta">Follow the current Agentforce Builder steps below. CostPilot will not mark setup complete until a live request creates an audit record.</p></div><template lwc:if={verificationPassed}><span class="status success">Verified</span></template><template lwc:else><span class="status neutral">Configuration required</span></template></div>
+                        <template lwc:if={hasSelectedAgents}><div class="selected-agents"><span>Selected agents</span><div class="selected-chips"><template for:each={selectedAgents} for:item="agent"><span class="selected-chip" key={agent.id}>{agent.label}</span></template></div></div></template>
+
+                        <lightning-accordion allow-multiple-sections-open active-section-name={guideSections} class="agent-guide">
+                            <lightning-accordion-section name="create" label="1. Create or open the Salesforce agent">
+                                <div class="guide-body">
+                                    <ol>
+                                        <li>In Salesforce Setup, search for <strong>Agentforce Agents</strong>.</li>
+                                        <li>Open a selected agent, or choose <strong>New Agent</strong> if you have not created one.</li>
+                                        <li>Use the recommended values below, then open the agent in the current Agentforce Builder.</li>
+                                    </ol>
+                                    <div class="mapping-table" role="table" aria-label="Recommended agent values">
+                                        <div class="mapping-header" role="row"><span role="columnheader">Field</span><span role="columnheader">Recommended value</span></div>
+                                        <div role="row"><strong role="cell">Label</strong><span role="cell">CostPilot Sales Assistant</span></div>
+                                        <div role="row"><strong role="cell">API Name</strong><span role="cell">CostPilot_Sales_Assistant</span></div>
+                                        <div role="row"><strong role="cell">Description</strong><span role="cell">Helps sales users complete AI work governed, routed, and recorded by CostPilot.</span></div>
+                                        <div role="row"><strong role="cell">Role</strong><span role="cell">Assist sales users with research, summaries, follow-ups, and recommended actions.</span></div>
+                                        <div role="row"><strong role="cell">Company</strong><span role="cell">Use Salesforce business context while sending every AI request through CostPilot.</span></div>
+                                    </div>
+                                </div>
+                            </lightning-accordion-section>
+
+                            <lightning-accordion-section name="topic" label="2. Create the CostPilot governance topic">
+                                <div class="guide-body">
+                                    <ol>
+                                        <li>In Agentforce Builder, add a topic named <strong>CostPilot Governed AI Work</strong>.</li>
+                                        <li>Set the classification description to: <em>Handles every AI request that must be governed, routed, executed, and audited by CostPilot.</em></li>
+                                        <li>Set the scope to: <em>Route the complete user request through CostPilot and return only the governed result.</em></li>
+                                        <li>Paste the required instructions below into the topic.</li>
+                                    </ol>
+                                    <pre class="instruction-copy">{governanceInstructions}</pre>
+                                    <div class="copy-row"><lightning-button label="Copy governance instructions" icon-name="utility:copy" onclick={copyInstructions}></lightning-button><template lwc:if={copyMessage}><span class="copy-message" role="status">{copyMessage}</span></template></div>
+                                </div>
+                            </lightning-accordion-section>
+
+                            <lightning-accordion-section name="action" label="3. Add and map Route Through CostPilot">
+                                <div class="guide-body">
+                                    <ol>
+                                        <li>Inside the CostPilot topic, select <strong>Add Action</strong>.</li>
+                                        <li>Choose <strong>Apex</strong>, then select <strong>Route Through CostPilot</strong>.</li>
+                                        <li>Map the inputs and expose the outputs exactly as shown.</li>
+                                    </ol>
+                                    <h3>Inputs</h3>
+                                    <div class="mapping-table three-column" role="table" aria-label="CostPilot action inputs">
+                                        <div class="mapping-header" role="row"><span role="columnheader">Input</span><span role="columnheader">Salesforce value</span><span role="columnheader">Required</span></div>
+                                        <div role="row"><strong role="cell">User Prompt</strong><span role="cell">Complete user request</span><span role="cell">Yes</span></div>
+                                        <div role="row"><strong role="cell">Record ID</strong><span role="cell">Current record ID when available</span><span role="cell">No</span></div>
+                                        <div role="row"><strong role="cell">Object Name</strong><span role="cell">Current Salesforce object API name</span><span role="cell">No</span></div>
+                                        <div role="row"><strong role="cell">Agent Name</strong><span role="cell">Current agent label or API name</span><span role="cell">Recommended</span></div>
+                                        <div role="row"><strong role="cell">Department</strong><span role="cell">Sales or the owning department</span><span role="cell">Recommended</span></div>
+                                        <div role="row"><strong role="cell">Context JSON</strong><span role="cell">Optional grounded business context</span><span role="cell">No</span></div>
+                                    </div>
+                                    <h3 class="table-heading">Outputs</h3>
+                                    <div class="mapping-table" role="table" aria-label="CostPilot action outputs">
+                                        <div class="mapping-header" role="row"><span role="columnheader">Output</span><span role="columnheader">Use</span></div>
+                                        <div role="row"><strong role="cell">CostPilot Response</strong><span role="cell">Return this governed answer to the user.</span></div>
+                                        <div role="row"><strong role="cell">Model Tier</strong><span role="cell">CostPilot tier selected for the request.</span></div>
+                                        <div role="row"><strong role="cell">Risk Level / Outcome</strong><span role="cell">Governance and routing result.</span></div>
+                                        <div role="row"><strong role="cell">Blocked</strong><span role="cell">Stop instead of producing an alternative answer.</span></div>
+                                        <div role="row"><strong role="cell">Audit ID</strong><span role="cell">Permanent evidence that the request completed through CostPilot.</span></div>
+                                    </div>
+                                </div>
+                            </lightning-accordion-section>
+
+                            <lightning-accordion-section name="publish" label="4. Save, publish, and activate the correct version">
+                                <div class="guide-body">
+                                    <ol>
+                                        <li>Save the topic and resolve every Agentforce validation error.</li>
+                                        <li>Publish the agent. Salesforce creates a new numbered version.</li>
+                                        <li>Open the version list and confirm the newly published version is the active version.</li>
+                                        <li>If an older version is active, activate the new version before testing.</li>
+                                    </ol>
+                                    <div class="notice warning compact"><strong>Publishing is not activation</strong><span>A successful publish can leave an older agent version active. Test only after confirming the new version is active.</span></div>
+                                </div>
+                            </lightning-accordion-section>
+
+                            <lightning-accordion-section name="test" label="5. Run the two verification challenges">
+                                <div class="guide-body">
+                                    <div class="challenge-grid">
+                                        <article class="challenge"><span class="challenge-number">A</span><div><strong>Standalone agent request</strong><p>Draft a two-sentence follow-up email after a successful sales discovery call.</p></div></article>
+                                        <article class="challenge"><span class="challenge-number">B</span><div><strong>Record-based request</strong><p>From an Account or Opportunity: Summarize this record and recommend the next sales action.</p></div></article>
+                                    </div>
+                                    <p class="meta">Return here after sending a request. Verification must find a live Salesforce Agentforce audit record created after setup began.</p>
+                                </div>
+                            </lightning-accordion-section>
+                        </lightning-accordion>
+
                         <template lwc:if={hasSelectedFlows}><article class="instruction-card"><h3>Selected Flows</h3><ol><li>Add an Action element at the AI request point.</li><li>Choose <strong>Route Through CostPilot</strong> and map prompt plus record context.</li><li>Run the Flow once.</li></ol><div class="selected-chips"><template for:each={selectedFlows} for:item="flow"><span class="selected-chip" key={flow.id}>{flow.label}</span></template></div></article></template>
-                        <div class="notice info"><strong>The only manual Salesforce step</strong><span>An installed package cannot silently modify an existing agent topic or active Flow. The action is already included.</span></div>
+                        <div class="notice info"><strong>Why these steps are manual</strong><span>Salesforce requires an administrator to review and publish changes to an existing agent. CostPilot provides the packaged action, exact mappings, and live proof that the active agent uses it.</span></div>
                         <template lwc:if={state.verificationMessage}><div class="notice verification"><strong>Verification result</strong><span>{state.verificationMessage}</span></div></template>
                         <div class="footer-actions"><p>CostPilot checks for a live Salesforce-originated governed request after setup began.</p><lightning-button variant="brand" label={actionLabel} onclick={runVerification} disabled={working}></lightning-button></div>
                     </section>
