@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import api.routes_connections as connection_routes
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -15,12 +16,14 @@ from api.routes_connections import (
     _new_context_changes,
     _new_salesforce_workspace,
     _populate_salesforce_costpilot_credential,
+    _salesforce_package_install_error,
     _servicenow_auth_base,
     approve_mapping,
     approve_salesforce_package_relationships,
     activate_salesforce_package_connection,
     create_connection,
     discover_salesforce_ai_entry_points,
+    install_salesforce_package,
     list_connections,
     recommend_business_mapping,
     recommend_child_relationships,
@@ -56,6 +59,65 @@ def test_salesforce_field_metadata_produces_explainable_recommendations():
     assert mapping["status"]["field"] == "Status__c"
     assert mapping["content"]["field"] == "Description__c"
     assert all(value["confidence"] in {"high", "medium"} for value in mapping.values())
+
+
+def test_salesforce_package_compile_failure_never_tells_customer_to_fix_code():
+    message = _salesforce_package_install_error({
+        "Errors": [{"message": "Apex compile failure in ExperienceControllerTest"}],
+    })
+    assert "CostPilot did not change that code" in message
+    assert "no CostPilot user should edit unrelated code" in message
+
+
+def test_salesforce_package_install_compiles_only_costpilot_apex(monkeypatch):
+    db = _session()
+    item = IntegrationConnection(
+        workspace_id="ORG-A",
+        platform="salesforce",
+        display_name="Salesforce",
+        status="connected",
+        instance_url="https://example.my.salesforce.com",
+        access_token_encrypted="encrypted",
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    captured = {}
+
+    class FakeResponse:
+        status_code = 201
+
+        @staticmethod
+        def json():
+            return {"id": "0Hf000000000001AAA", "success": True}
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, headers, json):
+            captured.update({"url": url, "headers": headers, "json": json})
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        connection_routes,
+        "_require_connected_salesforce",
+        lambda _item: ("https://example.my.salesforce.com", "token"),
+    )
+    monkeypatch.setattr(connection_routes.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(install_salesforce_package(item.id, db=db))
+
+    assert result["status"] == "in_progress"
+    assert captured["json"]["ApexCompileType"] == "package"
+    assert captured["json"]["SubscriberPackageVersionKey"] == "04tfj000000PZSPAA4"
+    assert captured["headers"]["Authorization"] == "Bearer token"
 
 
 def test_context_discovery_baseline_does_not_create_false_changes():

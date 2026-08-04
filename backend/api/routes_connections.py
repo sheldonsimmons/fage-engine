@@ -28,6 +28,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 SUPPORTED_PLATFORMS = {"salesforce", "servicenow", "hubspot"}
 SALESFORCE_API_VERSION = os.getenv("SALESFORCE_API_VERSION", "v65.0")
+SALESFORCE_PACKAGE_VERSION_ID = os.getenv(
+    "SALESFORCE_PACKAGE_VERSION_ID",
+    "04tfj000000PZSPAA4",
+)
 SERVICENOW_DEFAULT_TABLES = {
     "incident",
     "problem",
@@ -92,6 +96,28 @@ class PackageRelationshipChild(BaseModel):
 class PackageRelationshipApproval(BaseModel):
     parent_object: str = Field(default="Account", min_length=1, max_length=160)
     children: list[PackageRelationshipChild] = Field(default_factory=list, max_length=100)
+
+
+def _salesforce_package_install_error(payload: dict) -> str:
+    """Turn Salesforce installer output into customer-safe guidance."""
+    raw_errors = payload.get("Errors") or payload.get("errors") or []
+    if isinstance(raw_errors, dict):
+        raw_errors = raw_errors.get("errors") or raw_errors.get("records") or [raw_errors]
+    if not isinstance(raw_errors, list):
+        raw_errors = [raw_errors]
+    message = " ".join(
+        str(value.get("message") or value.get("Message") or value)
+        for value in raw_errors
+        if value
+    ).strip()
+    lowered = message.lower()
+    if "apex compile" in lowered or "compile failure" in lowered:
+        return (
+            "This Salesforce org requires existing Apex to compile during package installation. "
+            "CostPilot did not change that code. Send this diagnostic to the Salesforce administrator; "
+            "no CostPilot user should edit unrelated code."
+        )
+    return message[:500] or "Salesforce could not complete the CostPilot installation."
 
 
 def _new_pkce_pair() -> tuple[str, str]:
@@ -381,6 +407,14 @@ def _get_connection(db: Session, connection_id: int) -> IntegrationConnection:
     if not item:
         raise HTTPException(status_code=404, detail="Connection was not found")
     return item
+
+
+def _require_connected_salesforce(item: IntegrationConnection) -> tuple[str, str]:
+    if item.platform != "salesforce":
+        raise HTTPException(status_code=400, detail="This action requires a Salesforce connection")
+    if not item.instance_url or not item.access_token_encrypted:
+        raise HTTPException(status_code=409, detail="Connect Salesforce before installing CostPilot")
+    return item.instance_url.rstrip("/"), _decrypt(item.access_token_encrypted)
 
 
 def _salesforce_auth_base(value: Optional[str]) -> str:
@@ -780,6 +814,112 @@ def create_connection(body: ConnectionCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(item)
     return _public_connection(item)
+
+
+@router.post("/{connection_id}/salesforce-package-install")
+async def install_salesforce_package(connection_id: int, db: Session = Depends(get_db)):
+    """Install CostPilot without compiling unrelated subscriber Apex."""
+    item = _get_connection(db, connection_id)
+    instance_url, access_token = _require_connected_salesforce(item)
+    mapping = _json_object(item.mapping_json)
+    install = mapping.get("salesforce_package_install")
+    if not isinstance(install, dict):
+        install = {}
+    if install.get("request_id") and install.get("status") in {"in_progress", "success"}:
+        return {
+            "status": install["status"],
+            "installed": install["status"] == "success",
+            "message": install.get("message"),
+        }
+
+    endpoint = f"{instance_url}/services/data/{SALESFORCE_API_VERSION}/tooling/sobjects/PackageInstallRequest"
+    payload = {
+        "SubscriberPackageVersionKey": SALESFORCE_PACKAGE_VERSION_ID,
+        "NameConflictResolution": "Block",
+        "SecurityType": "None",
+        "PackageInstallSource": "U",
+        "ApexCompileType": "package",
+        "UpgradeType": "mixed-mode",
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {access_token}"},
+            json=payload,
+        )
+    try:
+        result = response.json()
+    except (TypeError, ValueError):
+        result = {}
+    if response.status_code >= 400 or not result.get("id"):
+        message = _salesforce_package_install_error(result)
+        mapping["salesforce_package_install"] = {"status": "error", "message": message}
+        item.mapping_json = json.dumps(mapping)
+        item.last_error = message
+        db.commit()
+        raise HTTPException(status_code=502, detail=message)
+
+    mapping["salesforce_package_install"] = {
+        "request_id": result["id"],
+        "status": "in_progress",
+        "message": "Salesforce is installing CostPilot. You can keep this page open.",
+    }
+    item.mapping_json = json.dumps(mapping)
+    item.last_error = None
+    db.commit()
+    return {
+        "status": "in_progress",
+        "installed": False,
+        "message": "Salesforce is installing CostPilot. You can keep this page open.",
+    }
+
+
+@router.get("/{connection_id}/salesforce-package-install")
+async def get_salesforce_package_install(connection_id: int, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id)
+    instance_url, access_token = _require_connected_salesforce(item)
+    mapping = _json_object(item.mapping_json)
+    install = mapping.get("salesforce_package_install")
+    if not isinstance(install, dict) or not install.get("request_id"):
+        return {"status": "not_started", "installed": False}
+
+    request_id = quote(str(install["request_id"]), safe="")
+    endpoint = (
+        f"{instance_url}/services/data/{SALESFORCE_API_VERSION}"
+        f"/tooling/sobjects/PackageInstallRequest/{request_id}"
+    )
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(endpoint, headers={"Authorization": f"Bearer {access_token}"})
+    try:
+        result = response.json()
+    except (TypeError, ValueError):
+        result = {}
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail="CostPilot could not read Salesforce installation progress. Try again shortly.",
+        )
+
+    raw_status = str(result.get("Status") or "UNKNOWN").upper()
+    status = {
+        "SUCCESS": "success",
+        "IN_PROGRESS": "in_progress",
+        "ERROR": "error",
+        "CANCELED": "error",
+    }.get(raw_status, "in_progress")
+    message = (
+        "CostPilot is installed and ready for guided setup."
+        if status == "success"
+        else _salesforce_package_install_error(result)
+        if status == "error"
+        else "Salesforce is installing CostPilot. You can keep this page open."
+    )
+    install.update({"status": status, "message": message})
+    mapping["salesforce_package_install"] = install
+    item.mapping_json = json.dumps(mapping)
+    item.last_error = message if status == "error" else None
+    db.commit()
+    return {"status": status, "installed": status == "success", "message": message}
 
 
 @router.get("/{connection_id}")

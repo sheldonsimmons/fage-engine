@@ -786,7 +786,7 @@ async function connectPlatformDiscovery(platform, authBaseUrl) {
   }
 }
 
-function restoreOAuthDiscovery() {
+async function restoreOAuthDiscovery() {
   const params = new URLSearchParams(window.location.search || "");
   if (params.get("oauth") !== "success" || !params.get("connection_id")) return;
   obDiscoveryConnectionId = Number(params.get("connection_id"));
@@ -798,8 +798,43 @@ function restoreOAuthDiscovery() {
   document.getElementById("screen-5")?.classList.add("active");
   selectObPlatform(obDiscoveryPlatform);
   setUniversalSetupStage(3);
-  loadDiscoveryObjects();
   window.history.replaceState({}, "", "/onboarding.html");
+  if (obDiscoveryPlatform === "salesforce") {
+    const installed = await ensureSalesforcePackageInstalled();
+    if (!installed) return;
+  }
+  loadDiscoveryObjects();
+}
+
+async function ensureSalesforcePackageInstalled() {
+  const status = document.getElementById("obDiscoveryStatus");
+  if (!status || !obDiscoveryConnectionId) return false;
+  status.innerHTML = `<div class="ob-discovery-status">Checking CostPilot for Salesforce…</div>`;
+  try {
+    let response = await fetch(
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/salesforce-package-install`,
+      { method: "POST" },
+    );
+    let result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "Salesforce could not start the CostPilot installation.");
+    for (let attempt = 0; result.status === "in_progress" && attempt < 90; attempt += 1) {
+      status.innerHTML = `<div class="ob-discovery-status">${_obEsc(result.message || "Salesforce is installing CostPilot…")}</div>`;
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      response = await fetch(
+        `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/salesforce-package-install`,
+      );
+      result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "Installation progress is temporarily unavailable.");
+    }
+    if (result.status !== "success") {
+      throw new Error(result.message || "The installation is taking longer than expected. Refresh this page to continue checking.");
+    }
+    status.innerHTML = `<div class="ob-discovery-status">CostPilot is installed. Finding your Salesforce business objects…</div>`;
+    return true;
+  } catch (error) {
+    status.innerHTML = `<div class="ob-error"><strong>CostPilot was not installed.</strong><br>${_obEsc(error.message)}<br><button type="button" class="ob-btn-primary" onclick="ensureSalesforcePackageInstalled().then(installed => installed && loadDiscoveryObjects())">Try installation again</button></div>`;
+    return false;
+  }
 }
 
 async function restoreServerOnboardingProgress() {
