@@ -2011,20 +2011,32 @@ function askEvidenceButton(item, data) {
 
 function renderAskBudgetFlag(flag) {
   if (!flag || !flag.severity || flag.severity === "unknown") return "";
+  const rows = [];
+
   if (flag.severity === "ok") {
-    return `<div class="ask-budget-flag severity-ok">✅ No departments over budget for the active workspace.</div>`;
+    rows.push(`<div class="ask-budget-flag severity-ok">✅ No departments over budget for the active workspace.</div>`);
+  } else {
+    const overNames = (flag.over_budget || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
+    const nearNames = (flag.near_cap || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
+    const parts = [];
+    if (overNames.length) parts.push(`🚨 <strong>${overNames.length} over budget:</strong> ${overNames.join(", ")}`);
+    if (nearNames.length) parts.push(`⚠️ <strong>${nearNames.length} near cap:</strong> ${nearNames.join(", ")}`);
+    const severity = flag.severity === "critical" ? "critical" : "warning";
+    rows.push(`<div class="ask-budget-flag severity-${severity}">${parts.join(" &nbsp;·&nbsp; ")}</div>`);
   }
-  const overNames = (flag.over_budget || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
-  const nearNames = (flag.near_cap || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
-  const parts = [];
-  if (overNames.length) {
-    parts.push(`🚨 <strong>${overNames.length} over budget:</strong> ${overNames.join(", ")}`);
+
+  // Unscoped: checks every workspace in the system, not just the active one.
+  const globalOver = flag.global_over_budget || [];
+  if (globalOver.length) {
+    const items = globalOver.map(d =>
+      `${escapeHtml(d.department || "Unknown")} (${escapeHtml(d.workspace_label || "Unknown")}, ${d.used_pct}%)`
+    ).join(", ");
+    rows.push(`<div class="ask-budget-flag severity-critical">
+      🌐 <strong>Anywhere in the system:</strong> ${globalOver.length} department${globalOver.length !== 1 ? "s" : ""} over budget — ${items}
+    </div>`);
   }
-  if (nearNames.length) {
-    parts.push(`⚠️ <strong>${nearNames.length} near cap:</strong> ${nearNames.join(", ")}`);
-  }
-  const severity = flag.severity === "critical" ? "critical" : "warning";
-  return `<div class="ask-budget-flag severity-${severity}">${parts.join(" &nbsp;·&nbsp; ")}</div>`;
+
+  return rows.join("");
 }
 
 function renderAskCostPilotAnswer(data) {

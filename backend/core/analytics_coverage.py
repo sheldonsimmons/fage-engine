@@ -299,3 +299,45 @@ def workspace_attention_signals(db, workspace_id: Optional[str], limit: int = 5)
         })
 
     return signals[:limit]
+
+
+def any_workspace_over_budget(db) -> list[dict]:
+    """
+    Answer the plain question "is anything, anywhere, over budget" — scans
+    every non-archived DepartmentBudget row across every workspace, ignoring
+    whichever workspace happens to be selected in the UI. This database has
+    several coexisting workspaces (a real trial, a historical demo, several
+    unrelated simulated industry scenarios); every other budget check in
+    this app is scoped to just one of them at a time, which is correct for
+    "how is my workspace doing" but wrong for "is anything over budget,
+    period" — this is the one check that isn't scoped to anything.
+
+    Each result: {department, workspace_label, spend_usd, cap_usd, used_pct}.
+    """
+    if db is None:
+        return []
+
+    rows = db.query(DepartmentBudget).filter(
+        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))  # noqa: E712
+    ).all()
+    over = []
+    for budget in rows:
+        cap = float(budget.monthly_cap_usd or 0)
+        if cap <= 0:
+            continue
+        spend = float(budget.current_spend_usd or 0)
+        pct = round(spend / cap * 100, 1)
+        if pct < 100:
+            continue
+        department = str(budget.department or "")
+        workspace_label = department.split(":")[0] if ":" in department else "Default"
+        label = department.split(":")[-1] or "Unassigned"
+        over.append({
+            "department": label,
+            "workspace_label": workspace_label,
+            "spend_usd": round(spend, 2),
+            "cap_usd": cap,
+            "used_pct": pct,
+        })
+    over.sort(key=lambda row: -row["used_pct"])
+    return over

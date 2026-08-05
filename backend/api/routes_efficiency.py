@@ -47,6 +47,7 @@ from core.analytics_periods import (
     resolve_primary_period,
 )
 from core.analytics_coverage import (
+    any_workspace_over_budget,
     comparison_data_coverage,
     workspace_analytics_settings,
     workspace_attention_signals,
@@ -2468,10 +2469,22 @@ def _ask_budget_flag(db: Session, workspace_id: Optional[str]) -> dict:
     over_budget = [s for s in signals if s.get("type") == "budget_exceeded"]
     near_cap = [s for s in signals if s.get("type") == "budget_near_cap"]
     severity = "critical" if over_budget else "warning" if near_cap else "ok"
+
+    # A separate, always-unscoped check: is anything over budget ANYWHERE,
+    # regardless of which workspace is currently selected. This database has
+    # several coexisting workspaces; every check above only looks at the one
+    # that's active. This one deliberately ignores workspace_id entirely.
+    try:
+        global_over = any_workspace_over_budget(db)
+    except Exception as exc:
+        logger.warning("Ask CostPilot global budget scan failed: %s", exc)
+        global_over = []
+
     return {
         "severity": severity,
         "over_budget": [{"department": s.get("department"), "detail": s.get("detail")} for s in over_budget],
         "near_cap": [{"department": s.get("department"), "detail": s.get("detail")} for s in near_cap],
+        "global_over_budget": global_over,
     }
 
 
