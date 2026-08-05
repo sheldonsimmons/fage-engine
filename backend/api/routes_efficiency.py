@@ -2280,11 +2280,22 @@ def _ask_agent_final_payload(
 
     evidence = []
     calculation = None
+    period = None
     data_scope = None
+    live_requests = 0
+    simulator_requests = 0
     cited_departments: set[str] = set()
     for tool_name, _args, result in tool_call_log:
+        # Later tool calls' period/scope win, since they're closer to what the
+        # final answer is actually about — but any tool result is better than
+        # none, so only overwrite with a real value.
+        period = result.get("period") or period
+        data_scope = result.get("data_scope") or data_scope
+        summary = result.get("summary") or {}
+        live_requests = int(summary.get("live_count") or 0) or live_requests
+        simulator_requests = int(summary.get("simulation_count") or 0) or simulator_requests
+
         if tool_name == "get_usage_report":
-            data_scope = result.get("data_scope") or data_scope
             for row in (result.get("top_departments") or [])[:3]:
                 evidence.append({
                     "label": row.get("label"),
@@ -2323,7 +2334,12 @@ def _ask_agent_final_payload(
         "evidence": evidence,
         "recommendations": [],
         "calculation": calculation,
-        "data_provenance": {"data_scope": data_scope or "unknown"},
+        "period": period,
+        "data_provenance": {
+            "scope": data_scope or "no_activity",
+            "live_requests": live_requests,
+            "simulator_requests": simulator_requests,
+        },
         "assistant_mode": "agent_tool_loop",
     }
 

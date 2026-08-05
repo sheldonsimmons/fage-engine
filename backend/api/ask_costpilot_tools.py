@@ -176,6 +176,18 @@ def _period_bounds(days: int, period_key: str) -> tuple[Optional[datetime], Opti
     return period.start, period.end
 
 
+def scope_from_summary(summary: dict) -> str:
+    live = int(summary.get("live_count") or 0)
+    simulation = int(summary.get("simulation_count") or 0)
+    if live and simulation:
+        return "mixed"
+    if simulation:
+        return "simulator"
+    if live:
+        return "live"
+    return "no_activity"
+
+
 def run_get_usage_report(db, workspace_id: Optional[str], reporting_filters: dict, days: int, period_key: str) -> dict:
     from api.routes_work_items import project_activity_reporting
 
@@ -198,12 +210,7 @@ def run_get_usage_report(db, workspace_id: Optional[str], reporting_filters: dic
         "top_departments": (report.get("organizational_unit_breakdown") or [])[:5],
         "top_platforms": (report.get("source_platform_breakdown") or [])[:5],
         "top_models": (report.get("model_breakdown") or [])[:5],
-        "data_scope": (
-            "mixed" if summary.get("live_count") and summary.get("simulation_count")
-            else "simulator" if summary.get("simulation_count")
-            else "live" if summary.get("live_count")
-            else "no_activity"
-        ),
+        "data_scope": scope_from_summary(summary),
     }
 
 
@@ -234,10 +241,13 @@ def run_get_change_drivers(
         metric, dimension, decomposition["absolute_change"], limit=5,
     )
     return {
+        "period": current_report.get("period"),
         "period_comparison": plan.contract(),
         "decomposition": decomposition,
         "top_contributors": contributors,
         "top_contributor": top_contributor(contributors),
+        "data_scope": scope_from_summary(current_summary),
+        "summary": current_summary,
     }
 
 
@@ -299,7 +309,13 @@ def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) ->
             "throttled": bool(budget.throttled),
         })
     rows.sort(key=lambda row: -row["used_pct"])
-    return {"departments": rows}
+    summary = report.get("summary") or {}
+    return {
+        "departments": rows,
+        "period": report.get("period"),
+        "data_scope": scope_from_summary(summary),
+        "summary": summary,
+    }
 
 
 def run_get_product_help(topic: str) -> dict:
