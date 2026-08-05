@@ -85,8 +85,10 @@ def ensure_agent_departments_have_budgets(db: Session) -> bool:
 
     missing = sorted(dept for dept in agent_departments if dept not in existing)
     for dept in missing:
+        prefix, sep, _label = str(dept).partition(":")
         db.add(DepartmentBudget(
             department=dept,
+            workspace_id=prefix if sep else "default",
             monthly_cap_usd=_default_cap_for(dept),
             current_spend_usd=0.0,
             period_start=datetime.utcnow(),
@@ -96,12 +98,24 @@ def ensure_agent_departments_have_budgets(db: Session) -> bool:
     return bool(missing)
 
 
-def get_all_budgets(db: Session) -> list:
-    """Return budget status for every department, enriched with usage metrics."""
+def get_all_budgets(db: Session, workspace_id: str | None = None) -> list:
+    """
+    Return budget status for every department in one workspace, enriched
+    with usage metrics. Without workspace scoping this returned every
+    workspace's rows together — the Admin > Budgets page then summed
+    same-named departments across all of them (see displayBudgetRows in
+    frontend/js/budget.js), silently blending unrelated accounts' spend
+    into one misleading total. workspace_id=None means the legacy
+    unscoped "default" bucket specifically, matching every other budget
+    lookup in this app (Ask CostPilot, the dashboard) — never "every
+    workspace pooled together."
+    """
     dirty = ensure_agent_departments_have_budgets(db)
     if dirty:
         db.flush()
-    budgets = db.query(DepartmentBudget).all()
+    budgets = db.query(DepartmentBudget).filter(
+        DepartmentBudget.workspace_id == (workspace_id or "default")
+    ).all()
     for b in budgets:
         dirty = reconcile_throttle_state(b) or dirty
     if dirty:

@@ -3298,7 +3298,13 @@ def _ask_costpilot_answer(
             elif ":" in raw_budget_department:
                 raw_budget_department = raw_budget_department.rsplit(":", 1)[-1]
             activity = activity_by_department.get(raw_budget_department.casefold(), {})
-            spent = float(activity.get("spend") or 0)
+            # current_spend_usd is the same live-tracked counter Admin >
+            # Budgets displays and real throttling enforcement acts on —
+            # it must be the source of truth here too, not a recompute
+            # from the activity ledger (which disagreed with Admin for
+            # every real workspace, since the counter isn't scoped to a
+            # rolling window the way this ledger recompute is).
+            spent = float(budget.current_spend_usd or 0)
             matched_requests = int(activity.get("requests") or 0)
             pct = spent / cap * 100 if cap > 0 else 0
             if cap <= 0:

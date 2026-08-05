@@ -618,7 +618,7 @@ async function refreshAdminOverview() {
   if (!metrics || !attention) return;
   try {
     const [budgets, agents] = await Promise.all([
-      apiGet("/api/budget"),
+      apiGet(scopedApiPath("/api/budget")),
       apiGet("/api/agents")
     ]);
     const activeBudgets = (typeof displayBudgetRows === "function" ? displayBudgetRows(budgets) : budgets)

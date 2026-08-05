@@ -253,55 +253,32 @@ def run_get_change_drivers(
 
 def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) -> dict:
     from sqlalchemy import or_
-    from api.routes_work_items import project_activity_reporting
 
+    # DepartmentBudget.current_spend_usd is the same live-tracked counter
+    # the Admin > Budgets page displays and real throttling enforcement
+    # acts on — it must be the single source of truth here too. An earlier
+    # version of this function recomputed spend from the transaction ledger
+    # instead (to work around that counter reading $0 for the backfilled
+    # historical-demo workspace, which never routes through live enforcement)
+    # but that made Ask CostPilot disagree with Admin for every *real*
+    # workspace, where the counter is the correct, authoritative number.
     query = db.query(DepartmentBudget).filter(
         or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),  # noqa: E712
-        # DepartmentBudget.workspace_id (backfilled by database/backfill_workspaces.py)
-        # is the real column now. No workspace given means the legacy
-        # "default" bucket specifically, never every workspace pooled
-        # together — which is what silently mixed unrelated workspaces'
-        # department budgets before this column existed.
         DepartmentBudget.workspace_id == (workspace_id or "default"),
     )
-
-    # DepartmentBudget.current_spend_usd is only incremented by live request
-    # routing — backfilled/simulated history never touches it, so it reads
-    # $0.00 forever for a workspace like the historical demo even though real
-    # activity exists. Recompute month-to-date spend from the actual ledger
-    # instead, the same way the rest of the app (dashboard, Ask CostPilot's
-    # deterministic budget intent) already does.
-    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    report = project_activity_reporting(
-        workspace_id=workspace_id, date_from=month_start, date_to=datetime.utcnow(), days=31,
-        project_id=None, user_external_id=None, agent_id=None, account_id=None,
-        source_platform=None, record_type=None, model_tier=None, charged_unit=None,
-        business_purpose=None, activity_limit=2000, db=db,
-    )
-    spend_by_department: dict[str, float] = {}
-    for activity_row in report.get("organizational_unit_breakdown") or []:
-        raw_department = str(activity_row.get("id") or activity_row.get("label") or "").strip()
-        if workspace_id and raw_department.startswith(f"{workspace_id}:"):
-            raw_department = raw_department[len(workspace_id) + 1:]
-        elif ":" in raw_department:
-            raw_department = raw_department.rsplit(":", 1)[-1]
-        key = raw_department.casefold()
-        if key:
-            spend_by_department[key] = spend_by_department.get(key, 0.0) + float(activity_row.get("spend_usd") or 0)
 
     rows = []
     for budget in query.all():
         cap = float(budget.monthly_cap_usd or 0)
         if cap <= 0:
             continue
-        label = (budget.department or "Unassigned").split(":")[-1]
-        spend = spend_by_department.get(label.casefold(), 0.0)
+        spend = float(budget.current_spend_usd or 0)
         pct = round(spend / cap * 100, 1)
         if alerts_only and pct < 80:
             continue
         rows.append({
             "id": budget.department,
-            "label": label,
+            "label": (budget.department or "Unassigned").split(":")[-1],
             "monthly_cap_usd": cap,
             "current_spend_usd": round(spend, 6),
             "remaining_usd": max(cap - spend, 0),
@@ -309,13 +286,7 @@ def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) ->
             "throttled": bool(budget.throttled),
         })
     rows.sort(key=lambda row: -row["used_pct"])
-    summary = report.get("summary") or {}
-    return {
-        "departments": rows,
-        "period": report.get("period"),
-        "data_scope": scope_from_summary(summary),
-        "summary": summary,
-    }
+    return {"departments": rows}
 
 
 def run_get_product_help(topic: str) -> dict:

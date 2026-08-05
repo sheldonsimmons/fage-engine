@@ -28,7 +28,7 @@ async function loadBudgets() {
   }
 
   try {
-    budgetData = await apiGet("/api/budget");
+    budgetData = await apiGet(scopedApiPath("/api/budget"));
     localStorage.setItem("fage_budgets", JSON.stringify(budgetData));
     renderBudgets();
     renderLiveBudgetBars();

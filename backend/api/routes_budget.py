@@ -9,8 +9,8 @@ POST /api/budget/{department}/revoke    — revoke override
 POST /api/budget/{department}/reset     — reset spend to zero (new month)
 """
 
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -57,9 +57,9 @@ class SetRawLoggingRequest(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[BudgetStatus])
-def list_budgets(db: Session = Depends(get_db)):
-    """Return real-time budget status for all departments."""
-    return get_all_budgets(db)
+def list_budgets(workspace_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """Return real-time budget status for all departments in one workspace."""
+    return get_all_budgets(db, workspace_id)
 
 
 @router.get("/{department}", response_model=BudgetStatus)
