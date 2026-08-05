@@ -2451,10 +2451,48 @@ about CostPilot the product. Always call exactly one tool per turn."""
         return None
 
 
+def _ask_budget_flag(db: Session, workspace_id: Optional[str]) -> dict:
+    """
+    A deterministic budget-status badge attached to every Ask CostPilot
+    answer, regardless of what was asked or which internal path produced
+    the answer. Computed the same way every time from workspace_attention_signals
+    — never narrated or phrased by a model — so "is anything over budget"
+    never depends on an LLM correctly noticing and stating it.
+    """
+    try:
+        signals = workspace_attention_signals(db, workspace_id, limit=20)
+    except Exception as exc:
+        logger.warning("Ask CostPilot budget flag lookup failed: %s", exc)
+        return {"severity": "unknown", "over_budget": [], "near_cap": []}
+
+    over_budget = [s for s in signals if s.get("type") == "budget_exceeded"]
+    near_cap = [s for s in signals if s.get("type") == "budget_near_cap"]
+    severity = "critical" if over_budget else "warning" if near_cap else "ok"
+    return {
+        "severity": severity,
+        "over_budget": [{"department": s.get("department"), "detail": s.get("detail")} for s in over_budget],
+        "near_cap": [{"department": s.get("department"), "detail": s.get("detail")} for s in near_cap],
+    }
+
+
 @router.post("/ask")
 def ask_costpilot(
     request: AskCostPilotRequest,
     db: Session = Depends(get_db),
+):
+    """Thin wrapper: guarantees the deterministic budget_flag badge is
+    attached to every answer no matter which internal path (agent loop or
+    the deterministic intent classifier, and any of their early-return
+    branches) produced it."""
+    result = _ask_costpilot_answer(request, db)
+    if isinstance(result, dict):
+        result["budget_flag"] = _ask_budget_flag(db, request.workspace_id)
+    return result
+
+
+def _ask_costpilot_answer(
+    request: AskCostPilotRequest,
+    db: Session,
 ):
     """
     Answer executive questions using CostPilot-calculated facts.

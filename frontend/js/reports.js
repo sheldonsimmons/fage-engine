@@ -2009,6 +2009,24 @@ function askEvidenceButton(item, data) {
   </div>`;
 }
 
+function renderAskBudgetFlag(flag) {
+  if (!flag || !flag.severity || flag.severity === "unknown") return "";
+  if (flag.severity === "ok") {
+    return `<div class="ask-budget-flag severity-ok">✅ No departments over budget for the active workspace.</div>`;
+  }
+  const overNames = (flag.over_budget || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
+  const nearNames = (flag.near_cap || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
+  const parts = [];
+  if (overNames.length) {
+    parts.push(`🚨 <strong>${overNames.length} over budget:</strong> ${overNames.join(", ")}`);
+  }
+  if (nearNames.length) {
+    parts.push(`⚠️ <strong>${nearNames.length} near cap:</strong> ${nearNames.join(", ")}`);
+  }
+  const severity = flag.severity === "critical" ? "critical" : "warning";
+  return `<div class="ask-budget-flag severity-${severity}">${parts.join(" &nbsp;·&nbsp; ")}</div>`;
+}
+
 function renderAskCostPilotAnswer(data) {
   const provenance = data.data_provenance || {};
   const clarification = provenance.scope === "clarification_required" || data.intent === "clarification";
@@ -2075,12 +2093,14 @@ function renderAskCostPilotAnswer(data) {
         <p>${escapeHtml(data.proactive_note.detail || "")}</p>
        </div>`
     : "";
+  const budgetFlag = renderAskBudgetFlag(data.budget_flag);
   return `
     <div class="ask-answer-header">
       <div><span class="ask-answer-kicker">${escapeHtml(period)}</span>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3></div>
       <span class="ask-calculated${clarification ? " needs-clarification" : ""}">${escapeHtml(statusLabel)}</span>
     </div>
+    ${budgetFlag}
     ${data.interpreted_as ? `<div class="ask-interpretation"><strong>Interpreted as</strong><span>${escapeHtml(data.interpreted_as)}</span></div>` : ""}
     <div class="ask-answer-meta">
       <div><strong>Date range</strong><span>${escapeHtml(period)}</span></div>
