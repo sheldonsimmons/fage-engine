@@ -304,13 +304,13 @@ def workspace_attention_signals(db, workspace_id: Optional[str], limit: int = 5)
 def any_workspace_over_budget(db) -> list[dict]:
     """
     Answer the plain question "is anything, anywhere, over budget" — scans
-    every non-archived DepartmentBudget row across every workspace, ignoring
-    whichever workspace happens to be selected in the UI. This database has
-    several coexisting workspaces (a real trial, a historical demo, several
-    unrelated simulated industry scenarios); every other budget check in
-    this app is scoped to just one of them at a time, which is correct for
-    "how is my workspace doing" but wrong for "is anything over budget,
-    period" — this is the one check that isn't scoped to anything.
+    every non-archived DepartmentBudget row across every *production*
+    workspace (real customer accounts only — see database/models.py
+    Workspace.workspace_type), ignoring whichever workspace happens to be
+    selected in the UI. Demo/simulation/legacy workspaces are deliberately
+    excluded: this check exists so a real over-budget account is never
+    hidden just because a different workspace is on screen, not to
+    surface old test data nobody's monitoring.
 
     Each result: {department, workspace_label, spend_usd, cap_usd, used_pct}.
     """
@@ -319,9 +319,16 @@ def any_workspace_over_budget(db) -> list[dict]:
 
     from database.models import Workspace
 
-    workspace_names = {w.workspace_id: w.name for w in db.query(Workspace).all()}
+    production_workspaces = {
+        w.workspace_id: w.name for w in
+        db.query(Workspace).filter(Workspace.workspace_type == "production").all()
+    }
+    if not production_workspaces:
+        return []
+
     rows = db.query(DepartmentBudget).filter(
-        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))  # noqa: E712
+        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),  # noqa: E712
+        DepartmentBudget.workspace_id.in_(production_workspaces.keys()),
     ).all()
     over = []
     for budget in rows:
@@ -333,7 +340,7 @@ def any_workspace_over_budget(db) -> list[dict]:
         if pct < 100:
             continue
         department = str(budget.department or "")
-        workspace_label = workspace_names.get(budget.workspace_id, budget.workspace_id or "Default")
+        workspace_label = production_workspaces.get(budget.workspace_id, budget.workspace_id or "Default")
         label = department.split(":")[-1] or "Unassigned"
         over.append({
             "department": label,
