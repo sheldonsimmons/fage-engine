@@ -2347,9 +2347,17 @@ def _ask_agent_final_payload(
     simulator_requests = 0
 
     # Build a pool of every candidate evidence row across every tool call —
-    # not what gets shown, just what's *available* to cite. Keyed by a
-    # dimension-prefixed id so the same underlying id can never collide
-    # across dimensions (e.g. a department and an account sharing a name).
+    # not what gets shown, just what's *available* to cite. Keyed by the
+    # exact raw "id" string the model actually sees in each tool's JSON
+    # result — NOT a dimension-prefixed key. An earlier version prefixed
+    # pool keys with the dimension name (e.g. "people:HIST2Y:...:USER:1"),
+    # but the model only ever cites the raw id it was shown
+    # ("HIST2Y:...:USER:1", no prefix) — so every evidence_ids lookup
+    # silently failed to match anything, and evidence always fell back to
+    # the hardcoded per-tool default instead of what the model actually
+    # cited. Real ids already embed a type marker (":USER:", ":ACCOUNT:",
+    # etc.), so cross-dimension collisions on the raw id aren't a
+    # practical risk.
     evidence_pool: dict[str, dict] = {}
     primary_breakdowns: dict[str, list[dict]] = {}  # per data-tool fallback if evidence_ids come back empty
 
@@ -2358,7 +2366,7 @@ def _ask_agent_final_payload(
         for row in rows or []:
             if row.get("id") is None and row.get("label") is None:
                 continue
-            pool_key = f"{dimension}:{row.get('id')}"
+            pool_key = str(row.get("id") if row.get("id") is not None else row.get("label"))
             item = {
                 "label": row.get("label"),
                 "value": row.get(value_key),
