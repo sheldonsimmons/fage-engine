@@ -118,16 +118,26 @@ function renderDeptHealth(d) {
     return;
   }
   pills.innerHTML = budgets.map(b => {
-    const pct     = b.budget_used_pct ?? b.used_pct ?? 0;
-    const color   = b.throttled ? "var(--accent-red)" : pct >= 70 ? "var(--accent-yellow)" : "var(--accent-green)";
-    const bg      = b.throttled ? "rgba(248,81,73,.12)" : pct >= 70 ? "rgba(210,153,34,.12)" : "rgba(63,185,80,.12)";
-    const icon    = b.throttled ? "⛔" : pct >= 70 ? "⚠" : "✓";
+    const pct = b.budget_used_pct ?? b.used_pct ?? 0;
+    // Severity comes from the actual computed percentage, not the stored
+    // `throttled` flag alone — that flag can lag behind real spend (e.g. for
+    // backfilled/simulated activity that never routes through live
+    // enforcement), which would otherwise show a department as merely
+    // "near limit" when it has actually gone over its cap.
+    const isOver    = pct >= 100 || b.throttled;
+    const isWarning = !isOver && pct >= 70;
+    const color   = isOver ? "var(--accent-red)" : isWarning ? "var(--accent-yellow)" : "var(--accent-green)";
+    const bg      = isOver ? "rgba(248,81,73,.12)" : isWarning ? "rgba(210,153,34,.12)" : "rgba(63,185,80,.12)";
+    const icon    = isOver ? "⛔" : isWarning ? "⚠" : "✓";
     const label   = displayDeptName(b.department || b.name);
-    return `<span title="${label}: ${pct}% of $${(b.monthly_cap_usd||0).toFixed(0)}/mo cap used"
+    const pctLabel = isOver ? `${pct}% OVER` : `${pct}%`;
+    const title = `${label}: ${pct}% of $${(b.monthly_cap_usd||0).toFixed(0)}/mo cap used` +
+      (isOver ? " — over budget" : "") + (b.throttled ? " (throttled)" : "");
+    return `<span title="${title}"
       style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;
              font-size:11px;font-weight:600;background:${bg};color:${color};border:1px solid ${color}33;
              cursor:default">
-      ${icon} ${label} <span style="font-weight:400;font-size:10px">${pct}%</span>
+      ${icon} ${label} <span style="font-weight:${isOver ? 700 : 400};font-size:10px">${pctLabel}</span>
     </span>`;
   }).join("");
 }
