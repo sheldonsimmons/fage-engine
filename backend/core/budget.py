@@ -98,6 +98,50 @@ def ensure_agent_departments_have_budgets(db: Session) -> bool:
     return bool(missing)
 
 
+def workspace_type_for(db: Session, workspace_id: str | None) -> str:
+    """Defaults to 'production' — the safe assumption for any workspace not
+    yet registered in the workspaces table, so current_spend_usd (the
+    live-tracked counter) stays the default source of truth unless a
+    workspace is explicitly known to be demo/simulation/legacy data."""
+    from database.models import Workspace
+
+    row = db.query(Workspace).filter(Workspace.workspace_id == (workspace_id or "default")).first()
+    return row.workspace_type if row else "production"
+
+
+def recomputed_department_spend(db: Session, workspace_id: str | None) -> dict[str, float]:
+    """
+    Month-to-date spend per department, recomputed from the actual
+    transaction ledger. Only meaningful for workspaces whose data was
+    bulk-backfilled or simulated rather than written through live request
+    routing — current_spend_usd never gets touched by a backfill, so it
+    reads $0.00 forever for those workspaces even when real activity
+    exists. Never used for production workspaces, where current_spend_usd
+    is the live, authoritative, admin-matching number.
+    """
+    from datetime import datetime as _datetime
+    from api.routes_work_items import project_activity_reporting
+
+    month_start = _datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    report = project_activity_reporting(
+        workspace_id=workspace_id, date_from=month_start, date_to=_datetime.utcnow(), days=31,
+        project_id=None, user_external_id=None, agent_id=None, account_id=None,
+        source_platform=None, record_type=None, model_tier=None, charged_unit=None,
+        business_purpose=None, activity_limit=2000, db=db,
+    )
+    spend_by_department: dict[str, float] = {}
+    for row in report.get("organizational_unit_breakdown") or []:
+        raw_department = str(row.get("id") or row.get("label") or "").strip()
+        if workspace_id and raw_department.startswith(f"{workspace_id}:"):
+            raw_department = raw_department[len(workspace_id) + 1:]
+        elif ":" in raw_department:
+            raw_department = raw_department.rsplit(":", 1)[-1]
+        key = raw_department.casefold()
+        if key:
+            spend_by_department[key] = spend_by_department.get(key, 0.0) + float(row.get("spend_usd") or 0)
+    return spend_by_department
+
+
 def get_all_budgets(db: Session, workspace_id: str | None = None) -> list:
     """
     Return budget status for every department in one workspace, enriched
@@ -120,7 +164,20 @@ def get_all_budgets(db: Session, workspace_id: str | None = None) -> list:
         dirty = reconcile_throttle_state(b) or dirty
     if dirty:
         db.commit()
-    return [_enrich(b) for b in budgets]
+
+    if workspace_type_for(db, workspace_id) == "production":
+        return [_enrich(b) for b in budgets]
+
+    # Non-production workspace (demo/simulation/legacy): current_spend_usd
+    # never gets touched by backfilled/simulated data, so it would show
+    # $0.00 forever even with real recorded activity. Recompute for display.
+    spend_by_department = recomputed_department_spend(db, workspace_id)
+    return [
+        _enrich(b, spend_override=spend_by_department.get(
+            (b.department or "").split(":")[-1].casefold(), 0.0
+        ))
+        for b in budgets
+    ]
 
 
 def get_budget(db: Session, department: str):
@@ -300,10 +357,18 @@ def effective_budget_context(db: Session, department: str) -> dict | None:
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _enrich(b: DepartmentBudget) -> dict:
-    """Add computed fields to a raw DepartmentBudget row."""
-    used_pct   = round((b.current_spend_usd / b.monthly_cap_usd) * 100, 1) if b.monthly_cap_usd else 0
-    remaining  = round(b.monthly_cap_usd - b.current_spend_usd, 4)
+def _enrich(b: DepartmentBudget, spend_override: float | None = None) -> dict:
+    """
+    Add computed fields to a raw DepartmentBudget row. spend_override lets
+    callers substitute a recomputed spend figure for display (see
+    recomputed_department_spend below) without ever mutating the ORM
+    object — current_spend_usd is the live-tracked field real throttling
+    enforcement reads, and must never be overwritten by a display-only
+    recompute.
+    """
+    spend = b.current_spend_usd if spend_override is None else spend_override
+    used_pct   = round((spend / b.monthly_cap_usd) * 100, 1) if b.monthly_cap_usd else 0
+    remaining  = round(b.monthly_cap_usd - spend, 4)
 
     if b.throttled:
         state = "throttled"
@@ -318,7 +383,7 @@ def _enrich(b: DepartmentBudget) -> dict:
     return {
         "department":                  b.department,
         "monthly_cap_usd":             b.monthly_cap_usd,
-        "current_spend_usd":           round(b.current_spend_usd, 4),
+        "current_spend_usd":           round(spend, 4),
         "remaining_usd":               remaining,
         "used_pct":                    used_pct,
         "throttled":                   b.throttled,

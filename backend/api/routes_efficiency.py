@@ -3289,6 +3289,8 @@ def _ask_costpilot_answer(
             )
             bucket["spend"] += float(activity_row.get("spend_usd") or 0)
             bucket["requests"] += int(activity_row.get("request_count") or 0)
+        from core.budget import workspace_type_for
+        _ask_budget_is_production_workspace = workspace_type_for(db, request.workspace_id) == "production"
         budget_rows = []
         for budget in budgets:
             cap = float(budget.monthly_cap_usd or 0)
@@ -3298,13 +3300,18 @@ def _ask_costpilot_answer(
             elif ":" in raw_budget_department:
                 raw_budget_department = raw_budget_department.rsplit(":", 1)[-1]
             activity = activity_by_department.get(raw_budget_department.casefold(), {})
-            # current_spend_usd is the same live-tracked counter Admin >
-            # Budgets displays and real throttling enforcement acts on —
-            # it must be the source of truth here too, not a recompute
-            # from the activity ledger (which disagreed with Admin for
-            # every real workspace, since the counter isn't scoped to a
-            # rolling window the way this ledger recompute is).
-            spent = float(budget.current_spend_usd or 0)
+            # current_spend_usd is the live-tracked counter Admin > Budgets
+            # displays and real throttling enforcement acts on — the source
+            # of truth for a real (production) workspace. It never gets
+            # touched by backfilled/simulated data though, so for
+            # demo/simulation workspaces it reads $0.00 forever even with
+            # real recorded activity — use the activity-ledger figure for
+            # those instead. Same rule core.budget.get_all_budgets (Admin)
+            # and ask_costpilot_tools.run_get_budget_status use.
+            spent = (
+                float(budget.current_spend_usd or 0) if _ask_budget_is_production_workspace
+                else float(activity.get("spend") or 0)
+            )
             matched_requests = int(activity.get("requests") or 0)
             pct = spent / cap * 100 if cap > 0 else 0
             if cap <= 0:

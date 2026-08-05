@@ -253,15 +253,18 @@ def run_get_change_drivers(
 
 def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) -> dict:
     from sqlalchemy import or_
+    from core.budget import recomputed_department_spend, workspace_type_for
 
-    # DepartmentBudget.current_spend_usd is the same live-tracked counter
-    # the Admin > Budgets page displays and real throttling enforcement
-    # acts on — it must be the single source of truth here too. An earlier
-    # version of this function recomputed spend from the transaction ledger
-    # instead (to work around that counter reading $0 for the backfilled
-    # historical-demo workspace, which never routes through live enforcement)
-    # but that made Ask CostPilot disagree with Admin for every *real*
-    # workspace, where the counter is the correct, authoritative number.
+    # current_spend_usd is the live-tracked counter Admin > Budgets displays
+    # and real throttling enforcement acts on — the source of truth for
+    # any real (production) workspace. It never gets touched by
+    # backfilled/simulated data though, so for demo/simulation workspaces
+    # it reads $0.00 forever even with real recorded activity — recompute
+    # from the ledger for those instead. Same rule core.budget.get_all_budgets
+    # (Admin's Budgets page) uses, so the two never disagree.
+    is_production = workspace_type_for(db, workspace_id) == "production"
+    spend_by_department = None if is_production else recomputed_department_spend(db, workspace_id)
+
     query = db.query(DepartmentBudget).filter(
         or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),  # noqa: E712
         DepartmentBudget.workspace_id == (workspace_id or "default"),
@@ -272,13 +275,17 @@ def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) ->
         cap = float(budget.monthly_cap_usd or 0)
         if cap <= 0:
             continue
-        spend = float(budget.current_spend_usd or 0)
+        label = (budget.department or "Unassigned").split(":")[-1]
+        spend = (
+            float(budget.current_spend_usd or 0) if is_production
+            else spend_by_department.get(label.casefold(), 0.0)
+        )
         pct = round(spend / cap * 100, 1)
         if alerts_only and pct < 80:
             continue
         rows.append({
             "id": budget.department,
-            "label": (budget.department or "Unassigned").split(":")[-1],
+            "label": label,
             "monthly_cap_usd": cap,
             "current_spend_usd": round(spend, 6),
             "remaining_usd": max(cap - spend, 0),
