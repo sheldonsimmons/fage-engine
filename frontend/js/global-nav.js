@@ -28,8 +28,8 @@
   // workspace not listed here was invisible and unreachable the moment a
   // user touched the switcher.
   const fallbackWorkspaceOptions = [
-    { id: "4BE43240A6674314", label: "Salesforce Pilot", kind: "Live workspace" },
-    { id: "SIM-HISTORICAL-2Y", label: "Historical Demo", kind: "Simulated history" },
+    { id: "4BE43240A6674314", label: "Production", kind: "Live workspace" },
+    { id: "SIM-HISTORICAL-2Y", label: "Simulated", kind: "Simulated history" },
   ];
   let dynamicWorkspaceOptions = null;
   const workspaceOptionsList = () => dynamicWorkspaceOptions || fallbackWorkspaceOptions;
