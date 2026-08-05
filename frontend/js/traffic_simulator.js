@@ -605,7 +605,14 @@
         mode: "control",
         source: {
           platform: item.platform,
-          workspace_id: item.workspaceId,
+          // Always write into the one real "Simulated" workspace
+          // (SIM-HISTORICAL-2Y) — item.workspaceId (SIM-ENTERPRISE-SAAS
+          // etc.) is only used to generate distinct per-scenario external
+          // ids below, it's no longer a real destination workspace after
+          // the workspace consolidation down to Production + Simulated.
+          // Previously each scenario wrote to its own workspace, none of
+          // which the app or Ask CostPilot could see anymore.
+          workspace_id: "SIM-HISTORICAL-2Y",
           agent_name: item.agent,
           department: item.department,
           agent_department: item.team,
