@@ -2340,13 +2340,35 @@ def _ask_agent_final_payload(
         logger.warning("Ask CostPilot agent answer failed validation: %s", "; ".join(contract_issues))
         return None
 
-    evidence = []
     calculation = None
     period = None
     data_scope = None
     live_requests = 0
     simulator_requests = 0
-    cited_departments: set[str] = set()
+
+    # Build a pool of every candidate evidence row across every tool call —
+    # not what gets shown, just what's *available* to cite. Keyed by a
+    # dimension-prefixed id so the same underlying id can never collide
+    # across dimensions (e.g. a department and an account sharing a name).
+    evidence_pool: dict[str, dict] = {}
+    primary_breakdowns: dict[str, list[dict]] = {}  # per data-tool fallback if evidence_ids come back empty
+
+    def _pool(dimension: str, rows: list, value_key: str, filter_name: Optional[str]):
+        built = []
+        for row in rows or []:
+            if row.get("id") is None and row.get("label") is None:
+                continue
+            pool_key = f"{dimension}:{row.get('id')}"
+            item = {
+                "label": row.get("label"),
+                "value": row.get(value_key),
+                "filter_name": filter_name,
+                "filter_value": row.get("id"),
+            }
+            evidence_pool[pool_key] = item
+            built.append(item)
+        return built
+
     for tool_name, _args, result in tool_call_log:
         # Later tool calls' period/scope win, since they're closer to what the
         # final answer is actually about — but any tool result is better than
@@ -2358,51 +2380,43 @@ def _ask_agent_final_payload(
         simulator_requests = int(summary.get("simulation_count") or 0) or simulator_requests
 
         if tool_name == "get_usage_report":
-            for row in (result.get("top_departments") or [])[:3]:
-                evidence.append({
-                    "label": row.get("label"),
-                    "value": row.get("spend_usd"),
-                    "filter_name": "charged_unit",
-                    "filter_value": row.get("id"),
-                })
-                if row.get("label"):
-                    cited_departments.add(str(row["label"]).lower())
-            for row in (result.get("top_accounts") or [])[:5]:
-                evidence.append({
-                    "label": row.get("label"),
-                    "value": row.get("spend_usd"),
-                    "filter_name": "account_id",
-                    "filter_value": row.get("id"),
-                })
+            people = _pool("people", result.get("top_people"), "spend_usd", "user_external_id")
+            _pool("department", result.get("top_departments"), "spend_usd", "charged_unit")
+            _pool("account", result.get("top_accounts"), "spend_usd", "account_id")
+            _pool("agent", result.get("top_agents"), "spend_usd", "agent_id")
+            _pool("platform", result.get("top_platforms"), "spend_usd", "source_platform")
+            _pool("model", result.get("top_models"), "spend_usd", None)
+            primary_breakdowns[tool_name] = people  # "who" defaults to people, not every dimension at once
         elif tool_name == "get_change_drivers":
             calculation = result.get("decomposition")
-            for row in (result.get("top_contributors") or [])[:3]:
-                evidence.append({
-                    "label": row.get("label"),
-                    "value": row.get("absolute_change"),
-                    "filter_name": None,
-                    "filter_value": row.get("id"),
-                })
-                if row.get("label"):
-                    cited_departments.add(str(row["label"]).lower())
+            primary_breakdowns[tool_name] = _pool(
+                "driver", result.get("top_contributors"), "absolute_change", None
+            )
         elif tool_name == "get_budget_status":
-            for row in (result.get("departments") or [])[:3]:
-                evidence.append({
-                    "label": row.get("label"),
-                    "value": row.get("used_pct"),
-                    "filter_name": "charged_unit",
-                    "filter_value": row.get("id"),
-                })
-                if row.get("label"):
-                    cited_departments.add(str(row["label"]).lower())
+            primary_breakdowns[tool_name] = _pool(
+                "budget", result.get("departments"), "used_pct", "charged_unit"
+            )
         elif tool_name == "get_agent_adoption":
-            for row in (result.get("agents") or [])[:8]:
-                evidence.append({
-                    "label": row.get("label"),
-                    "value": row.get("status"),
-                    "filter_name": "agent_id",
-                    "filter_value": row.get("id"),
-                })
+            primary_breakdowns[tool_name] = _pool(
+                "adoption", result.get("agents"), "status", "agent_id"
+            )
+
+    # The model already tells us which facts it actually used — trust that
+    # instead of guessing which dimension is relevant. Falls back to the
+    # last data tool's single primary breakdown only if the model's ids
+    # don't resolve to anything (malformed call), never to dumping every
+    # dimension a tool happened to return.
+    requested_ids = [str(i) for i in (final_args.get("evidence_ids") or [])]
+    evidence = [evidence_pool[i] for i in requested_ids if i in evidence_pool]
+    if not evidence:
+        for tool_name, _args, _result in reversed(tool_call_log):
+            if primary_breakdowns.get(tool_name):
+                evidence = primary_breakdowns[tool_name][:5]
+                break
+    cited_departments = {
+        str(row["label"]).lower() for row in evidence
+        if row.get("filter_name") == "charged_unit" and row.get("label")
+    }
 
     payload = {
         "title": title,
