@@ -572,12 +572,14 @@
       ? `<button type="button" class="cp-ask-supporting" data-ask-scope="${escapeHtml(encodeURIComponent(JSON.stringify(answerScope)))}">View ${rowCount.toLocaleString()} supporting ${rowCount === 1 ? "record" : "records"} →</button>`
       : "";
     const followUps = globalAskFollowUps(data);
+    const budgetFlag = renderAskBudgetFlag(data.budget_flag);
     return `<article class="cp-ask-answer">
       <div class="cp-ask-answer-head"><span>${escapeHtml(provenance.period_label || "Selected period")}</span><b class="${clarification ? "clarification" : ""}">${clarification ? "Needs clarification" : "Calculated"}</b></div>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3>
+      ${budgetFlag}
       ${data.interpreted_as ? `<div class="cp-ask-interpretation"><strong>Interpreted as</strong><span>${escapeHtml(data.interpreted_as)}</span></div>` : ""}
       <div class="cp-ask-answer-scope"><span><b>Date range</b>${escapeHtml(provenance.period_label || "Selected period")}</span><span><b>Scope</b>${escapeHtml(sourceLabel)}</span></div>
-      <p>${escapeHtml(data.answer || "No answer was returned.")}</p>
+      <div class="cp-ask-answer-body">${data.answer ? renderAskMarkdown(data.answer) : "<p>No answer was returned.</p>"}</div>
       ${activeFilters ? `<div class="cp-ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
       ${evidence ? `<section><h4>Evidence</h4>${evidence}</section>` : ""}
       ${calculation}

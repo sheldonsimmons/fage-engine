@@ -287,80 +287,9 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function renderAskMarkdown(text) {
-  const escaped = escapeHtml(text);
-  const inline = (line) => line
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`([^`]+?)`/g, "<code>$1</code>");
-
-  const lines = escaped.split("\n");
-  const html = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (/^\s*\|.*\|\s*$/.test(line)) {
-      const tableLines = [];
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
-        tableLines.push(lines[i]);
-        i++;
-      }
-      const rows = tableLines
-        .map(row => row.trim().replace(/^\||\|$/g, "").split("|").map(cell => cell.trim()))
-        .filter(cells => !cells.every(cell => /^:?-{2,}:?$/.test(cell)));
-      if (rows.length) {
-        const [head, ...body] = rows;
-        html.push(`<div style="overflow-x:auto"><table class="ask-markdown-table"><thead><tr>${
-          head.map(cell => `<th>${inline(cell)}</th>`).join("")
-        }</tr></thead><tbody>${
-          body.map(cells => `<tr>${cells.map(cell => `<td>${inline(cell)}</td>`).join("")}</tr>`).join("")
-        }</tbody></table></div>`);
-      }
-      continue;
-    }
-
-    if (/^#{1,4}\s+/.test(line)) {
-      const level = Math.min(4, line.match(/^#+/)[0].length) + 2;
-      html.push(`<h${level}>${inline(line.replace(/^#{1,4}\s+/, ""))}</h${level}>`);
-      i++;
-      continue;
-    }
-
-    if (/^\s*[-*]\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-        items.push(`<li>${inline(lines[i].replace(/^\s*[-*]\s+/, ""))}</li>`);
-        i++;
-      }
-      html.push(`<ul>${items.join("")}</ul>`);
-      continue;
-    }
-
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-        items.push(`<li>${inline(lines[i].replace(/^\s*\d+\.\s+/, ""))}</li>`);
-        i++;
-      }
-      html.push(`<ol>${items.join("")}</ol>`);
-      continue;
-    }
-
-    if (line.trim() === "") {
-      i++;
-      continue;
-    }
-
-    const paragraph = [line];
-    i++;
-    while (i < lines.length && lines[i].trim() !== "" && !/^\s*[-*|#]/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i])) {
-      paragraph.push(lines[i]);
-      i++;
-    }
-    html.push(`<p>${inline(paragraph.join(" "))}</p>`);
-  }
-  return html.join("");
-}
+// renderAskMarkdown() and renderAskBudgetFlag() live in js/ask-costpilot-render.js,
+// shared with the global nav's Ask CostPilot widget (js/global-nav.js) — keep
+// both UIs rendering the same response shape the same way instead of drifting.
 
 function selectValue(id) {
   return (document.getElementById(id)?.value || "").trim();
@@ -2007,36 +1936,6 @@ function askEvidenceButton(item, data) {
       ${drill}
     </div>
   </div>`;
-}
-
-function renderAskBudgetFlag(flag) {
-  if (!flag || !flag.severity || flag.severity === "unknown") return "";
-  const rows = [];
-
-  if (flag.severity === "ok") {
-    rows.push(`<div class="ask-budget-flag severity-ok">✅ No departments over budget for the active workspace.</div>`);
-  } else {
-    const overNames = (flag.over_budget || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
-    const nearNames = (flag.near_cap || []).map(d => escapeHtml(d.department || "")).filter(Boolean);
-    const parts = [];
-    if (overNames.length) parts.push(`🚨 <strong>${overNames.length} over budget:</strong> ${overNames.join(", ")}`);
-    if (nearNames.length) parts.push(`⚠️ <strong>${nearNames.length} near cap:</strong> ${nearNames.join(", ")}`);
-    const severity = flag.severity === "critical" ? "critical" : "warning";
-    rows.push(`<div class="ask-budget-flag severity-${severity}">${parts.join(" &nbsp;·&nbsp; ")}</div>`);
-  }
-
-  // Unscoped: checks every workspace in the system, not just the active one.
-  const globalOver = flag.global_over_budget || [];
-  if (globalOver.length) {
-    const items = globalOver.map(d =>
-      `${escapeHtml(d.department || "Unknown")} (${escapeHtml(d.workspace_label || "Unknown")}, ${d.used_pct}%)`
-    ).join(", ");
-    rows.push(`<div class="ask-budget-flag severity-critical">
-      🌐 <strong>Anywhere in the system:</strong> ${globalOver.length} department${globalOver.length !== 1 ? "s" : ""} over budget — ${items}
-    </div>`);
-  }
-
-  return rows.join("");
 }
 
 function renderAskCostPilotAnswer(data) {
