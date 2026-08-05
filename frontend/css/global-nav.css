@@ -489,6 +489,18 @@
   letter-spacing: .04em;
   text-transform: uppercase;
 }
+.ask-workspace-label {
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  display: inline-block;
+  color: var(--text-muted, #9aa7b8);
+  background: var(--bg-panel, #161b22);
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.ask-workspace-label strong { color: var(--text-primary, #e6edf3); }
 .ask-budget-flag {
   margin: 10px 0;
   padding: 9px 12px;

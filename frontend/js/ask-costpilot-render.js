@@ -95,6 +95,11 @@ function renderAskMarkdown(text) {
   return html.join("");
 }
 
+function renderAskWorkspaceLabel(workspaceName) {
+  if (!workspaceName) return "";
+  return `<div class="ask-workspace-label">📁 Viewing: <strong>${askRenderEscapeHtml(workspaceName)}</strong></div>`;
+}
+
 function renderAskBudgetFlag(flag) {
   if (!flag || !flag.severity || flag.severity === "unknown") return "";
   const rows = [];

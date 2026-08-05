@@ -2493,14 +2493,32 @@ def ask_costpilot(
     request: AskCostPilotRequest,
     db: Session = Depends(get_db),
 ):
-    """Thin wrapper: guarantees the deterministic budget_flag badge is
-    attached to every answer no matter which internal path (agent loop or
-    the deterministic intent classifier, and any of their early-return
-    branches) produced it."""
+    """Thin wrapper: guarantees the deterministic budget_flag badge and the
+    active workspace's real name are attached to every answer no matter
+    which internal path (agent loop or the deterministic intent classifier,
+    and any of their early-return branches) produced it."""
     result = _ask_costpilot_answer(request, db)
     if isinstance(result, dict):
         result["budget_flag"] = _ask_budget_flag(db, request.workspace_id)
+        result["workspace_name"] = _ask_workspace_name(db, request.workspace_id)
     return result
+
+
+def _ask_workspace_name(db: Session, workspace_id: Optional[str]) -> str:
+    """
+    Every answer states which workspace it's scoped to — the confusion
+    that caused several rounds of "the data is wrong" this session was
+    never bad math, it was not knowing which workspace's data was on
+    screen. Looked up from the workspaces table (Phase 0); falls back to
+    the raw workspace_id if it isn't registered there for some reason.
+    """
+    from database.models import Workspace
+
+    lookup_id = workspace_id or "default"
+    row = db.query(Workspace).filter(Workspace.workspace_id == lookup_id).first()
+    if row:
+        return row.name
+    return workspace_id or "Default"
 
 
 def _ask_costpilot_answer(

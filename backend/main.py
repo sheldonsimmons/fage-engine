@@ -275,6 +275,10 @@ app.include_router(routes_auditor.router, prefix="/api/audit", tags=["Auditor"])
 from api import routes_dashboard
 app.include_router(routes_dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 
+# Phase 1 — Workspace registry
+from api import routes_workspaces
+app.include_router(routes_workspaces.router, prefix="/api/workspaces", tags=["Workspaces"])
+
 # Step 9 — Sensitive Term Library
 from api import routes_keywords
 app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywords"])

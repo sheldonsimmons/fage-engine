@@ -2005,7 +2005,9 @@ function renderAskCostPilotAnswer(data) {
        </div>`
     : "";
   const budgetFlag = renderAskBudgetFlag(data.budget_flag);
+  const workspaceLabel = renderAskWorkspaceLabel(data.workspace_name);
   return `
+    ${workspaceLabel}
     <div class="ask-answer-header">
       <div><span class="ask-answer-kicker">${escapeHtml(period)}</span>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3></div>

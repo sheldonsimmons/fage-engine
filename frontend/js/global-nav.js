@@ -22,10 +22,17 @@
     { label: "Live Monitor", href: "/live-landing.html" },
   ];
 
-  const workspaceOptions = [
+  // Fallback only — used if GET /api/workspaces fails or hasn't resolved
+  // yet. The real list now comes from the workspaces table (Phase 1); this
+  // hardcoded array used to be the *only* source, which meant any
+  // workspace not listed here was invisible and unreachable the moment a
+  // user touched the switcher.
+  const fallbackWorkspaceOptions = [
     { id: "4BE43240A6674314", label: "Salesforce Pilot", kind: "Live workspace" },
     { id: "SIM-HISTORICAL-2Y", label: "Historical Demo", kind: "Simulated history" },
   ];
+  let dynamicWorkspaceOptions = null;
+  const workspaceOptionsList = () => dynamicWorkspaceOptions || fallbackWorkspaceOptions;
 
   const currentPath = location.pathname || "/";
   const isCurrent = (item) => (item.paths || [item.href]).includes(currentPath);
@@ -54,16 +61,18 @@
   }
 
   function activeWorkspace() {
-    const id = localStorage.getItem("cp_workspace_id") || workspaceOptions[0].id;
-    return workspaceOptions.find((workspace) => workspace.id === id)
+    const options = workspaceOptionsList();
+    const id = localStorage.getItem("cp_workspace_id") || options[0].id;
+    return options.find((workspace) => workspace.id === id)
       || { id, label: localStorage.getItem("cp_workspace_name") || "Current workspace", kind: "Workspace" };
   }
 
   function workspaceMarkup() {
     const active = activeWorkspace();
-    const options = workspaceOptions.some((workspace) => workspace.id === active.id)
-      ? workspaceOptions
-      : [active, ...workspaceOptions];
+    const base = workspaceOptionsList();
+    const options = base.some((workspace) => workspace.id === active.id)
+      ? base
+      : [active, ...base];
     return `
       <label class="cp-workspace-switcher" title="Choose which isolated workspace CostPilot should display">
         <span class="cp-workspace-switcher__label">Workspace</span>
@@ -73,8 +82,32 @@
       </label>`;
   }
 
+  async function refreshWorkspaceOptions() {
+    try {
+      const response = await fetch("/api/workspaces");
+      if (!response.ok) return;
+      const data = await response.json();
+      const fetched = (data.workspaces || []).map((w) => ({
+        id: w.workspace_id,
+        label: w.name,
+        kind: w.workspace_type === "production" ? "Live workspace" : w.workspace_type,
+      }));
+      if (!fetched.length) return;
+      dynamicWorkspaceOptions = fetched;
+      const select = document.getElementById("cpWorkspaceSwitcher");
+      if (!select) return;
+      const active = activeWorkspace();
+      const options = fetched.some((w) => w.id === active.id) ? fetched : [active, ...fetched];
+      select.innerHTML = options.map((workspace) =>
+        `<option value="${escapeHtml(workspace.id)}"${workspace.id === active.id ? " selected" : ""}>${escapeHtml(workspace.label)}</option>`
+      ).join("");
+    } catch (_err) {
+      // Fall back silently to fallbackWorkspaceOptions — never a hard dependency.
+    }
+  }
+
   function switchWorkspace(workspaceId) {
-    const selected = workspaceOptions.find((workspace) => workspace.id === workspaceId);
+    const selected = workspaceOptionsList().find((workspace) => workspace.id === workspaceId);
     if (!selected || selected.id === activeWorkspace().id) return;
     localStorage.setItem("cp_workspace_id", selected.id);
     localStorage.setItem("cp_workspace_name", selected.label);
@@ -161,6 +194,7 @@
     nav.querySelector("#cpWorkspaceSwitcher").addEventListener("change", (event) => {
       switchWorkspace(event.target.value);
     });
+    refreshWorkspaceOptions();
 
     document.addEventListener("click", () => closeMenus(nav));
     document.addEventListener("keydown", (event) => {
@@ -573,7 +607,9 @@
       : "";
     const followUps = globalAskFollowUps(data);
     const budgetFlag = renderAskBudgetFlag(data.budget_flag);
+    const workspaceLabel = renderAskWorkspaceLabel(data.workspace_name);
     return `<article class="cp-ask-answer">
+      ${workspaceLabel}
       <div class="cp-ask-answer-head"><span>${escapeHtml(provenance.period_label || "Selected period")}</span><b class="${clarification ? "clarification" : ""}">${clarification ? "Needs clarification" : "Calculated"}</b></div>
       <h3>${escapeHtml(data.title || "CostPilot answer")}</h3>
       ${budgetFlag}
