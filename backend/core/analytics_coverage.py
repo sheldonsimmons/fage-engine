@@ -212,11 +212,16 @@ def comparison_data_coverage(plan, primary_summary: dict, comparison_summary: di
     return result
 
 
-def _workspace_department_filter(model, workspace_id: Optional[str]):
-    """Match routes_dashboard._workspace_filter's department-prefix convention."""
-    if not workspace_id:
-        return None
-    return model.department.like(f"{workspace_id}:%")
+DEFAULT_WORKSPACE_ID = "default"
+
+
+def _workspace_budget_filter(workspace_id: Optional[str]):
+    """
+    DepartmentBudget.workspace_id (backfilled by database/backfill_workspaces.py)
+    is the real column now — no workspace given means the legacy unscoped
+    "default" bucket specifically, never every workspace pooled together.
+    """
+    return DepartmentBudget.workspace_id == (workspace_id or DEFAULT_WORKSPACE_ID)
 
 
 def workspace_attention_signals(db, workspace_id: Optional[str], limit: int = 5) -> list[dict]:
@@ -238,11 +243,9 @@ def workspace_attention_signals(db, workspace_id: Optional[str], limit: int = 5)
 
     # ── Budget caps ──────────────────────────────────────────────────────
     budget_query = db.query(DepartmentBudget).filter(
-        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))  # noqa: E712
+        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),  # noqa: E712
+        _workspace_budget_filter(workspace_id),
     )
-    dept_clause = _workspace_department_filter(DepartmentBudget, workspace_id)
-    if dept_clause is not None:
-        budget_query = budget_query.filter(dept_clause)
     for budget in budget_query.all():
         cap = float(budget.monthly_cap_usd or 0)
         if cap <= 0:
@@ -270,10 +273,8 @@ def workspace_attention_signals(db, workspace_id: Optional[str], limit: int = 5)
     blocked_query = db.query(func.count(AuditEvent.id)).filter(
         AuditEvent.decision_outcome.ilike("%blocked%"),
         AuditEvent.id > reviewed_through_id,
+        AuditEvent.workspace_id == (workspace_id or DEFAULT_WORKSPACE_ID),
     )
-    audit_dept_clause = _workspace_department_filter(AuditEvent, workspace_id)
-    if audit_dept_clause is not None:
-        blocked_query = blocked_query.filter(audit_dept_clause)
     unreviewed_blocked = blocked_query.scalar() or 0
     if unreviewed_blocked:
         signals.append({
@@ -287,9 +288,8 @@ def workspace_attention_signals(db, workspace_id: Optional[str], limit: int = 5)
     collision_query = db.query(func.count(AuditEvent.id)).filter(
         AuditEvent.timestamp >= cutoff,
         AuditEvent.event_type.in_(("LOCK", "COLLISION_LOCK", "COLLISION_QUEUE", "COLLISION_SKIP")),
+        AuditEvent.workspace_id == (workspace_id or DEFAULT_WORKSPACE_ID),
     )
-    if audit_dept_clause is not None:
-        collision_query = collision_query.filter(audit_dept_clause)
     collision_count = collision_query.scalar() or 0
     if collision_count:
         signals.append({
@@ -317,6 +317,9 @@ def any_workspace_over_budget(db) -> list[dict]:
     if db is None:
         return []
 
+    from database.models import Workspace
+
+    workspace_names = {w.workspace_id: w.name for w in db.query(Workspace).all()}
     rows = db.query(DepartmentBudget).filter(
         or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))  # noqa: E712
     ).all()
@@ -330,7 +333,7 @@ def any_workspace_over_budget(db) -> list[dict]:
         if pct < 100:
             continue
         department = str(budget.department or "")
-        workspace_label = department.split(":")[0] if ":" in department else "Default"
+        workspace_label = workspace_names.get(budget.workspace_id, budget.workspace_id or "Default")
         label = department.split(":")[-1] or "Unassigned"
         over.append({
             "department": label,

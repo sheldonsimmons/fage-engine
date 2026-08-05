@@ -112,6 +112,7 @@ class DepartmentBudget(Base):
     raw_payload_logging_enabled = Column(Boolean, default=False)  # per-dept raw payload logging toggle
     raw_retention_days          = Column(Integer, default=30)     # 30 | 90 | 180 | 365 | 0=indefinite
     archived          = Column(Boolean,  nullable=True, default=False)  # soft-hide stale departments without deleting history
+    workspace_id      = Column(String,   nullable=True, index=True)  # backfilled from the "workspace_id:DeptName" prefix on `department`
 
 
 class OrganizationalUnit(Base):
@@ -618,3 +619,28 @@ class TrialAccount(Base):
     trial_call_cap = Column(Integer, default=500)
     trial_spend_cap_usd = Column(Float, default=10.0)
     created_at   = Column(DateTime, default=datetime.utcnow)
+
+
+class Workspace(Base):
+    """
+    The canonical registry of workspaces. Before this table existed,
+    "workspace" was only ever inferred from a "workspace_id:DeptName"
+    string-prefix convention on department_budgets.department (and, for
+    token_transactions/audit_events, a workspace_id column with no backing
+    table) — no single place could answer "what workspaces exist" or "is
+    this one real customer data or leftover test data."
+    """
+    __tablename__ = "workspaces"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    workspace_id       = Column(String, unique=True, nullable=False, index=True)
+    name               = Column(String, nullable=False)
+    workspace_type     = Column(String, nullable=False, default="production")  # production | demo | simulation | legacy
+    source             = Column(String, nullable=True)  # trial_signup | historical_backfill | manual_seed | sandbox
+    owner_trial_account_id = Column(Integer, ForeignKey("trial_accounts.id"), nullable=True)
+    is_active          = Column(Boolean, default=True)
+    last_activity_at   = Column(DateTime, nullable=True)
+    default_monthly_budget_usd = Column(Float, nullable=True)
+    created_at         = Column(DateTime, default=datetime.utcnow)
+    archived_at        = Column(DateTime, nullable=True)
+    notes              = Column(Text, nullable=True)

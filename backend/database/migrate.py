@@ -71,6 +71,15 @@ def run_migrations():
         except Exception:
             pass
         try:
+            # department_budgets never got a real workspace_id column when
+            # token_transactions/audit_events did — it's the reason budget
+            # scoping had to be inferred from a "workspace_id:DeptName"
+            # string prefix on `department` everywhere. Nullable/unbackfilled
+            # here; backfill_workspaces.py populates it once from that prefix.
+            ensure_column(conn, "department_budgets", "workspace_id", "VARCHAR")
+        except Exception:
+            pass
+        try:
             ensure_column(conn, "audit_events", "raw_payload", "TEXT")
         except Exception:
             pass

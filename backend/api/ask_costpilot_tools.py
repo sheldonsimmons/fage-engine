@@ -256,14 +256,14 @@ def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) ->
     from api.routes_work_items import project_activity_reporting
 
     query = db.query(DepartmentBudget).filter(
-        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))  # noqa: E712
+        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),  # noqa: E712
+        # DepartmentBudget.workspace_id (backfilled by database/backfill_workspaces.py)
+        # is the real column now. No workspace given means the legacy
+        # "default" bucket specifically, never every workspace pooled
+        # together — which is what silently mixed unrelated workspaces'
+        # department budgets before this column existed.
+        DepartmentBudget.workspace_id == (workspace_id or "default"),
     )
-    if workspace_id:
-        query = query.filter(DepartmentBudget.department.like(f"{workspace_id}:%"))
-    else:
-        # Without this, every workspace's budget rows for the same department
-        # name (e.g. "Engineering") would all be returned together.
-        query = query.filter(~DepartmentBudget.department.like("%:%"))
 
     # DepartmentBudget.current_spend_usd is only incremented by live request
     # routing — backfilled/simulated history never touches it, so it reads

@@ -3181,33 +3181,18 @@ def _ask_costpilot_answer(
                     f"{period_label} within the active filters."
                 )
     elif intent == "budget":
-        budget_query = db.query(DepartmentBudget).filter(
-            DepartmentBudget.archived.isnot(True)
-        )
-        budgets = budget_query.all()
-        if request.workspace_id:
-            workspace_prefix = f"{request.workspace_id}:"
-            scoped = [
-                budget for budget in budgets
-                if (budget.department or "").startswith(workspace_prefix)
-            ]
-            budgets = scoped or [
-                budget for budget in budgets
-                if ":" not in str(budget.department or "")
-            ]
-        else:
-            # No workspace selected: use only the unscoped/global budgets, not
-            # every workspace's budgets pooled together. Without this, a
-            # department name that exists in multiple workspaces (e.g.
-            # "Engineering") produced one evidence row per workspace, each
-            # dividing the SAME globally-aggregated activity spend by a
-            # different (often stale/tiny) cap — yielding nonsensical
-            # percentages like 400%+ that also contradicted other budget
-            # answers computed against a single workspace's own rows.
-            budgets = [
-                budget for budget in budgets
-                if ":" not in str(budget.department or "")
-            ]
+        # DepartmentBudget.workspace_id (backfilled by database/backfill_workspaces.py)
+        # is the real column now — no workspace given means the legacy
+        # "default" bucket specifically, never every workspace pooled
+        # together (which previously produced one evidence row per
+        # workspace for any department name shared across workspaces,
+        # dividing the same aggregated activity by different, often
+        # stale/tiny caps — nonsensical percentages that also disagreed
+        # with answers computed against a single workspace's own rows).
+        budgets = db.query(DepartmentBudget).filter(
+            DepartmentBudget.archived.isnot(True),
+            DepartmentBudget.workspace_id == (request.workspace_id or "default"),
+        ).all()
         budget_scope = parsed.get("budget_scope") or "status"
         over_limit = any(term in question.lower() for term in (
             "over budget", "exceeded", "over cap", "above budget"

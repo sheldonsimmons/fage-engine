@@ -72,7 +72,10 @@ def get_dashboard(
     # Both spend figures query token_transactions directly so they always agree.
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
     audit_scope = _workspace_filter(AuditEvent, workspace_id)
-    budget_scope = _workspace_filter(DepartmentBudget, workspace_id)
+    # DepartmentBudget.workspace_id (backfilled by database/backfill_workspaces.py)
+    # is the real column now, unlike the department-prefix convention
+    # _workspace_filter still uses for other tables below.
+    budget_scope = DepartmentBudget.workspace_id == (workspace_id or "default")
     agent_scope = _workspace_filter(RegisteredAgent, workspace_id)
 
     def _filters(*items):
@@ -90,20 +93,9 @@ def get_dashboard(
 
     # Budget table still used for cap / throttle display — load once here
     budget_query = db.query(DepartmentBudget).filter(
-        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None))
+        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),
+        budget_scope,
     )
-    if budget_scope is not None:
-        budget_query = budget_query.filter(budget_scope)
-    else:
-        # No workspace selected: show only the unscoped/global budgets, not
-        # every workspace's rows pooled together. Without this, a department
-        # name that exists in multiple workspaces (e.g. "Engineering") shows
-        # up once per workspace here, each with a different — often stale,
-        # near-zero — spend figure, producing a confusing/contradictory
-        # health strip. Mirrors the same fix already applied to Ask
-        # CostPilot's budget lookups in api/routes_efficiency.py and
-        # api/ask_costpilot_tools.py.
-        budget_query = budget_query.filter(~DepartmentBudget.department.like("%:%"))
     budgets_for_spend = budget_query.all()
 
     # ── Token savings from pruning ─────────────────────────────────────────────
