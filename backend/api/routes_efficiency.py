@@ -2262,6 +2262,12 @@ def _ask_run_agent_tool(
         return executor(db, request.workspace_id, bool(args.get("alerts_only")))
     if name == "get_product_help":
         return executor(args.get("topic") or request.question)
+    if name == "get_agent_adoption":
+        return executor(
+            db, request.workspace_id,
+            args.get("status") or "all", int(args.get("usage_threshold") or 10),
+            int(args.get("days") or 30), args.get("period_key") or "none",
+        )
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -2383,6 +2389,14 @@ def _ask_agent_final_payload(
                 })
                 if row.get("label"):
                     cited_departments.add(str(row["label"]).lower())
+        elif tool_name == "get_agent_adoption":
+            for row in (result.get("agents") or [])[:8]:
+                evidence.append({
+                    "label": row.get("label"),
+                    "value": row.get("status"),
+                    "filter_name": "agent_id",
+                    "filter_value": row.get("id"),
+                })
 
     payload = {
         "title": title,
@@ -2445,6 +2459,10 @@ you did not retrieve from a tool in this conversation.
 Call get_usage_report for totals, rankings, or "how much/who/what" questions.
 Call get_change_drivers for questions about why a number changed, increased, or decreased.
 Call get_budget_status for budget, cap, or "on track" questions.
+Call get_agent_adoption for questions about which agents are active, inactive, unused, never
+used, or recently quiet. get_usage_report only ever returns agents that HAVE activity, so it
+cannot answer "which agents are inactive" — you must call get_agent_adoption for that, never
+infer an answer by subtracting counts.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call

@@ -125,6 +125,53 @@ TOOL_SCHEMAS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "get_agent_adoption",
+        "description": (
+            "List registered agents by usage status — which ones are active, "
+            "which have never been used, and which have gone quiet recently. "
+            "This is the ONLY tool that knows about agents with zero activity — "
+            "get_usage_report only ever returns agents that have activity, so it "
+            "cannot answer 'which agents are inactive/unused/never used'."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["all", "never", "recently_inactive", "unused", "low", "active"],
+                    "description": (
+                        "'unused' = never used OR recently inactive (combined). "
+                        "'never' = zero lifetime requests, ever. 'recently_inactive' = "
+                        "has history but nothing in the current period. 'low' = active "
+                        "but under the usage threshold. 'active' = at or above threshold. "
+                        "'all' = every agent with its status."
+                    ),
+                },
+                "usage_threshold": {
+                    "type": "integer",
+                    "description": "Requests-in-period floor between 'low' and 'active'. Default 10.",
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Rolling window in days ending now that defines 'this period', used only if period_key is 'none'.",
+                },
+                "period_key": {
+                    "type": "string",
+                    "enum": [
+                        "none", "today", "yesterday", "this_week", "last_week",
+                        "this_month", "last_month", "this_quarter", "last_quarter",
+                        "this_year", "last_year",
+                    ],
+                    "description": "A named calendar period defining 'this period'. Use 'none' to fall back to a rolling `days` window.",
+                },
+            },
+            "required": ["status", "usage_threshold", "days", "period_key"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 FINAL_ANSWER_TOOL = {
@@ -306,9 +353,103 @@ def run_get_product_help(topic: str) -> dict:
     }
 
 
+def run_get_agent_adoption(
+    db, workspace_id: Optional[str], status: str, usage_threshold: int,
+    days: int = 30, period_key: str = "none",
+) -> dict:
+    """
+    Classify every registered agent by usage status. Mirrors the
+    deterministic agent_adoption intent in routes_efficiency.py exactly —
+    same classification rule and same two-count model (lifetime activity
+    from AuditEvent decides "never" vs "has history"; CURRENT-PERIOD
+    activity from project_activity_reporting decides "recently_inactive"
+    vs "low"/"active") — so this tool and that older code path can't
+    disagree, and "not used in this period" is actually answerable (a
+    lifetime-only count can't tell "never used" apart from "was active
+    once, quiet now").
+    """
+    from sqlalchemy import func
+    from database.models import AuditEvent, RegisteredAgent
+    from api.routes_work_items import project_activity_reporting
+
+    agent_query = db.query(RegisteredAgent).filter(RegisteredAgent.archived.isnot(True))
+    if workspace_id:
+        agent_query = agent_query.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
+    agents = agent_query.all()
+
+    lifetime_query = db.query(
+        AuditEvent.agent_id, func.count(AuditEvent.id), func.max(AuditEvent.timestamp),
+    ).filter(AuditEvent.agent_id.isnot(None))
+    if workspace_id:
+        lifetime_query = lifetime_query.filter(AuditEvent.workspace_id == workspace_id)
+    lifetime_by_agent = {
+        str(agent_id): {"request_count": int(count or 0), "last_used_at": last_used}
+        for agent_id, count, last_used in lifetime_query.group_by(AuditEvent.agent_id).all()
+    }
+
+    date_from, date_to = _period_bounds(days, period_key)
+    report = project_activity_reporting(
+        workspace_id=workspace_id, date_from=date_from, date_to=date_to, days=days,
+        project_id=None, user_external_id=None, agent_id=None, account_id=None,
+        source_platform=None, record_type=None, model_tier=None, charged_unit=None,
+        business_purpose=None, activity_limit=2000, db=db,
+    )
+    current_by_agent = {
+        str(row.get("id")): int(row.get("request_count") or 0)
+        for row in (report.get("agent_breakdown") or [])
+        if row.get("id") is not None
+    }
+
+    threshold = max(1, int(usage_threshold or 10))
+    rows = []
+    counts = {"never": 0, "recently_inactive": 0, "low": 0, "active": 0}
+    for agent in agents:
+        lifetime = lifetime_by_agent.get(str(agent.id)) or {}
+        lifetime_count = int(lifetime.get("request_count") or 0)
+        current_count = current_by_agent.get(str(agent.id), 0)
+        last_used_at = lifetime.get("last_used_at") or agent.last_used_at
+
+        if lifetime_count == 0:
+            row_status = "never"
+        elif current_count == 0:
+            row_status = "recently_inactive"
+        elif current_count < threshold:
+            row_status = "low"
+        else:
+            row_status = "active"
+        counts[row_status] += 1
+
+        wanted = (
+            {"never", "recently_inactive"} if status == "unused"
+            else {status} if status != "all" else None
+        )
+        if wanted is not None and row_status not in wanted:
+            continue
+
+        rows.append({
+            "id": agent.id,
+            "label": agent.name or "Unnamed agent",
+            "status": row_status,
+            "platform": agent.source_platform or "Unknown platform",
+            "department": str(agent.department or "Unassigned").split(":")[-1],
+            "current_period_requests": current_count,
+            "lifetime_requests": lifetime_count,
+            "last_used_at": last_used_at.isoformat() if last_used_at else None,
+        })
+
+    return {
+        "agents": rows,
+        "total_agents": len(agents),
+        "status_counts": counts,
+        "threshold": threshold,
+        "period": report.get("period"),
+    }
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
     "get_budget_status": run_get_budget_status,
     "get_product_help": run_get_product_help,
+    "get_agent_adoption": run_get_agent_adoption,
 }
