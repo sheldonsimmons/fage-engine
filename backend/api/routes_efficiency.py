@@ -47,7 +47,6 @@ from core.analytics_periods import (
     resolve_primary_period,
 )
 from core.analytics_coverage import (
-    any_workspace_over_budget,
     comparison_data_coverage,
     workspace_analytics_settings,
     workspace_attention_signals,
@@ -2368,6 +2367,13 @@ def _ask_agent_final_payload(
                 })
                 if row.get("label"):
                     cited_departments.add(str(row["label"]).lower())
+            for row in (result.get("top_accounts") or [])[:5]:
+                evidence.append({
+                    "label": row.get("label"),
+                    "value": row.get("spend_usd"),
+                    "filter_name": "account_id",
+                    "filter_value": row.get("id"),
+                })
         elif tool_name == "get_change_drivers":
             calculation = result.get("decomposition")
             for row in (result.get("top_contributors") or [])[:3]:
@@ -2456,7 +2462,11 @@ def _ask_costpilot_agent(request: "AskCostPilotRequest", db: Session) -> Optiona
     instructions = """You are CostPilot's usage analyst. Answer the user's question about their
 attributed AI spend and usage by calling tools to retrieve real numbers — never state a figure
 you did not retrieve from a tool in this conversation.
-Call get_usage_report for totals, rankings, or "how much/who/what" questions.
+Call get_usage_report for totals, rankings, or "how much/who/what" questions. Its result has
+separate top_people and top_accounts lists — "account" means a business/customer entity (e.g.
+a company record in Salesforce), "people" means individual human users. These are never the
+same thing; never answer an "accounts" question using top_people data, or vice versa, even if
+one list is empty and the other has rows.
 Call get_change_drivers for questions about why a number changed, increased, or decreased.
 Call get_budget_status for budget, cap, or "on track" questions.
 Call get_agent_adoption for questions about which agents are active, inactive, unused, never
@@ -2544,21 +2554,17 @@ def _ask_budget_flag(db: Session, workspace_id: Optional[str]) -> dict:
     near_cap = [s for s in signals if s.get("type") == "budget_near_cap"]
     severity = "critical" if over_budget else "warning" if near_cap else "ok"
 
-    # A separate, always-unscoped check: is anything over budget ANYWHERE,
-    # regardless of which workspace is currently selected. This database has
-    # several coexisting workspaces; every check above only looks at the one
-    # that's active. This one deliberately ignores workspace_id entirely.
-    try:
-        global_over = any_workspace_over_budget(db)
-    except Exception as exc:
-        logger.warning("Ask CostPilot global budget scan failed: %s", exc)
-        global_over = []
-
+    # A cross-workspace "anywhere in the system" scan (any_workspace_over_budget)
+    # used to run here too, but with the workspace list simplified down to
+    # exactly two (Production, Simulated), it just produced a second,
+    # contradictory-looking line under the workspace-scoped one above —
+    # switching between two workspaces to check each is now trivial, so the
+    # extra check wasn't worth the confusion. Removed; workspace_id-scoped
+    # signals only.
     return {
         "severity": severity,
         "over_budget": [{"department": s.get("department"), "detail": s.get("detail")} for s in over_budget],
         "near_cap": [{"department": s.get("department"), "detail": s.get("detail")} for s in near_cap],
-        "global_over_budget": global_over,
     }
 
 

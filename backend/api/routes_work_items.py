@@ -1269,6 +1269,18 @@ def project_activity_reporting(
         identity(row)["agent_name"],
         {"source_platform": identity(row)["agent_platform"]},
     ))
+    # "Account" here means the business/customer entity (e.g. a company
+    # record in Salesforce) — distinct from "people" (individual human
+    # users). Account data was already tracked per-transaction (see
+    # identity() above) and exposed as a filter option, but never
+    # aggregated into its own ranked breakdown the way every other
+    # dimension is — so "which accounts generated the most activity" had
+    # no real data to answer from anywhere in the app.
+    account_breakdown = aggregate(lambda row: (
+        identity(row)["account_external_id"],
+        identity(row)["account_name"],
+        {},
+    ))
     purpose_breakdown = aggregate(lambda row: (
         identity(row)["business_purpose"],
         identity(row)["business_purpose"],
@@ -1417,6 +1429,7 @@ def project_activity_reporting(
         "project_breakdown": project_breakdown,
         "people_breakdown": people_breakdown,
         "agent_breakdown": agent_breakdown,
+        "account_breakdown": account_breakdown,
         "organizational_unit_breakdown": organizational_unit_breakdown,
         "business_purpose_breakdown": purpose_breakdown,
         "source_platform_breakdown": source_platform_breakdown,

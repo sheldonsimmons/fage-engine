@@ -254,6 +254,11 @@ def run_get_usage_report(db, workspace_id: Optional[str], reporting_filters: dic
         "summary": summary,
         "top_people": (report.get("people_breakdown") or [])[:5],
         "top_agents": (report.get("agent_breakdown") or [])[:5],
+        # "Account" = the business/customer entity (e.g. a company record
+        # in Salesforce) — distinct from "top_people" (individual human
+        # users). Keep these separate; don't let the model substitute one
+        # for the other.
+        "top_accounts": (report.get("account_breakdown") or [])[:5],
         "top_departments": (report.get("organizational_unit_breakdown") or [])[:5],
         "top_platforms": (report.get("source_platform_breakdown") or [])[:5],
         "top_models": (report.get("model_breakdown") or [])[:5],
