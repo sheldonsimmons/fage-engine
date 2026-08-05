@@ -596,6 +596,14 @@
     });
   }
 
+  function accountExternalId(accountName) {
+    return `ACCT-${String(accountName || "unknown")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")}`;
+  }
+
   async function postRoute(item) {
     const response = await fetch("/api/route", {
       method: "POST",
@@ -634,6 +642,10 @@
           source_platform: "CostPilot Simulator",
           sync_if_missing: true,
           department: item.work.department,
+          account: {
+            external_id: accountExternalId(item.work.account),
+            name: item.work.account,
+          },
         },
         request: {
           task: item.subject,

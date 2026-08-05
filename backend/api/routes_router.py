@@ -21,6 +21,7 @@ from database.models import (
     OrganizationalUnit,
     RegisteredAgent,
     TokenTransaction,
+    WorkAccount,
     WorkItem,
     WorkItemUser,
     WorkUser,
@@ -53,6 +54,11 @@ class UniversalActorContext(BaseModel):
     department: Optional[str] = None
 
 
+class UniversalWorkAccount(BaseModel):
+    external_id: str
+    name: str
+
+
 class UniversalWorkContext(BaseModel):
     external_id: str
     type: str = "project"
@@ -60,6 +66,7 @@ class UniversalWorkContext(BaseModel):
     source_platform: Optional[str] = None
     sync_if_missing: bool = False
     department: Optional[str] = None
+    account: Optional[UniversalWorkAccount] = None
 
 
 class UniversalRequestContext(BaseModel):
@@ -191,6 +198,35 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
                 # as source_record_type while using the universal custom
                 # reporting category internally.
                 context_type = "custom"
+
+            # Get-or-create the parent business account. Universal-ingested
+            # work items previously always ended up with account_id=None —
+            # there was nowhere in this schema to send the account name at
+            # all — so every "which accounts" report showed nothing but
+            # "Unassigned account" for any activity that came through this
+            # endpoint (e.g. the traffic simulator) instead of the seeded
+            # historical demo data, which sets account_id directly.
+            account_id = None
+            if work.account and work.account.external_id and work.account.name:
+                account_external_id = _canonical_work_external_id(
+                    workspace_id, platform, f"ACCOUNT:{work.account.external_id.strip()}"
+                )
+                account = db.query(WorkAccount).filter(
+                    WorkAccount.external_id == account_external_id
+                ).first()
+                if not account:
+                    account = WorkAccount(
+                        external_id=account_external_id,
+                        name=work.account.name.strip(),
+                        department=(req.work_department or department),
+                        status="active",
+                        workspace_id=workspace_id,
+                    )
+                    db.add(account)
+                    db.commit()
+                    db.refresh(account)
+                account_id = account.id
+
             item = WorkItem(
                 external_id=_canonical_work_external_id(workspace_id, platform, source_record_id),
                 name=(work.name or f"{work.type.title()} {source_record_id}").strip(),
@@ -202,6 +238,7 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
                 context_template=f"{platform.lower()}_{work.type.lower()}",
                 source_record_type=work.type,
                 source_record_id=source_record_id,
+                account_id=account_id,
             )
             db.add(item)
             db.commit()
