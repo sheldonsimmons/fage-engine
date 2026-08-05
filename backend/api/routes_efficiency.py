@@ -2265,6 +2265,57 @@ def _ask_run_agent_tool(
     return {"error": f"unhandled tool: {name}"}
 
 
+_ASK_AGENT_ALL_CLEAR_PATTERNS = [
+    re.compile(p, re.IGNORECASE) for p in (
+        r"no\s+depart\w*\s+(?:is|are)\s+(?:currently\s+)?(?:over|above|exceed\w*|near|approaching|close to)",
+        r"no\s+depart\w*\s+(?:is|are)\s+(?:at or )?(?:above|over)\s+(?:the\s+)?\d{1,3}\s*%",
+        r"(?:all|every)\s+depart\w*\s+(?:is|are)\s+(?:well\s+)?within",
+        r"nothing\s+is\s+(?:currently\s+)?(?:over|near|close to|approaching)",
+        r"no\s+depart\w*\s+(?:has|have)\s+(?:hit|reached|exceeded)",
+    )
+]
+
+
+def _ask_agent_validate_answer(tool_call_log: list, answer_text: str) -> list[str]:
+    """
+    Check the model's freeform final_answer text for direct contradictions
+    with the budget facts it was just given — modeled on the same spirit as
+    validate_ask_answer_contract() (core/ask_costpilot_contracts.py) for the
+    deterministic path, which has no equivalent for the agent loop today.
+    Deliberately narrow: only the failure mode that actually happened this
+    session (a fluent "all clear" narrative next to tool data that says
+    otherwise), not a general-purpose fact-checker.
+    """
+    issues: list[str] = []
+    budget_rows: list[dict] = []
+    for tool_name, _args, result in tool_call_log:
+        if tool_name == "get_budget_status":
+            budget_rows.extend(result.get("departments") or [])
+    if not budget_rows:
+        return issues
+
+    over_rows = [r for r in budget_rows if float(r.get("used_pct") or 0) >= 100]
+    near_rows = [r for r in budget_rows if float(r.get("used_pct") or 0) >= 80]
+    text_lower = answer_text.lower()
+
+    if near_rows and any(pattern.search(answer_text) for pattern in _ASK_AGENT_ALL_CLEAR_PATTERNS):
+        worst = max(near_rows, key=lambda r: float(r.get("used_pct") or 0))
+        issues.append(
+            f"answer claims no departments are at risk, but {worst.get('label')} "
+            f"is at {worst.get('used_pct')}% of its budget"
+        )
+
+    for row in over_rows:
+        label = str(row.get("label") or "").strip()
+        if label and label.lower() not in text_lower:
+            issues.append(
+                f"{label} is over budget ({row.get('used_pct')}%) per tool data "
+                f"but is never mentioned in the answer"
+            )
+
+    return issues
+
+
 def _ask_agent_final_payload(
     request: "AskCostPilotRequest", db: Session, final_args: dict, tool_call_log: list,
 ) -> Optional[dict]:
@@ -2277,6 +2328,11 @@ def _ask_agent_final_payload(
     title = str(final_args.get("title") or "").strip()[:180]
     answer = str(final_args.get("answer") or "").strip()[:4000]
     if not title or not answer or not tool_call_log:
+        return None
+
+    contract_issues = _ask_agent_validate_answer(tool_call_log, answer)
+    if contract_issues:
+        logger.warning("Ask CostPilot agent answer failed validation: %s", "; ".join(contract_issues))
         return None
 
     evidence = []
