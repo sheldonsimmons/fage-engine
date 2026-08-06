@@ -3413,12 +3413,14 @@ def _ask_costpilot_answer(
         # activity — recompute from the ledger for those instead, via the
         # same shared function core.budget.get_all_budgets (Admin) and
         # ask_costpilot_tools.run_get_budget_status use, so this answer
-        # can't disagree with either of them. request_count still comes
-        # from this question's own already-scoped `report` below — that
-        # part isn't duplicated anywhere else, only the spend number was.
+        # can't disagree with either of them. Pass the `report` this
+        # question already fetched instead of letting it trigger a second,
+        # identical (expensive) full activity scan — reusing it also keeps
+        # spend and request-count consistent with each other, since both
+        # then come from the exact same data.
         _ask_budget_spend_by_department = (
             None if _ask_budget_is_production_workspace
-            else recomputed_department_spend(db, request.workspace_id, date_from=date_from, date_to=date_to)
+            else recomputed_department_spend(db, request.workspace_id, date_from=date_from, date_to=date_to, report=report)
         )
         budget_rows = []
         for budget in budgets:

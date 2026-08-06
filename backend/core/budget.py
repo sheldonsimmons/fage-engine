@@ -114,6 +114,7 @@ def recomputed_department_spend(
     workspace_id: str | None,
     date_from=None,
     date_to=None,
+    report: dict | None = None,
 ) -> dict[str, float]:
     """
     Spend per department, recomputed from the actual transaction ledger for
@@ -133,6 +134,15 @@ def recomputed_department_spend(
     deterministic path defaulted to a 30-day rolling window while this
     function was always month-to-date — precisely because there were three
     separate recipes for the same number instead of one.
+
+    project_activity_reporting() is expensive (a full table scan across
+    the date range, aggregated in Python across several dimensions) — if
+    the caller already fetched a report for this exact workspace/date
+    range, pass it via `report` instead of triggering a second identical
+    scan. This is what caused a real slowdown right after the three
+    callers were consolidated: the Ask CostPilot budget answer used to
+    reuse its own already-fetched report inline, and briefly started
+    fetching a second one here instead.
     """
     from datetime import datetime as _datetime
     from api.routes_work_items import project_activity_reporting
@@ -142,12 +152,13 @@ def recomputed_department_spend(
     if date_to is None:
         date_to = _datetime.utcnow()
 
-    report = project_activity_reporting(
-        workspace_id=workspace_id, date_from=date_from, date_to=date_to, days=31,
-        project_id=None, user_external_id=None, agent_id=None, account_id=None,
-        source_platform=None, record_type=None, model_tier=None, charged_unit=None,
-        business_purpose=None, activity_limit=2000, db=db,
-    )
+    if report is None:
+        report = project_activity_reporting(
+            workspace_id=workspace_id, date_from=date_from, date_to=date_to, days=31,
+            project_id=None, user_external_id=None, agent_id=None, account_id=None,
+            source_platform=None, record_type=None, model_tier=None, charged_unit=None,
+            business_purpose=None, activity_limit=2000, db=db,
+        )
     spend_by_department: dict[str, float] = {}
     for row in report.get("organizational_unit_breakdown") or []:
         raw_department = str(row.get("id") or row.get("label") or "").strip()
