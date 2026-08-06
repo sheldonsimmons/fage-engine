@@ -2571,9 +2571,22 @@ about CostPilot the product. Always call exactly one tool per turn."""
     try:
         import anthropic
 
+        # timeout_seconds bounds a single Claude call — it does not bound
+        # the loop as a whole, which can run up to max_tool_calls + 1 turns.
+        # A merely-slow (not individually timed-out) sequence of turns could
+        # add up to well past Heroku's 30s router limit, which kills the
+        # whole request with no clean fallback — worse than just answering
+        # from the deterministic path. total_budget_seconds bounds the
+        # entire loop's wall-clock time instead: checked before every turn,
+        # comfortably under 30s, so this code chooses to fall back on its
+        # own terms rather than being cut off mid-request.
         timeout_seconds = _ask_env_seconds(
-            "ASK_COSTPILOT_AGENT_TIMEOUT_SECONDS", 20.0, 5.0, 45.0
+            "ASK_COSTPILOT_AGENT_TIMEOUT_SECONDS", 10.0, 5.0, 45.0
         )
+        total_budget_seconds = _ask_env_seconds(
+            "ASK_COSTPILOT_AGENT_TOTAL_BUDGET_SECONDS", 15.0, 5.0, 25.0
+        )
+        loop_start = time.monotonic()
         client = anthropic.Anthropic(api_key=api_key, timeout=timeout_seconds, max_retries=0)
         model = os.getenv(
             "ASK_COSTPILOT_AGENT_MODEL", os.getenv("ANTHROPIC_FLAGSHIP_MODEL", "claude-sonnet-4-6")
@@ -2584,6 +2597,14 @@ about CostPilot the product. Always call exactly one tool per turn."""
         ]
 
         for _turn in range(max_tool_calls + 1):
+            elapsed = time.monotonic() - loop_start
+            if elapsed + timeout_seconds > total_budget_seconds:
+                logger.info(
+                    "Ask CostPilot agent loop stopping before turn %d: %.1fs elapsed, "
+                    "next call could exceed the %.1fs total budget",
+                    _turn + 1, elapsed, total_budget_seconds,
+                )
+                return None
             response = client.messages.create(
                 model=model,
                 max_tokens=1024,
