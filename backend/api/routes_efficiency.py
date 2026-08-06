@@ -2841,16 +2841,25 @@ def _ask_costpilot_answer(
         "model": ("model_breakdown", None, "Models"),
     }
 
-    period_from = str(period.get("date_from") or "")[:10]
-    period_to = str(period.get("date_to") or "")[:10]
-    if period_from and period_to:
+    period_from_raw = period.get("date_from")
+    period_to_raw = period.get("date_to")
+    if period_from_raw and period_to_raw:
         from core.analytics_periods import format_date_range as _ask_format_date_range
+        from core.analytics_periods import _from_utc_naive, _workspace_zone
         try:
-            period_label = _ask_format_date_range(
-                datetime.fromisoformat(period_from), datetime.fromisoformat(period_to)
-            )
+            # date_from/date_to are UTC-naive (that's what the DB query
+            # needs) — converting straight to .date() here would show the
+            # UTC calendar day, not the workspace's local one. Near a UTC
+            # day boundary (late afternoon/evening in US timezones) those
+            # two days can differ, which is the exact bug being fixed:
+            # convert back to local time first so the displayed range
+            # matches the workspace's own calendar, not the server's.
+            zone = _workspace_zone(effective_timezone)
+            local_from = _from_utc_naive(datetime.fromisoformat(period_from_raw), zone)
+            local_to = _from_utc_naive(datetime.fromisoformat(period_to_raw), zone)
+            period_label = _ask_format_date_range(local_from, local_to)
         except ValueError:
-            period_label = f"{period_from} through {period_to}"
+            period_label = f"{str(period_from_raw)[:10]} through {str(period_to_raw)[:10]}"
     else:
         period_label = f"the last {parsed['days']} days"
     live_count = int(summary.get("live_count") or 0)
