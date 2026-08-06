@@ -262,6 +262,7 @@ loadTierNames().then(() => {
 renderPresetOptions();
 loadModels();
 loadRoutingOutcomes();
+loadRoutingCalibration();
 
 // ── Tier reference cards ──────────────────────────────────────────────────────
 
@@ -584,6 +585,70 @@ async function loadRoutingOutcomes() {
     const alertWrap = document.getElementById("mdlRoutingAlerts");
     if (alertWrap) alertWrap.innerHTML = '<div class="mdl-routing-alert critical">Routing signals unavailable.</div>';
     list.innerHTML = `<div class="mdl-placeholder" style="color:var(--accent-red)">Routing outcomes unavailable: ${modelHtmlEscape(e.message)}</div>`;
+  }
+}
+
+// ── Routing calibration ─────────────────────────────────────────────────────
+
+async function loadRoutingCalibration() {
+  const note = document.getElementById("mdlCalibrationNote");
+  const tierBody = document.querySelector("#mdlTierDistTable tbody");
+  const kwBody = document.querySelector("#mdlKeywordCalTable tbody");
+  if (!note || !tierBody || !kwBody) return;
+
+  const days = document.getElementById("mdlCalibrationDays").value;
+  note.textContent = "Loading calibration data…";
+
+  try {
+    const data = await apiGet(`/api/models/routing-calibration?days=${encodeURIComponent(days)}`);
+    const threshold = Number(data.complexity_token_threshold);
+    const total = Number(data.total_requests_analyzed);
+
+    note.textContent = total
+      ? `${total.toLocaleString()} routed requests analyzed over the last ${days} days · complexity token threshold: ${threshold.toLocaleString()}.`
+      : `No routed requests with matching audit data in the last ${days} days.`;
+
+    const tiers = data.tier_token_distribution || [];
+    tierBody.innerHTML = tiers.length
+      ? tiers.map(t => {
+          const overHot = Number(t.over_threshold_pct) >= 15;
+          return (
+            '<tr>' +
+              '<td><strong>' + modelHtmlEscape(t.tier) + '</strong></td>' +
+              '<td>' + Number(t.count).toLocaleString() + '</td>' +
+              '<td>' + Number(t.median_tokens).toLocaleString() + '</td>' +
+              '<td>' + Number(t.p90_tokens).toLocaleString() + '</td>' +
+              '<td>' + Number(t.max_tokens).toLocaleString() + '</td>' +
+              '<td class="' + (overHot ? "mdl-cal-hot" : "") + '">' + t.over_threshold_pct + '%</td>' +
+            '</tr>'
+          );
+        }).join("")
+      : '<tr><td colspan="6" class="mdl-placeholder">No data for this window.</td></tr>';
+
+    const keywords = data.keyword_calibration || [];
+    kwBody.innerHTML = keywords.length
+      ? keywords.map(k => {
+          const dead = k.never_fired && k.configured;
+          const overTrigger = k.configured && k.trigger_count > 0 && k.avg_request_tokens !== null && k.avg_request_tokens < 100;
+          const rowClass = dead ? "mdl-cal-dead" : overTrigger ? "mdl-cal-hot" : "";
+          return (
+            '<tr class="' + rowClass + '">' +
+              '<td><code class="mdl-model-id">' + modelHtmlEscape(k.keyword) + '</code></td>' +
+              '<td>' + (k.configured ? "✓" : "—") + '</td>' +
+              '<td>' + Number(k.trigger_count).toLocaleString() +
+                (dead ? ' <span class="mdl-cal-flag">never fired</span>' : '') +
+                (overTrigger ? ' <span class="mdl-cal-flag">short requests</span>' : '') +
+              '</td>' +
+              '<td>' + k.pct_of_requests + '%</td>' +
+              '<td>' + (k.avg_request_tokens === null ? "—" : Number(k.avg_request_tokens).toLocaleString() + " tok") + '</td>' +
+            '</tr>'
+          );
+        }).join("")
+      : '<tr><td colspan="5" class="mdl-placeholder">No data for this window.</td></tr>';
+  } catch (e) {
+    note.textContent = "Calibration data unavailable: " + e.message;
+    tierBody.innerHTML = '<tr><td colspan="6" class="mdl-placeholder">Unavailable.</td></tr>';
+    kwBody.innerHTML = '<tr><td colspan="5" class="mdl-placeholder">Unavailable.</td></tr>';
   }
 }
 
