@@ -15,7 +15,6 @@ from typing import Optional
 from core.analytics_drivers import change_decomposition, dimension_contributors, top_contributor
 from core.analytics_periods import comparison_plan, resolve_primary_period
 from core.costpilot_knowledge import search_costpilot_knowledge
-from database.models import DepartmentBudget
 
 
 TOOL_SCHEMAS = [
@@ -335,45 +334,31 @@ def run_get_change_drivers(
 
 
 def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) -> dict:
-    from sqlalchemy import or_
-    from core.budget import recomputed_department_spend, workspace_type_for
-
-    # current_spend_usd is the live-tracked counter Admin > Budgets displays
-    # and real throttling enforcement acts on — the source of truth for
-    # any real (production) workspace. It never gets touched by
-    # backfilled/simulated data though, so for demo/simulation workspaces
-    # it reads $0.00 forever even with real recorded activity — recompute
-    # from the ledger for those instead. Same rule core.budget.get_all_budgets
-    # (Admin's Budgets page) uses, so the two never disagree.
-    is_production = workspace_type_for(db, workspace_id) == "production"
-    spend_by_department = None if is_production else recomputed_department_spend(db, workspace_id)
-
-    query = db.query(DepartmentBudget).filter(
-        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),  # noqa: E712
-        DepartmentBudget.workspace_id == (workspace_id or "default"),
-    )
+    # Delegates spend/cap computation entirely to core.budget.get_all_budgets
+    # — the same function Admin > Budgets uses — instead of re-deriving the
+    # production-vs-recomputed branch here. Three independent copies of this
+    # branch (this one, the Admin page, and Ask CostPilot's deterministic
+    # answer) is exactly how the budget numbers ended up disagreeing across
+    # surfaces; this is one of them retired in favor of the shared function.
+    from core.budget import get_all_budgets
 
     rows = []
-    for budget in query.all():
-        cap = float(budget.monthly_cap_usd or 0)
-        if cap <= 0:
+    for budget in get_all_budgets(db, workspace_id):
+        cap = float(budget["monthly_cap_usd"] or 0)
+        if cap <= 0 or budget.get("archived"):
             continue
-        label = (budget.department or "Unassigned").split(":")[-1]
-        spend = (
-            float(budget.current_spend_usd or 0) if is_production
-            else spend_by_department.get(label.casefold(), 0.0)
-        )
-        pct = round(spend / cap * 100, 1)
+        spend = float(budget["current_spend_usd"] or 0)
+        pct = float(budget["used_pct"] or 0)
         if alerts_only and pct < 80:
             continue
         rows.append({
-            "id": budget.department,
-            "label": label,
+            "id": budget["department"],
+            "label": (budget["department"] or "Unassigned").split(":")[-1],
             "monthly_cap_usd": cap,
             "current_spend_usd": round(spend, 6),
-            "remaining_usd": max(cap - spend, 0),
+            "remaining_usd": budget["remaining_usd"],
             "used_pct": pct,
-            "throttled": bool(budget.throttled),
+            "throttled": bool(budget["throttled"]),
         })
     rows.sort(key=lambda row: -row["used_pct"])
     return {"departments": rows}

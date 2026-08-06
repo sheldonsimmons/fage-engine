@@ -14,7 +14,7 @@ GET /api/dashboard
 
 import json
 from datetime import datetime, date, timedelta
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func, or_
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -23,32 +23,9 @@ from database.models import (
     TokenTransaction, RegisteredAgent,
     AuditEvent,
 )
+from core.workspace_scope import workspace_filter as _workspace_filter
 
 router = APIRouter()
-
-
-def _workspace_filter(model, workspace_id: str | None):
-    """
-    TokenTransaction and AuditEvent both got a real workspace_id column
-    added later (see database/migrate.py) — activity written through the
-    universal /api/route ingestion path (including the traffic simulator)
-    sets that column but leaves department unprefixed, so the old
-    department LIKE 'workspace_id:%' filter alone silently dropped most of
-    it. Confirmed live: for one workspace this month, the LIKE filter
-    matched 65 of 214 actual transactions (~5x undercount on spend).
-    RegisteredAgent has no workspace_id column, so it keeps the prefix-only
-    match; TokenTransaction/AuditEvent prefer the real column and only fall
-    back to the prefix match for legacy rows that predate it.
-    """
-    if not workspace_id:
-        return None
-    prefix_match = model.department.like(f"{workspace_id}:%")
-    if hasattr(model, "workspace_id"):
-        return or_(
-            model.workspace_id == workspace_id,
-            and_(model.workspace_id.is_(None), prefix_match),
-        )
-    return prefix_match
 
 
 def _keyword_stats(db: Session, days: int = 30, top_n: int = 10, workspace_id: str | None = None) -> list:

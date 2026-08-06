@@ -109,22 +109,41 @@ def workspace_type_for(db: Session, workspace_id: str | None) -> str:
     return row.workspace_type if row else "production"
 
 
-def recomputed_department_spend(db: Session, workspace_id: str | None) -> dict[str, float]:
+def recomputed_department_spend(
+    db: Session,
+    workspace_id: str | None,
+    date_from=None,
+    date_to=None,
+) -> dict[str, float]:
     """
-    Month-to-date spend per department, recomputed from the actual
-    transaction ledger. Only meaningful for workspaces whose data was
-    bulk-backfilled or simulated rather than written through live request
-    routing — current_spend_usd never gets touched by a backfill, so it
-    reads $0.00 forever for those workspaces even when real activity
-    exists. Never used for production workspaces, where current_spend_usd
-    is the live, authoritative, admin-matching number.
+    Spend per department, recomputed from the actual transaction ledger for
+    the given date range (defaults to month-to-date). Only meaningful for
+    workspaces whose data was bulk-backfilled or simulated rather than
+    written through live request routing — current_spend_usd never gets
+    touched by a backfill, so it reads $0.00 forever for those workspaces
+    even when real activity exists. Never used for production workspaces,
+    where current_spend_usd is the live, authoritative, admin-matching
+    number.
+
+    Single source of truth for this recompute — get_all_budgets (Admin
+    Budgets), ask_costpilot_tools.run_get_budget_status (the agent tool
+    loop), and the deterministic Ask CostPilot budget answer all call this
+    same function now instead of each independently re-deriving spend from
+    organizational_unit_breakdown. They used to disagree — e.g. the
+    deterministic path defaulted to a 30-day rolling window while this
+    function was always month-to-date — precisely because there were three
+    separate recipes for the same number instead of one.
     """
     from datetime import datetime as _datetime
     from api.routes_work_items import project_activity_reporting
 
-    month_start = _datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if date_from is None:
+        date_from = _datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if date_to is None:
+        date_to = _datetime.utcnow()
+
     report = project_activity_reporting(
-        workspace_id=workspace_id, date_from=month_start, date_to=_datetime.utcnow(), days=31,
+        workspace_id=workspace_id, date_from=date_from, date_to=date_to, days=31,
         project_id=None, user_external_id=None, agent_id=None, account_id=None,
         source_platform=None, record_type=None, model_tier=None, charged_unit=None,
         business_purpose=None, activity_limit=2000, db=db,

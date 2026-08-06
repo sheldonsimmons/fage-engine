@@ -3386,6 +3386,9 @@ def _ask_costpilot_answer(
             "over budget", "exceeded", "over cap", "above budget"
         ))
         threshold = 100 if over_limit else 70
+        # Only request counts come from here now — spend is sourced from
+        # the shared core.budget.recomputed_department_spend below instead
+        # of being independently re-summed from this same breakdown.
         activity_by_department = {}
         for activity_row in report.get("organizational_unit_breakdown") or []:
             raw_department = str(
@@ -3398,13 +3401,25 @@ def _ask_costpilot_answer(
             department_key = raw_department.casefold()
             if not department_key:
                 continue
-            bucket = activity_by_department.setdefault(
-                department_key, {"spend": 0.0, "requests": 0}
-            )
-            bucket["spend"] += float(activity_row.get("spend_usd") or 0)
+            bucket = activity_by_department.setdefault(department_key, {"requests": 0})
             bucket["requests"] += int(activity_row.get("request_count") or 0)
-        from core.budget import workspace_type_for
+        from core.budget import recomputed_department_spend, workspace_type_for
         _ask_budget_is_production_workspace = workspace_type_for(db, request.workspace_id) == "production"
+        # current_spend_usd is the live-tracked counter Admin > Budgets
+        # displays and real throttling enforcement acts on — the source of
+        # truth for a real (production) workspace. It never gets touched by
+        # backfilled/simulated data though, so for demo/simulation
+        # workspaces it reads $0.00 forever even with real recorded
+        # activity — recompute from the ledger for those instead, via the
+        # same shared function core.budget.get_all_budgets (Admin) and
+        # ask_costpilot_tools.run_get_budget_status use, so this answer
+        # can't disagree with either of them. request_count still comes
+        # from this question's own already-scoped `report` below — that
+        # part isn't duplicated anywhere else, only the spend number was.
+        _ask_budget_spend_by_department = (
+            None if _ask_budget_is_production_workspace
+            else recomputed_department_spend(db, request.workspace_id, date_from=date_from, date_to=date_to)
+        )
         budget_rows = []
         for budget in budgets:
             cap = float(budget.monthly_cap_usd or 0)
@@ -3414,17 +3429,9 @@ def _ask_costpilot_answer(
             elif ":" in raw_budget_department:
                 raw_budget_department = raw_budget_department.rsplit(":", 1)[-1]
             activity = activity_by_department.get(raw_budget_department.casefold(), {})
-            # current_spend_usd is the live-tracked counter Admin > Budgets
-            # displays and real throttling enforcement acts on — the source
-            # of truth for a real (production) workspace. It never gets
-            # touched by backfilled/simulated data though, so for
-            # demo/simulation workspaces it reads $0.00 forever even with
-            # real recorded activity — use the activity-ledger figure for
-            # those instead. Same rule core.budget.get_all_budgets (Admin)
-            # and ask_costpilot_tools.run_get_budget_status use.
             spent = (
                 float(budget.current_spend_usd or 0) if _ask_budget_is_production_workspace
-                else float(activity.get("spend") or 0)
+                else _ask_budget_spend_by_department.get(raw_budget_department.casefold(), 0.0)
             )
             matched_requests = int(activity.get("requests") or 0)
             pct = spent / cap * 100 if cap > 0 else 0

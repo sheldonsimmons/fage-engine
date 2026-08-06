@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import AuditEvent, KnownModel, ModelRegistry, TokenTransaction
 from config import FLAGSHIP_MODEL, MICRO_MODEL
+from core.workspace_scope import workspace_filter as _calibration_workspace_filter
 
 router = APIRouter()
 
@@ -696,21 +697,6 @@ def get_model_routing_outcome_detail(
         "recent_calls": recent_calls,
         "audit_events": audit_rows,
     }
-
-
-def _calibration_workspace_filter(model, workspace_id: Optional[str]):
-    """Same real-workspace_id-first, department-prefix-fallback pattern as
-    routes_dashboard.py's _workspace_filter — duplicated locally since that
-    one isn't shared/exported."""
-    if not workspace_id:
-        return None
-    prefix_match = model.department.like(f"{workspace_id}:%")
-    if hasattr(model, "workspace_id"):
-        return or_(
-            model.workspace_id == workspace_id,
-            and_(model.workspace_id.is_(None), prefix_match),
-        )
-    return prefix_match
 
 
 @router.get("/routing-calibration")
