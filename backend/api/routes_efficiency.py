@@ -1486,6 +1486,20 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
         ("platform", "source_platform_breakdown", "source_platform", "platform"),
         ("model", "model_breakdown", "model_name", "model"),
     )
+    # The same real-world name can appear as more than one row within a
+    # single dimension — e.g. an account seeded by the historical demo
+    # script and the same account name created later via the traffic
+    # simulator's resolver end up as two WorkAccount rows with different
+    # external ids. Merge same-entity/same-label rows into one combined
+    # row before scoring so that duplication doesn't look like ambiguity
+    # between two different real subjects (which is the actual case this
+    # tie-check exists to catch, e.g. a person and a department sharing a
+    # name).
+    _SUM_FIELDS = (
+        "request_count", "input_tokens", "output_tokens", "tokens_saved",
+        "spend_usd", "simulation_count", "total_tokens", "live_count",
+    )
+    merged: dict[tuple, dict] = {}
     for entity, breakdown_key, filter_name, entity_label in configs:
         for row in report.get(breakdown_key) or []:
             label = str(row.get("label") or "").strip()
@@ -1493,18 +1507,30 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
             overlap = question_tokens & label_tokens
             if not overlap:
                 continue
-            candidates.append({
-                "entity": entity,
-                "entity_label": entity_label,
-                "filter_name": filter_name,
-                "row": row,
-                "score": (
-                    len(overlap),
-                    1 if label_tokens and label_tokens.issubset(question_tokens) else 0,
-                    len(" ".join(overlap)),
-                ),
-            })
+            key = (entity, label)
+            existing = merged.get(key)
+            if existing is None:
+                merged_row = dict(row)
+                for field in _SUM_FIELDS:
+                    if field in row:
+                        merged_row[field] = row.get(field) or 0
+                merged[key] = {
+                    "entity": entity,
+                    "entity_label": entity_label,
+                    "filter_name": filter_name,
+                    "row": merged_row,
+                    "score": (
+                        len(overlap),
+                        1 if label_tokens and label_tokens.issubset(question_tokens) else 0,
+                        len(" ".join(overlap)),
+                    ),
+                }
+            else:
+                for field in _SUM_FIELDS:
+                    if field in row:
+                        existing["row"][field] = (existing["row"].get(field) or 0) + (row.get(field) or 0)
 
+    candidates = list(merged.values())
     if not candidates:
         return None
     candidates.sort(key=lambda item: item["score"], reverse=True)
