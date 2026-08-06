@@ -298,8 +298,16 @@ def _ask_intent(question: str, default_days: int) -> dict:
         entity = "agent"
     elif any(term in text for term in ("department", "team", "business unit", "cost center")):
         entity = "department"
+    elif any(term in text for term in ("account", "customer")):
+        # "account" = a business/customer entity (e.g. a company record in
+        # Salesforce) — distinct from "context", which means the work item
+        # itself (an opportunity, case, matter, etc.). Conflating them
+        # answered "which accounts..." questions with work-item names
+        # (e.g. "Summit Financial — Customer Campaign") instead of account
+        # names (e.g. "Summit Financial").
+        entity = "account"
     elif any(term in text for term in (
-        "account", "customer", "project", "matter", "opportunity", "business context", "work item"
+        "project", "matter", "opportunity", "business context", "work item"
     )):
         entity = "context"
     elif any(term in text for term in ("platform", "provider", "source system", "source app")):
@@ -365,7 +373,11 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "recently inactive", "low usage", "low-use", "low use",
         "not being used much", "used infrequently", "high usage",
         "change threshold", "set threshold", "usage threshold",
-    )):
+    )) or ("agent" in text and "inactive" in text):
+        # "which agents are inactive" phrases "inactive" after "agent(s)",
+        # which the fixed phrases above miss entirely — this question fell
+        # through to a generic overview instead of the agent-adoption
+        # lookup that actually knows which agents have no activity.
         intent = "agent_adoption"
         entity = "agent"
         metric = "request_count"
@@ -2796,6 +2808,7 @@ def _ask_costpilot_answer(
         "person": ("people_breakdown", "user_external_id", "People"),
         "agent": ("agent_breakdown", "agent_id", "Agents"),
         "department": ("organizational_unit_breakdown", "charged_unit", "Departments and teams"),
+        "account": ("account_breakdown", "account_id", "Accounts"),
         "context": ("project_breakdown", "project_id", context_plural),
         "platform": ("source_platform_breakdown", "source_platform", "Platforms"),
         # Model evidence is still useful, but the attribution report does not
