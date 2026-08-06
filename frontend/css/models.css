@@ -582,6 +582,16 @@
 .mdl-action-btn:hover { border-color: var(--accent); color: var(--accent); }
 .mdl-action-toggle:hover { border-color: var(--accent-yellow); color: var(--accent-yellow); }
 .mdl-action-delete:hover  { border-color: var(--accent-red);    color: var(--accent-red); }
+.mdl-action-sync { border-color: var(--accent-yellow); color: var(--accent-yellow); }
+.mdl-action-sync:hover { background: rgba(210,153,34,0.12); }
+
+.mdl-price-outdated {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-yellow);
+  margin-top: 2px;
+  cursor: default;
+}
 
 @media (max-width: 900px) {
   .mdl-health-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

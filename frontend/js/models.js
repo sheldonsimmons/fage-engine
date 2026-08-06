@@ -786,6 +786,16 @@ function renderTable(models) {
       routingRole = '<span class="mdl-eligible-badge">Eligible fallback</span>';
     }
 
+    // price_outdated (set by the backend by comparing this row's price to
+    // its Known Models catalog entry) means the provider's rate moved since
+    // this row was added/last synced — flag it instead of leaving it silent.
+    const priceOutdated = !!m.price_outdated;
+    const priceFlag = priceOutdated
+      ? '<div class="mdl-price-outdated" title="Catalog price: $' +
+        m.catalog_cost_input_per_1m.toFixed(2) + ' / $' + m.catalog_cost_output_per_1m.toFixed(2) +
+        ' — this row has not been synced">⚠ Outdated</div>'
+      : '';
+
     return (
       '<tr>' +
         '<td>' +
@@ -803,12 +813,17 @@ function renderTable(models) {
           '<div class="mdl-tier-tagline-sm">' + modelHtmlEscape(m.tier_tagline) + '</div>' +
         '</td>' +
         '<td><code class="mdl-model-id">' + modelHtmlEscape(m.model_id) + '</code></td>' +
-        '<td class="mdl-cost">$' + m.cost_input_per_1m.toFixed(2) + '</td>' +
+        '<td class="mdl-cost">$' + m.cost_input_per_1m.toFixed(2) + priceFlag + '</td>' +
         '<td class="mdl-cost">$' + m.cost_output_per_1m.toFixed(2) + '</td>' +
         '<td>' + enabledBadge + '</td>' +
         '<td>' + routingRole + '</td>' +
         '<td class="mdl-actions">' +
           '<button class="mdl-action-btn" onclick="openEditModal(' + m.id + ')">Edit</button>' +
+          (priceOutdated
+            ? '<button class="mdl-action-btn mdl-action-sync" onclick="syncModelPrice(' + m.id + ', ' +
+              m.cost_input_per_1m + ', ' + m.cost_output_per_1m + ', ' +
+              m.catalog_cost_input_per_1m + ', ' + m.catalog_cost_output_per_1m + ', event)">Sync price</button>'
+            : '') +
           '<button class="mdl-action-btn mdl-action-toggle" onclick="toggleModel(' + m.id + ', event)">' +
             (m.is_enabled ? 'Disable' : 'Enable') +
           '</button>' +
@@ -828,6 +843,23 @@ async function toggleModel(id, e) {
     loadModels();
   } catch (err) {
     alert("Toggle failed: " + err.message);
+  }
+}
+
+async function syncModelPrice(id, oldIn, oldOut, newIn, newOut, e) {
+  e.stopPropagation();
+  const confirmed = confirm(
+    "Update this model's price from the Known Models catalog?\n\n" +
+    "Input:  $" + oldIn.toFixed(2) + " → $" + newIn.toFixed(2) + " per 1M tokens\n" +
+    "Output: $" + oldOut.toFixed(2) + " → $" + newOut.toFixed(2) + " per 1M tokens\n\n" +
+    "Only the price changes — tier, enabled state, and defaults are untouched."
+  );
+  if (!confirmed) return;
+  try {
+    await apiPatch("/api/models/" + id + "/sync-price", null);
+    loadModels();
+  } catch (err) {
+    alert("Price sync failed: " + err.message);
   }
 }
 

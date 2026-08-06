@@ -27,7 +27,7 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import AuditEvent, ModelRegistry, TokenTransaction
+from database.models import AuditEvent, KnownModel, ModelRegistry, TokenTransaction
 from config import FLAGSHIP_MODEL, MICRO_MODEL
 
 router = APIRouter()
@@ -83,8 +83,24 @@ class ModelIn(BaseModel):
     notes:              Optional[str] = None
 
 
-def _serialize(m: ModelRegistry) -> dict:
+def _serialize(m: ModelRegistry, known_by_model_id: Optional[dict] = None) -> dict:
     tier_info = TIER_META.get(m.tier, {})
+    # Registry rows copy their price from the Known Models catalog at the
+    # moment they're added — after that the two are independent numbers, so
+    # a later catalog price update (e.g. the provider changed rates) never
+    # reaches rows already in the registry unless someone remembers to edit
+    # each one by hand. Surface the mismatch here instead of leaving it
+    # silent; the frontend offers a one-click "sync from catalog" action
+    # when catalog_price is present and differs from the row's own price.
+    catalog = (known_by_model_id or {}).get(m.model_id)
+    catalog_price_input = catalog.cost_input_per_1m if catalog else None
+    catalog_price_output = catalog.cost_output_per_1m if catalog else None
+    price_outdated = bool(
+        catalog is not None and (
+            round(catalog_price_input or 0, 6) != round(m.cost_input_per_1m or 0, 6)
+            or round(catalog_price_output or 0, 6) != round(m.cost_output_per_1m or 0, 6)
+        )
+    )
     return {
         "id":                 m.id,
         "display_name":       m.display_name,
@@ -97,6 +113,9 @@ def _serialize(m: ModelRegistry) -> dict:
         "tier_icon":          tier_info.get("icon", "◈"),
         "cost_input_per_1m":  m.cost_input_per_1m,
         "cost_output_per_1m": m.cost_output_per_1m,
+        "catalog_cost_input_per_1m":  catalog_price_input,
+        "catalog_cost_output_per_1m": catalog_price_output,
+        "price_outdated":     price_outdated,
         "is_enabled":         m.is_enabled,
         "is_default":         m.is_default,
         "department":         m.department or None,
@@ -691,7 +710,8 @@ def list_models(
     if provider is not None: q = q.filter(ModelRegistry.provider == provider)
     if enabled  is not None: q = q.filter(ModelRegistry.is_enabled == enabled)
     models = q.order_by(ModelRegistry.tier, ModelRegistry.display_name).all()
-    return [_serialize(m) for m in models]
+    known_by_model_id = {k.model_id: k for k in db.query(KnownModel).all()}
+    return [_serialize(m, known_by_model_id) for m in models]
 
 
 @router.post("")
@@ -756,6 +776,32 @@ def toggle_model(model_id: int, db: Session = Depends(get_db)):
     m.is_enabled = not m.is_enabled
     db.commit()
     return {"id": m.id, "is_enabled": m.is_enabled}
+
+
+@router.patch("/{model_id}/sync-price")
+def sync_model_price(model_id: int, db: Session = Depends(get_db)):
+    """
+    Apply the Known Models catalog's current price for this model_id to this
+    registry row. Only touches cost_input_per_1m/cost_output_per_1m — tier,
+    enabled/default state, and department scoping are left untouched, so a
+    price sync can never accidentally change routing behavior.
+    """
+    m = db.query(ModelRegistry).filter(ModelRegistry.id == model_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    catalog = db.query(KnownModel).filter(KnownModel.model_id == m.model_id).first()
+    if not catalog:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No Known Models catalog entry for '{m.model_id}' to sync from",
+        )
+
+    m.cost_input_per_1m = catalog.cost_input_per_1m
+    m.cost_output_per_1m = catalog.cost_output_per_1m
+    db.commit()
+    db.refresh(m)
+    return _serialize(m, {catalog.model_id: catalog})
 
 
 @router.delete("/{model_id}")
