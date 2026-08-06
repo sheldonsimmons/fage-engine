@@ -14,23 +14,41 @@ GET /api/dashboard
 
 import json
 from datetime import datetime, date, timedelta
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import (
     TokenTransaction, RegisteredAgent,
-    DepartmentBudget, AuditEvent,
+    AuditEvent,
 )
 
 router = APIRouter()
 
 
 def _workspace_filter(model, workspace_id: str | None):
+    """
+    TokenTransaction and AuditEvent both got a real workspace_id column
+    added later (see database/migrate.py) — activity written through the
+    universal /api/route ingestion path (including the traffic simulator)
+    sets that column but leaves department unprefixed, so the old
+    department LIKE 'workspace_id:%' filter alone silently dropped most of
+    it. Confirmed live: for one workspace this month, the LIKE filter
+    matched 65 of 214 actual transactions (~5x undercount on spend).
+    RegisteredAgent has no workspace_id column, so it keeps the prefix-only
+    match; TokenTransaction/AuditEvent prefer the real column and only fall
+    back to the prefix match for legacy rows that predate it.
+    """
     if not workspace_id:
         return None
-    return model.department.like(f"{workspace_id}:%")
+    prefix_match = model.department.like(f"{workspace_id}:%")
+    if hasattr(model, "workspace_id"):
+        return or_(
+            model.workspace_id == workspace_id,
+            and_(model.workspace_id.is_(None), prefix_match),
+        )
+    return prefix_match
 
 
 def _keyword_stats(db: Session, days: int = 30, top_n: int = 10, workspace_id: str | None = None) -> list:
@@ -72,10 +90,6 @@ def get_dashboard(
     # Both spend figures query token_transactions directly so they always agree.
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
     audit_scope = _workspace_filter(AuditEvent, workspace_id)
-    # DepartmentBudget.workspace_id (backfilled by database/backfill_workspaces.py)
-    # is the real column now, unlike the department-prefix convention
-    # _workspace_filter still uses for other tables below.
-    budget_scope = DepartmentBudget.workspace_id == (workspace_id or "default")
     agent_scope = _workspace_filter(RegisteredAgent, workspace_id)
 
     def _filters(*items):
@@ -90,13 +104,6 @@ def get_dashboard(
         *_filters(tx_scope),
         TokenTransaction.timestamp >= month_start
     ).scalar() or 0.0
-
-    # Budget table still used for cap / throttle display — load once here
-    budget_query = db.query(DepartmentBudget).filter(
-        or_(DepartmentBudget.archived == False, DepartmentBudget.archived.is_(None)),
-        budget_scope,
-    )
-    budgets_for_spend = budget_query.all()
 
     # ── Token savings from pruning ─────────────────────────────────────────────
     tokens_saved_today = db.query(func.sum(TokenTransaction.tokens_saved)).filter(
@@ -176,24 +183,31 @@ def get_dashboard(
     agents_locked = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "locked")).scalar()  or 0
     agents_idle   = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "idle")).scalar()    or 0
 
-    # ── Budget summaries (reuse budgets_for_spend already loaded above) ──────────
-    budgets = budgets_for_spend
-    throttled_count = sum(1 for b in budgets if b.throttled)
+    # ── Budget summaries ───────────────────────────────────────────────────────
+    # current_spend_usd is the live-tracked counter real throttling enforcement
+    # acts on — the source of truth for a production workspace, but it never
+    # gets touched by backfilled/simulated data, so it reads $0.00 forever for
+    # demo/simulation workspaces even with real recorded activity. Reuse
+    # core.budget.get_all_budgets (the same function Admin > Budgets and Ask
+    # CostPilot use) so this dashboard can't disagree with either of them.
+    from core.budget import get_all_budgets
+    enriched_budgets = get_all_budgets(db, workspace_id)
+    throttled_count = sum(1 for b in enriched_budgets if b["throttled"])
 
-    total_cap   = sum(b.monthly_cap_usd   for b in budgets)
-    total_spend = sum(b.current_spend_usd for b in budgets)
+    total_cap   = sum(b["monthly_cap_usd"]   for b in enriched_budgets)
+    total_spend = sum(b["current_spend_usd"] for b in enriched_budgets)
     overall_pct = round((total_spend / total_cap) * 100, 1) if total_cap else 0
 
     budget_summaries = [
         {
-            "department":        b.department,
-            "monthly_cap_usd":   b.monthly_cap_usd,
-            "current_spend_usd": round(b.current_spend_usd, 4),
-            "used_pct":          round((b.current_spend_usd / b.monthly_cap_usd) * 100, 1),
-            "throttled":         b.throttled,
-            "override_granted":  b.override_granted,
+            "department":        b["department"],
+            "monthly_cap_usd":   b["monthly_cap_usd"],
+            "current_spend_usd": b["current_spend_usd"],
+            "used_pct":          b["used_pct"],
+            "throttled":         b["throttled"],
+            "override_granted":  b["override_granted"],
         }
-        for b in budgets
+        for b in enriched_budgets
     ]
 
     # ── Governance & Compliance stats ─────────────────────────────────────────
