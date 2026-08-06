@@ -1470,6 +1470,7 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
     configs = (
         ("person", "people_breakdown", "user_external_id", "person"),
         ("agent", "agent_breakdown", "agent_id", "agent"),
+        ("account", "account_breakdown", "account_id", "account"),
         (
             "department",
             "organizational_unit_breakdown",
@@ -2248,6 +2249,7 @@ def _ask_run_agent_tool(
         return executor(
             db, request.workspace_id, reporting_filters,
             int(args.get("days") or 30), args.get("period_key") or "none",
+            args.get("entity_name") or None,
         )
     if name == "get_change_drivers":
         return executor(
@@ -2394,7 +2396,16 @@ def _ask_agent_final_payload(
             _pool("agent", result.get("top_agents"), "spend_usd", "agent_id")
             _pool("platform", result.get("top_platforms"), "spend_usd", "source_platform")
             _pool("model", result.get("top_models"), "spend_usd", None)
+            named_match = result.get("named_entity_match")
             primary_breakdowns[tool_name] = people  # "who" defaults to people, not every dimension at once
+            if named_match:
+                matched = _pool(
+                    named_match["entity_type"], [named_match["row"]], "spend_usd", None
+                )
+                # A directly-named entity is more relevant than any generic
+                # top-5 list — make it what final_answer sees by default so
+                # the model doesn't fall back to citing the overall total.
+                primary_breakdowns[tool_name] = matched
         elif tool_name == "get_change_drivers":
             calculation = result.get("decomposition")
             primary_breakdowns[tool_name] = _pool(
@@ -2489,6 +2500,12 @@ separate top_people and top_accounts lists — "account" means a business/custom
 a company record in Salesforce), "people" means individual human users. These are never the
 same thing; never answer an "accounts" question using top_people data, or vice versa, even if
 one list is empty and the other has rows.
+If the question names a specific person, account, department, agent, platform, or model (for
+example "how much did BluePeak Consulting use" or "what did Maya Chen spend"), pass that exact
+name in get_usage_report's entity_name argument. Its top_* lists are truncated to 5 rows by
+spend, so a named entity may not appear there even though it exists — always rely on the
+named_entity_match field for a named-entity question, and never answer it with the overall
+total or say the entity had no usage just because it is missing from a top_* list.
 Call get_change_drivers for questions about why a number changed, increased, or decreased.
 Call get_budget_status for budget, cap, or "on track" questions.
 Call get_agent_adoption for questions about which agents are active, inactive, unused, never

@@ -44,8 +44,19 @@ TOOL_SCHEMAS = [
                     ],
                     "description": "A named calendar period. Use 'none' to fall back to a rolling `days` window.",
                 },
+                "entity_name": {
+                    "type": "string",
+                    "description": (
+                        "The exact name of a specific person, account, department, agent, "
+                        "platform, or model the question names (e.g. 'BluePeak Consulting', "
+                        "'Maya Chen'). When set, the result includes a direct lookup for that "
+                        "entity even if it would not otherwise appear in the top 5 lists — use "
+                        "this instead of guessing from the top 5 whenever the question names a "
+                        "specific subject. Empty string for general/overview questions."
+                    ),
+                },
             },
-            "required": ["days", "period_key"],
+            "required": ["days", "period_key", "entity_name"],
             "additionalProperties": False,
         },
     },
@@ -235,7 +246,11 @@ def scope_from_summary(summary: dict) -> str:
     return "no_activity"
 
 
-def run_get_usage_report(db, workspace_id: Optional[str], reporting_filters: dict, days: int, period_key: str) -> dict:
+def run_get_usage_report(
+    db, workspace_id: Optional[str], reporting_filters: dict, days: int, period_key: str,
+    entity_name: Optional[str] = None,
+) -> dict:
+    from api.routes_efficiency import _ask_named_entity
     from api.routes_work_items import project_activity_reporting
 
     date_from, date_to = _period_bounds(days, period_key)
@@ -249,7 +264,7 @@ def run_get_usage_report(db, workspace_id: Optional[str], reporting_filters: dic
         db=db,
     )
     summary = report.get("summary") or {}
-    return {
+    result = {
         "period": report.get("period"),
         "summary": summary,
         "top_people": (report.get("people_breakdown") or [])[:5],
@@ -264,6 +279,22 @@ def run_get_usage_report(db, workspace_id: Optional[str], reporting_filters: dic
         "top_models": (report.get("model_breakdown") or [])[:5],
         "data_scope": scope_from_summary(summary),
     }
+    # A named person/account/department/etc. is often outside the top 5 by
+    # spend — without this, the model had no way to answer "how much did X
+    # use" except by guessing from the truncated top lists or falling back
+    # to the overall total. Match against the FULL (untruncated) breakdowns
+    # so any named entity is found regardless of rank.
+    if entity_name and entity_name.strip():
+        match = _ask_named_entity(entity_name.strip(), report)
+        result["named_entity_match"] = (
+            {
+                "entity_type": match["entity"],
+                "label": match["row"].get("label"),
+                "row": match["row"],
+            }
+            if match else None
+        )
+    return result
 
 
 def run_get_change_drivers(
