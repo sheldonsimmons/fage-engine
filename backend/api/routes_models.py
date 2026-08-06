@@ -698,6 +698,144 @@ def get_model_routing_outcome_detail(
     }
 
 
+def _calibration_workspace_filter(model, workspace_id: Optional[str]):
+    """Same real-workspace_id-first, department-prefix-fallback pattern as
+    routes_dashboard.py's _workspace_filter — duplicated locally since that
+    one isn't shared/exported."""
+    if not workspace_id:
+        return None
+    prefix_match = model.department.like(f"{workspace_id}:%")
+    if hasattr(model, "workspace_id"):
+        return or_(
+            model.workspace_id == workspace_id,
+            and_(model.workspace_id.is_(None), prefix_match),
+        )
+    return prefix_match
+
+
+@router.get("/routing-calibration")
+def get_routing_calibration(
+    workspace_id: Optional[str] = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """
+    Surfaces whether the keyword/threshold complexity classifier is still
+    well-calibrated, using data every governed request already records —
+    no new instrumentation, no outcome/ground-truth signal (the system
+    doesn't have one; see routing_calibration design discussion).
+
+    Two views:
+      - keyword_calibration: how often each configured keyword actually
+        fires, and the average size of the requests it fires on. A keyword
+        that never fires is dead weight; a keyword firing constantly on
+        very short requests is a likely over-trigger (escalating a
+        two-sentence request because it contains "investigate").
+      - tier_token_distribution: request-size distribution within each
+        tier, including what share of each tier's requests exceed the
+        configured token threshold — which should be ~0% for Scout/Analyst
+        under normal (non-override) routing, so a nonzero rate flags that
+        tags/overrides/throttling are doing more of the work than the
+        classifier itself.
+    """
+    from core.routing_config import get_routing_config
+
+    cfg = get_routing_config(db)
+    configured_keywords = list(cfg.complexity_keywords or [])
+    threshold = cfg.complexity_token_threshold
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    q = (
+        db.query(
+            AuditEvent.matched_keywords_json,
+            TokenTransaction.input_tokens,
+            TokenTransaction.model_tier,
+        )
+        .join(
+            TokenTransaction,
+            TokenTransaction.governed_request_id == AuditEvent.governed_request_id,
+        )
+        .filter(
+            AuditEvent.event_type == "ROUTING",
+            AuditEvent.timestamp >= cutoff,
+        )
+    )
+    ws_clause = _calibration_workspace_filter(AuditEvent, workspace_id)
+    if ws_clause is not None:
+        q = q.filter(ws_clause)
+    rows = q.all()
+    total_analyzed = len(rows)
+
+    # Keyword calibration — seed with every currently-configured keyword
+    # (so a dead one shows a real zero, not just an absence) then tally hits.
+    keyword_hits = {kw: {"count": 0, "token_sum": 0} for kw in configured_keywords}
+    for kw_json, input_tokens, _tier in rows:
+        try:
+            matched = json.loads(kw_json or "[]")
+        except (TypeError, ValueError):
+            matched = []
+        for kw in matched:
+            bucket = keyword_hits.setdefault(kw, {"count": 0, "token_sum": 0})
+            bucket["count"] += 1
+            bucket["token_sum"] += int(input_tokens or 0)
+
+    keyword_calibration = []
+    for kw, stats in keyword_hits.items():
+        count = stats["count"]
+        keyword_calibration.append({
+            "keyword": kw,
+            "configured": kw in configured_keywords,
+            "trigger_count": count,
+            "pct_of_requests": round(count / total_analyzed * 100, 2) if total_analyzed else 0.0,
+            "avg_request_tokens": round(stats["token_sum"] / count) if count else None,
+            "never_fired": count == 0,
+        })
+    keyword_calibration.sort(key=lambda r: (-r["trigger_count"], r["keyword"]))
+
+    # Tier size distribution.
+    tier_buckets: dict = {}
+    for _kw_json, input_tokens, tier in rows:
+        tier_buckets.setdefault(tier or "Unknown", []).append(int(input_tokens or 0))
+
+    def _percentile(values_sorted, p):
+        if not values_sorted:
+            return None
+        idx = min(len(values_sorted) - 1, int(round(p * (len(values_sorted) - 1))))
+        return values_sorted[idx]
+
+    tier_order = {"Scout": 0, "Analyst": 1, "Advisor": 2, "Strategist": 3}
+    tier_token_distribution = []
+    for tier, values in tier_buckets.items():
+        values_sorted = sorted(values)
+        n = len(values_sorted)
+        mid = n // 2
+        median_tokens = (
+            values_sorted[mid] if n % 2 == 1
+            else round((values_sorted[mid - 1] + values_sorted[mid]) / 2)
+        ) if n else None
+        tier_token_distribution.append({
+            "tier": tier,
+            "count": n,
+            "min_tokens": values_sorted[0] if n else None,
+            "median_tokens": median_tokens,
+            "p90_tokens": _percentile(values_sorted, 0.9),
+            "max_tokens": values_sorted[-1] if n else None,
+            "over_threshold_pct": round(
+                sum(1 for v in values if v > threshold) / n * 100, 1
+            ) if n else 0.0,
+        })
+    tier_token_distribution.sort(key=lambda r: tier_order.get(r["tier"], 99))
+
+    return {
+        "workspace_id": workspace_id,
+        "days": days,
+        "complexity_token_threshold": threshold,
+        "total_requests_analyzed": total_analyzed,
+        "keyword_calibration": keyword_calibration,
+        "tier_token_distribution": tier_token_distribution,
+    }
+
+
 @router.get("")
 def list_models(
     tier:     Optional[int]  = Query(None),
