@@ -39,6 +39,20 @@ function scopedApiPath(path) {
   return `${path}${joiner}workspace_id=${encodeURIComponent(wsId)}`;
 }
 
+// Always scopes to the active workspace, even on pages that opt the rest of
+// the dashboard out of workspace scoping (data-dashboard-scope="all", used
+// by operate.html so agent registry counts span every workspace). Budget
+// caps/spend are workspace-specific by definition — reusing the unscoped
+// path for them pulled the legacy "default" bucket's stale rows (e.g. Legal
+// at 247.5% over) instead of the active workspace's real budgets, disagreeing
+// with every other budget surface in the app (Ask CostPilot, Admin Budgets).
+function workspaceScopedApiPath(path) {
+  const wsId = localStorage.getItem("cp_workspace_id") || "";
+  if (!wsId) return path;
+  const joiner = path.includes("?") ? "&" : "?";
+  return `${path}${joiner}workspace_id=${encodeURIComponent(wsId)}`;
+}
+
 function localDayKey(value) {
   if (!value) return "";
   const text = String(value);
@@ -64,11 +78,21 @@ function normalizeTierName(tier) {
 
 async function loadDashboard() {
   try {
+    const isAllScope = document.body?.dataset?.dashboardScope === "all";
     const d = await apiGet(scopedApiPath("/api/dashboard"));
     renderKpis(d);
     renderStatBar(d);
     renderCeoBanner(d);
-    renderDeptHealth(d);
+    if (isAllScope) {
+      // The unscoped payload's budget_summaries came from the legacy
+      // "default" bucket, not the active workspace — fetch the pills'
+      // data workspace-scoped instead so it never shows the wrong caps.
+      apiGet(workspaceScopedApiPath("/api/dashboard"))
+        .then(scoped => renderDeptHealth(scoped))
+        .catch(err => console.warn("Scoped budget fetch failed:", err.message));
+    } else {
+      renderDeptHealth(d);
+    }
     renderTodayTierSplit(d);
     renderAgentEfficiency();
     renderInsights();
