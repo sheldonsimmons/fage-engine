@@ -495,6 +495,18 @@ def _ask_intent(question: str, default_days: int) -> dict:
 
     budget_scope = None
     if intent == "budget":
+        if period_key is None:
+            # monthly_cap_usd is a calendar-month concept, and the Admin
+            # Budgets page (core/budget.py get_all_budgets) always computes
+            # spend as month-to-date. Without this, a budget question with
+            # no explicit date phrase ("was the change within budget?")
+            # fell back to the generic 30-day rolling window used by every
+            # other intent, silently comparing month-to-date budget caps
+            # against a different, longer period's spend — producing usage
+            # percentages that didn't match the Admin page for the same
+            # departments. An explicit phrase like "last month" earlier in
+            # this function already set period_key and is left alone.
+            days, period_key = 31, "this_month"
         if any(term in text for term in (
             "each department", "every department", "all department",
             "department budget", "departments budget", "budget by department",
