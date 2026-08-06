@@ -131,6 +131,15 @@ def resolve_primary_period(
         start, end, key = this_year, local_now, "this_year"
     elif period_key == "last_year":
         start, end, key = this_year.replace(year=this_year.year - 1), this_year, "last_year"
+    elif period_key == "same_range_last_year":
+        # Same rolling window size as a normal "days" lookup, just anchored
+        # to end exactly one year ago instead of now — for ranking
+        # questions scoped to "this time last year" rather than a
+        # this-year-vs-last-year delta comparison (see comparison_plan's
+        # same_period_previous_year mode for that case).
+        end = _shift_year(local_now, -1)
+        start = end - timedelta(days=max(1, int(days or 30)))
+        key = "same_range_last_year"
     else:
         end = local_now
         start = end - timedelta(days=max(1, int(days or 30)))

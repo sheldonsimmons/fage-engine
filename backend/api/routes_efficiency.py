@@ -231,6 +231,16 @@ def _ask_intent(question: str, default_days: int) -> dict:
         and any(term in text for term in ("on this date", "this date", "on this day", "that day"))
     ):
         days, period_key = 1, "same_date_last_year"
+    elif any(term in text for term in (
+        "same period last year", "this time last year", "around this time last year",
+    )):
+        # A range version of same_date_last_year: the same rolling window
+        # size, anchored to end one year ago instead of now. Ranking
+        # questions ("who had the most... this time last year") need this
+        # to actually look at last year's data; without it this phrase set
+        # no period override at all and silently fell back to the default
+        # rolling window ending today.
+        period_key = "same_range_last_year"
     elif any(term in text for term in ("month over month", "month-over-month")):
         days, period_key = 31, "this_month"
     elif any(term in text for term in ("quarter over quarter", "quarter-over-quarter")):
@@ -421,13 +431,22 @@ def _ask_intent(question: str, default_days: int) -> dict:
     ):
         intent = "change_drivers"
         entity = "overview"
-    elif any(term in text for term in (
-        "compare ", " compared ", " versus ", " vs. ", " vs "
-    )) or any(term in text for term in (
-        "same period last year", "this time last year", "around this time last year",
-        "year over year", "year-over-year", "month over month", "month-over-month",
-        "quarter over quarter", "quarter-over-quarter",
-    )):
+    elif (
+        any(term in text for term in (
+            "compare ", " compared ", " versus ", " vs. ", " vs "
+        )) or any(term in text for term in (
+            "same period last year", "this time last year", "around this time last year",
+            "year over year", "year-over-year", "month over month", "month-over-month",
+            "quarter over quarter", "quarter-over-quarter",
+        ))
+    ) and intent != "ranking":
+        # "Who had the most token usage this time last year?" names a
+        # ranking target ("who", "the most") — the user wants a ranked list
+        # for a historical window, not a this-year-vs-last-year delta. Only
+        # phrases with no ranking language (e.g. "how did spend compare to
+        # this time last year") should become a period comparison; a
+        # ranking question keeps its ranking intent and instead gets its
+        # date window shifted to that historical period below.
         intent = "comparison"
     elif (
         any(term in text for term in ("how much", "how many", "what is our", "what's our"))
@@ -1185,6 +1204,17 @@ def _ask_period_bounds(
         except ValueError:
             start = today.replace(year=today.year - 1, day=28)
         return start, start + timedelta(days=1)
+    if key == "same_range_last_year":
+        # Range version of same_date_last_year — same rolling window size,
+        # anchored to end one year ago instead of now. Used for ranking
+        # questions scoped to "this time last year" (e.g. "who had the
+        # most usage this time last year"), as opposed to a this-year-vs-
+        # last-year delta comparison.
+        try:
+            end = now.replace(year=now.year - 1)
+        except ValueError:
+            end = now.replace(year=now.year - 1, day=28)
+        return end - timedelta(days=max(1, int(parsed.get("days") or 30))), end
     if key == "rolling_days":
         return now - timedelta(days=max(1, int(parsed.get("days") or 30))), now
     return request.date_from, request.date_to
