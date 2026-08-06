@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import TokenTransaction
 from core.agentlake import display_department
+from core.workspace_scope import workspace_filter
 
 router = APIRouter()
 
@@ -42,8 +43,16 @@ def get_timeseries(
     start = datetime.utcnow() - timedelta(days=days)
 
     q = db.query(TokenTransaction).filter(TokenTransaction.timestamp >= start)
-    if workspace_id:
-        q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))
+    # TokenTransaction.workspace_id is the real column — activity written
+    # through /api/route (including the traffic simulator) sets it but
+    # leaves department unprefixed, so the old department-prefix-only
+    # filter silently excluded most/all new simulated traffic from this
+    # chart while every other page (already fixed) kept up to date. Same
+    # bug as the dashboard undercount found earlier, just in a file that
+    # hadn't been touched yet.
+    workspace_clause = workspace_filter(TokenTransaction, workspace_id)
+    if workspace_clause is not None:
+        q = q.filter(workspace_clause)
     rows = q.order_by(TokenTransaction.timestamp).all()
 
     # Build ordered date range (oldest → newest)

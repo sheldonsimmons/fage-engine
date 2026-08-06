@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import TokenTransaction, AuditEvent, DepartmentBudget, SensitiveTerm
 from core.agentlake import display_department
+from core.workspace_scope import workspace_filter
 
 router = APIRouter()
 
@@ -64,7 +65,7 @@ def savings_report(days: int = Query(30, ge=1, le=365),
         TokenTransaction.timestamp < end,
     )
     if workspace_id:
-        q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))
+        q = q.filter(workspace_filter(TokenTransaction, workspace_id))
     txns = q.all()
 
     total_cost       = sum(t.cost_usd for t in txns)
@@ -135,7 +136,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
         AuditEvent.timestamp < end,
     )
     if workspace_id:
-        q = q.filter(AuditEvent.department.like(f"{workspace_id}:%"))
+        q = q.filter(workspace_filter(AuditEvent, workspace_id))
     events = q.order_by(AuditEvent.timestamp.desc()).all()
 
     total_events  = len(events)
@@ -245,7 +246,7 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
         TokenTransaction.timestamp < end,
     )
     if workspace_id:
-        q = q.filter(TokenTransaction.department.like(f"{workspace_id}:%"))
+        q = q.filter(workspace_filter(TokenTransaction, workspace_id))
     txns = q.all()
 
     budgets = {b.department: b for b in db.query(DepartmentBudget).all()}

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import AuditEvent, AuditReviewState
+from core.workspace_scope import workspace_filter
 from core.auditor import get_audit_events, get_audit_event, export_jsonl_path
 import os
 
@@ -82,7 +83,7 @@ def _review_scope(workspace_id: Optional[str]) -> str:
 def _blocked_query(db: Session, workspace_id: Optional[str] = None):
     query = db.query(AuditEvent).filter(AuditEvent.decision_outcome.ilike("%blocked%"))
     if workspace_id:
-        query = query.filter(AuditEvent.department.like(f"{workspace_id}:%"))
+        query = query.filter(workspace_filter(AuditEvent, workspace_id))
     return query
 
 

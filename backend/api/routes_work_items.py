@@ -24,6 +24,7 @@ from database.models import (
     WorkUser,
 )
 from core.agentlake import display_agent_name, display_department, infer_platform
+from core.workspace_scope import workspace_filter
 from core.business_context import (
     BUSINESS_CONTEXT_TEMPLATES,
     business_context_json,
@@ -701,7 +702,7 @@ def work_item_summary(
     if workspace_id:
         item_query = item_query.filter(WorkItem.workspace_id == workspace_id)
         transaction_query = transaction_query.filter(
-            TokenTransaction.department.like(f"{workspace_id}:%")
+            workspace_filter(TokenTransaction, workspace_id)
         )
 
     items = item_query.all()
@@ -793,8 +794,8 @@ def business_context_reporting(
     tx_filters = [TokenTransaction.timestamp >= cutoff]
     audit_filters = [AuditEvent.timestamp >= cutoff]
     if workspace_id:
-        tx_filters.append(TokenTransaction.department.like(f"{workspace_id}:%"))
-        audit_filters.append(AuditEvent.department.like(f"{workspace_id}:%"))
+        tx_filters.append(workspace_filter(TokenTransaction, workspace_id))
+        audit_filters.append(workspace_filter(AuditEvent, workspace_id))
 
     total_calls, total_input, total_output, total_saved, total_spend = (
         db.query(

@@ -647,11 +647,15 @@ def save_business_context(
 @router.get("/first-call")
 def first_call_check(workspace_id: str, db: Session = Depends(get_db)):
     from database.models import TokenTransaction
+    from core.workspace_scope import workspace_filter
     call = db.query(TokenTransaction).filter_by(department=f"ws:{workspace_id}").first()
     if not call:
-        # also check workspace-tagged calls
+        # also check workspace-tagged calls — TokenTransaction.workspace_id
+        # is the real column now; activity from /api/route (including the
+        # traffic simulator) sets it but leaves department unprefixed, so
+        # the old department-prefix-only filter missed it.
         call = db.query(TokenTransaction).filter(
-            TokenTransaction.department.like(f"{workspace_id}:%")
+            workspace_filter(TokenTransaction, workspace_id)
         ).first()
     return {
         "has_calls": call is not None,
