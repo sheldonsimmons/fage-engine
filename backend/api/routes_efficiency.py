@@ -1159,65 +1159,35 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
 def _ask_period_bounds(
     request: AskCostPilotRequest,
     parsed: dict,
+    timezone_name: str = "UTC",
 ) -> tuple[Optional[datetime], Optional[datetime]]:
-    """Return exact calendar boundaries for natural-language periods."""
-    key = parsed.get("period_key")
-    if not key:
-        return request.date_from, request.date_to
+    """
+    Return exact calendar boundaries for natural-language periods.
 
-    now = datetime.utcnow()
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    this_week = today - timedelta(days=today.weekday())
-    this_month = today.replace(day=1)
-    this_quarter = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
-    this_year = today.replace(month=1, day=1)
+    Delegates to core.analytics_periods.resolve_primary_period instead of
+    keeping its own separate UTC-only date math. That duplication was
+    exactly why "today"/"this week"/the default rolling window ignored a
+    workspace's configured timezone even when one was correctly set —
+    this function always computed against server UTC, while
+    resolve_primary_period (already used for the comparison intent)
+    properly converted to local time first. A workspace near a UTC day
+    boundary (e.g. evening in the US) would see a "today" or default
+    30-day window that was a full day ahead of its actual local calendar.
+    Both paths now share one implementation and can't disagree.
+    """
+    from core.analytics_periods import resolve_primary_period
 
-    if key == "today":
-        return today, now
-    if key == "yesterday":
-        return today - timedelta(days=1), today
-    if key == "this_week":
-        return this_week, now
-    if key == "last_week":
-        return this_week - timedelta(days=7), this_week
-    if key == "this_month":
-        return this_month, now
-    if key == "last_month":
-        previous = (this_month - timedelta(days=1)).replace(day=1)
-        return previous, this_month
-    if key == "this_quarter":
-        return this_quarter, now
-    if key == "last_quarter":
-        previous_end = this_quarter
-        previous_start = (previous_end - timedelta(days=1)).replace(
-            month=(((previous_end - timedelta(days=1)).month - 1) // 3) * 3 + 1,
-            day=1,
+    try:
+        period = resolve_primary_period(
+            period_key=parsed.get("period_key"),
+            days=int(parsed.get("days") or 30),
+            timezone_name=timezone_name,
+            date_from=request.date_from,
+            date_to=request.date_to,
         )
-        return previous_start, previous_end
-    if key == "this_year":
-        return this_year, now
-    if key == "last_year":
-        return this_year.replace(year=this_year.year - 1), this_year
-    if key == "same_date_last_year":
-        try:
-            start = today.replace(year=today.year - 1)
-        except ValueError:
-            start = today.replace(year=today.year - 1, day=28)
-        return start, start + timedelta(days=1)
-    if key == "same_range_last_year":
-        # Range version of same_date_last_year — same rolling window size,
-        # anchored to end one year ago instead of now. Used for ranking
-        # questions scoped to "this time last year" (e.g. "who had the
-        # most usage this time last year"), as opposed to a this-year-vs-
-        # last-year delta comparison.
-        try:
-            end = now.replace(year=now.year - 1)
-        except ValueError:
-            end = now.replace(year=now.year - 1, day=28)
-        return end - timedelta(days=max(1, int(parsed.get("days") or 30))), end
-    if key == "rolling_days":
-        return now - timedelta(days=max(1, int(parsed.get("days") or 30))), now
-    return request.date_from, request.date_to
+    except ValueError:
+        return request.date_from, request.date_to
+    return period.start, period.end
 
 
 def _ask_row_metric(row: dict, metric: str) -> float:
@@ -2794,7 +2764,16 @@ def _ask_costpilot_answer(
         reporting_filters[subject_filter_name] = subject_filter_value
     comparison_execution_plan = None
     comparison_coverage_result = None
-    date_from, date_to = _ask_period_bounds(request, parsed)
+    # Looked up once and reused for both the general date-range resolution
+    # below and the comparison-intent branch further down (which used to
+    # look this up separately) — a workspace's configured timezone should
+    # never be read two different ways in the same request.
+    stored_analytics_settings = workspace_analytics_settings(db, request.workspace_id)
+    effective_timezone = (
+        stored_analytics_settings.timezone_name
+        if stored_analytics_settings else request.timezone_name
+    )
+    date_from, date_to = _ask_period_bounds(request, parsed, timezone_name=effective_timezone)
     if parsed.get("period_key") == "all_time":
         settings = workspace_analytics_settings(db, request.workspace_id)
         if settings and settings.collection_started_at:
@@ -2810,11 +2789,6 @@ def _ask_costpilot_answer(
                 if observed_end else datetime.utcnow()
             )
     if parsed.get("intent") in {"comparison", "change_drivers"}:
-        stored_analytics_settings = workspace_analytics_settings(db, request.workspace_id)
-        effective_timezone = (
-            stored_analytics_settings.timezone_name
-            if stored_analytics_settings else request.timezone_name
-        )
         primary_period = resolve_primary_period(
             period_key=parsed.get("period_key"),
             days=parsed["days"],
@@ -2869,10 +2843,16 @@ def _ask_costpilot_answer(
 
     period_from = str(period.get("date_from") or "")[:10]
     period_to = str(period.get("date_to") or "")[:10]
-    period_label = (
-        f"{period_from} through {period_to}"
-        if period_from and period_to else f"the last {parsed['days']} days"
-    )
+    if period_from and period_to:
+        from core.analytics_periods import format_date_range as _ask_format_date_range
+        try:
+            period_label = _ask_format_date_range(
+                datetime.fromisoformat(period_from), datetime.fromisoformat(period_to)
+            )
+        except ValueError:
+            period_label = f"{period_from} through {period_to}"
+    else:
+        period_label = f"the last {parsed['days']} days"
     live_count = int(summary.get("live_count") or 0)
     simulation_count = int(summary.get("simulation_count") or 0)
     if live_count and simulation_count:

@@ -80,6 +80,23 @@ def period_label(start: datetime, end: datetime) -> str:
     return f"{start.date().isoformat()} through {display_end.date().isoformat()}"
 
 
+def format_date_range(start, end) -> str:
+    """
+    Human-readable calendar range, e.g. "Jul 8 – Aug 6, 2026" instead of
+    "2026-07-08 through 2026-08-06" — accepts date or datetime objects.
+    Single source of truth for Ask CostPilot's displayed date range (both
+    the answer text and the frontend's "Date range" field read the same
+    backend-computed string, so this one function fixes both).
+    """
+    start_date = start.date() if hasattr(start, "date") else start
+    end_date = end.date() if hasattr(end, "date") else end
+    if start_date == end_date:
+        return start_date.strftime("%b %-d, %Y")
+    if start_date.year == end_date.year:
+        return f"{start_date.strftime('%b %-d')} – {end_date.strftime('%b %-d, %Y')}"
+    return f"{start_date.strftime('%b %-d, %Y')} – {end_date.strftime('%b %-d, %Y')}"
+
+
 def resolve_primary_period(
     *,
     period_key: Optional[str],
@@ -140,6 +157,10 @@ def resolve_primary_period(
         end = _shift_year(local_now, -1)
         start = end - timedelta(days=max(1, int(days or 30)))
         key = "same_range_last_year"
+    elif period_key == "same_date_last_year":
+        start = _shift_year(today, -1)
+        end = start + timedelta(days=1)
+        key = "same_date_last_year"
     else:
         end = local_now
         start = end - timedelta(days=max(1, int(days or 30)))
