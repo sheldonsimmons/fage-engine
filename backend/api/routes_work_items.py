@@ -1149,13 +1149,16 @@ def project_activity_reporting(
     def matches(row):
         tx, _, _, _, _ = row
         item = identity(row)
-        if project_id and item["project_external_id"] != project_id:
+        # A dropdown option can bundle several ids that share one display
+        # name (see unique_options's mergeable dedupe) — the filter value
+        # arrives as a comma-joined list in that case, a single id otherwise.
+        if project_id and item["project_external_id"] not in project_id.split(","):
             return False
-        if user_external_id and item["user_external_id"] != user_external_id:
+        if user_external_id and item["user_external_id"] not in user_external_id.split(","):
             return False
         if agent_id is not None and item["agent_id"] != agent_id:
             return False
-        if account_id and item["account_external_id"] != account_id:
+        if account_id and item["account_external_id"] not in account_id.split(","):
             return False
         if source_platform and (tx.source_platform or "").lower() != source_platform.lower():
             return False
@@ -1337,18 +1340,49 @@ def project_activity_reporting(
             "is_simulation": is_simulator_traffic((tx, project, account, user, agent)),
         })
 
-    def unique_options(key, label, extra=None):
-        options = {}
+    def unique_options(key, label, extra=None, mergeable=False):
+        # The same real-world person/account can end up with more than one
+        # id in this data (e.g. one row seeded by the historical demo
+        # script, another created later by the traffic simulator's
+        # get-or-create resolver) — without this, filter dropdowns showed
+        # the same name twice with no way to tell them apart. For
+        # string-keyed filters (mergeable=True), dedupe by the displayed
+        # label and fold every id sharing that label into one option whose
+        # value is a comma-joined id list; matches() below accepts either a
+        # single id or that list. agent_id is a typed int query param and
+        # can't carry a comma list, so it keeps the plain per-id dedupe.
+        if not mergeable:
+            options = {}
+            for item in option_rows:
+                value = item.get(key)
+                if value is None:
+                    continue
+                options[str(value)] = {
+                    "value": value,
+                    "label": item.get(label) or str(value),
+                    **({extra: item.get(extra)} if extra else {}),
+                }
+            return sorted(options.values(), key=lambda item: item["label"].lower())
+
+        by_label = {}
         for item in option_rows:
             value = item.get(key)
             if value is None:
                 continue
-            options[str(value)] = {
-                "value": value,
-                "label": item.get(label) or str(value),
-                **({extra: item.get(extra)} if extra else {}),
+            label_text = item.get(label) or str(value)
+            bucket = by_label.setdefault(label_text, {"label": label_text, "ids": [], "extra": item.get(extra) if extra else None})
+            if str(value) not in bucket["ids"]:
+                bucket["ids"].append(str(value))
+        options = []
+        for bucket in by_label.values():
+            entry = {
+                "value": bucket["ids"][0] if len(bucket["ids"]) == 1 else ",".join(bucket["ids"]),
+                "label": bucket["label"],
             }
-        return sorted(options.values(), key=lambda item: item["label"].lower())
+            if extra:
+                entry[extra] = bucket["extra"]
+            options.append(entry)
+        return sorted(options, key=lambda item: item["label"].lower())
 
     total_input = sum(int(row[0].input_tokens or 0) for row in rows)
     total_output = sum(int(row[0].output_tokens or 0) for row in rows)
@@ -1400,10 +1434,10 @@ def project_activity_reporting(
         "context_label": context_label,
         "context_label_plural": context_label_plural,
         "filter_options": {
-            "projects": unique_options("project_external_id", "project_name", "account_name"),
-            "people": unique_options("user_external_id", "user_name", "user_email"),
+            "projects": unique_options("project_external_id", "project_name", "account_name", mergeable=True),
+            "people": unique_options("user_external_id", "user_name", "user_email", mergeable=True),
             "agents": unique_options("agent_id", "agent_name", "agent_platform"),
-            "accounts": unique_options("account_external_id", "account_name"),
+            "accounts": unique_options("account_external_id", "account_name", mergeable=True),
             "source_platforms": sorted({
                 row[0].source_platform for row in base_rows if row[0].source_platform
             }),
