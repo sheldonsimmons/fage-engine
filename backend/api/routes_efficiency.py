@@ -3453,14 +3453,22 @@ def _ask_costpilot_answer(
         # activity — recompute from the ledger for those instead, via the
         # same shared function core.budget.get_all_budgets (Admin) and
         # ask_costpilot_tools.run_get_budget_status use, so this answer
-        # can't disagree with either of them. Pass the `report` this
-        # question already fetched instead of letting it trigger a second,
-        # identical (expensive) full activity scan — reusing it also keeps
-        # spend and request-count consistent with each other, since both
-        # then come from the exact same data.
+        # can't disagree with either of them.
+        #
+        # Deliberately NOT passing this question's own date_from/date_to or
+        # its already-fetched `report` through here, even though doing so
+        # would save a query — "over/near budget" is a monthly-cap concept,
+        # and this question's resolved period can be an arbitrary window
+        # (e.g. "this week"). Scoping spend to that window while still
+        # dividing by the full monthly cap produced nonsensical >100%
+        # figures for a department with a burst of activity in a short
+        # window, while the always-month-to-date budget_flag badge attached
+        # to every answer correctly reported nothing over budget — the same
+        # bug this function's docstring says was already fixed once, since
+        # get_all_budgets and the badge always use true month-to-date.
         _ask_budget_spend_by_department = (
             None if _ask_budget_is_production_workspace
-            else recomputed_department_spend(db, request.workspace_id, date_from=date_from, date_to=date_to, report=report)
+            else recomputed_department_spend(db, request.workspace_id)
         )
         budget_rows = []
         for budget in budgets:
