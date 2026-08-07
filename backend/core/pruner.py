@@ -334,53 +334,40 @@ def prune(raw_text: str) -> dict:
       clean_tokens      — estimated token count after pruning
       tokens_saved      — difference
       compression_pct   — how much smaller the payload is (0–100)
-      filters_applied   — list of filter names that ran
+      filters_applied   — list of filter names that ran (backward-compatible)
+      filter_details    — list of {name, tokens_saved} for filters that actually
+                           changed the payload — the per-decision audit breakdown
     """
     filters_applied = []
+    filter_details   = []
     text = raw_text
 
-    before_html = len(text)
-    text = strip_html(text)
-    if len(text) < before_html:
-        filters_applied.append("strip_html")
+    def _run(name, fn, current_text):
+        before = estimate_tokens(current_text)
+        result_text = fn(current_text)
+        after = estimate_tokens(result_text)
+        if len(result_text) < len(current_text):
+            filters_applied.append(name)
+            saved = before - after
+            if saved > 0:
+                filter_details.append({"name": name, "tokens_saved": saved})
+        return result_text
 
-    before_markup = len(text)
-    text = strip_markup_noise(text)
-    if len(text) < before_markup:
-        filters_applied.append("strip_markup_noise")
+    text = _run("strip_html", strip_html, text)
+    text = _run("strip_markup_noise", strip_markup_noise, text)
+    text = _run("strip_email_headers", strip_email_headers, text)
+    text = _run("strip_reply_chains", strip_reply_chains, text)
+    text = _run("strip_legal_disclaimers", strip_legal_disclaimers, text)
+    text = _run("strip_signatures", strip_signatures, text)
+    text = _run("strip_footer_blocks", strip_footer_blocks, text)
+    text = _run("dedupe_repeated_lines", dedupe_repeated_lines, text)
 
-    before_headers = len(text)
-    text = strip_email_headers(text)
-    if len(text) < before_headers:
-        filters_applied.append("strip_email_headers")
-
-    before_chain = len(text)
-    text = strip_reply_chains(text)
-    if len(text) < before_chain:
-        filters_applied.append("strip_reply_chains")
-
-    before_legal = len(text)
-    text = strip_legal_disclaimers(text)
-    if len(text) < before_legal:
-        filters_applied.append("strip_legal_disclaimers")
-
-    before_sig = len(text)
-    text = strip_signatures(text)
-    if len(text) < before_sig:
-        filters_applied.append("strip_signatures")
-
-    before_footer = len(text)
-    text = strip_footer_blocks(text)
-    if len(text) < before_footer:
-        filters_applied.append("strip_footer_blocks")
-
-    before_dedupe = len(text)
-    text = dedupe_repeated_lines(text)
-    if len(text) < before_dedupe:
-        filters_applied.append("dedupe_repeated_lines")
-
+    before_collapse = estimate_tokens(text)
     text = collapse_whitespace(text)
     filters_applied.append("collapse_whitespace")
+    collapse_saved = before_collapse - estimate_tokens(text)
+    if collapse_saved > 0:
+        filter_details.append({"name": "collapse_whitespace", "tokens_saved": collapse_saved})
 
     raw_tokens   = estimate_tokens(raw_text)
     clean_tokens = estimate_tokens(text)
@@ -394,4 +381,5 @@ def prune(raw_text: str) -> dict:
         "tokens_saved":    tokens_saved,
         "compression_pct": compression,
         "filters_applied": filters_applied,
+        "filter_details":  filter_details,
     }

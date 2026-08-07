@@ -231,9 +231,12 @@ async function fetchRationaleContent(eventId) {
     const hasBudgetContext = snapshot.budget_cap_usd != null || snapshot.budget_spent_usd != null;
     const callCost = detail.cost_usd != null ? `$${Number(detail.cost_usd).toFixed(6)}` : "not recorded";
     const capturedAt = formatAuditCapturedAt(snapshot.captured_at);
+    const requestedByLine = detail.actor_name
+      ? `<br>Requested by: ${detail.actor_name}${detail.actor_email ? ` (${detail.actor_email})` : ""}${detail.actor_source_platform ? ` via ${detail.actor_source_platform}` : ""}`
+      : "";
     const agentLine = `Agent: ${detail.display_agent_name || detail.agent_name || "not linked"}
           &nbsp;|&nbsp; Platform: ${detail.source_platform || "unknown"}
-          &nbsp;|&nbsp; Department: ${detail.display_department || detail.department || "—"}`;
+          &nbsp;|&nbsp; Department: ${detail.display_department || detail.department || "—"}${requestedByLine}`;
     const contextLine = hasBudgetContext
       ? `Budget: $${snapshot.budget_spent_usd ?? "0"} / $${snapshot.budget_cap_usd ?? "0"}
           &nbsp;(${snapshot.budget_used_pct ?? 0}% used)
@@ -266,7 +269,10 @@ async function fetchRationaleContent(eventId) {
           <span style="color:var(--accent-green)">&#9660; Pruning:</span>
           Raw: ${snapshot.raw_tokens ?? "?"} tokens
           &nbsp;&rarr;&nbsp; Clean: ${snapshot.clean_tokens ?? "?"} tokens
-          &nbsp;|&nbsp; <span style="color:var(--accent-green)">Saved: ${snapshot.tokens_saved ?? 0} tokens (${snapshot.compression_pct ?? 0}% reduction)</span>` : ""}
+          &nbsp;|&nbsp; <span style="color:var(--accent-green)">Saved: ${snapshot.tokens_saved ?? 0} tokens (${snapshot.compression_pct ?? 0}% reduction)</span>
+          ${(snapshot.filter_details || []).length ? `<br>${snapshot.filter_details
+            .map(f => `&nbsp;&nbsp;&#8226; ${f.name}: &minus;${f.tokens_saved} tokens`)
+            .join("<br>")}` : ""}` : ""}
         </div>
       </div>
       <div class="rationale-section">

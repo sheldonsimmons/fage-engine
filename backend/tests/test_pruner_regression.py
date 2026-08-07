@@ -11,6 +11,7 @@ def test_plain_business_text_remains_unchanged():
         "tokens_saved": 0,
         "compression_pct": 0.0,
         "filters_applied": ["collapse_whitespace"],
+        "filter_details": [],
     }
 
 
@@ -28,6 +29,7 @@ def test_repeated_business_boilerplate_snapshot_is_unchanged():
         "tokens_saved": 13,
         "compression_pct": 48.1,
         "filters_applied": ["dedupe_repeated_lines", "collapse_whitespace"],
+        "filter_details": [{"name": "dedupe_repeated_lines", "tokens_saved": 13}],
     }
 
 

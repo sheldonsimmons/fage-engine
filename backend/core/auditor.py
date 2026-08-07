@@ -240,6 +240,7 @@ def write_audit_event(
     tokens_saved:     int       = 0,
     raw_tokens:       int       = 0,
     clean_tokens:     int       = 0,
+    filter_details:   list      = None,   # [{name, tokens_saved}] — per-filter pruning breakdown
     input_tokens:     int       = None,
     output_tokens:    int       = None,
     usage_source:     str       = None,
@@ -276,6 +277,8 @@ def write_audit_event(
         context["clean_tokens"]  = clean_tokens
         context["tokens_saved"]  = tokens_saved
         context["compression_pct"] = round((tokens_saved / raw_tokens) * 100, 1) if raw_tokens > 0 else 0.0
+    if filter_details:
+        context["filter_details"] = filter_details
     if input_tokens is not None:
         context["input_tokens"] = input_tokens
     if output_tokens is not None:
