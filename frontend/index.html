@@ -2463,6 +2463,7 @@
 <script>
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtUsd(v) {
+  if (!v) return "$0.00";
   if (v >= 1000000) return "$" + (v / 1000000).toFixed(2) + "M";
   if (v >= 1000)    return "$" + (v / 1000).toFixed(1) + "K";
   if (v >= 1)       return "$" + v.toFixed(2);
@@ -4642,21 +4643,20 @@ function buildHomeInsights(events, data, context, comparison) {
   if (budgetCap > 0) {
     const budgetPct = monthSpend / budgetCap * 100;
     const remaining = Math.max(0, budgetCap - monthSpend);
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    const monthEvents = (events || []).filter(event => eventTs(event) >= monthStart.getTime());
-    const spendByDepartment = new Map();
-    monthEvents.forEach(event => {
-      const department = displayDeptName(event.department || event.source_department) || "Unassigned";
-      spendByDepartment.set(department, (spendByDepartment.get(department) || 0) + totalEventCost([event]));
-    });
-    const budgetRows = (dashboard.budget_summaries || []).map(row => {
-      const department = displayDeptName(row.department) || "Unassigned";
-      const cap = Number(row.monthly_cap_usd || 0);
-      const spend = Number(spendByDepartment.get(department) || 0);
-      return { department, cap, spend, pct: cap > 0 ? spend / cap * 100 : 0 };
-    }).sort((a, b) => b.pct - a.pct).slice(0, 3);
+    // Per-department spend used to be re-summed client-side from the
+    // (limit-capped) /api/audit events array instead of reading the
+    // dashboard's own already-correct budget_summaries — a second,
+    // independent spend calculation that could disagree with the headline
+    // number above (which does use dashboard.spend_month_usd), and did:
+    // percentages here could exceed what the same department shows on
+    // Admin Budgets or Ask CostPilot. budget_summaries.current_spend_usd
+    // is the same value every other budget surface in the app uses.
+    const budgetRows = (dashboard.budget_summaries || []).map(row => ({
+      department: displayDeptName(row.department) || "Unassigned",
+      cap: Number(row.monthly_cap_usd || 0),
+      spend: Number(row.current_spend_usd || 0),
+      pct: Number(row.used_pct || 0),
+    })).sort((a, b) => b.pct - a.pct).slice(0, 3);
     insights.push({
       title: "How is the budget tracking?",
       scope: "Month-to-date attributed spend compared with configured monthly budgets.",
