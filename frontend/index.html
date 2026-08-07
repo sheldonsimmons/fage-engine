@@ -1653,6 +1653,21 @@
     <div class="ov-col">
       <div class="ov-card">
         <div class="ov-card-head">
+          <span class="ov-card-title" id="standoutTitle">What else stands out?</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="ov-card-meta" id="standoutPos">—</span>
+            <button type="button" id="standoutNext" title="Show the next signal" aria-label="Show the next signal"
+              style="background:var(--bg-base);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;line-height:1">↻</button>
+          </div>
+        </div>
+        <p class="ov-card-note" id="standoutScope">Every real signal that crossed a threshold this period, ranked by severity.</p>
+        <div id="standoutBody">
+          <div class="ov-risk-empty">Loading…</div>
+        </div>
+      </div>
+
+      <div class="ov-card">
+        <div class="ov-card-head">
           <span class="ov-card-title">Model tier mix</span>
           <span class="ov-card-meta" id="tierMeta">—</span>
         </div>
@@ -1960,6 +1975,54 @@ document.querySelectorAll(".ov-tab").forEach(tab => {
 });
 
 // ── Budget risk (live signal feed) ────────────────────────────────────────
+// ── "What else stands out?" — cycles through every live signal, not just
+// budget pace. Budget risk (below) stays a flat always-visible list of
+// budget-pace departments specifically; this card is the single most
+// notable thing across every signal type the backend computes, one at a
+// time, so a new signal type (e.g. cost-driver shifts, later) shows up
+// here automatically without needing its own dedicated card.
+let standoutSignals = [];
+let standoutIndex = 0;
+
+function renderStandout(insights) {
+  standoutSignals = insights.signals || [];
+  standoutIndex = 0;
+  paintStandout();
+}
+
+function paintStandout() {
+  const body = document.getElementById("standoutBody");
+  const pos = document.getElementById("standoutPos");
+  const next = document.getElementById("standoutNext");
+  if (!body) return;
+  if (!standoutSignals.length) {
+    body.innerHTML = `<div class="ov-risk-empty">Nothing stands out right now — no signal has crossed its threshold this period.</div>`;
+    if (pos) pos.textContent = "";
+    if (next) next.disabled = true;
+    return;
+  }
+  const s = standoutSignals[standoutIndex];
+  const sev = s.type === "budget_pace"
+    ? (s.overage_pct >= 100 ? "bad" : "warn")
+    : (s.pct_change >= 100 ? "bad" : "warn");
+  body.innerHTML = `
+    <div class="ov-risk-row" style="border-bottom:none;padding-top:0">
+      <span class="ov-risk-stripe" style="background:var(--accent-${sev === "bad" ? "red" : "yellow"})"></span>
+      <div class="body">
+        <div class="dept">${s.title}</div>
+        <div class="detail">${s.detail}</div>
+      </div>
+    </div>`;
+  if (pos) pos.textContent = `${standoutIndex + 1} of ${standoutSignals.length}`;
+  if (next) next.disabled = standoutSignals.length < 2;
+}
+
+document.getElementById("standoutNext")?.addEventListener("click", () => {
+  if (!standoutSignals.length) return;
+  standoutIndex = (standoutIndex + 1) % standoutSignals.length;
+  paintStandout();
+});
+
 function renderRisk(insights) {
   const el = document.getElementById("riskList");
   if (!el) return;
@@ -2001,7 +2064,7 @@ async function loadOverview() {
       apiGet(wsUrl("/api/timeseries", { days: "30" })),
       apiGet(wsUrl("/api/reports/savings", { days: "30" })),
       apiGet(wsUrl("/api/work-items/activity-report", { days: "30", activity_limit: "1" })),
-      apiGet(wsUrl("/api/insights", { limit: "5" })).catch(() => ({ signals: [] })),
+      apiGet(wsUrl("/api/insights", { limit: "10" })).catch(() => ({ signals: [] })),
       apiGet(wsUrl("/api/audit/review-status")).catch(() => ({ unreviewed_blocked_count: 0 })),
       apiGet(wsUrl("/api/reports/risk", { days: "7" })).catch(() => ({ critical: 0, high: 0 })),
     ]);
@@ -2012,6 +2075,7 @@ async function loadOverview() {
     renderTierDonut(dashboard);
     const activeTab = document.querySelector(".ov-tab.active");
     renderRankBars(activeTab ? activeTab.dataset.dim : "department");
+    renderStandout(insights);
     renderRisk(insights);
     renderGovernance(auditReview, risk);
   } catch (err) {
