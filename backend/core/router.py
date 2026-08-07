@@ -19,7 +19,7 @@ from config import (
     COMPLEXITY_KEYWORDS as _DEFAULT_KEYWORDS,
 )
 from core.pruner import prune, estimate_tokens
-from core.model_client import call_model, get_mode_info
+from core.model_client import call_model, get_mode_info, ModelProviderError
 from core.keywords import term_matches_text
 
 TIER_NAMES = {1: "Scout", 2: "Analyst", 3: "Advisor", 4: "Strategist"}
@@ -159,6 +159,45 @@ def _get_model_from_registry(tier_num: int, db, department: str = None):
         "cost_input_per_million":  model.cost_input_per_1m,
         "cost_output_per_million": model.cost_output_per_1m,
         "department_scoped":     model.department is not None,
+    }
+
+
+def _get_alternate_model_from_registry(tier_num: int, db, exclude_model_id: str, department: str = None):
+    """
+    Find one other enabled model at the same tier, for use when the
+    primary model's live call just failed (bad key, no credits, provider
+    outage) — a different model_id, ideally on a different provider so a
+    single provider's outage doesn't take down the whole tier. Does not
+    cascade to other tiers; that's what the primary lookup already does
+    when nothing is configured at all, which is a different situation from
+    "something is configured but temporarily unreachable."
+    """
+    if db is None or tier_num < 1:
+        return None
+
+    from database.models import ModelRegistry
+
+    query = db.query(ModelRegistry).filter(
+        ModelRegistry.tier == tier_num,
+        ModelRegistry.is_enabled == True,
+        ModelRegistry.model_id != exclude_model_id,
+    )
+    if department:
+        model = query.filter(ModelRegistry.department == department).first()
+        if not model:
+            model = query.filter(ModelRegistry.department == None).first()
+    else:
+        model = query.filter(ModelRegistry.department == None).first()
+    if not model:
+        return None
+
+    return {
+        "model_id":              model.model_id,
+        "display_name":          model.display_name,
+        "tier":                  model.tier,
+        "tier_name":             TIER_NAMES.get(model.tier, f"Tier {model.tier}"),
+        "cost_input_per_million":  model.cost_input_per_1m,
+        "cost_output_per_million": model.cost_output_per_1m,
     }
 
 
@@ -321,13 +360,77 @@ def route(
         fallback_tier    = "micro" if is_micro else "flagship"
         model_source     = "built_in_fallback"
 
-    # Step 5 — Call the model
-    model_result = call_model(
-        working_text,
-        model_id=model_id_to_use,
-        fallback_tier=fallback_tier,
-        force_simulated=force_simulated_model,
-    )
+    # Step 5 — Call the model, with one same-tier fallback attempt and a
+    # clean governed "degraded" result if nothing reachable is left. A live
+    # provider outage or an exhausted API key used to surface as a raw,
+    # unhandled 502 all the way through to callers like the Salesforce
+    # Agentforce integration — this governs the request either way instead
+    # of hard-failing it.
+    provider_unavailable = False
+    provider_error_detail = None
+    try:
+        model_result = call_model(
+            working_text,
+            model_id=model_id_to_use,
+            fallback_tier=fallback_tier,
+            force_simulated=force_simulated_model,
+        )
+    except ModelProviderError as primary_error:
+        alternate = _get_alternate_model_from_registry(
+            tier_num, db, exclude_model_id=model_id_to_use, department=department
+        ) if model_id_to_use else None
+        if alternate:
+            try:
+                model_result = call_model(
+                    working_text,
+                    model_id=alternate["model_id"],
+                    fallback_tier=fallback_tier,
+                    force_simulated=force_simulated_model,
+                )
+                model_id_to_use = alternate["model_id"]
+                display_name    = alternate["display_name"]
+                cost_in_per_m    = alternate["cost_input_per_million"]
+                cost_out_per_m   = alternate["cost_output_per_million"]
+                routing_reason  += f" [Fell back to {alternate['display_name']} after the primary model was unavailable: {primary_error}]"
+            except ModelProviderError as fallback_error:
+                provider_unavailable = True
+                provider_error_detail = f"{primary_error}; fallback to {alternate['display_name']} also failed: {fallback_error}"
+        else:
+            provider_unavailable = True
+            provider_error_detail = str(primary_error)
+
+    if provider_unavailable:
+        mode_info = get_mode_info()
+        return {
+            "department":               department,
+            "complexity":               complexity,
+            "routing_decision":         "PROVIDER_UNAVAILABLE",
+            "routing_reason":           (
+                f"Request was governed and logged, but no AI response could be generated: "
+                f"{provider_error_detail}"
+            ),
+            "matched_keywords":         complexity_result["matched_keywords"],
+            "model_tier":               model_tier_label,
+            "resolved_model_tier":      resolved_model_tier,
+            "model_source":             model_source,
+            "routing_cascaded":         False,
+            "model_name":               "unavailable",
+            "input_tokens":             0,
+            "output_tokens":            0,
+            "usage_source":             "unavailable",
+            "cost_usd":                 0.0,
+            "simulated_response":       (
+                "CostPilot governed this request, but the configured AI provider was "
+                "unavailable and no response was generated. No cost was incurred."
+            ),
+            "was_pruned":               auto_prune,
+            "tokens_saved_by_pruning":  prune_result["tokens_saved"] if prune_result else 0,
+            "pruning_cost_saved_usd":   0.0,
+            "total_cost_without_pruning": 0.0,
+            "provider":                 "unavailable",
+            "model_mode":               "simulated" if force_simulated_model else mode_info["mode"],
+            "execution_status":         "failed",
+        }
 
     # Step 6 — Calculate cost from actual token counts using registry rates
     cost_usd = _calculate_cost(
@@ -372,4 +475,5 @@ def route(
         "total_cost_without_pruning": round(cost_usd + pruning_cost_saved, 6),
         "provider":                 model_result["provider"],
         "model_mode":               effective_model_mode,
+        "execution_status":         "succeeded",
     }

@@ -123,6 +123,20 @@ def _call_simulated(text: str, tier: str) -> dict:
     }
 
 
+class ModelProviderError(Exception):
+    """
+    A live model call failed (bad credentials, no credits, provider outage,
+    network error, etc). Deliberately a plain exception, not an HTTPException
+    — this module has no business deciding how a failure should surface over
+    HTTP. Raising HTTPException here meant the only possible outcome of a
+    provider failure was a raw 502 all the way up through every caller,
+    including real customer integrations (Salesforce Agentforce) — no
+    caller ever got the chance to retry with a different model or degrade
+    gracefully. core.router.route() catches this and decides what to do.
+    """
+    pass
+
+
 # ── OpenAI live call ───────────────────────────────────────────────────────────
 
 def _call_openai(text: str, model_id: str) -> dict:
@@ -135,14 +149,17 @@ def _call_openai(text: str, model_id: str) -> dict:
         "For routine questions, give a direct answer. Always indicate your confidence level."
     )
 
-    response = client.chat.completions.create(
-        model=model_id,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": text},
-        ],
-        max_completion_tokens=400,
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model_id,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": text},
+            ],
+            max_completion_tokens=400,
+        )
+    except Exception as e:
+        raise ModelProviderError(f"OpenAI call failed: {type(e).__name__}: {e}") from e
 
     choice = response.choices[0]
     usage  = response.usage
@@ -161,7 +178,6 @@ def _call_openai(text: str, model_id: str) -> dict:
 
 def _call_anthropic(text: str, model_id: str) -> dict:
     import anthropic
-    from fastapi import HTTPException
     client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
 
     system_prompt = (
@@ -178,11 +194,11 @@ def _call_anthropic(text: str, model_id: str) -> dict:
             messages=[{"role": "user", "content": text}],
         )
     except anthropic.APIStatusError as e:
-        raise HTTPException(status_code=502, detail=f"Anthropic API error {e.status_code}: {e.message}")
+        raise ModelProviderError(f"Anthropic API error {e.status_code}: {e.message}") from e
     except anthropic.APIConnectionError as e:
-        raise HTTPException(status_code=502, detail=f"Anthropic connection error: {e}")
+        raise ModelProviderError(f"Anthropic connection error: {e}") from e
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Anthropic call failed: {type(e).__name__}: {e}")
+        raise ModelProviderError(f"Anthropic call failed: {type(e).__name__}: {e}") from e
 
     usage = response.usage
 

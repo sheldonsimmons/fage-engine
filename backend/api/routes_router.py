@@ -771,7 +771,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             timestamp      = datetime.utcnow(),
             routing_reason = result["routing_decision"],
             routing_policy_version = ROUTING_POLICY_VERSION,
-            execution_status = "succeeded",
+            execution_status = result.get("execution_status", "succeeded"),
             was_pruned     = result["was_pruned"],
             tokens_saved   = result["tokens_saved_by_pruning"],
         )
@@ -863,7 +863,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
                 governed_request_id = governed_request_id,
                 routing_policy_version = ROUTING_POLICY_VERSION,
                 routing_reason_code = result["routing_decision"],
-                execution_status = "succeeded",
+                execution_status = result.get("execution_status", "succeeded"),
             )
         except Exception:
             pass  # Never let audit write failure break the routing response
