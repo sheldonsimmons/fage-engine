@@ -275,6 +275,11 @@ app.include_router(routes_auditor.router, prefix="/api/audit", tags=["Auditor"])
 from api import routes_dashboard
 app.include_router(routes_dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 
+# Live "what stands out" signal feed — deterministic anomaly/pace checks,
+# ranked by severity, first slice of the roadmap's predictive-intelligence phase
+from api import routes_insights
+app.include_router(routes_insights.router, prefix="/api/insights", tags=["Insights"])
+
 # Phase 1 — Workspace registry
 from api import routes_workspaces
 app.include_router(routes_workspaces.router, prefix="/api/workspaces", tags=["Workspaces"])
