@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from database.models import AuditEvent
 from config import AUDIT_LOG_DIR, AUDIT_LOG_FILENAME
 from core.budget import effective_budget_context
+from core.workspace_scope import workspace_filter
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -415,7 +416,7 @@ def write_audit_event(
 def get_audit_events(db: Session, limit: int = 50, workspace_id: str = None) -> list:
     q = db.query(AuditEvent)
     if workspace_id:
-        q = q.filter(AuditEvent.department.like(f"{workspace_id}:%"))
+        q = q.filter(workspace_filter(AuditEvent, workspace_id))
     events = q.order_by(AuditEvent.timestamp.desc()).limit(limit).all()
     return [_serialize(e) for e in events]
 
