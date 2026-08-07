@@ -54,7 +54,13 @@ body {
   background: var(--bg-panel);
 }
 
-.header-brand { display: flex; align-items: center; gap: 10px; min-width: 260px; flex: 0 1 320px; }
+/* flex: 0 1 320px used to cap this container at roughly the logo's own
+   width, leaving almost no room for .header-sub beside it — the tagline
+   wrapped into a stacked column instead of sitting on one line. flex: 0 1
+   auto lets it size to its actual content (logo + tagline) while still
+   allowing it to shrink under real space pressure; .header-sub's own
+   nowrap+ellipsis (below) is the safety net for when it does. */
+.header-brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 1 auto; }
 .brand-logo-img {
   display: block;
   width: min(260px, 22vw);
@@ -74,7 +80,7 @@ body {
 }
 .header-logo  { font-size: 22px; color: var(--accent); }
 .header-title { font-size: 18px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-primary); }
-.header-sub   { font-size: 12px; color: var(--text-muted); }
+.header-sub   { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 .header-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
 .mode-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 10px; }
