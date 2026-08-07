@@ -350,6 +350,33 @@
     };
   }
 
+  // A business context's "related record activity" is only ever the
+  // context's own primary record unless some activity is explicitly tied
+  // to a different originating record — without this, "related records"
+  // always showed exactly 1, even though the Business Context Engine's
+  // whole point is rolling up the same work across multiple source
+  // systems (e.g. a Salesforce opportunity that also has a linked
+  // ServiceNow case and a HubSpot deal). These are synthetic secondary
+  // records for the same work context, on different simulated platforms.
+  function buildSecondaryRecords(work) {
+    return [
+      {
+        platform: "ServiceNow",
+        agent: "ServiceNow Case Agent",
+        type: "Case",
+        id: `${work.id}-SN`,
+        name: `${work.account} — Support Case`,
+      },
+      {
+        platform: "HubSpot",
+        agent: "HubSpot Marketing Agent",
+        type: "Deal",
+        id: `${work.id}-HS`,
+        name: `${work.account} — Marketing Touchpoint`,
+      },
+    ];
+  }
+
   function buildRoutine({ department }) {
     return [
       "Customer request:",
@@ -582,18 +609,39 @@
   function buildPlan() {
     const profile = profileMap[$("companyProfile").value] || profileMap.enterpriseSaas;
     const scenarioTypes = buildScenarioTypes();
-    return scenarioTypes.map((type, index) => {
+    const plan = [];
+    scenarioTypes.forEach((type, index) => {
       const context = buildBusinessContext(profile, index);
       const subjectOptions = subjects[type];
       const subject = subjectOptions[index % subjectOptions.length];
-      return {
+      const item = {
         type,
         subject,
         workspaceId: profile.workspaceId,
         ...context,
         text: `Subject: ${subject}\n\n${buildText(type, context)}`,
       };
+      plan.push(item);
+
+      // ~35% of non-blocked items also generate a linked-record request on
+      // a second simulated platform for the same business context, so most
+      // contexts accumulate 2-3 related records across platforms instead
+      // of always showing exactly 1.
+      if (type !== "blocked" && Math.random() < 0.35) {
+        const secondaryRecords = buildSecondaryRecords(context.work);
+        const secondary = secondaryRecords[index % secondaryRecords.length];
+        const secondarySubject = `${secondary.type} follow-up: ${subject}`;
+        plan.push({
+          ...item,
+          subject: secondarySubject,
+          platform: secondary.platform,
+          agent: secondary.agent,
+          originRecord: { id: secondary.id, type: secondary.type, name: secondary.name },
+          text: `Subject: ${secondarySubject}\n\n${buildText(type, context)}`,
+        });
+      }
     });
+    return plan;
   }
 
   function accountExternalId(accountName) {
@@ -611,6 +659,17 @@
       body: JSON.stringify({
         contract_version: "2026-07-26",
         mode: "control",
+        // origin_record_id defaults to work.external_id (the context's own
+        // primary record) unless set explicitly — set here for the
+        // secondary-platform items buildPlan() generates, so their
+        // activity groups under a different originating record than the
+        // primary one while still rolling up to the same business context
+        // via work.external_id below.
+        ...(item.originRecord ? {
+          origin_record_id: item.originRecord.id,
+          origin_record_type: item.originRecord.type,
+          origin_record_name: item.originRecord.name,
+        } : {}),
         source: {
           platform: item.platform,
           // Always write into the one real "Simulated" workspace
