@@ -4621,8 +4621,49 @@ function homeInsightRow(title, meta, value, state = "") {
   return { title, meta, value, state };
 }
 
+// Converts a live signal from GET /api/insights (core/insights.py) into the
+// same {title, scope, answer, rows, href} shape the static insight cards
+// use, so the carousel can show real, ranked, severity-based signals
+// first — not just the same fixed rotation regardless of whether anything
+// is actually notable this week.
+function liveSignalToInsight(signal) {
+  if (signal.type === "budget_pace") {
+    return {
+      title: signal.title,
+      scope: "Projected from the department's current daily spend pace this month.",
+      answer: signal.detail,
+      rows: [homeInsightRow(
+        "Projected month-end spend",
+        `${fmtUsd(signal.spend_to_date_usd)} used so far · $${signal.daily_rate_usd.toFixed(2)}/day`,
+        fmtUsd(signal.projected_month_end_usd),
+        "danger"
+      )],
+      href: "/reports.html?tab=activity",
+    };
+  }
+  if (signal.type === "spend_anomaly") {
+    return {
+      title: signal.title,
+      scope: "Most recent half of a 14-day window compared with the half before it.",
+      answer: signal.detail,
+      rows: [homeInsightRow(
+        "Recent vs. prior spend",
+        `+${signal.pct_change.toFixed(0)}%`,
+        fmtUsd(signal.recent_spend_usd),
+        "warning"
+      )],
+      href: "/reports.html?tab=activity",
+    };
+  }
+  return null;
+}
+
 function buildHomeInsights(events, data, context, comparison) {
   const insights = [];
+  const liveSignals = (data.liveSignals?.signals || [])
+    .map(liveSignalToInsight)
+    .filter(Boolean);
+  insights.push(...liveSignals);
   if (comparison) {
     const direction = comparison.currentSpend > comparison.previousSpend
       ? "increased"
@@ -5321,7 +5362,7 @@ function executiveAuditLimit() {
 
 async function runExecLoad() {
   try {
-    const [dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage] = await Promise.all([
+    const [dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage, liveSignals] = await Promise.all([
       apiGet(executiveScopedUrl("/api/dashboard")),
       apiGet(executiveScopedUrl("/api/timeseries", { days: "180" })),
       apiGet(executiveScopedUrl("/api/audit", { limit: String(executiveAuditLimit()) })),
@@ -5342,8 +5383,12 @@ async function runExecLoad() {
         console.warn("Organizational attribution load failed:", err.message);
         return null;
       }),
+      apiGet(executiveScopedUrl("/api/insights", { limit: "5" })).catch(err => {
+        console.warn("Live insight signals load failed:", err.message);
+        return { signals: [] };
+      }),
     ]);
-    execData = { dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage };
+    execData = { dashboard, timeseries, audits, agents, models, reviewStatus, businessContexts, organizationalUsage, liveSignals };
     populateExecFilters(execData);
     renderExec(execData);
     updateTrialStartCard(execData);
