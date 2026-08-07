@@ -5093,7 +5093,11 @@ function renderExec(data) {
   const today = localIsoDate();
   const todayEvents = events.filter(e => eventIsoDay(e) === today);
   const sevenDayEvents = eventsSince(events, 7);
-  const todayCost = totalEventCost(todayEvents);
+  // d.spend_today_usd is the backend-correct total — only re-sum from the
+  // (limit-capped) client-side events array when filters make that
+  // necessary, since the flat backend total can't reflect a filtered
+  // slice. Unfiltered, prefer the same number every other page agrees on.
+  const todayCost = hasFilters ? totalEventCost(todayEvents) : Number(d.spend_today_usd || 0);
   const sevenDayCost = totalEventCost(sevenDayEvents);
   const sevenDayActiveDays = new Set(sevenDayEvents.map(eventIsoDay).filter(Boolean)).size;
   const projectedMonthCost = sevenDayCost > 0 ? (sevenDayCost / Math.max(1, sevenDayActiveDays)) * 30 : actualCost;
