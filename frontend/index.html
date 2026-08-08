@@ -1453,6 +1453,10 @@
   .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
   .ov-chip { font-size: 12px; color: var(--text-muted); background: var(--bg-base); border: 1px solid var(--border); padding: 7px 12px; border-radius: 20px; cursor: pointer; transition: border-color .15s, color .15s; }
   .ov-chip:hover { border-color: var(--accent); color: var(--text-primary); }
+  .ov-ask-answer-slot { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .ov-ask-answer-slot .cp-ask-thinking { font-size: 13px; color: var(--text-muted); }
+  .ov-ask-answer-slot .cp-ask-error { font-size: 13px; color: var(--accent-red); }
+  .ov-ask-answer-slot .cp-ask-answer { background: none; border: none; padding: 0; }
 
   .ov-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 34px 0 13px; }
   .ov-section-head h2 { font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0; }
@@ -1559,6 +1563,7 @@
       <span class="ov-chip" data-q="Who used the most tokens this month?">Who used the most tokens this month?</span>
       <span class="ov-chip" data-q="Which agents have not been used in this period?">Which agents have gone quiet?</span>
     </div>
+    <div id="ovAskAnswer" class="ov-ask-answer-slot" style="display:none"></div>
   </section>
 
   <!-- KPI strip -->
@@ -1755,32 +1760,65 @@ async function checkHealth() {
   }
 }
 
-// ── Ask hero → the existing Ask CostPilot panel (global-nav.js) ─────────
-// global-nav.js is a single IIFE with nothing exposed on window, so this
-// can't call its open/submit functions directly — instead it clicks the
-// same #cpGlobalAsk trigger button global-nav.js already wires up itself,
-// then drives the resulting #cpAskForm/#cpAskInput it renders. Same code
-// path as the header's own Ask CostPilot button, not a second copy of it.
-function askViaPanel(question) {
+// ── Ask hero → expands in place on this page ─────────────────────────────
+// Used to trigger the separate global-nav.js slide-out panel instead of
+// answering here. Now posts directly to the same /ask endpoint and renders
+// with the shared card builder from js/ask-costpilot-render.js (also used
+// by the panel) — one answer format, two entry points, no second copy of
+// the rendering logic.
+function bindOvAskDrills(container) {
+  container?.querySelectorAll("[data-ask-scope]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const scope = JSON.parse(decodeURIComponent(button.dataset.askScope));
+      location.href = askDrillUrl(scope);
+    });
+  });
+  container?.querySelectorAll("[data-ask-question]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById("ovAskInput").value = button.dataset.askQuestion;
+      document.getElementById("ovAskForm")?.requestSubmit();
+    });
+  });
+}
+
+async function askInline(question) {
   const q = (question || "").trim();
   if (!q) return;
-  document.getElementById("cpGlobalAsk")?.click();
-  setTimeout(() => {
-    const panelInput = document.getElementById("cpAskInput");
-    if (!panelInput) return;
-    panelInput.value = q;
-    document.getElementById("cpAskForm")?.requestSubmit();
-  }, 60);
+  const slot = document.getElementById("ovAskAnswer");
+  const goButton = document.querySelector(".ov-ask-go");
+  slot.style.display = "block";
+  slot.innerHTML = `<div class="cp-ask-thinking">Calculating from governed activity…</div>`;
+  if (goButton) goButton.disabled = true;
+  try {
+    const response = await fetch("/api/reports/bot-efficiency/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: q,
+        days: 30,
+        timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        workspace_id: localStorage.getItem("cp_workspace_id") || undefined,
+      }),
+    });
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    const data = await response.json();
+    slot.innerHTML = renderAskAnswerCard(data);
+    bindOvAskDrills(slot);
+  } catch (err) {
+    slot.innerHTML = `<div class="cp-ask-error"><strong>CostPilot did not generate an answer.</strong><span>${(err.message || "").replace(/</g, "&lt;")}</span></div>`;
+  } finally {
+    if (goButton) goButton.disabled = false;
+  }
 }
 document.getElementById("ovAskForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
-  askViaPanel(document.getElementById("ovAskInput").value);
+  askInline(document.getElementById("ovAskInput").value);
 });
 document.getElementById("ovAskChips")?.addEventListener("click", (event) => {
   const chip = event.target.closest(".ov-chip");
   if (!chip) return;
   document.getElementById("ovAskInput").value = chip.dataset.q;
-  askViaPanel(chip.dataset.q);
+  askInline(chip.dataset.q);
 });
 
 // ── Canvas helpers ───────────────────────────────────────────────────────
@@ -2148,7 +2186,7 @@ setInterval(loadOverview, 30000);
 })();
 </script>
 <script src="/vendor/tabler/tabler.min.js?v=1.4.0"></script>
-<script src="/js/ask-costpilot-render.js?v=20260805"></script>
-<script src="/js/global-nav.js?v=20260803-workspaces"></script>
+<script src="/js/ask-costpilot-render.js?v=20260808-inline-ask"></script>
+<script src="/js/global-nav.js?v=20260808-inline-ask"></script>
 </body>
 </html>

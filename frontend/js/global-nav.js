@@ -515,129 +515,9 @@
     return node;
   }
 
-  const GLOBAL_ASK_DRILL_KEYS = [
-    "date_from", "date_to", "project_id", "user_external_id", "account_id", "agent_id",
-    "source_platform", "record_type", "charged_unit", "business_purpose", "audit_event_id",
-  ];
-
-  function normalizeGlobalAskDrillScope(scopeOrName, filterValue) {
-    let source = scopeOrName;
-    if (typeof source === "string" && source.trim().startsWith("{")) {
-      try { source = JSON.parse(source); } catch (_) { source = {}; }
-    } else if (typeof source === "string") {
-      source = { [source]: filterValue };
-    }
-    if (source?.scope) source = source.scope;
-    if (source?.filterName) source = { [source.filterName]: source.filterValue };
-    const normalized = {};
-    GLOBAL_ASK_DRILL_KEYS.forEach((key) => {
-      const value = source?.[key];
-      if (value !== null && value !== undefined && String(value).trim() !== "") {
-        normalized[key] = key === "date_from" || key === "date_to"
-          ? String(value).trim().slice(0, 10)
-          : String(value).trim();
-      }
-    });
-    return normalized;
-  }
-
-  function globalAskDrillScope(data, item) {
-    const provenance = data?.data_provenance || {};
-    const scope = normalizeGlobalAskDrillScope({
-      ...(data?.filters || {}),
-      ...(provenance.active_filters || {}),
-      date_from: data?.period?.date_from,
-      date_to: data?.period?.date_to,
-    });
-    if (item?.filter_name && item.filter_value !== null && item.filter_value !== undefined) {
-      scope[item.filter_name] = String(item.filter_value);
-    }
-    return normalizeGlobalAskDrillScope(scope);
-  }
-
-  function globalAskDrillUrl(scope) {
-    const params = new URLSearchParams({ tab: "contexts" });
-    Object.entries(scope).forEach(([key, value]) => {
-      if (key !== "audit_event_id") params.set(key, value);
-    });
-    return `/reports.html?${params.toString()}`;
-  }
-
-  function renderGlobalEvidence(item, data) {
-    const scope = globalAskDrillScope(data, item);
-    const drill = item.filter_name && item.filter_value !== null && item.filter_value !== undefined
-      ? `<button type="button" data-ask-scope="${escapeHtml(encodeURIComponent(JSON.stringify(scope)))}">View activity →</button>`
-      : "";
-    return `<div class="cp-ask-evidence">
-      <div><strong>${escapeHtml(item.label || "Unknown")}</strong><span>${escapeHtml(item.detail || "")}</span></div>
-      <div><strong>${escapeHtml(item.value || "—")}</strong><span>${escapeHtml(item.metric_label || "")}</span>${drill}</div>
-    </div>`;
-  }
-
-  function renderGlobalAnswer(data) {
-    const provenance = data.data_provenance || {};
-    const liveRequests = Number(provenance.live_requests || 0);
-    const simulatorRequests = Number(provenance.simulator_requests || 0);
-    const sourceLabel = {
-      live: `Live data · ${liveRequests} requests`,
-      simulator: `Simulator data · ${simulatorRequests} requests`,
-      mixed: `Live + simulator · ${liveRequests} live / ${simulatorRequests} simulated`,
-      no_activity: "No matching activity",
-      product_knowledge: "CostPilot product knowledge",
-      clarification_required: "Answer withheld for verification",
-    }[provenance.scope] || "Governed activity";
-    const clarification = provenance.scope === "clarification_required" || data.intent === "clarification";
-    const evidence = (data.evidence || []).map((item) => renderGlobalEvidence(item, data)).join("");
-    const activeFilters = Object.entries(provenance.active_filters || {})
-      .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
-      .map(([key, value]) => `<span>${escapeHtml(key.replaceAll("_", " "))}: ${escapeHtml(String(value))}</span>`)
-      .join("");
-    const calculation = data.calculation
-      ? `<div class="cp-ask-calculation"><strong>Calculation</strong><span>${escapeHtml(data.calculation.formula || "")} across ${escapeHtml(String(data.calculation.row_count || 0))} matching requests.</span></div>`
-      : "";
-    const recommendations = (data.recommendations || []).length
-      ? `<section><h4>Recommended next steps</h4><div class="cp-ask-recommendations">${data.recommendations.map((item) => `
-          <div><strong>${escapeHtml(item.title || "Review opportunity")}</strong><span>${escapeHtml(item.body || "")}</span></div>
-        `).join("")}</div></section>`
-      : "";
-    const rowCount = Number(data.calculation?.row_count || data.summary?.request_count || 0);
-    const answerScope = globalAskDrillScope(data, null);
-    const supportingRecords = rowCount > 0
-      ? `<button type="button" class="cp-ask-supporting" data-ask-scope="${escapeHtml(encodeURIComponent(JSON.stringify(answerScope)))}">View ${rowCount.toLocaleString()} supporting ${rowCount === 1 ? "record" : "records"} →</button>`
-      : "";
-    const followUps = globalAskFollowUps(data);
-    const budgetFlag = renderAskBudgetFlag(data.budget_flag);
-    const workspaceLabel = renderAskWorkspaceLabel(data.workspace_name);
-    return `<article class="cp-ask-answer">
-      ${workspaceLabel}
-      <div class="cp-ask-answer-head"><span>${escapeHtml(provenance.period_label || "Selected period")}</span><b class="${clarification ? "clarification" : ""}">${clarification ? "Needs clarification" : "Calculated"}</b></div>
-      <h3>${escapeHtml(data.title || "CostPilot answer")}</h3>
-      ${budgetFlag}
-      ${data.interpreted_as ? `<div class="cp-ask-interpretation"><strong>Interpreted as</strong><span>${escapeHtml(data.interpreted_as)}</span></div>` : ""}
-      <div class="cp-ask-answer-scope"><span><b>Date range</b>${escapeHtml(provenance.period_label || "Selected period")}</span><span><b>Scope</b>${escapeHtml(sourceLabel)}</span></div>
-      <div class="cp-ask-answer-body">${data.answer ? renderAskMarkdown(data.answer) : "<p>No answer was returned.</p>"}</div>
-      ${activeFilters ? `<div class="cp-ask-active-filters"><strong>Active filters</strong>${activeFilters}</div>` : ""}
-      ${evidence ? `<section><h4>Evidence</h4>${evidence}</section>` : ""}
-      ${calculation}
-      ${supportingRecords}
-      ${recommendations}
-      ${followUps.length ? `<section><h4>You might also ask</h4><div class="cp-ask-followups">${followUps.map(question => `<button type="button" data-ask-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}</div></section>` : ""}
-      <small>${escapeHtml(data.measurement_note || "Calculated from governed CostPilot activity.")}</small>
-    </article>`;
-  }
-
-  function globalAskFollowUps(data) {
-    if (Array.isArray(data.suggested_questions) && data.suggested_questions.length) {
-      return data.suggested_questions.slice(0, 2).map(String);
-    }
-    if (data.intent === "clarification") return [];
-    if (data.intent === "comparison" || data.intent === "drivers") {
-      return ["Which department contributed most to the change?", "Was the change within budget?"];
-    }
-    if (data.entity === "people") return ["Compare the top people with the previous period."];
-    if (data.entity === "agents") return ["Which models did the top agents use?"];
-    return ["What changed compared with the previous period?"];
-  }
+  // Shared with the Overview page's inline Ask box — see
+  // js/ask-costpilot-render.js for renderAskAnswerCard/askDrillUrl/etc.,
+  // so the two surfaces render identical answer cards from one place.
 
   function bindGlobalAskDrills(container) {
     container?.querySelectorAll("[data-ask-scope],[data-ask-filter]").forEach((button) => {
@@ -663,7 +543,7 @@
       } else if (item.role === "assistant") {
         const node = addAskMessage(
           "assistant",
-          item.data ? renderGlobalAnswer(item.data) : `<p>${escapeHtml(item.content)}</p>`,
+          item.data ? renderAskAnswerCard(item.data) : `<p>${escapeHtml(item.content)}</p>`,
         );
         bindGlobalAskDrills(node);
       }
@@ -704,7 +584,7 @@
       }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const data = await response.json();
-      pending.innerHTML = renderGlobalAnswer(data);
+      pending.innerHTML = renderAskAnswerCard(data);
       bindGlobalAskDrills(pending);
       history.push(
         { role: "user", content: question },
@@ -725,7 +605,7 @@
   }
 
   function openAskDrill(scopeOrName, filterValue) {
-    const scope = normalizeGlobalAskDrillScope(scopeOrName, filterValue);
+    const scope = normalizeAskDrillScope(scopeOrName, filterValue);
     if (scope.audit_event_id) {
       closeAskCostPilot();
       writeSession("cp_audit_pending_event", scope.audit_event_id);
@@ -738,7 +618,7 @@
       return;
     }
     writeSession("cp_ask_pending_drill", { scope });
-    location.href = globalAskDrillUrl(scope);
+    location.href = askDrillUrl(scope);
   }
 
   function closeMenus(nav) {
