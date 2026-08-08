@@ -121,12 +121,12 @@ function renderAskBudgetFlag(flag) {
 // same card — not a second, thinner version of it — so this is now the one
 // place both build it.
 
-const ASK_DRILL_KEYS = [
+const ASK_RENDER_DRILL_KEYS = [
   "date_from", "date_to", "project_id", "user_external_id", "account_id", "agent_id",
   "source_platform", "record_type", "charged_unit", "business_purpose", "audit_event_id",
 ];
 
-function normalizeAskDrillScope(scopeOrName, filterValue) {
+function normalizeAskRenderDrillScope(scopeOrName, filterValue) {
   let source = scopeOrName;
   if (typeof source === "string" && source.trim().startsWith("{")) {
     try { source = JSON.parse(source); } catch (_) { source = {}; }
@@ -136,7 +136,7 @@ function normalizeAskDrillScope(scopeOrName, filterValue) {
   if (source?.scope) source = source.scope;
   if (source?.filterName) source = { [source.filterName]: source.filterValue };
   const normalized = {};
-  ASK_DRILL_KEYS.forEach((key) => {
+  ASK_RENDER_DRILL_KEYS.forEach((key) => {
     const value = source?.[key];
     if (value !== null && value !== undefined && String(value).trim() !== "") {
       normalized[key] = key === "date_from" || key === "date_to"
@@ -149,7 +149,7 @@ function normalizeAskDrillScope(scopeOrName, filterValue) {
 
 function askDrillScope(data, item) {
   const provenance = data?.data_provenance || {};
-  const scope = normalizeAskDrillScope({
+  const scope = normalizeAskRenderDrillScope({
     ...(data?.filters || {}),
     ...(provenance.active_filters || {}),
     date_from: data?.period?.date_from,
@@ -158,7 +158,7 @@ function askDrillScope(data, item) {
   if (item?.filter_name && item.filter_value !== null && item.filter_value !== undefined) {
     scope[item.filter_name] = String(item.filter_value);
   }
-  return normalizeAskDrillScope(scope);
+  return normalizeAskRenderDrillScope(scope);
 }
 
 function askDrillUrl(scope) {

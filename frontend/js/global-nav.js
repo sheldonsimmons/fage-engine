@@ -605,7 +605,7 @@
   }
 
   function openAskDrill(scopeOrName, filterValue) {
-    const scope = normalizeAskDrillScope(scopeOrName, filterValue);
+    const scope = normalizeAskRenderDrillScope(scopeOrName, filterValue);
     if (scope.audit_event_id) {
       closeAskCostPilot();
       writeSession("cp_audit_pending_event", scope.audit_event_id);
