@@ -144,6 +144,12 @@ function normalizeAskRenderDrillScope(scopeOrName, filterValue) {
         : String(value).trim();
     }
   });
+  // Not a filter — carried alongside so reports.html can show the real name
+  // instead of the raw id when the drilled-to person/project/account/agent
+  // isn't already in its default-loaded dropdown options.
+  if (source?.filter_label !== null && source?.filter_label !== undefined && String(source.filter_label).trim() !== "") {
+    normalized.filter_label = String(source.filter_label).trim();
+  }
   return normalized;
 }
 
@@ -157,6 +163,7 @@ function askDrillScope(data, item) {
   });
   if (item?.filter_name && item.filter_value !== null && item.filter_value !== undefined) {
     scope[item.filter_name] = String(item.filter_value);
+    if (item.label) scope.filter_label = String(item.label);
   }
   return normalizeAskRenderDrillScope(scope);
 }

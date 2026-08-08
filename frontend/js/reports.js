@@ -1873,6 +1873,13 @@ function normalizeAskDrillScope(scopeOrName, filterValue) {
         : String(value);
     }
   });
+  // Not a filter — the real display name for whichever filter this drill
+  // just set, so the dropdown can show it instead of the raw id when the
+  // drilled-to person/project/account/agent isn't in the default-loaded
+  // option list yet (see applyScopeSelects in drillFromAskCostPilot).
+  if (source?.filter_label !== null && source?.filter_label !== undefined && String(source.filter_label).trim() !== "") {
+    normalized.filter_label = String(source.filter_label).trim();
+  }
   return normalized;
 }
 
@@ -1886,6 +1893,7 @@ function askDrillScopeForEvidence(data, item) {
   });
   if (item?.filter_name && item.filter_value !== null && item.filter_value !== undefined) {
     scope[item.filter_name] = String(item.filter_value);
+    if (item.label) scope.filter_label = String(item.label);
   }
   return normalizeAskDrillScope(scope);
 }
@@ -1894,6 +1902,7 @@ function askDrillScopeFromLocation() {
   const params = new URLSearchParams(location.search);
   const scope = {};
   ASK_DRILL_KEYS.forEach(key => { if (params.get(key)) scope[key] = params.get(key); });
+  if (params.get("filter_label")) scope.filter_label = params.get("filter_label");
   return normalizeAskDrillScope(scope);
 }
 
@@ -2188,7 +2197,7 @@ async function drillFromAskCostPilot(scopeOrName, filterValue) {
       const select = document.getElementById(selectId);
       if (!select) return;
       if (![...select.options].some(option => option.value === value)) {
-        select.add(new Option(value, value));
+        select.add(new Option(scope.filter_label || value, value));
       }
       select.value = value;
     });
