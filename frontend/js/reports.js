@@ -2762,10 +2762,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const locationScope = askDrillScopeFromLocation();
   const drillScope = Object.keys(locationScope).length ? locationScope : pendingScope;
+  // Open the requested tab immediately and unconditionally — this used to
+  // only happen when there was NO filter scope, so any failure anywhere in
+  // the scope-parsing path silently left the default Performance tab
+  // active even though the URL correctly said tab=contexts (an Ask
+  // CostPilot "View activity" link landing on the wrong tab). Tab
+  // selection and filter application are now independent: the tab is
+  // always right, and drillFromAskCostPilot only has to get the filters
+  // right on top of it.
+  if (requestedTab && document.getElementById(`tab-${requestedTab}`)) {
+    openReportView(requestedTab, { preserveUrl: true });
+  }
   if (Object.keys(drillScope).length) {
     setTimeout(() => drillFromAskCostPilot(drillScope), 100);
-  } else if (requestedTab && document.getElementById(`tab-${requestedTab}`)) {
-    openReportView(requestedTab, { preserveUrl: true });
   }
   updateReportRangeSummary();
   setTimeout(() => initDraggableReports("savings"), 100);
