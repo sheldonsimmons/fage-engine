@@ -2413,15 +2413,41 @@ def _ask_agent_final_payload(
     evidence_pool: dict[str, dict] = {}
     primary_breakdowns: dict[str, list[dict]] = {}  # per data-tool fallback if evidence_ids come back empty
 
+    def _pool_display_value(value_key: str, raw_value) -> tuple[str, str]:
+        # Mirrors _ask_metric_value's formatting for the deterministic path —
+        # this pool used to store the raw number with no unit or label at
+        # all (e.g. "1.4138" instead of "$1.4138" with an "AI spend"
+        # caption), the one field on this whole page that skipped the
+        # formatting every other Ask CostPilot answer applies.
+        if value_key == "spend_usd":
+            return _ask_metric_value("spend_usd", raw_value)
+        if value_key == "used_pct":
+            try:
+                return f"{float(raw_value or 0):.1f}%", "of monthly budget"
+            except (TypeError, ValueError):
+                return str(raw_value if raw_value is not None else "—"), ""
+        if value_key == "absolute_change":
+            try:
+                number = float(raw_value or 0)
+                sign = "+" if number >= 0 else "-"
+                return f"{sign}${abs(number):,.4f}", "change vs. the prior period"
+            except (TypeError, ValueError):
+                return str(raw_value if raw_value is not None else "—"), ""
+        if value_key == "status":
+            return str(raw_value or "—"), "adoption status"
+        return str(raw_value if raw_value is not None else "—"), ""
+
     def _pool(dimension: str, rows: list, value_key: str, filter_name: Optional[str]):
         built = []
         for row in rows or []:
             if row.get("id") is None and row.get("label") is None:
                 continue
             pool_key = str(row.get("id") if row.get("id") is not None else row.get("label"))
+            display_value, metric_label = _pool_display_value(value_key, row.get(value_key))
             item = {
                 "label": row.get("label"),
-                "value": row.get(value_key),
+                "value": display_value,
+                "metric_label": metric_label,
                 "filter_name": filter_name,
                 "filter_value": row.get("id"),
             }
