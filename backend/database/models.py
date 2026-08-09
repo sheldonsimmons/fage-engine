@@ -237,6 +237,62 @@ class WorkItemSourceLink(Base):
     work_item = relationship("WorkItem", back_populates="source_links")
 
 
+class WorkItemOutcome(Base):
+    """
+    Current business-outcome state for a work item (e.g. a Salesforce
+    Opportunity's stage/amount/close date) -- the "what happened to the
+    work" half of AI Event -> Work Item -> Outcome. One row per work item.
+
+    CostPilot does not own this data; the source system (Salesforce, etc.)
+    remains authoritative. This is a synced/cached minimum-fields copy, not
+    a duplicate CRM -- see WorkItemOutcomeEvent for the append-only history
+    and core/outcome_adapters/ for the source-specific field mapping.
+    """
+    __tablename__ = "work_item_outcomes"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    work_item_id      = Column(Integer, ForeignKey("work_items.id"), nullable=False, unique=True, index=True)
+    workspace_id      = Column(String, nullable=False, default="default", index=True)
+    outcome_status    = Column(String, nullable=True)   # canonical OUTCOME_STATUS, e.g. source StageName
+    outcome_value     = Column(Float, nullable=True)     # canonical OUTCOME_VALUE
+    outcome_date      = Column(DateTime, nullable=True)  # canonical OUTCOME_DATE
+    outcome_success   = Column(Boolean, nullable=True)   # canonical OUTCOME_SUCCESS (None = not yet decided)
+    is_closed         = Column(Boolean, nullable=True)
+    owner             = Column(String, nullable=True)
+    source_system     = Column(String, nullable=False)   # "salesforce"
+    source_object     = Column(String, nullable=False)   # "Opportunity"
+    external_id       = Column(String, nullable=False, index=True)
+    source_modified_at = Column(DateTime, nullable=True)  # source system's own LastModifiedDate
+    last_synced_at    = Column(DateTime, nullable=False, default=datetime.utcnow)
+    retrieval_method  = Column(String, nullable=False, default="sync")  # webhook | sync | on_demand
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    work_item = relationship("WorkItem", backref="outcome")
+
+
+class WorkItemOutcomeEvent(Base):
+    """
+    Append-only outcome history -- one row per observed change, so future
+    analysis (AI spend by lifecycle stage, cost accumulated across a sales
+    cycle, etc.) has more than just the current snapshot to work from.
+    """
+    __tablename__ = "work_item_outcome_events"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    work_item_id    = Column(Integer, ForeignKey("work_items.id"), nullable=False, index=True)
+    workspace_id    = Column(String, nullable=False, default="default", index=True)
+    outcome_status  = Column(String, nullable=True)
+    outcome_value   = Column(Float, nullable=True)
+    outcome_date    = Column(DateTime, nullable=True)
+    outcome_success = Column(Boolean, nullable=True)
+    is_closed       = Column(Boolean, nullable=True)
+    retrieval_method = Column(String, nullable=False, default="sync")
+    recorded_at     = Column(DateTime, default=datetime.utcnow)
+
+    work_item = relationship("WorkItem")
+
+
 class WorkspaceAnalyticsSettings(Base):
     """Tenant-specific calendar and verified ingestion boundaries for analytics."""
     __tablename__ = "workspace_analytics_settings"
@@ -367,6 +423,13 @@ class TokenTransaction(Base):
     charged_org_unit_name = Column(String, nullable=True)
     attribution_source = Column(String, nullable=True)
     attribution_confidence = Column(String, nullable=True)
+    # Computed once at write time by classify_business_purpose_fields() so
+    # reporting can GROUP BY it in SQL instead of reclassifying every row in
+    # Python on every report request. Pure function of already-persisted
+    # signals (origin_record_*, work item type, agent name) -- unlike
+    # provider, there's no external registry that could make a persisted
+    # value go stale later.
+    business_purpose = Column(String, nullable=True, index=True)
     model_tier      = Column(String,   nullable=False)    # micro | flagship
     requested_model_name = Column(String, nullable=True)
     requested_model_tier = Column(String, nullable=True)

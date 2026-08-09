@@ -13,17 +13,24 @@ from core.analytics_periods import comparison_coverage, comparison_plan, resolve
 from core.analytics_drivers import change_decomposition, dimension_contributors
 
 from api.routes_efficiency import (
+    _ask_agent_final_payload,
+    _ask_agent_validate_answer,
     _ask_conversation_text,
     _ask_evidence,
+    _ask_extract_numbers,
     _ask_fallback_intent,
     _ask_grounded_narrative,
     _ask_has_explicit_named_subject,
     _ask_intent,
     _ask_is_follow_up,
     _ask_named_entity,
+    _ask_named_entity_ambiguity,
+    _ask_narration_causal_claims,
+    _ask_narration_unverified_numbers,
     _ask_period_bounds,
     _ask_rank,
     _ask_reporting_filters,
+    _ask_suggested_questions,
     _resolve_ask_intent,
     AskCostPilotMessage,
     AskCostPilotRequest,
@@ -32,6 +39,7 @@ from api.routes_efficiency import (
     ask_costpilot,
     _validated_ask_intent,
 )
+from core.analytics_metrics import metric_for_keywords
 
 
 def _controlled_report():
@@ -1143,6 +1151,71 @@ def test_named_person_is_resolved_from_costpilot_breakdown():
     assert match["row"]["label"] == "Sheldon Simmons"
 
 
+def test_different_people_sharing_a_name_are_not_summed_together():
+    """
+    Confirmed live on the hosted traffic-simulator demo: "Avery Johnson"
+    existed as 5 distinct simulated identities across 5 unrelated
+    simulated companies/platforms, 4 sharing one synthetic email and one
+    with a clearly different email. Ask CostPilot summed all 5 into one
+    $7.4483 answer, while the attribution dashboard's exact-identity
+    filter showed only one of them (~$0.84) -- a ~4x overstatement that
+    looked like "the math is wrong" from the outside. Merging must stop
+    treating same-name-different-email rows as the same person; a person
+    with a different email is either a real ambiguity (falls to
+    clarification) or -- as here -- resolvable once the 4 same-email rows
+    correctly merge into one candidate and the 5th, different-email row
+    is recognized as a separate one.
+    """
+    report = {
+        "people_breakdown": [
+            {
+                "id": "SIM-ENTERPRISE-SAAS-USER-010", "label": "Avery Johnson",
+                "email": "avery.johnson@example.com", "request_count": 159,
+                "spend_usd": 3.188828, "total_tokens": 102223,
+            },
+            {
+                "id": "SIM-PROFESSIONAL-SERVICES-USER-010", "label": "Avery Johnson",
+                "email": "avery.johnson@example.com", "request_count": 101,
+                "spend_usd": 1.859198, "total_tokens": 58449,
+            },
+            {
+                "id": "SIM-RETAIL-SERVICES-USER-010", "label": "Avery Johnson",
+                "email": "avery.johnson@example.com", "request_count": 74,
+                "spend_usd": 1.372039, "total_tokens": 45048,
+            },
+            {
+                "id": "SIM-MANUFACTURING-USER-010", "label": "Avery Johnson",
+                "email": "avery.johnson@example.com", "request_count": 53,
+                "spend_usd": 0.836397, "total_tokens": 28584,
+            },
+            {
+                # A different real identity that happens to share the
+                # display name -- distinguished only by a different email.
+                "id": "HIST2Y:SIM-HISTORICAL-2Y:USER:7", "label": "Avery Johnson",
+                "email": "historical.user7@example.com", "request_count": 65,
+                "spend_usd": 0.191864, "total_tokens": 118721,
+            },
+        ],
+        "agent_breakdown": [], "organizational_unit_breakdown": [], "project_breakdown": [],
+    }
+
+    match = _ask_named_entity("How much did Avery Johnson spend?", report)
+
+    # Must not silently sum all 5 (~$7.45) -- that's the confirmed bug.
+    assert match is None or match["row"]["spend_usd"] < 7.0
+
+    ambiguous = _ask_named_entity_ambiguity("How much did Avery Johnson spend?", report)
+    if match is None:
+        # The 4 same-email rows should have merged into one candidate that
+        # ties with the 5th (different-email) row -- a genuine ambiguity,
+        # correctly surfaced rather than guessed at or summed.
+        assert len(ambiguous) == 2
+        merged_candidate = next(c for c in ambiguous if c["row"]["id"] != "HIST2Y:SIM-HISTORICAL-2Y:USER:7")
+        assert round(merged_candidate["row"]["spend_usd"], 4) == round(
+            3.188828 + 1.859198 + 1.372039 + 0.836397, 4
+        )
+
+
 def test_ambiguous_name_is_not_guessed():
     report = {
         "people_breakdown": [
@@ -1155,6 +1228,102 @@ def test_ambiguous_name_is_not_guessed():
     }
 
     assert _ask_named_entity("How many tokens has Alex used?", report) is None
+
+
+def test_won_opportunity_ranking_question_sets_outcome_filter():
+    intent = _ask_intent(
+        "Which won opportunities had the highest AI spend?",
+        default_days=30,
+    )
+    assert intent["intent"] == "ranking"
+    assert intent["entity"] == "context"
+    assert intent["outcome_filter"] == "won"
+
+
+def test_lost_opportunity_total_question_sets_outcome_filter():
+    intent = _ask_intent(
+        "How much AI spend was associated with lost opportunities last quarter?",
+        default_days=30,
+    )
+    assert intent["entity"] == "context"
+    assert intent["outcome_filter"] == "lost"
+
+
+def test_plain_opportunity_question_has_no_outcome_filter():
+    intent = _ask_intent(
+        "How much did we spend on the Acme opportunity?",
+        default_days=30,
+    )
+    assert intent["entity"] == "context"
+    assert intent["outcome_filter"] is None
+
+
+def _outcome_report():
+    return {
+        "summary": {
+            "request_count": 106, "total_tokens": 8000, "input_tokens": 6000,
+            "output_tokens": 2000, "tokens_saved": 500, "spend_usd": 214.0,
+            "live_count": 106, "simulation_count": 0,
+            "people_count": 2, "agent_count": 1,
+        },
+        "period": {"date_from": "2026-07-01T00:00:00", "date_to": "2026-08-01T00:00:00", "days": 31},
+        "context_label_plural": "Opportunities",
+        "people_breakdown": [], "agent_breakdown": [], "organizational_unit_breakdown": [],
+        "account_breakdown": [], "source_platform_breakdown": [], "model_breakdown": [],
+        "provider_breakdown": [],
+        "project_breakdown": [
+            {
+                "id": "PROJECT-ACME-WON", "label": "Acme Expansion",
+                "account_external_id": None, "account_name": "Acme Corp",
+                "request_count": 83, "total_tokens": 6500, "input_tokens": 5000,
+                "output_tokens": 1500, "tokens_saved": 400, "spend_usd": 196.0,
+                "live_count": 83, "simulation_count": 0,
+                "outcome_status": "Closed Won", "outcome_value": 600000.0,
+                "outcome_success": True, "outcome_is_closed": True,
+                "outcome_freshness": "current",
+            },
+            {
+                "id": "PROJECT-BETA-LOST", "label": "Beta Renewal",
+                "account_external_id": None, "account_name": "Beta Inc",
+                "request_count": 23, "total_tokens": 1500, "input_tokens": 1000,
+                "output_tokens": 500, "tokens_saved": 100, "spend_usd": 18.0,
+                "live_count": 23, "simulation_count": 0,
+                "outcome_status": "Closed Lost", "outcome_value": 150000.0,
+                "outcome_success": False, "outcome_is_closed": True,
+                "outcome_freshness": "potentially_stale",
+            },
+        ],
+        "activities": [], "activity_count": 0,
+        "measurement_note": "Controlled outcome fixture.",
+    }
+
+
+def test_endpoint_ranking_won_opportunities_excludes_lost_and_carries_outcome_facts():
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(question="Which won opportunities had the highest AI spend?"),
+        report=_outcome_report(),
+        db=_FakeDB(),
+    )
+    assert len(calls) == 1
+    assert len(response["evidence"]) == 1
+    assert response["evidence"][0]["label"] == "Acme Expansion"
+    assert response["evidence"][0]["outcome"]["status"] == "Closed Won"
+    assert response["evidence"][0]["outcome"]["value"] == 600000.0
+    assert "AI generated" not in response["answer"]
+    assert "AI drove" not in response["answer"]
+
+
+def test_endpoint_total_lost_opportunities_scopes_to_lost_only():
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(question="How much AI spend was associated with lost opportunities?"),
+        report=_outcome_report(),
+        db=_FakeDB(),
+    )
+    assert len(calls) == 1
+    assert len(response["evidence"]) == 1
+    assert response["evidence"][0]["label"] == "Beta Renewal"
+    assert "$18.0000" in response["answer"] or "18.00" in response["answer"]
+    assert "not evidence that the ai activity caused them" in response["answer"].lower()
 
 
 def test_endpoint_answers_named_person_with_calculation_and_drill_filter():
@@ -1320,3 +1489,450 @@ def test_grounded_narrator_can_phrase_facts_but_not_replace_evidence():
     assert title == "Sheldon token usage"
     assert "4,321" in answer
     assert payload["evidence"][0]["value"] == "4,321"
+
+
+def test_grounded_narrator_rejects_a_number_not_in_the_source_facts():
+    """
+    If the narration model swaps or invents a figure that never appeared in
+    the deterministic facts it was given, the rewrite must be discarded and
+    the deterministic title/answer returned instead -- this is the fidelity
+    check that used to be entirely absent for the narration path.
+    """
+    class FakeResponses:
+        @staticmethod
+        def create(**kwargs):
+            return SimpleNamespace(output=[SimpleNamespace(
+                type="function_call",
+                name="write_grounded_costpilot_answer",
+                arguments=(
+                    '{"title":"Sheldon token usage",'
+                    '"answer":"Sheldon used exactly 9,999 tokens in this period."}'
+                ),
+            )])
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    original_module = sys.modules.get("openai")
+    original_key = os.environ.get("OPENAI_API_KEY")
+    original_enabled = os.environ.get("ASK_COSTPILOT_NARRATION_ENABLED")
+    sys.modules["openai"] = SimpleNamespace(OpenAI=FakeOpenAI)
+    os.environ["OPENAI_API_KEY"] = "test-key"
+    os.environ["ASK_COSTPILOT_NARRATION_ENABLED"] = "true"
+    payload = {
+        "title": "Deterministic title",
+        "answer": "Deterministic answer with 4,321 tokens.",
+        "period": {"label": "Last 31 days"},
+        "filters": {},
+        "summary": {"total_tokens": 4321},
+        "evidence": [{"label": "Sheldon", "value": "4,321"}],
+        "recommendations": [],
+        "calculation": {"formula": "Sum of input and output tokens"},
+        "data_provenance": {"scope": "live"},
+        "measurement_note": "Consumption only.",
+    }
+    try:
+        title, answer, narrated = _ask_grounded_narrative(
+            AskCostPilotRequest(question="How many tokens has Sheldon used?"),
+            payload,
+        )
+    finally:
+        if original_module is None:
+            sys.modules.pop("openai", None)
+        else:
+            sys.modules["openai"] = original_module
+        if original_key is None:
+            os.environ.pop("OPENAI_API_KEY", None)
+        else:
+            os.environ["OPENAI_API_KEY"] = original_key
+        if original_enabled is None:
+            os.environ.pop("ASK_COSTPILOT_NARRATION_ENABLED", None)
+        else:
+            os.environ["ASK_COSTPILOT_NARRATION_ENABLED"] = original_enabled
+
+    assert narrated is False
+    assert title == "Deterministic title"
+    assert answer == "Deterministic answer with 4,321 tokens."
+
+
+def test_narration_number_extraction_ignores_small_integers_and_units():
+    numbers = _ask_extract_numbers("Top 5 departments spent $12,480.50, up 26.4% from 9 last year.")
+    assert 12480.50 in numbers
+    assert 26.4 in numbers
+    assert 5 not in numbers  # "top 5" is a rank/count, not a fact to verify
+    assert 9 not in numbers
+
+
+def test_narration_unverified_numbers_allows_close_rounding():
+    facts = {"summary": {"spend_usd": 12480.4231}}
+    unverified = _ask_narration_unverified_numbers(facts, "Spend was $12,480.42 this period.")
+    assert unverified == set()
+
+
+def test_narration_unverified_numbers_flags_invented_figure():
+    facts = {"summary": {"spend_usd": 12480.42}}
+    unverified = _ask_narration_unverified_numbers(facts, "Spend was $99,999.00 this period.")
+    assert 99999.0 in unverified
+
+
+def test_narration_causal_claims_flags_ai_credited_with_dollar_outcome():
+    claims = _ask_narration_causal_claims(
+        "AI generated $600,000 in revenue for this deal."
+    )
+    assert claims
+
+    claims = _ask_narration_causal_claims(
+        "The AI agent drove $500K in new business this quarter."
+    )
+    assert claims
+
+
+def test_narration_causal_claims_allows_association_without_causation():
+    claims = _ask_narration_causal_claims(
+        "This $600,000 Closed Won opportunity had $196 of tracked AI "
+        "activity across 83 interactions."
+    )
+    assert claims == []
+
+    claims = _ask_narration_causal_claims(
+        "AI was used to help close this deal, which had $196 in tracked spend."
+    )
+    assert claims == []
+
+
+def test_metric_for_keywords_matches_pruning_before_generic_usage():
+    assert metric_for_keywords("how much did token pruning save us") == "tokens_saved"
+
+
+def test_metric_for_keywords_matches_request_count_for_volume_language():
+    assert metric_for_keywords("which department has the most call volume") == "request_count"
+
+
+def test_metric_for_keywords_defaults_to_spend():
+    assert metric_for_keywords("what happened this quarter") == "spend_usd"
+
+
+def test_suggested_questions_are_department_specific_when_scoped():
+    suggestions = _ask_suggested_questions("ranking", department="Sales")
+    assert all("Sales" in s for s in suggestions)
+
+
+def test_suggested_questions_are_subject_specific_when_named():
+    suggestions = _ask_suggested_questions("ranking", subject="Maya Chen")
+    assert all("Maya Chen" in s for s in suggestions)
+
+
+def test_suggested_questions_no_activity_ignores_department_scope():
+    # Zero data anywhere makes a department-scoped suggestion equally
+    # unanswerable -- the no-activity suggestions must win regardless.
+    suggestions = _ask_suggested_questions("no_activity", department="Sales")
+    assert suggestions == [
+        "Who had the most AI spend yesterday?",
+        "Who had the most AI spend in the last 7 days?",
+        "Show the latest AI activity.",
+    ]
+
+
+def test_suggested_questions_filters_out_restating_the_asked_question():
+    suggestions = _ask_suggested_questions(
+        "ranking", asked_question="Which department spent the most on AI?"
+    )
+    assert "Which department spent the most on AI?" not in suggestions
+    assert suggestions  # other suggestions in the same category still remain
+
+
+def test_suggested_questions_unrecognized_category_returns_empty():
+    assert _ask_suggested_questions("some_unrelated_intent") == []
+
+
+def test_agent_validate_answer_flags_false_all_clear():
+    tool_call_log = [(
+        "get_budget_status", {},
+        {"departments": [{"label": "Sales", "used_pct": 92.0}]},
+    )]
+    issues = _ask_agent_validate_answer(
+        tool_call_log, "Good news -- no departments are currently over their budget."
+    )
+    assert any("Sales" in issue for issue in issues)
+
+
+def test_agent_validate_answer_flags_unmentioned_over_budget_department():
+    tool_call_log = [(
+        "get_budget_status", {},
+        {"departments": [{"label": "Sales", "used_pct": 104.0}]},
+    )]
+    issues = _ask_agent_validate_answer(
+        tool_call_log, "Overall spend looks reasonable across the company this month."
+    )
+    assert any("Sales" in issue and "over budget" in issue for issue in issues)
+
+
+def test_agent_validate_answer_passes_when_over_budget_department_named():
+    tool_call_log = [(
+        "get_budget_status", {},
+        {"departments": [{"label": "Sales", "used_pct": 104.0}]},
+    )]
+    issues = _ask_agent_validate_answer(
+        tool_call_log, "Sales is over budget at 104% of its monthly cap."
+    )
+    assert issues == []
+
+
+def test_agent_validate_answer_ignores_non_budget_tool_calls():
+    tool_call_log = [(
+        "get_usage_report", {},
+        {"top_people": [{"label": "Sheldon", "spend_usd": 12.0}]},
+    )]
+    issues = _ask_agent_validate_answer(tool_call_log, "No departments are over budget at all.")
+    assert issues == []
+
+
+def test_agent_final_payload_rejects_answer_missing_title_or_answer():
+    tool_call_log = [("get_usage_report", {}, {"top_people": []})]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="How much did we spend?"),
+        db=None,
+        final_args={"title": "", "answer": "Some answer", "evidence_ids": []},
+        tool_call_log=tool_call_log,
+    )
+    assert payload is None
+
+
+def test_agent_final_payload_rejects_answer_with_no_tool_calls():
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="How much did we spend?"),
+        db=None,
+        final_args={"title": "Spend", "answer": "We spent $100.", "evidence_ids": []},
+        tool_call_log=[],
+    )
+    assert payload is None
+
+
+def test_agent_final_payload_builds_evidence_from_cited_ids():
+    tool_call_log = [(
+        "get_usage_report", {},
+        {
+            "period": {"label": "This month"},
+            "summary": {"live_count": 5, "simulation_count": 0},
+            "data_scope": "live",
+            "top_people": [
+                {"id": "USER-1", "label": "Sheldon", "spend_usd": 12.5},
+                {"id": "USER-2", "label": "Marcus", "spend_usd": 8.0},
+            ],
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="How much did Sheldon spend?"),
+        db=None,
+        final_args={
+            "title": "Sheldon's spend",
+            "answer": "Sheldon spent $12.50 this month.",
+            "evidence_ids": ["USER-1"],
+        },
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    assert payload["evidence"] == [{
+        "label": "Sheldon", "value": "$12.5000", "metric_label": "AI spend",
+        "filter_name": "user_external_id", "filter_value": "USER-1",
+    }]
+
+
+def test_agent_final_payload_falls_back_to_primary_breakdown_when_no_ids_cited():
+    tool_call_log = [(
+        "get_usage_report", {},
+        {
+            "period": {"label": "This month"},
+            "summary": {"live_count": 5, "simulation_count": 0},
+            "data_scope": "live",
+            "top_people": [{"id": "USER-1", "label": "Sheldon", "spend_usd": 12.5}],
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="Who spent the most?"),
+        db=None,
+        final_args={
+            "title": "Top spender",
+            "answer": "Sheldon spent the most this month.",
+            "evidence_ids": [],
+        },
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    assert len(payload["evidence"]) == 1
+    assert payload["evidence"][0]["label"] == "Sheldon"
+
+
+def test_named_department_resolves_from_real_department_labels():
+    """
+    _ask_intent alone can only recognize the literal word "department" --
+    it never touches the database, so a question naming an actual
+    department ("what did Sales spend") can't be classified there. This
+    checks the layer that CAN see real data (_ask_named_department)
+    correctly picks a named department out of free text.
+    """
+    from api.routes_efficiency import _ask_named_department
+
+    class FakeQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def distinct(self):
+            return self
+
+        def all(self):
+            return [("Sales",), ("Marketing",), ("Support",), ("Operations",)]
+
+    class FakeDB:
+        def query(self, *args, **kwargs):
+            return FakeQuery()
+
+    db = FakeDB()
+    assert _ask_named_department("What did Sales spend last month?", None, db) == "Sales"
+    assert _ask_named_department("What about marketing?", None, db) == "Marketing"
+    assert _ask_named_department("How much did we spend?", None, db) is None
+
+
+def test_named_department_promotes_entity_when_no_other_ranking_dimension_named():
+    """
+    Once a department is resolved from free text, a question with no other
+    named ranking dimension ("what did Sales spend") should classify
+    entity as "department" instead of leaving it at the generic default --
+    this is what makes conversation_context/title narration correctly
+    reflect the department as the subject, not just get the number right.
+    """
+    from api.routes_efficiency import _ask_named_entity
+
+    report = _controlled_report()
+
+    class FakeQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def distinct(self):
+            return self
+
+        def all(self):
+            return [("Sales",), ("Marketing",)]
+
+        def first(self):
+            return None
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, *args, **kwargs):
+            return self
+
+    class FakeDB:
+        def query(self, *args, **kwargs):
+            return FakeQuery()
+
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(question="What did Sales spend last month?", days=30),
+        report=report,
+        db=FakeDB(),
+    )
+    assert response["interpreted_intent"]["entity"] == "department"
+
+
+class _FakeQuery:
+    def filter(self, *a, **k):
+        return self
+
+    def distinct(self):
+        return self
+
+    def all(self):
+        return []
+
+    def first(self):
+        return None
+
+    def order_by(self, *a, **k):
+        return self
+
+    def limit(self, *a, **k):
+        return self
+
+
+class _FakeDB:
+    def query(self, *a, **k):
+        return _FakeQuery()
+
+
+def test_ambiguous_named_person_asks_for_clarification_instead_of_silent_total():
+    """
+    Before this behavior existed, "How much did Chris spend?" with two
+    equally-matching Chrises silently answered with the unfiltered,
+    company-wide total -- a confident, wrong answer to a question about
+    one specific person. This locks in the fix: ambiguity must produce a
+    clarification, never a silently-wrong number.
+    """
+    report = _controlled_report()
+    report["people_breakdown"] = [
+        {
+            "id": "USER-1", "label": "Chris Johnson", "request_count": 10,
+            "total_tokens": 3500, "input_tokens": 2500, "output_tokens": 1000,
+            "tokens_saved": 500, "spend_usd": 1.0, "live_count": 10, "simulation_count": 0,
+        },
+        {
+            "id": "USER-2", "label": "Chris Smith", "request_count": 10,
+            "total_tokens": 3500, "input_tokens": 2500, "output_tokens": 1000,
+            "tokens_saved": 500, "spend_usd": 1.0, "live_count": 10, "simulation_count": 0,
+        },
+    ]
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(question="How much did Chris spend?", days=30),
+        report=report,
+        db=_FakeDB(),
+    )
+    assert response["intent"] == "clarification_required"
+    assert "Chris Johnson" in response["answer"]
+    assert "Chris Smith" in response["answer"]
+    # Must not have silently used the unfiltered $2.00 company-wide total.
+    assert "2.0000" not in response["answer"] and "2.00" not in response["answer"]
+
+
+def test_unmatched_name_still_falls_through_to_normal_overview():
+    """
+    A name that matches nothing at all (as opposed to matching two things
+    equally) is a different case -- no real ambiguity exists, so it should
+    fall through to the normal company-wide answer rather than block on a
+    clarification that has no real candidates to offer.
+    """
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(question="How much did Zzyzx spend?", days=30),
+        db=_FakeDB(),
+    )
+    assert response["intent"] != "clarification_required"
+
+
+def test_change_decomposition_percent_change_is_none_when_prior_is_zero():
+    """
+    Phase 8 requirement: never compute a misleading percentage change when
+    the comparison value is zero (an infinite/undefined "% increase" from
+    nothing). percent_change must be None, not 0, not inf, not a crash.
+    """
+    current = {"request_count": 10, "spend_usd": 50.0}
+    prior = {"request_count": 0, "spend_usd": 0.0}
+    result = change_decomposition(current, prior, "spend_usd")
+    assert result["percent_change"] is None
+    assert result["absolute_change"] == 50.0
+
+
+def test_change_decomposition_percent_change_computes_normally_otherwise():
+    current = {"request_count": 20, "spend_usd": 150.0}
+    prior = {"request_count": 10, "spend_usd": 100.0}
+    result = change_decomposition(current, prior, "spend_usd")
+    assert result["percent_change"] == 50.0
+
+
+def test_dimension_contributors_net_change_pct_is_none_when_total_change_is_zero():
+    current_rows = [{"id": "Sales", "label": "Sales", "spend_usd": 10.0}]
+    prior_rows = [{"id": "Sales", "label": "Sales", "spend_usd": 5.0}]
+    # total_change=0 despite a real per-dimension delta -- e.g. offset by
+    # another dimension decreasing by the same amount elsewhere.
+    contributors = dimension_contributors(current_rows, prior_rows, "spend_usd", "department", 0.0)
+    assert contributors[0]["net_change_contribution_pct"] is None

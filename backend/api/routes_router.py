@@ -76,6 +76,23 @@ class UniversalRequestContext(BaseModel):
     auto_prune: bool = True
 
 
+class UniversalObservedUsageContext(BaseModel):
+    """
+    mode="observe" payload: a system reporting an AI call it already made
+    itself (its own model choice, its own provider key), as opposed to
+    mode="control" where CostPilot picks the model and makes the call.
+    There is no prompt to prune or classify here -- just the recorded
+    facts of a call that already happened.
+    """
+    model_name: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: Optional[float] = None
+    occurred_at: Optional[datetime] = None
+    was_pruned: bool = False
+    tokens_saved: int = 0
+
+
 class RouteRequest(BaseModel):
     text:                   Optional[str] = None
     department:             str  = "Support"
@@ -111,6 +128,7 @@ class RouteRequest(BaseModel):
     actor_context:          Optional[UniversalActorContext] = Field(default=None, alias="actor")
     work_context:           Optional[UniversalWorkContext] = Field(default=None, alias="work")
     request_context:        Optional[UniversalRequestContext] = Field(default=None, alias="request")
+    usage_context:          Optional[UniversalObservedUsageContext] = Field(default=None, alias="usage")
 
     class Config:
         populate_by_name = True
@@ -118,10 +136,15 @@ class RouteRequest(BaseModel):
 
 def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
     """Translate the universal envelope into the existing flat routing inputs."""
-    if req.mode != "control":
+    if req.mode not in ("control", "observe"):
         raise HTTPException(
             status_code=400,
-            detail="POST /api/route supports mode='control'. Observe-mode ingestion is not available yet.",
+            detail="POST /api/route supports mode='control' or mode='observe'.",
+        )
+    if req.mode == "observe" and not req.usage_context:
+        raise HTTPException(
+            status_code=422,
+            detail="mode='observe' requires a usage context (model_name, input_tokens, output_tokens).",
         )
     if req.source_context:
         req.source_platform = req.source_context.platform
@@ -153,7 +176,7 @@ def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
         req.origin_record_name = req.work_context.name
     if req.work_context and req.work_context.department:
         req.work_department = req.work_context.department
-    if not (req.text or "").strip():
+    if req.mode == "control" and not (req.text or "").strip():
         raise HTTPException(status_code=422, detail="A non-empty text or request.content value is required")
     return req
 
@@ -267,23 +290,28 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
 class RouteResponse(BaseModel):
     governed_request_id:        Optional[str] = None
     department:                 str
-    complexity:                 str
-    routing_decision:           str
-    routing_reason:             str
-    matched_keywords:           List[str]
-    model_tier:                 str
+    # Control-mode-only concepts (a decision CostPilot made about a call it
+    # placed itself) default to a neutral value in observe mode, where
+    # nothing was routed, classified, or simulated -- the call already
+    # happened elsewhere. One shared response shape keeps a single
+    # contract instead of a second schema per mode.
+    complexity:                 str = "OBSERVED"
+    routing_decision:           str = "OBSERVED"
+    routing_reason:             str = "Reported via mode='observe'; no routing decision was made by CostPilot."
+    matched_keywords:           List[str] = []
+    model_tier:                 str = ""
     model_name:                 str
     input_tokens:               int
     output_tokens:              int
     cost_usd:                   float
-    simulated_response:         str
-    was_pruned:                 bool
-    tokens_saved_by_pruning:    int
-    pruning_cost_saved_usd:     float
-    total_cost_without_pruning: float
+    simulated_response:         str = ""
+    was_pruned:                 bool = False
+    tokens_saved_by_pruning:    int = 0
+    pruning_cost_saved_usd:     float = 0.0
+    total_cost_without_pruning: float = 0.0
     budget_used_pct:            float
     budget_remaining_usd:       float
-    was_throttled:              bool
+    was_throttled:              bool = False
     sensitive_term_triggered:   bool = False
     sensitive_term_action:      Optional[str] = None
     sensitive_term_matches:     List[str] = []
@@ -502,6 +530,182 @@ def _resolve_work_user(
     return work_user
 
 
+def _observed_cost_usd(db: Session, model_name: str, input_tokens: int, output_tokens: int) -> float:
+    """
+    Price an already-made call by the recorded model's registry rate, the
+    same rate table core/router.py prices a CostPilot-made call from. Used
+    only when the reporting system didn't supply its own cost_usd -- most
+    real connectors will know their own bill better than a rate lookup
+    can approximate, but this keeps the field usably populated either way.
+    """
+    from database.models import ModelRegistry, KnownModel
+
+    name = (model_name or "").strip()
+    if not name:
+        return 0.0
+    registry_model = (
+        db.query(ModelRegistry).filter(ModelRegistry.model_id == name).first()
+        or db.query(ModelRegistry).filter(ModelRegistry.display_name == name).first()
+    )
+    if not registry_model:
+        known = db.query(KnownModel).filter(KnownModel.model_id == name).first()
+        if known:
+            cost_in_per_m, cost_out_per_m = known.cost_input_per_1m, known.cost_output_per_1m
+        else:
+            return 0.0
+    else:
+        cost_in_per_m, cost_out_per_m = registry_model.cost_input_per_1m, registry_model.cost_output_per_1m
+    return round(
+        (input_tokens or 0) * (cost_in_per_m or 0) / 1_000_000
+        + (output_tokens or 0) * (cost_out_per_m or 0) / 1_000_000,
+        6,
+    )
+
+
+def _record_observed_usage(
+    db: Session,
+    req: "RouteRequest",
+    department: str,
+    agent: Optional[RegisteredAgent],
+    work_item: Optional[WorkItem],
+    work_user: Optional[WorkUser],
+    attribution: dict,
+    governed_request_id: str,
+) -> "RouteResponse":
+    """
+    mode="observe": record a call a system already made itself, instead of
+    routing/pruning/simulating one the way mode="control" does. Reuses the
+    same identity/attribution resolution as control mode (already run by
+    the time this is called) -- only the "what happened to the payload"
+    step differs.
+    """
+    usage = req.usage_context
+    input_tokens = max(0, int(usage.input_tokens or 0))
+    output_tokens = max(0, int(usage.output_tokens or 0))
+    cost_usd = (
+        round(float(usage.cost_usd), 6) if usage.cost_usd is not None
+        else _observed_cost_usd(db, usage.model_name, input_tokens, output_tokens)
+    )
+    occurred_at = usage.occurred_at or datetime.utcnow()
+
+    budget = db.query(DepartmentBudget).filter_by(department=department).first()
+
+    if not req.is_test:
+        from core.agentlake import infer_platform
+        from api.routes_work_items import classify_business_purpose_fields
+
+        origin_record_type = (req.origin_record_type or "").strip() or None
+        origin_record_name = (req.origin_record_name or "").strip() or None
+
+        tx = TokenTransaction(
+            governed_request_id=governed_request_id,
+            department=department,
+            source_platform=agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
+            agent_id=agent.id if agent else req.agent_id,
+            work_item_id=work_item.id if work_item else None,
+            work_user_id=work_user.id if work_user else None,
+            origin_record_id=(req.origin_record_id or "").strip() or None,
+            origin_record_type=origin_record_type,
+            origin_record_name=origin_record_name,
+            actor_external_id=work_user.external_id if work_user else None,
+            actor_name=work_user.name if work_user else None,
+            actor_email=work_user.email if work_user else None,
+            actor_source_platform=work_user.source_platform if work_user else None,
+            **attribution,
+            business_purpose=classify_business_purpose_fields(
+                origin_record_type, origin_record_name,
+                work_item.context_type if work_item else None,
+                work_item.source_record_type if work_item else None,
+                agent.name if agent else None,
+            ),
+            model_tier="",
+            model_name=usage.model_name,
+            resolved_model_tier="",
+            model_source="observed",
+            routing_cascaded=False,
+            is_simulation=False,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            # Distinct from "estimated" (a CostPilot-side guess): this
+            # number came from the reporting system itself, which knows
+            # its own real usage -- see database/models.py's TokenTransaction
+            # docstring on usage_source.
+            usage_source="provider_reported",
+            cost_usd=cost_usd,
+            timestamp=occurred_at,
+            routing_reason="OBSERVED",
+            routing_policy_version=None,
+            execution_status="succeeded",
+            was_pruned=bool(usage.was_pruned),
+            tokens_saved=max(0, int(usage.tokens_saved or 0)),
+        )
+        db.add(tx)
+
+        if budget:
+            budget.current_spend_usd = round(budget.current_spend_usd + cost_usd, 6)
+            if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
+                budget.throttled = True
+        db.commit()
+
+        try:
+            write_audit_event(
+                db=db,
+                event_type="OBSERVED",
+                department=department,
+                routing_decision="OBSERVED",
+                routing_reason="Usage reported via mode='observe'; no routing decision was made by CostPilot.",
+                prompt_payload="",
+                model_tier="",
+                agent_id=agent.id if agent else req.agent_id,
+                cost_usd=cost_usd,
+                decision_outcome=f"Observed usage recorded — ${cost_usd:.6f}",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                usage_source="provider_reported",
+                model_name=usage.model_name,
+                work_item=work_item,
+                work_user=work_user,
+                origin_record_id=req.origin_record_id,
+                origin_record_type=req.origin_record_type,
+                origin_record_name=req.origin_record_name,
+                is_simulation=False,
+                attribution=attribution,
+                governed_request_id=governed_request_id,
+                routing_reason_code="OBSERVED",
+                execution_status="succeeded",
+            )
+        except Exception:
+            pass  # Never let audit write failure break the response
+
+    response_budget_context = effective_budget_context(db, department)
+    if response_budget_context and response_budget_context.get("budget_cap_usd", 0) > 0:
+        budget_used_pct = response_budget_context.get("budget_used_pct", 0.0)
+        budget_remaining_usd = round(
+            response_budget_context.get("budget_cap_usd", 0.0)
+            - response_budget_context.get("budget_spent_usd", 0.0),
+            4,
+        )
+    elif budget and budget.monthly_cap_usd > 0:
+        budget_used_pct = round((budget.current_spend_usd / budget.monthly_cap_usd) * 100, 1)
+        budget_remaining_usd = round(budget.monthly_cap_usd - budget.current_spend_usd, 4)
+    else:
+        budget_used_pct = 0.0
+        budget_remaining_usd = 0.0
+
+    return RouteResponse(
+        governed_request_id=governed_request_id,
+        department=department,
+        model_name=usage.model_name,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost_usd,
+        budget_used_pct=budget_used_pct,
+        budget_remaining_usd=budget_remaining_usd,
+        work_item_id=work_item.external_id if work_item else None,
+        work_item_name=work_item.name if work_item else None,
+    )
+
+
 @router.post("", response_model=RouteResponse)
 def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     """
@@ -580,6 +784,11 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     )
     if not req.is_test:
         db.commit()
+
+    if req.mode == "observe":
+        return _record_observed_usage(
+            db, req, department, agent, work_item, work_user, attribution, governed_request_id,
+        )
 
     # ── payload_type gate — code payloads skip the pruner entirely ───────────
     # Agent pruning_enabled=False overrides everything — "off means off".
@@ -743,6 +952,11 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     if not req.is_test:
         # ── Persist the token transaction ──────────────────────────────────────
         from core.agentlake import infer_platform
+        from api.routes_work_items import classify_business_purpose_fields
+
+        origin_record_type = (req.origin_record_type or "").strip() or None
+        origin_record_name = (req.origin_record_name or "").strip() or None
+
         tx = TokenTransaction(
             governed_request_id = governed_request_id,
             department      = department,
@@ -751,13 +965,19 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             work_item_id    = work_item.id if work_item else None,
             work_user_id    = work_user.id if work_user else None,
             origin_record_id = (req.origin_record_id or "").strip() or None,
-            origin_record_type = (req.origin_record_type or "").strip() or None,
-            origin_record_name = (req.origin_record_name or "").strip() or None,
+            origin_record_type = origin_record_type,
+            origin_record_name = origin_record_name,
             actor_external_id = work_user.external_id if work_user else None,
             actor_name      = work_user.name if work_user else None,
             actor_email     = work_user.email if work_user else None,
             actor_source_platform = work_user.source_platform if work_user else None,
             **attribution,
+            business_purpose = classify_business_purpose_fields(
+                origin_record_type, origin_record_name,
+                work_item.context_type if work_item else None,
+                work_item.source_record_type if work_item else None,
+                agent.name if agent else None,
+            ),
             model_tier      = result["model_tier"],
             model_name      = result["model_name"],
             resolved_model_tier = result.get("resolved_model_tier", result["model_tier"]),

@@ -201,6 +201,13 @@ def run_migrations():
                     ensure_column(conn, table, column, definition)
                 except Exception:
                     pass
+        try:
+            # Lets reporting GROUP BY business_purpose in SQL instead of
+            # reclassifying every row in Python on every request -- see
+            # models.py's TokenTransaction.business_purpose comment.
+            ensure_column(conn, "token_transactions", "business_purpose", "VARCHAR")
+        except Exception:
+            pass
         for column, definition in (
             ("context_type", "VARCHAR DEFAULT 'project' NOT NULL"),
             ("context_template", "VARCHAR"),

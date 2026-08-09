@@ -19,11 +19,13 @@ from database.models import (
     WorkAccount,
     WorkItem,
     WorkItemAgent,
+    WorkItemOutcome,
     WorkItemSourceLink,
     WorkItemUser,
     WorkUser,
 )
 from core.agentlake import display_agent_name, display_department, infer_platform
+from core.model_provider import load_provider_registry, resolve_provider
 from core.workspace_scope import workspace_filter
 from core.business_context import (
     BUSINESS_CONTEXT_TEMPLATES,
@@ -99,22 +101,74 @@ BUSINESS_PURPOSE_RULES = (
 )
 
 
-def classify_business_purpose(tx, project=None, agent=None):
-    """Return an explainable business-purpose bucket from persisted metadata."""
+def classify_business_purpose_fields(
+    origin_record_type=None, origin_record_name=None,
+    context_type=None, source_record_type=None, agent_name=None,
+):
+    """Return an explainable business-purpose bucket from raw signal values.
+
+    Takes plain values rather than ORM objects so it can be called at write
+    time (before a TokenTransaction row exists) as well as at read time.
+    """
     signals = " ".join(
         str(value or "").lower()
         for value in (
-            tx.origin_record_type,
-            tx.origin_record_name,
-            project.context_type if project else None,
-            project.source_record_type if project else None,
-            agent.name if agent else None,
+            origin_record_type, origin_record_name,
+            context_type, source_record_type, agent_name,
         )
     )
     for label, keywords in BUSINESS_PURPOSE_RULES:
         if any(keyword in signals for keyword in keywords):
             return label
     return "Other / Unclassified"
+
+
+def classify_business_purpose(tx, project=None, agent=None):
+    """Return an explainable business-purpose bucket from persisted metadata."""
+    return classify_business_purpose_fields(
+        tx.origin_record_type,
+        tx.origin_record_name,
+        project.context_type if project else None,
+        project.source_record_type if project else None,
+        agent.name if agent else None,
+    )
+
+
+# How long a synced outcome is considered current before Ask CostPilot must
+# call it out as potentially stale rather than presenting it as guaranteed
+# fresh (see WorkItemOutcome.last_synced_at / core/outcome_adapters).
+OUTCOME_FRESHNESS_WINDOW = timedelta(hours=24)
+
+
+def _outcome_fields(outcome) -> dict:
+    """Return the canonical outcome facts for one WorkItemOutcome row (or
+    the "no outcome yet" shape if the work item hasn't been synced)."""
+    if outcome is None:
+        return {
+            "outcome_status": None,
+            "outcome_value": None,
+            "outcome_date": None,
+            "outcome_success": None,
+            "outcome_is_closed": None,
+            "outcome_source_system": None,
+            "outcome_last_synced_at": None,
+            "outcome_freshness": "unavailable",
+        }
+    age = datetime.utcnow() - outcome.last_synced_at if outcome.last_synced_at else None
+    freshness = (
+        "current" if age is not None and age <= OUTCOME_FRESHNESS_WINDOW
+        else "potentially_stale"
+    )
+    return {
+        "outcome_status": outcome.outcome_status,
+        "outcome_value": outcome.outcome_value,
+        "outcome_date": outcome.outcome_date.isoformat() if outcome.outcome_date else None,
+        "outcome_success": outcome.outcome_success,
+        "outcome_is_closed": outcome.is_closed,
+        "outcome_source_system": outcome.source_system,
+        "outcome_last_synced_at": outcome.last_synced_at.isoformat() if outcome.last_synced_at else None,
+        "outcome_freshness": freshness,
+    }
 
 
 class AccountIn(BaseModel):
@@ -1077,6 +1131,7 @@ def project_activity_reporting(
     model_tier: Optional[str] = Query(None),
     charged_unit: Optional[str] = None,
     business_purpose: Optional[str] = None,
+    provider: Optional[str] = None,
     activity_limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
@@ -1096,11 +1151,17 @@ def project_activity_reporting(
             WorkAccount,
             WorkUser,
             RegisteredAgent,
+            WorkItemOutcome,
         )
         .outerjoin(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
         .outerjoin(WorkAccount, WorkItem.account_id == WorkAccount.id)
         .outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
         .outerjoin(RegisteredAgent, TokenTransaction.agent_id == RegisteredAgent.id)
+        # AI activity <-> business outcome are joined here, at read time,
+        # rather than ever copying outcome fields onto TokenTransaction --
+        # an outcome belongs to the work item, not to any individual AI
+        # event (see database/models.py WorkItemOutcome docstring).
+        .outerjoin(WorkItemOutcome, WorkItem.id == WorkItemOutcome.work_item_id)
         .filter(
             TokenTransaction.timestamp >= period_start,
             TokenTransaction.timestamp < period_end,
@@ -1113,15 +1174,20 @@ def project_activity_reporting(
         ))
 
     base_rows = query.order_by(TokenTransaction.timestamp.desc()).all()
+    # Loaded once per report call, not once per row -- see
+    # core/model_provider.py's resolve_provider() docstring for why a
+    # per-row db lookup here would be a real N+1 query problem.
+    provider_registry = load_provider_registry(db)
 
     def identity(row):
-        tx, project, account, user, agent = row
+        tx, project, account, user, agent, outcome = row
         charged_unit_name = (
             (tx.charged_org_unit_name or "").strip()
             or (tx.department or "").split(":")[-1].strip()
             or "Unassigned"
         )
         return {
+            **_outcome_fields(outcome),
             "project_external_id": project.external_id if project else None,
             "project_name": project.name if project else "Unattributed",
             "account_external_id": account.external_id if account else None,
@@ -1142,14 +1208,36 @@ def project_activity_reporting(
             "agent_unit": tx.agent_org_unit_name,
             "work_unit": tx.work_org_unit_name,
             "attribution_source": tx.attribution_source,
-            "business_purpose": classify_business_purpose(tx, project, agent),
+            # Persisted at write time for rows created after the
+            # business_purpose column existed (see models.py) -- only
+            # reclassify here for older rows that predate it, so this isn't
+            # redone from scratch on every report request for most data.
+            "business_purpose": tx.business_purpose or classify_business_purpose(tx, project, agent),
         }
 
-    option_rows = [identity(row) for row in base_rows]
+    def is_simulator_traffic(row):
+        tx, project, _, user, agent, _outcome = row
+        return bool(tx.is_simulation) or bool(
+            agent
+            and not project
+            and not user
+            and not tx.actor_external_id
+            and not tx.origin_record_id
+        )
 
-    def matches(row):
-        tx, _, _, _, _ = row
-        item = identity(row)
+    # identity()/is_simulator_traffic() are computed once per row here and
+    # reused everywhere below (filtering, every breakdown, activities,
+    # summary) instead of being recomputed on every access -- previously
+    # each was called dozens of times per row across the function, which is
+    # what actually made this scale badly (O(rows) work turning into
+    # O(rows * ~24) work), not the lack of SQL GROUP BY per se.
+    option_rows = [identity(row) for row in base_rows]
+    sim_flags = [is_simulator_traffic(row) for row in base_rows]
+    enriched_rows = list(zip(base_rows, option_rows, sim_flags))
+
+    def matches(entry):
+        row, item, _sim = entry
+        tx = row[0]
         # A dropdown option can bundle several ids that share one display
         # name (see unique_options's mergeable dedupe) — the filter value
         # arrives as a comma-joined list in that case, a single id otherwise.
@@ -1171,9 +1259,14 @@ def project_activity_reporting(
             return False
         if business_purpose and item["business_purpose"] != business_purpose:
             return False
+        if provider and resolve_provider(
+            tx.model_name or tx.requested_model_name, registry=provider_registry
+        ).lower() != provider.lower():
+            return False
         return True
 
-    rows = [row for row in base_rows if matches(row)]
+    filtered_entries = [entry for entry in enriched_rows if matches(entry)]
+    rows = [entry[0] for entry in filtered_entries]
     governed_ids = {
         row[0].governed_request_id for row in rows
         if row[0].governed_request_id
@@ -1189,21 +1282,21 @@ def project_activity_reporting(
         for audit in audit_rows:
             audit_by_request.setdefault(audit.governed_request_id, audit)
 
-    def is_simulator_traffic(row):
-        tx, project, _, user, agent = row
-        return bool(tx.is_simulation) or bool(
-            agent
-            and not project
-            and not user
-            and not tx.actor_external_id
-            and not tx.origin_record_id
-        )
+    # Each entry is (row, item, sim) where item = identity(row) and
+    # sim = is_simulator_traffic(row), both computed once above. provider is
+    # likewise resolved once per entry here rather than inside each lambda.
+    entries_with_provider = [
+        (row, item, sim, resolve_provider(row[0].model_name or row[0].requested_model_name, registry=provider_registry))
+        for row, item, sim in filtered_entries
+    ]
 
     def aggregate(key_fn):
         grouped = {}
-        for row in rows:
+        for entry in entries_with_provider:
+            row = entry[0]
             tx = row[0]
-            key, label, metadata = key_fn(row)
+            sim = entry[2]
+            key, label, metadata = key_fn(entry)
             bucket = grouped.setdefault(key or "__unknown__", {
                 "id": key,
                 "label": label,
@@ -1220,7 +1313,7 @@ def project_activity_reporting(
             bucket["output_tokens"] += int(tx.output_tokens or 0)
             bucket["tokens_saved"] += int(tx.tokens_saved or 0)
             bucket["spend_usd"] += float(tx.cost_usd or 0.0)
-            bucket["simulation_count"] += 1 if is_simulator_traffic(row) else 0
+            bucket["simulation_count"] += 1 if sim else 0
         result = []
         for bucket in grouped.values():
             bucket["total_tokens"] = bucket["input_tokens"] + bucket["output_tokens"]
@@ -1232,46 +1325,55 @@ def project_activity_reporting(
             key=lambda bucket: (-bucket["spend_usd"], -bucket["request_count"], bucket["label"]),
         )
 
-    project_breakdown = aggregate(lambda row: (
-        identity(row)["project_external_id"] or (
-            "__simulator__" if is_simulator_traffic(row) else None
+    project_breakdown = aggregate(lambda entry: (
+        entry[1]["project_external_id"] or (
+            "__simulator__" if entry[2] else None
         ),
         (
             "Simulator Traffic"
-            if not identity(row)["project_external_id"] and is_simulator_traffic(row)
-            else identity(row)["project_name"]
+            if not entry[1]["project_external_id"] and entry[2]
+            else entry[1]["project_name"]
         ),
         {
-            "account_external_id": identity(row)["account_external_id"],
+            "account_external_id": entry[1]["account_external_id"],
             "account_name": (
                 "Synthetic workload"
-                if not identity(row)["project_external_id"] and is_simulator_traffic(row)
-                else identity(row)["account_name"]
+                if not entry[1]["project_external_id"] and entry[2]
+                else entry[1]["account_name"]
             ),
+            # Outcome is a property of the work item, constant across every
+            # AI event that rolls up to it -- safe to take from any one row
+            # in the bucket rather than aggregated/summed like the metrics.
+            "outcome_status": entry[1]["outcome_status"],
+            "outcome_value": entry[1]["outcome_value"],
+            "outcome_date": entry[1]["outcome_date"],
+            "outcome_success": entry[1]["outcome_success"],
+            "outcome_is_closed": entry[1]["outcome_is_closed"],
+            "outcome_freshness": entry[1]["outcome_freshness"],
         },
     ))
-    people_breakdown = aggregate(lambda row: (
-        identity(row)["user_external_id"] or (
-            "__simulator__" if is_simulator_traffic(row) else None
+    people_breakdown = aggregate(lambda entry: (
+        entry[1]["user_external_id"] or (
+            "__simulator__" if entry[2] else None
         ),
         (
             "Simulator User"
-            if not identity(row)["user_external_id"] and is_simulator_traffic(row)
-            else identity(row)["user_name"]
+            if not entry[1]["user_external_id"] and entry[2]
+            else entry[1]["user_name"]
         ),
         {
-            "email": identity(row)["user_email"],
+            "email": entry[1]["user_email"],
             "source_platform": (
                 "CostPilot Simulator"
-                if not identity(row)["user_external_id"] and is_simulator_traffic(row)
-                else identity(row)["user_source_platform"]
+                if not entry[1]["user_external_id"] and entry[2]
+                else entry[1]["user_source_platform"]
             ),
         },
     ))
-    agent_breakdown = aggregate(lambda row: (
-        identity(row)["agent_id"],
-        identity(row)["agent_name"],
-        {"source_platform": identity(row)["agent_platform"]},
+    agent_breakdown = aggregate(lambda entry: (
+        entry[1]["agent_id"],
+        entry[1]["agent_name"],
+        {"source_platform": entry[1]["agent_platform"]},
     ))
     # "Account" here means the business/customer entity (e.g. a company
     # record in Salesforce) — distinct from "people" (individual human
@@ -1280,35 +1382,47 @@ def project_activity_reporting(
     # aggregated into its own ranked breakdown the way every other
     # dimension is — so "which accounts generated the most activity" had
     # no real data to answer from anywhere in the app.
-    account_breakdown = aggregate(lambda row: (
-        identity(row)["account_external_id"],
-        identity(row)["account_name"],
+    account_breakdown = aggregate(lambda entry: (
+        entry[1]["account_external_id"],
+        entry[1]["account_name"],
         {},
     ))
-    purpose_breakdown = aggregate(lambda row: (
-        identity(row)["business_purpose"],
-        identity(row)["business_purpose"],
+    purpose_breakdown = aggregate(lambda entry: (
+        entry[1]["business_purpose"],
+        entry[1]["business_purpose"],
         {},
     ))
-    organizational_unit_breakdown = aggregate(lambda row: (
-        identity(row)["charged_unit"],
-        identity(row)["charged_unit"],
+    organizational_unit_breakdown = aggregate(lambda entry: (
+        entry[1]["charged_unit"],
+        entry[1]["charged_unit"],
         {},
     ))
-    source_platform_breakdown = aggregate(lambda row: (
-        row[0].source_platform or "Unknown platform",
-        row[0].source_platform or "Unknown platform",
+    source_platform_breakdown = aggregate(lambda entry: (
+        entry[0][0].source_platform or "Unknown platform",
+        entry[0][0].source_platform or "Unknown platform",
         {},
     ))
-    model_breakdown = aggregate(lambda row: (
-        row[0].model_name or row[0].model_tier or "Unknown model",
-        row[0].model_name or row[0].model_tier or "Unknown model",
-        {"model_tier": row[0].model_tier},
+    model_breakdown = aggregate(lambda entry: (
+        entry[0][0].model_name or entry[0][0].model_tier or "Unknown model",
+        entry[0][0].model_name or entry[0][0].model_tier or "Unknown model",
+        {"model_tier": entry[0][0].model_tier},
+    ))
+    # Provider (Anthropic/OpenAI/...) is not a stored column on
+    # TokenTransaction -- only model_name is -- so it's derived here rather
+    # than filtered/grouped in SQL. Previously there was no provider
+    # breakdown or filter at all, meaning "how much are we spending on
+    # Claude" or "compare OpenAI and Anthropic" had no data to answer from
+    # anywhere in the app even though the underlying model names were
+    # perfectly resolvable to a provider.
+    provider_breakdown = aggregate(lambda entry: (
+        entry[3],
+        entry[3],
+        {},
     ))
 
     activities = []
-    for tx, project, account, user, agent in rows[:activity_limit]:
-        item = identity((tx, project, account, user, agent))
+    for row, item, sim, _provider in entries_with_provider[:activity_limit]:
+        tx, project, account, user, agent, _outcome = row
         audit = audit_by_request.get(tx.governed_request_id)
         activities.append({
             "transaction_id": tx.id,
@@ -1338,7 +1452,7 @@ def project_activity_reporting(
             "decision_outcome": audit.decision_outcome if audit else None,
             "risk_level": audit.risk_level if audit else None,
             "routing_reason_code": audit.routing_reason_code if audit else None,
-            "is_simulation": is_simulator_traffic((tx, project, account, user, agent)),
+            "is_simulation": sim,
         })
 
     def unique_options(key, label, extra=None, mergeable=False):
@@ -1455,11 +1569,11 @@ def project_activity_reporting(
             "total_tokens": total_input + total_output,
             "tokens_saved": sum(int(row[0].tokens_saved or 0) for row in rows),
             "spend_usd": round(sum(float(row[0].cost_usd or 0.0) for row in rows), 6),
-            "people_count": len({identity(row)["user_external_id"] for row in rows if identity(row)["user_external_id"]}),
-            "agent_count": len({identity(row)["agent_id"] for row in rows if identity(row)["agent_id"] is not None}),
-            "project_count": len({identity(row)["project_external_id"] for row in rows if identity(row)["project_external_id"]}),
-            "simulation_count": sum(1 for row in rows if is_simulator_traffic(row)),
-            "live_count": sum(1 for row in rows if not is_simulator_traffic(row)),
+            "people_count": len({e[1]["user_external_id"] for e in filtered_entries if e[1]["user_external_id"]}),
+            "agent_count": len({e[1]["agent_id"] for e in filtered_entries if e[1]["agent_id"] is not None}),
+            "project_count": len({e[1]["project_external_id"] for e in filtered_entries if e[1]["project_external_id"]}),
+            "simulation_count": sum(1 for e in filtered_entries if e[2]),
+            "live_count": sum(1 for e in filtered_entries if not e[2]),
         },
         "project_breakdown": project_breakdown,
         "people_breakdown": people_breakdown,
@@ -1469,6 +1583,7 @@ def project_activity_reporting(
         "business_purpose_breakdown": purpose_breakdown,
         "source_platform_breakdown": source_platform_breakdown,
         "model_breakdown": model_breakdown,
+        "provider_breakdown": provider_breakdown,
         "activities": activities,
         "activity_count": len(rows),
         "activity_limit": activity_limit,

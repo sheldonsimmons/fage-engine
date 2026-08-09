@@ -40,7 +40,7 @@ from core.ask_costpilot_contracts import (
     canonical_ask_intent,
     validate_ask_answer_contract,
 )
-from core.analytics_metrics import metric_definition
+from core.analytics_metrics import metric_definition, metric_for_keywords
 from core.analytics_periods import (
     comparison_coverage,
     comparison_plan,
@@ -219,9 +219,69 @@ def update_workspace_analytics_settings(
     return {**_analytics_settings_payload(item), "configured": True}
 
 
+# Small, bounded vocabulary for typo correction -- NOT a general spell
+# checker. Corrects a mistyped word only when it's a close match (one
+# edit away in practice, via difflib's ratio) to exactly one word in this
+# list and isn't already a real word Ask CostPilot recognizes elsewhere
+# (checked by the caller before calling this). Scoped to the domain terms
+# actual users mistype in practice ("toknes", "spnd", "dept") rather than
+# attempting to correct arbitrary English, which risks "fixing" a word
+# into the wrong meaning.
+_ASK_TYPO_VOCABULARY = (
+    "tokens", "token", "spend", "spent", "cost", "costs", "department",
+    "departments", "people", "person", "users", "user", "agent", "agents",
+    "account", "accounts", "budget", "provider", "platform", "model",
+    "models", "pruning", "savings", "requests", "request",
+)
+
+# Common, correctly-spelled words that happen to sit close (by edit
+# distance) to a vocabulary word above -- e.g. "uses" is a 0.89 ratio match
+# for "users", closer than the genuine typo "toknes" is to "tokens"
+# (0.83), so the distance metric alone can't tell them apart. Skip
+# correcting anything in this set rather than risk turning a correctly
+# spelled word into a different one ("which model uses tokens" silently
+# becoming "...users tokens..." and misclassifying the whole question).
+_ASK_TYPO_PROTECTED_WORDS = {
+    "uses", "used", "using", "costing", "modelling", "modeling",
+}
+
+
+# Common short-form workplace abbreviations -- distinct from typos (these
+# are intentional shorthand, not misspellings), so handled as a direct
+# lookup rather than edit-distance matching, which would be unreliable at
+# this length (a 3-letter word is one edit away from dozens of unrelated
+# words).
+_ASK_ABBREVIATIONS = {
+    "ppl": "people", "dept": "department", "acct": "account",
+    "req": "request", "reqs": "requests",
+}
+
+
+def _ask_correct_typos(text: str) -> str:
+    import difflib
+
+    words = text.split()
+    corrected = []
+    for word in words:
+        bare = word.strip(".,!?;:")
+        if not bare:
+            corrected.append(word)
+            continue
+        if bare in _ASK_ABBREVIATIONS:
+            corrected.append(_ASK_ABBREVIATIONS[bare])
+            continue
+        if bare in _ASK_TYPO_VOCABULARY or bare in _ASK_TYPO_PROTECTED_WORDS or len(bare) < 4:
+            corrected.append(word)
+            continue
+        match = difflib.get_close_matches(bare, _ASK_TYPO_VOCABULARY, n=1, cutoff=0.78)
+        corrected.append(match[0] if match else word)
+    return " ".join(corrected)
+
+
 def _ask_intent(question: str, default_days: int) -> dict:
     """Translate common executive questions into a bounded reporting intent."""
     text = " ".join((question or "").lower().split())
+    text = _ask_correct_typos(text)
     days = max(1, min(int(default_days or 30), 365))
     period_key = None
     if any(term in text for term in ("all time", "all-time", "ever recorded", "since inception")):
@@ -285,21 +345,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
             days = max(1, min(word_days.get(raw_days, int(raw_days) if raw_days.isdigit() else days), 365))
             period_key = "rolling_days"
 
-    metric = "spend_usd"
-    if any(term in text for term in ("prun", "tokens removed", "removed before model")):
-        metric = "tokens_saved"
-    elif any(term in text for term in ("risk event", "risk events")):
-        metric = "risk_event_count"
-    elif any(term in text for term in ("average cost", "avg cost", "cost per request")):
-        metric = "avg_cost_per_request"
-    elif "token" in text:
-        metric = "total_tokens"
-    elif any(term in text for term in (
-        "expensive", "costliest", "highest cost", "most cost", "spend", "spent"
-    )):
-        metric = "spend_usd"
-    elif any(term in text for term in ("request", "call", "volume", "used most", "usage")):
-        metric = "request_count"
+    metric = metric_for_keywords(text)
 
     entity = "overview"
     if any(term in text for term in ("employee", "person", "people", "user", "who ")):
@@ -317,12 +363,29 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # names (e.g. "Summit Financial").
         entity = "account"
     elif any(term in text for term in (
-        "project", "matter", "opportunity", "business context", "work item"
+        # "opportunit" (stem, no suffix) matches both "opportunity" and
+        # "opportunities" -- the full word "opportunity" alone never
+        # matched the plural, since "opportunities" doesn't contain it as
+        # a substring ("opportunit-y" vs "opportunit-ies").
+        "project", "matter", "opportunit", "business context", "work item"
     )):
         entity = "context"
-    elif any(term in text for term in ("platform", "provider", "source system", "source app")):
+    elif any(term in text for term in (
+        "provider", "anthropic", "openai", "vendor",
+    )):
+        # "Provider" (Anthropic/OpenAI/the AI vendor) and "platform"
+        # (Salesforce/ServiceNow/the source system a request came from)
+        # used to share one entity bucket, so "compare OpenAI and
+        # Anthropic spend" and "how does routing use different tiers"
+        # resolved to the same "platform" ranking as "which system sends
+        # us the most traffic" -- two genuinely different dimensions
+        # collapsed into one, answering provider questions with source
+        # -system data. See core/model_provider.py for how provider is
+        # actually resolved from the recorded model name.
+        entity = "provider"
+    elif any(term in text for term in ("platform", "source system", "source app")):
         entity = "platform"
-    elif any(term in text for term in ("model", "tier", "opus", "sonnet", "haiku", "gpt")):
+    elif any(term in text for term in ("model", "tier", "opus", "sonnet", "haiku", "gpt", "claude")):
         entity = "model"
     elif "where did" in text and any(term in text for term in ("spend", "cost", "token", "usage")):
         entity = "context"
@@ -424,11 +487,15 @@ def _ask_intent(question: str, default_days: int) -> dict:
         and any(term in text for term in (
             "change", "changed", "increase", "increased", "decrease", "decreased",
             "spike", "spiked", "drop", "dropped", "grew", "fell",
-        ))
-        and any(term in text for term in (
-            "spend", "cost", "token", "request", "usage", "volume",
+            "jump", "jumped", "surge", "surged", "spiral", "explod", "balloon",
         ))
     ):
+        # A metric word (spend/cost/token/...) is common but not required —
+        # "what caused the spike yesterday?" names no metric at all, and
+        # Ask CostPilot's entire domain is AI spend/usage, so defaulting to
+        # the already-default spend_usd metric is the right fallback rather
+        # than missing the question's intent entirely for lacking a word
+        # that was implicit given the bot's scope.
         intent = "change_drivers"
         entity = "overview"
     elif (
@@ -492,6 +559,16 @@ def _ask_intent(question: str, default_days: int) -> dict:
     for tier in ("strategist", "advisor", "analyst", "scout", "flagship"):
         if tier in text:
             model_tier = tier
+            break
+    provider = None
+    for keyword, provider_name in (
+        ("anthropic", "Anthropic"), ("claude", "Anthropic"),
+        ("openai", "OpenAI"), ("gpt", "OpenAI"),
+        ("gemini", "Google"), ("google", "Google"),
+        ("mistral", "Mistral"), ("llama", "Meta"),
+    ):
+        if keyword in text:
+            provider = provider_name
             break
 
     usage_status = None
@@ -558,6 +635,22 @@ def _ask_intent(question: str, default_days: int) -> dict:
         else:
             budget_scope = "status"
 
+    # "which won opportunities had the highest AI spend" / "AI spend on
+    # opportunities we lost" -- narrows project_breakdown rows by
+    # WorkItemOutcome.outcome_success without needing a new intent, the
+    # same shape as usage_status above. Only meaningful for entity=="context"
+    # (opportunities/projects are the only rows with outcome data today).
+    outcome_filter = None
+    if entity == "context":
+        if any(term in text for term in (
+            "closed won", "won opportunit", "we won", "opportunities we won",
+        )) or (" won " in f" {text} " and "opportunit" in text):
+            outcome_filter = "won"
+        elif any(term in text for term in (
+            "closed lost", "lost opportunit", "we lost", "opportunities we lost",
+        )) or (" lost " in f" {text} " and "opportunit" in text):
+            outcome_filter = "lost"
+
     comparison_key = None
     if intent in {"comparison", "change_drivers"}:
         if any(term in text for term in (
@@ -589,9 +682,11 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "comparison_key": comparison_key,
         "source_platform": source_platform,
         "model_tier": model_tier,
+        "provider": provider,
         "usage_status": usage_status,
         "usage_threshold": usage_threshold,
         "budget_scope": budget_scope,
+        "outcome_filter": outcome_filter,
     }
     canonical = canonical_ask_intent(question)
     if canonical:
@@ -610,7 +705,23 @@ _ASK_INTENTS = {
     "tier_usage", "optimization", "change_drivers", "help", "product", "decision",
 }
 _ASK_ENTITIES = {
-    "person", "agent", "department", "context", "platform", "model", "overview", "request"
+    "person", "agent", "department", "context", "platform", "model", "provider", "overview", "request"
+}
+# (breakdown_key, filter_name, label) per rankable entity -- "context" is
+# added dynamically at call time with a per-request label, see its use in
+# _ask_costpilot_answer. Exposed at module level (not just a local dict)
+# so core/analytics_dimensions.py's DIMENSION_REGISTRY can be checked
+# against it in tests instead of the two silently drifting apart.
+_ASK_ENTITY_CONFIG_STATIC = {
+    "person": ("people_breakdown", "user_external_id", "People"),
+    "agent": ("agent_breakdown", "agent_id", "Agents"),
+    "department": ("organizational_unit_breakdown", "charged_unit", "Departments and teams"),
+    "account": ("account_breakdown", "account_id", "Accounts"),
+    "platform": ("source_platform_breakdown", "source_platform", "Platforms"),
+    # Model evidence is still useful, but the attribution report does not
+    # currently expose a model selector. Do not render a dead drill link.
+    "model": ("model_breakdown", None, "Models"),
+    "provider": ("provider_breakdown", "provider", "Providers"),
 }
 _ASK_METRICS = {
     "spend_usd", "total_tokens", "request_count", "tokens_saved",
@@ -815,7 +926,7 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
     explicit_entity = any(term in text for term in (
         "employee", "person", "people", "user", "who ", "agent", "bot",
         "department", "team", "business unit", "cost center", "account",
-        "customer", "project", "matter", "opportunity", "business context",
+        "customer", "project", "matter", "opportunit", "business context",
         "work item", "platform", "provider", "source system", "model", "tier",
     ))
     explicit_direction = any(term in text for term in (
@@ -940,6 +1051,7 @@ def _ask_reporting_filters(request: AskCostPilotRequest, parsed: dict) -> dict:
         "model_tier": parsed.get("model_tier") or request.model_tier,
         "charged_unit": request.charged_unit,
         "business_purpose": request.business_purpose,
+        "provider": parsed.get("provider"),
     }
     if _ask_has_explicit_named_subject(request.question):
         # A named subject must be discovered across the filtered workspace.
@@ -1237,22 +1349,37 @@ def _ask_evidence(
         value, metric_label = _ask_metric_value(
             metric, _ask_row_metric(row, metric)
         )
-        evidence.append({
+        detail = (
+            f"{int(row.get('request_count') or 0):,} requests · "
+            f"{int(row.get('total_tokens') or 0):,} tokens · "
+            f"${float(row.get('spend_usd') or 0):,.4f} · "
+            f"{int(row.get('live_count') or 0):,} live / "
+            f"{int(row.get('simulation_count') or 0):,} simulator"
+        )
+        entry = {
             "label": row.get("label") or "Unknown",
             "value": value,
             "metric_label": metric_label,
-            "detail": (
-                f"{int(row.get('request_count') or 0):,} requests · "
-                f"{int(row.get('total_tokens') or 0):,} tokens · "
-                f"${float(row.get('spend_usd') or 0):,.4f} · "
-                f"{int(row.get('live_count') or 0):,} live / "
-                f"{int(row.get('simulation_count') or 0):,} simulator"
-            ),
+            "detail": detail,
             "filter_name": filter_name,
             "filter_value": row.get("id"),
             "live_count": int(row.get("live_count") or 0),
             "simulation_count": int(row.get("simulation_count") or 0),
-        })
+        }
+        # Outcome is only present on project_breakdown rows (see
+        # WorkItemOutcome) -- surfaced as its own facts, not folded into
+        # `detail`'s prose, so Ask CostPilot's narrator states the AI figure
+        # and the outcome figure as two separate associated facts rather
+        # than one blended sentence that risks implying causation.
+        if row.get("outcome_status") is not None:
+            entry["outcome"] = {
+                "status": row.get("outcome_status"),
+                "value": row.get("outcome_value"),
+                "success": row.get("outcome_success"),
+                "is_closed": row.get("outcome_is_closed"),
+                "freshness": row.get("outcome_freshness"),
+            }
+        evidence.append(entry)
     return evidence
 
 
@@ -1478,17 +1605,56 @@ def _ask_name_tokens(value: str) -> set[str]:
     }
 
 
-def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
+def _ask_named_department(question: str, workspace_id: Optional[str], db: Session) -> Optional[str]:
     """
-    Resolve an explicitly named person, agent, department, or work item.
+    Detect a department named in the question even when the question's
+    *ranking dimension* (entity) is something else entirely — e.g. "what
+    models is Sales using" ranks by model, not department, so _ask_intent's
+    single `entity` field can never carry "Sales" as a filter; it can only
+    be "model" or "department", not both. Without this, that class of
+    question silently answered with the company-wide breakdown while the
+    narrated text still named the department, mixing two different scopes
+    into one answer (confirmed live on 2026-08-08 for exactly this
+    question). Matches against the real distinct department labels in this
+    workspace's data rather than a hardcoded list, since department names
+    are customer-defined. Returns a department only on an unambiguous single
+    match — never guesses between two equally-plausible department names.
+    """
+    from database.models import TokenTransaction
+    from core.workspace_scope import workspace_filter
 
-    Matching happens only against labels already returned by CostPilot's
-    deterministic attribution report. A single first/last-name token can
-    identify a row only when it is unique across every candidate.
+    text = (question or "").lower()
+    if not text or db is None:
+        return None
+    query = db.query(TokenTransaction.department)
+    scope = workspace_filter(TokenTransaction, workspace_id)
+    # workspace_filter()'s contract is "None means skip filtering, not
+    # 'filter to nothing'" -- passing None straight into .filter() instead
+    # builds a `WHERE NULL` clause that matches zero rows, silently making
+    # every unscoped-workspace lookup (workspace_id=None, e.g. this app's
+    # default/legacy workspace) come back empty.
+    if scope is not None:
+        query = query.filter(scope)
+    rows = query.distinct().all()
+    labels = {str(row[0]).split(":")[-1].strip() for row in rows if row[0]}
+    matches = {label for label in labels if label and label.lower() in text}
+    if len(matches) == 1:
+        return next(iter(matches))
+    return None
+
+
+def _ask_named_entity_candidates(question: str, report: dict) -> list:
+    """
+    Every candidate row (across people/agents/accounts/departments/
+    context/platforms/models) whose label shares a name token with the
+    question, sorted best match first. Shared by _ask_named_entity (which
+    picks the unique winner or abstains) and _ask_named_entity_ambiguity
+    (which needs the full tied group to build a clarification message) so
+    the two can never define "candidate" or "match score" differently.
     """
     question_tokens = _ask_name_tokens(question)
     if not question_tokens:
-        return None
+        return []
 
     candidates = []
     configs = (
@@ -1519,6 +1685,19 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
     # between two different real subjects (which is the actual case this
     # tie-check exists to catch, e.g. a person and a department sharing a
     # name).
+    #
+    # For rows that carry an email (people), fold it into the merge key
+    # too. Without this, two DIFFERENT people who happen to share a name
+    # got silently summed into one answer instead of merely deduplicating
+    # true duplicates -- confirmed live: a demo workspace's traffic
+    # simulator generates unrelated synthetic personas across different
+    # simulated companies that coincidentally reuse the same display name
+    # ("Avery Johnson" existed as 5 distinct simulated identities across 5
+    # platforms), and summing them overstated one person's spend by ~4x
+    # versus what the attribution dashboard's exact-identity filter showed
+    # for any single one of them. Rows lacking an email at all (most
+    # non-person dimensions) fall back to the original label-only key,
+    # preserving the account-merging behavior this logic was built for.
     _SUM_FIELDS = (
         "request_count", "input_tokens", "output_tokens", "tokens_saved",
         "spend_usd", "simulation_count", "total_tokens", "live_count",
@@ -1531,7 +1710,7 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
             overlap = question_tokens & label_tokens
             if not overlap:
                 continue
-            key = (entity, label)
+            key = (entity, label, row.get("email") or None)
             existing = merged.get(key)
             if existing is None:
                 merged_row = dict(row)
@@ -1555,12 +1734,41 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
                         existing["row"][field] = (existing["row"].get(field) or 0) + (row.get(field) or 0)
 
     candidates = list(merged.values())
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+    return candidates
+
+
+def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
+    """
+    Resolve an explicitly named person, agent, department, or work item.
+
+    Matching happens only against labels already returned by CostPilot's
+    deterministic attribution report. A single first/last-name token can
+    identify a row only when it is unique across every candidate.
+    """
+    candidates = _ask_named_entity_candidates(question, report)
     if not candidates:
         return None
-    candidates.sort(key=lambda item: item["score"], reverse=True)
     if len(candidates) > 1 and candidates[0]["score"] == candidates[1]["score"]:
         return None
     return candidates[0]
+
+
+def _ask_named_entity_ambiguity(question: str, report: dict) -> list:
+    """
+    Return the tied top-scoring candidates when a named subject can't be
+    resolved because two or more equally-good matches exist (e.g. two
+    people named "Chris") -- empty if there's a unique winner, or if no
+    candidate matched at all. Used to build a clarification message
+    ("I found two people named Chris...") instead of the alternative that
+    was happening before this existed: silently answering with an
+    unfiltered, company-wide number as if it had resolved the name.
+    """
+    candidates = _ask_named_entity_candidates(question, report)
+    if len(candidates) < 2 or candidates[0]["score"] != candidates[1]["score"]:
+        return []
+    top_score = candidates[0]["score"]
+    return [c for c in candidates if c["score"] == top_score]
 
 
 def _agent_stats(db: Session, agent: RegisteredAgent, days: int) -> dict:
@@ -2175,6 +2383,87 @@ def _ask_help_response(
     }
 
 
+_ASK_NUMBER_PATTERN = re.compile(r"-?\$?\d[\d,]*(?:\.\d+)?%?")
+
+
+def _ask_extract_numbers(value) -> set[float]:
+    """
+    Pull every number out of arbitrary text/JSON, normalized to a bare
+    float (currency signs, thousands separators, and percent signs
+    stripped). Used to compare "what numbers does the narrated answer
+    contain" against "what numbers were actually in the source facts",
+    since the two need to name the same values even though one is prose
+    and the other is JSON.
+    """
+    numbers: set[float] = set()
+    text = value if isinstance(value, str) else json.dumps(value, default=str)
+    for match in _ASK_NUMBER_PATTERN.findall(text):
+        cleaned = match.replace("$", "").replace(",", "").replace("%", "")
+        try:
+            number = float(cleaned)
+        except ValueError:
+            continue
+        # Skip tiny integers (0-9): "top 5", "5 departments", list positions,
+        # and years/dates would otherwise flood false mismatches for values
+        # that were never meant to be verified as a spend/token figure.
+        if abs(number) < 10 and number == int(number):
+            continue
+        numbers.add(round(number, 2))
+    return numbers
+
+
+def _ask_narration_unverified_numbers(facts: dict, narrated_answer: str) -> set[float]:
+    """
+    Return any number appearing in the model's rewritten answer that does
+    not approximately match a number present in the source facts it was
+    given. The prompt already tells the model to "preserve exact numbers",
+    but nothing previously checked that — this is the fidelity check that
+    was missing, catching a fluent rewrite that silently swaps or drops a
+    figure before it reaches the user.
+    """
+    source_numbers = _ask_extract_numbers(facts)
+    narrated_numbers = _ask_extract_numbers(narrated_answer)
+    unverified = set()
+    for number in narrated_numbers:
+        if any(abs(number - source) <= max(0.01, abs(source) * 0.005) for source in source_numbers):
+            continue
+        unverified.add(number)
+    return unverified
+
+
+# Verbs that assert AI as the cause of a business result, rather than
+# merely reporting that both figures exist. Matched near a currency/percent
+# figure so "AI generated the report" (no dollar amount nearby) isn't
+# flagged, but "AI generated $600,000" is. This is a category the numeric-
+# fidelity check above cannot catch: the number can be perfectly correct
+# while the causal claim around it is still unsupported by the facts (see
+# database/models.py WorkItemOutcome and core/outcome_adapters -- CostPilot
+# tracks AI activity alongside a business outcome, it never establishes
+# that the AI activity caused it).
+_ASK_CAUSAL_VERBS = (
+    "generated", "drove", "caused", "resulted in", "produced", "created",
+    "delivered", "led to", "responsible for", "won", "closed",
+)
+_ASK_CAUSAL_CLAIM_PATTERN = re.compile(
+    r"\b(ai|the model|claude|gpt|the agent)\b[^.?!]{0,40}\b("
+    + "|".join(re.escape(verb) for verb in _ASK_CAUSAL_VERBS)
+    + r")\b[^.?!]{0,40}[\$\d]",
+    re.IGNORECASE,
+)
+
+
+def _ask_narration_causal_claims(narrated_answer: str) -> list[str]:
+    """
+    Return any sentence fragment where the narration credits AI itself with
+    causing a dollar/percent outcome (e.g. "AI generated $600,000" or
+    "the agent closed this $500K deal"). CostPilot can state that AI
+    activity and a business outcome co-occurred; it cannot claim the AI
+    activity caused the outcome -- see "measure contribution before
+    attribution" in the CostPilot Universal design notes.
+    """
+    return [match.group(0) for match in _ASK_CAUSAL_CLAIM_PATTERN.finditer(narrated_answer)]
+
+
 def _ask_grounded_narrative(
     request: AskCostPilotRequest,
     payload: dict,
@@ -2228,6 +2517,13 @@ CostPilot already performed every calculation. Never calculate a different value
 change a date range, or claim information not present in the facts. Preserve exact names and numbers.
 State when the scope is live, simulator, mixed, or has no activity when that distinction matters.
 Do not score employee productivity or infer business outcomes. Be concise and directly useful.
+If the facts include a business outcome (outcome_status/outcome_value/outcome_success) alongside
+AI spend, state both figures side by side as associated facts only -- e.g. "this $600,000 Closed
+Won opportunity had $196 of tracked AI activity across 83 interactions." Never say AI generated,
+drove, caused, produced, or was responsible for a dollar amount or business result; AI activity and
+a business outcome occurring on the same work item is not evidence that one caused the other.
+If an outcome's freshness is "potentially_stale" or "unavailable", say so rather than presenting it
+as current.
 Call write_grounded_costpilot_answer exactly once."""
     try:
         from openai import OpenAI
@@ -2258,6 +2554,22 @@ Call write_grounded_costpilot_answer exactly once."""
                 title = str(written.get("title") or "").strip()
                 answer = str(written.get("answer") or "").strip()
                 if title and answer:
+                    unverified = _ask_narration_unverified_numbers(facts, answer)
+                    if unverified:
+                        logger.warning(
+                            "Ask CostPilot grounded narration rejected: numbers %s in the "
+                            "rewritten answer do not appear in the source facts",
+                            sorted(unverified),
+                        )
+                        return payload["title"], payload["answer"], False
+                    causal_claims = _ask_narration_causal_claims(answer)
+                    if causal_claims:
+                        logger.warning(
+                            "Ask CostPilot grounded narration rejected: causal claim(s) %s "
+                            "credit AI with a business outcome the facts only associate it with",
+                            causal_claims,
+                        )
+                        return payload["title"], payload["answer"], False
                     return title[:180], answer[:4000], True
     except Exception as exc:
         _ASK_WRITER_DISABLED_UNTIL = time.monotonic() + _ask_env_seconds(
@@ -2268,9 +2580,40 @@ Call write_grounded_costpilot_answer exactly once."""
 
 
 def _ask_agent_mode_enabled() -> bool:
-    return os.getenv("ASK_COSTPILOT_AGENT_MODE", "false").lower() not in {
+    return os.getenv("ASK_COSTPILOT_AGENT_MODE", "true").lower() not in {
         "0", "false", "no", "off"
     }
+
+
+def _ask_debug_enabled() -> bool:
+    return os.getenv("ASK_COSTPILOT_DEBUG", "false").lower() not in {
+        "0", "false", "no", "off"
+    }
+
+
+def _ask_debug_log(request: "AskCostPilotRequest", stage: str, payload: dict) -> None:
+    """
+    Internal diagnostic trace only — never returned to the client. Gated by
+    ASK_COSTPILOT_DEBUG so it can be turned on in a support/debug session to
+    see USER QUESTION -> INTENT/PLAN -> ENTITY RESOLUTION -> TOOL CALLS ->
+    RESULTS -> FINAL ANSWER for a specific failing question, without
+    exposing any of this to end users on every request.
+    """
+    if not _ask_debug_enabled():
+        return
+    try:
+        # logger.warning, not .info: nothing in this app calls
+        # logging.basicConfig, so the root logger sits at the default
+        # WARNING level and every .info call is silently dropped — an
+        # .info-level trace here would never actually print no matter how
+        # many call sites used it. Severity is bumped, not the gating: this
+        # still only fires when ASK_COSTPILOT_DEBUG is on.
+        logger.warning(
+            "ASK_COSTPILOT_TRACE[%s] question=%r %s",
+            stage, request.question, json.dumps(payload, default=str)[:4000],
+        )
+    except Exception:
+        pass
 
 
 def _ask_agent_reporting_filters(request: "AskCostPilotRequest") -> dict:
@@ -2299,7 +2642,8 @@ def _ask_run_agent_tool(
         return executor(
             db, request.workspace_id, reporting_filters,
             int(args.get("days") or 30), args.get("period_key") or "none",
-            args.get("entity_name") or None,
+            args.get("entity_name") or None, int(args.get("limit") or 5),
+            args.get("department") or None, args.get("provider") or None,
         )
     if name == "get_change_drivers":
         return executor(
@@ -2308,6 +2652,7 @@ def _ask_run_agent_tool(
             args.get("comparison_key") or "previous_period",
             args.get("metric") or "spend_usd",
             args.get("dimension") or "organizational_unit_breakdown",
+            args.get("department") or None, args.get("provider") or None,
         )
     if name == "get_budget_status":
         return executor(db, request.workspace_id, bool(args.get("alerts_only")))
@@ -2371,6 +2716,97 @@ def _ask_agent_validate_answer(tool_call_log: list, answer_text: str) -> list[st
             )
 
     return issues
+
+
+def _ask_normalized_question(text: str) -> str:
+    return re.sub(r"[^a-z0-9 ]", "", (text or "").lower()).strip()
+
+
+def _ask_suggested_questions(
+    category: str,
+    department: Optional[str] = None,
+    subject: Optional[str] = None,
+    asked_question: Optional[str] = None,
+) -> list[str]:
+    """
+    Build "you might also ask" follow-ups templated from what was actually
+    asked, instead of a fixed canned list shown regardless of context (the
+    prior behavior: every answer outside a few hardcoded intents got an
+    empty list, and the ones that got suggestions -- e.g. any budget
+    question -- always saw the same 5 generic questions with no reference
+    to the department/person actually asked about). Templated rather than
+    model-generated so a suggestion can never point at something that
+    isn't actually answerable, matching the no-hallucination approach used
+    everywhere else in Ask CostPilot. Shared by both the deterministic path
+    and the agent tool loop so the feature doesn't disappear depending on
+    which one answered.
+    """
+    if category == "no_activity":
+        # Zero data anywhere in the checked period -- a department/person
+        # -scoped suggestion would be equally unanswerable, so this always
+        # wins regardless of what was actually filtered on.
+        candidates = [
+            "Who had the most AI spend yesterday?",
+            "Who had the most AI spend in the last 7 days?",
+            "Show the latest AI activity.",
+        ]
+    elif department:
+        candidates = [
+            f"Which model is {department}'s biggest cost driver?",
+            f"How does {department} compare to other departments?",
+            f"Show {department}'s AI spend by person.",
+        ]
+    elif subject:
+        candidates = [
+            f"What did {subject} spend last month?",
+            f"Which accounts has {subject} worked on?",
+        ]
+    elif category == "budget":
+        candidates = [
+            "How much AI budget is left this month?",
+            "Are we on track to exceed budget this month?",
+            "Which departments are closest to their budget limits?",
+            "What is our budget variance so far this month?",
+            "How much budget does each department have?",
+        ]
+    elif category in {"comparison", "change_drivers"}:
+        candidates = [
+            "Which department contributed most to the change?",
+            "Was the change within budget?",
+            "Which people contributed most to the change?",
+            "Which agents contributed most to the change?",
+            "Which accounts contributed most to the change?",
+        ]
+    elif category == "pruning":
+        candidates = [
+            "How much have we saved from pruning this quarter?",
+            "Which department benefits most from token pruning?",
+        ]
+    elif category == "agent_adoption":
+        candidates = [
+            "Which agents are most active?",
+            "Which agents have never been used?",
+        ]
+    elif category in {"ranking", "total", "overview"}:
+        candidates = [
+            "Which department spent the most on AI?",
+            "Who are the top users by AI spend?",
+            "What models are we using the most?",
+        ]
+    else:
+        candidates = []
+
+    # A suggestion that just restates the question the user already asked
+    # (e.g. asking "which department spent the most" and being told to
+    # ask... "which department spent the most") is worse than no
+    # suggestion at all -- filter any near-exact restatement out.
+    asked_normalized = _ask_normalized_question(asked_question) if asked_question else None
+    if asked_normalized:
+        candidates = [
+            candidate for candidate in candidates
+            if _ask_normalized_question(candidate) != asked_normalized
+        ]
+    return candidates
 
 
 def _ask_agent_final_payload(
@@ -2472,6 +2908,7 @@ def _ask_agent_final_payload(
             _pool("agent", result.get("top_agents"), "spend_usd", "agent_id")
             _pool("platform", result.get("top_platforms"), "spend_usd", "source_platform")
             _pool("model", result.get("top_models"), "spend_usd", None)
+            _pool("provider", result.get("top_providers"), "spend_usd", "provider")
             named_match = result.get("named_entity_match")
             primary_breakdowns[tool_name] = people  # "who" defaults to people, not every dimension at once
             if named_match:
@@ -2513,6 +2950,32 @@ def _ask_agent_final_payload(
         if row.get("filter_name") == "charged_unit" and row.get("label")
     }
 
+    # Derive the same (category, department, subject) inputs the
+    # deterministic path uses for _ask_suggested_questions, but from the
+    # tool call log instead of a parsed intent -- last tool call wins, same
+    # "closer to what the final answer is about" rule used for period/scope
+    # above, so a multi-tool turn (e.g. change drivers then budget) bases
+    # suggestions on the tool that actually produced the answer.
+    _TOOL_SUGGESTION_CATEGORY = {
+        "get_usage_report": "ranking",
+        "get_change_drivers": "change_drivers",
+        "get_budget_status": "budget",
+        "get_agent_adoption": "agent_adoption",
+    }
+    suggestion_category = ""
+    suggestion_department = None
+    suggestion_subject = None
+    for tool_name, call_args, result in tool_call_log:
+        if tool_name not in _TOOL_SUGGESTION_CATEGORY:
+            continue
+        suggestion_category = _TOOL_SUGGESTION_CATEGORY[tool_name]
+        suggestion_department = call_args.get("department") or None
+        suggestion_subject = None
+        if tool_name == "get_usage_report":
+            named_match = result.get("named_entity_match")
+            if named_match and named_match.get("entity_type") in {"person", "account"}:
+                suggestion_subject = named_match.get("label")
+
     payload = {
         "title": title,
         "answer": answer,
@@ -2527,6 +2990,12 @@ def _ask_agent_final_payload(
             "simulator_requests": simulator_requests,
         },
         "assistant_mode": "agent_tool_loop",
+        "suggested_questions": _ask_suggested_questions(
+            "no_activity" if (data_scope or "no_activity") == "no_activity" else suggestion_category,
+            department=suggestion_department,
+            subject=suggestion_subject,
+            asked_question=request.question,
+        ),
     }
 
     try:
@@ -2554,12 +3023,19 @@ def _ask_costpilot_agent(request: "AskCostPilotRequest", db: Session) -> Optiona
 
     if not _ask_agent_mode_enabled():
         return None
+    _ask_debug_log(request, "question_received", {
+        "workspace_id": request.workspace_id,
+        "is_follow_up": _ask_is_follow_up(request.question),
+        "context": request.context.model_dump(exclude_none=True) if request.context else None,
+    })
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if (
-        not api_key
-        or api_key.startswith("YOUR")
-        or time.monotonic() < _ASK_AGENT_DISABLED_UNTIL
-    ):
+    if not api_key or api_key.startswith("YOUR"):
+        _ask_debug_log(request, "abort_no_api_key", {})
+        return None
+    if time.monotonic() < _ASK_AGENT_DISABLED_UNTIL:
+        _ask_debug_log(request, "abort_in_cooldown", {
+            "seconds_remaining": round(_ASK_AGENT_DISABLED_UNTIL - time.monotonic(), 1),
+        })
         return None
 
     from api.ask_costpilot_tools import TOOL_SCHEMAS, FINAL_ANSWER_TOOL, to_anthropic_tools
@@ -2576,6 +3052,20 @@ separate top_people and top_accounts lists — "account" means a business/custom
 a company record in Salesforce), "people" means individual human users. These are never the
 same thing; never answer an "accounts" question using top_people data, or vice versa, even if
 one list is empty and the other has rows.
+Always set get_usage_report's limit argument to match the question — "top 10 users" needs
+limit=10, "who spent the most" needs limit=1, a general overview can use the default of 5.
+Never assume more rows exist beyond what the tool actually returned.
+If the question names a specific department (e.g. "what models is Sales using", "how much did
+Marketing spend"), always pass that department into get_usage_report's or get_change_drivers'
+department argument — the top_* lists in an unfiltered call are company-wide, not scoped to
+any department, so without this argument you cannot actually answer a department-scoped
+question and must never present an unfiltered total as if it were department-specific.
+The same applies to provider (Anthropic/OpenAI/Google/Mistral/Meta) — this is the AI vendor
+behind a model, NOT the source platform (Salesforce/ServiceNow/etc are platforms, not
+providers). "Claude" or "Sonnet" means provider='Anthropic'; "GPT" means provider='OpenAI'.
+For "compare OpenAI and Anthropic spend" or similar two-provider comparisons, call
+get_usage_report twice, once per provider, and compare the two summaries yourself — there is
+no single tool call that returns both sides of a provider comparison at once.
 If the question names a specific person, account, department, agent, platform, or model (for
 example "how much did BluePeak Consulting use" or "what did Maya Chen spend"), pass that exact
 name in get_usage_report's entity_name argument. Its top_* lists are truncated to 5 rows by
@@ -2592,7 +3082,14 @@ Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call
 final_answer without having called at least one data tool first, unless the question is purely
-about CostPilot the product. Always call exactly one tool per turn."""
+about CostPilot the product. Always call exactly one tool per turn.
+The user's message includes a DEFAULT_WINDOW line giving the date range already selected in
+their screen (e.g. a dashboard date picker). If the question does not name its own period
+("this month", "last year", etc.), use that default window for your first data lookup instead
+of guessing a period of your own — do not assume "this month" or any other arbitrary window
+when the caller already told you what range they're looking at. Only widen or change the
+window if the caller's default window comes back with no activity and the question doesn't
+depend on that exact range mattering."""
 
     try:
         import anthropic
@@ -2618,19 +3115,27 @@ about CostPilot the product. Always call exactly one tool per turn."""
             "ASK_COSTPILOT_AGENT_MODEL", os.getenv("ANTHROPIC_FLAGSHIP_MODEL", "claude-sonnet-4-6")
         )
         all_tools = to_anthropic_tools(TOOL_SCHEMAS + [FINAL_ANSWER_TOOL])
+        conversation_text = _ask_conversation_text(request)
+        if request.date_from and request.date_to:
+            window_line = (
+                f"DEFAULT_WINDOW: {request.date_from.date()} to {request.date_to.date()} "
+                "(explicit date range already selected on screen)"
+            )
+        else:
+            window_line = f"DEFAULT_WINDOW: last {max(1, min(int(request.days or 30), 365))} days"
         messages: list = [
-            {"role": "user", "content": _ask_conversation_text(request)}
+            {"role": "user", "content": f"{window_line}\n{conversation_text}"}
         ]
 
         for _turn in range(max_tool_calls + 1):
             elapsed = time.monotonic() - loop_start
             if elapsed + timeout_seconds > total_budget_seconds:
-                logger.info(
-                    "Ask CostPilot agent loop stopping before turn %d: %.1fs elapsed, "
-                    "next call could exceed the %.1fs total budget",
-                    _turn + 1, elapsed, total_budget_seconds,
-                )
+                _ask_debug_log(request, "abort_budget_preflight", {
+                    "turn": _turn, "elapsed": round(elapsed, 2),
+                    "timeout_seconds": timeout_seconds, "total_budget_seconds": total_budget_seconds,
+                })
                 return None
+            _ask_debug_log(request, "calling_model", {"turn": _turn, "model": model})
             response = client.messages.create(
                 model=model,
                 max_tokens=1024,
@@ -2641,27 +3146,44 @@ about CostPilot the product. Always call exactly one tool per turn."""
             )
             tool_uses = [block for block in response.content if getattr(block, "type", None) == "tool_use"]
             if not tool_uses:
+                _ask_debug_log(request, "abort_no_tool_use_block", {
+                    "turn": _turn,
+                    "stop_reason": getattr(response, "stop_reason", None),
+                    "content_types": [getattr(b, "type", None) for b in response.content],
+                })
                 return None
 
             messages.append({"role": "assistant", "content": response.content})
 
             final_call = next((block for block in tool_uses if block.name == "final_answer"), None)
             if final_call is not None:
-                return _ask_agent_final_payload(request, db, dict(final_call.input or {}), tool_call_log)
+                final_args = dict(final_call.input or {})
+                _ask_debug_log(request, "final_answer", {
+                    "turn": _turn, "args": final_args,
+                    "tool_calls": [{"tool": n, "args": a} for n, a, _r in tool_call_log],
+                })
+                payload = _ask_agent_final_payload(request, db, final_args, tool_call_log)
+                _ask_debug_log(request, "response", {"payload": payload})
+                return payload
 
             tool_results = []
             for call in tool_uses:
                 if len(tool_call_log) >= max_tool_calls:
+                    _ask_debug_log(request, "abort_max_tool_calls", {"turn": _turn})
                     return None
                 call_args = dict(call.input or {})
                 result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters)
                 tool_call_log.append((call.name, call_args, result))
+                _ask_debug_log(request, "tool_call", {
+                    "turn": _turn, "tool": call.name, "args": call_args, "result": result,
+                })
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": call.id,
                     "content": json.dumps(result, default=str),
                 })
             messages.append({"role": "user", "content": tool_results})
+        _ask_debug_log(request, "abort_loop_exhausted", {"turns": max_tool_calls + 1})
         return None
     except Exception as exc:
         cooldown_seconds = _ask_env_seconds(
@@ -2765,6 +3287,7 @@ def _ask_costpilot_answer(
         if agent_result is not None:
             return agent_result
         # Falls through to the deterministic path below unchanged.
+        _ask_debug_log(request, "agent_fallback_to_deterministic", {})
 
     parsed, assistant_mode = _resolve_ask_intent(request)
     if parsed.get("intent") == "help":
@@ -2788,6 +3311,22 @@ def _ask_costpilot_answer(
             except (TypeError, ValueError):
                 subject_filter_value = None
         reporting_filters[subject_filter_name] = subject_filter_value
+    if parsed.get("entity") != "department" and not reporting_filters.get("charged_unit"):
+        # The question ranks something other than department (e.g. models,
+        # platforms) but may still name one to scope by -- see
+        # _ask_named_department for why entity alone can't carry this.
+        named_department = _ask_named_department(question, request.workspace_id, db)
+        if named_department:
+            reporting_filters["charged_unit"] = named_department
+            if parsed.get("entity") == "overview":
+                # No other ranking dimension was named (e.g. "what did
+                # Sales spend" rather than "what models is Sales using") --
+                # the department itself is the subject, so classify it as
+                # such instead of leaving entity at the generic default.
+                # _ask_intent can't know this on its own (it never touches
+                # the database, so it can't check real department names);
+                # this is the earliest point real department data exists.
+                parsed["entity"] = "department"
     comparison_execution_plan = None
     comparison_coverage_result = None
     # Looked up once and reused for both the general date-range resolution
@@ -2846,6 +3385,7 @@ def _ask_costpilot_answer(
     entity = parsed["entity"]
     direction = parsed["direction"]
     result_limit = parsed["result_limit"]
+    outcome_filter = parsed.get("outcome_filter")
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -2854,17 +3394,41 @@ def _ask_costpilot_answer(
     driver_analysis = None
     budget_coverage = None
     named_entity = _ask_named_entity(question, report)
+    if named_entity is None and intent in {"total", "overview", "ranking"}:
+        # Without this, an ambiguous name ("How much did Chris spend?" with
+        # two Chrises) silently fell through to an unfiltered, company-wide
+        # total presented as if it had answered the question about one
+        # specific person -- exactly the confident-wrong-answer failure
+        # mode this whole feature exists to avoid. Only intercedes when a
+        # real tie exists; a name that matches nothing at all still falls
+        # through to the normal (correctly labeled) company-wide answer.
+        ambiguous_matches = _ask_named_entity_ambiguity(question, report)
+        if ambiguous_matches:
+            labels = sorted({
+                str(match["row"].get("label") or "Unknown") for match in ambiguous_matches
+            })
+            return {
+                "title": "Which one did you mean?",
+                "answer": (
+                    f"I found {len(labels)} matches for that name: {', '.join(labels)}. "
+                    "Which one did you mean?"
+                ),
+                "intent": "clarification_required",
+                "confidence": "CLARIFICATION_REQUIRED",
+                "evidence": [
+                    {"label": label, "value": None, "metric_label": None}
+                    for label in labels
+                ],
+                "recommendations": [],
+                "read_only": True,
+            }
 
     entity_config = {
-        "person": ("people_breakdown", "user_external_id", "People"),
-        "agent": ("agent_breakdown", "agent_id", "Agents"),
-        "department": ("organizational_unit_breakdown", "charged_unit", "Departments and teams"),
-        "account": ("account_breakdown", "account_id", "Accounts"),
+        **_ASK_ENTITY_CONFIG_STATIC,
+        # "context" is the one entry with a per-request dynamic label
+        # (the customer's own term for a project/matter/case), so it can't
+        # live in the static module-level registry with everything else.
         "context": ("project_breakdown", "project_id", context_plural),
-        "platform": ("source_platform_breakdown", "source_platform", "Platforms"),
-        # Model evidence is still useful, but the attribution report does not
-        # currently expose a model selector. Do not render a dead drill link.
-        "model": ("model_breakdown", None, "Models"),
     }
 
     period_from_raw = period.get("date_from")
@@ -3353,6 +3917,28 @@ def _ask_costpilot_answer(
             limit=1,
         )
         intent = "lookup"
+    elif intent == "total" and entity == "context" and outcome_filter:
+        # "How much AI spend was associated with won opportunities" needs a
+        # total scoped to won/lost project_breakdown rows, not the
+        # company-wide summary the generic "total" branch below uses --
+        # entity is otherwise ignored by that branch.
+        outcome_rows = [
+            row for row in (report.get("project_breakdown") or [])
+            if row.get("outcome_success") == (outcome_filter == "won")
+        ]
+        value, metric_label = _ask_metric_value(
+            metric, sum(_ask_row_metric(row, metric) for row in outcome_rows)
+        )
+        request_total = sum(int(row.get("request_count") or 0) for row in outcome_rows)
+        outcome_label = "won" if outcome_filter == "won" else "lost"
+        title = f"Total {metric_label} on {outcome_label} opportunities"
+        answer = (
+            f"CostPilot recorded {value} in tracked {metric_label} across "
+            f"{len(outcome_rows)} {outcome_label} opportunities for {period_label} "
+            f"({request_total:,} governed requests). This is AI activity tracked "
+            f"alongside those outcomes, not evidence that the AI activity caused them."
+        )
+        evidence = _ask_evidence(outcome_rows, metric, "project_id", limit=result_limit)
     elif intent == "total":
         value, metric_label = _ask_metric_value(metric, _ask_row_metric(summary, metric))
         title = f"Total {metric_label}"
@@ -3823,6 +4409,14 @@ def _ask_costpilot_answer(
     elif intent == "ranking" and entity in entity_config:
         breakdown_key, filter_name, entity_label = entity_config[entity]
         ranking_rows = report.get(breakdown_key) or []
+        if entity == "context" and outcome_filter:
+            # "Which won opportunities had the highest AI investment" --
+            # narrow to rows whose synced outcome matches, before ranking.
+            ranking_rows = [
+                row for row in ranking_rows
+                if row.get("outcome_success") == (outcome_filter == "won")
+            ]
+            entity_label = f"{'Won' if outcome_filter == 'won' else 'Lost'} {entity_label.lower()}"
         if metric == "risk_event_count":
             risk_request = request.model_copy(update={
                 key: value for key, value in reporting_filters.items()
@@ -3850,6 +4444,16 @@ def _ask_costpilot_answer(
         )
         rank_label = "Lowest" if direction == "asc" else "Top"
         title = f"{rank_label} {entity_label.lower()} by {_ask_metric_value(metric, 0)[1]}"
+        # When the query was scoped to a department (either via a carried-
+        # over subject filter or _ask_named_department detecting one named
+        # in this question) but the ranked dimension is something else
+        # (models, platforms, agents...), say so explicitly -- the numbers
+        # were already correctly scoped, but without this the sentence read
+        # identically to an unfiltered, company-wide answer, which is
+        # exactly the ambiguity that made the department-scoping bug look
+        # unfixed even after the underlying query was corrected.
+        department_scope = reporting_filters.get("charged_unit") if entity != "department" else None
+        scope_suffix = f" for {department_scope}" if department_scope else ""
         if ranked:
             value, metric_label = _ask_metric_value(
                 metric, _ask_row_metric(ranked[0], metric)
@@ -3857,9 +4461,9 @@ def _ask_costpilot_answer(
             if result_limit > 1:
                 available = min(result_limit, len(ranked))
                 qualifier = (
-                    f"the {available} matching {entity_label.lower()}"
+                    f"the {available} matching {entity_label.lower()}{scope_suffix}"
                     if available == result_limit
-                    else f"all {available} matching {entity_label.lower()} available"
+                    else f"all {available} matching {entity_label.lower()}{scope_suffix} available"
                 )
                 answer = (
                     f"Showing {qualifier}, ordered from "
@@ -3870,7 +4474,7 @@ def _ask_costpilot_answer(
             else:
                 answer = (
                     f"{ranked[0].get('label') or 'Unknown'} had the "
-                    f"{'lowest' if direction == 'asc' else 'highest'} {metric_label} "
+                    f"{'lowest' if direction == 'asc' else 'highest'} {metric_label}{scope_suffix} "
                     f"for {period_label}: {value}. "
                     f"That includes {int(ranked[0].get('request_count') or 0):,} governed requests."
                 )
@@ -3886,15 +4490,31 @@ def _ask_costpilot_answer(
                 answer = f"No {entity_label.lower()} had attributed AI activity in this period."
     else:
         context_rows = report.get("project_breakdown") or []
-        title = "Where your AI usage went"
-        answer = (
-            f"For {period_label}, CostPilot governed "
-            f"{int(summary.get('request_count') or 0):,} requests using "
-            f"{int(summary.get('total_tokens') or 0):,} tokens at a cost of "
-            f"${float(summary.get('spend_usd') or 0):,.4f}. "
-            f"{int(summary.get('people_count') or 0):,} identified people and "
-            f"{int(summary.get('agent_count') or 0):,} agents contributed to that usage."
-        )
+        if entity == "context" and outcome_filter:
+            context_rows = [
+                row for row in context_rows
+                if row.get("outcome_success") == (outcome_filter == "won")
+            ]
+            outcome_label = "won" if outcome_filter == "won" else "lost"
+            outcome_spend = sum(float(row.get("spend_usd") or 0) for row in context_rows)
+            outcome_requests = sum(int(row.get("request_count") or 0) for row in context_rows)
+            title = f"AI spend on {outcome_label} opportunities"
+            answer = (
+                f"For {period_label}, CostPilot tracked ${outcome_spend:,.4f} of AI spend "
+                f"across {outcome_requests:,} requests on {len(context_rows)} {outcome_label} "
+                f"opportunities. This is AI activity tracked alongside those outcomes, not "
+                f"evidence that the AI activity caused them."
+            )
+        else:
+            title = "Where your AI usage went"
+            answer = (
+                f"For {period_label}, CostPilot governed "
+                f"{int(summary.get('request_count') or 0):,} requests using "
+                f"{int(summary.get('total_tokens') or 0):,} tokens at a cost of "
+                f"${float(summary.get('spend_usd') or 0):,.4f}. "
+                f"{int(summary.get('people_count') or 0):,} identified people and "
+                f"{int(summary.get('agent_count') or 0):,} agents contributed to that usage."
+            )
         evidence = _ask_evidence(context_rows, "spend_usd", "project_id")
 
     if live_count and simulation_count:
@@ -3998,31 +4618,15 @@ def _ask_costpilot_answer(
         "contract_status": "passed",
         "interpreted_intent": parsed,
         "conversation_context": conversation_context,
-        "suggested_questions": (
-            [
-                "Who had the most AI spend yesterday?",
-                "Who had the most AI spend in the last 7 days?",
-                "Show the latest AI activity.",
-            ]
-            if data_scope == "no_activity" and latest_available_at
-            else
-            [
-                "How much AI budget is left this month?",
-                "Are we on track to exceed budget this month?",
-                "Which departments are closest to their budget limits?",
-                "What is our budget variance so far this month?",
-                "How much budget does each department have?",
-            ]
-            if intent == "budget"
-            else [
-                "Which department contributed most to the change?",
-                "Was the change within budget?",
-                "Which people contributed most to the change?",
-                "Which agents contributed most to the change?",
-                "Which accounts contributed most to the change?",
-            ]
-            if intent in {"comparison", "change_drivers"}
-            else []
+        "suggested_questions": _ask_suggested_questions(
+            "no_activity" if data_scope == "no_activity" and latest_available_at else intent,
+            department=reporting_filters.get("charged_unit"),
+            subject=(
+                named_entity["row"].get("label")
+                if named_entity and named_entity.get("entity") in {"person", "account"}
+                else None
+            ),
+            asked_question=question,
         ),
         "read_only": True,
     }

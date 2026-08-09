@@ -649,11 +649,17 @@ def first_call_check(workspace_id: str, db: Session = Depends(get_db)):
     from database.models import TokenTransaction
     from core.workspace_scope import workspace_filter
     call = db.query(TokenTransaction).filter_by(department=f"ws:{workspace_id}").first()
-    if not call:
+    if not call and workspace_id:
         # also check workspace-tagged calls — TokenTransaction.workspace_id
         # is the real column now; activity from /api/route (including the
         # traffic simulator) sets it but leaves department unprefixed, so
         # the old department-prefix-only filter missed it.
+        #
+        # Guarded by `workspace_id` truthiness: workspace_filter() returns
+        # None to mean "don't filter" when workspace_id is falsy, and
+        # .filter(None) compiles to WHERE NULL -- matching zero rows, the
+        # opposite of "don't filter". An empty-string workspace_id would
+        # otherwise silently report no calls for a workspace that has data.
         call = db.query(TokenTransaction).filter(
             workspace_filter(TokenTransaction, workspace_id)
         ).first()

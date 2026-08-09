@@ -21,7 +21,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import AuditEvent, IntegrationConnection, TrialAccount
+from database.models import (
+    AuditEvent, IntegrationConnection, TrialAccount,
+    WorkItem, WorkItemOutcome, WorkItemOutcomeEvent,
+)
 
 
 router = APIRouter()
@@ -2029,3 +2032,132 @@ def approve_mapping(connection_id: int, body: MappingUpdate, db: Session = Depen
     db.commit()
     db.refresh(item)
     return _public_connection(item)
+
+
+# ── Outcome sync (AI Event -> Work Item -> Outcome) ─────────────────────────
+#
+# Smallest viable implementation of business-outcome enrichment: Salesforce
+# Opportunity only, incremental sync only (no webhooks/scheduler yet -- see
+# core/outcome_adapters/salesforce_opportunity.py's module docstring). This
+# endpoint is meant to be called by an external trigger (e.g. Heroku
+# Scheduler) rather than a new in-app background-job system.
+
+async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationConnection) -> dict:
+    from core.outcome_adapters.salesforce_opportunity import (
+        build_opportunity_query,
+        map_salesforce_opportunity_to_canonical_outcome,
+    )
+
+    work_items = (
+        db.query(WorkItem)
+        .filter(
+            WorkItem.workspace_id == item.workspace_id,
+            WorkItem.source_platform == "Salesforce",
+            WorkItem.source_record_type == "Opportunity",
+            WorkItem.source_record_id.isnot(None),
+        )
+        .all()
+    )
+    if not work_items:
+        return {"checked": 0, "updated": 0, "unchanged": 0, "errors": []}
+
+    by_opportunity_id = {wi.source_record_id: wi for wi in work_items}
+    errors: list[str] = []
+    updated = 0
+    unchanged = 0
+
+    # Batch in chunks of 200 -- SOQL IN() lists and URL length both have
+    # practical limits; this also bounds a single sync run's blast radius.
+    opportunity_ids = list(by_opportunity_id.keys())
+    for start in range(0, len(opportunity_ids), 200):
+        batch = opportunity_ids[start:start + 200]
+        try:
+            query = build_opportunity_query(batch)
+            records, error = await _salesforce_try_query(item, query)
+        except ValueError as exc:
+            errors.append(str(exc))
+            continue
+        if error:
+            errors.append(error)
+            continue
+
+        now = datetime.utcnow()
+        for record in records:
+            canonical = map_salesforce_opportunity_to_canonical_outcome(record)
+            work_item = by_opportunity_id.get(canonical["external_id"])
+            if not work_item:
+                continue
+
+            existing = (
+                db.query(WorkItemOutcome)
+                .filter_by(work_item_id=work_item.id)
+                .first()
+            )
+            changed = existing is None or (
+                existing.outcome_status != canonical["outcome_status"]
+                or existing.outcome_value != canonical["outcome_value"]
+                or existing.outcome_date != canonical["outcome_date"]
+                or existing.outcome_success != canonical["outcome_success"]
+                or existing.is_closed != canonical["is_closed"]
+            )
+            if not changed:
+                existing.last_synced_at = now
+                unchanged += 1
+                continue
+
+            if existing is None:
+                existing = WorkItemOutcome(
+                    work_item_id=work_item.id,
+                    workspace_id=item.workspace_id,
+                )
+                db.add(existing)
+            existing.outcome_status = canonical["outcome_status"]
+            existing.outcome_value = canonical["outcome_value"]
+            existing.outcome_date = canonical["outcome_date"]
+            existing.outcome_success = canonical["outcome_success"]
+            existing.is_closed = canonical["is_closed"]
+            existing.owner = canonical["owner"]
+            existing.source_system = canonical["source_system"]
+            existing.source_object = canonical["source_object"]
+            existing.external_id = canonical["external_id"]
+            existing.source_modified_at = canonical["source_modified_at"]
+            existing.last_synced_at = now
+            existing.retrieval_method = "sync"
+
+            db.add(WorkItemOutcomeEvent(
+                work_item_id=work_item.id,
+                workspace_id=item.workspace_id,
+                outcome_status=canonical["outcome_status"],
+                outcome_value=canonical["outcome_value"],
+                outcome_date=canonical["outcome_date"],
+                outcome_success=canonical["outcome_success"],
+                is_closed=canonical["is_closed"],
+                retrieval_method="sync",
+                recorded_at=now,
+            ))
+            updated += 1
+
+    db.commit()
+    return {
+        "checked": len(opportunity_ids),
+        "updated": updated,
+        "unchanged": unchanged,
+        "errors": errors,
+    }
+
+
+@router.post("/{connection_id}/sync-outcomes")
+async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
+    """
+    Pull current stage/amount/close-date for every WorkItem this workspace
+    has already linked to a Salesforce Opportunity, and update
+    WorkItemOutcome (+ append WorkItemOutcomeEvent history on change).
+
+    Salesforce remains the system of record -- this only ever reads.
+    """
+    item = _get_connection(db, connection_id)
+    _require_connected_salesforce(item)
+    result = await _sync_salesforce_opportunity_outcomes(db, item)
+    item.last_success_at = datetime.utcnow()
+    db.commit()
+    return result

@@ -79,6 +79,20 @@ BUSINESS_CONTEXT_TEMPLATES = {
             "project, account, user, agent, budget, and governance decision."
         ),
     ),
+    "salesforce_opportunity": BusinessContextTemplate(
+        key="salesforce_opportunity",
+        name="Salesforce Opportunity",
+        source_platform="Salesforce",
+        context_type="opportunity",
+        work_label="Opportunity",
+        customer_label="Account",
+        source_record_types=("Opportunity",),
+        description=(
+            "Connects AI activity to a Salesforce Opportunity, and its "
+            "eventual stage/close outcome once synced -- see "
+            "core/outcome_adapters/salesforce_opportunity.py."
+        ),
+    ),
     "servicenow_case": BusinessContextTemplate(
         key="servicenow_case",
         name="ServiceNow Case",
