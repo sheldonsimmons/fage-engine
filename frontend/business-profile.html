@@ -380,19 +380,40 @@
       try {
         const path = workspaceId ? `/api/integrations/connections?workspace_id=${encodeURIComponent(workspaceId)}` : "/api/integrations/connections?workspace_id=default";
         const data = await apiGet(path);
-        const items = (data.connections || []).filter((c) => c.status === "connected" || c.status === "active");
+        // A connection's `status` field tracks onboarding-flow progress
+        // (draft/authorizing/mapping/discovering/active/error/superseded),
+        // not "is this thing actually working" -- a connection can sit at
+        // "mapping" forever while still successfully syncing real data
+        // (e.g. the outcome sync doesn't touch status at all). What
+        // actually proves a connection works is a real last_success_at, so
+        // that's what determines display here, not the status string.
+        // Broken (error) or replaced (superseded) connections are excluded
+        // even if they have an old last_success_at from before they broke.
+        // Multiple connection rows can exist per platform (re-auth
+        // attempts, package-install retries) -- keep only the most
+        // recently successful one per platform.
+        const candidates = (data.connections || []).filter(
+          (c) => c.last_success_at && c.status !== "error" && c.status !== "superseded"
+        );
+        const byPlatform = new Map();
+        for (const c of candidates) {
+          const existing = byPlatform.get(c.platform);
+          if (!existing || new Date(c.last_success_at) > new Date(existing.last_success_at)) {
+            byPlatform.set(c.platform, c);
+          }
+        }
+        const items = [...byPlatform.values()].sort((a, b) => a.platform.localeCompare(b.platform));
         if (!items.length) {
-          container.innerHTML = `<div class="bp-empty">No connected systems in this workspace yet.</div>`;
+          container.innerHTML = `<div class="bp-empty">No connected systems have synced successfully in this workspace yet.</div>`;
           return;
         }
         container.innerHTML = items.map((c) => {
-          let dotClass = "off";
-          let statusText = "Not connected";
-          if (c.last_success_at) {
-            const ageMs = Date.now() - new Date(c.last_success_at).getTime();
-            dotClass = ageMs < 24 * 3600 * 1000 ? "" : "stale";
-            statusText = dotClass === "" ? "Connected" : "Stale — last synced " + new Date(c.last_success_at).toLocaleDateString();
-          }
+          const ageMs = Date.now() - new Date(c.last_success_at).getTime();
+          const isFresh = ageMs < 24 * 3600 * 1000;
+          const dotClass = isFresh ? "" : "stale";
+          const statusText = isFresh
+            ? "Connected"
+            : "Stale — last synced " + new Date(c.last_success_at).toLocaleDateString();
           return `<div class="bp-conn-row">
             <span>${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)}</span>
             <span class="bp-conn-status"><span class="bp-conn-dot ${dotClass}"></span>${statusText}</span>
