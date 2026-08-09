@@ -105,6 +105,41 @@ def test_account_profile_rolls_up_spend_and_outcomes_across_work_items():
     assert purposes == {"Sales & Revenue", "Customer & Employee Support"}
 
 
+def test_account_profile_reports_prior_period_spend_for_comparison():
+    db = _session()
+    account = WorkAccount(external_id="ACCOUNT-TREND", name="Trend Co", workspace_id="WS-1")
+    db.add(account); db.flush()
+    item = WorkItem(external_id="PROJ-TREND", name="Trend Deal", account_id=account.id, workspace_id="WS-1")
+    db.add(item); db.flush()
+
+    now = datetime.utcnow()
+    # Current period is [now-7d, now+1d) -- an 8-day span -- so the prior
+    # period of equal length is [now-15d, now-7d). Place the prior
+    # transaction well inside that window.
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=item.id,
+        model_tier="Scout", model_name="claude", input_tokens=100, output_tokens=50,
+        tokens_saved=0, cost_usd=10.0, timestamp=now - timedelta(days=10),
+    ))
+    # Current period.
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=item.id,
+        model_tier="Scout", model_name="claude", input_tokens=100, output_tokens=50,
+        tokens_saved=0, cost_usd=15.0, timestamp=now - timedelta(days=1),
+    ))
+    db.commit()
+
+    profile = account_profile(
+        identifier="ACCOUNT-TREND", workspace_id="WS-1",
+        date_from=now - timedelta(days=7), date_to=now + timedelta(days=1),
+        days=7, db=db,
+    )
+    assert profile["kpis"]["ai_investment_usd"] == 15.0
+    # Prior period is the same length (8 days), ending where the current
+    # period starts -- the 20-days-ago transaction falls inside it.
+    assert profile["prior_period"]["ai_investment_usd"] == 10.0
+
+
 def test_account_profile_handles_account_with_no_work_items():
     db = _session()
     db.add(WorkAccount(external_id="ACCOUNT-EMPTY", name="Empty Co", workspace_id="WS-1"))

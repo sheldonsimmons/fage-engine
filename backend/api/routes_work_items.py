@@ -762,6 +762,7 @@ def account_profile(
             "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
             "work_item_count": 0,
             "kpis": empty_kpis,
+            "prior_period": {"date_from": None, "date_to": None, "ai_investment_usd": 0.0},
             "business_function_breakdown": [],
             "outcomes": {
                 "won_count": 0, "lost_count": 0, "open_count": 0,
@@ -810,6 +811,23 @@ def account_profile(
         )
     ]
 
+    # Previous period of equal length, purely so the frontend can show a
+    # real "up/down X% vs prior period" comparison instead of inventing
+    # trend language -- same SQL-aggregated shape as the current period,
+    # no row loop, and simply zero (not omitted) when there's no prior data.
+    prior_period_end = period_start
+    prior_period_start = period_start - (period_end - period_start)
+    prior_spend_usd = float(
+        db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+        .filter(
+            TokenTransaction.work_item_id.in_(work_item_ids),
+            TokenTransaction.timestamp >= prior_period_start,
+            TokenTransaction.timestamp < prior_period_end,
+        )
+        .scalar()
+        or 0.0
+    )
+
     is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
     is_open = WorkItemOutcome.is_closed.is_(False)
     is_won = WorkItemOutcome.outcome_success.is_(True)
@@ -838,6 +856,11 @@ def account_profile(
             "total_tokens": int(total_tokens),
             "tokens_saved": int(tokens_saved),
             "ai_savings_usd_estimate": savings_estimate,
+        },
+        "prior_period": {
+            "date_from": prior_period_start.isoformat(),
+            "date_to": prior_period_end.isoformat(),
+            "ai_investment_usd": round(prior_spend_usd, 6),
         },
         "business_function_breakdown": business_function_breakdown,
         "outcomes": {

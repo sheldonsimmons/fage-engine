@@ -71,6 +71,13 @@
     .bp-conn-dot.stale { background: var(--accent-yellow); }
     .bp-conn-dot.off { background: var(--text-muted); }
 
+    .bp-insights-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
+    @media (max-width: 900px) { .bp-insights-row { grid-template-columns: 1fr; } }
+    .bp-insight { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 16px 18px; }
+    .bp-insight .headline { font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+    .bp-insight .body { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+    .bp-insights-row .bp-empty { grid-column: 1 / -1; padding: 12px 0; }
+
     .bp-note { font-size: 12px; color: var(--text-muted); margin-top: 24px; border-top: 1px solid var(--border); padding-top: 14px; }
     .bp-empty { font-size: 13.5px; color: var(--text-muted); padding: 24px 0; }
     .bp-donut-wrap { position: relative; height: 220px; }
@@ -153,6 +160,9 @@
           <div class="sub">AI interactions</div>
         </div>
       </div>
+
+      <div class="bp-section-head"><h3>CostPilot Insights</h3></div>
+      <div class="bp-insights-row" id="bpInsights"></div>
 
       <div class="bp-grid-2">
         <div>
@@ -284,6 +294,54 @@
       document.getElementById("bpMeasurementNote").textContent = profile.measurement_note || "";
 
       bpRenderFunctionDonut(profile.business_function_breakdown || []);
+      bpRenderInsights(profile);
+    }
+
+    // Deterministic, code-computed insights -- no LLM-generated text here.
+    // Each insight is only shown when the underlying numbers actually
+    // support it; nothing is invented to fill three slots (same principle
+    // as the numeric-fidelity check in Ask CostPilot's narration guardrail).
+    function bpRenderInsights(profile) {
+      const container = document.getElementById("bpInsights");
+      const insights = [];
+      const kpis = profile.kpis;
+      const prior = profile.prior_period;
+      const outcomes = profile.outcomes;
+      const functions = profile.business_function_breakdown || [];
+
+      if (prior && prior.ai_investment_usd > 0) {
+        const delta = ((kpis.ai_investment_usd - prior.ai_investment_usd) / prior.ai_investment_usd) * 100;
+        if (Math.abs(delta) >= 1) {
+          insights.push({
+            headline: `AI investment ${delta >= 0 ? "increased" : "decreased"} ${Math.abs(delta).toFixed(0)}%`,
+            body: `${bpFmtUsdFull(kpis.ai_investment_usd)} this period vs ${bpFmtUsdFull(prior.ai_investment_usd)} the prior period of equal length.`,
+          });
+        }
+      }
+
+      if (functions.length) {
+        const top = functions[0];
+        const pct = kpis.ai_investment_usd > 0 ? Math.round((top.spend_usd / kpis.ai_investment_usd) * 100) : 0;
+        insights.push({
+          headline: `${top.business_purpose} is the largest driver`,
+          body: `${bpFmtUsdFull(top.spend_usd)} (${pct}% of tracked AI investment) went to ${top.business_purpose.toLowerCase()} work.`,
+        });
+      }
+
+      if (outcomes.won_count > 0) {
+        insights.push({
+          headline: `${outcomes.won_count} won opportunit${outcomes.won_count === 1 ? "y has" : "ies have"} tracked AI investment`,
+          body: `${bpFmtUsdFull(kpis.ai_investment_usd)} of AI activity is associated with ${bpFmtUsdFull(outcomes.closed_won_value_usd)} in closed-won value. This reflects association, not causation.`,
+        });
+      }
+
+      if (!insights.length) {
+        container.innerHTML = `<div class="bp-empty">Not enough activity yet in this period to surface an insight.</div>`;
+        return;
+      }
+      container.innerHTML = insights.slice(0, 3).map((i) =>
+        `<div class="bp-insight"><div class="headline">${i.headline}</div><div class="body">${i.body}</div></div>`
+      ).join("");
     }
 
     function bpRenderFunctionDonut(rows) {
