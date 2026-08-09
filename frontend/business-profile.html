@@ -32,6 +32,16 @@
       background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-primary);
       font-family: var(--font-sans); font-size: 13px; padding: 8px 12px; border-radius: 7px;
     }
+    .bp-live-toggle {
+      display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted);
+      cursor: pointer; user-select: none; padding: 8px 12px; border: 1px solid var(--border);
+      border-radius: 7px; background: var(--bg-panel);
+    }
+    .bp-live-toggle input { display: none; }
+    .bp-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); transition: background .2s; }
+    .bp-live-toggle input:checked ~ .bp-live-dot { background: var(--accent-green); box-shadow: 0 0 0 0 rgba(63,185,80,0.5); animation: bp-pulse 2s infinite; }
+    @keyframes bp-pulse { 0% { box-shadow: 0 0 0 0 rgba(63,185,80,0.45); } 70% { box-shadow: 0 0 0 6px rgba(63,185,80,0); } 100% { box-shadow: 0 0 0 0 rgba(63,185,80,0); } }
+    .bp-live-status { font-size: 11px; color: var(--text-muted); margin: -12px 0 18px; text-align: right; }
 
     /* Ask CostPilot hero -- copied verbatim from index.html's .ov-ask-hero */
     .bp-ask-hero { padding: 30px 34px 24px; background: radial-gradient(680px 220px at 18% 0%, rgba(88,166,255,0.09), transparent 65%), var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 28px; }
@@ -137,8 +147,14 @@
             <option value="365">Last 12 months</option>
           </select>
         </div>
+        <label class="bp-live-toggle">
+          <input type="checkbox" id="bpLiveToggle" checked />
+          <span class="bp-live-dot" id="bpLiveDot"></span>
+          <span id="bpLiveLabel">Live</span>
+        </label>
       </div>
     </div>
+    <div class="bp-live-status" id="bpLiveStatus"></div>
 
     <section class="bp-ask-hero">
       <p class="bp-ask-eyebrow">Ask CostPilot</p>
@@ -283,6 +299,8 @@
         document.getElementById("bpEmptyState").style.display = "none";
         document.getElementById("bpContent").style.display = "block";
         bpRenderProfile(profile);
+        bpLastUpdatedAt = Date.now();
+        bpUpdateLiveStatus();
       } catch (err) {
         bpShowEmpty(`Could not load this account's profile: ${(err.message || "").replace(/</g, "&lt;")}`);
       }
@@ -521,6 +539,46 @@
     });
     document.getElementById("bpDaysSelect")?.addEventListener("change", bpLoadProfile);
 
+    // "Live" mode: poll the same real endpoints on an interval so activity
+    // reported by a connected agent (e.g. Salesforce Agentforce calling
+    // through CostPilot) shows up here without a manual refresh. This is
+    // polling, not a push/websocket -- every few seconds, not instant --
+    // stated plainly rather than implying something more real-time than it is.
+    const BP_POLL_INTERVAL_MS = 6000;
+    let bpPollTimer = null;
+    let bpLastUpdatedAt = null;
+
+    function bpUpdateLiveStatus() {
+      const status = document.getElementById("bpLiveStatus");
+      const toggle = document.getElementById("bpLiveToggle");
+      if (!toggle.checked) { status.textContent = "Live updates paused."; return; }
+      if (!bpLastUpdatedAt) { status.textContent = "Watching for new activity…"; return; }
+      const secondsAgo = Math.max(0, Math.round((Date.now() - bpLastUpdatedAt) / 1000));
+      status.textContent = `Live — updated ${secondsAgo === 0 ? "just now" : secondsAgo + "s ago"}. Checks every ${BP_POLL_INTERVAL_MS / 1000}s.`;
+    }
+
+    async function bpPollTick() {
+      if (!document.getElementById("bpLiveToggle").checked) return;
+      if (document.hidden) return; // don't hammer the API from a background tab
+      if (!bpCurrentAccount) return;
+      await bpLoadProfile();
+    }
+
+    function bpStartPolling() {
+      if (bpPollTimer) return;
+      bpPollTimer = setInterval(bpPollTick, BP_POLL_INTERVAL_MS);
+    }
+    function bpStopPolling() {
+      if (bpPollTimer) { clearInterval(bpPollTimer); bpPollTimer = null; }
+    }
+
+    document.getElementById("bpLiveToggle")?.addEventListener("change", (e) => {
+      if (e.target.checked) bpStartPolling(); else bpStopPolling();
+      bpUpdateLiveStatus();
+    });
+    setInterval(bpUpdateLiveStatus, 1000); // just refreshes the "Xs ago" text
+
+    bpStartPolling();
     bpLoadAccounts();
   </script>
   <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
