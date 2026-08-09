@@ -93,6 +93,21 @@ BUSINESS_CONTEXT_TEMPLATES = {
             "core/outcome_adapters/salesforce_opportunity.py."
         ),
     ),
+    "salesforce_case": BusinessContextTemplate(
+        key="salesforce_case",
+        name="Salesforce Case",
+        source_platform="Salesforce",
+        context_type="case",
+        work_label="Case",
+        customer_label="Account",
+        source_record_types=("Case",),
+        description=(
+            "Connects AI activity to a Salesforce Case, and its status "
+            "once synced -- see core/outcome_adapters/salesforce_case.py. "
+            "Unlike Opportunities, Cases have no dollar value or won/lost "
+            "outcome; only status and closed state are tracked."
+        ),
+    ),
     "servicenow_case": BusinessContextTemplate(
         key="servicenow_case",
         name="ServiceNow Case",

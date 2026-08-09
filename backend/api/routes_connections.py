@@ -2091,24 +2091,35 @@ def approve_mapping(connection_id: int, body: MappingUpdate, db: Session = Depen
 
 # ── Outcome sync (AI Event -> Work Item -> Outcome) ─────────────────────────
 #
-# Smallest viable implementation of business-outcome enrichment: Salesforce
-# Opportunity only, incremental sync only (no webhooks/scheduler yet -- see
-# core/outcome_adapters/salesforce_opportunity.py's module docstring). This
-# endpoint is meant to be called by an external trigger (e.g. Heroku
-# Scheduler) rather than a new in-app background-job system.
+# Business-outcome enrichment, now covering two Salesforce object types
+# (Opportunity, Case) via the shared _sync_salesforce_object_outcomes loop
+# below -- Case was added specifically to prove the pattern generalizes,
+# not just Opportunity's. Still incremental sync only (no webhooks yet --
+# see core/outcome_adapters/salesforce_opportunity.py's module docstring).
+# Triggered by an external process (scripts/sync_all_salesforce_outcomes.py,
+# run on a schedule) rather than a new in-app background-job system.
 
-async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationConnection) -> dict:
-    from core.outcome_adapters.salesforce_opportunity import (
-        build_opportunity_query,
-        map_salesforce_opportunity_to_canonical_outcome,
-    )
-
+async def _sync_salesforce_object_outcomes(
+    db: Session,
+    item: IntegrationConnection,
+    *,
+    source_record_type: str,
+    build_query,
+    map_record,
+) -> dict:
+    """
+    Shared sync loop for any Salesforce object with an outcome adapter --
+    Opportunity and Case both call this with their own query-builder and
+    field-mapper. Adding a third object type means writing a third adapter
+    module, not touching this loop. See core/outcome_adapters/ for the
+    adapters themselves.
+    """
     work_items = (
         db.query(WorkItem)
         .filter(
             WorkItem.workspace_id == item.workspace_id,
             WorkItem.source_platform == "Salesforce",
-            WorkItem.source_record_type == "Opportunity",
+            WorkItem.source_record_type == source_record_type,
             WorkItem.source_record_id.isnot(None),
         )
         .all()
@@ -2116,18 +2127,18 @@ async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationCo
     if not work_items:
         return {"checked": 0, "updated": 0, "unchanged": 0, "errors": []}
 
-    by_opportunity_id = {wi.source_record_id: wi for wi in work_items}
+    by_record_id = {wi.source_record_id: wi for wi in work_items}
     errors: list[str] = []
     updated = 0
     unchanged = 0
 
     # Batch in chunks of 200 -- SOQL IN() lists and URL length both have
     # practical limits; this also bounds a single sync run's blast radius.
-    opportunity_ids = list(by_opportunity_id.keys())
-    for start in range(0, len(opportunity_ids), 200):
-        batch = opportunity_ids[start:start + 200]
+    record_ids = list(by_record_id.keys())
+    for start in range(0, len(record_ids), 200):
+        batch = record_ids[start:start + 200]
         try:
-            query = build_opportunity_query(batch)
+            query = build_query(batch)
             records, error = await _salesforce_try_query(item, query, db=db)
         except ValueError as exc:
             errors.append(str(exc))
@@ -2138,8 +2149,8 @@ async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationCo
 
         now = datetime.utcnow()
         for record in records:
-            canonical = map_salesforce_opportunity_to_canonical_outcome(record)
-            work_item = by_opportunity_id.get(canonical["external_id"])
+            canonical = map_record(record)
+            work_item = by_record_id.get(canonical["external_id"])
             if not work_item:
                 continue
 
@@ -2194,25 +2205,64 @@ async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationCo
 
     db.commit()
     return {
-        "checked": len(opportunity_ids),
+        "checked": len(record_ids),
         "updated": updated,
         "unchanged": unchanged,
         "errors": errors,
     }
 
 
+async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationConnection) -> dict:
+    from core.outcome_adapters.salesforce_opportunity import (
+        build_opportunity_query,
+        map_salesforce_opportunity_to_canonical_outcome,
+    )
+    return await _sync_salesforce_object_outcomes(
+        db, item,
+        source_record_type="Opportunity",
+        build_query=build_opportunity_query,
+        map_record=map_salesforce_opportunity_to_canonical_outcome,
+    )
+
+
+async def _sync_salesforce_case_outcomes(db: Session, item: IntegrationConnection) -> dict:
+    from core.outcome_adapters.salesforce_case import (
+        build_case_query,
+        map_salesforce_case_to_canonical_outcome,
+    )
+    return await _sync_salesforce_object_outcomes(
+        db, item,
+        source_record_type="Case",
+        build_query=build_case_query,
+        map_record=map_salesforce_case_to_canonical_outcome,
+    )
+
+
+def _merge_sync_results(*results: dict) -> dict:
+    merged = {"checked": 0, "updated": 0, "unchanged": 0, "errors": []}
+    for result in results:
+        merged["checked"] += result["checked"]
+        merged["updated"] += result["updated"]
+        merged["unchanged"] += result["unchanged"]
+        merged["errors"] += result["errors"]
+    return merged
+
+
 @router.post("/{connection_id}/sync-outcomes")
 async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
     """
-    Pull current stage/amount/close-date for every WorkItem this workspace
-    has already linked to a Salesforce Opportunity, and update
+    Pull current status/value/close-date for every WorkItem this workspace
+    has already linked to a Salesforce Opportunity or Case, and update
     WorkItemOutcome (+ append WorkItemOutcomeEvent history on change).
 
     Salesforce remains the system of record -- this only ever reads.
     """
     item = _get_connection(db, connection_id)
     _require_connected_salesforce(item)
-    result = await _sync_salesforce_opportunity_outcomes(db, item)
+    result = _merge_sync_results(
+        await _sync_salesforce_opportunity_outcomes(db, item),
+        await _sync_salesforce_case_outcomes(db, item),
+    )
     # Only a real success should move last_success_at -- it was previously
     # set unconditionally, which made a fully-failed sync (e.g. every batch
     # 401ing) look like it had just succeeded when the connection's health

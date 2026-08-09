@@ -65,7 +65,11 @@ def _select_connections_to_sync(db):
 
 async def main(dry_run: bool):
     from database.db import SessionLocal
-    from api.routes_connections import _sync_salesforce_opportunity_outcomes
+    from api.routes_connections import (
+        _sync_salesforce_opportunity_outcomes,
+        _sync_salesforce_case_outcomes,
+        _merge_sync_results,
+    )
 
     db = SessionLocal()
     try:
@@ -82,7 +86,10 @@ async def main(dry_run: bool):
                 )
                 continue
             try:
-                result = await _sync_salesforce_opportunity_outcomes(db, item)
+                result = _merge_sync_results(
+                    await _sync_salesforce_opportunity_outcomes(db, item),
+                    await _sync_salesforce_case_outcomes(db, item),
+                )
                 if result["errors"]:
                     logger.warning(
                         "workspace=%s connection_id=%s sync had errors: %s",
