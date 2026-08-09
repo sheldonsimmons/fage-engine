@@ -128,7 +128,7 @@ def test_full_scenario_ai_event_to_work_item_to_outcome_to_reporting(monkeypatch
     work_item = _make_opportunity_work_item(db, workspace_id=connection.workspace_id)
     _seed_ai_activity(db, work_item, n=83, total_cost=196.0)
 
-    async def fake_salesforce_try_query(_item, _query):
+    async def fake_salesforce_try_query(_item, _query, db=None):
         return (
             [{
                 "Id": work_item.source_record_id,

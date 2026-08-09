@@ -1259,15 +1259,69 @@ async def servicenow_callback(
     )
 
 
-async def _salesforce_get(item: IntegrationConnection, path: str) -> dict:
+async def _salesforce_refresh_access_token(db: Session, item: IntegrationConnection) -> bool:
+    """
+    Exchange the stored refresh_token for a new access_token. Salesforce
+    access tokens are short-lived (~2 hours); nothing previously renewed
+    them, so every connection silently went stale until someone manually
+    re-authorized it (see connect flow in this file for the original
+    exchange this mirrors). Refresh token rotation is enabled on the
+    Connected App (isRefreshTokenRotationEnabled), so a new refresh_token
+    must be stored too when Salesforce returns one, or the next refresh
+    would fail with the old one already invalidated.
+    """
+    if not item.refresh_token_encrypted or not item.instance_url:
+        return False
+    client_id = os.getenv("SALESFORCE_CLIENT_ID")
+    if not client_id:
+        return False
+    auth_base = _salesforce_auth_base(item.auth_base_url or item.instance_url)
+    refresh_token = _decrypt(item.refresh_token_encrypted)
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{auth_base}/services/oauth2/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+            },
+        )
+    if response.status_code >= 400:
+        return False
+    token = response.json()
+    access_token = token.get("access_token")
+    if not access_token:
+        return False
+    item.access_token_encrypted = _encrypt(access_token)
+    if token.get("refresh_token"):
+        item.refresh_token_encrypted = _encrypt(token["refresh_token"])
+    if token.get("instance_url"):
+        item.instance_url = token["instance_url"]
+    item.last_error = None
+    db.commit()
+    return True
+
+
+async def _salesforce_get(
+    item: IntegrationConnection, path: str, *, db: Optional[Session] = None
+) -> dict:
     if not item.access_token_encrypted or not item.instance_url:
         raise HTTPException(status_code=409, detail="Connect Salesforce before discovering metadata")
-    token = _decrypt(item.access_token_encrypted)
-    async with httpx.AsyncClient(timeout=25) as client:
-        response = await client.get(
-            f"{item.instance_url.rstrip('/')}/services/data/{SALESFORCE_API_VERSION}/{path.lstrip('/')}",
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-        )
+
+    async def _do_request():
+        token = _decrypt(item.access_token_encrypted)
+        async with httpx.AsyncClient(timeout=25) as client:
+            return await client.get(
+                f"{item.instance_url.rstrip('/')}/services/data/{SALESFORCE_API_VERSION}/{path.lstrip('/')}",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+
+    response = await _do_request()
+    if response.status_code == 401 and db is not None:
+        # Expired access token -- try the refresh token once before giving
+        # up, instead of surfacing an avoidable failure to the caller.
+        if await _salesforce_refresh_access_token(db, item):
+            response = await _do_request()
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"Salesforce metadata request failed ({response.status_code})")
     return response.json()
@@ -1278,11 +1332,12 @@ async def _salesforce_try_query(
     query: str,
     *,
     tooling: bool = False,
+    db: Optional[Session] = None,
 ) -> tuple[list[dict], Optional[str]]:
     """Query optional Salesforce metadata without failing the whole onboarding."""
     path = "tooling/query" if tooling else "query"
     try:
-        payload = await _salesforce_get(item, f"{path}?q={quote(query, safe='')}")
+        payload = await _salesforce_get(item, f"{path}?q={quote(query, safe='')}", db=db)
         return payload.get("records", []), None
     except HTTPException as exc:
         return [], str(exc.detail)
@@ -2073,7 +2128,7 @@ async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationCo
         batch = opportunity_ids[start:start + 200]
         try:
             query = build_opportunity_query(batch)
-            records, error = await _salesforce_try_query(item, query)
+            records, error = await _salesforce_try_query(item, query, db=db)
         except ValueError as exc:
             errors.append(str(exc))
             continue
@@ -2158,6 +2213,12 @@ async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
     item = _get_connection(db, connection_id)
     _require_connected_salesforce(item)
     result = await _sync_salesforce_opportunity_outcomes(db, item)
-    item.last_success_at = datetime.utcnow()
+    # Only a real success should move last_success_at -- it was previously
+    # set unconditionally, which made a fully-failed sync (e.g. every batch
+    # 401ing) look like it had just succeeded when the connection's health
+    # was checked, masking exactly the kind of stale-token problem this was
+    # meant to help catch.
+    if not result["errors"]:
+        item.last_success_at = datetime.utcnow()
     db.commit()
     return result
