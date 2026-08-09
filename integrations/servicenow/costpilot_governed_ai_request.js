@@ -13,8 +13,12 @@
         throw new Error('The requested ServiceNow record was not found or is not accessible.');
     }
 
+    var apiBaseUrl = String(gs.getProperty(
+        'costpilot.api_base_url',
+        'https://fage-engine-21cb49fe4806.herokuapp.com'
+    )).replace(/\/+$/, '');
     var rm = new sn_ws.RESTMessageV2();
-    rm.setEndpoint('https://fage-engine-21cb49fe4806.herokuapp.com/api/route');
+    rm.setEndpoint(apiBaseUrl + '/api/route');
     rm.setHttpMethod('POST');
     rm.setRequestHeader('Content-Type', 'application/json');
     rm.setHttpTimeout(120000);

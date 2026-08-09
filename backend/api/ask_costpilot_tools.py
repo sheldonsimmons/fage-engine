@@ -49,13 +49,47 @@ TOOL_SCHEMAS = [
                         "The exact name of a specific person, account, department, agent, "
                         "platform, or model the question names (e.g. 'BluePeak Consulting', "
                         "'Maya Chen'). When set, the result includes a direct lookup for that "
-                        "entity even if it would not otherwise appear in the top 5 lists — use "
-                        "this instead of guessing from the top 5 whenever the question names a "
+                        "entity even if it would not otherwise appear in the top-N lists — use "
+                        "this instead of guessing from the top-N whenever the question names a "
                         "specific subject. Empty string for general/overview questions."
                     ),
                 },
+                "limit": {
+                    "type": "integer",
+                    "description": (
+                        "How many rows to return per breakdown list (people/agents/accounts/"
+                        "departments/platforms/models). Default 5. Set this to match the "
+                        "question — e.g. use 10 for 'top 10 users', 1 for 'who spent the most'. "
+                        "Never rely on the default and then guess at rows beyond what was "
+                        "returned; ask for the number you actually need, up to 50."
+                    ),
+                },
+                "department": {
+                    "type": "string",
+                    "description": (
+                        "Scope every number in the result to a single department/team (e.g. "
+                        "'Sales', 'Marketing'). Set this whenever the question names a "
+                        "department, even to ask about a dimension other than department itself "
+                        "— for example 'what models is Sales using' needs department='Sales' so "
+                        "the model breakdown only reflects Sales activity, not the whole company. "
+                        "Empty string for company-wide questions."
+                    ),
+                },
+                "provider": {
+                    "type": "string",
+                    "enum": ["", "Anthropic", "OpenAI", "Google", "Mistral", "Meta"],
+                    "description": (
+                        "Scope every number in the result to a single AI provider/vendor -- "
+                        "NOT the source platform (Salesforce/ServiceNow/etc). 'Claude' or "
+                        "'Anthropic' in the question means provider='Anthropic'; 'GPT' or "
+                        "'OpenAI' means provider='OpenAI'. Set this for questions like 'how "
+                        "much are we spending on Claude' or 'compare OpenAI and Anthropic "
+                        "spend' (call this tool twice, once per provider, for that one). "
+                        "Empty string for provider-agnostic questions."
+                    ),
+                },
             },
-            "required": ["days", "period_key", "entity_name"],
+            "required": ["days", "period_key", "entity_name", "limit", "department", "provider"],
             "additionalProperties": False,
         },
     },
@@ -89,11 +123,32 @@ TOOL_SCHEMAS = [
                 },
                 "dimension": {
                     "type": "string",
-                    "enum": ["organizational_unit_breakdown", "agent_breakdown", "source_platform_breakdown"],
+                    "enum": [
+                        "organizational_unit_breakdown", "agent_breakdown",
+                        "source_platform_breakdown", "provider_breakdown",
+                    ],
                     "description": "Which breakdown to attribute the change against.",
                 },
+                "department": {
+                    "type": "string",
+                    "description": (
+                        "Scope the comparison to a single department/team (e.g. 'Sales') "
+                        "if the question names one. Empty string for company-wide."
+                    ),
+                },
+                "provider": {
+                    "type": "string",
+                    "enum": ["", "Anthropic", "OpenAI", "Google", "Mistral", "Meta"],
+                    "description": (
+                        "Scope the comparison to a single AI provider/vendor if the question "
+                        "names one (e.g. 'why did Claude spend increase'). Empty for company-wide."
+                    ),
+                },
             },
-            "required": ["days", "period_key", "comparison_key", "metric", "dimension"],
+            "required": [
+                "days", "period_key", "comparison_key", "metric", "dimension",
+                "department", "provider",
+            ],
             "additionalProperties": False,
         },
     },
@@ -245,12 +300,42 @@ def scope_from_summary(summary: dict) -> str:
     return "no_activity"
 
 
+def _with_department_override(
+    reporting_filters: dict, department: Optional[str], provider: Optional[str] = None,
+) -> dict:
+    """
+    Let the model scope a lookup to a specific department and/or AI
+    provider for THIS call, overriding whatever static filters the request
+    carried in from page context (or the lack of them). Without this, a
+    question like "what models is Sales using" had no way to actually
+    filter to Sales — the tool could only read the unfiltered,
+    company-wide top-5 breakdown and the model would narrate it as if it
+    were Sales-scoped, silently mixing an unfiltered total with a
+    department-specific-sounding answer. Provider (Anthropic/OpenAI/...)
+    has the identical failure mode for "how much are we spending on
+    Claude" -- see core/model_provider.py for how it's resolved.
+    """
+    overrides = {}
+    if department and department.strip():
+        overrides["charged_unit"] = department.strip()
+    if provider and provider.strip():
+        overrides["provider"] = provider.strip()
+    return {**reporting_filters, **overrides} if overrides else reporting_filters
+
+
 def run_get_usage_report(
     db, workspace_id: Optional[str], reporting_filters: dict, days: int, period_key: str,
-    entity_name: Optional[str] = None,
+    entity_name: Optional[str] = None, limit: Optional[int] = None,
+    department: Optional[str] = None, provider: Optional[str] = None,
 ) -> dict:
     from api.routes_efficiency import _ask_named_entity
     from api.routes_work_items import project_activity_reporting
+
+    # Clamp rather than trust the model's number outright: too low silently
+    # drops requested rows, too high blows up the tool-result payload sent
+    # back into the model's context for no benefit past a top-50 answer.
+    row_limit = max(1, min(int(limit or 5), 50))
+    reporting_filters = _with_department_override(reporting_filters, department, provider)
 
     date_from, date_to = _period_bounds(days, period_key)
     report = project_activity_reporting(
@@ -266,16 +351,20 @@ def run_get_usage_report(
     result = {
         "period": report.get("period"),
         "summary": summary,
-        "top_people": (report.get("people_breakdown") or [])[:5],
-        "top_agents": (report.get("agent_breakdown") or [])[:5],
+        "top_people": (report.get("people_breakdown") or [])[:row_limit],
+        "top_agents": (report.get("agent_breakdown") or [])[:row_limit],
         # "Account" = the business/customer entity (e.g. a company record
         # in Salesforce) — distinct from "top_people" (individual human
         # users). Keep these separate; don't let the model substitute one
         # for the other.
-        "top_accounts": (report.get("account_breakdown") or [])[:5],
-        "top_departments": (report.get("organizational_unit_breakdown") or [])[:5],
-        "top_platforms": (report.get("source_platform_breakdown") or [])[:5],
-        "top_models": (report.get("model_breakdown") or [])[:5],
+        "top_accounts": (report.get("account_breakdown") or [])[:row_limit],
+        "top_departments": (report.get("organizational_unit_breakdown") or [])[:row_limit],
+        "top_platforms": (report.get("source_platform_breakdown") or [])[:row_limit],
+        "top_models": (report.get("model_breakdown") or [])[:row_limit],
+        # "Provider" = the AI vendor (Anthropic/OpenAI/...) derived from
+        # the recorded model name -- distinct from "top_platforms" (the
+        # source system, e.g. Salesforce, a request came from).
+        "top_providers": (report.get("provider_breakdown") or [])[:row_limit],
         "data_scope": scope_from_summary(summary),
     }
     # A named person/account/department/etc. is often outside the top 5 by
@@ -299,9 +388,11 @@ def run_get_usage_report(
 def run_get_change_drivers(
     db, workspace_id: Optional[str], reporting_filters: dict,
     days: int, period_key: str, comparison_key: str, metric: str, dimension: str,
+    department: Optional[str] = None, provider: Optional[str] = None,
 ) -> dict:
     from api.routes_work_items import project_activity_reporting
 
+    reporting_filters = _with_department_override(reporting_filters, department, provider)
     primary_period = resolve_primary_period(
         period_key=None if period_key in (None, "none") else period_key,
         days=days,

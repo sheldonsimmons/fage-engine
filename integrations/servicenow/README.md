@@ -4,6 +4,20 @@ CostPilot should be invoked only when ServiceNow requests AI work. Creating or
 updating a ServiceNow record is not, by itself, an AI request and must not be
 measured as one.
 
+## Portable configuration
+
+The connector reads its endpoint and defaults from ServiceNow System
+Properties:
+
+| Property | Default |
+| --- | --- |
+| `costpilot.api_base_url` | `https://fage-engine-21cb49fe4806.herokuapp.com` |
+| `costpilot.servicenow.default_agent` | `ServiceNow Change Agent` |
+| `costpilot.servicenow.default_department` | `Operations` |
+
+OAuth secrets and tokens must be configured after installation and must never
+be included in an Update Set.
+
 ## Install the reusable Flow Designer action
 
 1. Open **Flow Designer** and create an Action named
@@ -46,3 +60,6 @@ Rule. Every invocation represents one governed and measured AI request.
 
 The existing proof-of-concept Business Rule should be disabled after the new
 Action has been tested successfully.
+
+See `UPDATE_SET_PLAN.md` for the reusable package boundary and clean-PDI
+acceptance test.

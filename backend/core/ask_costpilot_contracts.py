@@ -158,7 +158,11 @@ _CANONICAL_INTENTS = (
     {
         "name": "agent_cost_ranking",
         "patterns": (
-            r"\bwhich (?:agents?|bots?)\b.*\b(?:cost|spend|spent|expensive|costliest)\b.*\b(?:most|highest|top)?",
+            # (?!.*\bper (?:request|call)\b) -- without this, the fully
+            # optional trailing group let this match "which agent has the
+            # highest cost PER REQUEST", silently answering an average-cost
+            # question with a total-spend ranking instead.
+            r"\bwhich (?:agents?|bots?)\b(?!.*\bper (?:request|call)\b).*\b(?:cost|spend|spent|expensive|costliest)\b.*\b(?:most|highest|top)?",
             r"\b(?:highest|top|most|largest|costliest)\b.*\b(?:cost|spend|expensive)\b.*\b(?:agents?|bots?)\b",
         ),
         "intent": "ranking",
@@ -170,7 +174,7 @@ _CANONICAL_INTENTS = (
     {
         "name": "department_spend_ranking",
         "patterns": (
-            r"\bwhich (?:departments?|teams?|business units?)\b.*\b(?:spent|spend|cost)\b.*\b(?:most|highest|top)?",
+            r"\bwhich (?:departments?|teams?|business units?)\b(?!.*\bper (?:request|call)\b).*\b(?:spent|spend|cost)\b.*\b(?:most|highest|top)?",
             r"\b(?:highest|top|most|largest)\b.*\b(?:spend|cost)\b.*\b(?:departments?|teams?|business units?)\b",
         ),
         "intent": "ranking",
@@ -182,7 +186,7 @@ _CANONICAL_INTENTS = (
     {
         "name": "model_cost_ranking",
         "patterns": (
-            r"\bwhich models?\b.*\b(?:cost|spend|spent|expensive|costliest)\b.*\b(?:most|highest|top)?",
+            r"\bwhich models?\b(?!.*\bper (?:request|call)\b).*\b(?:cost|spend|spent|expensive|costliest)\b.*\b(?:most|highest|top)?",
             r"\b(?:highest|top|most|largest|costliest)\b.*\b(?:cost|spend|expensive)\b.*\bmodels?\b",
         ),
         "intent": "ranking",

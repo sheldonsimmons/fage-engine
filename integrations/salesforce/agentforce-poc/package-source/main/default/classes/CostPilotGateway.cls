@@ -101,9 +101,15 @@ public with sharing class CostPilotGateway {
             RecordIdentity identity = recordIdentity(requestValue.recordId);
             if (identity != null) {
                 governanceRequest.projectName = identity.displayName;
-                governanceRequest.sourceType = identity.objectName;
+                String costPilotProjectName =
+                    CostPilot_Project__c.SObjectType.getDescribe().getName();
+                Boolean isCostPilotProject =
+                    identity.objectName == costPilotProjectName;
+                governanceRequest.sourceType = isCostPilotProject
+                    ? 'CostPilot_Project__c'
+                    : identity.objectName;
                 governanceRequest.sourceSystem = 'Salesforce';
-                if (identity.objectName != 'CostPilot_Project__c') {
+                if (!isCostPilotProject) {
                     governanceRequest.projectExternalId = requestValue.recordId;
                 }
             } else if (String.isBlank(requestValue.recordId)) {

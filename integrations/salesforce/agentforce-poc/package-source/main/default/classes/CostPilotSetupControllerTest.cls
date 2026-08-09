@@ -156,4 +156,39 @@ private class CostPilotSetupControllerTest {
         System.assertEquals(true, activeState.activated);
         System.assertNotEquals(null, activeState.goLiveAt);
     }
+
+    @IsTest
+    static void rejectsInvalidSetupInputs() {
+        Boolean missingConnectionRejected = false;
+        try {
+            CostPilotSetupController.saveSelections(null, '[]');
+        } catch (AuraHandledException expected) {
+            missingConnectionRejected = true;
+        }
+        System.assertEquals(true, missingConnectionRejected);
+
+        Boolean invalidSelectionRejected = false;
+        try {
+            CostPilotSetupController.saveSelections(42, '{invalid');
+        } catch (AuraHandledException expected) {
+            invalidSelectionRejected = true;
+        }
+        System.assertEquals(true, invalidSelectionRejected);
+
+        Boolean invalidRelationshipRejected = false;
+        try {
+            CostPilotSetupController.approveRelationships(42, 'Account', '{invalid');
+        } catch (AuraHandledException expected) {
+            invalidRelationshipRejected = true;
+        }
+        System.assertEquals(true, invalidRelationshipRejected);
+
+        Boolean unknownObjectRejected = false;
+        try {
+            CostPilotSetupController.discoverRelationships('NotARealSalesforceObject');
+        } catch (AuraHandledException expected) {
+            unknownObjectRejected = true;
+        }
+        System.assertEquals(true, unknownObjectRejected);
+    }
 }

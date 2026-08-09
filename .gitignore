@@ -6,6 +6,18 @@ __pycache__/
 *.pyc
 *.pyo
 venv/
+venv311/
+
+# Salesforce CLI local caches / debug session transcripts / auth-adjacent
+# metadata -- never source, and can carry Connected App identifiers.
+integrations/**/.sf/
+integrations/**/.sfdx/
+integrations/**/.sf-auth-backup-*/
+integrations/**/.eca-package-draft/
+integrations/**/.eca-reference/
+integrations/**/.eca-retrieved/
+integrations/**/.eca-secret-runtime-*/
+integrations/**/.reference-agent-metadata/
 *.egg-info/
 
 # Database

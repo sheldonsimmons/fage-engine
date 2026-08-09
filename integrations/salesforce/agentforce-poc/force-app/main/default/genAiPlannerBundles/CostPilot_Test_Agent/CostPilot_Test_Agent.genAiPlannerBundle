@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GenAiPlannerBundle xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <description>Minimal test agent for validating governed Salesforce AI work through CostPilot.</description>
+    <localTopicLinks>
+        <genAiPluginName>CostPilot_Governed_AI_Work</genAiPluginName>
+    </localTopicLinks>
+    <localTopics>
+        <fullName>CostPilot_Governed_AI_Work</fullName>
+        <canEscalate>false</canEscalate>
+        <description>Use this topic for AI-assisted summaries, drafting, recommendations, and analysis involving the current Salesforce record. Every answer must be executed through CostPilot.</description>
+        <developerName>CostPilot_Governed_AI_Work</developerName>
+        <genAiPluginInstructions>
+            <description>Always call Send to CostPilot before answering.
+
+Pass the complete user request into prompt.
+Pass the current Salesforce record ID into recordId whenever the request concerns the current record.
+Use CostPilot Test Agent as Agent Name unless a more specific agent name is available.
+Pass the business department when it is known.
+
+CostPilot retrieves accessible Salesforce record context and executes the governed model request.
+
+If Blocked is false, return CostPilot Response verbatim as the final answer. Do not generate a second answer.
+If Blocked is true, return the CostPilot Response explaining why the request cannot continue.
+Never show model tier, routing, risk, or cost metadata as a separate chat response.
+Do not ask for information already available from the current Salesforce record.</description>
+            <developerName>CostPilot_Governance_Instructions</developerName>
+            <language xsi:nil="true"/>
+            <masterLabel>CostPilot Governance Instructions</masterLabel>
+            <sortOrder>0</sortOrder>
+        </genAiPluginInstructions>
+        <language>en_US</language>
+        <localActionLinks>
+            <functionName>Send_to_CostPilot</functionName>
+        </localActionLinks>
+        <localActions>
+            <fullName>Send_to_CostPilot</fullName>
+            <description>Routes the user request and grounded Salesforce record context through CostPilot for pruning, governance, model routing, execution, attribution, and audit.</description>
+            <developerName>Send_to_CostPilot</developerName>
+            <invocationTarget>CostPilotGateway</invocationTarget>
+            <invocationTargetType>apex</invocationTargetType>
+            <isConfirmationRequired>false</isConfirmationRequired>
+            <isIncludeInProgressIndicator>true</isIncludeInProgressIndicator>
+            <localDeveloperName>Send_to_CostPilot</localDeveloperName>
+            <masterLabel>Send to CostPilot</masterLabel>
+            <progressIndicatorMessage>Governing and executing this request through CostPilot...</progressIndicatorMessage>
+        </localActions>
+        <localDeveloperName>CostPilot_Governed_AI_Work</localDeveloperName>
+        <masterLabel>CostPilot Governed AI Work</masterLabel>
+        <pluginType>Topic</pluginType>
+        <scope>Handle AI-assisted business work on Salesforce records through CostPilot. CostPilot must receive the request and current record ID, retrieve grounded context, prune and govern the prompt, route and execute the model call, attribute usage, and audit the result before responding.</scope>
+    </localTopics>
+    <masterLabel>CostPilot Test Agent</masterLabel>
+    <plannerSurfaces>
+        <adaptiveResponseAllowed>true</adaptiveResponseAllowed>
+        <callRecordingAllowed>false</callRecordingAllowed>
+        <surface>SurfaceAction__Messaging</surface>
+        <surfaceType>Messaging</surfaceType>
+    </plannerSurfaces>
+    <plannerType>AiCopilot__ReAct</plannerType>
+</GenAiPlannerBundle>

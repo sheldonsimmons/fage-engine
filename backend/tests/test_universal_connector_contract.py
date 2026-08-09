@@ -192,13 +192,122 @@ def test_universal_and_legacy_requests_use_the_same_routing_pipeline():
     assert universal.tokens_saved_by_pruning == legacy.tokens_saved_by_pruning
 
 
-def test_observe_mode_is_explicitly_rejected_until_ingestion_exists():
-    payload = _universal_payload("HubSpot", "PORTAL-1", "DEAL-1")
-    payload["mode"] = "observe"
+def _observe_payload(platform: str, workspace_id: str, **usage_overrides):
+    usage = {
+        "model_name": "gpt-4o-mini",
+        "input_tokens": 1200,
+        "output_tokens": 340,
+        "cost_usd": 0.0021,
+    }
+    usage.update(usage_overrides)
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "mode": "observe",
+        "source": {"platform": platform, "workspace_id": workspace_id},
+        "actor": {"external_id": "emp-4471", "name": "Jamie Lee", "department": "Customer Support"},
+        "work": {
+            "external_id": "TICKET-8842", "type": "ticket",
+            "name": "Refund request escalation", "sync_if_missing": True,
+        },
+        "usage": usage,
+    }
+
+
+def test_observe_mode_requires_a_usage_block():
+    payload = _observe_payload("Acme Support Tool", "acme-prod")
+    payload.pop("usage")
     req = RouteRequest(**payload)
     try:
         _normalize_universal_request(req)
-        assert False, "Observe mode must not silently route a control request"
+        assert False, "observe mode without a usage block must be rejected"
     except HTTPException as exc:
-        assert exc.status_code == 400
-        assert "Observe-mode ingestion is not available yet" in str(exc.detail)
+        assert exc.status_code == 422
+
+
+def test_observe_mode_does_not_require_prompt_content():
+    # Unlike control mode, observe mode has no prompt to prune -- there is
+    # nothing analogous to request.content, and none should be required.
+    req = RouteRequest(**_observe_payload("Acme Support Tool", "acme-prod"))
+    normalized = _normalize_universal_request(req)
+    assert not (normalized.text or "").strip()
+
+
+def test_observe_mode_records_a_token_transaction_with_reported_cost():
+    from database.models import TokenTransaction
+
+    db = _session()
+    req = RouteRequest(**_observe_payload("Acme Support Tool", "acme-prod"))
+    response = route_payload(req, db=db)
+
+    assert response.model_name == "gpt-4o-mini"
+    assert response.input_tokens == 1200
+    assert response.output_tokens == 340
+    assert response.cost_usd == 0.0021
+    assert response.routing_decision == "OBSERVED"
+
+    tx = db.query(TokenTransaction).one()
+    assert tx.model_name == "gpt-4o-mini"
+    assert tx.usage_source == "provider_reported"
+    assert tx.is_simulation is False
+    assert tx.cost_usd == 0.0021
+    assert tx.actor_name == "Jamie Lee"
+    assert tx.department == "Customer Support"
+
+
+def test_observe_mode_falls_back_to_registry_pricing_when_cost_omitted():
+    from database.models import ModelRegistry, TokenTransaction
+
+    db = _session()
+    db.add(ModelRegistry(
+        display_name="Test Model", model_id="test-model-x", provider="OpenAI",
+        tier=1, cost_input_per_1m=3.0, cost_output_per_1m=15.0, is_enabled=True,
+    ))
+    db.commit()
+
+    payload = _observe_payload("Acme Support Tool", "acme-prod", model_name="test-model-x")
+    payload["usage"].pop("cost_usd")
+    req = RouteRequest(**payload)
+    response = route_payload(req, db=db)
+
+    expected_cost = round(1200 * 3.0 / 1_000_000 + 340 * 15.0 / 1_000_000, 6)
+    assert response.cost_usd == expected_cost
+    assert db.query(TokenTransaction).one().cost_usd == expected_cost
+
+
+def test_observe_mode_resolves_work_item_and_department_like_control_mode():
+    from database.models import WorkItem
+
+    db = _session()
+    req = RouteRequest(**_observe_payload("Acme Support Tool", "acme-prod"))
+    route_payload(req, db=db)
+
+    item = db.query(WorkItem).filter(WorkItem.source_record_id == "TICKET-8842").first()
+    assert item is not None
+    assert item.name == "Refund request escalation"
+
+
+def test_observe_mode_updates_department_budget_spend():
+    from database.models import DepartmentBudget
+
+    db = _session()
+    db.add(DepartmentBudget(department="Customer Support", monthly_cap_usd=100.0, current_spend_usd=0.0))
+    db.commit()
+
+    req = RouteRequest(**_observe_payload("Acme Support Tool", "acme-prod"))
+    route_payload(req, db=db)
+
+    budget = db.query(DepartmentBudget).filter_by(department="Customer Support").first()
+    assert budget.current_spend_usd == 0.0021
+
+
+def test_connector_contract_documents_observe_mode_with_its_own_example():
+    contract = get_connector_contract()
+    assert "usage.model_name" in contract["observe"]["required"]
+    assert contract["observe"]["example"]["mode"] == "observe"
+    assert contract["observe"]["example"]["usage"]["model_name"]
+
+
+def test_connector_manifests_report_observe_as_available():
+    catalog = list_connector_manifests()
+    assert all(item["modes"]["observe"] == "available" for item in catalog["connectors"])
+    assert all("reports" in item for item in catalog["connectors"])

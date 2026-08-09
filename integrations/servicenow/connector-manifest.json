@@ -1,0 +1,64 @@
+{
+  "name": "CostPilot ServiceNow Connector",
+  "version": "0.1.0-poc",
+  "scope": "global",
+  "purpose": "Send only explicit ServiceNow AI requests through CostPilot for governance, routing, pruning, attribution, measurement, and audit.",
+  "system_properties": [
+    {
+      "name": "costpilot.api_base_url",
+      "type": "string",
+      "default": "https://fage-engine-21cb49fe4806.herokuapp.com",
+      "required": true,
+      "secret": false
+    },
+    {
+      "name": "costpilot.servicenow.default_agent",
+      "type": "string",
+      "default": "ServiceNow Change Agent",
+      "required": false,
+      "secret": false
+    },
+    {
+      "name": "costpilot.servicenow.default_department",
+      "type": "string",
+      "default": "Operations",
+      "required": false,
+      "secret": false
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "flow_action",
+      "name": "CostPilot Governed AI Request",
+      "source": "costpilot_governed_ai_request.js"
+    },
+    {
+      "type": "ui_action",
+      "name": "Ask CostPilot AI",
+      "table": "change_request",
+      "source": "ask_costpilot_ai_ui_action.js"
+    }
+  ],
+  "excluded_from_package": [
+    "OAuth client secrets",
+    "OAuth access and refresh tokens",
+    "ServiceNow instance URL",
+    "Customer field mappings",
+    "Record-triggered Business Rules"
+  ],
+  "verification": {
+    "table": "change_request",
+    "required_outputs": [
+      "ai_response",
+      "model_tier",
+      "model_name",
+      "routing_decision",
+      "cost_usd",
+      "input_tokens",
+      "output_tokens",
+      "tokens_pruned",
+      "work_item_id",
+      "work_item_name"
+    ]
+  }
+}

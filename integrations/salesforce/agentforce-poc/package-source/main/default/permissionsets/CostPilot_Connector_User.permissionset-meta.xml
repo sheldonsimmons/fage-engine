@@ -15,7 +15,7 @@
     <description>Allows users and agents to send governed AI requests through CostPilot and manage CostPilot work attribution records.</description>
     <externalCredentialPrincipalAccesses>
         <enabled>true</enabled>
-        <externalCredentialPrincipal>CostPilotExternal-CostPilotKey</externalCredentialPrincipal>
+        <externalCredentialPrincipal>costpilot__CostPilotExternal-CostPilotKey</externalCredentialPrincipal>
     </externalCredentialPrincipalAccesses>
     <fieldPermissions><editable>true</editable><field>CostPilot_Project__c.Account__c</field><readable>true</readable></fieldPermissions>
     <fieldPermissions><editable>true</editable><field>CostPilot_Project__c.CostPilot_Decision__c</field><readable>true</readable></fieldPermissions>

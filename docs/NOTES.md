@@ -27,6 +27,19 @@ Users can force a specific tier by starting their payload with:
 - Results are session-only — nothing persists
 - `is_test` is an honor-system flag — there is no authentication enforcing it
 
+### Salesforce AppExchange Connector Direction
+- Current onboarding generates platform-specific setup code, including Apex for Salesforce
+- This is acceptable for demos and early pilots, but it creates friction when customers want to add fields, objects, departments, or agents later
+- Long-term AppExchange direction: install one stable CostPilot Salesforce connector/package, then manage mappings in configuration instead of regenerating Apex for every change
+- Target design:
+  - Salesforce package contains the reusable connector, Named Credential/endpoint setup, and Flow/Apex entry point
+  - CostPilot UI manages objects, fields, departments, agents, and routing metadata
+  - Salesforce keeps a synced/local copy of mappings, likely Custom Metadata or Custom Settings, so runtime does not need an extra mapping lookup call before every request
+  - Runtime request reads local mapping, sends selected fields plus `X-Department`, `X-Platform`, and `X-Agent-Name` to CostPilot
+  - Adding a field or agent later should be a configuration update, not a new Apex generation cycle
+- Design reason: keep onboarding plug-and-play while avoiding connector slowdown from unnecessary round trips
+- Future: build AppExchange-ready managed package path with configurable mappings and sync behavior
+
 ### Budget Throttle
 - Auto-throttle triggers when `current_spend_usd >= monthly_cap_usd`
 - Override requires a manual flag (`override_granted = True`) set in the DB or budget panel
