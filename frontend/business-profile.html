@@ -71,6 +71,24 @@
     .bp-conn-dot.stale { background: var(--accent-yellow); }
     .bp-conn-dot.off { background: var(--text-muted); }
 
+    .bp-journey-row { display: flex; align-items: flex-start; overflow-x: auto; padding: 6px 2px; }
+    .bp-journey-stage { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 118px; flex: 1; position: relative; }
+    .bp-journey-stage:not(:last-child)::after {
+      content: ""; position: absolute; top: 22px; left: calc(50% + 26px); right: calc(-50% + 26px);
+      height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-purple));
+    }
+    .bp-journey-dot {
+      width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      background: var(--bg-base); border: 2px solid var(--accent); font-size: 18px; margin-bottom: 10px; z-index: 1;
+    }
+    .bp-journey-won-badge {
+      font-size: 10px; font-weight: 700; color: var(--accent-green); background: rgba(63,185,80,0.12);
+      border-radius: 20px; padding: 2px 8px; margin-bottom: 6px;
+    }
+    .bp-journey-label { font-size: 12.5px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; }
+    .bp-journey-value { font-size: 15px; font-weight: 650; font-family: var(--font-mono); color: var(--text-primary); }
+    .bp-journey-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
+
     .bp-insights-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
     @media (max-width: 900px) { .bp-insights-row { grid-template-columns: 1fr; } }
     .bp-insight { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 16px 18px; }
@@ -163,6 +181,9 @@
 
       <div class="bp-section-head"><h3>CostPilot Insights</h3></div>
       <div class="bp-insights-row" id="bpInsights"></div>
+
+      <div class="bp-section-head"><h3>AI Investment by Work Type</h3></div>
+      <div class="panel" id="bpJourneyPanel"></div>
 
       <div class="bp-grid-2">
         <div>
@@ -294,7 +315,41 @@
       document.getElementById("bpMeasurementNote").textContent = profile.measurement_note || "";
 
       bpRenderFunctionDonut(profile.business_function_breakdown || []);
+      bpRenderJourney(profile.journey_breakdown || [], kpis.ai_investment_usd);
       bpRenderInsights(profile);
+    }
+
+    // "AI Investment by Work Type" -- grouped by WorkItem.context_type,
+    // which is real captured data. Not a chronological journey/funnel:
+    // CostPilot doesn't track a work item moving through stages over time
+    // today, only what type it is, so this shows types side by side rather
+    // than implying an order or a "Marketing -> Renewal" pipeline that
+    // isn't backed by anything.
+    const BP_STAGE_ICONS = {
+      opportunity: "◎", project: "▣", case: "☎", ticket: "☎", incident: "☎",
+      engagement: "◈", claim: "▤", product: "▦", application: "▧",
+      environment: "◇", account: "▢", customer: "◐", campaign: "▲", custom: "○",
+    };
+
+    function bpRenderJourney(rows, totalSpend) {
+      const panel = document.getElementById("bpJourneyPanel");
+      if (!rows.length) {
+        panel.innerHTML = `<div class="bp-empty">No AI activity with a known work type in this period.</div>`;
+        return;
+      }
+      panel.innerHTML = `<div class="bp-journey-row">${rows.map((stage) => {
+        const pct = totalSpend > 0 ? Math.round((stage.spend_usd / totalSpend) * 100) : 0;
+        const icon = BP_STAGE_ICONS[stage.stage] || "○";
+        const badge = stage.won_count !== null && stage.won_count !== undefined && stage.won_count > 0
+          ? `<div class="bp-journey-won-badge">${stage.won_count} Won</div>` : "";
+        return `<div class="bp-journey-stage">
+          ${badge}
+          <div class="bp-journey-dot">${icon}</div>
+          <div class="bp-journey-label">${stage.label}</div>
+          <div class="bp-journey-value">${bpFmtUsd(stage.spend_usd)}</div>
+          <div class="bp-journey-sub">${pct}% of AI spend</div>
+        </div>`;
+      }).join("")}</div>`;
     }
 
     // Deterministic, code-computed insights -- no LLM-generated text here.

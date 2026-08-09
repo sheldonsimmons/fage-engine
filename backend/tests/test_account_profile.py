@@ -104,6 +104,13 @@ def test_account_profile_rolls_up_spend_and_outcomes_across_work_items():
     purposes = {row["business_purpose"] for row in profile["business_function_breakdown"]}
     assert purposes == {"Sales & Revenue", "Customer & Employee Support"}
 
+    [opportunity_stage] = profile["journey_breakdown"]
+    assert opportunity_stage["stage"] == "opportunity"
+    assert opportunity_stage["label"] == "Opportunity"
+    assert round(opportunity_stage["spend_usd"], 2) == 0.52
+    assert opportunity_stage["request_count"] == 2
+    assert opportunity_stage["won_count"] == 1
+
 
 def test_account_profile_reports_prior_period_spend_for_comparison():
     db = _session()
@@ -138,6 +145,53 @@ def test_account_profile_reports_prior_period_spend_for_comparison():
     # Prior period is the same length (8 days), ending where the current
     # period starts -- the 20-days-ago transaction falls inside it.
     assert profile["prior_period"]["ai_investment_usd"] == 10.0
+
+
+def test_account_profile_journey_breakdown_groups_by_work_item_type():
+    db = _session()
+    account = WorkAccount(external_id="ACCOUNT-MIX", name="Mixed Co", workspace_id="WS-1")
+    db.add(account); db.flush()
+    opp_item = WorkItem(
+        external_id="PROJ-MIX-OPP", name="Mix Opportunity", account_id=account.id,
+        context_type="opportunity", workspace_id="WS-1",
+    )
+    case_item = WorkItem(
+        external_id="PROJ-MIX-CASE", name="Mix Support Case", account_id=account.id,
+        context_type="case", workspace_id="WS-1",
+    )
+    db.add_all([opp_item, case_item]); db.flush()
+    db.add(WorkItemOutcome(
+        work_item_id=opp_item.id, workspace_id="WS-1", outcome_status="Closed Won",
+        outcome_value=50000.0, outcome_success=True, is_closed=True,
+        source_system="salesforce", source_object="Opportunity", external_id="006MIX",
+        last_synced_at=datetime.utcnow(),
+    ))
+    now = datetime.utcnow()
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=opp_item.id,
+        model_tier="Scout", model_name="claude", input_tokens=100, output_tokens=50,
+        tokens_saved=0, cost_usd=7.0, timestamp=now,
+    ))
+    db.add(TokenTransaction(
+        department="WS-1:Support", workspace_id="WS-1", work_item_id=case_item.id,
+        model_tier="Scout", model_name="claude", input_tokens=100, output_tokens=50,
+        tokens_saved=0, cost_usd=3.0, timestamp=now,
+    ))
+    db.commit()
+
+    profile = account_profile(
+        identifier="ACCOUNT-MIX", workspace_id="WS-1",
+        date_from=now - timedelta(days=1), date_to=now + timedelta(days=1),
+        days=90, db=db,
+    )
+    by_stage = {row["stage"]: row for row in profile["journey_breakdown"]}
+    assert set(by_stage) == {"opportunity", "case"}
+    assert by_stage["opportunity"]["spend_usd"] == 7.0
+    assert by_stage["opportunity"]["won_count"] == 1
+    assert by_stage["case"]["label"] == "Support"
+    assert by_stage["case"]["spend_usd"] == 3.0
+    # Support/Case has no won/lost concept -- must not fake one.
+    assert by_stage["case"]["won_count"] is None
 
 
 def test_account_profile_handles_account_with_no_work_items():

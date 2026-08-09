@@ -764,6 +764,7 @@ def account_profile(
             "kpis": empty_kpis,
             "prior_period": {"date_from": None, "date_to": None, "ai_investment_usd": 0.0},
             "business_function_breakdown": [],
+            "journey_breakdown": [],
             "outcomes": {
                 "won_count": 0, "lost_count": 0, "open_count": 0,
                 "pipeline_value_usd": 0.0, "closed_won_value_usd": 0.0,
@@ -846,6 +847,44 @@ def account_profile(
     )
     won_count, lost_count, open_count, pipeline_value, closed_won_value = outcome_totals
 
+    # Business "journey" stage, using WorkItem.context_type -- what kind of
+    # work each item actually is (Opportunity, Case, Project, ...), which
+    # is real, already-captured data. Deliberately not a Marketing ->
+    # Closed Won -> Implementation -> Support -> Renewal pipeline: CostPilot
+    # doesn't track a work item moving through stages over time today, only
+    # what type it is and (for Opportunities) its outcome. Showing that
+    # invented pipeline would misrepresent what's actually known.
+    stage_rows = (
+        tx_base
+        .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .with_entities(
+            WorkItem.context_type,
+            func.sum(TokenTransaction.cost_usd),
+            func.count(TokenTransaction.id),
+        )
+        .group_by(WorkItem.context_type)
+        .order_by(func.sum(TokenTransaction.cost_usd).desc())
+        .all()
+    )
+    stage_labels = {
+        "campaign": "Marketing", "opportunity": "Opportunity", "project": "Project",
+        "engagement": "Engagement", "case": "Support", "ticket": "Support",
+        "incident": "Support", "claim": "Claims", "product": "Product",
+        "application": "Application", "environment": "Environment",
+        "account": "Account", "customer": "Customer", "custom": "Other",
+    }
+    journey_breakdown = [
+        {
+            "stage": context_type or "custom",
+            "label": stage_labels.get(context_type or "custom", (context_type or "Other").replace("_", " ").title()),
+            "spend_usd": round(float(spend), 6),
+            "request_count": int(count),
+            # Only the Opportunity stage has a won/lost concept today.
+            "won_count": int(won_count or 0) if context_type == "opportunity" else None,
+        }
+        for context_type, spend, count in stage_rows
+    ]
+
     return {
         "account": _account_json(account),
         "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
@@ -863,6 +902,7 @@ def account_profile(
             "ai_investment_usd": round(prior_spend_usd, 6),
         },
         "business_function_breakdown": business_function_breakdown,
+        "journey_breakdown": journey_breakdown,
         "outcomes": {
             "won_count": int(won_count or 0),
             "lost_count": int(lost_count or 0),
