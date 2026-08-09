@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -706,6 +706,154 @@ def list_accounts(
     if workspace_id:
         query = query.filter(WorkAccount.workspace_id == workspace_id)
     return [_account_json(account) for account in query.order_by(WorkAccount.name).all()]
+
+
+@router.get("/accounts/{identifier}/profile")
+def account_profile(
+    identifier: str,
+    workspace_id: Optional[str] = Query(None),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    days: int = Query(90, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """
+    Account-level rollup: AI investment + activity + savings across every
+    WorkItem belonging to this account, plus business outcomes rolled up
+    from WorkItemOutcome. This is the one thing that did not exist yet for
+    a "Business Profile" page -- every other endpoint in this API operates
+    at the work-item level, not the account level.
+
+    Entirely SQL-side aggregation (SUM/COUNT/GROUP BY) -- no row loaded
+    into Python beyond the small number of grouped result rows -- per the
+    scalability principle that bit project_activity_reporting() before it
+    was fixed (see that function's history).
+    """
+    account = (
+        db.query(WorkAccount)
+        .filter(WorkAccount.external_id == identifier)
+        .first()
+    )
+    if not account and identifier.isdigit():
+        account = db.query(WorkAccount).filter(WorkAccount.id == int(identifier)).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if workspace_id and account.workspace_id and account.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Account not found in this workspace")
+
+    period_end = date_to or datetime.utcnow()
+    period_start = date_from or (period_end - timedelta(days=days))
+    if period_start >= period_end:
+        raise HTTPException(status_code=400, detail="date_from must be before date_to")
+
+    work_item_ids_query = db.query(WorkItem.id).filter(WorkItem.account_id == account.id)
+    work_item_ids = [row[0] for row in work_item_ids_query.all()]
+
+    empty_kpis = {
+        "ai_investment_usd": 0.0,
+        "ai_activity_count": 0,
+        "total_tokens": 0,
+        "tokens_saved": 0,
+        "ai_savings_usd_estimate": 0.0,
+    }
+    if not work_item_ids:
+        return {
+            "account": _account_json(account),
+            "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
+            "work_item_count": 0,
+            "kpis": empty_kpis,
+            "business_function_breakdown": [],
+            "outcomes": {
+                "won_count": 0, "lost_count": 0, "open_count": 0,
+                "pipeline_value_usd": 0.0, "closed_won_value_usd": 0.0,
+            },
+            "measurement_note": (
+                "This account has no linked work items yet, so there is no "
+                "AI activity or outcome data to report."
+            ),
+        }
+
+    tx_base = db.query(TokenTransaction).filter(
+        TokenTransaction.work_item_id.in_(work_item_ids),
+        TokenTransaction.timestamp >= period_start,
+        TokenTransaction.timestamp < period_end,
+    )
+
+    totals = tx_base.with_entities(
+        func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        func.count(TokenTransaction.id),
+        func.coalesce(func.sum(TokenTransaction.input_tokens + TokenTransaction.output_tokens), 0),
+        func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+    ).first()
+    spend_usd, activity_count, total_tokens, tokens_saved = totals
+
+    # Simplified, clearly-labeled savings estimate (pruning-avoided tokens at
+    # flagship input rate) -- not the full pruning+downgrade methodology
+    # routes_reports.py's savings_report() uses, which requires per-row
+    # tier-bucketing that isn't a clean SQL aggregate. Labeling this an
+    # estimate rather than silently reusing a different, more precise number
+    # under the same name.
+    from api.routes_reports import FLAGSHIP_INPUT_COST
+    savings_estimate = round(float(tokens_saved) * FLAGSHIP_INPUT_COST, 6)
+
+    business_function_breakdown = [
+        {"business_purpose": purpose or "Other / Unclassified", "spend_usd": round(float(spend), 6), "request_count": int(count)}
+        for purpose, spend, count in (
+            tx_base.with_entities(
+                TokenTransaction.business_purpose,
+                func.sum(TokenTransaction.cost_usd),
+                func.count(TokenTransaction.id),
+            )
+            .group_by(TokenTransaction.business_purpose)
+            .order_by(func.sum(TokenTransaction.cost_usd).desc())
+            .all()
+        )
+    ]
+
+    is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+    is_open = WorkItemOutcome.is_closed.is_(False)
+    is_won = WorkItemOutcome.outcome_success.is_(True)
+    outcome_value = func.coalesce(WorkItemOutcome.outcome_value, 0.0)
+
+    outcome_totals = (
+        db.query(
+            func.coalesce(func.sum(case((is_won, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_lost, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_open, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_open, outcome_value), else_=0.0)), 0.0),
+            func.coalesce(func.sum(case((is_won, outcome_value), else_=0.0)), 0.0),
+        )
+        .filter(WorkItemOutcome.work_item_id.in_(work_item_ids))
+        .first()
+    )
+    won_count, lost_count, open_count, pipeline_value, closed_won_value = outcome_totals
+
+    return {
+        "account": _account_json(account),
+        "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
+        "work_item_count": len(work_item_ids),
+        "kpis": {
+            "ai_investment_usd": round(float(spend_usd), 6),
+            "ai_activity_count": int(activity_count),
+            "total_tokens": int(total_tokens),
+            "tokens_saved": int(tokens_saved),
+            "ai_savings_usd_estimate": savings_estimate,
+        },
+        "business_function_breakdown": business_function_breakdown,
+        "outcomes": {
+            "won_count": int(won_count or 0),
+            "lost_count": int(lost_count or 0),
+            "open_count": int(open_count or 0),
+            "pipeline_value_usd": round(float(pipeline_value or 0.0), 2),
+            "closed_won_value_usd": round(float(closed_won_value or 0.0), 2),
+        },
+        "measurement_note": (
+            "AI investment reflects governed CostPilot activity across this "
+            "account's work items. Business outcomes are synced from the "
+            "connected system of record and are associated with, not "
+            "caused by, this AI activity."
+        ),
+    }
 
 
 @router.get("/context-templates")
