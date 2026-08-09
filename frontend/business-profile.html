@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Business Profile</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <script src="/js/chart.umd.min.js"></script>
+  <script src="/js/chart-theme.js"></script>
+  <style>
+    /* Reuses the app's existing tokens (--bg-base, --bg-panel, --border,
+       --text-primary, --text-muted, --accent, --accent-green/yellow/red,
+       --font-sans, --font-mono) -- same convention as index.html's
+       Overview redesign. No new palette introduced. */
+    body { margin: 0; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); }
+    .bp-wrap { max-width: 1240px; margin: 0 auto; padding: 22px 28px 64px; }
+    .bp-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    .bp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 22px; flex-wrap: wrap; }
+    .bp-title-row { display: flex; align-items: center; gap: 10px; }
+    .bp-title-row h1 { font-size: 27px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+    .bp-meta { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+    .bp-account-picker { display: flex; align-items: center; gap: 8px; }
+    .bp-account-picker select {
+      background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-primary);
+      font-family: var(--font-sans); font-size: 13px; padding: 8px 12px; border-radius: 7px; min-width: 240px;
+    }
+    .bp-days select {
+      background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-primary);
+      font-family: var(--font-sans); font-size: 13px; padding: 8px 12px; border-radius: 7px;
+    }
+
+    /* Ask CostPilot hero -- copied verbatim from index.html's .ov-ask-hero */
+    .bp-ask-hero { padding: 30px 34px 24px; background: radial-gradient(680px 220px at 18% 0%, rgba(88,166,255,0.09), transparent 65%), var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 28px; }
+    .bp-ask-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+    .bp-ask-hero h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 18px; color: var(--text-primary); }
+    .bp-ask-box { display: flex; align-items: center; gap: 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 11px; padding: 6px 6px 6px 18px; transition: border-color .15s; }
+    .bp-ask-box:focus-within { border-color: var(--accent); }
+    .bp-ask-box input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: var(--font-sans); font-size: 14.5px; padding: 11px 0; }
+    .bp-ask-box input::placeholder { color: #5b6773; }
+    .bp-ask-go { display: flex; align-items: center; gap: 8px; background: var(--accent); color: #061423; border: none; font-family: var(--font-sans); font-weight: 650; font-size: 13px; padding: 10px 17px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+    .bp-ask-go:hover { filter: brightness(1.08); }
+    .bp-ask-answer-slot { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+    .bp-ask-answer-slot .cp-ask-thinking { font-size: 13px; color: var(--text-muted); }
+    .bp-ask-answer-slot .cp-ask-error { font-size: 13px; color: var(--accent-red); }
+
+    .bp-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 30px 0 13px; }
+    .bp-section-head h3 { font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0; }
+
+    /* KPI row -- copied verbatim from index.html's .ov-kpi-row */
+    .bp-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 13px; }
+    .bp-kpi { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 18px 20px; }
+    .bp-kpi .label { font-size: 11.5px; color: var(--text-muted); margin-bottom: 9px; }
+    .bp-kpi .value { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; font-family: var(--font-mono); }
+    .bp-kpi .sub { font-size: 11.5px; color: #5b6773; margin-top: 6px; }
+
+    .bp-grid-2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 900px) { .bp-grid-2 { grid-template-columns: 1fr; } }
+
+    .bp-outcome-row { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+    .bp-outcome-row:last-child { border-bottom: none; }
+    .bp-outcome-row .n { font-family: var(--font-mono); font-weight: 600; }
+
+    .bp-conn-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .bp-conn-row:last-child { border-bottom: none; }
+    .bp-conn-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+    .bp-conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-green); }
+    .bp-conn-dot.stale { background: var(--accent-yellow); }
+    .bp-conn-dot.off { background: var(--text-muted); }
+
+    .bp-note { font-size: 12px; color: var(--text-muted); margin-top: 24px; border-top: 1px solid var(--border); padding-top: 14px; }
+    .bp-empty { font-size: 13.5px; color: var(--text-muted); padding: 24px 0; }
+    .bp-donut-wrap { position: relative; height: 220px; }
+    .bp-business-fn-legend { margin-top: 14px; font-size: 12.5px; }
+    .bp-business-fn-legend .row { display: flex; justify-content: space-between; padding: 5px 0; }
+  </style>
+</head>
+<body>
+  <header class="wa-header">
+    <div class="wa-brand">
+      <img src="/assets/costpilot-logo-transparent.svg" class="wa-logo" alt="CostPilot" />
+    </div>
+    <nav class="wa-nav" aria-label="Primary navigation">
+      <a href="/index.html">Overview</a>
+      <a href="/operate.html">Operate</a>
+      <a href="/work-items.html">Work</a>
+      <a href="/business-profile.html" class="active">Business Profiles</a>
+      <a href="/onboarding.html">Connect &amp; Setup</a>
+    </nav>
+  </header>
+
+  <div class="bp-wrap">
+    <div class="bp-header">
+      <div>
+        <div class="bp-title-row">
+          <h1 id="bpAccountName">Business Profile</h1>
+        </div>
+        <div class="bp-meta" id="bpAccountMeta">Select an account to view its AI investment and business outcomes.</div>
+      </div>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <div class="bp-account-picker">
+          <select id="bpAccountSelect" aria-label="Select account"><option value="">Loading accounts…</option></select>
+        </div>
+        <div class="bp-days">
+          <select id="bpDaysSelect" aria-label="Date range">
+            <option value="30">Last 30 days</option>
+            <option value="90" selected>Last 90 days</option>
+            <option value="180">Last 180 days</option>
+            <option value="365">Last 12 months</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <section class="bp-ask-hero">
+      <p class="bp-ask-eyebrow">Ask CostPilot</p>
+      <h2 id="bpAskHeading">Ask anything about this account…</h2>
+      <form class="bp-ask-box" id="bpAskForm">
+        <input type="text" id="bpAskInput" placeholder="e.g. “How much AI spend was associated with won opportunities?”" aria-label="Ask CostPilot a question" />
+        <button class="bp-ask-go" type="submit">
+          Ask
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </form>
+      <div id="bpAskAnswer" class="bp-ask-answer-slot" style="display:none"></div>
+    </section>
+
+    <div id="bpEmptyState" class="bp-empty" style="display:none"></div>
+
+    <div id="bpContent" style="display:none">
+      <div class="bp-kpi-row">
+        <div class="bp-kpi">
+          <div class="label">Business Value</div>
+          <div class="value bp-num" id="bpKpiValue">—</div>
+          <div class="sub">Pipeline + Closed Won</div>
+        </div>
+        <div class="bp-kpi">
+          <div class="label">AI Investment</div>
+          <div class="value bp-num" id="bpKpiSpend">—</div>
+          <div class="sub" id="bpKpiSpendSub">Tracked AI spend</div>
+        </div>
+        <div class="bp-kpi">
+          <div class="label">CostPilot Savings</div>
+          <div class="value bp-num" id="bpKpiSavings">—</div>
+          <div class="sub">Estimated from pruning</div>
+        </div>
+        <div class="bp-kpi">
+          <div class="label">AI Activity</div>
+          <div class="value bp-num" id="bpKpiActivity">—</div>
+          <div class="sub">AI interactions</div>
+        </div>
+      </div>
+
+      <div class="bp-grid-2">
+        <div>
+          <div class="bp-section-head"><h3>AI Investment by Business Function</h3></div>
+          <div class="panel">
+            <div class="bp-donut-wrap"><canvas id="bpFunctionDonut"></canvas></div>
+            <div class="bp-business-fn-legend" id="bpFunctionLegend"></div>
+          </div>
+        </div>
+        <div>
+          <div class="bp-section-head"><h3>Business Outcomes</h3></div>
+          <div class="panel">
+            <div class="bp-outcome-row"><span>Opportunities Won</span><span class="n" id="bpOutcomeWon">—</span></div>
+            <div class="bp-outcome-row"><span>Opportunities Lost</span><span class="n" id="bpOutcomeLost">—</span></div>
+            <div class="bp-outcome-row"><span>Opportunities Open</span><span class="n" id="bpOutcomeOpen">—</span></div>
+            <div class="bp-outcome-row"><span>Pipeline Value</span><span class="n" id="bpOutcomePipeline">—</span></div>
+            <div class="bp-outcome-row"><span>Closed Won Value</span><span class="n" id="bpOutcomeClosedWon">—</span></div>
+          </div>
+
+          <div class="bp-section-head"><h3>Connected Systems</h3></div>
+          <div class="panel" id="bpConnectedSystems">
+            <div class="bp-empty">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bp-note" id="bpMeasurementNote"></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Business Profile page -- account-level rollup view.
+    // Backed entirely by real endpoints, no placeholder/demo values:
+    //   GET /api/work-items/accounts?workspace_id=...
+    //   GET /api/work-items/accounts/{external_id}/profile?workspace_id=...&days=...
+    //   GET /api/integrations/connections?workspace_id=...
+    //   POST /api/reports/bot-efficiency/ask
+    const bpParams = new URLSearchParams(location.search);
+    const bpWorkspaceId = () => localStorage.getItem("cp_workspace_id") || bpParams.get("workspace_id") || "";
+    let bpCurrentAccount = bpParams.get("account") || "";
+    let bpFunctionChart = null;
+
+    function bpFmtUsd(value) {
+      const n = Number(value || 0);
+      if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}K`;
+      return `$${n.toFixed(2)}`;
+    }
+    function bpFmtUsdFull(value) {
+      return `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    function bpFmtNum(value) {
+      return Number(value || 0).toLocaleString();
+    }
+
+    async function bpLoadAccounts() {
+      const select = document.getElementById("bpAccountSelect");
+      try {
+        const workspaceId = bpWorkspaceId();
+        const path = workspaceId ? `/api/work-items/accounts?workspace_id=${encodeURIComponent(workspaceId)}` : "/api/work-items/accounts";
+        const accounts = await apiGet(path);
+        if (!accounts.length) {
+          select.innerHTML = `<option value="">No accounts in this workspace</option>`;
+          bpShowEmpty("No accounts found in this workspace yet. Accounts are created automatically when a connected system (e.g. Salesforce) reports activity tied to one.");
+          return;
+        }
+        select.innerHTML = accounts.map((a) =>
+          `<option value="${a.external_id}">${a.name}</option>`
+        ).join("");
+        if (bpCurrentAccount && accounts.some((a) => a.external_id === bpCurrentAccount)) {
+          select.value = bpCurrentAccount;
+        } else {
+          bpCurrentAccount = accounts[0].external_id;
+          select.value = bpCurrentAccount;
+        }
+        bpLoadProfile();
+      } catch (err) {
+        select.innerHTML = `<option value="">Failed to load accounts</option>`;
+        bpShowEmpty(`Could not load accounts: ${(err.message || "").replace(/</g, "&lt;")}`);
+      }
+    }
+
+    function bpShowEmpty(message) {
+      document.getElementById("bpEmptyState").style.display = "block";
+      document.getElementById("bpEmptyState").textContent = message;
+      document.getElementById("bpContent").style.display = "none";
+    }
+
+    async function bpLoadProfile() {
+      if (!bpCurrentAccount) return;
+      const days = document.getElementById("bpDaysSelect").value;
+      const workspaceId = bpWorkspaceId();
+      const params = new URLSearchParams({ days });
+      if (workspaceId) params.set("workspace_id", workspaceId);
+      try {
+        const profile = await apiGet(`/api/work-items/accounts/${encodeURIComponent(bpCurrentAccount)}/profile?${params}`);
+        document.getElementById("bpEmptyState").style.display = "none";
+        document.getElementById("bpContent").style.display = "block";
+        bpRenderProfile(profile);
+      } catch (err) {
+        bpShowEmpty(`Could not load this account's profile: ${(err.message || "").replace(/</g, "&lt;")}`);
+      }
+      bpLoadConnections(workspaceId);
+    }
+
+    function bpRenderProfile(profile) {
+      document.getElementById("bpAccountName").textContent = profile.account.name;
+      document.getElementById("bpAskHeading").textContent = `Ask anything about ${profile.account.name}…`;
+      document.getElementById("bpAskInput").placeholder = `e.g. "How much AI spend was associated with won opportunities?"`;
+      document.getElementById("bpAccountMeta").textContent =
+        `${profile.work_item_count} linked work item${profile.work_item_count === 1 ? "" : "s"} · ${profile.period.days}-day view`;
+
+      const kpis = profile.kpis;
+      const outcomes = profile.outcomes;
+      const businessValue = (outcomes.pipeline_value_usd || 0) + (outcomes.closed_won_value_usd || 0);
+
+      document.getElementById("bpKpiValue").textContent = bpFmtUsd(businessValue);
+      document.getElementById("bpKpiSpend").textContent = bpFmtUsdFull(kpis.ai_investment_usd);
+      document.getElementById("bpKpiSpendSub").textContent = `${bpFmtNum(kpis.ai_activity_count)} requests`;
+      document.getElementById("bpKpiSavings").textContent = bpFmtUsdFull(kpis.ai_savings_usd_estimate);
+      document.getElementById("bpKpiActivity").textContent = bpFmtNum(kpis.ai_activity_count);
+
+      document.getElementById("bpOutcomeWon").textContent = bpFmtNum(outcomes.won_count);
+      document.getElementById("bpOutcomeLost").textContent = bpFmtNum(outcomes.lost_count);
+      document.getElementById("bpOutcomeOpen").textContent = bpFmtNum(outcomes.open_count);
+      document.getElementById("bpOutcomePipeline").textContent = bpFmtUsdFull(outcomes.pipeline_value_usd);
+      document.getElementById("bpOutcomeClosedWon").textContent = bpFmtUsdFull(outcomes.closed_won_value_usd);
+
+      document.getElementById("bpMeasurementNote").textContent = profile.measurement_note || "";
+
+      bpRenderFunctionDonut(profile.business_function_breakdown || []);
+    }
+
+    function bpRenderFunctionDonut(rows) {
+      const canvas = document.getElementById("bpFunctionDonut");
+      const legend = document.getElementById("bpFunctionLegend");
+      if (!rows.length) {
+        legend.innerHTML = `<div class="bp-empty" style="padding:8px 0">No AI activity with a classified business function in this period.</div>`;
+        if (bpFunctionChart) { bpFunctionChart.destroy(); bpFunctionChart = null; }
+        return;
+      }
+      const palette = ["--accent", "--accent-purple", "--accent-green", "--accent-yellow", "--accent-red"];
+      const colors = palette.map((v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#8b949e");
+      const total = rows.reduce((sum, r) => sum + r.spend_usd, 0) || 1;
+
+      if (bpFunctionChart) bpFunctionChart.destroy();
+      bpFunctionChart = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels: rows.map((r) => r.business_purpose),
+          datasets: [{ data: rows.map((r) => r.spend_usd), backgroundColor: colors, borderWidth: 0 }],
+        },
+        options: {
+          cutout: "68%",
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${bpFmtUsdFull(ctx.parsed)}` } } },
+        },
+      });
+
+      legend.innerHTML = rows.map((r, i) => {
+        const pct = Math.round((r.spend_usd / total) * 100);
+        return `<div class="row"><span style="color:${colors[i % colors.length]}">● ${r.business_purpose}</span><span class="bp-num">${bpFmtUsdFull(r.spend_usd)} · ${pct}%</span></div>`;
+      }).join("");
+    }
+
+    async function bpLoadConnections(workspaceId) {
+      const container = document.getElementById("bpConnectedSystems");
+      try {
+        const path = workspaceId ? `/api/integrations/connections?workspace_id=${encodeURIComponent(workspaceId)}` : "/api/integrations/connections?workspace_id=default";
+        const data = await apiGet(path);
+        const items = (data.connections || []).filter((c) => c.status === "connected" || c.status === "active");
+        if (!items.length) {
+          container.innerHTML = `<div class="bp-empty">No connected systems in this workspace yet.</div>`;
+          return;
+        }
+        container.innerHTML = items.map((c) => {
+          let dotClass = "off";
+          let statusText = "Not connected";
+          if (c.last_success_at) {
+            const ageMs = Date.now() - new Date(c.last_success_at).getTime();
+            dotClass = ageMs < 24 * 3600 * 1000 ? "" : "stale";
+            statusText = dotClass === "" ? "Connected" : "Stale — last synced " + new Date(c.last_success_at).toLocaleDateString();
+          }
+          return `<div class="bp-conn-row">
+            <span>${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)}</span>
+            <span class="bp-conn-status"><span class="bp-conn-dot ${dotClass}"></span>${statusText}</span>
+          </div>`;
+        }).join("");
+      } catch (err) {
+        container.innerHTML = `<div class="bp-empty">Could not load connections.</div>`;
+      }
+    }
+
+    async function bpAsk(question) {
+      const q = (question || "").trim();
+      if (!q) return;
+      const slot = document.getElementById("bpAskAnswer");
+      const goButton = document.querySelector(".bp-ask-go");
+      slot.style.display = "block";
+      slot.innerHTML = `<div class="cp-ask-thinking">Calculating from governed activity…</div>`;
+      if (goButton) goButton.disabled = true;
+      try {
+        const response = await fetch("/api/reports/bot-efficiency/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: q,
+            days: Number(document.getElementById("bpDaysSelect").value || 90),
+            timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            workspace_id: bpWorkspaceId() || undefined,
+          }),
+        });
+        if (!response.ok) throw new Error(`Request failed (${response.status})`);
+        const data = await response.json();
+        slot.innerHTML = typeof renderAskAnswerCard === "function" ? renderAskAnswerCard(data) : `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+      } catch (err) {
+        slot.innerHTML = `<div class="cp-ask-error"><strong>CostPilot did not generate an answer.</strong><br/>${(err.message || "").replace(/</g, "&lt;")}</div>`;
+      } finally {
+        if (goButton) goButton.disabled = false;
+      }
+    }
+
+    document.getElementById("bpAskForm")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      bpAsk(document.getElementById("bpAskInput").value);
+    });
+    document.getElementById("bpAccountSelect")?.addEventListener("change", (e) => {
+      bpCurrentAccount = e.target.value;
+      const url = new URL(location.href);
+      url.searchParams.set("account", bpCurrentAccount);
+      history.replaceState(null, "", url);
+      bpLoadProfile();
+    });
+    document.getElementById("bpDaysSelect")?.addEventListener("change", bpLoadProfile);
+
+    bpLoadAccounts();
+  </script>
+  <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
+  <script src="/js/global-nav.js?v=20260808c-label-fix"></script>
+</body>
+</html>
