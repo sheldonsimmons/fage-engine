@@ -1562,7 +1562,16 @@ def project_activity_reporting(
             TokenTransaction.workspace_id.is_(None) & (WorkItem.workspace_id == workspace_id),
         ))
 
-    base_rows = query.order_by(TokenTransaction.timestamp.desc()).all()
+    # Hard SQL-side cap, independent of activity_limit (which only slices
+    # the already-loaded Python list further down -- see
+    # project_fage_tech_debt memory: this function loads the full joined
+    # row set into Python before aggregating, and an unscoped call (no
+    # workspace_id) or a workspace with a large row count can load tens of
+    # thousands of ORM objects into memory. This bounds the blast radius
+    # without changing behavior for any normal-sized request; the real fix
+    # (SQL-side aggregation) is a separate, larger piece of work.
+    MAX_REPORTING_ROWS = 5000
+    base_rows = query.order_by(TokenTransaction.timestamp.desc()).limit(MAX_REPORTING_ROWS).all()
     # Loaded once per report call, not once per row -- see
     # core/model_provider.py's resolve_provider() docstring for why a
     # per-row db lookup here would be a real N+1 query problem.
