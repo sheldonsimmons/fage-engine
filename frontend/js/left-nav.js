@@ -7,11 +7,15 @@
   // than global-nav.js: no Manage/Tools dropdowns, no mobile drawer yet --
   // just the items that map to a real page in this app. "Alerts" is
   // omitted rather than pointed at something that isn't actually an
-  // alerts feature -- there's no alerting page in this app yet.
+  // alerts feature -- there's no alerting page in this app yet. There is
+  // also no separate "Dashboards" item: workspace.html looked like a fit
+  // at first but is actually a trial-onboarding-only page (its own
+  // workspace-stats call 404s for any non-trial workspace) -- Overview
+  // and Operate already cover general/live dashboards, so nothing was
+  // dropped by removing it.
   const items = [
     { label: "Home", href: "/index.html", icon: "home" },
     { label: "Ask CostPilot", href: "#", icon: "ask", id: "cpLeftNavAsk" },
-    { label: "Dashboards", href: "/workspace.html", icon: "grid" },
     { label: "Business Profiles", href: "/business-profile.html", icon: "building" },
     { label: "AI Activity", href: "/operate.html", icon: "pulse" },
     { label: "Optimization", href: "/savings.html", icon: "target" },
