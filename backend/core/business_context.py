@@ -121,6 +121,20 @@ BUSINESS_CONTEXT_TEMPLATES = {
             "account, assignee, service agent, and operational controls."
         ),
     ),
+    "hubspot_deal": BusinessContextTemplate(
+        key="hubspot_deal",
+        name="HubSpot Deal",
+        source_platform="HubSpot",
+        context_type="opportunity",
+        work_label="Deal",
+        customer_label="Company",
+        source_record_types=("deal",),
+        description=(
+            "Connects AI activity to a HubSpot Deal, and its eventual "
+            "stage/close outcome once synced -- the HubSpot analog of "
+            "salesforce_opportunity."
+        ),
+    ),
 }
 
 

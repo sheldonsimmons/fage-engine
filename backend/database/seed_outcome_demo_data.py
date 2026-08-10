@@ -79,6 +79,19 @@ CASE_SUBJECTS = [
     "Login access issue", "Billing discrepancy", "Integration failure",
     "Performance degradation", "Feature request escalation", "Data export request",
 ]
+# ServiceNow incidents and HubSpot deals -- second and third platforms in
+# the demo dataset, proving business context/outcome intelligence isn't
+# Salesforce-only, the same "prove it with two" principle applied to the
+# real connector work earlier. Vocabulary matches each platform's own
+# adapter (core/outcome_adapters/servicenow_incident.py's state strings,
+# HubSpot's stage vocabulary) rather than reusing Salesforce's.
+INCIDENT_SUBJECTS = [
+    "VPN connection failure", "Email delivery delayed", "Application timeout errors",
+    "Password reset request", "Printer not responding", "Network latency spike",
+]
+INCIDENT_STATES = ["New", "In Progress", "On Hold", "Resolved", "Closed"]
+DEAL_NAMES = ["New Business", "Expansion", "Renewal", "Upsell", "Cross-sell"]
+DEAL_STAGES_OPEN = ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "contractsent"]
 
 # A shared rep pool -- a real business has a handful of people covering
 # many accounts, not a unique employee per client. Owners are internal to
@@ -217,7 +230,7 @@ def _assign_owner(db, work_item, owner, role):
     db.add(WorkItemUser(work_item_id=work_item.id, work_user_id=owner.id, role=role))
 
 
-def _make_transactions(rng, db, work_item, department, owner, agent, n, days_ago_min, days_ago_max):
+def _make_transactions(rng, db, work_item, department, owner, agent, n, days_ago_min, days_ago_max, source_platform="Salesforce"):
     for _ in range(n):
         tier, model_name, in_cost, out_cost = rng.choice(MODELS)
         input_tokens = rng.randint(200, 2200)
@@ -232,7 +245,7 @@ def _make_transactions(rng, db, work_item, department, owner, agent, n, days_ago
         db.add(TokenTransaction(
             department=f"{WORKSPACE_ID}:{department}",
             workspace_id=WORKSPACE_ID,
-            source_platform="Salesforce",
+            source_platform=source_platform,
             work_item_id=work_item.id,
             work_user_id=owner.id if owner else None,
             agent_id=agent.id if agent else None,
@@ -241,7 +254,7 @@ def _make_transactions(rng, db, work_item, department, owner, agent, n, days_ago
             origin_record_name=work_item.name,
             actor_name=owner.name if owner else None,
             actor_email=owner.email if owner else None,
-            actor_source_platform="Salesforce" if owner else None,
+            actor_source_platform=source_platform if owner else None,
             model_tier=tier,
             model_name=model_name,
             input_tokens=input_tokens,
@@ -255,7 +268,7 @@ def _make_transactions(rng, db, work_item, department, owner, agent, n, days_ago
         ))
 
 
-def _make_activity_notes(rng, db, work_item, department, owner, agent, days_ago_min, days_ago_max):
+def _make_activity_notes(rng, db, work_item, department, owner, agent, days_ago_min, days_ago_max, source_platform="Salesforce"):
     """Lightweight Task/Note-style activity per record -- small, cheap AI
     calls (drafting a note, summarizing a call) rather than full work
     sessions, so a record looks actively worked by its owner, not just a
@@ -273,7 +286,7 @@ def _make_activity_notes(rng, db, work_item, department, owner, agent, days_ago_
         db.add(TokenTransaction(
             department=f"{WORKSPACE_ID}:{department}",
             workspace_id=WORKSPACE_ID,
-            source_platform="Salesforce",
+            source_platform=source_platform,
             work_item_id=work_item.id,
             work_user_id=owner.id if owner else None,
             agent_id=agent.id if agent else None,
@@ -282,7 +295,7 @@ def _make_activity_notes(rng, db, work_item, department, owner, agent, days_ago_
             origin_record_name=f"{note_text} — {work_item.name}",
             actor_name=owner.name if owner else None,
             actor_email=owner.email if owner else None,
-            actor_source_platform="Salesforce" if owner else None,
+            actor_source_platform=source_platform if owner else None,
             model_tier="Scout", model_name="claude-3-5-haiku",
             input_tokens=input_tokens, output_tokens=output_tokens,
             tokens_saved=0, cost_usd=cost_usd, was_pruned=False,
@@ -304,7 +317,10 @@ def seed(db, dry_run=False):
 
     work_item_count = 0
     note_count = 0
-    outcome_counts = {"won": 0, "lost": 0, "open": 0, "case_closed": 0, "case_open": 0}
+    outcome_counts = {
+        "won": 0, "lost": 0, "open": 0, "case_closed": 0, "case_open": 0,
+        "incident_closed": 0, "incident_open": 0, "deal_won": 0, "deal_lost": 0, "deal_open": 0,
+    }
 
     for company in COMPANIES:
         # A per-company RNG, used ONLY for the three counts drawn below
@@ -451,6 +467,110 @@ def seed(db, dry_run=False):
             _make_activity_notes(item_rng, db, case, department, owner, agent, 2, 730)
             note_count += 1
 
+        # 1-3 ServiceNow incidents per account -- a second platform for the
+        # same support/success team, matching the honest outcome shape
+        # servicenow_incident.py actually supports (status only, no
+        # dollar-value/success signal -- an incident has neither).
+        incident_count = company_rng.randint(1, 3)
+        for i in range(incident_count):
+            incident_external_id = _entity_id("INCIDENT", company, i)
+            item_rng = random.Random(f"{RANDOM_SEED}:{incident_external_id}")
+            incident_name = f"{company} — {item_rng.choice(INCIDENT_SUBJECTS)}"
+            if db.query(WorkItem).filter_by(external_id=incident_external_id).first():
+                continue
+            incident = WorkItem(
+                external_id=incident_external_id, name=incident_name, account_id=account.id,
+                context_type="case", context_template="servicenow_case",
+                source_platform="ServiceNow", source_record_type="incident",
+                source_record_id=_entity_id("SNID-INC", company, i),
+                workspace_id=WORKSPACE_ID, status="active",
+            )
+            db.add(incident)
+            db.flush()
+            work_item_count += 1
+
+            owner = item_rng.choice(reps_by_dept["Support"] + reps_by_dept["Success"])
+            department = "Support" if owner in reps_by_dept["Support"] else "Success"
+            agent = random.Random(f"{RANDOM_SEED}:agent:{incident_external_id}").choice(agents_by_dept[department])
+            _assign_owner(db, incident, owner, "Owner")
+
+            now = datetime.utcnow()
+            is_closed = item_rng.random() < 0.6
+            status = item_rng.choice(["Resolved", "Closed"]) if is_closed else item_rng.choice(["New", "In Progress", "On Hold"])
+            outcome_counts["incident_closed" if is_closed else "incident_open"] += 1
+            outcome_date = _weighted_past_datetime(item_rng, 2, 730) if is_closed else None
+
+            db.add(WorkItemOutcome(
+                work_item_id=incident.id, workspace_id=WORKSPACE_ID,
+                outcome_status=status, outcome_value=None, outcome_success=None,
+                is_closed=is_closed, source_system="servicenow", source_object="incident",
+                external_id=incident.source_record_id, source_modified_at=outcome_date or now,
+                last_synced_at=now, retrieval_method="seed",
+            ))
+            db.add(WorkItemOutcomeEvent(
+                work_item_id=incident.id, workspace_id=WORKSPACE_ID,
+                outcome_status=status, outcome_value=None, outcome_success=None,
+                is_closed=is_closed, retrieval_method="seed", recorded_at=outcome_date or now,
+            ))
+            _make_transactions(item_rng, db, incident, department, owner, agent, item_rng.randint(3, 10), 2, 730, source_platform="ServiceNow")
+            _make_activity_notes(item_rng, db, incident, department, owner, agent, 2, 730, source_platform="ServiceNow")
+            note_count += 1
+
+        # 1-3 HubSpot deals per account -- a second platform for the same
+        # sales team, matching the real HubSpot Deal vocabulary (stage
+        # names, closedwon/closedlost) rather than reusing Salesforce's.
+        deal_count = company_rng.randint(1, 3)
+        for i in range(deal_count):
+            deal_external_id = _entity_id("DEAL", company, i)
+            item_rng = random.Random(f"{RANDOM_SEED}:{deal_external_id}")
+            deal_name = f"{company} — {item_rng.choice(DEAL_NAMES)} {i + 1}"
+            if db.query(WorkItem).filter_by(external_id=deal_external_id).first():
+                continue
+            deal = WorkItem(
+                external_id=deal_external_id, name=deal_name, account_id=account.id,
+                context_type="opportunity", context_template="hubspot_deal",
+                source_platform="HubSpot", source_record_type="deal",
+                source_record_id=_entity_id("HSID-DEAL", company, i),
+                workspace_id=WORKSPACE_ID, status="active",
+            )
+            db.add(deal)
+            db.flush()
+            work_item_count += 1
+
+            owner = item_rng.choice(reps_by_dept["Sales"])
+            agent = random.Random(f"{RANDOM_SEED}:agent:{deal_external_id}").choice(agents_by_dept["Sales"])
+            _assign_owner(db, deal, owner, "Owner")
+
+            outcome_roll = item_rng.random()
+            deal_value = round(item_rng.uniform(tier_min, tier_max) / 500) * 500
+            now = datetime.utcnow()
+            if outcome_roll < 0.35:
+                stage, success, closed, value = "closedwon", True, True, deal_value
+                outcome_counts["deal_won"] += 1
+            elif outcome_roll < 0.50:
+                stage, success, closed, value = "closedlost", False, True, deal_value
+                outcome_counts["deal_lost"] += 1
+            else:
+                stage, success, closed, value = item_rng.choice(DEAL_STAGES_OPEN), None, False, deal_value
+                outcome_counts["deal_open"] += 1
+            outcome_date = _weighted_past_datetime(item_rng, 5, 730) if closed else None
+
+            db.add(WorkItemOutcome(
+                work_item_id=deal.id, workspace_id=WORKSPACE_ID,
+                outcome_status=stage, outcome_value=value, outcome_success=success,
+                is_closed=closed, source_system="hubspot", source_object="deal",
+                external_id=deal.source_record_id, source_modified_at=outcome_date or now,
+                last_synced_at=now, retrieval_method="seed",
+            ))
+            db.add(WorkItemOutcomeEvent(
+                work_item_id=deal.id, workspace_id=WORKSPACE_ID,
+                outcome_status=stage, outcome_value=value, outcome_success=success,
+                is_closed=closed, retrieval_method="seed", recorded_at=outcome_date or now,
+            ))
+            _make_transactions(item_rng, db, deal, "Sales", owner, agent, item_rng.randint(6, 22), 3, 730, source_platform="HubSpot")
+            _make_activity_notes(item_rng, db, deal, "Sales", owner, agent, 3, 730, source_platform="HubSpot")
+            note_count += 1
+
     print(f"Would create {work_item_count} work items across {len(COMPANIES)} accounts." if dry_run
           else f"Created {work_item_count} work items across {len(COMPANIES)} accounts.")
     print(f"Seeded rep pool: {sum(len(v) for v in reps_by_dept.values())} people across Sales/Support/Success.")
@@ -458,6 +578,8 @@ def seed(db, dry_run=False):
     print(f"Added Task/Note activity for {note_count} work items.")
     print(f"Opportunity outcomes: {outcome_counts['won']} won, {outcome_counts['lost']} lost, {outcome_counts['open']} open.")
     print(f"Case outcomes: {outcome_counts['case_closed']} closed, {outcome_counts['case_open']} open.")
+    print(f"ServiceNow incident outcomes: {outcome_counts['incident_closed']} closed, {outcome_counts['incident_open']} open.")
+    print(f"HubSpot deal outcomes: {outcome_counts['deal_won']} won, {outcome_counts['deal_lost']} lost, {outcome_counts['deal_open']} open.")
 
     if dry_run:
         db.rollback()
