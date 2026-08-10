@@ -464,16 +464,15 @@ def reset(db):
         .filter(WorkUser.workspace_id == WORKSPACE_ID, WorkUser.external_id.like(f"{PREFIX}-%"))
         .all()
     ]
-    # RegisteredAgent has no workspace_id/external_id column -- name is
-    # globally unique, so filter by our own fixed name list (deliberately
-    # distinct from seed_historical_demo.py's AGENTS) rather than a broad
-    # department-prefix wildcard, which could otherwise delete that other
-    # script's agents too if it's ever run against this same workspace.
-    all_agent_names = [name for names in AGENTS_BY_DEPT.values() for name in names]
-    agent_ids = [
-        a.id for a in db.query(RegisteredAgent).filter(RegisteredAgent.name.in_(all_agent_names)).all()
-    ]
-    if not account_ids and not rep_ids and not agent_ids:
+    # RegisteredAgent rows are deliberately NOT deleted on reset: they're
+    # small, harmless, reusable metadata (find-or-create by name+department
+    # in _seed_agents), and on Postgres (unlike the SQLite used for local
+    # testing) foreign keys are actually enforced -- some other real
+    # process (live routing, another sync job) can end up referencing the
+    # same agent row via its own token_transactions, and deleting it out
+    # from under those rows fails with an IntegrityError. Leaving agents in
+    # place avoids that entirely and costs nothing.
+    if not account_ids and not rep_ids:
         print("Nothing to reset.")
         return
     work_item_ids = [
@@ -486,9 +485,8 @@ def reset(db):
     db.query(WorkItem).filter(WorkItem.id.in_(work_item_ids)).delete(synchronize_session=False)
     db.query(WorkAccount).filter(WorkAccount.id.in_(account_ids)).delete(synchronize_session=False)
     db.query(WorkUser).filter(WorkUser.id.in_(rep_ids)).delete(synchronize_session=False)
-    db.query(RegisteredAgent).filter(RegisteredAgent.id.in_(agent_ids)).delete(synchronize_session=False)
     db.commit()
-    print(f"Removed {len(account_ids)} accounts, {len(work_item_ids)} work items, {len(rep_ids)} reps, and {len(agent_ids)} agents.")
+    print(f"Removed {len(account_ids)} accounts, {len(work_item_ids)} work items, and {len(rep_ids)} reps.")
 
 
 if __name__ == "__main__":
