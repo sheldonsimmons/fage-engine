@@ -28,6 +28,7 @@ from database.models import (
 )
 from core.router import route
 from core.auditor import write_audit_event
+from api.routes_work_items import resolve_account_through_merge
 from core.keywords import check_terms
 from core.budget import effective_budget_context, reconcile_throttle_state
 
@@ -237,6 +238,7 @@ def _resolve_work_item(db: Session, req: RouteRequest, department: str) -> Optio
                 account = db.query(WorkAccount).filter(
                     WorkAccount.external_id == account_external_id
                 ).first()
+                account = resolve_account_through_merge(db, account)
                 if not account:
                     account = WorkAccount(
                         external_id=account_external_id,

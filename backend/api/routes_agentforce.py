@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from api.routes_proxy import _get_account
 from api.routes_router import RouteRequest, route_payload
+from api.routes_work_items import resolve_account_through_merge
 from core.business_context import normalize_context_type
 from core.model_client import get_mode_info
 from database.db import get_db
@@ -281,6 +282,7 @@ def _resolve_customer(
         return None
     external_id = external_id or f"SF-CUSTOMER-{name.lower().replace(' ', '-')}"
     account = db.query(WorkAccount).filter(WorkAccount.external_id == external_id).first()
+    account = resolve_account_through_merge(db, account)
     if account and account.workspace_id not in (None, workspace_id):
         raise HTTPException(
             status_code=409,

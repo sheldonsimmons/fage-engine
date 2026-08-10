@@ -713,6 +713,27 @@ def resolve_work_account(db: Session, identifier: str) -> Optional[WorkAccount]:
     return account
 
 
+def resolve_account_through_merge(db: Session, account: Optional[WorkAccount]) -> Optional[WorkAccount]:
+    """Follow merged_into_work_account_id to the surviving account.
+
+    Merging (see merge_work_accounts) only repoints WorkItems that exist at
+    merge time -- it can't do anything about a live-write path that later
+    looks an account back up by its old external_id (two connected orgs
+    can genuinely share one, e.g. two Salesforce dev orgs both named
+    "GenePoint"). Without this, new activity silently starts a second,
+    invisible pocket of data on the archived account instead of landing on
+    the one actually shown on Business Profile. Any write path that
+    resolves a WorkAccount by external_id and then attaches new activity
+    to it should call this on the result first. Bounded hop count is
+    defensive only -- merges aren't expected to chain.
+    """
+    seen = set()
+    while account and account.merged_into_work_account_id and account.id not in seen:
+        seen.add(account.id)
+        account = db.query(WorkAccount).filter(WorkAccount.id == account.merged_into_work_account_id).first()
+    return account
+
+
 @router.get("/accounts")
 def list_accounts(
     workspace_id: Optional[str] = Query(None),
