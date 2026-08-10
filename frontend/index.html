@@ -9,9 +9,15 @@
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
   <style>
     /* ── Executive landing layout ─────────────────────────────────────────────── */
-    body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-base); }
+    /* This page's internal-scroll region (trial banner + header + scrollable
+       body) now lives on .cp-app-main instead of <body> directly, so it sits
+       beside the left-nav sidebar as a sibling flex column -- see
+       css/left-nav.css's .cp-app-shell/.cp-left-nav. */
+    body { background: var(--bg-base); }
+    .cp-app-main { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
     .exec-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -1380,7 +1386,10 @@
   <script src="/js/chart.umd.min.js"></script>
   <script src="/js/chart-theme.js"></script>
 </head>
-<body class="cp-executive-page">
+<body class="cp-executive-page cp-uses-left-nav">
+<div class="cp-app-shell">
+<aside id="cpLeftNavMount"></aside>
+<div class="cp-app-main">
 
 <!-- ── Trial Banner (shown only when a trial workspace is active) ─────────────── -->
 <div id="trialBanner" style="display:none;align-items:center;justify-content:space-between;
@@ -2185,8 +2194,12 @@ setInterval(loadOverview, 30000);
   banner.style.display = "flex";
 })();
 </script>
+
+</div>
+</div>
 <script src="/vendor/tabler/tabler.min.js?v=1.4.0"></script>
 <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
 <script src="/js/global-nav.js?v=20260808c-label-fix"></script>
+<script src="/js/left-nav.js?v=20260810a"></script>
 </body>
 </html>

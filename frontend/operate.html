@@ -8,9 +8,14 @@
   <link rel="stylesheet" href="css/styles.css?v=20260724-v452" />
   <link rel="stylesheet" href="css/demo.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
   <style>
     /* ── Live-style layout override ──────────────────────────────────────────── */
-    body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    /* Internal-scroll region (header + agentlake focus bar + dash-content)
+       now lives on .cp-app-main instead of <body> directly, so it sits
+       beside the left-nav sidebar as a sibling flex column -- see
+       css/left-nav.css's .cp-app-shell/.cp-left-nav. */
+    .cp-app-main { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
     /* Header nav */
     .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
@@ -141,7 +146,10 @@
     }
   </style>
 </head>
-<body data-dashboard-scope="all">
+<body data-dashboard-scope="all" class="cp-uses-left-nav">
+<div class="cp-app-shell">
+<aside id="cpLeftNavMount"></aside>
+<div class="cp-app-main">
 
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <header class="header">
@@ -772,6 +780,8 @@
   CostPilot v0.1.0 &nbsp;|&nbsp; <a href="/onboarding.html">⚙ Connect your platform</a>
 </footer>
 
+</div>
+</div>
 <script src="/js/chart.umd.min.js"></script>
 <script src="/js/Sortable.min.js"></script>
 <script src="js/api.js"></script>
@@ -832,5 +842,6 @@ document.addEventListener("click", function() {
 <script src="/js/mobile-guard.js"></script>
 <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
 <script src="/js/global-nav.js?v=20260808c-label-fix"></script>
+<script src="/js/left-nav.js?v=20260810a"></script>
 </body>
 </html>

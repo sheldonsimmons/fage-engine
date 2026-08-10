@@ -74,3 +74,16 @@
   .cp-app-shell { flex-direction: column; }
   .cp-left-nav__links { flex-direction: row; flex-wrap: wrap; }
 }
+
+/* Pages that keep their existing global-nav.js header (for its Ask drawer,
+   health dot, and help/tour button) alongside the new sidebar -- opt-in via
+   body.cp-uses-left-nav so this never affects business-profile.html (which
+   dropped global-nav.js entirely) or any page not yet converted. Hides only
+   the pieces the sidebar now makes redundant (primary links, Manage/Tools
+   dropdowns, the workspace switcher -- left-nav.js has its own), leaving
+   #cpGlobalAsk / #cpGlobalStatus / #cpGlobalHelp visible and fully working. */
+.cp-uses-left-nav .cp-global-nav__primary,
+.cp-uses-left-nav .cp-global-nav__mobile-trigger,
+.cp-uses-left-nav .cp-global-nav__utilities .cp-workspace-switcher {
+  display: none !important;
+}
