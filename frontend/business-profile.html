@@ -266,9 +266,21 @@
           bpShowEmpty("No accounts found in this workspace yet. Accounts are created automatically when a connected system (e.g. Salesforce) reports activity tied to one.");
           return;
         }
-        select.innerHTML = accounts.map((a) =>
-          `<option value="${a.external_id}">${a.name}</option>`
-        ).join("");
+        // Two real Salesforce orgs connected to the same workspace can
+        // produce accounts with the identical display name (both orgs
+        // seeded from Salesforce's standard demo dataset) -- each is a
+        // genuinely distinct real account, correctly not merged, but an
+        // unqualified name in the picker makes them impossible to tell
+        // apart. Append a short id suffix only for names that actually
+        // collide, so the common case (no collision) stays clean.
+        const nameCounts = {};
+        accounts.forEach((a) => { nameCounts[a.name] = (nameCounts[a.name] || 0) + 1; });
+        select.innerHTML = accounts.map((a) => {
+          const label = nameCounts[a.name] > 1
+            ? `${a.name} (…${a.external_id.slice(-8)})`
+            : a.name;
+          return `<option value="${a.external_id}">${label}</option>`;
+        }).join("");
         if (bpCurrentAccount && accounts.some((a) => a.external_id === bpCurrentAccount)) {
           select.value = bpCurrentAccount;
         } else {
