@@ -176,20 +176,32 @@ def _seed_reps(db, dry_run_existing):
 
 def _seed_agents(db):
     """Create (or reuse) the shared RegisteredAgent pool, keyed by
-    (name, department) the same way seed_historical_demo.py's AGENTS
-    lookup works -- RegisteredAgent.name is globally unique, so an
-    existing-by-name query is what actually keeps this idempotent, not a
-    workspace_id column (there isn't one on this table). Returns
+    (name, department). RegisteredAgent.name is globally unique across the
+    whole app -- and this app already has a large pre-existing catalog of
+    agent names from unrelated demo/test scenarios, so a name from
+    AGENTS_BY_DEPT can collide with one we don't own. Reuse is matched by
+    department + name-prefix (covers a disambiguated name from a prior
+    run); a genuine collision with someone else's agent falls back to an
+    auto-numbered variant instead of crashing the whole seed run. Returns
     {department: [RegisteredAgent, ...]}."""
     agents_by_dept = {}
     for dept, names in AGENTS_BY_DEPT.items():
         agents = []
         for name in names:
             department = f"{WORKSPACE_ID}:{dept}"
-            agent = db.query(RegisteredAgent).filter_by(name=name, department=department).first()
+            agent = (
+                db.query(RegisteredAgent)
+                .filter(RegisteredAgent.department == department, RegisteredAgent.name.like(f"{name}%"))
+                .first()
+            )
             if not agent:
+                candidate_name = name
+                suffix = 2
+                while db.query(RegisteredAgent).filter_by(name=candidate_name).first():
+                    candidate_name = f"{name} ({suffix})"
+                    suffix += 1
                 agent = RegisteredAgent(
-                    name=name, department=department, source_platform="Salesforce",
+                    name=candidate_name, department=department, source_platform="Salesforce",
                     permissions="read,write", target_table="outcome_demo",
                     status="idle", collision_policy="lock",
                     min_tier=1, max_tier=4, pruning_enabled=True, archived=False,
