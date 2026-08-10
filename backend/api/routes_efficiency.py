@@ -126,6 +126,12 @@ class AskCostPilotRequest(BaseModel):
     user_external_id: Optional[str] = None
     agent_id: Optional[int] = None
     account_id: Optional[str] = None
+    # True only when the caller is a page whose entire context IS this
+    # account (e.g. Business Profile), as opposed to a multi-turn chat
+    # widget where account_id might be a stale filter left over from a
+    # previous question. Pinned scope survives _ask_reporting_filters'
+    # explicit-named-subject clearing below; unpinned scope does not.
+    account_id_pinned: bool = False
     source_platform: Optional[str] = None
     record_type: Optional[str] = None
     model_tier: Optional[str] = None
@@ -1057,8 +1063,15 @@ def _ask_reporting_filters(request: AskCostPilotRequest, parsed: dict) -> dict:
         # A named subject must be discovered across the filtered workspace.
         # Keep cross-cutting scope (date, platform, model, record type), but do
         # not let an old person/agent/context/department selection hide it.
+        # account_id is the one exception: a pinned account (the whole page
+        # IS this account, e.g. Business Profile) isn't a stale leftover
+        # filter the way a chat widget's account_id might be, so a question
+        # like "top agent for Acme Corp" on Acme's own profile page should
+        # stay scoped to Acme, not search the entire workspace for whichever
+        # account "Acme Corp" happens to name.
         filters["project_id"] = None
-        filters["account_id"] = None
+        if not request.account_id_pinned:
+            filters["account_id"] = None
         filters["user_external_id"] = None
         filters["agent_id"] = None
         filters["charged_unit"] = None

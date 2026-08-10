@@ -145,6 +145,103 @@ def test_account_profile_reports_prior_period_spend_for_comparison():
     # Prior period is the same length (8 days), ending where the current
     # period starts -- the 20-days-ago transaction falls inside it.
     assert profile["prior_period"]["ai_investment_usd"] == 10.0
+    # Activity count and savings estimate get the same prior-period
+    # treatment as AI investment -- not just the one metric.
+    assert profile["prior_period"]["ai_activity_count"] == 1
+    assert profile["kpis"]["ai_activity_count"] == 1
+
+
+def test_account_profile_derives_tier_health_and_active_since():
+    db = _session()
+    account = _seed(db)
+
+    profile = account_profile(
+        identifier="ACCOUNT-ACME", workspace_id="WS-1",
+        date_from=datetime.utcnow() - timedelta(days=1),
+        date_to=datetime.utcnow() + timedelta(days=1),
+        days=90, db=db,
+    )
+    # Seeded pipeline (300000) + closed won (600000) = 900000 -> Mid-Market
+    # bucket (>= 100000, < 1000000), a heuristic documented as such in
+    # account_profile(), not a real CRM segment.
+    assert profile["account"]["tier"] == "Mid-Market"
+    assert profile["account"]["health_status"] in {"healthy", "attention"}
+    assert profile["account"]["active_since"] is not None
+
+
+def test_account_profile_health_flags_attention_on_activity_drop():
+    db = _session()
+    account = WorkAccount(external_id="ACCOUNT-DROP", name="Drop Co", workspace_id="WS-1")
+    db.add(account); db.flush()
+    item = WorkItem(external_id="PROJ-DROP", name="Drop Deal", account_id=account.id, workspace_id="WS-1")
+    db.add(item); db.flush()
+
+    now = datetime.utcnow()
+    # Heavy activity in the prior period, none in the current period.
+    for _ in range(5):
+        db.add(TokenTransaction(
+            department="WS-1:Sales", workspace_id="WS-1", work_item_id=item.id,
+            model_tier="Scout", model_name="claude", input_tokens=100, output_tokens=50,
+            tokens_saved=0, cost_usd=10.0, timestamp=now - timedelta(days=10),
+        ))
+    db.commit()
+
+    profile = account_profile(
+        identifier="ACCOUNT-DROP", workspace_id="WS-1",
+        date_from=now - timedelta(days=7), date_to=now + timedelta(days=1),
+        days=7, db=db,
+    )
+    assert profile["kpis"]["ai_activity_count"] == 0
+    assert profile["account"]["health_status"] == "attention"
+
+
+def test_account_profile_support_cases_and_active_projects_rows():
+    db = _session()
+    account = WorkAccount(external_id="ACCOUNT-OPS", name="Ops Co", workspace_id="WS-1")
+    db.add(account); db.flush()
+
+    resolved_case = WorkItem(
+        external_id="CASE-1", name="Resolved case", account_id=account.id,
+        context_type="case", workspace_id="WS-1",
+    )
+    open_case = WorkItem(
+        external_id="CASE-2", name="Open case", account_id=account.id,
+        context_type="case", workspace_id="WS-1",
+    )
+    active_project = WorkItem(
+        external_id="PROJ-1", name="Active project", account_id=account.id,
+        context_type="project", status="active", workspace_id="WS-1",
+    )
+    completed_project = WorkItem(
+        external_id="PROJ-2", name="Completed project", account_id=account.id,
+        context_type="project", status="completed", workspace_id="WS-1",
+    )
+    db.add_all([resolved_case, open_case, active_project, completed_project]); db.flush()
+    db.add(WorkItemOutcome(
+        work_item_id=resolved_case.id, workspace_id="WS-1", outcome_status="Closed",
+        is_closed=True, source_system="salesforce", source_object="Case",
+        external_id="500RESOLVED", last_synced_at=datetime.utcnow(),
+    ))
+    db.commit()
+
+    profile = account_profile(identifier="ACCOUNT-OPS", workspace_id="WS-1", date_from=None, date_to=None, days=90, db=db)
+
+    assert profile["outcomes"]["support_cases"] == {"total": 2, "resolved": 1}
+    assert profile["outcomes"]["active_projects"]["in_progress"] == 1
+    assert profile["outcomes"]["active_projects"]["completed"] == 1
+
+
+def test_account_profile_omits_support_and_project_rows_when_absent():
+    db = _session()
+    account = _seed(db)  # only has opportunity-type work items
+    profile = account_profile(
+        identifier="ACCOUNT-ACME", workspace_id="WS-1",
+        date_from=datetime.utcnow() - timedelta(days=1),
+        date_to=datetime.utcnow() + timedelta(days=1),
+        days=90, db=db,
+    )
+    assert profile["outcomes"]["support_cases"] is None
+    assert profile["outcomes"]["active_projects"] is None
 
 
 def test_account_profile_journey_breakdown_groups_by_work_item_type():
@@ -204,6 +301,11 @@ def test_account_profile_handles_account_with_no_work_items():
     assert profile["work_item_count"] == 0
     assert profile["kpis"]["ai_investment_usd"] == 0.0
     assert profile["outcomes"]["won_count"] == 0
+    assert profile["outcomes"]["support_cases"] is None
+    assert profile["outcomes"]["active_projects"] is None
+    assert profile["account"]["active_since"] is None
+    assert profile["account"]["tier"] is None
+    assert profile["account"]["health_status"] is None
 
 
 def test_account_profile_404s_for_unknown_account():

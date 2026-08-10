@@ -829,16 +829,20 @@ def account_profile(
     }
     if not work_item_ids:
         return {
-            "account": _account_json(account),
+            "account": {**_account_json(account), "active_since": None, "tier": None, "health_status": None},
             "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
             "work_item_count": 0,
             "kpis": empty_kpis,
-            "prior_period": {"date_from": None, "date_to": None, "ai_investment_usd": 0.0},
+            "prior_period": {
+                "date_from": None, "date_to": None,
+                "ai_investment_usd": 0.0, "ai_activity_count": 0, "ai_savings_usd_estimate": 0.0,
+            },
             "business_function_breakdown": [],
             "journey_breakdown": [],
             "outcomes": {
                 "won_count": 0, "lost_count": 0, "open_count": 0,
                 "pipeline_value_usd": 0.0, "closed_won_value_usd": 0.0,
+                "support_cases": None, "active_projects": None,
             },
             "measurement_note": (
                 "This account has no linked work items yet, so there is no "
@@ -887,18 +891,29 @@ def account_profile(
     # real "up/down X% vs prior period" comparison instead of inventing
     # trend language -- same SQL-aggregated shape as the current period,
     # no row loop, and simply zero (not omitted) when there's no prior data.
+    # Covers AI investment, activity count, and the savings estimate --
+    # pipeline/closed-won ("Business Value") is deliberately not given a
+    # prior-period delta: pipeline is a live snapshot of currently-open
+    # opportunities, not something that happened "during" a period, so a
+    # naive prior-period re-query of it wouldn't be a real comparison.
     prior_period_end = period_start
     prior_period_start = period_start - (period_end - period_start)
-    prior_spend_usd = float(
-        db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+    prior_totals = (
+        db.query(
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+        )
         .filter(
             TokenTransaction.work_item_id.in_(work_item_ids),
             TokenTransaction.timestamp >= prior_period_start,
             TokenTransaction.timestamp < prior_period_end,
         )
-        .scalar()
-        or 0.0
+        .first()
     )
+    prior_spend_usd, prior_activity_count, prior_tokens_saved = prior_totals
+    prior_spend_usd = float(prior_spend_usd or 0.0)
+    prior_savings_estimate = round(float(prior_tokens_saved or 0) * FLAGSHIP_INPUT_COST, 6)
 
     is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
     is_open = WorkItemOutcome.is_closed.is_(False)
@@ -956,8 +971,75 @@ def account_profile(
         for context_type, spend, count in stage_rows
     ]
 
+    # Everything below is a heuristic derived from real data, not a CRM
+    # field CostPilot actually stores -- each is documented as such so the
+    # frontend doesn't present it as more authoritative than it is.
+
+    active_since = (
+        db.query(func.min(WorkItem.created_at))
+        .filter(WorkItem.account_id == account.id)
+        .scalar()
+    )
+
+    # Tier is a simple spend-bucket heuristic, not a real CRM segment.
+    lifetime_value = float((pipeline_value or 0.0) + (closed_won_value or 0.0))
+    if lifetime_value >= 1_000_000:
+        tier = "Enterprise"
+    elif lifetime_value >= 100_000:
+        tier = "Mid-Market"
+    else:
+        tier = "Growth"
+
+    # Health is a simple heuristic (current vs. prior period spend), not a
+    # certified account-health score.
+    if activity_count == 0 and prior_activity_count > 0:
+        health_status = "attention"
+    elif prior_spend_usd > 0 and spend_usd < prior_spend_usd * 0.5:
+        health_status = "attention"
+    else:
+        health_status = "healthy"
+
+    support_context_types = ("case", "ticket", "incident")
+    support_total, support_resolved = (
+        db.query(
+            func.count(WorkItem.id),
+            func.coalesce(func.sum(case((WorkItemOutcome.is_closed.is_(True), 1), else_=0)), 0),
+        )
+        .outerjoin(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.account_id == account.id, WorkItem.context_type.in_(support_context_types))
+        .first()
+    )
+    support_cases = (
+        {"total": int(support_total), "resolved": int(support_resolved)}
+        if support_total else None
+    )
+
+    project_in_progress, project_completed, project_value = (
+        db.query(
+            func.coalesce(func.sum(case((WorkItem.status.in_(("active", "on_hold")), 1), else_=0)), 0),
+            func.coalesce(func.sum(case((WorkItem.status == "completed", 1), else_=0)), 0),
+            func.coalesce(func.sum(func.coalesce(WorkItemOutcome.outcome_value, 0.0)), 0.0),
+        )
+        .outerjoin(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.account_id == account.id, WorkItem.context_type == "project")
+        .first()
+    )
+    active_projects = (
+        {
+            "in_progress": int(project_in_progress),
+            "completed": int(project_completed),
+            "value_usd": round(float(project_value or 0.0), 2),
+        }
+        if (project_in_progress + project_completed) else None
+    )
+
     return {
-        "account": _account_json(account),
+        "account": {
+            **_account_json(account),
+            "active_since": active_since.isoformat() if active_since else None,
+            "tier": tier,
+            "health_status": health_status,
+        },
         "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
         "work_item_count": len(work_item_ids),
         "kpis": {
@@ -971,6 +1053,8 @@ def account_profile(
             "date_from": prior_period_start.isoformat(),
             "date_to": prior_period_end.isoformat(),
             "ai_investment_usd": round(prior_spend_usd, 6),
+            "ai_activity_count": int(prior_activity_count or 0),
+            "ai_savings_usd_estimate": prior_savings_estimate,
         },
         "business_function_breakdown": business_function_breakdown,
         "journey_breakdown": journey_breakdown,
@@ -980,6 +1064,8 @@ def account_profile(
             "open_count": int(open_count or 0),
             "pipeline_value_usd": round(float(pipeline_value or 0.0), 2),
             "closed_won_value_usd": round(float(closed_won_value or 0.0), 2),
+            "support_cases": support_cases,
+            "active_projects": active_projects,
         },
         "measurement_note": (
             "AI investment reflects governed CostPilot activity across this "

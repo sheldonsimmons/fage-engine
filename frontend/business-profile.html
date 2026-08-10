@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
   <script src="/js/chart.umd.min.js"></script>
   <script src="/js/chart-theme.js"></script>
   <style>
@@ -16,22 +17,58 @@
        --font-sans, --font-mono) -- same convention as index.html's
        Overview redesign. No new palette introduced. */
     body { margin: 0; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); }
-    .bp-wrap { max-width: 1240px; margin: 0 auto; padding: 22px 28px 64px; }
+    .bp-wrap { max-width: 1320px; margin: 0 auto; padding: 0 28px 40px; }
     .bp-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-    .bp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 22px; flex-wrap: wrap; }
+    /* Top bar -- slim, sits above the header row. No notification bell or
+       user avatar here: this app has no notification system and no
+       authenticated-user identity to draw an avatar from, so nothing
+       fakes either (the left-nav footer shows a workspace-derived name
+       instead, see left-nav.js). */
+    .bp-topbar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 28px; border-bottom: 1px solid var(--border);
+      background: var(--bg-panel);
+    }
+    .bp-topbar-ask {
+      flex: 1; display: flex; align-items: center; gap: 10px;
+      background: var(--bg-base); border: 1px solid var(--border); border-radius: 9px;
+      padding: 8px 8px 8px 14px; max-width: 640px; transition: border-color .15s;
+    }
+    .bp-topbar-ask:focus-within { border-color: var(--accent); }
+    .bp-topbar-ask input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: var(--font-sans); font-size: 13.5px; padding: 6px 0; }
+    .bp-topbar-ask input::placeholder { color: #5b6773; }
+    .bp-topbar-ask button {
+      display: flex; align-items: center; background: var(--accent); color: #061423; border: none;
+      font-family: var(--font-sans); font-weight: 650; font-size: 12.5px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+    }
+    .bp-topbar-help {
+      width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-base);
+      color: var(--text-muted); font-size: 14px; cursor: pointer; flex: 0 0 auto;
+    }
+
+    .bp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin: 22px 0; flex-wrap: wrap; }
     .bp-title-row { display: flex; align-items: center; gap: 10px; }
     .bp-title-row h1 { font-size: 27px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+    .bp-pill { font-size: 12px; font-weight: 650; padding: 4px 11px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; }
+    .bp-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .bp-pill.healthy { background: rgba(63,185,80,0.12); color: var(--accent-green); }
+    .bp-pill.attention { background: rgba(210,153,34,0.14); color: var(--accent-yellow); }
     .bp-meta { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
-    .bp-account-picker { display: flex; align-items: center; gap: 8px; }
-    .bp-account-picker select {
-      background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-primary);
-      font-family: var(--font-sans); font-size: 13px; padding: 8px 12px; border-radius: 7px; min-width: 240px;
-    }
-    .bp-days select {
+    .bp-header-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .bp-account-picker select, .bp-days select {
       background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-primary);
       font-family: var(--font-sans); font-size: 13px; padding: 8px 12px; border-radius: 7px;
     }
+    .bp-account-picker select { min-width: 220px; }
+    .bp-share-btn {
+      display: flex; align-items: center; gap: 7px; background: var(--bg-panel); border: 1px solid var(--border);
+      color: var(--text-primary); font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+      padding: 8px 14px; border-radius: 7px; cursor: pointer;
+    }
+    .bp-share-btn:hover { border-color: var(--accent); }
+    .bp-share-btn.copied { color: var(--accent-green); border-color: var(--accent-green); }
+
     .bp-live-toggle {
       display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted);
       cursor: pointer; user-select: none; padding: 8px 12px; border: 1px solid var(--border);
@@ -41,42 +78,51 @@
     .bp-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); transition: background .2s; }
     .bp-live-toggle input:checked ~ .bp-live-dot { background: var(--accent-green); box-shadow: 0 0 0 0 rgba(63,185,80,0.5); animation: bp-pulse 2s infinite; }
     @keyframes bp-pulse { 0% { box-shadow: 0 0 0 0 rgba(63,185,80,0.45); } 70% { box-shadow: 0 0 0 6px rgba(63,185,80,0); } 100% { box-shadow: 0 0 0 0 rgba(63,185,80,0); } }
-    .bp-live-status { font-size: 11px; color: var(--text-muted); margin: -12px 0 18px; text-align: right; }
+    .bp-live-status { font-size: 11px; color: var(--text-muted); margin: -14px 0 18px; text-align: right; }
 
-    /* Ask CostPilot hero -- copied verbatim from index.html's .ov-ask-hero */
-    .bp-ask-hero { padding: 30px 34px 24px; background: radial-gradient(680px 220px at 18% 0%, rgba(88,166,255,0.09), transparent 65%), var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 28px; }
-    .bp-ask-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
-    .bp-ask-hero h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 18px; color: var(--text-primary); }
-    .bp-ask-box { display: flex; align-items: center; gap: 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 11px; padding: 6px 6px 6px 18px; transition: border-color .15s; }
-    .bp-ask-box:focus-within { border-color: var(--accent); }
-    .bp-ask-box input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: var(--font-sans); font-size: 14.5px; padding: 11px 0; }
-    .bp-ask-box input::placeholder { color: #5b6773; }
-    .bp-ask-go { display: flex; align-items: center; gap: 8px; background: var(--accent); color: #061423; border: none; font-family: var(--font-sans); font-weight: 650; font-size: 13px; padding: 10px 17px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
-    .bp-ask-go:hover { filter: brightness(1.08); }
-    .bp-ask-answer-slot { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
-    .bp-ask-answer-slot .cp-ask-thinking { font-size: 13px; color: var(--text-muted); }
-    .bp-ask-answer-slot .cp-ask-error { font-size: 13px; color: var(--accent-red); }
+    /* AI summary banner -- a deterministic templated paragraph assembled
+       client-side from the same real KPI/outcome numbers as the rest of
+       this page (see bpRenderSummaryBanner). Not an LLM call. */
+    .bp-summary-banner {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: radial-gradient(680px 220px at 18% 0%, rgba(88,166,255,0.09), transparent 65%), var(--bg-panel);
+      border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 22px;
+      font-size: 13.5px; line-height: 1.55; color: var(--text-primary);
+    }
+    .bp-summary-banner .icon { flex: 0 0 auto; color: var(--accent); margin-top: 1px; }
+    .bp-summary-banner b { font-weight: 650; }
 
-    .bp-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 30px 0 13px; }
+    .bp-body-grid { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+    @media (max-width: 1100px) { .bp-body-grid { grid-template-columns: 1fr; } }
+
+    .bp-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 26px 0 13px; }
+    .bp-section-head:first-child { margin-top: 0; }
     .bp-section-head h3 { font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0; }
+    .bp-section-head a { font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 600; }
+    .bp-section-head a:hover { text-decoration: underline; }
 
-    /* KPI row -- copied verbatim from index.html's .ov-kpi-row */
+    /* KPI row */
     .bp-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 13px; }
-    .bp-kpi { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 18px 20px; }
-    .bp-kpi .label { font-size: 11.5px; color: var(--text-muted); margin-bottom: 9px; }
+    .bp-kpi { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 18px 20px; position: relative; }
+    .bp-kpi .icon { position: absolute; top: 16px; right: 16px; width: 30px; height: 30px; border-radius: 8px; background: rgba(88,166,255,0.12); color: var(--accent); display: flex; align-items: center; justify-content: center; }
+    .bp-kpi .label { font-size: 11.5px; color: var(--text-muted); margin-bottom: 9px; padding-right: 34px; }
     .bp-kpi .value { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; font-family: var(--font-mono); }
     .bp-kpi .sub { font-size: 11.5px; color: #5b6773; margin-top: 6px; }
+    .bp-kpi .delta { font-size: 11.5px; margin-top: 6px; font-weight: 650; }
+    .bp-kpi .delta.up { color: var(--accent-green); }
+    .bp-kpi .delta.down { color: var(--accent-red); }
 
     .bp-grid-2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; align-items: start; }
-    @media (max-width: 900px) { .bp-grid-2 { grid-template-columns: 1fr; } }
+    @media (max-width: 700px) { .bp-grid-2 { grid-template-columns: 1fr; } }
 
     .bp-outcome-row { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
     .bp-outcome-row:last-child { border-bottom: none; }
     .bp-outcome-row .n { font-family: var(--font-mono); font-weight: 600; }
+    .bp-outcome-row .n small { font-family: var(--font-sans); font-weight: 500; color: var(--text-muted); }
 
     .bp-conn-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
     .bp-conn-row:last-child { border-bottom: none; }
-    .bp-conn-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+    .bp-conn-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
     .bp-conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-green); }
     .bp-conn-dot.stale { background: var(--accent-yellow); }
     .bp-conn-dot.off { background: var(--text-muted); }
@@ -99,134 +145,175 @@
     .bp-journey-value { font-size: 15px; font-weight: 650; font-family: var(--font-mono); color: var(--text-primary); }
     .bp-journey-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
 
-    .bp-insights-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
-    @media (max-width: 900px) { .bp-insights-row { grid-template-columns: 1fr; } }
-    .bp-insight { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 16px 18px; }
-    .bp-insight .headline { font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
-    .bp-insight .body { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
-    .bp-insights-row .bp-empty { grid-column: 1 / -1; padding: 12px 0; }
+    .bp-insight { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 15px 16px; display: flex; gap: 11px; margin-bottom: 11px; }
+    .bp-insight .icon { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; background: rgba(88,166,255,0.12); color: var(--accent); display: flex; align-items: center; justify-content: center; }
+    .bp-insight .headline { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 5px; }
+    .bp-insight .body { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+    .bp-insight .body a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    .bp-insight .body a:hover { text-decoration: underline; }
 
     .bp-note { font-size: 12px; color: var(--text-muted); margin-top: 24px; border-top: 1px solid var(--border); padding-top: 14px; }
     .bp-empty { font-size: 13.5px; color: var(--text-muted); padding: 24px 0; }
     .bp-donut-wrap { position: relative; height: 220px; }
     .bp-business-fn-legend { margin-top: 14px; font-size: 12.5px; }
     .bp-business-fn-legend .row { display: flex; justify-content: space-between; padding: 5px 0; }
+
+    /* Bottom follow-up bar */
+    .bp-followup-wrap { margin-top: 30px; }
+    .bp-followup-answer { margin-bottom: 14px; }
+    .bp-followup-answer .cp-ask-thinking { font-size: 13px; color: var(--text-muted); }
+    .bp-followup-answer .cp-ask-error { font-size: 13px; color: var(--accent-red); }
+    .bp-followup-form {
+      display: flex; align-items: center; gap: 12px; background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 11px; padding: 6px 6px 6px 18px; position: sticky; bottom: 16px;
+    }
+    .bp-followup-form input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: var(--font-sans); font-size: 14px; padding: 11px 0; }
+    .bp-followup-form input::placeholder { color: #5b6773; }
+    .bp-followup-form button {
+      display: flex; align-items: center; gap: 8px; background: var(--accent); color: #061423; border: none;
+      font-family: var(--font-sans); font-weight: 650; font-size: 13px; padding: 10px 17px; border-radius: 7px; cursor: pointer;
+    }
+    .bp-footer-note { font-size: 11.5px; color: var(--text-muted); text-align: center; margin: 14px 0 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
   </style>
 </head>
 <body>
-  <header class="wa-header">
-    <div class="wa-brand">
-      <img src="/assets/costpilot-logo-transparent.svg" class="wa-logo" alt="CostPilot" />
-    </div>
-    <nav class="wa-nav" aria-label="Primary navigation">
-      <a href="/index.html">Overview</a>
-      <a href="/operate.html">Operate</a>
-      <a href="/work-items.html">Work</a>
-      <a href="/business-profile.html" class="active">Business Profiles</a>
-      <a href="/onboarding.html">Connect &amp; Setup</a>
-    </nav>
-  </header>
+  <div class="cp-app-shell">
+    <aside id="cpLeftNavMount"></aside>
 
-  <div class="bp-wrap">
-    <div class="bp-header">
-      <div>
-        <div class="bp-title-row">
-          <h1 id="bpAccountName">Business Profile</h1>
-        </div>
-        <div class="bp-meta" id="bpAccountMeta">Select an account to view its AI investment and business outcomes.</div>
-      </div>
-      <div style="display:flex; gap:12px; align-items:center;">
-        <div class="bp-account-picker">
-          <select id="bpAccountSelect" aria-label="Select account"><option value="">Loading accounts…</option></select>
-        </div>
-        <div class="bp-days">
-          <select id="bpDaysSelect" aria-label="Date range">
-            <option value="30">Last 30 days</option>
-            <option value="90" selected>Last 90 days</option>
-            <option value="180">Last 180 days</option>
-            <option value="365">Last 12 months</option>
-          </select>
-        </div>
-        <label class="bp-live-toggle">
-          <input type="checkbox" id="bpLiveToggle" checked />
-          <span class="bp-live-dot" id="bpLiveDot"></span>
-          <span id="bpLiveLabel">Live</span>
-        </label>
-      </div>
-    </div>
-    <div class="bp-live-status" id="bpLiveStatus"></div>
-
-    <section class="bp-ask-hero">
-      <p class="bp-ask-eyebrow">Ask CostPilot</p>
-      <h2 id="bpAskHeading">Ask anything about this account…</h2>
-      <form class="bp-ask-box" id="bpAskForm">
-        <input type="text" id="bpAskInput" placeholder="e.g. “How much AI spend was associated with won opportunities?”" aria-label="Ask CostPilot a question" />
-        <button class="bp-ask-go" type="submit">
-          Ask
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </form>
-      <div id="bpAskAnswer" class="bp-ask-answer-slot" style="display:none"></div>
-    </section>
-
-    <div id="bpEmptyState" class="bp-empty" style="display:none"></div>
-
-    <div id="bpContent" style="display:none">
-      <div class="bp-kpi-row">
-        <div class="bp-kpi">
-          <div class="label">Business Value</div>
-          <div class="value bp-num" id="bpKpiValue">—</div>
-          <div class="sub">Pipeline + Closed Won</div>
-        </div>
-        <div class="bp-kpi">
-          <div class="label">AI Investment</div>
-          <div class="value bp-num" id="bpKpiSpend">—</div>
-          <div class="sub" id="bpKpiSpendSub">Tracked AI spend</div>
-        </div>
-        <div class="bp-kpi">
-          <div class="label">CostPilot Savings</div>
-          <div class="value bp-num" id="bpKpiSavings">—</div>
-          <div class="sub">Estimated from pruning</div>
-        </div>
-        <div class="bp-kpi">
-          <div class="label">AI Activity</div>
-          <div class="value bp-num" id="bpKpiActivity">—</div>
-          <div class="sub">AI interactions</div>
-        </div>
+    <div class="cp-app-main">
+      <div class="bp-topbar">
+        <form class="bp-topbar-ask" id="bpAskForm">
+          <input type="text" id="bpAskInput" placeholder="Ask anything about this account…" aria-label="Ask CostPilot a question" />
+          <button type="submit">Ask</button>
+        </form>
+        <button class="bp-topbar-help" id="bpHelpBtn" type="button" title="Help" aria-label="Help">?</button>
       </div>
 
-      <div class="bp-section-head"><h3>CostPilot Insights</h3></div>
-      <div class="bp-insights-row" id="bpInsights"></div>
-
-      <div class="bp-section-head"><h3>AI Investment by Work Type</h3></div>
-      <div class="panel" id="bpJourneyPanel"></div>
-
-      <div class="bp-grid-2">
-        <div>
-          <div class="bp-section-head"><h3>AI Investment by Business Function</h3></div>
-          <div class="panel">
-            <div class="bp-donut-wrap"><canvas id="bpFunctionDonut"></canvas></div>
-            <div class="bp-business-fn-legend" id="bpFunctionLegend"></div>
+      <div class="bp-wrap">
+        <div class="bp-header">
+          <div>
+            <div class="bp-title-row">
+              <h1 id="bpAccountName">Business Profile</h1>
+              <span class="bp-pill" id="bpHealthPill" style="display:none"></span>
+            </div>
+            <div class="bp-meta" id="bpAccountMeta">Select an account to view its AI investment and business outcomes.</div>
+          </div>
+          <div class="bp-header-right">
+            <div class="bp-account-picker">
+              <select id="bpAccountSelect" aria-label="Select account"><option value="">Loading accounts…</option></select>
+            </div>
+            <div class="bp-days">
+              <select id="bpDaysSelect" aria-label="Date range">
+                <option value="30">Last 30 days</option>
+                <option value="90" selected>Last 90 days</option>
+                <option value="180">Last 180 days</option>
+                <option value="365">Last 12 months</option>
+              </select>
+            </div>
+            <button class="bp-share-btn" id="bpShareBtn" type="button" title="Copy a link to this profile">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 11.5l3-3M8 7.5L6.2 5.8a2.6 2.6 0 1 1 3.7-3.7L11.6 4M12 12.5l1.8 1.7a2.6 2.6 0 1 1-3.7 3.7L8.4 16"/></svg>
+              <span id="bpShareLabel">Share</span>
+            </button>
+            <label class="bp-live-toggle">
+              <input type="checkbox" id="bpLiveToggle" checked />
+              <span class="bp-live-dot" id="bpLiveDot"></span>
+              <span id="bpLiveLabel">Live</span>
+            </label>
           </div>
         </div>
-        <div>
-          <div class="bp-section-head"><h3>Business Outcomes</h3></div>
-          <div class="panel">
-            <div class="bp-outcome-row"><span>Opportunities Won</span><span class="n" id="bpOutcomeWon">—</span></div>
-            <div class="bp-outcome-row"><span>Opportunities Lost</span><span class="n" id="bpOutcomeLost">—</span></div>
-            <div class="bp-outcome-row"><span>Opportunities Open</span><span class="n" id="bpOutcomeOpen">—</span></div>
-            <div class="bp-outcome-row"><span>Pipeline Value</span><span class="n" id="bpOutcomePipeline">—</span></div>
-            <div class="bp-outcome-row"><span>Closed Won Value</span><span class="n" id="bpOutcomeClosedWon">—</span></div>
+        <div class="bp-live-status" id="bpLiveStatus"></div>
+
+        <div id="bpSummaryBanner" class="bp-summary-banner" style="display:none"></div>
+
+        <div id="bpEmptyState" class="bp-empty" style="display:none"></div>
+
+        <div id="bpContent" style="display:none">
+          <div class="bp-body-grid">
+            <div class="bp-main-col">
+              <div class="bp-kpi-row">
+                <div class="bp-kpi">
+                  <div class="icon"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="9" height="16" rx="1"/><path d="M13 7h3v11h-3"/></svg></div>
+                  <div class="label">Business Value</div>
+                  <div class="value bp-num" id="bpKpiValue">—</div>
+                  <div class="sub">Pipeline + Closed Won</div>
+                </div>
+                <div class="bp-kpi">
+                  <div class="icon"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="14" height="9" rx="2"/><path d="M7 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div>
+                  <div class="label">AI Investment</div>
+                  <div class="value bp-num" id="bpKpiSpend">—</div>
+                  <div class="sub" id="bpKpiSpendSub">Tracked AI spend</div>
+                  <div class="delta" id="bpKpiSpendDelta"></div>
+                </div>
+                <div class="bp-kpi">
+                  <div class="icon"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3a5 5 0 0 0-1 9.9V15a1 1 0 0 0 2 0v-2.1A5 5 0 0 0 10 3z"/><circle cx="10" cy="8" r="1.1" fill="currentColor" stroke="none"/></svg></div>
+                  <div class="label">CostPilot Savings</div>
+                  <div class="value bp-num" id="bpKpiSavings">—</div>
+                  <div class="sub">Estimated from pruning</div>
+                  <div class="delta" id="bpKpiSavingsDelta"></div>
+                </div>
+                <div class="bp-kpi">
+                  <div class="icon"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10h4l2-6 3 12 2-8 1.5 2H18"/></svg></div>
+                  <div class="label">AI Activity</div>
+                  <div class="value bp-num" id="bpKpiActivity">—</div>
+                  <div class="sub">AI interactions</div>
+                  <div class="delta" id="bpKpiActivityDelta"></div>
+                </div>
+              </div>
+
+              <div class="bp-section-head"><h3>Business Journey &amp; AI Investment</h3></div>
+              <div class="panel" id="bpJourneyPanel"></div>
+
+              <div class="bp-grid-2">
+                <div>
+                  <div class="bp-section-head"><h3>AI Investment by Business Function</h3></div>
+                  <div class="panel">
+                    <div class="bp-donut-wrap"><canvas id="bpFunctionDonut"></canvas></div>
+                    <div class="bp-business-fn-legend" id="bpFunctionLegend"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="bp-section-head"><h3>Business Outcomes</h3></div>
+                  <div class="panel" id="bpOutcomesPanel">
+                    <div class="bp-outcome-row"><span>Opportunities Won</span><span class="n" id="bpOutcomeWon">—</span></div>
+                    <div class="bp-outcome-row"><span>Opportunities Lost</span><span class="n" id="bpOutcomeLost">—</span></div>
+                    <div class="bp-outcome-row"><span>Opportunities Open</span><span class="n" id="bpOutcomeOpen">—</span></div>
+                    <div class="bp-outcome-row"><span>Pipeline Value</span><span class="n" id="bpOutcomePipeline">—</span></div>
+                    <div class="bp-outcome-row"><span>Closed Won Value</span><span class="n" id="bpOutcomeClosedWon">—</span></div>
+                    <div class="bp-outcome-row" id="bpOutcomeSupportRow" style="display:none"><span>Support Cases</span><span class="n" id="bpOutcomeSupport">—</span></div>
+                    <div class="bp-outcome-row" id="bpOutcomeProjectsRow" style="display:none"><span>Active Projects</span><span class="n" id="bpOutcomeProjects">—</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bp-note" id="bpMeasurementNote"></div>
+            </div>
+
+            <aside class="bp-main-col">
+              <div class="bp-section-head"><h3>CostPilot Insights</h3></div>
+              <div id="bpInsights"></div>
+
+              <div class="bp-section-head"><h3>Connected Systems</h3></div>
+              <div class="panel" id="bpConnectedSystems">
+                <div class="bp-empty">Loading…</div>
+              </div>
+            </aside>
           </div>
 
-          <div class="bp-section-head"><h3>Connected Systems</h3></div>
-          <div class="panel" id="bpConnectedSystems">
-            <div class="bp-empty">Loading…</div>
+          <div class="bp-followup-wrap">
+            <div class="bp-followup-answer" id="bpAskAnswer" style="display:none"></div>
+            <form class="bp-followup-form" id="bpFollowupForm">
+              <input type="text" id="bpFollowupInput" placeholder="Ask CostPilot a follow-up…" aria-label="Ask a follow-up question" />
+              <button type="submit">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </form>
+            <div class="bp-footer-note">
+              <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="9" width="12" height="8" rx="1.5"/><path d="M6.5 9V6a3.5 3.5 0 0 1 7 0v3"/></svg>
+              <span id="bpFooterNote">All data is workspace-scoped.</span>
+            </div>
           </div>
         </div>
       </div>
-
-      <div class="bp-note" id="bpMeasurementNote"></div>
     </div>
   </div>
 
@@ -254,6 +341,18 @@
     function bpFmtNum(value) {
       return Number(value || 0).toLocaleString();
     }
+    function bpFmtDeltaPct(current, prior) {
+      if (!prior || prior <= 0) return null;
+      return ((current - prior) / prior) * 100;
+    }
+    function bpRenderDelta(elId, current, prior, suffix) {
+      const el = document.getElementById(elId);
+      const pct = bpFmtDeltaPct(current, prior);
+      if (pct === null || Math.abs(pct) < 1) { el.textContent = ""; el.className = "delta"; return; }
+      const up = pct >= 0;
+      el.className = `delta ${up ? "up" : "down"}`;
+      el.textContent = `${up ? "↑" : "↓"} ${Math.abs(pct).toFixed(0)}% ${suffix || "vs prior period"}`;
+    }
 
     async function bpLoadAccounts() {
       const select = document.getElementById("bpAccountSelect");
@@ -266,13 +365,11 @@
           bpShowEmpty("No accounts found in this workspace yet. Accounts are created automatically when a connected system (e.g. Salesforce) reports activity tied to one.");
           return;
         }
-        // Two real Salesforce orgs connected to the same workspace can
-        // produce accounts with the identical display name (both orgs
-        // seeded from Salesforce's standard demo dataset) -- each is a
-        // genuinely distinct real account, correctly not merged, but an
-        // unqualified name in the picker makes them impossible to tell
-        // apart. Append a short id suffix only for names that actually
-        // collide, so the common case (no collision) stays clean.
+        // Two real Salesforce orgs connected to the same workspace can, in
+        // principle, still produce accounts with the identical display
+        // name -- each would be a genuinely distinct real account. Append
+        // a short id suffix only for names that actually collide, so the
+        // common case (no collision) stays clean.
         const nameCounts = {};
         accounts.forEach((a) => { nameCounts[a.name] = (nameCounts[a.name] || 0) + 1; });
         select.innerHTML = accounts.map((a) => {
@@ -298,6 +395,7 @@
       document.getElementById("bpEmptyState").style.display = "block";
       document.getElementById("bpEmptyState").textContent = message;
       document.getElementById("bpContent").style.display = "none";
+      document.getElementById("bpSummaryBanner").style.display = "none";
     }
 
     async function bpLoadProfile() {
@@ -320,13 +418,29 @@
     }
 
     function bpRenderProfile(profile) {
-      document.getElementById("bpAccountName").textContent = profile.account.name;
-      document.getElementById("bpAskHeading").textContent = `Ask anything about ${profile.account.name}…`;
-      document.getElementById("bpAskInput").placeholder = `e.g. "How much AI spend was associated with won opportunities?"`;
-      document.getElementById("bpAccountMeta").textContent =
-        `${profile.work_item_count} linked work item${profile.work_item_count === 1 ? "" : "s"} · ${profile.period.days}-day view`;
+      const account = profile.account;
+      document.getElementById("bpAccountName").textContent = account.name;
+      document.getElementById("bpAskInput").placeholder = `Ask anything about ${account.name}…`;
+
+      const metaParts = [];
+      if (account.tier) metaParts.push(account.tier);
+      if (account.active_since) {
+        metaParts.push(`Active since ${new Date(account.active_since).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`);
+      }
+      metaParts.push(`${profile.work_item_count} linked work item${profile.work_item_count === 1 ? "" : "s"}`);
+      document.getElementById("bpAccountMeta").textContent = metaParts.join(" · ");
+
+      const healthPill = document.getElementById("bpHealthPill");
+      if (account.health_status) {
+        healthPill.style.display = "inline-flex";
+        healthPill.className = `bp-pill ${account.health_status}`;
+        healthPill.textContent = account.health_status === "healthy" ? "Healthy" : "Needs attention";
+      } else {
+        healthPill.style.display = "none";
+      }
 
       const kpis = profile.kpis;
+      const prior = profile.prior_period || {};
       const outcomes = profile.outcomes;
       const businessValue = (outcomes.pipeline_value_usd || 0) + (outcomes.closed_won_value_usd || 0);
 
@@ -336,30 +450,64 @@
       document.getElementById("bpKpiSavings").textContent = bpFmtUsdFull(kpis.ai_savings_usd_estimate);
       document.getElementById("bpKpiActivity").textContent = bpFmtNum(kpis.ai_activity_count);
 
+      bpRenderDelta("bpKpiSpendDelta", kpis.ai_investment_usd, prior.ai_investment_usd);
+      bpRenderDelta("bpKpiSavingsDelta", kpis.ai_savings_usd_estimate, prior.ai_savings_usd_estimate);
+      bpRenderDelta("bpKpiActivityDelta", kpis.ai_activity_count, prior.ai_activity_count);
+      // Business Value intentionally has no delta -- see account_profile()'s
+      // comment on why pipeline (a live snapshot) isn't period-comparable.
+
       document.getElementById("bpOutcomeWon").textContent = bpFmtNum(outcomes.won_count);
       document.getElementById("bpOutcomeLost").textContent = bpFmtNum(outcomes.lost_count);
       document.getElementById("bpOutcomeOpen").textContent = bpFmtNum(outcomes.open_count);
       document.getElementById("bpOutcomePipeline").textContent = bpFmtUsdFull(outcomes.pipeline_value_usd);
       document.getElementById("bpOutcomeClosedWon").textContent = bpFmtUsdFull(outcomes.closed_won_value_usd);
 
+      const supportRow = document.getElementById("bpOutcomeSupportRow");
+      if (outcomes.support_cases) {
+        supportRow.style.display = "flex";
+        document.getElementById("bpOutcomeSupport").innerHTML =
+          `${bpFmtNum(outcomes.support_cases.total)} <small>total · ${bpFmtNum(outcomes.support_cases.resolved)} resolved</small>`;
+      } else {
+        supportRow.style.display = "none";
+      }
+
+      const projectsRow = document.getElementById("bpOutcomeProjectsRow");
+      if (outcomes.active_projects) {
+        projectsRow.style.display = "flex";
+        document.getElementById("bpOutcomeProjects").innerHTML =
+          `${bpFmtNum(outcomes.active_projects.in_progress)} <small>in progress · ${bpFmtNum(outcomes.active_projects.completed)} completed</small>`;
+      } else {
+        projectsRow.style.display = "none";
+      }
+
       document.getElementById("bpMeasurementNote").textContent = profile.measurement_note || "";
+      document.getElementById("bpFooterNote").textContent =
+        "All data is workspace-scoped." + (profile.period ? ` Showing ${profile.period.days} days.` : "");
 
       bpRenderFunctionDonut(profile.business_function_breakdown || []);
       bpRenderJourney(profile.journey_breakdown || [], kpis.ai_investment_usd);
       bpRenderInsights(profile);
+      bpRenderSummaryBanner(profile, businessValue);
     }
 
-    // "AI Investment by Work Type" -- grouped by WorkItem.context_type,
+    // "Business Journey & AI Investment" -- grouped by WorkItem.context_type,
     // which is real captured data. Not a chronological journey/funnel:
     // CostPilot doesn't track a work item moving through stages over time
     // today, only what type it is, so this shows types side by side rather
-    // than implying an order or a "Marketing -> Renewal" pipeline that
-    // isn't backed by anything.
+        // than implying an order or a "Marketing -> Renewal" pipeline that
+    // isn't backed by anything. Reordered into a sensible logical sequence
+    // (lead-generating -> sales -> delivery -> support) when those types
+    // are present, purely for readability -- not a claim about sequence.
     const BP_STAGE_ICONS = {
-      opportunity: "◎", project: "▣", case: "☎", ticket: "☎", incident: "☎",
-      engagement: "◈", claim: "▤", product: "▦", application: "▧",
-      environment: "◇", account: "▢", customer: "◐", campaign: "▲", custom: "○",
+      campaign: "▲", opportunity: "◎", project: "▣", engagement: "◈",
+      case: "☎", ticket: "☎", incident: "☎", claim: "▤", product: "▦",
+      application: "▧", environment: "◇", account: "▢", customer: "◐", custom: "○",
     };
+    const BP_STAGE_ORDER = [
+      "campaign", "opportunity", "project", "engagement",
+      "case", "ticket", "incident", "claim", "product", "application",
+      "environment", "account", "customer", "custom",
+    ];
 
     function bpRenderJourney(rows, totalSpend) {
       const panel = document.getElementById("bpJourneyPanel");
@@ -367,7 +515,8 @@
         panel.innerHTML = `<div class="bp-empty">No AI activity with a known work type in this period.</div>`;
         return;
       }
-      panel.innerHTML = `<div class="bp-journey-row">${rows.map((stage) => {
+      const ordered = [...rows].sort((a, b) => BP_STAGE_ORDER.indexOf(a.stage) - BP_STAGE_ORDER.indexOf(b.stage));
+      panel.innerHTML = `<div class="bp-journey-row">${ordered.map((stage) => {
         const pct = totalSpend > 0 ? Math.round((stage.spend_usd / totalSpend) * 100) : 0;
         const icon = BP_STAGE_ICONS[stage.stage] || "○";
         const badge = stage.won_count !== null && stage.won_count !== undefined && stage.won_count > 0
@@ -381,6 +530,10 @@
         </div>`;
       }).join("")}</div>`;
     }
+
+    const BP_INSIGHT_ICON_SPEND = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10h4l2-6 3 12 2-8 1.5 2H18"/></svg>`;
+    const BP_INSIGHT_ICON_SAVE = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3a5 5 0 0 0-1 9.9V15a1 1 0 0 0 2 0v-2.1A5 5 0 0 0 10 3z"/></svg>`;
+    const BP_INSIGHT_ICON_TARGET = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/></svg>`;
 
     // Deterministic, code-computed insights -- no LLM-generated text here.
     // Each insight is only shown when the underlying numbers actually
@@ -398,16 +551,28 @@
         const delta = ((kpis.ai_investment_usd - prior.ai_investment_usd) / prior.ai_investment_usd) * 100;
         if (Math.abs(delta) >= 1) {
           insights.push({
+            icon: BP_INSIGHT_ICON_SPEND,
             headline: `AI investment ${delta >= 0 ? "increased" : "decreased"} ${Math.abs(delta).toFixed(0)}%`,
             body: `${bpFmtUsdFull(kpis.ai_investment_usd)} this period vs ${bpFmtUsdFull(prior.ai_investment_usd)} the prior period of equal length.`,
+            linkText: "View AI investment breakdown →",
+            linkTarget: "#bpFunctionLegend",
           });
         }
+      }
+
+      if (kpis.ai_savings_usd_estimate > 0) {
+        insights.push({
+          icon: BP_INSIGHT_ICON_SAVE,
+          headline: `${bpFmtUsdFull(kpis.ai_savings_usd_estimate)} saved through optimization`,
+          body: `Estimated from pruned tokens across this account's work items.`,
+        });
       }
 
       if (functions.length) {
         const top = functions[0];
         const pct = kpis.ai_investment_usd > 0 ? Math.round((top.spend_usd / kpis.ai_investment_usd) * 100) : 0;
         insights.push({
+          icon: BP_INSIGHT_ICON_TARGET,
           headline: `${top.business_purpose} is the largest driver`,
           body: `${bpFmtUsdFull(top.spend_usd)} (${pct}% of tracked AI investment) went to ${top.business_purpose.toLowerCase()} work.`,
         });
@@ -415,6 +580,7 @@
 
       if (outcomes.won_count > 0) {
         insights.push({
+          icon: BP_INSIGHT_ICON_TARGET,
           headline: `${outcomes.won_count} won opportunit${outcomes.won_count === 1 ? "y has" : "ies have"} tracked AI investment`,
           body: `${bpFmtUsdFull(kpis.ai_investment_usd)} of AI activity is associated with ${bpFmtUsdFull(outcomes.closed_won_value_usd)} in closed-won value. This reflects association, not causation.`,
         });
@@ -425,8 +591,38 @@
         return;
       }
       container.innerHTML = insights.slice(0, 3).map((i) =>
-        `<div class="bp-insight"><div class="headline">${i.headline}</div><div class="body">${i.body}</div></div>`
+        `<div class="bp-insight">
+          <div class="icon">${i.icon}</div>
+          <div>
+            <div class="headline">${i.headline}</div>
+            <div class="body">${i.body}${i.linkText ? ` <a href="${i.linkTarget}">${i.linkText}</a>` : ""}</div>
+          </div>
+        </div>`
       ).join("");
+    }
+
+    // Deterministic templated paragraph -- assembled from the same numbers
+    // as the KPI cards/insights above, not an LLM call. Only shown once
+    // there's enough real data to say something meaningful.
+    function bpRenderSummaryBanner(profile, businessValue) {
+      const banner = document.getElementById("bpSummaryBanner");
+      const kpis = profile.kpis;
+      const account = profile.account;
+      if (!profile.work_item_count) { banner.style.display = "none"; return; }
+
+      const parts = [];
+      parts.push(`<b>${account.name}</b> has <b>${bpFmtUsd(businessValue)}</b> in tracked business value across connected systems.`);
+      parts.push(`CostPilot has observed <b>${bpFmtUsd(kpis.ai_investment_usd)}</b> in AI investment supporting ${account.name}-related work, with <b>${bpFmtUsd(kpis.ai_savings_usd_estimate)}</b> in optimization savings.`);
+      const prior = profile.prior_period;
+      if (prior && prior.ai_investment_usd > 0) {
+        const delta = ((kpis.ai_investment_usd - prior.ai_investment_usd) / prior.ai_investment_usd) * 100;
+        if (Math.abs(delta) >= 1) {
+          const top = (profile.business_function_breakdown || [])[0];
+          parts.push(`AI activity ${delta >= 0 ? "increased" : "decreased"} ${Math.abs(delta).toFixed(0)}% this period${top ? `, primarily across ${top.business_purpose}` : ""}.`);
+        }
+      }
+      banner.style.display = "flex";
+      banner.innerHTML = `<span class="icon">${BP_INSIGHT_ICON_SPEND}</span><span>${parts.join(" ")}</span>`;
     }
 
     function bpRenderFunctionDonut(rows) {
@@ -496,8 +692,9 @@
           const ageMs = Date.now() - new Date(c.last_success_at).getTime();
           const isFresh = ageMs < 24 * 3600 * 1000;
           const dotClass = isFresh ? "" : "stale";
+          const agoMinutes = Math.round(ageMs / 60000);
           const statusText = isFresh
-            ? "Connected"
+            ? (agoMinutes < 1 ? "Connected · just now" : `Connected · ${agoMinutes}m ago`)
             : "Stale — last synced " + new Date(c.last_success_at).toLocaleDateString();
           return `<div class="bp-conn-row">
             <span>${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)}</span>
@@ -513,10 +710,9 @@
       const q = (question || "").trim();
       if (!q) return;
       const slot = document.getElementById("bpAskAnswer");
-      const goButton = document.querySelector(".bp-ask-go");
       slot.style.display = "block";
       slot.innerHTML = `<div class="cp-ask-thinking">Calculating from governed activity…</div>`;
-      if (goButton) goButton.disabled = true;
+      slot.scrollIntoView({ behavior: "smooth", block: "center" });
       try {
         const response = await fetch("/api/reports/bot-efficiency/ask", {
           method: "POST",
@@ -526,6 +722,13 @@
             days: Number(document.getElementById("bpDaysSelect").value || 90),
             timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
             workspace_id: bpWorkspaceId() || undefined,
+            // Without this, a question that names the account in its own
+            // text (e.g. "top agent for Acme Corp") gets its account scope
+            // wiped by the backend's stale-filter guard and searches the
+            // whole workspace instead of this account -- account_id_pinned
+            // tells it this page's account is never a stale leftover filter.
+            account_id: bpCurrentAccount || undefined,
+            account_id_pinned: !!bpCurrentAccount,
           }),
         });
         if (!response.ok) throw new Error(`Request failed (${response.status})`);
@@ -533,14 +736,34 @@
         slot.innerHTML = typeof renderAskAnswerCard === "function" ? renderAskAnswerCard(data) : `<pre>${JSON.stringify(data, null, 2)}</pre>`;
       } catch (err) {
         slot.innerHTML = `<div class="cp-ask-error"><strong>CostPilot did not generate an answer.</strong><br/>${(err.message || "").replace(/</g, "&lt;")}</div>`;
-      } finally {
-        if (goButton) goButton.disabled = false;
       }
     }
 
     document.getElementById("bpAskForm")?.addEventListener("submit", (e) => {
       e.preventDefault();
       bpAsk(document.getElementById("bpAskInput").value);
+    });
+    document.getElementById("bpFollowupForm")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = document.getElementById("bpFollowupInput");
+      bpAsk(input.value);
+      input.value = "";
+    });
+    document.getElementById("bpHelpBtn")?.addEventListener("click", () => {
+      location.href = "/getting-started.html";
+    });
+    document.getElementById("bpShareBtn")?.addEventListener("click", async () => {
+      const btn = document.getElementById("bpShareBtn");
+      const label = document.getElementById("bpShareLabel");
+      try {
+        await navigator.clipboard.writeText(location.href);
+        btn.classList.add("copied");
+        label.textContent = "Link copied";
+        setTimeout(() => { btn.classList.remove("copied"); label.textContent = "Share"; }, 2000);
+      } catch (_err) {
+        label.textContent = "Copy failed";
+        setTimeout(() => { label.textContent = "Share"; }, 2000);
+      }
     });
     document.getElementById("bpAccountSelect")?.addEventListener("change", (e) => {
       bpCurrentAccount = e.target.value;
@@ -594,6 +817,6 @@
     bpLoadAccounts();
   </script>
   <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
-  <script src="/js/global-nav.js?v=20260808c-label-fix"></script>
+  <script src="/js/left-nav.js?v=20260810a"></script>
 </body>
 </html>

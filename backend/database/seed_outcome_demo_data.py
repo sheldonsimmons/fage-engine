@@ -1,21 +1,30 @@
 """
 database/seed_outcome_demo_data.py — realistic, multi-record test data for
 the outcome-enrichment feature (AI Event -> Work Item -> Outcome), spread
-across the past several months.
+across the past two years.
 
 Writes into the SIM-HISTORICAL-2Y workspace only -- entirely separate from
 any real Salesforce-synced data in the Production workspace, using the app's
 existing "Simulated" workspace convention (same trust boundary the app
 already shows via the "Viewing: Simulated" banner). Uses the exact same
 tables and columns real synced data uses (WorkAccount, WorkItem,
-TokenTransaction, WorkItemOutcome, WorkItemOutcomeEvent) -- every real
-feature (Business Profile, Ask CostPilot, the outcome-aware ranking
-questions) works on this data identically to how it works on real data.
-Only the data's origin differs, not its shape.
+TokenTransaction, WorkItemOutcome, WorkItemOutcomeEvent, WorkUser,
+WorkItemUser) -- every real feature (Business Profile, Ask CostPilot, the
+outcome-aware ranking questions) works on this data identically to how it
+works on real data. Only the data's origin differs, not its shape.
 
-Idempotent-ish: uses a fixed external_id prefix and skips accounts that
-already exist, so re-running adds nothing new once seeded (use --reset to
-wipe and reseed).
+Each Opportunity/Case is assigned a named owner from a shared rep pool (the
+way a real territory-based sales/support org works -- a handful of people
+covering many accounts, not one person per account), and that owner's
+identity is attached to every TokenTransaction generated for that record
+(work_user_id/actor_name/actor_email) plus a handful of lightweight
+Task/Note-style activity entries -- so activity looks like it's tied to
+real people working real records, not anonymous system noise. No
+Project-type work items are generated (Opportunities and Cases only).
+
+Idempotent-ish: uses a fixed external_id prefix and skips accounts/people
+that already exist, so re-running adds nothing new once seeded (use --reset
+to wipe and reseed).
 
 Run from the backend folder:
     python database/seed_outcome_demo_data.py [--dry-run] [--reset]
@@ -31,6 +40,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.db import engine, SessionLocal, Base
 from database.models import (
     WorkAccount, WorkItem, TokenTransaction, WorkItemOutcome, WorkItemOutcomeEvent,
+    WorkUser, WorkItemUser,
 )
 from api.routes_work_items import classify_business_purpose_fields
 
@@ -47,13 +57,50 @@ COMPANIES = [
     "Palisade Energy", "Quarrystone Mining", "Ridgeline Telecom",
     "Silverbrook Foods", "Timberline Apparel", "Underwood Legal Services",
     "Vantage Point Consulting", "Westfield Automotive", "Yellowstone Agriculture",
-    "Zephyr Renewable Power",
+    "Zephyr Renewable Power", "Alderleaf Pharmaceuticals", "Brightwater Marine",
+    "Copperfield Realty", "Duskwood Furniture", "Eastgate Import Export",
+    "Foxglove Publishing", "Greystone Architecture", "Hawthorn Distillers",
+    "Ivywood Education Group", "Jasperfield Robotics", "Kingsley Waste Management",
+    "Lonestar Petroleum", "Mossbrook Dairy Co", "Nightingale Home Health",
+    "Oakhaven Furniture Rentals", "Prairiewind Grain", "Quicksilver Courier",
+    "Redwood Timber Co", "Stonebridge Capital", "Thistledown Textiles",
+    "Umberglen Security", "Violetgrove Cosmetics", "Wrenfield Software",
+    "Xander Freight Systems", "Youngblood Sporting Goods", "Ashworth Dental Group",
+    "Blackfriar Brewing", "Cobalt Ridge Mining", "Dovetail Furniture Works",
+    "Emberline Foods", "Fallowfield Farms", "Goldleaf Jewelers",
+    "Hemlock Forestry", "Innsbridge Hospitality Group", "Jacaranda Wellness Spas",
 ]
 
 OPPORTUNITY_NAMES = ["Expansion", "Renewal", "New Business", "Upsell", "Platform Migration"]
 CASE_SUBJECTS = [
     "Login access issue", "Billing discrepancy", "Integration failure",
     "Performance degradation", "Feature request escalation", "Data export request",
+]
+
+# A shared rep pool -- a real business has a handful of people covering
+# many accounts, not a unique employee per client. Owners are internal to
+# the (fictional) company running this CostPilot workspace, so the email
+# domain is constant across the pool rather than derived from each client.
+REP_EMAIL_DOMAIN = "brightleafsolutions.com"
+SALES_REPS = [
+    "Jordan Michaels", "Priya Anand", "Marcus Webb",
+    "Elena Torres", "Sam O'Connell", "Nina Kowalski",
+]
+SUPPORT_REPS = [
+    "Dana Whitfield", "Malik Johnson", "Chloe Bergstrom",
+    "Tariq Osei", "Rachel Kim", "Owen Fitzgerald",
+]
+SUCCESS_REPS = [
+    "Ines Duarte", "Gavin Patel", "Fatima Rahman",
+    "Liam Sutherland", "Yuki Tanaka", "Beatriz Costa",
+]
+
+TASK_NOTES = [
+    "Logged follow-up call", "Sent pricing proposal", "Internal note: budget confirmed",
+    "Scheduled demo with stakeholders", "Followed up on outstanding questions",
+    "Left voicemail, no response yet", "Sent renewal reminder", "Escalated to manager",
+    "Confirmed contact details", "Reviewed contract terms with legal",
+    "Sent troubleshooting steps", "Scheduled screen-share session",
 ]
 
 MODELS = [
@@ -69,12 +116,54 @@ def _entity_id(*parts):
     return f"{PREFIX}-" + "-".join(str(p).replace(" ", "").upper() for p in parts)
 
 
-def _random_past_datetime(rng, days_ago_min, days_ago_max):
-    days_ago = rng.uniform(days_ago_min, days_ago_max)
+def _rep_email(name):
+    local = name.lower().replace("'", "").replace(" ", ".")
+    return f"{local}@{REP_EMAIL_DOMAIN}"
+
+
+def _weighted_past_datetime(rng, days_ago_min, days_ago_max):
+    """Bias toward recent dates (denser activity in recent months, the way
+    a real, growing business's activity looks) instead of uniform-random
+    across the whole window -- same realism goal as
+    seed_historical_demo.py's month-over-month volume ramp, expressed here
+    as a skewed single draw rather than a per-month loop."""
+    span = days_ago_max - days_ago_min
+    skewed = rng.random() ** 2.2  # exponent > 1 skews toward 0 (recent)
+    days_ago = days_ago_min + skewed * span
     return datetime.utcnow() - timedelta(days=days_ago)
 
 
-def _make_transactions(rng, db, work_item, department, n, days_ago_min, days_ago_max):
+def _seed_reps(db, dry_run_existing):
+    """Create (or reuse) the shared WorkUser rep pool, keyed by
+    (workspace_id, source_platform, external_id) per WorkUser's unique
+    constraint. Returns {department: [WorkUser, ...]}."""
+    pools = {"Sales": SALES_REPS, "Support": SUPPORT_REPS, "Success": SUCCESS_REPS}
+    reps_by_dept = {}
+    for dept, names in pools.items():
+        reps = []
+        for name in names:
+            external_id = _entity_id("REP", dept, name)
+            existing = dry_run_existing.get(external_id)
+            if existing:
+                reps.append(existing)
+                continue
+            user = WorkUser(
+                workspace_id=WORKSPACE_ID, source_platform="Salesforce",
+                external_id=external_id, name=name, email=_rep_email(name),
+            )
+            db.add(user)
+            db.flush()
+            dry_run_existing[external_id] = user
+            reps.append(user)
+        reps_by_dept[dept] = reps
+    return reps_by_dept
+
+
+def _assign_owner(db, work_item, owner, role):
+    db.add(WorkItemUser(work_item_id=work_item.id, work_user_id=owner.id, role=role))
+
+
+def _make_transactions(rng, db, work_item, department, owner, n, days_ago_min, days_ago_max):
     for _ in range(n):
         tier, model_name, in_cost, out_cost = rng.choice(MODELS)
         input_tokens = rng.randint(200, 2200)
@@ -91,9 +180,13 @@ def _make_transactions(rng, db, work_item, department, n, days_ago_min, days_ago
             workspace_id=WORKSPACE_ID,
             source_platform="Salesforce",
             work_item_id=work_item.id,
+            work_user_id=owner.id if owner else None,
             origin_record_id=work_item.source_record_id,
             origin_record_type=origin_record_type,
             origin_record_name=work_item.name,
+            actor_name=owner.name if owner else None,
+            actor_email=owner.email if owner else None,
+            actor_source_platform="Salesforce" if owner else None,
             model_tier=tier,
             model_name=model_name,
             input_tokens=input_tokens,
@@ -103,26 +196,86 @@ def _make_transactions(rng, db, work_item, department, n, days_ago_min, days_ago
             was_pruned=tokens_saved > 0,
             business_purpose=business_purpose,
             is_simulation=True,
-            timestamp=_random_past_datetime(rng, days_ago_min, days_ago_max),
+            timestamp=_weighted_past_datetime(rng, days_ago_min, days_ago_max),
+        ))
+
+
+def _make_activity_notes(rng, db, work_item, department, owner, days_ago_min, days_ago_max):
+    """Lightweight Task/Note-style activity per record -- small, cheap AI
+    calls (drafting a note, summarizing a call) rather than full work
+    sessions, so a record looks actively worked by its owner, not just a
+    shell with a handful of big transactions."""
+    for _ in range(rng.randint(2, 6)):
+        note_text = rng.choice(TASK_NOTES)
+        record_kind = rng.choice(["Task", "Note"])
+        input_tokens = rng.randint(80, 400)
+        output_tokens = rng.randint(30, 150)
+        cost_usd = round((input_tokens * 0.80 + output_tokens * 4.00) / 1_000_000, 6)
+        business_purpose = classify_business_purpose_fields(
+            work_item.source_record_type, work_item.name, work_item.context_type,
+            work_item.source_record_type, None,
+        )
+        db.add(TokenTransaction(
+            department=f"{WORKSPACE_ID}:{department}",
+            workspace_id=WORKSPACE_ID,
+            source_platform="Salesforce",
+            work_item_id=work_item.id,
+            work_user_id=owner.id if owner else None,
+            origin_record_id=work_item.source_record_id,
+            origin_record_type=record_kind,
+            origin_record_name=f"{note_text} — {work_item.name}",
+            actor_name=owner.name if owner else None,
+            actor_email=owner.email if owner else None,
+            actor_source_platform="Salesforce" if owner else None,
+            model_tier="Scout", model_name="claude-3-5-haiku",
+            input_tokens=input_tokens, output_tokens=output_tokens,
+            tokens_saved=0, cost_usd=cost_usd, was_pruned=False,
+            business_purpose=business_purpose,
+            is_simulation=True,
+            timestamp=_weighted_past_datetime(rng, days_ago_min, days_ago_max),
         ))
 
 
 def seed(db, dry_run=False):
-    rng = random.Random(RANDOM_SEED)
     existing_accounts = {
         a.external_id for a in db.query(WorkAccount).filter(WorkAccount.workspace_id == WORKSPACE_ID).all()
     }
+    existing_reps = {
+        u.external_id: u for u in db.query(WorkUser).filter(WorkUser.workspace_id == WORKSPACE_ID).all()
+    }
+    reps_by_dept = _seed_reps(db, existing_reps)
 
     work_item_count = 0
+    note_count = 0
     outcome_counts = {"won": 0, "lost": 0, "open": 0, "case_closed": 0, "case_open": 0}
 
     for company in COMPANIES:
+        # A per-company RNG, used ONLY for the three counts drawn below
+        # (tier, opportunity count, case count) -- never for anything
+        # inside the per-item loops. Each work item gets its OWN
+        # independent RNG seeded from its own external_id (see item_rng
+        # below) instead of continuing to draw from a shared stream.
+        #
+        # This two-level split matters for idempotency: a shared RNG means
+        # re-running after some items already exist skips their (many) rng
+        # draws entirely -- transactions, notes, outcome rolls -- which
+        # desyncs the shared sequence for every later count/item, so a
+        # "no-op" re-run ends up drawing different opportunity/case counts
+        # and creating genuinely new external_ids instead of being
+        # idempotent. Isolating both company-level counts and per-item
+        # content on their own independently-seeded RNGs makes every draw
+        # depend only on (company name) or (item external_id), never on
+        # what happened to any other item or any previous run.
+        company_rng = random.Random(f"{RANDOM_SEED}:{company}")
+
         # A per-company size tier so deal values look like they belong to
         # one real company (a mining/energy firm's deals cluster larger
         # than a consulting shop's) instead of every deal being an
         # independent uniform-random draw with no relationship to who it's for.
-        company_tier = rng.choice([("small", 6_000, 60_000), ("mid", 25_000, 180_000), ("large", 80_000, 500_000)])
+        company_tier = company_rng.choice([("small", 6_000, 60_000), ("mid", 25_000, 180_000), ("large", 80_000, 500_000)])
         tier_label, tier_min, tier_max = company_tier
+        opp_count = company_rng.randint(3, 7)
+        case_count = company_rng.randint(2, 5)
 
         account_external_id = _entity_id("ACCOUNT", company)
         if account_external_id in existing_accounts:
@@ -136,9 +289,10 @@ def seed(db, dry_run=False):
             db.flush()
 
         # 3-7 opportunities per account
-        for i in range(rng.randint(3, 7)):
-            opp_name = f"{company} — {rng.choice(OPPORTUNITY_NAMES)} {i + 1}"
+        for i in range(opp_count):
             opp_external_id = _entity_id("OPP", company, i)
+            item_rng = random.Random(f"{RANDOM_SEED}:{opp_external_id}")
+            opp_name = f"{company} — {item_rng.choice(OPPORTUNITY_NAMES)} {i + 1}"
             if db.query(WorkItem).filter_by(external_id=opp_external_id).first():
                 continue
             opp = WorkItem(
@@ -152,22 +306,25 @@ def seed(db, dry_run=False):
             db.flush()
             work_item_count += 1
 
-            outcome_roll = rng.random()
+            owner = item_rng.choice(reps_by_dept["Sales"])
+            _assign_owner(db, opp, owner, "Owner")
+
+            outcome_roll = item_rng.random()
             # Real deal amounts are almost never perfectly random floats --
             # round to the nearest $500, the way an actual sales team would
             # enter a negotiated number.
-            deal_value = round(rng.uniform(tier_min, tier_max) / 500) * 500
+            deal_value = round(item_rng.uniform(tier_min, tier_max) / 500) * 500
             now = datetime.utcnow()
             if outcome_roll < 0.35:
                 status, success, closed, value, outcome_counts["won"] = "Closed Won", True, True, deal_value, outcome_counts["won"] + 1
             elif outcome_roll < 0.50:
                 status, success, closed, value, outcome_counts["lost"] = "Closed Lost", False, True, deal_value, outcome_counts["lost"] + 1
             else:
-                status, success, closed, value = rng.choice(
+                status, success, closed, value = item_rng.choice(
                     ["Qualification", "Needs Analysis", "Proposal", "Negotiation"]
                 ), None, False, deal_value
                 outcome_counts["open"] += 1
-            outcome_date = _random_past_datetime(rng, 5, 240) if closed else None
+            outcome_date = _weighted_past_datetime(item_rng, 5, 730) if closed else None
 
             db.add(WorkItemOutcome(
                 work_item_id=opp.id, workspace_id=WORKSPACE_ID,
@@ -181,12 +338,15 @@ def seed(db, dry_run=False):
                 outcome_status=status, outcome_value=value, outcome_success=success,
                 is_closed=closed, retrieval_method="seed", recorded_at=outcome_date or now,
             ))
-            _make_transactions(rng, db, opp, "Sales", rng.randint(6, 22), 3, 260)
+            _make_transactions(item_rng, db, opp, "Sales", owner, item_rng.randint(6, 22), 3, 730)
+            _make_activity_notes(item_rng, db, opp, "Sales", owner, 3, 730)
+            note_count += 1
 
         # 2-5 support cases per account
-        for i in range(rng.randint(2, 5)):
-            case_name = f"{company} — {rng.choice(CASE_SUBJECTS)}"
+        for i in range(case_count):
             case_external_id = _entity_id("CASE", company, i)
+            item_rng = random.Random(f"{RANDOM_SEED}:{case_external_id}")
+            case_name = f"{company} — {item_rng.choice(CASE_SUBJECTS)}"
             if db.query(WorkItem).filter_by(external_id=case_external_id).first():
                 continue
             case = WorkItem(
@@ -200,13 +360,17 @@ def seed(db, dry_run=False):
             db.flush()
             work_item_count += 1
 
+            owner = item_rng.choice(reps_by_dept["Support"] + reps_by_dept["Success"])
+            department = "Support" if owner in reps_by_dept["Support"] else "Success"
+            _assign_owner(db, case, owner, "Owner")
+
             now = datetime.utcnow()
-            is_closed = rng.random() < 0.6
-            status = rng.choice(["Closed", "Escalated"]) if is_closed else rng.choice(["New", "Working"])
+            is_closed = item_rng.random() < 0.6
+            status = item_rng.choice(["Closed", "Escalated"]) if is_closed else item_rng.choice(["New", "Working"])
             if status == "Closed":
                 is_closed = True
             outcome_counts["case_closed" if is_closed else "case_open"] += 1
-            outcome_date = _random_past_datetime(rng, 2, 200) if is_closed else None
+            outcome_date = _weighted_past_datetime(item_rng, 2, 730) if is_closed else None
 
             db.add(WorkItemOutcome(
                 work_item_id=case.id, workspace_id=WORKSPACE_ID,
@@ -220,10 +384,14 @@ def seed(db, dry_run=False):
                 outcome_status=status, outcome_value=None, outcome_success=None,
                 is_closed=is_closed, retrieval_method="seed", recorded_at=outcome_date or now,
             ))
-            _make_transactions(rng, db, case, "Support", rng.randint(4, 14), 2, 210)
+            _make_transactions(item_rng, db, case, department, owner, item_rng.randint(4, 14), 2, 730)
+            _make_activity_notes(item_rng, db, case, department, owner, 2, 730)
+            note_count += 1
 
     print(f"Would create {work_item_count} work items across {len(COMPANIES)} accounts." if dry_run
           else f"Created {work_item_count} work items across {len(COMPANIES)} accounts.")
+    print(f"Seeded rep pool: {sum(len(v) for v in reps_by_dept.values())} people across Sales/Support/Success.")
+    print(f"Added Task/Note activity for {note_count} work items.")
     print(f"Opportunity outcomes: {outcome_counts['won']} won, {outcome_counts['lost']} lost, {outcome_counts['open']} open.")
     print(f"Case outcomes: {outcome_counts['case_closed']} closed, {outcome_counts['case_open']} open.")
 
@@ -239,7 +407,12 @@ def reset(db):
         .filter(WorkAccount.workspace_id == WORKSPACE_ID, WorkAccount.external_id.like(f"{PREFIX}-%"))
         .all()
     ]
-    if not account_ids:
+    rep_ids = [
+        u.id for u in db.query(WorkUser)
+        .filter(WorkUser.workspace_id == WORKSPACE_ID, WorkUser.external_id.like(f"{PREFIX}-%"))
+        .all()
+    ]
+    if not account_ids and not rep_ids:
         print("Nothing to reset.")
         return
     work_item_ids = [
@@ -248,10 +421,12 @@ def reset(db):
     db.query(WorkItemOutcomeEvent).filter(WorkItemOutcomeEvent.work_item_id.in_(work_item_ids)).delete(synchronize_session=False)
     db.query(WorkItemOutcome).filter(WorkItemOutcome.work_item_id.in_(work_item_ids)).delete(synchronize_session=False)
     db.query(TokenTransaction).filter(TokenTransaction.work_item_id.in_(work_item_ids)).delete(synchronize_session=False)
+    db.query(WorkItemUser).filter(WorkItemUser.work_item_id.in_(work_item_ids)).delete(synchronize_session=False)
     db.query(WorkItem).filter(WorkItem.id.in_(work_item_ids)).delete(synchronize_session=False)
     db.query(WorkAccount).filter(WorkAccount.id.in_(account_ids)).delete(synchronize_session=False)
+    db.query(WorkUser).filter(WorkUser.id.in_(rep_ids)).delete(synchronize_session=False)
     db.commit()
-    print(f"Removed {len(account_ids)} accounts and {len(work_item_ids)} work items.")
+    print(f"Removed {len(account_ids)} accounts, {len(work_item_ids)} work items, and {len(rep_ids)} reps.")
 
 
 if __name__ == "__main__":

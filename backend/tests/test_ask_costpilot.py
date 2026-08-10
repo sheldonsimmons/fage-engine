@@ -900,6 +900,37 @@ def test_named_subject_starts_fresh_scope_but_keeps_cross_cutting_filters():
     assert filters["model_tier"] == "Scout"
 
 
+def test_pinned_account_survives_named_subject_in_question_text():
+    # A Business Profile page's question naturally names its own account
+    # ("top agent for Acme Corp") -- that must not be treated as a stale
+    # leftover filter the way an unpinned chat-widget account_id would be.
+    request = AskCostPilotRequest(
+        question="What agent had the highest spend for Cascade Health Partners?",
+        account_id="OUTDEMO-ACCOUNT-CASCADEHEALTHPARTNERS",
+        account_id_pinned=True,
+        project_id="OLD-PROJECT",
+        user_external_id="OLD-USER",
+    )
+
+    assert _ask_has_explicit_named_subject(request.question) is True
+    filters = _ask_reporting_filters(request, _ask_fallback_intent(request))
+
+    assert filters["account_id"] == "OUTDEMO-ACCOUNT-CASCADEHEALTHPARTNERS"
+    # The rest of the stale-scope clearing still applies -- only account_id
+    # is exempted when pinned.
+    assert filters["project_id"] is None
+    assert filters["user_external_id"] is None
+
+
+def test_unpinned_account_still_cleared_by_named_subject_default_behavior():
+    request = AskCostPilotRequest(
+        question="Show AI usage for ACME Test.",
+        account_id="OLD-ACCOUNT",
+    )
+    filters = _ask_reporting_filters(request, _ask_fallback_intent(request))
+    assert filters["account_id"] is None
+
+
 def test_named_subject_does_not_inherit_prior_optimization_or_subject():
     request = AskCostPilotRequest(
         question="Show AI usage for ACME Test.",

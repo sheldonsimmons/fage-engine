@@ -1,0 +1,76 @@
+/* Vertical left-nav sidebar, first used on business-profile.html.
+   Reuses the app's existing design tokens (--bg-panel, --border,
+   --text-primary, --text-muted, --accent, --font-sans) -- same convention
+   as global-nav.css, just a vertical layout instead of horizontal. */
+
+.cp-app-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+.cp-left-nav {
+  width: 232px;
+  flex: 0 0 232px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.cp-left-nav__brand { padding: 6px 10px 18px; }
+.cp-left-nav__brand img { height: 24px; display: block; }
+
+.cp-left-nav__links { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+
+.cp-left-nav__link {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 11px; border-radius: 8px;
+  color: var(--text-muted); text-decoration: none;
+  font-size: 13.5px; font-weight: 500;
+  transition: background .12s, color .12s;
+}
+.cp-left-nav__link:hover { background: var(--bg-base); color: var(--text-primary); }
+.cp-left-nav__link.active {
+  background: rgba(88,166,255,0.12); color: var(--accent); font-weight: 650;
+}
+.cp-left-nav__icon { flex: 0 0 auto; opacity: 0.9; }
+
+.cp-left-nav__footer {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cp-left-nav__workspace { display: flex; flex-direction: column; gap: 5px; padding: 0 4px; }
+.cp-left-nav__workspace span { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.cp-left-nav__workspace select {
+  background: var(--bg-base); border: 1px solid var(--border); color: var(--text-primary);
+  font-family: var(--font-sans); font-size: 12.5px; padding: 7px 9px; border-radius: 6px; width: 100%;
+}
+
+.cp-left-nav__user { display: flex; align-items: center; gap: 10px; padding: 4px; }
+.cp-left-nav__user-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--accent); color: #061423; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.cp-left-nav__user-meta { min-width: 0; }
+.cp-left-nav__user-name { font-size: 12.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-left-nav__user-email { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.cp-app-main { flex: 1; min-width: 0; }
+
+@media (max-width: 900px) {
+  .cp-left-nav { position: static; height: auto; width: 100%; flex-basis: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .cp-app-shell { flex-direction: column; }
+  .cp-left-nav__links { flex-direction: row; flex-wrap: wrap; }
+}
