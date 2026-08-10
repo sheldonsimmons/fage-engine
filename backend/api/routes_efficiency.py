@@ -4047,7 +4047,17 @@ def _ask_costpilot_answer(
             DepartmentBudget.workspace_id == (request.workspace_id or "default"),
         ).all()
         budget_scope = parsed.get("budget_scope") or "status"
-        over_limit = any(term in question.lower() for term in (
+        # "closest to going over budget" contains the literal substring
+        # "over budget", so the naive over_limit check below previously
+        # misread it as an already-exceeded claim (threshold=100, then
+        # filtered to zero rows since nothing had actually crossed 100%)
+        # instead of the proximity/ranking question it actually is --
+        # "which department is nearest its cap," answerable regardless of
+        # whether anything has crossed the threshold.
+        is_proximity_question = any(term in question.lower() for term in (
+            "closest to", "closest department", "nearest to", "which department is closest",
+        ))
+        over_limit = (not is_proximity_question) and any(term in question.lower() for term in (
             "over budget", "exceeded", "over cap", "above budget"
         ))
         threshold = 100 if over_limit else 70
@@ -4124,7 +4134,7 @@ def _ask_costpilot_answer(
                 "throttled": bool(budget.throttled),
             })
         all_budget_rows = list(budget_rows)
-        if budget_scope == "alerts":
+        if budget_scope == "alerts" and not is_proximity_question:
             budget_rows = [row for row in budget_rows if row["pct"] >= threshold]
         budget_rows.sort(
             key=(
@@ -4268,6 +4278,24 @@ def _ask_costpilot_answer(
             else:
                 answer = "No active department budgets are configured, so budget status cannot be calculated."
             calculation_formula = "Combined current department spend divided by combined configured monthly budget"
+        elif is_proximity_question:
+            title = "Budget watch"
+            # budget_rows is sorted by -pct here (the non-"all" sort key
+            # above), so the first row is already the closest to its cap --
+            # answer with it directly rather than a threshold count, since
+            # "closest to going over" is a ranking question, not a yes/no
+            # over-threshold check.
+            if budget_rows:
+                top = budget_rows[0]
+                status_word = "over" if top["pct"] >= 100 else "closest to"
+                answer = (
+                    f"{top['label']} is {status_word} its monthly AI budget: "
+                    f"${top['spent']:,.4f} of ${top['cap']:,.2f} used "
+                    f"({budget_pct_display(top['pct'])})."
+                )
+            else:
+                answer = "No active department budgets are configured, so budget proximity cannot be calculated."
+            calculation_formula = "Department with the highest current spend as a percentage of its monthly cap"
         else:
             title = "Budget watch"
             answer = (
