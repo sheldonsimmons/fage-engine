@@ -19,8 +19,11 @@ covering many accounts, not one person per account), and that owner's
 identity is attached to every TokenTransaction generated for that record
 (work_user_id/actor_name/actor_email) plus a handful of lightweight
 Task/Note-style activity entries -- so activity looks like it's tied to
-real people working real records, not anonymous system noise. No
-Project-type work items are generated (Opportunities and Cases only).
+real people working real records, not anonymous system noise. Every
+TokenTransaction is also assigned a RegisteredAgent from a small shared
+pool (department-matched), so "which agent had the highest spend" has a
+real name to return instead of "Unknown agent". No Project-type work items
+are generated (Opportunities and Cases only).
 
 Idempotent-ish: uses a fixed external_id prefix and skips accounts/people
 that already exist, so re-running adds nothing new once seeded (use --reset
@@ -40,7 +43,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.db import engine, SessionLocal, Base
 from database.models import (
     WorkAccount, WorkItem, TokenTransaction, WorkItemOutcome, WorkItemOutcomeEvent,
-    WorkUser, WorkItemUser,
+    WorkUser, WorkItemUser, RegisteredAgent,
 )
 from api.routes_work_items import classify_business_purpose_fields
 
@@ -94,6 +97,18 @@ SUCCESS_REPS = [
     "Ines Duarte", "Gavin Patel", "Fatima Rahman",
     "Liam Sutherland", "Yuki Tanaka", "Beatriz Costa",
 ]
+
+# A shared AI agent pool, one department each -- same "handful of workers
+# covering many accounts" shape as the rep pool above, so "which agent had
+# the highest spend" has a real name to return instead of "Unknown agent".
+# RegisteredAgent.name is globally unique (no workspace_id column on that
+# table), so these must not collide with seed_historical_demo.py's AGENTS
+# list -- kept deliberately distinct.
+AGENTS_BY_DEPT = {
+    "Sales": ["Opportunity Insights Agent", "Pipeline Coach Agent", "Proposal Drafting Agent"],
+    "Support": ["Case Triage Agent", "Support Deflection Agent", "Escalation Assistant"],
+    "Success": ["Renewal Outreach Agent", "Customer Health Agent", "Onboarding Assistant"],
+}
 
 TASK_NOTES = [
     "Logged follow-up call", "Sent pricing proposal", "Internal note: budget confirmed",
@@ -159,11 +174,38 @@ def _seed_reps(db, dry_run_existing):
     return reps_by_dept
 
 
+def _seed_agents(db):
+    """Create (or reuse) the shared RegisteredAgent pool, keyed by
+    (name, department) the same way seed_historical_demo.py's AGENTS
+    lookup works -- RegisteredAgent.name is globally unique, so an
+    existing-by-name query is what actually keeps this idempotent, not a
+    workspace_id column (there isn't one on this table). Returns
+    {department: [RegisteredAgent, ...]}."""
+    agents_by_dept = {}
+    for dept, names in AGENTS_BY_DEPT.items():
+        agents = []
+        for name in names:
+            department = f"{WORKSPACE_ID}:{dept}"
+            agent = db.query(RegisteredAgent).filter_by(name=name, department=department).first()
+            if not agent:
+                agent = RegisteredAgent(
+                    name=name, department=department, source_platform="Salesforce",
+                    permissions="read,write", target_table="outcome_demo",
+                    status="idle", collision_policy="lock",
+                    min_tier=1, max_tier=4, pruning_enabled=True, archived=False,
+                )
+                db.add(agent)
+                db.flush()
+            agents.append(agent)
+        agents_by_dept[dept] = agents
+    return agents_by_dept
+
+
 def _assign_owner(db, work_item, owner, role):
     db.add(WorkItemUser(work_item_id=work_item.id, work_user_id=owner.id, role=role))
 
 
-def _make_transactions(rng, db, work_item, department, owner, n, days_ago_min, days_ago_max):
+def _make_transactions(rng, db, work_item, department, owner, agent, n, days_ago_min, days_ago_max):
     for _ in range(n):
         tier, model_name, in_cost, out_cost = rng.choice(MODELS)
         input_tokens = rng.randint(200, 2200)
@@ -181,6 +223,7 @@ def _make_transactions(rng, db, work_item, department, owner, n, days_ago_min, d
             source_platform="Salesforce",
             work_item_id=work_item.id,
             work_user_id=owner.id if owner else None,
+            agent_id=agent.id if agent else None,
             origin_record_id=work_item.source_record_id,
             origin_record_type=origin_record_type,
             origin_record_name=work_item.name,
@@ -200,7 +243,7 @@ def _make_transactions(rng, db, work_item, department, owner, n, days_ago_min, d
         ))
 
 
-def _make_activity_notes(rng, db, work_item, department, owner, days_ago_min, days_ago_max):
+def _make_activity_notes(rng, db, work_item, department, owner, agent, days_ago_min, days_ago_max):
     """Lightweight Task/Note-style activity per record -- small, cheap AI
     calls (drafting a note, summarizing a call) rather than full work
     sessions, so a record looks actively worked by its owner, not just a
@@ -221,6 +264,7 @@ def _make_activity_notes(rng, db, work_item, department, owner, days_ago_min, da
             source_platform="Salesforce",
             work_item_id=work_item.id,
             work_user_id=owner.id if owner else None,
+            agent_id=agent.id if agent else None,
             origin_record_id=work_item.source_record_id,
             origin_record_type=record_kind,
             origin_record_name=f"{note_text} — {work_item.name}",
@@ -244,6 +288,7 @@ def seed(db, dry_run=False):
         u.external_id: u for u in db.query(WorkUser).filter(WorkUser.workspace_id == WORKSPACE_ID).all()
     }
     reps_by_dept = _seed_reps(db, existing_reps)
+    agents_by_dept = _seed_agents(db)
 
     work_item_count = 0
     note_count = 0
@@ -307,6 +352,11 @@ def seed(db, dry_run=False):
             work_item_count += 1
 
             owner = item_rng.choice(reps_by_dept["Sales"])
+            # Isolated RNG so adding agent assignment doesn't shift every
+            # other draw for this item (deal value, outcome, dates) --
+            # keeps a --reset && reseed reproducing identical prior numbers
+            # plus the new agent field, not silently different ones.
+            agent = random.Random(f"{RANDOM_SEED}:agent:{opp_external_id}").choice(agents_by_dept["Sales"])
             _assign_owner(db, opp, owner, "Owner")
 
             outcome_roll = item_rng.random()
@@ -338,8 +388,8 @@ def seed(db, dry_run=False):
                 outcome_status=status, outcome_value=value, outcome_success=success,
                 is_closed=closed, retrieval_method="seed", recorded_at=outcome_date or now,
             ))
-            _make_transactions(item_rng, db, opp, "Sales", owner, item_rng.randint(6, 22), 3, 730)
-            _make_activity_notes(item_rng, db, opp, "Sales", owner, 3, 730)
+            _make_transactions(item_rng, db, opp, "Sales", owner, agent, item_rng.randint(6, 22), 3, 730)
+            _make_activity_notes(item_rng, db, opp, "Sales", owner, agent, 3, 730)
             note_count += 1
 
         # 2-5 support cases per account
@@ -362,6 +412,7 @@ def seed(db, dry_run=False):
 
             owner = item_rng.choice(reps_by_dept["Support"] + reps_by_dept["Success"])
             department = "Support" if owner in reps_by_dept["Support"] else "Success"
+            agent = random.Random(f"{RANDOM_SEED}:agent:{case_external_id}").choice(agents_by_dept[department])
             _assign_owner(db, case, owner, "Owner")
 
             now = datetime.utcnow()
@@ -384,13 +435,14 @@ def seed(db, dry_run=False):
                 outcome_status=status, outcome_value=None, outcome_success=None,
                 is_closed=is_closed, retrieval_method="seed", recorded_at=outcome_date or now,
             ))
-            _make_transactions(item_rng, db, case, department, owner, item_rng.randint(4, 14), 2, 730)
-            _make_activity_notes(item_rng, db, case, department, owner, 2, 730)
+            _make_transactions(item_rng, db, case, department, owner, agent, item_rng.randint(4, 14), 2, 730)
+            _make_activity_notes(item_rng, db, case, department, owner, agent, 2, 730)
             note_count += 1
 
     print(f"Would create {work_item_count} work items across {len(COMPANIES)} accounts." if dry_run
           else f"Created {work_item_count} work items across {len(COMPANIES)} accounts.")
     print(f"Seeded rep pool: {sum(len(v) for v in reps_by_dept.values())} people across Sales/Support/Success.")
+    print(f"Seeded agent pool: {sum(len(v) for v in agents_by_dept.values())} agents across Sales/Support/Success.")
     print(f"Added Task/Note activity for {note_count} work items.")
     print(f"Opportunity outcomes: {outcome_counts['won']} won, {outcome_counts['lost']} lost, {outcome_counts['open']} open.")
     print(f"Case outcomes: {outcome_counts['case_closed']} closed, {outcome_counts['case_open']} open.")
@@ -412,7 +464,16 @@ def reset(db):
         .filter(WorkUser.workspace_id == WORKSPACE_ID, WorkUser.external_id.like(f"{PREFIX}-%"))
         .all()
     ]
-    if not account_ids and not rep_ids:
+    # RegisteredAgent has no workspace_id/external_id column -- name is
+    # globally unique, so filter by our own fixed name list (deliberately
+    # distinct from seed_historical_demo.py's AGENTS) rather than a broad
+    # department-prefix wildcard, which could otherwise delete that other
+    # script's agents too if it's ever run against this same workspace.
+    all_agent_names = [name for names in AGENTS_BY_DEPT.values() for name in names]
+    agent_ids = [
+        a.id for a in db.query(RegisteredAgent).filter(RegisteredAgent.name.in_(all_agent_names)).all()
+    ]
+    if not account_ids and not rep_ids and not agent_ids:
         print("Nothing to reset.")
         return
     work_item_ids = [
@@ -425,8 +486,9 @@ def reset(db):
     db.query(WorkItem).filter(WorkItem.id.in_(work_item_ids)).delete(synchronize_session=False)
     db.query(WorkAccount).filter(WorkAccount.id.in_(account_ids)).delete(synchronize_session=False)
     db.query(WorkUser).filter(WorkUser.id.in_(rep_ids)).delete(synchronize_session=False)
+    db.query(RegisteredAgent).filter(RegisteredAgent.id.in_(agent_ids)).delete(synchronize_session=False)
     db.commit()
-    print(f"Removed {len(account_ids)} accounts, {len(work_item_ids)} work items, and {len(rep_ids)} reps.")
+    print(f"Removed {len(account_ids)} accounts, {len(work_item_ids)} work items, {len(rep_ids)} reps, and {len(agent_ids)} agents.")
 
 
 if __name__ == "__main__":
