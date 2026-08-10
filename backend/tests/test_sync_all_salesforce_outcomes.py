@@ -36,6 +36,56 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
+def test_syncs_both_orgs_when_one_workspace_has_two_distinct_salesforce_connections():
+    """
+    Found live in production: one CostPilot workspace had two genuinely
+    different Salesforce orgs connected (different instance_url), and the
+    old workspace-only dedup silently dropped one of them -- accounts that
+    only existed in the dropped org looked like they had no data at all,
+    when the real problem was "never queried."
+    """
+    db = _session()
+    org_a = IntegrationConnection(
+        workspace_id="WS-MULTI", platform="salesforce", display_name="org-a", status="connected",
+        instance_url="https://cpcom-dev-ed.develop.my.salesforce.com", access_token_encrypted=_encrypt("x"),
+        last_success_at=datetime.utcnow() - timedelta(hours=2),
+    )
+    org_b = IntegrationConnection(
+        workspace_id="WS-MULTI", platform="salesforce", display_name="org-b", status="mapping",
+        instance_url="https://aicom177-dev-ed.develop.my.salesforce.com", access_token_encrypted=_encrypt("x"),
+        last_success_at=None,
+    )
+    db.add_all([org_a, org_b])
+    db.commit()
+
+    selected = sync_all._select_connections_to_sync(db)
+    assert len(selected) == 2
+    display_names = {c.display_name for c in selected}
+    assert display_names == {"org-a", "org-b"}
+
+
+def test_dedups_multiple_rows_for_the_same_org_within_one_workspace():
+    """Multiple re-auth attempts against the SAME org should still collapse
+    to one connection, unlike two genuinely different orgs."""
+    db = _session()
+    db.add(IntegrationConnection(
+        workspace_id="WS-SAMEORG", platform="salesforce", display_name="old-row", status="error",
+        instance_url="https://same-org.my.salesforce.com", access_token_encrypted=_encrypt("x"),
+        last_success_at=datetime.utcnow() - timedelta(days=5),
+    ))
+    newer = IntegrationConnection(
+        workspace_id="WS-SAMEORG", platform="salesforce", display_name="newer-row", status="mapping",
+        instance_url="https://same-org.my.salesforce.com", access_token_encrypted=_encrypt("x"),
+        last_success_at=datetime.utcnow() - timedelta(hours=1),
+    )
+    db.add(newer)
+    db.commit()
+
+    selected = sync_all._select_connections_to_sync(db)
+    assert len(selected) == 1
+    assert selected[0].display_name == "newer-row"
+
+
 def test_picks_most_recently_successful_connection_per_workspace():
     db = _session()
     db.add(IntegrationConnection(

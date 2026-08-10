@@ -48,19 +48,30 @@ def _select_connections_to_sync(db):
         )
         .all()
     )
-    by_workspace = {}
+    # Dedup key is (workspace, org) not just workspace -- a single CostPilot
+    # workspace can have more than one distinct Salesforce org connected
+    # (found in practice: one workspace with both a "cpcom-dev-ed" and an
+    # "aicom177-dev-ed" connection, each with real, different accounts and
+    # Opportunities). Deduping to one connection per workspace silently
+    # dropped every org except whichever synced most recently -- accounts
+    # that only exist in the other org looked like they had no outcome
+    # data at all, when the truth was simply "never queried."
+    by_workspace_and_org = {}
     for item in candidates:
-        existing = by_workspace.get(item.workspace_id)
+        org_key = (item.workspace_id, (item.instance_url or "").rstrip("/").lower())
+        existing = by_workspace_and_org.get(org_key)
         if existing is None:
-            by_workspace[item.workspace_id] = item
+            by_workspace_and_org[org_key] = item
             continue
-        # Prefer whichever has actually succeeded more recently; a
-        # connection that has never succeeded loses to one that has.
+        # Within the same org, prefer whichever connection row has actually
+        # succeeded more recently (multiple rows accumulate per org from
+        # re-auth attempts) -- a connection that has never succeeded loses
+        # to one that has.
         item_success = item.last_success_at
         existing_success = existing.last_success_at
         if item_success and (not existing_success or item_success > existing_success):
-            by_workspace[item.workspace_id] = item
-    return list(by_workspace.values())
+            by_workspace_and_org[org_key] = item
+    return list(by_workspace_and_org.values())
 
 
 async def main(dry_run: bool):
