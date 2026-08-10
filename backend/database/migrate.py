@@ -258,3 +258,67 @@ def run_migrations():
                 conn.commit()
             except Exception:
                 pass
+
+        # reporting_activity — read-only flat view for future third-party BI
+        # tool access (Tableau/PowerBI/Metabase connecting directly to
+        # Postgres). Postgres-only: CREATE OR REPLACE VIEW isn't valid SQLite
+        # syntax, and nothing in the app queries this view, so skipping it
+        # entirely on SQLite (local tests) is safe.
+        #
+        # The `workspace_id` output column mirrors core/workspace_scope.py's
+        # workspace_filter() exactly (real column first, "WORKSPACE:Dept"
+        # department-prefix fallback second) -- that helper exists precisely
+        # because this same scoping logic was once reimplemented slightly
+        # differently in two other files and silently drifted apart
+        # (routes_dashboard.py undercounted spend ~5x for a while). If
+        # workspace_filter() ever changes, this view's COALESCE/split_part
+        # expression must change with it.
+        #
+        # Deliberately excludes actor_email/actor_name/actor_external_id/
+        # origin_record_name (PII / external-record identifiers not needed
+        # for aggregate reporting). No per-tenant access control (roles/RLS)
+        # yet -- that's provisioned per customer when there's a real request,
+        # not built speculatively here.
+        if engine.dialect.name == "postgresql":
+            try:
+                conn.execute(text("""
+                    CREATE OR REPLACE VIEW reporting_activity AS
+                    SELECT
+                        COALESCE(tt.workspace_id, split_part(tt.department, ':', 1)) AS workspace_id,
+                        tt.id AS transaction_id,
+                        tt.timestamp,
+                        tt.department,
+                        tt.source_platform,
+                        tt.model_tier,
+                        tt.model_name,
+                        tt.input_tokens,
+                        tt.output_tokens,
+                        tt.cost_usd,
+                        tt.tokens_saved,
+                        tt.was_pruned,
+                        tt.business_purpose,
+                        wi.id AS work_item_id,
+                        wi.name AS work_item_name,
+                        wi.external_id AS work_item_external_id,
+                        wi.context_type,
+                        wi.context_template,
+                        wi.source_record_type,
+                        wa.id AS account_id,
+                        wa.name AS account_name,
+                        wa.external_id AS account_external_id,
+                        wo.outcome_status,
+                        wo.outcome_value,
+                        wo.outcome_success,
+                        wo.is_closed,
+                        ra.id AS agent_id,
+                        ra.name AS agent_name,
+                        ra.department AS agent_department
+                    FROM token_transactions tt
+                    LEFT JOIN work_items wi ON wi.id = tt.work_item_id
+                    LEFT JOIN work_accounts wa ON wa.id = wi.account_id
+                    LEFT JOIN work_item_outcomes wo ON wo.work_item_id = wi.id
+                    LEFT JOIN registered_agents ra ON ra.id = tt.agent_id
+                """))
+                conn.commit()
+            except Exception:
+                pass

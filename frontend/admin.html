@@ -341,12 +341,27 @@
       <p id="adminSystemSummary">Checking the CostPilot backend...</p>
       <button class="admin-secondary-btn" onclick="checkStatus();refreshAdminOverview()">Refresh status</button>
     </div>
+    <div class="admin-system-card">
+      <h3>Reporting access</h3>
+      <p>CostPilot now maintains a read-only reporting view of your workspace's AI activity, shaped for
+         connecting a third-party BI tool (Tableau, Power BI, Metabase) directly to the data. Per-workspace
+         connection credentials aren't self-service yet -- they're provisioned individually on request, so
+         one workspace's connection can never see another's data. Reach out to your CostPilot contact to
+         set one up.</p>
+      <p>Your workspace ID (needed for the request): <code id="adminReportingWorkspaceId">Loading...</code></p>
+    </div>
     <div class="admin-system-card admin-danger-zone">
       <h3>Danger zone</h3>
       <p>Destructive demo actions are isolated here to prevent accidental use.</p>
       <div id="adminDemoMount"></div>
     </div>
   </section>
+  <script>
+    (function () {
+      const el = document.getElementById("adminReportingWorkspaceId");
+      if (el) el.textContent = localStorage.getItem("cp_workspace_id") || "default";
+    })();
+  </script>
 
   <div id="legacyAdminLayout">
   <div class="section-label">Configuration</div>
