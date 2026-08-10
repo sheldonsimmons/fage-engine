@@ -2385,6 +2385,19 @@ async def _import_salesforce_work_items(
                 )
                 db.add(account)
                 db.flush()
+            else:
+                # An existing account's name was previously never refreshed
+                # on re-sync -- a rename in Salesforce (this is the one
+                # field every Opportunity/Case record actually carries,
+                # via the joined Account.Name) would silently never reach
+                # CostPilot once the account row already existed. Only
+                # `name` is touched here -- status/merged_into_work_account_id
+                # are CostPilot-owned merge state (see the account-merge
+                # endpoints), not something Salesforce sync should ever
+                # overwrite.
+                incoming_name = wi_fields.get("account_name")
+                if incoming_name and account.name != incoming_name:
+                    account.name = incoming_name
 
         # Idempotent (section 12 of the design brief): identity is the
         # source link (workspace + platform + source record id), not a

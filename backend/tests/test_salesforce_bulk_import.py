@@ -179,6 +179,51 @@ def test_import_creates_work_items_accounts_and_outcomes(monkeypatch):
     assert db.query(WorkItemOutcomeEvent).filter_by(work_item_id=acme_item.id).count() == 1
 
 
+def test_reimport_refreshes_an_existing_account_name(monkeypatch):
+    # An account rename in Salesforce previously never reached CostPilot
+    # once the WorkAccount row already existed -- the import path only
+    # ever set `name` on creation, never on a later sync of the same
+    # account_external_id. account_name is available on every
+    # Opportunity/Case record via the joined Account.Name field, so a
+    # re-import is exactly where this should get picked up.
+    db = _session()
+    connection = _make_connection(db)
+
+    record_v1 = {
+        "Id": "006RENAME001", "Name": "Renamed Co Deal", "AccountId": "001RENAME",
+        "Account": {"Name": "GenePoint"}, "StageName": "Proposal", "IsClosed": False,
+        "IsWon": False, "Amount": 5000.0, "CloseDate": None,
+        "OwnerId": "005R", "LastModifiedDate": "2026-01-01T00:00:00.000+0000",
+    }
+    record_v2 = {**record_v1, "Account": {"Name": "GenePoint Renewables"}}
+
+    call_count = {"n": 0}
+
+    async def fake_query_all(_item, _query, db=None, max_records=50_000):
+        call_count["n"] += 1
+        return [record_v1 if call_count["n"] == 1 else record_v2], None
+
+    monkeypatch.setattr("api.routes_connections._salesforce_query_all", fake_query_all)
+
+    asyncio.run(import_work_items(connection.id, object_type="Opportunity", db=db))
+    account = db.query(WorkAccount).filter_by(workspace_id="WS-IMPORT", external_id="001RENAME").first()
+    assert account.name == "GenePoint"
+
+    # Simulate this account having gone through CostPilot's own merge
+    # feature -- sync must never clobber merge state, only the name.
+    account.status = "merged"
+    account.merged_into_work_account_id = 999
+    db.commit()
+
+    asyncio.run(import_work_items(connection.id, object_type="Opportunity", db=db))
+    db.refresh(account)
+    assert account.name == "GenePoint Renewables"
+    assert account.status == "merged"
+    assert account.merged_into_work_account_id == 999
+    # Still exactly one account row -- a rename must not create a duplicate.
+    assert db.query(WorkAccount).filter_by(workspace_id="WS-IMPORT").count() == 1
+
+
 def test_import_records_history_when_a_reimport_finds_a_real_change(monkeypatch):
     db = _session()
     connection = _make_connection(db)
