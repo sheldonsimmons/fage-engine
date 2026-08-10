@@ -1860,7 +1860,10 @@ async def _servicenow_refresh_access_token(db: Session, item: IntegrationConnect
         )
     if response.status_code >= 400:
         return False
-    token = response.json()
+    try:
+        token = response.json()
+    except ValueError:
+        return False
     access_token = token.get("access_token")
     if not access_token:
         return False
@@ -1930,7 +1933,21 @@ async def _servicenow_table_get(
             status_code=502,
             detail=f"ServiceNow metadata request failed ({response.status_code}).{permission_hint}",
         )
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError:
+        # A 200 with a non-JSON body happens for real -- most commonly a
+        # hibernating Personal Developer Instance returning an HTML
+        # "waking up" page instead of the Table API's JSON. Surface this
+        # as a clear, retryable error instead of an unhandled 500.
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "ServiceNow returned a non-JSON response -- if this is a "
+                "Personal Developer Instance, it may be hibernating and "
+                "need a minute to wake up. Try again shortly."
+            ),
+        )
     return payload.get("result", []) if isinstance(payload, dict) else []
 
 
