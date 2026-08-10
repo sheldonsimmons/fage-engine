@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import (
     AuditEvent, IntegrationConnection, TrialAccount,
-    WorkItem, WorkItemOutcome, WorkItemOutcomeEvent,
+    WorkAccount, WorkItem, WorkItemOutcome, WorkItemOutcomeEvent, WorkItemSourceLink,
 )
 
 
@@ -1343,6 +1343,42 @@ async def _salesforce_try_query(
         return [], str(exc.detail)
 
 
+async def _salesforce_query_all(
+    item: IntegrationConnection,
+    query: str,
+    *,
+    db: Optional[Session] = None,
+    max_records: int = 50_000,
+) -> tuple[list[dict], Optional[str]]:
+    """
+    Like _salesforce_try_query, but follows Salesforce's nextRecordsUrl
+    pagination (query results cap at 2,000 records per page) to collect
+    every matching record -- needed for bulk import, where "all
+    Opportunities" for a real org can be thousands of rows, unlike the
+    outcome sync's bounded WHERE Id IN (...) batches.
+
+    max_records is a hard safety cap, not an expected ceiling, so a
+    runaway query against an unexpectedly huge org can't loop forever.
+    """
+    try:
+        payload = await _salesforce_get(item, f"query?q={quote(query, safe='')}", db=db)
+    except HTTPException as exc:
+        return [], str(exc.detail)
+
+    records = list(payload.get("records", []))
+    next_url = payload.get("nextRecordsUrl")
+    data_api_prefix = f"/services/data/{SALESFORCE_API_VERSION}/"
+    while next_url and not payload.get("done", True) and len(records) < max_records:
+        path = next_url[len(data_api_prefix):] if next_url.startswith(data_api_prefix) else next_url.lstrip("/")
+        try:
+            payload = await _salesforce_get(item, path, db=db)
+        except HTTPException as exc:
+            return records, str(exc.detail)
+        records.extend(payload.get("records", []))
+        next_url = payload.get("nextRecordsUrl")
+    return records, None
+
+
 @router.get("/{connection_id}/ai-entry-points")
 async def discover_salesforce_ai_entry_points(
     connection_id: int,
@@ -2271,4 +2307,205 @@ async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
     if not result["errors"]:
         item.last_success_at = datetime.utcnow()
     db.commit()
+    return result
+
+
+# ── Bulk import (Connect -> Discover -> Import) ─────────────────────────────
+#
+# Before this, the only way a WorkItem+WorkItemSourceLink pair existed was
+# a human calling the API by hand for one record at a time (or an
+# Agentforce action reactively creating one, which the account-level
+# fallback in routes_agentforce.py could get wrong when no source link
+# existed yet). A real company has hundreds or thousands of Opportunities
+# -- that doesn't scale to "someone manually creates each one."
+#
+# This function deliberately knows nothing about Salesforce fields --
+# everything vendor-specific comes in through build_all_query/
+# map_to_work_item/map_to_outcome, the same three-function shape
+# _sync_salesforce_object_outcomes already uses for the outcome side. A
+# second platform (Jira, HubSpot) would mean writing a sibling adapter
+# with this same shape, not touching this function -- the intended test
+# from the universal Business Context design: "would connecting a new
+# platform require changing this code?" should be no.
+
+async def _import_salesforce_work_items(
+    db: Session,
+    item: IntegrationConnection,
+    *,
+    source_record_type: str,
+    build_all_query,
+    map_to_work_item,
+    map_to_outcome,
+) -> dict:
+    query = build_all_query()
+    records, error = await _salesforce_query_all(item, query, db=db)
+    if error:
+        return {"discovered": 0, "created": 0, "updated": 0, "errors": [error]}
+
+    created = 0
+    updated = 0
+    errors: list[str] = []
+    now = datetime.utcnow()
+
+    for record in records:
+        try:
+            wi_fields = map_to_work_item(record)
+        except Exception as exc:
+            errors.append(str(exc))
+            continue
+
+        account = None
+        account_external_id = wi_fields.get("account_external_id")
+        if account_external_id:
+            account = (
+                db.query(WorkAccount)
+                .filter_by(workspace_id=item.workspace_id, external_id=account_external_id)
+                .first()
+            )
+            if not account:
+                account = WorkAccount(
+                    external_id=account_external_id,
+                    name=wi_fields.get("account_name") or account_external_id,
+                    workspace_id=item.workspace_id,
+                )
+                db.add(account)
+                db.flush()
+
+        # Idempotent (section 12 of the design brief): identity is the
+        # source link (workspace + platform + source record id), not a
+        # freshly-generated id, so importing the same Opportunity twice
+        # updates the existing WorkItem instead of duplicating it.
+        link = (
+            db.query(WorkItemSourceLink)
+            .filter_by(
+                workspace_id=item.workspace_id,
+                source_platform="Salesforce",
+                source_record_id=wi_fields["source_record_id"],
+            )
+            .first()
+        )
+        work_item = db.query(WorkItem).filter_by(id=link.work_item_id).first() if link else None
+
+        context_type = "opportunity" if source_record_type == "Opportunity" else "case"
+        context_template = f"salesforce_{context_type}"
+
+        if work_item is None:
+            work_item = WorkItem(
+                external_id=f"SF-{source_record_type.upper()}-{wi_fields['source_record_id']}",
+                name=wi_fields["name"],
+                account_id=account.id if account else None,
+                context_type=context_type,
+                context_template=context_template,
+                source_platform="Salesforce",
+                source_record_type=source_record_type,
+                source_record_id=wi_fields["source_record_id"],
+                workspace_id=item.workspace_id,
+            )
+            db.add(work_item)
+            db.flush()
+            db.add(WorkItemSourceLink(
+                work_item_id=work_item.id,
+                workspace_id=item.workspace_id,
+                source_platform="Salesforce",
+                source_record_type=source_record_type,
+                source_record_id=wi_fields["source_record_id"],
+                source_record_name=wi_fields["name"],
+                account_external_id=account_external_id,
+                is_primary=True,
+            ))
+            created += 1
+        else:
+            work_item.name = wi_fields["name"]
+            if account and work_item.account_id != account.id:
+                work_item.account_id = account.id
+            updated += 1
+
+        # Seed/refresh the outcome in the same pass -- the record is
+        # already in hand, so there's no reason to make a second API call
+        # just to populate day-one outcome data for a newly-imported item.
+        canonical = map_to_outcome(record)
+        outcome = db.query(WorkItemOutcome).filter_by(work_item_id=work_item.id).first()
+        changed = outcome is None or (
+            outcome.outcome_status != canonical["outcome_status"]
+            or outcome.outcome_value != canonical["outcome_value"]
+            or outcome.outcome_date != canonical["outcome_date"]
+            or outcome.outcome_success != canonical["outcome_success"]
+            or outcome.is_closed != canonical["is_closed"]
+        )
+        if outcome is None:
+            outcome = WorkItemOutcome(work_item_id=work_item.id, workspace_id=item.workspace_id)
+            db.add(outcome)
+        if changed:
+            outcome.outcome_status = canonical["outcome_status"]
+            outcome.outcome_value = canonical["outcome_value"]
+            outcome.outcome_date = canonical["outcome_date"]
+            outcome.outcome_success = canonical["outcome_success"]
+            outcome.is_closed = canonical["is_closed"]
+            outcome.owner = canonical["owner"]
+            outcome.source_system = canonical["source_system"]
+            outcome.source_object = canonical["source_object"]
+            outcome.external_id = canonical["external_id"]
+            outcome.source_modified_at = canonical["source_modified_at"]
+            outcome.retrieval_method = "import"
+            db.add(WorkItemOutcomeEvent(
+                work_item_id=work_item.id,
+                workspace_id=item.workspace_id,
+                outcome_status=canonical["outcome_status"],
+                outcome_value=canonical["outcome_value"],
+                outcome_date=canonical["outcome_date"],
+                outcome_success=canonical["outcome_success"],
+                is_closed=canonical["is_closed"],
+                retrieval_method="import",
+                recorded_at=now,
+            ))
+        outcome.last_synced_at = now
+
+    db.commit()
+    return {"discovered": len(records), "created": created, "updated": updated, "errors": errors}
+
+
+@router.post("/{connection_id}/import-work-items")
+async def import_work_items(
+    connection_id: int,
+    object_type: str = Query(..., description="Opportunity or Case"),
+    db: Session = Depends(get_db),
+):
+    """
+    Bulk-discover and import every Opportunity or Case from a connected
+    Salesforce org as CostPilot WorkItems, with outcome data seeded in the
+    same pass. Safe to re-run (idempotent -- updates existing WorkItems by
+    source link rather than duplicating them).
+    """
+    item = _get_connection(db, connection_id)
+    _require_connected_salesforce(item)
+
+    if object_type == "Opportunity":
+        from core.outcome_adapters.salesforce_opportunity import (
+            build_all_opportunities_query,
+            map_salesforce_opportunity_to_work_item_fields,
+            map_salesforce_opportunity_to_canonical_outcome,
+        )
+        result = await _import_salesforce_work_items(
+            db, item,
+            source_record_type="Opportunity",
+            build_all_query=build_all_opportunities_query,
+            map_to_work_item=map_salesforce_opportunity_to_work_item_fields,
+            map_to_outcome=map_salesforce_opportunity_to_canonical_outcome,
+        )
+    elif object_type == "Case":
+        from core.outcome_adapters.salesforce_case import (
+            build_all_cases_query,
+            map_salesforce_case_to_work_item_fields,
+            map_salesforce_case_to_canonical_outcome,
+        )
+        result = await _import_salesforce_work_items(
+            db, item,
+            source_record_type="Case",
+            build_all_query=build_all_cases_query,
+            map_to_work_item=map_salesforce_case_to_work_item_fields,
+            map_to_outcome=map_salesforce_case_to_canonical_outcome,
+        )
+    else:
+        raise HTTPException(status_code=400, detail="object_type must be 'Opportunity' or 'Case'")
+
     return result

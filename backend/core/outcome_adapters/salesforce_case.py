@@ -63,3 +63,26 @@ def build_case_query(case_ids: list[str]) -> str:
     fields = ", ".join(SALESFORCE_CASE_OUTCOME_FIELDS)
     id_list = ", ".join(f"'{cid}'" for cid in safe_ids)
     return f"SELECT {fields} FROM Case WHERE Id IN ({id_list})"
+
+
+# ── Bulk discovery/import -- same shape as salesforce_opportunity.py's,
+# proving the pattern generalizes to a second object type, not just a
+# second platform ──
+
+def build_all_cases_query() -> str:
+    fields = ", ".join(SALESFORCE_CASE_OUTCOME_FIELDS) + ", CaseNumber, Subject, Account.Name"
+    return f"SELECT {fields} FROM Case"
+
+
+def map_salesforce_case_to_work_item_fields(record: dict) -> dict:
+    account = record.get("Account") or {}
+    case_number = record.get("CaseNumber")
+    subject = record.get("Subject")
+    name = f"Case {case_number}: {subject}" if case_number and subject else (subject or case_number or record["Id"])
+    return {
+        "name": name,
+        "source_record_id": record["Id"],
+        "source_record_type": "Case",
+        "account_external_id": record.get("AccountId"),
+        "account_name": account.get("Name") or record.get("AccountId"),
+    }

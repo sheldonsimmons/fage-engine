@@ -82,3 +82,32 @@ def build_opportunity_incremental_query(since: datetime) -> str:
     fields = ", ".join(SALESFORCE_OPPORTUNITY_OUTCOME_FIELDS)
     since_literal = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     return f"SELECT {fields} FROM Opportunity WHERE LastModifiedDate > {since_literal}"
+
+
+# ── Bulk discovery/import (proves the "Connect -> Discover -> Import" shape
+# from the universal Business Context design; Salesforce is the first
+# adapter, not a special case -- see api/routes_connections.py's
+# _import_salesforce_work_items, which knows nothing Salesforce-specific) ──
+
+def build_all_opportunities_query() -> str:
+    """SOQL for every Opportunity in the org -- used for the one-time bulk
+    import, not the bounded batch queries above. Includes Account.Name via
+    a relationship query so the importer doesn't need a second round-trip
+    just to label the account it's creating/matching."""
+    fields = ", ".join(SALESFORCE_OPPORTUNITY_OUTCOME_FIELDS) + ", Name, Account.Name"
+    return f"SELECT {fields} FROM Opportunity"
+
+
+def map_salesforce_opportunity_to_work_item_fields(record: dict) -> dict:
+    """The work-item-identity half of a bulk-imported record -- name,
+    account linkage -- kept separate from map_salesforce_opportunity_to_
+    canonical_outcome's outcome-facts half, since a WorkItem and its
+    Outcome are different concepts even when built from the same record."""
+    account = record.get("Account") or {}
+    return {
+        "name": record.get("Name") or record["Id"],
+        "source_record_id": record["Id"],
+        "source_record_type": "Opportunity",
+        "account_external_id": record.get("AccountId"),
+        "account_name": account.get("Name") or record.get("AccountId"),
+    }
