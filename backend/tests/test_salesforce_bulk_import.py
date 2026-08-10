@@ -209,6 +209,78 @@ def test_import_records_history_when_a_reimport_finds_a_real_change(monkeypatch)
     assert db.query(WorkItemOutcomeEvent).filter_by(work_item_id=work_item.id).count() == 2
 
 
+def test_import_self_heals_multiple_records_sharing_one_stale_work_item(monkeypatch):
+    """
+    Found live in production: before bulk import existed, Agentforce's
+    reactive fallback could point several genuinely different
+    Opportunities' WorkItemSourceLink rows at the SAME account-level
+    WorkItem (it picked "the account's oldest work item" whenever no link
+    existed yet). Bulk import must not reuse that shared link for more
+    than one record -- doing so either silently merges unrelated deals or
+    crashes on WorkItemOutcome's one-row-per-work-item constraint, which
+    is exactly what happened before this fix.
+    """
+    db = _session()
+    connection = _make_connection(db)
+
+    account = WorkAccount(external_id="001SHARED", name="Shared Co", workspace_id="WS-IMPORT")
+    db.add(account)
+    db.flush()
+    stale_shared_item = WorkItem(
+        external_id="ACCOUNT-LEVEL-FALLBACK", name="Shared Co", account_id=account.id,
+        context_type="account", source_platform="Salesforce", source_record_type="Account",
+        source_record_id="001SHARED", workspace_id="WS-IMPORT",
+    )
+    db.add(stale_shared_item)
+    db.flush()
+    # Two DIFFERENT real Opportunities both incorrectly linked to the same
+    # fallback WorkItem -- the corruption pattern found live.
+    db.add(WorkItemSourceLink(
+        work_item_id=stale_shared_item.id, workspace_id="WS-IMPORT", source_platform="Salesforce",
+        source_record_type="Opportunity", source_record_id="006STALE001",
+    ))
+    db.add(WorkItemSourceLink(
+        work_item_id=stale_shared_item.id, workspace_id="WS-IMPORT", source_platform="Salesforce",
+        source_record_type="Opportunity", source_record_id="006STALE002",
+    ))
+    db.commit()
+
+    fake_records = [
+        {
+            "Id": "006STALE001", "Name": "Deal One", "AccountId": "001SHARED",
+            "Account": {"Name": "Shared Co"}, "StageName": "Closed Won", "IsClosed": True,
+            "IsWon": True, "Amount": 10000.0, "CloseDate": "2026-01-01",
+            "OwnerId": "005X", "LastModifiedDate": "2026-01-01T00:00:00.000+0000",
+        },
+        {
+            "Id": "006STALE002", "Name": "Deal Two", "AccountId": "001SHARED",
+            "Account": {"Name": "Shared Co"}, "StageName": "Closed Lost", "IsClosed": True,
+            "IsWon": False, "Amount": 20000.0, "CloseDate": "2026-01-02",
+            "OwnerId": "005X", "LastModifiedDate": "2026-01-02T00:00:00.000+0000",
+        },
+    ]
+
+    async def fake_query_all(_item, _query, db=None, max_records=50_000):
+        return fake_records, None
+
+    monkeypatch.setattr("api.routes_connections._salesforce_query_all", fake_query_all)
+
+    result = asyncio.run(import_work_items(connection.id, object_type="Opportunity", db=db))
+    assert result["errors"] == []
+    assert result["healed"] == 1  # the second record needed its own WorkItem
+
+    link1 = db.query(WorkItemSourceLink).filter_by(source_record_id="006STALE001").first()
+    link2 = db.query(WorkItemSourceLink).filter_by(source_record_id="006STALE002").first()
+    assert link1.work_item_id != link2.work_item_id, "the two deals must end up on distinct WorkItems"
+
+    outcome1 = db.query(WorkItemOutcome).filter_by(work_item_id=link1.work_item_id).first()
+    outcome2 = db.query(WorkItemOutcome).filter_by(work_item_id=link2.work_item_id).first()
+    assert outcome1.outcome_value == 10000.0
+    assert outcome2.outcome_value == 20000.0
+    assert outcome1.outcome_success is True
+    assert outcome2.outcome_success is False
+
+
 def test_import_rejects_invalid_object_type():
     db = _session()
     connection = _make_connection(db)

@@ -2340,12 +2340,27 @@ async def _import_salesforce_work_items(
     query = build_all_query()
     records, error = await _salesforce_query_all(item, query, db=db)
     if error:
-        return {"discovered": 0, "created": 0, "updated": 0, "errors": [error]}
+        return {"discovered": 0, "created": 0, "updated": 0, "healed": 0, "errors": [error]}
 
     created = 0
     updated = 0
+    healed = 0
     errors: list[str] = []
     now = datetime.utcnow()
+    # Work items already claimed by a specific source record THIS run.
+    # Needed because of a real data-corruption pattern found in production:
+    # before bulk import existed, Agentforce's reactive fallback (see
+    # routes_agentforce.py _resolve_or_create_project) could point several
+    # genuinely different Opportunities' WorkItemSourceLink rows at the
+    # SAME generic account-level WorkItem, since it picked "the account's
+    # oldest work item" whenever no link existed yet. Reusing that shared
+    # link for more than one record here would either silently merge
+    # unrelated deals or (as found live) crash on WorkItemOutcome's
+    # one-row-per-work-item constraint when two records in the same import
+    # both try to claim it. Self-heal instead: the first record to reach an
+    # already-claimed link keeps it; every subsequent one gets its own
+    # fresh, correctly 1:1 WorkItem, and its link is repointed.
+    claimed_work_item_ids: set[int] = set()
 
     for record in records:
         try:
@@ -2385,6 +2400,12 @@ async def _import_salesforce_work_items(
             .first()
         )
         work_item = db.query(WorkItem).filter_by(id=link.work_item_id).first() if link else None
+        if work_item is not None and work_item.id in claimed_work_item_ids:
+            # This link points at a WorkItem a different source record
+            # already claimed this run -- it's stale/shared, not this
+            # record's real WorkItem. Force creating this record's own.
+            work_item = None
+            healed += 1
 
         context_type = "opportunity" if source_record_type == "Opportunity" else "case"
         context_template = f"salesforce_{context_type}"
@@ -2403,22 +2424,30 @@ async def _import_salesforce_work_items(
             )
             db.add(work_item)
             db.flush()
-            db.add(WorkItemSourceLink(
-                work_item_id=work_item.id,
-                workspace_id=item.workspace_id,
-                source_platform="Salesforce",
-                source_record_type=source_record_type,
-                source_record_id=wi_fields["source_record_id"],
-                source_record_name=wi_fields["name"],
-                account_external_id=account_external_id,
-                is_primary=True,
-            ))
+            if link is not None:
+                # Repoint the existing (previously mis-shared) link rather
+                # than create a second link row for the same source record.
+                link.work_item_id = work_item.id
+                link.source_record_name = wi_fields["name"]
+                link.account_external_id = account_external_id
+            else:
+                db.add(WorkItemSourceLink(
+                    work_item_id=work_item.id,
+                    workspace_id=item.workspace_id,
+                    source_platform="Salesforce",
+                    source_record_type=source_record_type,
+                    source_record_id=wi_fields["source_record_id"],
+                    source_record_name=wi_fields["name"],
+                    account_external_id=account_external_id,
+                    is_primary=True,
+                ))
             created += 1
         else:
             work_item.name = wi_fields["name"]
             if account and work_item.account_id != account.id:
                 work_item.account_id = account.id
             updated += 1
+        claimed_work_item_ids.add(work_item.id)
 
         # Seed/refresh the outcome in the same pass -- the record is
         # already in hand, so there's no reason to make a second API call
@@ -2461,7 +2490,10 @@ async def _import_salesforce_work_items(
         outcome.last_synced_at = now
 
     db.commit()
-    return {"discovered": len(records), "created": created, "updated": updated, "errors": errors}
+    return {
+        "discovered": len(records), "created": created, "updated": updated,
+        "healed": healed, "errors": errors,
+    }
 
 
 @router.post("/{connection_id}/import-work-items")
