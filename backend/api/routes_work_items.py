@@ -1562,16 +1562,78 @@ def project_activity_reporting(
             TokenTransaction.workspace_id.is_(None) & (WorkItem.workspace_id == workspace_id),
         ))
 
-    # Hard SQL-side cap, independent of activity_limit (which only slices
-    # the already-loaded Python list further down -- see
-    # project_fage_tech_debt memory: this function loads the full joined
-    # row set into Python before aggregating, and an unscoped call (no
-    # workspace_id) or a workspace with a large row count can load tens of
-    # thousands of ORM objects into memory. This bounds the blast radius
-    # without changing behavior for any normal-sized request; the real fix
-    # (SQL-side aggregation) is a separate, larger piece of work.
+    # base_rows (workspace + date scoped only) stays exactly as before --
+    # filter_options/unique_options() below deliberately builds its
+    # dropdown lists from the FULL scoped set regardless of which other
+    # filters are active (confirmed by test_organizational_attribution.py:
+    # filtering by one business_purpose still expects to see every
+    # business_purpose in filter_options, so a user can broaden/pivot their
+    # filters -- standard faceted-search UX). Any additional filter must
+    # therefore narrow a SEPARATE query, not this one.
     MAX_REPORTING_ROWS = 5000
     base_rows = query.order_by(TokenTransaction.timestamp.desc()).limit(MAX_REPORTING_ROWS).all()
+
+    # Pushing filters down to SQL for the actual report/aggregation instead
+    # of loading up to MAX_REPORTING_ROWS regardless of scope and filtering
+    # every one of them in Python's matches() (further down) -- this is the
+    # actual fix for slow/heavy reporting calls, since almost every real
+    # call passes at least one of these. Each filter below has a proven
+    # exact SQL equivalent to its Python counterpart in matches(), so the
+    # corresponding Python checks are removed there rather than duplicated.
+    # agent_id in particular: item["agent_id"] is `agent.id if agent else
+    # tx.agent_id`, but the join condition is
+    # `TokenTransaction.agent_id == RegisteredAgent.id`, so agent.id always
+    # equals tx.agent_id whenever the join succeeds -- filtering
+    # TokenTransaction.agent_id directly is exactly equivalent in both the
+    # joined and unjoined case.
+    filtered_query = query
+    if project_id:
+        filtered_query = filtered_query.filter(WorkItem.external_id.in_(project_id.split(",")))
+    if user_external_id:
+        ids = user_external_id.split(",")
+        filtered_query = filtered_query.filter(or_(
+            WorkUser.external_id.in_(ids),
+            and_(WorkUser.id.is_(None), TokenTransaction.actor_external_id.in_(ids)),
+        ))
+    if agent_id is not None:
+        filtered_query = filtered_query.filter(TokenTransaction.agent_id == agent_id)
+    if account_id:
+        filtered_query = filtered_query.filter(WorkAccount.external_id.in_(account_id.split(",")))
+    if source_platform:
+        filtered_query = filtered_query.filter(func.lower(func.coalesce(TokenTransaction.source_platform, "")) == source_platform.lower())
+    if record_type:
+        filtered_query = filtered_query.filter(func.lower(func.coalesce(TokenTransaction.origin_record_type, "")) == record_type.lower())
+    if model_tier:
+        filtered_query = filtered_query.filter(func.lower(func.coalesce(TokenTransaction.model_tier, "")) == model_tier.lower())
+    if charged_unit:
+        # Loose superset narrowing only -- charged_unit's real value has a
+        # Python-side fallback chain (see identity() below) that isn't
+        # safely reproducible as an exact SQL expression across both
+        # SQLite (tests) and Postgres (production) without risk of subtly
+        # diverging from it. matches() below still does the exact,
+        # unchanged check; this only shrinks what reaches it.
+        filtered_query = filtered_query.filter(or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == charged_unit,
+            TokenTransaction.department == charged_unit,
+            TokenTransaction.department.like(f"%:{charged_unit}"),
+        ))
+    if business_purpose:
+        # Same loose-narrowing reasoning as charged_unit -- business_purpose
+        # can fall back to classify_business_purpose() for older rows with
+        # no persisted value (see identity() below), so NULL rows are kept
+        # here and still checked exactly by matches().
+        filtered_query = filtered_query.filter(or_(
+            TokenTransaction.business_purpose == business_purpose,
+            TokenTransaction.business_purpose.is_(None),
+        ))
+    has_extra_filters = any([
+        project_id, user_external_id, agent_id is not None, account_id,
+        source_platform, record_type, model_tier, charged_unit, business_purpose,
+    ])
+    matched_base_rows = (
+        base_rows if not has_extra_filters
+        else filtered_query.order_by(TokenTransaction.timestamp.desc()).limit(MAX_REPORTING_ROWS).all()
+    )
     # Loaded once per report call, not once per row -- see
     # core/model_provider.py's resolve_provider() docstring for why a
     # per-row db lookup here would be a real N+1 query problem.
@@ -1631,28 +1693,27 @@ def project_activity_reporting(
     # O(rows * ~24) work), not the lack of SQL GROUP BY per se.
     option_rows = [identity(row) for row in base_rows]
     sim_flags = [is_simulator_traffic(row) for row in base_rows]
-    enriched_rows = list(zip(base_rows, option_rows, sim_flags))
+    # matched_base_rows is the same list object as base_rows (not just an
+    # equal one) whenever no extra filter is active, so this reuses the
+    # identity()/is_simulator_traffic() results already computed above
+    # instead of recomputing them in that (common, no-extra-filter) case.
+    if matched_base_rows is base_rows:
+        matched_option_rows, matched_sim_flags = option_rows, sim_flags
+    else:
+        matched_option_rows = [identity(row) for row in matched_base_rows]
+        matched_sim_flags = [is_simulator_traffic(row) for row in matched_base_rows]
+    enriched_rows = list(zip(matched_base_rows, matched_option_rows, matched_sim_flags))
 
     def matches(entry):
         row, item, _sim = entry
         tx = row[0]
-        # A dropdown option can bundle several ids that share one display
-        # name (see unique_options's mergeable dedupe) — the filter value
-        # arrives as a comma-joined list in that case, a single id otherwise.
-        if project_id and item["project_external_id"] not in project_id.split(","):
-            return False
-        if user_external_id and item["user_external_id"] not in user_external_id.split(","):
-            return False
-        if agent_id is not None and item["agent_id"] != agent_id:
-            return False
-        if account_id and item["account_external_id"] not in account_id.split(","):
-            return False
-        if source_platform and (tx.source_platform or "").lower() != source_platform.lower():
-            return False
-        if record_type and (tx.origin_record_type or "").lower() != record_type.lower():
-            return False
-        if model_tier and (tx.model_tier or "").lower() != model_tier.lower():
-            return False
+        # project_id/user_external_id/agent_id/account_id/source_platform/
+        # record_type/model_tier are no longer checked here -- they're now
+        # exact SQL filters applied to matched_base_rows above, so every
+        # entry reaching this point already satisfies them. Only the two
+        # filters with a Python-side fallback chain (charged_unit,
+        # business_purpose) and provider (needs the in-memory registry,
+        # not a stored column) still need an exact check here.
         if charged_unit and item["charged_unit"] != charged_unit:
             return False
         if business_purpose and item["business_purpose"] != business_purpose:
