@@ -14,6 +14,7 @@ Pipeline:
   7. Audit Record      — return structured result for logging
 """
 
+import os
 import re
 import time
 import json
@@ -32,74 +33,24 @@ logger = logging.getLogger(__name__)
 #   - Email, IP address, driver's license, ITIN detection
 #   - Lower confidence threshold (0.40 vs 0.50) — NLP is more precise
 #
-# Graceful fallback: if spaCy model is not available, falls back to
-# pattern-only recognizers so the rule engine still runs unaffected.
+# This is the single heaviest thing loaded at process startup (spaCy's model
+# plus Presidio's own overhead) -- set VOICE_GUARD_NLP_ENABLED=false to skip
+# it entirely and run on the pattern-only recognizers below instead, e.g.
+# while the voice-transcript feature isn't in active use and that memory
+# isn't worth spending. Reversible any time by unsetting the var and
+# restarting -- no code change needed to turn it back on.
+#
+# Graceful fallback: if spaCy model is not available (or NLP is disabled),
+# falls back to pattern-only recognizers so the rule engine still runs
+# unaffected.
 
 _presidio_ready = False
 _analyzer = None
+_VOICE_GUARD_NLP_ENABLED = os.getenv("VOICE_GUARD_NLP_ENABLED", "true").strip().lower() not in ("false", "0", "no")
 
-try:
-    from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
-    from presidio_analyzer.nlp_engine import NlpEngineProvider
 
-    # Build spaCy NLP engine — en_core_web_sm provides tokenization,
-    # POS tagging, and NER for English. Required for context-aware detection.
-    _nlp_config = {
-        "nlp_engine_name": "spacy",
-        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
-    }
-    _provider   = NlpEngineProvider(nlp_configuration=_nlp_config)
-    _nlp_engine = _provider.create_engine()
-
-    # Custom recognizers — supplement built-in Presidio recognizers with
-    # patterns for PII types that need stronger coverage in call center speech.
-    _custom_recognizers = [
-        # Member ID / Policy / Insurance / Medicare — not in Presidio built-ins
-        PatternRecognizer(
-            supported_entity="MEMBER_ID",
-            patterns=[
-                Pattern("MEMBER_6_12", r"(?<!\d)\d{6,12}(?!\d)", 0.55),
-            ]
-        ),
-        # Bank routing — ABA format starts with 0
-        PatternRecognizer(
-            supported_entity="US_BANK_NUMBER",
-            patterns=[
-                Pattern("ROUTING_ABA", r"\b0\d{8}\b", 0.80),
-            ]
-        ),
-        # Email — standard format + spoken format ("derek dot morrison at acme dot com")
-        PatternRecognizer(
-            supported_entity="EMAIL_ADDRESS",
-            patterns=[
-                Pattern("EMAIL_STANDARD", r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b", 0.95),
-                Pattern("EMAIL_SPOKEN",   r"\b[\w][\w.]*(?:\s+dot\s+[\w]+)*\s+at\s+[\w]+(?:\s+[\w]+)*\s+dot\s+(?:com|org|net|edu|gov|io)\b", 0.88),
-            ]
-        ),
-        # IP address
-        PatternRecognizer(
-            supported_entity="IP_ADDRESS",
-            patterns=[
-                Pattern("IPV4", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0.85),
-            ]
-        ),
-    ]
-
-    # Build the full analyzer — combines built-in recognizers + custom ones + NLP
-    _analyzer = AnalyzerEngine(
-        nlp_engine=_nlp_engine,
-        supported_languages=["en"],
-    )
-    for _r in _custom_recognizers:
-        _analyzer.registry.add_recognizer(_r)
-
-    _presidio_ready = True
-    logger.info("Presidio AnalyzerEngine loaded with spaCy NLP (en_core_web_sm) — Level 2 active")
-
-except Exception as e:
-    logger.warning(f"Presidio NLP engine not available — attempting pattern-only fallback: {e}")
-
-    # Pattern-only fallback — maintains Level 1 behavior if spaCy not available
+def _load_pattern_only_fallback(reason: str):
+    global _analyzer, _presidio_ready
     try:
         from presidio_analyzer import PatternRecognizer, Pattern
         _fallback_recognizers = [
@@ -130,9 +81,75 @@ except Exception as e:
 
         _analyzer = _PatternOnlyAnalyzer(_fallback_recognizers)
         _presidio_ready = True
-        logger.info("Presidio running in pattern-only fallback mode (no spaCy)")
+        logger.info(f"Presidio running in pattern-only fallback mode ({reason})")
     except Exception as e2:
         logger.warning(f"Presidio pattern fallback also failed — rule engine only: {e2}")
+
+
+if not _VOICE_GUARD_NLP_ENABLED:
+    _load_pattern_only_fallback("VOICE_GUARD_NLP_ENABLED=false — spaCy/Presidio NLP skipped to save memory")
+else:
+    try:
+        from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
+        from presidio_analyzer.nlp_engine import NlpEngineProvider
+
+        # Build spaCy NLP engine — en_core_web_sm provides tokenization,
+        # POS tagging, and NER for English. Required for context-aware detection.
+        _nlp_config = {
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+        }
+        _provider   = NlpEngineProvider(nlp_configuration=_nlp_config)
+        _nlp_engine = _provider.create_engine()
+
+        # Custom recognizers — supplement built-in Presidio recognizers with
+        # patterns for PII types that need stronger coverage in call center speech.
+        _custom_recognizers = [
+            # Member ID / Policy / Insurance / Medicare — not in Presidio built-ins
+            PatternRecognizer(
+                supported_entity="MEMBER_ID",
+                patterns=[
+                    Pattern("MEMBER_6_12", r"(?<!\d)\d{6,12}(?!\d)", 0.55),
+                ]
+            ),
+            # Bank routing — ABA format starts with 0
+            PatternRecognizer(
+                supported_entity="US_BANK_NUMBER",
+                patterns=[
+                    Pattern("ROUTING_ABA", r"\b0\d{8}\b", 0.80),
+                ]
+            ),
+            # Email — standard format + spoken format ("derek dot morrison at acme dot com")
+            PatternRecognizer(
+                supported_entity="EMAIL_ADDRESS",
+                patterns=[
+                    Pattern("EMAIL_STANDARD", r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b", 0.95),
+                    Pattern("EMAIL_SPOKEN",   r"\b[\w][\w.]*(?:\s+dot\s+[\w]+)*\s+at\s+[\w]+(?:\s+[\w]+)*\s+dot\s+(?:com|org|net|edu|gov|io)\b", 0.88),
+                ]
+            ),
+            # IP address
+            PatternRecognizer(
+                supported_entity="IP_ADDRESS",
+                patterns=[
+                    Pattern("IPV4", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0.85),
+                ]
+            ),
+        ]
+
+        # Build the full analyzer — combines built-in recognizers + custom ones + NLP
+        _analyzer = AnalyzerEngine(
+            nlp_engine=_nlp_engine,
+            supported_languages=["en"],
+        )
+        for _r in _custom_recognizers:
+            _analyzer.registry.add_recognizer(_r)
+
+        _presidio_ready = True
+        logger.info("Presidio AnalyzerEngine loaded with spaCy NLP (en_core_web_sm) — Level 2 active")
+
+    except Exception as e:
+        logger.warning(f"Presidio NLP engine not available — attempting pattern-only fallback: {e}")
+        _load_pattern_only_fallback("no spaCy")
 
 
 # PII type mapping: Presidio entity type → (our redact label, base confidence)
