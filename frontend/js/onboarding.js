@@ -1166,7 +1166,15 @@ async function approveDiscoveredMapping() {
     if (obDiscoveryPlatform === "salesforce") {
       await loadContextDiscoveryMonitor(true);
       await loadSalesforceAiEntryPoints();
-      renderBusinessContextImportStep(selectedObject, mapping.children);
+    }
+    // Bulk-import backend support (POST .../import-work-items) exists for
+    // Salesforce and ServiceNow today -- renderBusinessContextImportStep
+    // itself stays platform-agnostic (driven by the connector manifest's
+    // recommended_work, not a hardcoded object-name list); this list is
+    // only "which platforms have a real adapter behind that endpoint yet,"
+    // not a re-hardcoding of Salesforce-specific object names.
+    if (["salesforce", "servicenow"].includes(obDiscoveryPlatform)) {
+      await renderBusinessContextImportStep(selectedObject, mapping.children);
     }
   } catch (error) {
     status.innerHTML = `<div class="ob-error"><strong>Relationship mapping was not saved.</strong> ${_obEsc(error.message)}</div>`;
@@ -1181,20 +1189,32 @@ async function approveDiscoveredMapping() {
 // Bulk-imports the business records CostPilot just discovered/mapped as
 // real WorkItems, so AI activity has something concrete to attach to
 // instead of relying on the reactive account-level fallback. The backend
-// endpoint (POST .../import-work-items) already existed and was fully
-// idempotent/self-healing -- this was the missing bridge that called it
-// from onboarding. Only Opportunity/Case have bulk-import adapters today.
-const OB_IMPORTABLE_OBJECT_TYPES = ["Opportunity", "Case"];
-
-function _obImportableObjectTypes(parentObject, children) {
-  const types = new Set();
-  if (OB_IMPORTABLE_OBJECT_TYPES.includes(parentObject)) types.add(parentObject);
+// endpoint (POST .../import-work-items) already existed for Salesforce and
+// now also covers ServiceNow -- this was the missing bridge that called it
+// from onboarding.
+//
+// Which object types are importable is NOT hardcoded here -- it comes from
+// the connector manifest's recommended_work (GET /api/integrations/
+// connectors/{platform}, api/routes_integrations.py's CONNECTOR_MANIFESTS),
+// intersected with what the admin actually approved (the parent object
+// plus any non-ignored child relationships). Adding a third platform's
+// bulk-import support later means it just works here with zero JS changes,
+// as long as its manifest lists recommended_work.
+async function _obImportableObjectTypes(platform, parentObject, children) {
+  let manifest;
+  try {
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connectors/${encodeURIComponent(platform)}`);
+    if (!response.ok) return [];
+    manifest = await response.json();
+  } catch (_error) {
+    return [];
+  }
+  const recommendedObjects = new Set((manifest.recommended_work || []).map(rw => rw.object));
+  const approvedObjects = new Set([parentObject]);
   (children || []).forEach(child => {
-    if (child.behavior !== "ignore" && OB_IMPORTABLE_OBJECT_TYPES.includes(child.object)) {
-      types.add(child.object);
-    }
+    if (child.behavior !== "ignore") approvedObjects.add(child.object);
   });
-  return [...types];
+  return [...recommendedObjects].filter(object => approvedObjects.has(object));
 }
 
 function ensureBusinessContextImportHost() {
@@ -1209,12 +1229,12 @@ function ensureBusinessContextImportHost() {
   return host;
 }
 
-function renderBusinessContextImportStep(parentObject, children) {
+async function renderBusinessContextImportStep(parentObject, children) {
   const host = ensureBusinessContextImportHost();
   if (!host) return;
-  const objectTypes = _obImportableObjectTypes(parentObject, children);
+  const objectTypes = await _obImportableObjectTypes(obDiscoveryPlatform, parentObject, children);
   if (!objectTypes.length) {
-    host.innerHTML = `<div class="ob-discovery-status">No importable business records (Opportunity/Case) are part of this mapping yet.</div>`;
+    host.innerHTML = `<div class="ob-discovery-status">No importable business records are part of this mapping yet.</div>`;
     return;
   }
   host._obImportObjectTypes = objectTypes;

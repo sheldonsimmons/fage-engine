@@ -428,6 +428,17 @@ def _require_connected_salesforce(item: IntegrationConnection) -> tuple[str, str
     return item.instance_url.rstrip("/"), _decrypt(item.access_token_encrypted)
 
 
+def _require_connected(item: IntegrationConnection) -> None:
+    """Platform-agnostic connectivity check for actions (bulk import,
+    outcome sync) that don't need the instance_url/token tuple
+    _require_connected_salesforce returns -- just a live connection."""
+    if not item.instance_url or not item.access_token_encrypted:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Connect {item.platform.title()} before importing business context",
+        )
+
+
 def _salesforce_auth_base(value: Optional[str]) -> str:
     base = (value or os.getenv("SALESFORCE_AUTH_BASE_URL") or "https://login.salesforce.com").rstrip("/")
     parsed = urlparse(base)
@@ -1379,6 +1390,43 @@ async def _salesforce_query_all(
     return records, None
 
 
+async def _servicenow_query_all(
+    item: IntegrationConnection,
+    table: str,
+    *,
+    query: str,
+    fields: str,
+    db: Optional[Session] = None,
+    page_size: int = 500,
+    max_records: int = 50_000,
+) -> tuple[list[dict], Optional[str]]:
+    """
+    Like _salesforce_query_all, but for ServiceNow's Table API, which has
+    no cursor field to follow (no nextRecordsUrl/done) -- pagination is
+    sysparm_offset/sysparm_limit instead, and end-of-results is inferred
+    from a page coming back shorter than the requested page_size. This is
+    the piece that actually proves the connector abstraction generalizes:
+    Salesforce and ServiceNow need genuinely different fetch-all
+    strategies, not just different field names.
+    """
+    records: list[dict] = []
+    offset = 0
+    while len(records) < max_records:
+        try:
+            page = await _servicenow_table_get(
+                item, table, query=query, fields=fields,
+                limit=page_size, offset=offset, db=db,
+                display_value="all",
+            )
+        except HTTPException as exc:
+            return records, str(exc.detail)
+        records.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return records, None
+
+
 @router.get("/{connection_id}/ai-entry-points")
 async def discover_salesforce_ai_entry_points(
     connection_id: int,
@@ -1782,6 +1830,48 @@ def activate_salesforce_package_connection(
     return _salesforce_package_setup(item)
 
 
+async def _servicenow_refresh_access_token(db: Session, item: IntegrationConnection) -> bool:
+    """
+    Exchange the stored refresh_token for a new access_token, mirroring
+    _salesforce_refresh_access_token above. ServiceNow access tokens are
+    also short-lived (typically ~30 min), and nothing previously renewed
+    them -- same silent-staleness problem, same fix. Unlike Salesforce's
+    PKCE-only flow, ServiceNow's OAuth application requires both
+    client_id AND client_secret on every grant, including refresh.
+    """
+    if not item.refresh_token_encrypted or not item.instance_url:
+        return False
+    client_id = os.getenv("SERVICENOW_CLIENT_ID")
+    client_secret = os.getenv("SERVICENOW_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return False
+    auth_base = _servicenow_auth_base(item.auth_base_url or item.instance_url)
+    refresh_token = _decrypt(item.refresh_token_encrypted)
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{auth_base}/oauth_token.do",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            headers={"Accept": "application/json"},
+        )
+    if response.status_code >= 400:
+        return False
+    token = response.json()
+    access_token = token.get("access_token")
+    if not access_token:
+        return False
+    item.access_token_encrypted = _encrypt(access_token)
+    if token.get("refresh_token"):
+        item.refresh_token_encrypted = _encrypt(token["refresh_token"])
+    item.last_error = None
+    db.commit()
+    return True
+
+
 async def _servicenow_table_get(
     item: IntegrationConnection,
     table: str,
@@ -1789,24 +1879,47 @@ async def _servicenow_table_get(
     query: str,
     fields: str,
     limit: int = 500,
+    offset: int = 0,
+    db: Optional[Session] = None,
+    display_value: str = "true",
 ) -> list[dict]:
+    """
+    display_value="true" (the default, used by metadata/discovery calls)
+    returns reference/choice fields as a flat human-readable string --
+    fine for labels, but NOT a stable identifier. Bulk import and outcome
+    sync must pass display_value="all" instead, which returns those
+    fields as {"display_value": ..., "value": <sys_id or raw value>} so
+    callers can use the real sys_id as identity rather than a display
+    name -- the same "never use display names as identity" principle
+    already applied to Salesforce/WorkItemSourceLink resolution.
+    """
     if not item.access_token_encrypted or not item.instance_url:
         raise HTTPException(status_code=409, detail="Connect ServiceNow before discovering metadata")
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", table):
         raise HTTPException(status_code=400, detail="Invalid ServiceNow metadata table")
-    token = _decrypt(item.access_token_encrypted)
-    async with httpx.AsyncClient(timeout=25) as client:
-        response = await client.get(
-            f"{item.instance_url.rstrip('/')}/api/now/table/{table}",
-            params={
-                "sysparm_query": query,
-                "sysparm_fields": fields,
-                "sysparm_limit": str(limit),
-                "sysparm_display_value": "true",
-                "sysparm_exclude_reference_link": "true",
-            },
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-        )
+
+    async def _do_request():
+        token = _decrypt(item.access_token_encrypted)
+        async with httpx.AsyncClient(timeout=25) as client:
+            return await client.get(
+                f"{item.instance_url.rstrip('/')}/api/now/table/{table}",
+                params={
+                    "sysparm_query": query,
+                    "sysparm_fields": fields,
+                    "sysparm_limit": str(limit),
+                    "sysparm_offset": str(offset),
+                    "sysparm_display_value": display_value,
+                    "sysparm_exclude_reference_link": "true",
+                },
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+
+    response = await _do_request()
+    if response.status_code == 401 and db is not None:
+        # Expired access token -- try the refresh token once before giving
+        # up, same pattern as _salesforce_get.
+        if await _servicenow_refresh_access_token(db, item):
+            response = await _do_request()
     if response.status_code >= 400:
         permission_hint = (
             " Verify that the OAuth user can read sys_db_object and sys_dictionary."
@@ -1841,6 +1954,7 @@ async def discover_objects(connection_id: int, db: Session = Depends(get_db)):
                 query="nameISNOTEMPTY^nameNOT LIKEsys_^ORDERBYlabel",
                 fields="sys_id,name,label,super_class",
                 limit=1000,
+                db=db,
             )
             objects = [
                 {
@@ -1902,6 +2016,7 @@ async def discover_object_fields(
             query=f"name={body.object_name}^elementISNOTEMPTY^active=true^ORDERBYcolumn_label",
             fields="element,column_label,internal_type,reference,read_only,mandatory",
             limit=1000,
+            db=db,
         )
         fields = [
             {
@@ -1928,6 +2043,7 @@ async def discover_object_fields(
             query=f"reference.name={body.object_name}^elementISNOTEMPTY^active=true",
             fields="name,element,column_label,reference",
             limit=500,
+            db=db,
         )
         child_relationships = [
             {
@@ -2135,26 +2251,30 @@ def approve_mapping(connection_id: int, body: MappingUpdate, db: Session = Depen
 # Triggered by an external process (scripts/sync_all_salesforce_outcomes.py,
 # run on a schedule) rather than a new in-app background-job system.
 
-async def _sync_salesforce_object_outcomes(
+async def _sync_object_outcomes(
     db: Session,
     item: IntegrationConnection,
     *,
+    source_platform: str,
     source_record_type: str,
-    build_query,
+    fetch_batch,
     map_record,
 ) -> dict:
     """
-    Shared sync loop for any Salesforce object with an outcome adapter --
-    Opportunity and Case both call this with their own query-builder and
-    field-mapper. Adding a third object type means writing a third adapter
-    module, not touching this loop. See core/outcome_adapters/ for the
-    adapters themselves.
+    Shared sync loop for any connected-system object with an outcome
+    adapter -- Salesforce Opportunity/Case and ServiceNow incident/Case
+    all call this with their own batch-fetcher and field-mapper. Adding a
+    fourth object type means writing a fourth adapter module, not
+    touching this loop. See core/outcome_adapters/ for the adapters
+    themselves. fetch_batch(batch_ids) -> (records, error) hides the
+    platform-specific bounded-query shape (SOQL "WHERE Id IN (...)" vs
+    ServiceNow's "sys_idIN..." encoded query).
     """
     work_items = (
         db.query(WorkItem)
         .filter(
             WorkItem.workspace_id == item.workspace_id,
-            WorkItem.source_platform == "Salesforce",
+            WorkItem.source_platform == source_platform,
             WorkItem.source_record_type == source_record_type,
             WorkItem.source_record_id.isnot(None),
         )
@@ -2168,14 +2288,14 @@ async def _sync_salesforce_object_outcomes(
     updated = 0
     unchanged = 0
 
-    # Batch in chunks of 200 -- SOQL IN() lists and URL length both have
-    # practical limits; this also bounds a single sync run's blast radius.
+    # Batch in chunks of 200 -- SOQL/encoded-query IN() lists and URL
+    # length both have practical limits; this also bounds a single sync
+    # run's blast radius.
     record_ids = list(by_record_id.keys())
     for start in range(0, len(record_ids), 200):
         batch = record_ids[start:start + 200]
         try:
-            query = build_query(batch)
-            records, error = await _salesforce_try_query(item, query, db=db)
+            records, error = await fetch_batch(batch)
         except ValueError as exc:
             errors.append(str(exc))
             continue
@@ -2253,10 +2373,13 @@ async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationCo
         build_opportunity_query,
         map_salesforce_opportunity_to_canonical_outcome,
     )
-    return await _sync_salesforce_object_outcomes(
+    async def fetch_batch(batch):
+        return await _salesforce_try_query(item, build_opportunity_query(batch), db=db)
+    return await _sync_object_outcomes(
         db, item,
+        source_platform="Salesforce",
         source_record_type="Opportunity",
-        build_query=build_opportunity_query,
+        fetch_batch=fetch_batch,
         map_record=map_salesforce_opportunity_to_canonical_outcome,
     )
 
@@ -2266,11 +2389,75 @@ async def _sync_salesforce_case_outcomes(db: Session, item: IntegrationConnectio
         build_case_query,
         map_salesforce_case_to_canonical_outcome,
     )
-    return await _sync_salesforce_object_outcomes(
+    async def fetch_batch(batch):
+        return await _salesforce_try_query(item, build_case_query(batch), db=db)
+    return await _sync_object_outcomes(
         db, item,
+        source_platform="Salesforce",
         source_record_type="Case",
-        build_query=build_case_query,
+        fetch_batch=fetch_batch,
         map_record=map_salesforce_case_to_canonical_outcome,
+    )
+
+
+async def _servicenow_try_query(
+    item: IntegrationConnection, table: str, *, sys_ids: list[str], fields: str, db: Optional[Session] = None,
+) -> tuple[list[dict], Optional[str]]:
+    """Bounded lookup of known sys_ids -- the ServiceNow analog of
+    _salesforce_try_query's "WHERE Id IN (...)" batch fetch, used by
+    outcome sync (not the unbounded _servicenow_query_all used by bulk
+    import)."""
+    safe_ids = [sid for sid in sys_ids if re.fullmatch(r"[0-9a-fA-F]{32}", sid)]
+    if len(safe_ids) != len(sys_ids):
+        return [], "One or more sys_ids are not valid ServiceNow record ids"
+    query = f"sys_idIN{','.join(safe_ids)}"
+    try:
+        records = await _servicenow_table_get(
+            item, table, query=query, fields=fields, limit=len(safe_ids) or 1,
+            db=db, display_value="all",
+        )
+        return records, None
+    except HTTPException as exc:
+        return [], str(exc.detail)
+
+
+async def _sync_servicenow_incident_outcomes(db: Session, item: IntegrationConnection) -> dict:
+    from core.outcome_adapters.servicenow_incident import (
+        SERVICENOW_INCIDENT_TABLE,
+        SERVICENOW_INCIDENT_OUTCOME_FIELDS,
+        map_servicenow_incident_to_canonical_outcome,
+    )
+    async def fetch_batch(batch):
+        return await _servicenow_try_query(
+            item, SERVICENOW_INCIDENT_TABLE, sys_ids=batch,
+            fields=",".join(SERVICENOW_INCIDENT_OUTCOME_FIELDS), db=db,
+        )
+    return await _sync_object_outcomes(
+        db, item,
+        source_platform="ServiceNow",
+        source_record_type="incident",
+        fetch_batch=fetch_batch,
+        map_record=map_servicenow_incident_to_canonical_outcome,
+    )
+
+
+async def _sync_servicenow_case_outcomes(db: Session, item: IntegrationConnection) -> dict:
+    from core.outcome_adapters.servicenow_case import (
+        SERVICENOW_CASE_TABLE,
+        SERVICENOW_CASE_OUTCOME_FIELDS,
+        map_servicenow_case_to_canonical_outcome,
+    )
+    async def fetch_batch(batch):
+        return await _servicenow_try_query(
+            item, SERVICENOW_CASE_TABLE, sys_ids=batch,
+            fields=",".join(SERVICENOW_CASE_OUTCOME_FIELDS), db=db,
+        )
+    return await _sync_object_outcomes(
+        db, item,
+        source_platform="ServiceNow",
+        source_record_type="sn_customerservice_case",
+        fetch_batch=fetch_batch,
+        map_record=map_servicenow_case_to_canonical_outcome,
     )
 
 
@@ -2288,17 +2475,30 @@ def _merge_sync_results(*results: dict) -> dict:
 async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
     """
     Pull current status/value/close-date for every WorkItem this workspace
-    has already linked to a Salesforce Opportunity or Case, and update
-    WorkItemOutcome (+ append WorkItemOutcomeEvent history on change).
+    has already linked to a Salesforce Opportunity/Case or ServiceNow
+    incident/Case, and update WorkItemOutcome (+ append
+    WorkItemOutcomeEvent history on change).
 
-    Salesforce remains the system of record -- this only ever reads.
+    The connected system remains the system of record -- this only ever
+    reads.
     """
     item = _get_connection(db, connection_id)
-    _require_connected_salesforce(item)
-    result = _merge_sync_results(
-        await _sync_salesforce_opportunity_outcomes(db, item),
-        await _sync_salesforce_case_outcomes(db, item),
-    )
+    _require_connected(item)
+    if item.platform == "salesforce":
+        result = _merge_sync_results(
+            await _sync_salesforce_opportunity_outcomes(db, item),
+            await _sync_salesforce_case_outcomes(db, item),
+        )
+    elif item.platform == "servicenow":
+        result = _merge_sync_results(
+            await _sync_servicenow_incident_outcomes(db, item),
+            await _sync_servicenow_case_outcomes(db, item),
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Outcome sync is not available for platform '{item.platform}'",
+        )
     # Only a real success should move last_success_at -- it was previously
     # set unconditionally, which made a fully-failed sync (e.g. every batch
     # 401ing) look like it had just succeeded when the connection's health
@@ -2328,18 +2528,34 @@ async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
 # from the universal Business Context design: "would connecting a new
 # platform require changing this code?" should be no.
 
-async def _import_salesforce_work_items(
+async def _import_work_items(
     db: Session,
     item: IntegrationConnection,
     *,
+    source_platform: str,
     source_record_type: str,
-    build_all_query,
+    context_type: str,
+    external_id_prefix: str,
+    fetch_records,
     map_to_work_item,
     map_to_outcome,
     dry_run: bool = False,
 ) -> dict:
-    query = build_all_query()
-    records, error = await _salesforce_query_all(item, query, db=db)
+    """
+    Platform-agnostic bulk-import core, extracted from the Salesforce-only
+    version of this function. Everything platform-specific is pushed into
+    the caller: how records are fetched (fetch_records -- SOQL cursor
+    pagination for Salesforce, sysparm_offset pagination for ServiceNow,
+    see _salesforce_query_all vs _servicenow_query_all), and how a raw
+    record becomes work-item/outcome fields (map_to_work_item/
+    map_to_outcome, the same duck-typed adapter shape core/outcome_adapters
+    already uses). Everything below -- identity via WorkItemSourceLink's
+    natural key, the claimed_work_item_ids self-heal, account upsert,
+    outcome-change detection, dry_run rollback -- is genuinely universal
+    and was already written that way; it just had "Salesforce" hardcoded
+    in a few string literals instead of taking them as parameters.
+    """
+    records, error = await fetch_records()
     if error:
         return {"discovered": 0, "created": 0, "updated": 0, "healed": 0, "errors": [error]}
 
@@ -2408,7 +2624,7 @@ async def _import_salesforce_work_items(
             db.query(WorkItemSourceLink)
             .filter_by(
                 workspace_id=item.workspace_id,
-                source_platform="Salesforce",
+                source_platform=source_platform,
                 source_record_id=wi_fields["source_record_id"],
             )
             .first()
@@ -2421,17 +2637,16 @@ async def _import_salesforce_work_items(
             work_item = None
             healed += 1
 
-        context_type = "opportunity" if source_record_type == "Opportunity" else "case"
-        context_template = f"salesforce_{context_type}"
+        context_template = f"{source_platform.lower()}_{context_type}"
 
         if work_item is None:
             work_item = WorkItem(
-                external_id=f"SF-{source_record_type.upper()}-{wi_fields['source_record_id']}",
+                external_id=f"{external_id_prefix}-{wi_fields['source_record_id']}",
                 name=wi_fields["name"],
                 account_id=account.id if account else None,
                 context_type=context_type,
                 context_template=context_template,
-                source_platform="Salesforce",
+                source_platform=source_platform,
                 source_record_type=source_record_type,
                 source_record_id=wi_fields["source_record_id"],
                 workspace_id=item.workspace_id,
@@ -2448,7 +2663,7 @@ async def _import_salesforce_work_items(
                 db.add(WorkItemSourceLink(
                     work_item_id=work_item.id,
                     workspace_id=item.workspace_id,
-                    source_platform="Salesforce",
+                    source_platform=source_platform,
                     source_record_type=source_record_type,
                     source_record_id=wi_fields["source_record_id"],
                     source_record_name=wi_fields["name"],
@@ -2521,49 +2736,106 @@ async def _import_salesforce_work_items(
 @router.post("/{connection_id}/import-work-items")
 async def import_work_items(
     connection_id: int,
-    object_type: str = Query(..., description="Opportunity or Case"),
+    object_type: str = Query(..., description="Opportunity, Case, incident, or sn_customerservice_case"),
     dry_run: bool = False,
     db: Session = Depends(get_db),
 ):
     """
-    Bulk-discover and import every Opportunity or Case from a connected
-    Salesforce org as CostPilot WorkItems, with outcome data seeded in the
-    same pass. Safe to re-run (idempotent -- updates existing WorkItems by
-    source link rather than duplicating them). Pass dry_run=true to preview
-    counts before committing.
+    Bulk-discover and import every matching business record from a
+    connected Salesforce or ServiceNow org as CostPilot WorkItems, with
+    outcome data seeded in the same pass. Safe to re-run (idempotent --
+    updates existing WorkItems by source link rather than duplicating
+    them). Pass dry_run=true to preview counts before committing.
     """
     item = _get_connection(db, connection_id)
-    _require_connected_salesforce(item)
+    _require_connected(item)
 
-    if object_type == "Opportunity":
+    if item.platform == "salesforce" and object_type == "Opportunity":
         from core.outcome_adapters.salesforce_opportunity import (
             build_all_opportunities_query,
             map_salesforce_opportunity_to_work_item_fields,
             map_salesforce_opportunity_to_canonical_outcome,
         )
-        result = await _import_salesforce_work_items(
+        result = await _import_work_items(
             db, item,
+            source_platform="Salesforce",
             source_record_type="Opportunity",
-            build_all_query=build_all_opportunities_query,
+            context_type="opportunity",
+            external_id_prefix="SF-OPPORTUNITY",
+            fetch_records=lambda: _salesforce_query_all(item, build_all_opportunities_query(), db=db),
             map_to_work_item=map_salesforce_opportunity_to_work_item_fields,
             map_to_outcome=map_salesforce_opportunity_to_canonical_outcome,
             dry_run=dry_run,
         )
-    elif object_type == "Case":
+    elif item.platform == "salesforce" and object_type == "Case":
         from core.outcome_adapters.salesforce_case import (
             build_all_cases_query,
             map_salesforce_case_to_work_item_fields,
             map_salesforce_case_to_canonical_outcome,
         )
-        result = await _import_salesforce_work_items(
+        result = await _import_work_items(
             db, item,
+            source_platform="Salesforce",
             source_record_type="Case",
-            build_all_query=build_all_cases_query,
+            context_type="case",
+            external_id_prefix="SF-CASE",
+            fetch_records=lambda: _salesforce_query_all(item, build_all_cases_query(), db=db),
             map_to_work_item=map_salesforce_case_to_work_item_fields,
             map_to_outcome=map_salesforce_case_to_canonical_outcome,
             dry_run=dry_run,
         )
+    elif item.platform == "servicenow" and object_type == "incident":
+        from core.outcome_adapters.servicenow_incident import (
+            SERVICENOW_INCIDENT_TABLE,
+            SERVICENOW_INCIDENT_OUTCOME_FIELDS,
+            build_all_incidents_query,
+            map_servicenow_incident_to_work_item_fields,
+            map_servicenow_incident_to_canonical_outcome,
+        )
+        result = await _import_work_items(
+            db, item,
+            source_platform="ServiceNow",
+            source_record_type="incident",
+            context_type="case",
+            external_id_prefix="SN-INCIDENT",
+            fetch_records=lambda: _servicenow_query_all(
+                item, SERVICENOW_INCIDENT_TABLE,
+                query=build_all_incidents_query(),
+                fields=",".join(SERVICENOW_INCIDENT_OUTCOME_FIELDS),
+                db=db,
+            ),
+            map_to_work_item=map_servicenow_incident_to_work_item_fields,
+            map_to_outcome=map_servicenow_incident_to_canonical_outcome,
+            dry_run=dry_run,
+        )
+    elif item.platform == "servicenow" and object_type == "sn_customerservice_case":
+        from core.outcome_adapters.servicenow_case import (
+            SERVICENOW_CASE_TABLE,
+            SERVICENOW_CASE_OUTCOME_FIELDS,
+            build_all_cases_query,
+            map_servicenow_case_to_work_item_fields,
+            map_servicenow_case_to_canonical_outcome,
+        )
+        result = await _import_work_items(
+            db, item,
+            source_platform="ServiceNow",
+            source_record_type="sn_customerservice_case",
+            context_type="case",
+            external_id_prefix="SN-CASE",
+            fetch_records=lambda: _servicenow_query_all(
+                item, SERVICENOW_CASE_TABLE,
+                query=build_all_cases_query(),
+                fields=",".join(SERVICENOW_CASE_OUTCOME_FIELDS),
+                db=db,
+            ),
+            map_to_work_item=map_servicenow_case_to_work_item_fields,
+            map_to_outcome=map_servicenow_case_to_canonical_outcome,
+            dry_run=dry_run,
+        )
     else:
-        raise HTTPException(status_code=400, detail="object_type must be 'Opportunity' or 'Case'")
+        raise HTTPException(
+            status_code=400,
+            detail=f"object_type '{object_type}' is not importable for platform '{item.platform}'",
+        )
 
     return result
