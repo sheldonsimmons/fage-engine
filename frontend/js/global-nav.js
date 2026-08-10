@@ -5,6 +5,7 @@
     { label: "Overview", href: "/index.html", paths: ["/", "/index.html"] },
     { label: "Operate", href: "/operate.html", paths: ["/operate.html"] },
     { label: "Projects", href: "/work-items.html", paths: ["/work-items.html"] },
+    { label: "Business Profiles", href: "/business-profile.html", paths: ["/business-profile.html"] },
     { label: "Reports", href: "/reports.html", paths: ["/reports.html"] },
   ];
 
