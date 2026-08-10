@@ -263,6 +263,10 @@ class MergeWorkItemsIn(BaseModel):
     target_identifier: str = Field(min_length=1, max_length=240)
 
 
+class MergeAccountsIn(BaseModel):
+    target_identifier: str = Field(min_length=1, max_length=240)
+
+
 def _clean_external_id(value: Optional[str], prefix: str) -> str:
     if value:
         cleaned = re.sub(r"[^A-Za-z0-9._:-]+", "-", value.strip()).strip("-")
@@ -317,6 +321,7 @@ def _account_json(account: WorkAccount) -> dict:
         "department": account.department,
         "status": account.status,
         "workspace_id": account.workspace_id,
+        "merged_into_work_account_id": account.merged_into_work_account_id,
         "created_at": account.created_at.isoformat() if account.created_at else None,
         "updated_at": account.updated_at.isoformat() if account.updated_at else None,
     }
@@ -697,15 +702,81 @@ def resolve_work_item(db: Session, identifier: str) -> Optional[WorkItem]:
     return item
 
 
+def resolve_work_account(db: Session, identifier: str) -> Optional[WorkAccount]:
+    """Resolve either the public external ID or the internal integer ID."""
+    value = str(identifier or "").strip()
+    if not value:
+        return None
+    account = db.query(WorkAccount).filter(WorkAccount.external_id == value).first()
+    if not account and value.isdigit():
+        account = db.query(WorkAccount).filter(WorkAccount.id == int(value)).first()
+    return account
+
+
 @router.get("/accounts")
 def list_accounts(
     workspace_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    query = db.query(WorkAccount)
+    query = db.query(WorkAccount).filter(WorkAccount.status != "merged")
     if workspace_id:
         query = query.filter(WorkAccount.workspace_id == workspace_id)
     return [_account_json(account) for account in query.order_by(WorkAccount.name).all()]
+
+
+@router.post("/accounts/{identifier}/merge")
+def merge_work_accounts(
+    identifier: str,
+    body: MergeAccountsIn,
+    db: Session = Depends(get_db),
+):
+    source = resolve_work_account(db, identifier)
+    target = resolve_work_account(db, body.target_identifier)
+    if not source or not target:
+        raise HTTPException(status_code=404, detail="Source or destination account was not found")
+    if source.id == target.id:
+        raise HTTPException(status_code=400, detail="Select two different accounts")
+    if target.status == "merged" or target.merged_into_work_account_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="The destination account is already merged. Restore it before using it as the surviving account.",
+        )
+    if source.workspace_id and target.workspace_id and source.workspace_id != target.workspace_id:
+        raise HTTPException(status_code=409, detail="Accounts from different workspaces cannot be merged")
+
+    # Every downstream table (TokenTransaction, WorkItemOutcome, AuditEvent,
+    # source links) hangs off WorkItem, not WorkAccount -- so repointing
+    # WorkItem.account_id is the entire merge. Nothing else needs to move.
+    db.query(WorkItem).filter(WorkItem.account_id == source.id).update(
+        {WorkItem.account_id: target.id}, synchronize_session=False
+    )
+
+    source.status = "merged"
+    source.merged_into_work_account_id = target.id
+    source.updated_at = datetime.utcnow()
+    target.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(target)
+    return {
+        "merged": source.external_id,
+        "into": target.external_id,
+        "account": _account_json(target),
+    }
+
+
+@router.post("/accounts/{identifier}/restore-merge")
+def restore_merged_work_account(identifier: str, db: Session = Depends(get_db)):
+    account = resolve_work_account(db, identifier)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.status != "merged" and account.merged_into_work_account_id is None:
+        raise HTTPException(status_code=409, detail="This account is already active")
+    account.status = "active"
+    account.merged_into_work_account_id = None
+    account.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(account)
+    return _account_json(account)
 
 
 @router.get("/accounts/{identifier}/profile")

@@ -233,6 +233,10 @@ def run_migrations():
             ensure_column(conn, "sensitive_terms", "deleted_at", "TIMESTAMP")
         except Exception:
             pass
+        try:
+            ensure_column(conn, "work_accounts", "merged_into_work_account_id", "INTEGER REFERENCES work_accounts(id)")
+        except Exception:
+            pass
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount

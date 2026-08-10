@@ -172,6 +172,7 @@ class WorkAccount(Base):
     department  = Column(String,   nullable=True)
     status      = Column(String,   nullable=False, default="active")
     workspace_id = Column(String,  nullable=True, index=True)
+    merged_into_work_account_id = Column(Integer, ForeignKey("work_accounts.id"), nullable=True, index=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
     updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
