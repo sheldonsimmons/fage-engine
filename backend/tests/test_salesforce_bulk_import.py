@@ -326,6 +326,38 @@ def test_import_self_heals_multiple_records_sharing_one_stale_work_item(monkeypa
     assert outcome2.outcome_success is False
 
 
+def test_dry_run_reports_counts_without_writing_anything(monkeypatch):
+    db = _session()
+    connection = _make_connection(db)
+
+    fake_records = [{
+        "Id": "006PREVIEW001", "Name": "Preview Deal", "AccountId": "001PREVIEW",
+        "Account": {"Name": "Preview Co"}, "StageName": "Negotiation", "IsClosed": False,
+        "IsWon": False, "Amount": 8000.0, "CloseDate": None,
+        "OwnerId": "005P", "LastModifiedDate": "2026-01-01T00:00:00.000+0000",
+    }]
+
+    async def fake_query_all(_item, _query, db=None, max_records=50_000):
+        return fake_records, None
+
+    monkeypatch.setattr("api.routes_connections._salesforce_query_all", fake_query_all)
+
+    result = asyncio.run(import_work_items(connection.id, object_type="Opportunity", dry_run=True, db=db))
+    assert result["discovered"] == 1
+    assert result["created"] == 1
+    assert result["dry_run"] is True
+    # Nothing should actually have been persisted.
+    assert db.query(WorkItem).filter_by(workspace_id="WS-IMPORT").count() == 0
+    assert db.query(WorkAccount).filter_by(workspace_id="WS-IMPORT").count() == 0
+    assert db.query(WorkItemSourceLink).count() == 0
+
+    # A real (non-dry-run) import afterward still works and actually creates.
+    result_real = asyncio.run(import_work_items(connection.id, object_type="Opportunity", db=db))
+    assert result_real["created"] == 1
+    assert result_real["dry_run"] is False
+    assert db.query(WorkItem).filter_by(workspace_id="WS-IMPORT").count() == 1
+
+
 def test_import_rejects_invalid_object_type():
     db = _session()
     connection = _make_connection(db)

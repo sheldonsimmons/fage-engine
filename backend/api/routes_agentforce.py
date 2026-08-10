@@ -122,6 +122,20 @@ def _resolve_or_create_project(
         project = None
 
     is_explicit_project = source_record_type.lower() == "costpilot_project__c"
+    # Opportunity now has full deterministic per-record identity via the
+    # bulk importer (routes_connections.py:_import_salesforce_work_items,
+    # external_id f"SF-{TYPE}-{record_id}"). Routing live AI activity for
+    # an Opportunity into the account-level bucket instead of its own
+    # WorkItem is exactly the "reactive fallback merges unrelated records"
+    # pattern the bulk importer's claimed_work_item_ids self-heal exists to
+    # clean up after the fact -- better to never create the mis-shared link
+    # in the first place. Case is deliberately excluded here: it has its
+    # own tested, intentional account-rollup contract (see
+    # test_business_context.py::test_salesforce_case_with_customer_is_a_stable_account_rollup_with_origin_activity)
+    # where the origin Case stays visible via related_record_activity
+    # rather than getting a standalone WorkItem -- that's a different,
+    # deliberate design, not the same bug.
+    has_deterministic_identity = source_record_type == "Opportunity"
     grouped_by_account = False
     # Normal requests retain the legacy account-grouping fallback. When an
     # onboarding-approved relationship resolved a canonical parent, use that
@@ -131,6 +145,7 @@ def _resolve_or_create_project(
         not project
         and account
         and not is_explicit_project
+        and not has_deterministic_identity
         and not force_canonical_parent
     ):
         project = (
@@ -157,7 +172,12 @@ def _resolve_or_create_project(
         grouped_by_account = project is not None
 
     external_id = _project_identifier(body)
-    if account and not is_explicit_project:
+    if has_deterministic_identity:
+        # Matches the shape _import_salesforce_work_items uses so a record
+        # created reactively here and later bulk-imported resolve to the
+        # same WorkItem via this external_id too, not just the source link.
+        external_id = f"SF-{source_record_type.upper()}-{source_record_id}"
+    elif account and not is_explicit_project:
         external_id = f"SF-ACCOUNT-{account.external_id}"
     if not project:
         project = db.query(WorkItem).filter(WorkItem.external_id == external_id).first()
@@ -195,8 +215,10 @@ def _resolve_or_create_project(
     # A non-project Salesforce record carrying an Account relationship is
     # stored as an Account rollup. Keep the canonical row's identity stable;
     # the originating Case, Contact, or Opportunity remains available through
-    # its source link and per-origin transaction fields.
-    is_account_rollup = bool(account and not is_explicit_project)
+    # its source link and per-origin transaction fields. Opportunity/Case
+    # get their own deterministic WorkItem instead (see
+    # has_deterministic_identity above), not the account rollup treatment.
+    is_account_rollup = bool(account and not is_explicit_project and not has_deterministic_identity)
     if is_account_rollup:
         context_type = "account"
 
@@ -227,7 +249,7 @@ def _resolve_or_create_project(
             external_id=external_id,
             name=(
                 body.customer_name
-                if account and not is_explicit_project and body.customer_name
+                if is_account_rollup and body.customer_name
                 else body.project_name or f"Salesforce work {body.record_id}"
             ).strip(),
             owner=(body.project_owner or "").strip() or None,

@@ -292,6 +292,58 @@ def test_salesforce_case_with_customer_is_a_stable_account_rollup_with_origin_ac
     }]
 
 
+def test_unimported_opportunity_gets_its_own_work_item_not_the_account_bucket():
+    # Before this fix, an Opportunity referenced by live AI activity before
+    # any bulk import ran would land in the same account-level WorkItem as
+    # every other unlinked record for that account -- the exact "reactive
+    # fallback merges unrelated records" pattern the bulk importer's
+    # claimed_work_item_ids self-heal exists to clean up after the fact
+    # (see test_salesforce_bulk_import.py). It should get its own
+    # deterministic WorkItem instead, matching the shape
+    # _import_salesforce_work_items would create.
+    db = _session()
+    body = AgentforceGovernRequest(
+        record_id="006-REACTIVE-1",
+        task_description="Draft a renewal proposal",
+        project_name="Acme Renewal",
+        source_record_name="Acme Renewal",
+        source_type="Opportunity",
+        source_record_type="Opportunity",
+        customer_external_id="001-REACTIVE-ACME",
+        customer_name="Acme Reactive Co",
+    )
+
+    item = _resolve_or_create_project(db, "WORKSPACE-REACTIVE", body)
+
+    assert item.external_id == "SF-OPPORTUNITY-006-REACTIVE-1"
+    assert item.name == "Acme Renewal"
+    assert item.context_type != "account"
+    assert item.source_record_type == "Opportunity"
+    assert item.source_record_id == "006-REACTIVE-1"
+
+    # A second, genuinely different Opportunity for the SAME account must
+    # get its own WorkItem too, not share the first one.
+    other_body = AgentforceGovernRequest(
+        record_id="006-REACTIVE-2",
+        task_description="Draft a follow-up",
+        project_name="Acme Expansion",
+        source_record_name="Acme Expansion",
+        source_type="Opportunity",
+        source_record_type="Opportunity",
+        customer_external_id="001-REACTIVE-ACME",
+        customer_name="Acme Reactive Co",
+    )
+    other_item = _resolve_or_create_project(db, "WORKSPACE-REACTIVE", other_body)
+    assert other_item.id != item.id
+    assert other_item.external_id == "SF-OPPORTUNITY-006-REACTIVE-2"
+
+    # Resolving the SAME Opportunity again (e.g. a second AI event) must
+    # reuse the same WorkItem via the source link, not create a duplicate.
+    again = _resolve_or_create_project(db, "WORKSPACE-REACTIVE", body)
+    assert again.id == item.id
+    assert db.query(WorkItem).filter_by(workspace_id="WORKSPACE-REACTIVE").count() == 2
+
+
 def test_unknown_custom_context_uses_work_language_not_customs():
     db = _session()
     item = WorkItem(

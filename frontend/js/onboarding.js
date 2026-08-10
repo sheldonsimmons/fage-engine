@@ -1166,6 +1166,7 @@ async function approveDiscoveredMapping() {
     if (obDiscoveryPlatform === "salesforce") {
       await loadContextDiscoveryMonitor(true);
       await loadSalesforceAiEntryPoints();
+      renderBusinessContextImportStep(selectedObject, mapping.children);
     }
   } catch (error) {
     status.innerHTML = `<div class="ob-error"><strong>Relationship mapping was not saved.</strong> ${_obEsc(error.message)}</div>`;
@@ -1175,6 +1176,112 @@ async function approveDiscoveredMapping() {
     }
     status.scrollIntoView({ behavior: "smooth", block: "center" });
   }
+}
+
+// Bulk-imports the business records CostPilot just discovered/mapped as
+// real WorkItems, so AI activity has something concrete to attach to
+// instead of relying on the reactive account-level fallback. The backend
+// endpoint (POST .../import-work-items) already existed and was fully
+// idempotent/self-healing -- this was the missing bridge that called it
+// from onboarding. Only Opportunity/Case have bulk-import adapters today.
+const OB_IMPORTABLE_OBJECT_TYPES = ["Opportunity", "Case"];
+
+function _obImportableObjectTypes(parentObject, children) {
+  const types = new Set();
+  if (OB_IMPORTABLE_OBJECT_TYPES.includes(parentObject)) types.add(parentObject);
+  (children || []).forEach(child => {
+    if (child.behavior !== "ignore" && OB_IMPORTABLE_OBJECT_TYPES.includes(child.object)) {
+      types.add(child.object);
+    }
+  });
+  return [...types];
+}
+
+function ensureBusinessContextImportHost() {
+  let host = document.getElementById("obBusinessContextImport");
+  if (host) return host;
+  const results = document.getElementById("obDiscoveryResults");
+  if (!results) return null;
+  host = document.createElement("section");
+  host.id = "obBusinessContextImport";
+  host.className = "ob-context-monitor";
+  results.appendChild(host);
+  return host;
+}
+
+function renderBusinessContextImportStep(parentObject, children) {
+  const host = ensureBusinessContextImportHost();
+  if (!host) return;
+  const objectTypes = _obImportableObjectTypes(parentObject, children);
+  if (!objectTypes.length) {
+    host.innerHTML = `<div class="ob-discovery-status">No importable business records (Opportunity/Case) are part of this mapping yet.</div>`;
+    return;
+  }
+  host._obImportObjectTypes = objectTypes;
+  host.innerHTML = `<div class="ob-discovery-head">
+      <div><div class="ob-context-eyebrow">Bring in existing business records</div>
+        <h3>Import ${objectTypes.join(" & ")} as CostPilot work items</h3>
+        <p>CostPilot creates a WorkItem and a source link for each record it discovers, so AI activity attaches to the
+           real ${objectTypes.join("/")} instead of a generic account bucket. Safe to run more than once -- existing
+           records are updated, never duplicated.</p></div>
+    </div>
+    <div class="ob-discovery-actions">
+      <button type="button" class="ob-btn-secondary" id="obPreviewImportBtn" onclick="previewBusinessContextImport()">Preview import</button>
+      <button type="button" class="ob-btn-primary" id="obRunImportBtn" onclick="runBusinessContextImport()">Import now</button>
+    </div>
+    <div id="obImportResults"></div>`;
+}
+
+function _obImportResultRow(objectType, result, label) {
+  if (result.errors === undefined) {
+    return `<div class="ob-context-change"><strong>${_obEsc(objectType)}</strong><small>${_obEsc(result.message || "Could not run.")}</small></div>`;
+  }
+  const errorNote = result.errors.length ? ` · ${result.errors.length} error${result.errors.length === 1 ? "" : "s"}` : "";
+  return `<div class="ob-context-change">
+    <strong>${_obEsc(objectType)}</strong>
+    <small>${label}: ${result.discovered} found · ${result.created} to create · ${result.updated} already exist${result.healed ? ` · ${result.healed} healed` : ""}${errorNote}</small>
+  </div>`;
+}
+
+async function _obRunImportForAllTypes(dryRun) {
+  const host = ensureBusinessContextImportHost();
+  const objectTypes = host?._obImportObjectTypes || [];
+  const resultsHost = document.getElementById("obImportResults");
+  const previewBtn = document.getElementById("obPreviewImportBtn");
+  const importBtn = document.getElementById("obRunImportBtn");
+  if (previewBtn) previewBtn.disabled = true;
+  if (importBtn) importBtn.disabled = true;
+  if (resultsHost) resultsHost.innerHTML = `<div class="ob-discovery-status">${dryRun ? "Previewing" : "Importing"} ${objectTypes.join(" & ")}…</div>`;
+  const rows = [];
+  try {
+    for (const objectType of objectTypes) {
+      const response = await fetch(
+        `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/import-work-items` +
+        `?object_type=${encodeURIComponent(objectType)}&dry_run=${dryRun}`,
+        { method: "POST" }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        rows.push(_obImportResultRow(objectType, { message: payload.detail || `Import failed (${response.status}).` }, ""));
+        continue;
+      }
+      rows.push(_obImportResultRow(objectType, payload, dryRun ? "Preview" : "Result"));
+    }
+    if (resultsHost) resultsHost.innerHTML = `<div class="ob-context-change-list">${rows.join("")}</div>`;
+  } catch (error) {
+    if (resultsHost) resultsHost.innerHTML = `<div class="ob-error"><strong>Import could not run.</strong> ${_obEsc(error.message)}</div>`;
+  } finally {
+    if (previewBtn) previewBtn.disabled = false;
+    if (importBtn) importBtn.disabled = false;
+  }
+}
+
+async function previewBusinessContextImport() {
+  await _obRunImportForAllTypes(true);
+}
+
+async function runBusinessContextImport() {
+  await _obRunImportForAllTypes(false);
 }
 
 function ensureContextDiscoveryMonitorHost() {

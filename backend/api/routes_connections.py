@@ -2336,6 +2336,7 @@ async def _import_salesforce_work_items(
     build_all_query,
     map_to_work_item,
     map_to_outcome,
+    dry_run: bool = False,
 ) -> dict:
     query = build_all_query()
     records, error = await _salesforce_query_all(item, query, db=db)
@@ -2502,10 +2503,18 @@ async def _import_salesforce_work_items(
             ))
         outcome.last_synced_at = now
 
-    db.commit()
+    # Preview mode: everything above (including the id-generating flushes
+    # each WorkItem/account create needs) still ran for real, so the counts
+    # reflect true would-be create/update/heal outcomes -- just never
+    # persisted. Reuses the exact same logic as a real import rather than a
+    # parallel counting path that could drift out of sync with it.
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
     return {
         "discovered": len(records), "created": created, "updated": updated,
-        "healed": healed, "errors": errors,
+        "healed": healed, "errors": errors, "dry_run": dry_run,
     }
 
 
@@ -2513,13 +2522,15 @@ async def _import_salesforce_work_items(
 async def import_work_items(
     connection_id: int,
     object_type: str = Query(..., description="Opportunity or Case"),
+    dry_run: bool = False,
     db: Session = Depends(get_db),
 ):
     """
     Bulk-discover and import every Opportunity or Case from a connected
     Salesforce org as CostPilot WorkItems, with outcome data seeded in the
     same pass. Safe to re-run (idempotent -- updates existing WorkItems by
-    source link rather than duplicating them).
+    source link rather than duplicating them). Pass dry_run=true to preview
+    counts before committing.
     """
     item = _get_connection(db, connection_id)
     _require_connected_salesforce(item)
@@ -2536,6 +2547,7 @@ async def import_work_items(
             build_all_query=build_all_opportunities_query,
             map_to_work_item=map_salesforce_opportunity_to_work_item_fields,
             map_to_outcome=map_salesforce_opportunity_to_canonical_outcome,
+            dry_run=dry_run,
         )
     elif object_type == "Case":
         from core.outcome_adapters.salesforce_case import (
@@ -2549,6 +2561,7 @@ async def import_work_items(
             build_all_query=build_all_cases_query,
             map_to_work_item=map_salesforce_case_to_work_item_fields,
             map_to_outcome=map_salesforce_case_to_canonical_outcome,
+            dry_run=dry_run,
         )
     else:
         raise HTTPException(status_code=400, detail="object_type must be 'Opportunity' or 'Case'")
