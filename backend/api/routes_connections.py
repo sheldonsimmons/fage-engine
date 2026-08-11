@@ -406,11 +406,16 @@ def _public_connection(item: IntegrationConnection, db: Optional[Session] = None
         # is shared between them rather than attributable to one. Accepted
         # ambiguity (see gap analysis) rather than a schema change here.
         from database.models import WorkItemSourceLink
+        # source_platform is written capitalized ("Salesforce",
+        # "ServiceNow") by the import/outcome-sync code, but
+        # IntegrationConnection.platform is lowercase ("salesforce",
+        # "servicenow") -- an exact-match filter here silently matched zero
+        # rows even for connections with hundreds of real linked records.
         work_item_count = (
             db.query(WorkItemSourceLink)
             .filter(
                 WorkItemSourceLink.workspace_id == item.workspace_id,
-                WorkItemSourceLink.source_platform == item.platform,
+                func.lower(WorkItemSourceLink.source_platform) == item.platform.lower(),
             )
             .count()
         )

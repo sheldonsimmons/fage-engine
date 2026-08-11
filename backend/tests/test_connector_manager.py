@@ -122,3 +122,26 @@ def test_public_connection_includes_work_item_count_scoped_by_workspace_and_plat
 
     resp = client.get("/api/integrations/connections", params={"workspace_id": "WS3"})
     assert resp.json()["connections"][0]["work_item_count"] == 1
+
+
+def test_work_item_count_matches_capitalized_source_platform():
+    # Found live in production: the import/outcome-sync code writes
+    # source_platform capitalized ("Salesforce"/"ServiceNow"), while
+    # IntegrationConnection.platform is lowercase ("salesforce") -- an
+    # exact-match filter silently zeroed this count for every real
+    # connection.
+    client, db = _client()
+    conn = IntegrationConnection(
+        workspace_id="WS4", platform="salesforce", display_name="sf", status="active",
+        access_token_encrypted=_encrypt("x"),
+    )
+    db.add(conn)
+    wi = WorkItem(external_id="006ABC", workspace_id="WS4", name="Deal")
+    db.add(wi)
+    db.commit()
+    db.refresh(wi)
+    db.add(WorkItemSourceLink(work_item_id=wi.id, workspace_id="WS4", source_platform="Salesforce", source_record_id="006ABC"))
+    db.commit()
+
+    resp = client.get("/api/integrations/connections", params={"workspace_id": "WS4"})
+    assert resp.json()["connections"][0]["work_item_count"] == 1
