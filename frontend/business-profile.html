@@ -126,6 +126,10 @@
     .bp-conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-green); }
     .bp-conn-dot.stale { background: var(--accent-yellow); }
     .bp-conn-dot.off { background: var(--text-muted); }
+    .bp-conn-sync { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-muted); }
+    .bp-sync-btn { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }
+    .bp-sync-btn:hover { border-color: var(--accent-green); color: var(--text); }
+    .bp-sync-btn:disabled { opacity: 0.6; cursor: default; }
 
     .bp-journey-row { display: flex; align-items: flex-start; overflow-x: auto; padding: 6px 2px; }
     .bp-journey-stage { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 118px; flex: 1; position: relative; }
@@ -688,6 +692,7 @@
           container.innerHTML = `<div class="bp-empty">No connected systems have synced successfully in this workspace yet.</div>`;
           return;
         }
+        const outcomeSyncPlatforms = new Set(["salesforce", "servicenow"]);
         container.innerHTML = items.map((c) => {
           const ageMs = Date.now() - new Date(c.last_success_at).getTime();
           const isFresh = ageMs < 24 * 3600 * 1000;
@@ -696,13 +701,60 @@
           const statusText = isFresh
             ? (agoMinutes < 1 ? "Connected · just now" : `Connected · ${agoMinutes}m ago`)
             : "Stale — last synced " + new Date(c.last_success_at).toLocaleDateString();
-          return `<div class="bp-conn-row">
-            <span>${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)}</span>
-            <span class="bp-conn-status"><span class="bp-conn-dot ${dotClass}"></span>${statusText}</span>
+
+          // last_outcome_sync_at tracks the outcome-enrichment sweep
+          // specifically (runs automatically ~every 10 min via Heroku
+          // Scheduler) -- distinct from last_success_at, which just means
+          // "the connection itself last worked" (e.g. OAuth test).
+          let syncLine = "";
+          if (outcomeSyncPlatforms.has(c.platform)) {
+            const countText = (c.work_item_count || c.work_item_count === 0)
+              ? `${c.work_item_count} record${c.work_item_count === 1 ? "" : "s"} tracked`
+              : "";
+            const syncText = c.last_outcome_sync_at
+              ? `Last synced ${bpTimeAgo(c.last_outcome_sync_at)}`
+              : "Not synced yet";
+            syncLine = `<div class="bp-conn-sync">
+              <span>${[countText, syncText].filter(Boolean).join(" · ")}</span>
+              <button class="bp-sync-btn" data-connection-id="${c.id}" onclick="bpSyncNow(${c.id}, this)">Sync Now</button>
+            </div>`;
+          }
+
+          return `<div class="bp-conn-row" style="flex-direction:column;align-items:stretch;gap:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <span>${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)}</span>
+              <span class="bp-conn-status"><span class="bp-conn-dot ${dotClass}"></span>${statusText}</span>
+            </div>
+            ${syncLine}
           </div>`;
         }).join("");
       } catch (err) {
         container.innerHTML = `<div class="bp-empty">Could not load connections.</div>`;
+      }
+    }
+
+    function bpTimeAgo(isoTimestamp) {
+      const ms = Date.now() - new Date(isoTimestamp).getTime();
+      const minutes = Math.round(ms / 60000);
+      if (minutes < 1) return "just now";
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return new Date(isoTimestamp).toLocaleDateString();
+    }
+
+    async function bpSyncNow(connectionId, buttonEl) {
+      const original = buttonEl.textContent;
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Syncing…";
+      try {
+        const result = await apiPost(`/api/integrations/connections/${connectionId}/sync-outcomes`, {});
+        buttonEl.textContent = result.errors && result.errors.length ? "Sync had errors" : "Synced";
+        await bpLoadConnections(bpWorkspaceId());
+      } catch (err) {
+        buttonEl.textContent = "Sync failed";
+        buttonEl.disabled = false;
+        setTimeout(() => { buttonEl.textContent = original; }, 3000);
       }
     }
 

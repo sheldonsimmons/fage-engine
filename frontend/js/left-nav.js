@@ -21,6 +21,7 @@
     { label: "Optimization", href: "/savings.html", icon: "target" },
     { label: "Reports", href: "/reports.html", icon: "doc" },
     { label: "Integrations", href: "/onboarding.html", icon: "plug" },
+    { label: "Connectors", href: "/connector-manager.html", icon: "grid" },
     { label: "Settings", href: "/admin.html", icon: "gear" },
   ];
 

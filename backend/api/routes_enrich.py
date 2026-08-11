@@ -289,6 +289,7 @@ async def enrich_and_route_salesforce(
                 target_table     = "cases",
                 collision_policy = "lock",
                 status           = "idle",
+                discovery_source = "event",
             )
             db.add(agent)
             db.commit()

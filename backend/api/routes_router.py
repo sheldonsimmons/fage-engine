@@ -761,6 +761,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             target_table     = "tickets",
             collision_policy = "lock",
             status           = "idle",
+            discovery_source = "event",
         )
         db.add(agent)
         db.commit()

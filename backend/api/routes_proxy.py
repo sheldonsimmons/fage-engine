@@ -289,6 +289,7 @@ def _ensure_agent(db, workspace_id: str, department: str, platform: str, agent_n
         pruning_enabled  = True,
         min_tier         = 1,
         max_tier         = 4,
+        discovery_source = "event",
     )
     db.add(agent)
     db.commit()

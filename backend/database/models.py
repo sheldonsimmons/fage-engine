@@ -88,6 +88,7 @@ class RegisteredAgent(Base):
     min_tier         = Column(Integer,  nullable=True, default=1)      # floor tier: routing never goes below this (1=Scout)
     max_tier         = Column(Integer,  nullable=True, default=4)      # ceiling tier: routing never goes above this (4=Strategist)
     pruning_enabled  = Column(Boolean,  nullable=True, default=True)   # False = skip context pruner entirely for this agent
+    discovery_source = Column(String,   nullable=True, default="manual")  # manual | event -- "event" means this row was auto-created on first traffic, not registered ahead of time
 
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")
@@ -164,6 +165,12 @@ class IntegrationConnection(Base):
     # sweep can log/report freshness without conflating it with unrelated
     # connection-health checks.
     last_outcome_sync_at  = Column(DateTime, nullable=True)
+    # Objects the admin has opted into tracking beyond the single primary
+    # `selected_object` that import actually runs against today -- recorded
+    # now so the intent isn't lost, even though multi-object import (looping
+    # the existing single-object import per tracked object) isn't wired up
+    # yet. JSON array of object API names, e.g. ["Opportunity", "Case"].
+    tracked_objects_json  = Column(Text, nullable=True)
     created_at            = Column(DateTime, default=datetime.utcnow)
     updated_at            = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

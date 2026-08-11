@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Connector Manager</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
+  <style>
+    body { margin: 0; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); }
+    .cm-wrap { max-width: 1100px; margin: 0 auto; padding: 28px 28px 60px; }
+    .cm-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .cm-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+    .cm-header h1 { font-size: 22px; margin: 0 0 4px; }
+    .cm-header p { color: var(--text-muted); font-size: 13px; margin: 0; }
+
+    .cm-health-panel { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; padding: 18px 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-panel); margin-bottom: 24px; }
+    .cm-health-score { text-align: center; }
+    .cm-health-score .n { font-size: 34px; font-weight: 700; font-family: var(--font-mono); }
+    .cm-health-score .l { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .cm-health-cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 20px; }
+    .cm-health-cat { font-size: 12px; }
+    .cm-health-cat .bar { height: 5px; border-radius: 3px; background: var(--border); margin-top: 4px; overflow: hidden; }
+    .cm-health-cat .bar > div { height: 100%; background: var(--accent-green); }
+    .cm-health-cat .bar.low > div { background: var(--accent-yellow); }
+    .cm-health-cat .bar.crit > div { background: var(--accent-red, #d9534f); }
+    .cm-recs { margin-top: 14px; font-size: 12px; color: var(--text-muted); grid-column: 1 / -1; }
+    .cm-recs div { padding: 3px 0; }
+
+    .cm-conn-card { border: 1px solid var(--border); border-radius: 10px; background: var(--bg-panel); padding: 16px 20px; margin-bottom: 14px; }
+    .cm-conn-top { display: flex; align-items: center; justify-content: space-between; }
+    .cm-conn-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .cm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); display: inline-block; }
+    .cm-dot.stale { background: var(--accent-yellow); }
+    .cm-dot.off { background: var(--text-muted); }
+    .cm-conn-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .cm-conn-actions { display: flex; gap: 8px; align-items: center; }
+    .cm-btn { font-size: 12px; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-primary); cursor: pointer; }
+    .cm-btn:hover { border-color: var(--accent-green); }
+    .cm-btn:disabled { opacity: .6; cursor: default; }
+
+    .cm-objects { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .cm-objects-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 6px; }
+    .cm-chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--bg-base); border: 1px solid var(--border); margin: 2px 4px 2px 0; }
+    .cm-chip.primary { border-color: var(--accent-green); }
+
+    .cm-trust { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+    .cm-trust summary { cursor: pointer; color: var(--text-primary); font-size: 12px; }
+    .cm-trust ul { margin: 8px 0 0; padding-left: 18px; }
+
+    .cm-empty { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <div class="cp-app-shell">
+    <aside id="cpLeftNavMount"></aside>
+    <div class="cp-app-main">
+      <div class="cm-wrap">
+        <div class="cm-header">
+          <div>
+            <h1>Connector Manager</h1>
+            <p>Every system connected to this workspace, its sync status, what it's tracking, and what CostPilot can see.</p>
+          </div>
+        </div>
+
+        <div class="cm-health-panel" id="cmHealthPanel">
+          <div class="cm-health-score">
+            <div class="n" id="cmHealthScore">—</div>
+            <div class="l">Setup Health</div>
+          </div>
+          <div class="cm-health-cats" id="cmHealthCats"></div>
+          <div class="cm-recs" id="cmHealthRecs"></div>
+        </div>
+
+        <div id="cmConnections"><div class="cm-empty">Loading connections…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Connector Manager -- central view of every IntegrationConnection in
+    // this workspace, backed entirely by real endpoints (no placeholder
+    // data): GET /api/integrations/connections, GET
+    // /api/integrations/connections/health, POST .../sync-outcomes, PUT
+    // .../tracked-objects.
+    const cmParams = new URLSearchParams(location.search);
+    const cmWorkspaceId = () => localStorage.getItem("cp_workspace_id") || cmParams.get("workspace_id") || "";
+
+    const CATEGORY_LABELS = {
+      ai_sources: "AI Sources",
+      business_context: "Business Context",
+      field_mapping: "Field Mapping",
+      outcome_coverage: "Outcome Coverage",
+      sync_health: "Sync Health",
+      data_quality: "Data Quality",
+    };
+
+    function cmTimeAgo(iso) {
+      if (!iso) return null;
+      const ms = Date.now() - new Date(iso).getTime();
+      const minutes = Math.round(ms / 60000);
+      if (minutes < 1) return "just now";
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return new Date(iso).toLocaleDateString();
+    }
+
+    function cmBarClass(pct) {
+      if (pct >= 80) return "";
+      if (pct >= 40) return "low";
+      return "crit";
+    }
+
+    async function cmLoadHealth() {
+      try {
+        const health = await apiGet(`/api/integrations/connections/health?workspace_id=${encodeURIComponent(cmWorkspaceId() || "default")}`);
+        document.getElementById("cmHealthScore").textContent = `${Math.round(health.overall)}%`;
+        document.getElementById("cmHealthCats").innerHTML = Object.entries(health.categories).map(([key, pct]) => `
+          <div class="cm-health-cat">
+            <div style="display:flex;justify-content:space-between;"><span>${CATEGORY_LABELS[key] || key}</span><span class="cm-num">${Math.round(pct)}%</span></div>
+            <div class="bar ${cmBarClass(pct)}"><div style="width:${pct}%"></div></div>
+          </div>`).join("");
+        const recsEl = document.getElementById("cmHealthRecs");
+        recsEl.innerHTML = health.recommendations.length
+          ? health.recommendations.map(r => `<div>→ ${r}</div>`).join("")
+          : `<div>Nothing to flag right now.</div>`;
+      } catch (err) {
+        document.getElementById("cmHealthPanel").innerHTML = `<div class="cm-empty">Could not load workspace health.</div>`;
+      }
+    }
+
+    const OUTCOME_SYNC_PLATFORMS = new Set(["salesforce", "servicenow"]);
+
+    function cmConnectionCard(c) {
+      const ageMs = c.last_success_at ? Date.now() - new Date(c.last_success_at).getTime() : null;
+      const isFresh = ageMs !== null && ageMs < 24 * 3600 * 1000;
+      const dotClass = !c.last_success_at ? "off" : (isFresh ? "" : "stale");
+      const statusText = !c.last_success_at
+        ? (c.status === "error" ? "Error" : "Not yet connected")
+        : (isFresh ? `Connected · ${cmTimeAgo(c.last_success_at)}` : `Stale · last connected ${cmTimeAgo(c.last_success_at)}`);
+
+      const objectChips = [c.selected_object].filter(Boolean).map(o => `<span class="cm-chip primary">${o} (imported)</span>`).join("")
+        + (c.tracked_objects || []).filter(o => o !== c.selected_object).map(o => `<span class="cm-chip">${o} (tracked, not yet imported)</span>`).join("");
+
+      const syncBlock = OUTCOME_SYNC_PLATFORMS.has(c.platform) ? `
+        <div class="cm-conn-meta" style="margin-top:6px;">
+          ${(c.work_item_count || c.work_item_count === 0) ? `${c.work_item_count} record${c.work_item_count === 1 ? "" : "s"} tracked · ` : ""}
+          ${c.last_outcome_sync_at ? `Outcome sync: ${cmTimeAgo(c.last_outcome_sync_at)}` : "Outcome sync: not run yet"}
+        </div>` : "";
+
+      const mappingFields = c.mapping ? Object.keys(c.mapping).filter(k => k !== "children") : [];
+
+      return `<div class="cm-conn-card" data-id="${c.id}">
+        <div class="cm-conn-top">
+          <div>
+            <div class="cm-conn-name"><span class="cm-dot ${dotClass}"></span>${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)} — ${c.display_name}</div>
+            <div class="cm-conn-meta">${statusText}${c.last_error ? ` · <span style="color:var(--accent-yellow);">${c.last_error}</span>` : ""}</div>
+            ${syncBlock}
+          </div>
+          <div class="cm-conn-actions">
+            ${OUTCOME_SYNC_PLATFORMS.has(c.platform) && c.last_success_at ? `<button class="cm-btn" onclick="cmSyncNow(${c.id}, this)">Sync Now</button>` : ""}
+          </div>
+        </div>
+        ${objectChips ? `<div class="cm-objects"><div class="cm-objects-label">Tracked Objects</div>${objectChips}</div>` : ""}
+        <details class="cm-trust">
+          <summary>What CostPilot can see here</summary>
+          <ul>
+            <li>Reads only: <strong>${c.selected_object || "no object selected yet"}</strong>${(c.tracked_objects && c.tracked_objects.length) ? ` and ${c.tracked_objects.filter(o => o !== c.selected_object).join(", ") || "no other objects"}` : ""}</li>
+            <li>Fields mapped: ${mappingFields.length ? mappingFields.join(", ") : "none yet"}</li>
+            <li>CostPilot never writes back to ${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)} — every connection here is read-only</li>
+            <li>Instance: ${c.instance_url || "—"}</li>
+          </ul>
+        </details>
+      </div>`;
+    }
+
+    async function cmLoadConnections() {
+      const container = document.getElementById("cmConnections");
+      try {
+        const path = `/api/integrations/connections?workspace_id=${encodeURIComponent(cmWorkspaceId() || "default")}`;
+        const data = await apiGet(path);
+        const items = (data.connections || []).filter(c => c.status !== "superseded");
+        if (!items.length) {
+          container.innerHTML = `<div class="cm-empty">No connections in this workspace yet.</div>`;
+          return;
+        }
+        items.sort((a, b) => a.platform.localeCompare(b.platform));
+        container.innerHTML = items.map(cmConnectionCard).join("");
+      } catch (err) {
+        container.innerHTML = `<div class="cm-empty">Could not load connections.</div>`;
+      }
+    }
+
+    async function cmSyncNow(connectionId, buttonEl) {
+      const original = buttonEl.textContent;
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Syncing…";
+      try {
+        const result = await apiPost(`/api/integrations/connections/${connectionId}/sync-outcomes`, {});
+        buttonEl.textContent = result.errors && result.errors.length ? "Sync had errors" : "Synced";
+        await Promise.all([cmLoadConnections(), cmLoadHealth()]);
+      } catch (err) {
+        buttonEl.textContent = "Sync failed";
+        buttonEl.disabled = false;
+        setTimeout(() => { buttonEl.textContent = original; }, 3000);
+      }
+    }
+
+    cmLoadHealth();
+    cmLoadConnections();
+  </script>
+  <script src="/js/left-nav.js?v=20260810a"></script>
+</body>
+</html>

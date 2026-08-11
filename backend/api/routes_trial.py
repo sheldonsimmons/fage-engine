@@ -861,6 +861,7 @@ def workspace_agents(workspace_id: str, db: Session = Depends(get_db)):
             "display_department": dept_display,
             "platform":       a.source_platform or "api",
             "status":         a.status,
+            "discovery_source": a.discovery_source or "manual",
             "active_recently": agent_active_recently(a),
             "last_active":    a.last_used_at.isoformat() if a.last_used_at else None,
             "total_calls":    total_calls,

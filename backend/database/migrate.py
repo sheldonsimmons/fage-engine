@@ -241,6 +241,14 @@ def run_migrations():
             ensure_column(conn, "integration_connections", "last_outcome_sync_at", "TIMESTAMP")
         except Exception:
             pass
+        try:
+            ensure_column(conn, "integration_connections", "tracked_objects_json", "TEXT")
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "registered_agents", "discovery_source", "TEXT")
+        except Exception:
+            pass
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount

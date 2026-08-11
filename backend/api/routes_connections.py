@@ -71,6 +71,10 @@ class MappingUpdate(BaseModel):
     mapping: dict
 
 
+class TrackedObjectsUpdate(BaseModel):
+    objects: list[str] = Field(default_factory=list, max_length=50)
+
+
 class ContextChangeDecision(BaseModel):
     decision: str = Field(pattern="^(approve|ignore)$")
     behavior: Optional[str] = Field(default=None, pattern="^(track_and_rollup|rollup_only|separate|ignore)$")
@@ -386,7 +390,7 @@ def _decrypt(value: Optional[str]) -> Optional[str]:
     return _fernet().decrypt(value.encode("ascii")).decode("utf-8") if value else None
 
 
-def _public_connection(item: IntegrationConnection) -> dict:
+def _public_connection(item: IntegrationConnection, db: Optional[Session] = None) -> dict:
     mapping = json.loads(item.mapping_json) if item.mapping_json else None
     if isinstance(mapping, dict):
         mapping = {
@@ -394,6 +398,22 @@ def _public_connection(item: IntegrationConnection) -> dict:
             for key, value in mapping.items()
             if not str(key).startswith("_")
         }
+    work_item_count = None
+    if db is not None:
+        # WorkItemSourceLink has no connection_id -- it's keyed by
+        # (workspace_id, source_platform, source_record_id), so if a
+        # workspace has two connections for the same platform this count
+        # is shared between them rather than attributable to one. Accepted
+        # ambiguity (see gap analysis) rather than a schema change here.
+        from database.models import WorkItemSourceLink
+        work_item_count = (
+            db.query(WorkItemSourceLink)
+            .filter(
+                WorkItemSourceLink.workspace_id == item.workspace_id,
+                WorkItemSourceLink.source_platform == item.platform,
+            )
+            .count()
+        )
     return {
         "id": item.id,
         "workspace_id": item.workspace_id,
@@ -404,12 +424,15 @@ def _public_connection(item: IntegrationConnection) -> dict:
         "instance_url": item.instance_url,
         "external_tenant_id": item.external_tenant_id,
         "selected_object": item.selected_object,
+        "tracked_objects": json.loads(item.tracked_objects_json) if item.tracked_objects_json else [],
         "mapping": mapping,
         "last_tested_at": item.last_tested_at,
         "last_success_at": item.last_success_at,
+        "last_outcome_sync_at": item.last_outcome_sync_at,
         "last_error": item.last_error,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
+        "work_item_count": work_item_count,
     }
 
 
@@ -811,7 +834,88 @@ def list_connections(
     if not include_superseded:
         query = query.filter(IntegrationConnection.status != "superseded")
     items = query.order_by(IntegrationConnection.created_at.desc()).all()
-    return {"connections": [_public_connection(item) for item in items]}
+    return {"connections": [_public_connection(item, db) for item in items]}
+
+
+@router.get("/health")
+def workspace_connection_health(workspace_id: str = Query(default="default"), db: Session = Depends(get_db)):
+    """
+    A rule-based, evidence-derived health score for how "onboarded" a
+    workspace actually is -- every number here comes from a real query
+    against existing tables, no separately-tracked score to drift out of
+    sync with reality. Categories are intentionally simple (no ML/weighting
+    tuning) so each number is explainable in one sentence.
+    """
+    from database.models import TokenTransaction
+
+    connections = (
+        db.query(IntegrationConnection)
+        .filter(IntegrationConnection.workspace_id == workspace_id, IntegrationConnection.status != "superseded")
+        .all()
+    )
+    healthy_connections = [c for c in connections if c.last_success_at and c.status != "error"]
+    syncable_connections = [c for c in healthy_connections if c.platform in ("salesforce", "servicenow")]
+
+    total_calls = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.workspace_id == workspace_id).scalar() or 0
+    resolved_calls = (
+        db.query(func.count(TokenTransaction.id))
+        .filter(TokenTransaction.workspace_id == workspace_id, TokenTransaction.work_item_id.isnot(None))
+        .scalar() or 0
+    )
+    work_item_count = db.query(func.count(WorkItem.id)).filter(WorkItem.workspace_id == workspace_id).scalar() or 0
+    outcome_count = db.query(func.count(WorkItemOutcome.id)).filter(WorkItemOutcome.workspace_id == workspace_id).scalar() or 0
+
+    def pct(numerator: float, denominator: float, if_no_denominator: float = 0.0) -> float:
+        if not denominator:
+            return if_no_denominator
+        return round(min(100.0, (numerator / denominator) * 100), 1)
+
+    ai_sources_pct = 100.0 if (healthy_connections or total_calls > 0) else 0.0
+    business_context_pct = 100.0 if work_item_count > 0 else 0.0
+    field_mapping_pct = pct(
+        sum(1 for c in healthy_connections if c.mapping_json), len(healthy_connections), if_no_denominator=0.0,
+    )
+    outcome_coverage_pct = pct(outcome_count, work_item_count, if_no_denominator=0.0)
+    fresh_syncs = sum(
+        1 for c in syncable_connections
+        if c.last_outcome_sync_at and (datetime.utcnow() - c.last_outcome_sync_at) < timedelta(hours=24)
+    )
+    # No syncable connection is not itself unhealthy -- treated as 100 so a
+    # workspace with only SDK/gateway activity (no CRM connected yet) isn't
+    # penalized for a category that doesn't apply to it yet.
+    sync_health_pct = pct(fresh_syncs, len(syncable_connections), if_no_denominator=100.0)
+    data_quality_pct = pct(resolved_calls, total_calls, if_no_denominator=0.0)
+
+    categories = {
+        "ai_sources":       ai_sources_pct,
+        "business_context": business_context_pct,
+        "field_mapping":    field_mapping_pct,
+        "outcome_coverage": outcome_coverage_pct,
+        "sync_health":       sync_health_pct,
+        "data_quality":      data_quality_pct,
+    }
+    overall = round(sum(categories.values()) / len(categories), 1)
+
+    recommendations = []
+    if ai_sources_pct < 100:
+        recommendations.append("Connect an AI source (SDK, gateway, or a native connector) so activity starts flowing in.")
+    if business_context_pct < 100:
+        recommendations.append("Connect a business system (e.g. Salesforce) so AI activity can roll up to real work.")
+    if 0 < outcome_coverage_pct < 80:
+        recommendations.append("Some work items have no outcome data yet -- run Sync Now or wait for the next automatic sync.")
+    elif outcome_coverage_pct == 0 and work_item_count > 0:
+        recommendations.append("Connect outcome fields (e.g. Opportunity stage/amount) to unlock business-value analytics.")
+    if syncable_connections and sync_health_pct < 100:
+        recommendations.append(f"{len(syncable_connections) - fresh_syncs} connection(s) haven't synced in over 24 hours.")
+    if 0 < data_quality_pct < 80:
+        recommendations.append(f"{total_calls - resolved_calls} AI events are missing work context and aren't attributed to any work item.")
+
+    return {
+        "workspace_id": workspace_id,
+        "overall": overall,
+        "categories": categories,
+        "recommendations": recommendations,
+    }
 
 
 @router.post("", status_code=201)
@@ -946,7 +1050,7 @@ async def get_salesforce_package_install(connection_id: int, db: Session = Depen
 
 @router.get("/{connection_id}")
 def get_connection(connection_id: int, db: Session = Depends(get_db)):
-    return _public_connection(_get_connection(db, connection_id))
+    return _public_connection(_get_connection(db, connection_id), db)
 
 
 @router.post("/{connection_id}/authorize")
@@ -2097,6 +2201,25 @@ async def discover_object_fields(
     item.last_error = None
     db.commit()
     return discovery
+
+
+@router.put("/{connection_id}/tracked-objects")
+def set_tracked_objects(connection_id: int, body: TrackedObjectsUpdate, db: Session = Depends(get_db)):
+    """
+    Records which additional objects (beyond the single primary
+    `selected_object` that import actually runs against today) the admin
+    wants CostPilot to track. This is intent, not import -- multi-object
+    import would mean looping the existing single-object import logic per
+    tracked object, which isn't wired up yet. Storing the opt-in now means
+    that intent survives until the import loop catches up, rather than
+    forcing a UI to pretend only one object can ever matter.
+    """
+    item = _get_connection(db, connection_id)
+    cleaned = sorted({name.strip() for name in body.objects if name.strip()})
+    item.tracked_objects_json = json.dumps(cleaned)
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    return {"connection_id": item.id, "tracked_objects": cleaned}
 
 
 @router.get("/{connection_id}/context-discovery")
