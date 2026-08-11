@@ -7,6 +7,7 @@ GET /api/timeseries   — daily spend (by department) + call counts (by model ti
 
 from datetime import datetime, timedelta, date as date_type
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -42,42 +43,80 @@ def get_timeseries(
     """
     start = datetime.utcnow() - timedelta(days=days)
 
-    q = db.query(TokenTransaction).filter(TokenTransaction.timestamp >= start)
-    # TokenTransaction.workspace_id is the real column — activity written
-    # through /api/route (including the traffic simulator) sets it but
-    # leaves department unprefixed, so the old department-prefix-only
-    # filter silently excluded most/all new simulated traffic from this
-    # chart while every other page (already fixed) kept up to date. Same
-    # bug as the dashboard undercount found earlier, just in a file that
-    # hadn't been touched yet.
-    workspace_clause = workspace_filter(TokenTransaction, workspace_id)
-    if workspace_clause is not None:
-        q = q.filter(workspace_clause)
-    rows = q.order_by(TokenTransaction.timestamp).all()
+    def _scoped(query):
+        # TokenTransaction.workspace_id is the real column — activity written
+        # through /api/route (including the traffic simulator) sets it but
+        # leaves department unprefixed, so the old department-prefix-only
+        # filter silently excluded most/all new simulated traffic from this
+        # chart while every other page (already fixed) kept up to date. Same
+        # bug as the dashboard undercount found earlier, just in a file that
+        # hadn't been touched yet.
+        workspace_clause = workspace_filter(TokenTransaction, workspace_id)
+        if workspace_clause is not None:
+            query = query.filter(workspace_clause)
+        return query.filter(TokenTransaction.timestamp >= start)
+
+    # GROUP BY in SQL instead of pulling every transaction row into Python --
+    # the result set here is bounded by (days x distinct departments) and
+    # (days x 4 tiers), typically a few hundred rows, regardless of whether
+    # the underlying table has thousands or millions of transactions. Same
+    # fix as project_activity_reporting() got earlier this week, applied
+    # here since this chart never got the same treatment at the time.
+    spend_rows = _scoped(
+        db.query(
+            func.date(TokenTransaction.timestamp).label("day"),
+            TokenTransaction.department,
+            func.sum(TokenTransaction.cost_usd),
+        )
+    ).group_by("day", TokenTransaction.department).all()
+
+    call_rows = _scoped(
+        db.query(
+            func.date(TokenTransaction.timestamp).label("day"),
+            TokenTransaction.model_tier,
+            func.count(TokenTransaction.id),
+        )
+    ).group_by("day", TokenTransaction.model_tier).all()
 
     # Build ordered date range (oldest → newest)
     today = datetime.utcnow().date()
     date_range = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
+    date_range_set = set(date_range)
 
-    # Collect display-safe department labels. Raw values may include internal
-    # workspace prefixes like WORKSPACE_ID:Sales; those stay in storage but
-    # should not leak into charts.
-    all_depts = sorted({display_department(r.department) for r in rows if r.department})
+    def _as_date(value) -> date_type:
+        # SQLite's func.date() returns an ISO string ("2026-08-11");
+        # Postgres' returns a real date object -- normalize both the same
+        # way display_department()/parity testing already expects a plain
+        # date, not a driver-specific type.
+        return value if isinstance(value, date_type) else datetime.strptime(value, "%Y-%m-%d").date()
 
-    # Initialize per-day buckets
+    # display_department() strips internal workspace prefixes
+    # ("WORKSPACE_ID:Sales" -> "Sales") -- applying it AFTER the SQL
+    # GROUP BY, on the small aggregated result set, rather than trying to
+    # replicate that Python-side string logic in SQL, keeps this an exact
+    # behavioral match for the previous per-row implementation (including
+    # its existing quirk of merging same-named departments across
+    # workspaces when workspace_id is unset -- preserved here, not
+    # something this change should silently alter).
     spend_by_day_dept: dict[date_type, dict] = {d: {} for d in date_range}
-    calls_by_day_tier: dict[date_type, dict] = {d: {} for d in date_range}
-
-    for r in rows:
-        d = r.timestamp.date() if r.timestamp else None
-        if d not in spend_by_day_dept:
+    for raw_day, raw_dept, total in spend_rows:
+        d = _as_date(raw_day)
+        if d not in date_range_set:
             continue
-        canonical_tier = TIER_ALIASES.get(r.model_tier, r.model_tier)
-        dept = display_department(r.department)
+        dept = display_department(raw_dept)
         if dept:
-            spend_by_day_dept[d][dept] = spend_by_day_dept[d].get(dept, 0.0) + (r.cost_usd or 0.0)
+            spend_by_day_dept[d][dept] = spend_by_day_dept[d].get(dept, 0.0) + float(total or 0.0)
+
+    calls_by_day_tier: dict[date_type, dict] = {d: {} for d in date_range}
+    for raw_day, raw_tier, count in call_rows:
+        d = _as_date(raw_day)
+        if d not in date_range_set:
+            continue
+        canonical_tier = TIER_ALIASES.get(raw_tier, raw_tier)
         if canonical_tier:
-            calls_by_day_tier[d][canonical_tier] = calls_by_day_tier[d].get(canonical_tier, 0) + 1
+            calls_by_day_tier[d][canonical_tier] = calls_by_day_tier[d].get(canonical_tier, 0) + int(count or 0)
+
+    all_depts = sorted({dept for day in spend_by_day_dept.values() for dept in day})
 
     daily_spend = [
         {

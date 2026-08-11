@@ -46,8 +46,8 @@ Both modes end up producing the same underlying record — a database row saying
 ### The technical honesty section (say this in engineering conversations, not just here)
 
 - Real Salesforce OAuth integration exists and works — verified against a live org today, including automatic token refresh (the app fixes its own expired login credentials without a human re-authorizing every two hours).
-- The outcome-enrichment mechanism above works for exactly one case today: **Salesforce Opportunities.** The pattern is proven and designed to extend to other object types and platforms, but that extension hasn't been built yet.
-- There's no auto-scheduled sync yet — pulling fresh outcome data from Salesforce happens on request, not on a timer, today.
+- The outcome-enrichment mechanism is **proven live on Salesforce Opportunities and Cases.** The same pattern has also been built and unit-tested for ServiceNow Incidents and Cases, but not yet verified against a real ServiceNow instance — no ServiceNow org has actually been connected yet, so treat that half as "built, not yet proven," not as a live capability to cite the same way as Salesforce.
+- Sync **is automatic today**, not on-demand — confirmed directly from production logs, not just the code: Heroku Scheduler runs the sync every ~10 minutes against every connected, working Salesforce org, and it's actually updating real records (one recent run updated 27 records in a single pass). A human can still trigger it manually too, but nobody has to remember to.
 - "Real-time" dashboards in this app mean **polling every few seconds**, not a push/websocket architecture. Said plainly: it's not instant, it's fast-refreshing.
 - Aggregation/reporting queries are built to run inside the database (SQL `SUM`/`GROUP BY`), specifically so the system doesn't fall over as data volume grows — this was a real bug found and fixed this week (a report that took 0.02 seconds at 47 rows took 2.5 seconds at 20,000 rows before the fix).
 
@@ -85,9 +85,9 @@ That's a small dollar amount by design (it was a test), but it's a **real, live,
 
 ## Honest limitations (know these before a sales call, don't get caught by them)
 
-- Outcome tracking today = **Salesforce Opportunities only.** Not HubSpot, not ServiceNow, not Jira, not other CRMs. Say "we've proven the pattern on Salesforce and are extending it" — don't imply it's already universal.
+- Outcome tracking is **proven live on Salesforce** (Opportunities and Cases). ServiceNow support exists in code and passes tests, but hasn't been run against a real ServiceNow org yet — say "proven on Salesforce, built and tested for ServiceNow, verifying it live next" rather than claiming ServiceNow the same way as Salesforce. Not HubSpot, not Jira, not other CRMs yet at all.
 - Not autonomous. CostPilot observes, enforces explicit rules (budget caps, sensitive-data blocks), and answers questions. It doesn't yet take independent optimization action on your behalf.
-- Sync is on-demand, not scheduled, for outcome data today.
+- Sync runs automatically (~every 10 minutes via a scheduled job), confirmed from real production logs — not just an on-demand button someone has to remember to click.
 - Small team, actively building. Some pieces (cost tracking, budget governance, the audit trail) are mature. The outcome-enrichment piece is brand new — built and proven this week.
 
 ## Likely objections, and honest answers
@@ -102,7 +102,7 @@ You could build the cost-tracking piece in a sprint. The parts that take real ti
 Cloud cost tools track infrastructure spend. CostPilot tracks AI activity specifically, including things cloud tools have no concept of: which model was used for which task, whether sensitive data was involved, and — uniquely — whether that AI activity is connected to a business outcome like a closed deal.
 
 **"What happens when we're not just using Salesforce?"**
-Today: only Salesforce Opportunities get the outcome-correlation treatment. The architecture is explicitly designed so other platforms (HubSpot, ServiceNow, Jira) follow the same pattern later — but that extension work hasn't happened yet. Be straight about that; it's a roadmap item, not a current feature.
+Today: Salesforce Opportunities and Cases get the outcome-correlation treatment, proven against a real org. ServiceNow follows the identical pattern in code and passes the same tests, but hasn't been verified against a real ServiceNow instance yet — that's the very next thing to confirm, not a future roadmap item. HubSpot and Jira genuinely haven't been built yet. Be straight about exactly which of those three states applies to which platform; don't round ServiceNow up to "done" or down to "not started."
 
 ---
 

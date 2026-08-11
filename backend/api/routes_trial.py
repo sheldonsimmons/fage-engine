@@ -38,13 +38,17 @@ def _trial_caps(account: TrialAccount) -> tuple[int, float]:
 
 def _workspace_usage(db: Session, workspace_id: str) -> dict:
     from database.models import TokenTransaction
-    prefix = f"{workspace_id}:"
-    q = db.query(TokenTransaction).filter(
-        TokenTransaction.department.like(f"{prefix}%")
-    )
-    total_calls = q.count()
-    total_spend = round(sum(t.cost_usd or 0.0 for t in q.all()), 6)
-    return {"calls": total_calls, "spend_usd": total_spend}
+    from sqlalchemy import func
+    from core.workspace_scope import workspace_filter
+
+    scope = workspace_filter(TokenTransaction, workspace_id)
+    q = db.query(TokenTransaction)
+    if scope is not None:
+        q = q.filter(scope)
+    total_calls, total_spend = q.with_entities(
+        func.count(TokenTransaction.id), func.sum(TokenTransaction.cost_usd)
+    ).one()
+    return {"calls": total_calls or 0, "spend_usd": round(float(total_spend or 0.0), 6)}
 
 
 def _business_context_config(account: TrialAccount):
@@ -879,55 +883,86 @@ def workspace_agents(workspace_id: str, db: Session = Depends(get_db)):
 @router.get("/workspace-stats")
 def workspace_stats(workspace_id: str, db: Session = Depends(get_db)):
     from database.models import TokenTransaction
-    from sqlalchemy import func
+    from sqlalchemy import func, case
+    from core.workspace_scope import workspace_filter
 
     account = db.query(TrialAccount).filter_by(workspace_id=workspace_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Workspace not found.")
 
-    # All transactions tagged to this workspace (department = "WORKSPACE_ID:DeptName")
+    # workspace_filter() prefers the real workspace_id column (set by the
+    # universal /api/route ingestion path) and falls back to the legacy
+    # "WORKSPACE_ID:DeptName" department prefix only for older rows -- the
+    # same scoping already used in routes_timeseries.py. The old LIKE-only
+    # filter here silently excluded any activity written through the real
+    # column, same bug class as the dashboard undercount.
     prefix = f"{workspace_id}:"
-    txns = db.query(TokenTransaction).filter(
-        TokenTransaction.department.like(f"{prefix}%")
-    ).order_by(TokenTransaction.timestamp.desc()).all()
+    scope = workspace_filter(TokenTransaction, workspace_id)
 
-    status        = _trial_status_payload(account, db)
-    total_calls   = len(txns)
-    total_cost    = status["usage"]["spend_usd"]
-    tokens_saved  = sum(t.tokens_saved for t in txns if t.was_pruned)
+    def _scoped(query):
+        return query.filter(scope) if scope is not None else query
 
-    # Economy vs flagship split
-    economy_tiers = {"Scout", "Analyst", "micro"}
-    economy_calls = sum(1 for t in txns if t.model_tier in economy_tiers)
-    economy_pct   = round(economy_calls / total_calls * 100, 1) if total_calls else 0
+    status = _trial_status_payload(account, db)
+    total_cost = status["usage"]["spend_usd"]
 
-    # Savings vs all-flagship baseline
+    economy_tiers = ("Scout", "Analyst", "micro")
     FLAGSHIP_INPUT  = 5.00 / 1_000_000
     FLAGSHIP_OUTPUT = 15.00 / 1_000_000
-    cost_if_flagship = sum(
-        (t.input_tokens * FLAGSHIP_INPUT + t.output_tokens * FLAGSHIP_OUTPUT)
-        for t in txns
-    )
+
+    # Single aggregate query in SQL instead of pulling every transaction
+    # row into Python -- same GROUP BY-in-the-database pattern already
+    # applied to get_timeseries() and project_activity_reporting().
+    totals = _scoped(
+        db.query(
+            func.count(TokenTransaction.id),
+            func.sum(TokenTransaction.tokens_saved).filter(TokenTransaction.was_pruned.is_(True)),
+            func.sum(case((TokenTransaction.model_tier.in_(economy_tiers), 1), else_=0)),
+            func.sum(TokenTransaction.input_tokens),
+            func.sum(TokenTransaction.output_tokens),
+        )
+    ).one()
+    total_calls, tokens_saved, economy_calls, total_input_tokens, total_output_tokens = totals
+    total_calls        = total_calls or 0
+    tokens_saved        = tokens_saved or 0
+    economy_calls       = economy_calls or 0
+    total_input_tokens  = total_input_tokens or 0
+    total_output_tokens = total_output_tokens or 0
+
+    economy_pct = round(economy_calls / total_calls * 100, 1) if total_calls else 0
+
+    cost_if_flagship = (total_input_tokens * FLAGSHIP_INPUT) + (total_output_tokens * FLAGSHIP_OUTPUT)
     saved = round(max(0, cost_if_flagship - total_cost), 6)
     annual_projection = round(saved * 12, 2)
 
-    # Per-department breakdown
-    dept_data = {}
-    for t in txns:
-        dept = t.department.replace(prefix, "", 1) if t.department.startswith(prefix) else t.department
-        if dept not in dept_data:
-            dept_data[dept] = {"calls": 0, "cost": 0.0}
-        dept_data[dept]["calls"] += 1
-        dept_data[dept]["cost"]  = round(dept_data[dept]["cost"] + t.cost_usd, 6)
+    # Per-department breakdown, aggregated in SQL
+    dept_rows = _scoped(
+        db.query(
+            TokenTransaction.department,
+            func.count(TokenTransaction.id),
+            func.sum(TokenTransaction.cost_usd),
+        )
+    ).group_by(TokenTransaction.department).all()
 
-    # Recent calls (last 10)
+    dept_data = {}
+    for raw_dept, calls, cost in dept_rows:
+        dept = raw_dept.replace(prefix, "", 1) if raw_dept and raw_dept.startswith(prefix) else raw_dept
+        entry = dept_data.setdefault(dept, {"calls": 0, "cost": 0.0})
+        entry["calls"] += calls or 0
+        entry["cost"]   = round(entry["cost"] + float(cost or 0.0), 6)
+
+    # Recent calls (last 10) -- the one piece that legitimately needs
+    # row-level data, kept as a small LIMIT-ed query rather than derived
+    # from the aggregates above.
+    recent_rows = _scoped(
+        db.query(TokenTransaction).order_by(TokenTransaction.timestamp.desc())
+    ).limit(10).all()
     recent = [{
         "timestamp":  t.timestamp.isoformat(),
-        "department": t.department.replace(prefix, "", 1),
+        "department": t.department.replace(prefix, "", 1) if t.department and t.department.startswith(prefix) else t.department,
         "model_tier": t.model_tier,
         "cost_usd":   t.cost_usd,
         "routing_reason": t.routing_reason or "—",
-    } for t in txns[:10]]
+    } for t in recent_rows]
 
     return {
         "workspace_id":       workspace_id,

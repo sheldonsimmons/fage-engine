@@ -146,7 +146,11 @@ def test_excludes_connections_without_a_real_token():
     assert sync_all._select_connections_to_sync(db) == []
 
 
-def test_ignores_non_salesforce_platforms():
+def test_includes_servicenow_alongside_salesforce():
+    # ServiceNow outcome sync (Incidents/Cases) now shares the same
+    # dispatcher and selection logic as Salesforce -- this used to be
+    # Salesforce-only, deliberately widened once ServiceNow's outcome
+    # adapters existed for real, not just scaffolded.
     db = _session()
     db.add(IntegrationConnection(
         workspace_id="WS-E", platform="servicenow", display_name="sn", status="mapping",
@@ -155,4 +159,39 @@ def test_ignores_non_salesforce_platforms():
     ))
     db.commit()
 
+    selected = sync_all._select_connections_to_sync(db)
+    assert len(selected) == 1
+    assert selected[0].platform == "servicenow"
+
+
+def test_ignores_platforms_without_outcome_support():
+    db = _session()
+    db.add(IntegrationConnection(
+        workspace_id="WS-F", platform="hubspot", display_name="hs", status="mapping",
+        instance_url="https://f.hubspot.com", access_token_encrypted=_encrypt("x"),
+        last_success_at=datetime.utcnow(),
+    ))
+    db.commit()
+
     assert sync_all._select_connections_to_sync(db) == []
+
+
+def test_dedups_by_workspace_platform_and_org_not_workspace_alone():
+    # A workspace with both a Salesforce and a ServiceNow connection to the
+    # same instance_url string (unlikely in practice, but exercises the
+    # dedup key directly) must keep both -- platform is part of the key.
+    db = _session()
+    db.add(IntegrationConnection(
+        workspace_id="WS-G", platform="salesforce", display_name="sf", status="mapping",
+        instance_url="https://shared.example.com", access_token_encrypted=_encrypt("x"),
+        last_success_at=datetime.utcnow(),
+    ))
+    db.add(IntegrationConnection(
+        workspace_id="WS-G", platform="servicenow", display_name="sn", status="mapping",
+        instance_url="https://shared.example.com", access_token_encrypted=_encrypt("x"),
+        last_success_at=datetime.utcnow(),
+    ))
+    db.commit()
+
+    selected = sync_all._select_connections_to_sync(db)
+    assert {item.platform for item in selected} == {"salesforce", "servicenow"}

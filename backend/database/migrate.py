@@ -237,6 +237,10 @@ def run_migrations():
             ensure_column(conn, "work_accounts", "merged_into_work_account_id", "INTEGER REFERENCES work_accounts(id)")
         except Exception:
             pass
+        try:
+            ensure_column(conn, "integration_connections", "last_outcome_sync_at", "TIMESTAMP")
+        except Exception:
+            pass
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount

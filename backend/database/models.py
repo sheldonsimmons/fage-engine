@@ -158,6 +158,12 @@ class IntegrationConnection(Base):
     last_tested_at        = Column(DateTime, nullable=True)
     last_success_at       = Column(DateTime, nullable=True)
     last_error            = Column(Text, nullable=True)
+    # Distinct from last_success_at (any successful API call -- test,
+    # discovery, import, sync) -- this is specifically "when did the
+    # automatic outcome-sync sweep last touch this connection," so the
+    # sweep can log/report freshness without conflating it with unrelated
+    # connection-health checks.
+    last_outcome_sync_at  = Column(DateTime, nullable=True)
     created_at            = Column(DateTime, default=datetime.utcnow)
     updated_at            = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

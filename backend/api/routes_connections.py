@@ -2488,19 +2488,14 @@ def _merge_sync_results(*results: dict) -> dict:
     return merged
 
 
-@router.post("/{connection_id}/sync-outcomes")
-async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
+async def _sync_connection_outcomes(db: Session, item: IntegrationConnection) -> dict:
     """
-    Pull current status/value/close-date for every WorkItem this workspace
-    has already linked to a Salesforce Opportunity/Case or ServiceNow
-    incident/Case, and update WorkItemOutcome (+ append
-    WorkItemOutcomeEvent history on change).
-
-    The connected system remains the system of record -- this only ever
-    reads.
+    Platform dispatch shared by the manual /sync-outcomes endpoint and the
+    automatic background sweep (see run_outcome_sync_sweep in
+    core/outcome_sync_scheduler.py) -- one place decides which adapters run
+    for a given platform, so the two callers can never drift apart on what
+    "syncing this connection" actually means.
     """
-    item = _get_connection(db, connection_id)
-    _require_connected(item)
     if item.platform == "salesforce":
         result = _merge_sync_results(
             await _sync_salesforce_opportunity_outcomes(db, item),
@@ -2523,8 +2518,25 @@ async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
     # meant to help catch.
     if not result["errors"]:
         item.last_success_at = datetime.utcnow()
+    item.last_outcome_sync_at = datetime.utcnow()
     db.commit()
     return result
+
+
+@router.post("/{connection_id}/sync-outcomes")
+async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
+    """
+    Pull current status/value/close-date for every WorkItem this workspace
+    has already linked to a Salesforce Opportunity/Case or ServiceNow
+    incident/Case, and update WorkItemOutcome (+ append
+    WorkItemOutcomeEvent history on change).
+
+    The connected system remains the system of record -- this only ever
+    reads.
+    """
+    item = _get_connection(db, connection_id)
+    _require_connected(item)
+    return await _sync_connection_outcomes(db, item)
 
 
 # ── Bulk import (Connect -> Discover -> Import) ─────────────────────────────
