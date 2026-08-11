@@ -3508,4 +3508,7 @@ function toggleObMic() {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-renderDeptList();
+// renderDeptList() used to run here to pre-populate the legacy department
+// budget screen at load -- that screen (and its "totalBudget" input) no
+// longer exists, so this call is gone rather than left throwing on a null
+// element every page load.
