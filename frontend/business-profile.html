@@ -692,7 +692,6 @@
           container.innerHTML = `<div class="bp-empty">No connected systems have synced successfully in this workspace yet.</div>`;
           return;
         }
-        const outcomeSyncPlatforms = new Set(["salesforce", "servicenow"]);
         container.innerHTML = items.map((c) => {
           const ageMs = Date.now() - new Date(c.last_success_at).getTime();
           const isFresh = ageMs < 24 * 3600 * 1000;
@@ -707,7 +706,7 @@
           // Scheduler) -- distinct from last_success_at, which just means
           // "the connection itself last worked" (e.g. OAuth test).
           let syncLine = "";
-          if (outcomeSyncPlatforms.has(c.platform)) {
+          if (c.supports_outcome_sync) {
             const countText = (c.work_item_count || c.work_item_count === 0)
               ? `${c.work_item_count} record${c.work_item_count === 1 ? "" : "s"} tracked`
               : "";

@@ -44,11 +44,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
-SYNCABLE_PLATFORMS = ("salesforce", "servicenow")
-
-
 def _select_connections_to_sync(db):
     from database.models import IntegrationConnection
+    # Single source of truth for "which platforms have outcome-sync
+    # adapters" -- this used to be its own separately-maintained tuple here,
+    # which could silently drift from the real dispatch list in
+    # api/routes_connections.py (the actual place new platforms get wired
+    # up). Importing it means adding a platform there is enough; this
+    # script picks it up automatically.
+    from api.routes_connections import DEEP_INTEGRATION_PLATFORMS as SYNCABLE_PLATFORMS
 
     candidates = (
         db.query(IntegrationConnection)

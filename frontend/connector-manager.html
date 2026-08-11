@@ -134,8 +134,6 @@
       }
     }
 
-    const OUTCOME_SYNC_PLATFORMS = new Set(["salesforce", "servicenow"]);
-
     function cmConnectionCard(c) {
       const ageMs = c.last_success_at ? Date.now() - new Date(c.last_success_at).getTime() : null;
       const isFresh = ageMs !== null && ageMs < 24 * 3600 * 1000;
@@ -147,7 +145,7 @@
       const objectChips = [c.selected_object].filter(Boolean).map(o => `<span class="cm-chip primary">${o} (imported)</span>`).join("")
         + (c.tracked_objects || []).filter(o => o !== c.selected_object).map(o => `<span class="cm-chip">${o} (tracked, not yet imported)</span>`).join("");
 
-      const syncBlock = OUTCOME_SYNC_PLATFORMS.has(c.platform) ? `
+      const syncBlock = c.supports_outcome_sync ? `
         <div class="cm-conn-meta" style="margin-top:6px;">
           ${(c.work_item_count || c.work_item_count === 0) ? `${c.work_item_count} record${c.work_item_count === 1 ? "" : "s"} tracked · ` : ""}
           ${c.last_outcome_sync_at ? `Outcome sync: ${cmTimeAgo(c.last_outcome_sync_at)}` : "Outcome sync: not run yet"}
@@ -163,7 +161,7 @@
             ${syncBlock}
           </div>
           <div class="cm-conn-actions">
-            ${OUTCOME_SYNC_PLATFORMS.has(c.platform) && c.last_success_at ? `<button class="cm-btn" onclick="cmSyncNow(${c.id}, this)">Sync Now</button>` : ""}
+            ${c.supports_outcome_sync && c.last_success_at ? `<button class="cm-btn" onclick="cmSyncNow(${c.id}, this)">Sync Now</button>` : ""}
           </div>
         </div>
         ${objectChips ? `<div class="cm-objects"><div class="cm-objects-label">Tracked Objects</div>${objectChips}</div>` : ""}

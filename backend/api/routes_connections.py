@@ -30,6 +30,16 @@ from database.models import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 SUPPORTED_PLATFORMS = {"salesforce", "servicenow", "hubspot"}
+# Platforms with real metadata discovery (sobjects/sys_db_object APIs) and
+# outcome-sync adapters today. Single source of truth -- this used to be
+# hardcoded as {"salesforce", "servicenow"} independently in four places in
+# this file (plus duplicated again in two frontend JS files and a separate
+# script), which is exactly the kind of drift that let CostPilot's actual
+# platform support quietly diverge from what the UI claimed. Adding a new
+# platform's discovery/outcome-sync support means updating this one set
+# (and whatever dispatch function needs the new platform's specific
+# adapter), not hunting across every file that used to guess independently.
+DEEP_INTEGRATION_PLATFORMS = {"salesforce", "servicenow"}
 SALESFORCE_API_VERSION = os.getenv("SALESFORCE_API_VERSION", "v65.0")
 SALESFORCE_PACKAGE_VERSION_ID = os.getenv(
     "SALESFORCE_PACKAGE_VERSION_ID",
@@ -430,6 +440,7 @@ def _public_connection(item: IntegrationConnection, db: Optional[Session] = None
         "external_tenant_id": item.external_tenant_id,
         "selected_object": item.selected_object,
         "tracked_objects": json.loads(item.tracked_objects_json) if item.tracked_objects_json else [],
+        "supports_outcome_sync": item.platform in DEEP_INTEGRATION_PLATFORMS,
         "mapping": mapping,
         "last_tested_at": item.last_tested_at,
         "last_success_at": item.last_success_at,
@@ -859,7 +870,7 @@ def workspace_connection_health(workspace_id: str = Query(default="default"), db
         .all()
     )
     healthy_connections = [c for c in connections if c.last_success_at and c.status != "error"]
-    syncable_connections = [c for c in healthy_connections if c.platform in ("salesforce", "servicenow")]
+    syncable_connections = [c for c in healthy_connections if c.platform in DEEP_INTEGRATION_PLATFORMS]
 
     total_calls = db.query(func.count(TokenTransaction.id)).filter(TokenTransaction.workspace_id == workspace_id).scalar() or 0
     resolved_calls = (
@@ -2063,7 +2074,7 @@ async def _servicenow_table_get(
 @router.get("/{connection_id}/objects")
 async def discover_objects(connection_id: int, db: Session = Depends(get_db)):
     item = _get_connection(db, connection_id)
-    if item.platform not in {"salesforce", "servicenow"}:
+    if item.platform not in DEEP_INTEGRATION_PLATFORMS:
         raise HTTPException(status_code=501, detail=f"{item.platform.title()} metadata discovery is not available yet")
     try:
         if item.platform == "salesforce":
@@ -2111,7 +2122,7 @@ async def discover_object_fields(
     db: Session = Depends(get_db),
 ):
     item = _get_connection(db, connection_id)
-    if item.platform not in {"salesforce", "servicenow"}:
+    if item.platform not in DEEP_INTEGRATION_PLATFORMS:
         raise HTTPException(status_code=501, detail=f"{item.platform.title()} metadata discovery is not available yet")
     if item.platform == "salesforce":
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:__c|__mdt|__e|__x)?", body.object_name):
