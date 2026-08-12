@@ -916,15 +916,15 @@ def workspace_connection_health(workspace_id: str = Query(default="default"), db
     if ai_sources_pct < 100:
         recommendations.append("Connect an AI source (SDK, gateway, or a native connector) so activity starts flowing in.")
     if business_context_pct < 100:
-        recommendations.append("Connect a business system (e.g. Salesforce) so AI activity can roll up to real work.")
+        recommendations.append("Connect a business system (e.g. Salesforce) so AI activity can connect to real work.")
     if 0 < outcome_coverage_pct < 80:
-        recommendations.append("Some work items have no outcome data yet -- run Sync Now or wait for the next automatic sync.")
+        recommendations.append("Some tracked records have no outcome data yet -- run Sync Now or wait for the next automatic sync.")
     elif outcome_coverage_pct == 0 and work_item_count > 0:
         recommendations.append("Connect outcome fields (e.g. Opportunity stage/amount) to unlock business-value analytics.")
     if syncable_connections and sync_health_pct < 100:
         recommendations.append(f"{len(syncable_connections) - fresh_syncs} connection(s) haven't synced in over 24 hours.")
     if 0 < data_quality_pct < 80:
-        recommendations.append(f"{total_calls - resolved_calls} AI events are missing work context and aren't attributed to any work item.")
+        recommendations.append(f"{total_calls - resolved_calls} AI events are missing business context and aren't attributed to any tracked record.")
 
     return {
         "workspace_id": workspace_id,
@@ -1884,7 +1884,7 @@ def verify_salesforce_package_request(
     if not parent_verified:
         missing.append(f"a live {relationships.get('parent_object') or 'Account'} request")
     if not child_verified:
-        missing.append("a live approved related-record request rolled up to the same Account")
+        missing.append("a live approved related-record request connected to the same Account")
     package_setup["verification"] = {
         "verified": verified,
         "parent_verified": parent_verified,
@@ -1895,7 +1895,7 @@ def verify_salesforce_package_request(
         "child_audit_id": child_event.id if child_event else None,
         "child_record_name": child_event.origin_record_name if child_event else None,
         "message": (
-            "Both a parent and related Salesforce request completed the governed pipeline and rolled up together."
+            "Both a parent and related Salesforce request completed the governed pipeline and connected successfully."
             if verified else "Still waiting for " + " and ".join(missing) + "."
         ),
     }
