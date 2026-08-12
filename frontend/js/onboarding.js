@@ -155,12 +155,12 @@ function refreshBusinessTemplatePreview() {
   const button = document.getElementById("obBuildTemplateBtn");
   button.disabled = !ready;
   if (!businessFirstState.built) {
-    button.textContent = "Build My Template →";
+    button.textContent = "Continue →";
     document.getElementById("obTemplatePreview").hidden = true;
     return;
   }
   const measures = _businessMeasures();
-  document.getElementById("obTemplateTitle").textContent = `${workLabel} Business Context`;
+  document.getElementById("obTemplateTitle").textContent = `${workLabel} setup`;
   document.getElementById("obTemplateDescription").textContent =
     `CostPilot will understand ${workLabel.toLowerCase()} activity from ${sourceLabel} using your business language.`;
   const parts = [
@@ -725,7 +725,7 @@ function renderObDiscoveryCard(platform) {
   obDiscoveryPlatform = platform;
   card.innerHTML = `<div class="ob-discovery-head">
       <div><h3>Find related objects</h3>
-      <p>Connect ${_obEsc(label)} so CostPilot can suggest which record is the parent and which related records should roll up to it. CostPilot reads metadata—not customer record contents.</p></div>
+      <p>Connect ${_obEsc(label)} so CostPilot can recommend which record is the primary one and which related records should connect to it. CostPilot reads metadata—not customer record contents.</p></div>
       <span class="ob-context-eyebrow">${available ? "Available" : "Adapter next"}</span>
     </div>
     ${platform === "salesforce" ? `<div class="ob-field-help" style="margin-bottom:8px">Requires a Salesforce admin. If this org has not had the CostPilot package installed yet, Salesforce will reject the connection with an "External client app is not installed" error -- that is not something you did wrong, it just means the package needs to be installed first. Contact your CostPilot rep if you hit that.</div><div class="ob-discovery-actions">
@@ -914,7 +914,7 @@ async function restoreServerOnboardingProgress() {
       _markVerificationRow("obVerifyParentRequest", setup.verification.parent_record_name || "Received");
     }
     if (setup.verification?.child_verified) {
-      _markVerificationRow("obVerifyChildRequest", setup.verification.child_record_name || "Received and rolled up");
+      _markVerificationRow("obVerifyChildRequest", setup.verification.child_record_name || "Received and connected");
     }
     if (setup.verification?.verified) {
       const button = document.getElementById("obRunTestBtn");
@@ -945,7 +945,7 @@ async function loadDiscoveryObjects() {
     results.innerHTML = `<div class="ob-field ob-parent-object-step" style="margin-top:14px">
       <div class="ob-context-eyebrow">Step 1 of 2</div>
       <label class="ob-label">Choose the primary business context</label>
-      <p class="ob-field-help">This is the parent record where related AI cost, tokens, users, and agents will roll up.</p>
+      <p class="ob-field-help">This is the main record that AI cost, tokens, users, and agents will connect to.</p>
       <select class="ob-input" id="obDiscoveredObject">
         ${objects.map(obj => `<option value="${_obEsc(obj.name)}">${_obEsc(obj.label)} · ${_obEsc(obj.name)}</option>`).join("")}
       </select>
@@ -979,7 +979,7 @@ async function discoverPlatformFields() {
     obDiscoveredRelationships = payload.child_relationships || [];
     renderDiscoveredMapping(payload);
     document.getElementById("obPlatObject").value = objectName;
-    status.innerHTML = `<div class="ob-discovery-status"><strong>Relationship suggestions ready.</strong> Review which records should roll up to ${_obEsc(payload.object_label || objectName)}.</div>`;
+    status.innerHTML = `<div class="ob-discovery-status"><strong>Relationship suggestions ready.</strong> Review which records should connect to ${_obEsc(payload.object_label || objectName)}.</div>`;
   } catch (error) {
     status.innerHTML = `<div class="ob-error">${_obEsc(error.message)}</div>`;
   }
@@ -1022,8 +1022,8 @@ function renderDiscoveredMapping(payload) {
         <small>${_obEsc(child.object)} → ${_obEsc(child.parent_field)} → ${_obEsc(payload.object)}</small>
       </div>
       <select class="ob-input ob-child-behavior" aria-label="Attribution behavior for ${_obEsc(child.label)}">
-        <option value="track_and_rollup" ${recommended ? "selected" : ""}>Track separately + roll up</option>
-        <option value="rollup_only">Roll up to parent only</option>
+        <option value="track_and_rollup" ${recommended ? "selected" : ""}>Track separately + connect to parent</option>
+        <option value="rollup_only">Connect to parent only</option>
         <option value="separate">Track separately only</option>
         <option value="ignore" ${recommended ? "" : "selected"}>Ignore for attribution</option>
       </select>
@@ -1048,7 +1048,7 @@ function renderDiscoveredMapping(payload) {
     </details>
     <div class="ob-discovery-section-head">
       <strong>Recommended business relationships</strong>
-      <span>CostPilot selected the records most likely to carry meaningful AI work. Recommended records remain visible separately and also roll up to the parent.</span>
+      <span>CostPilot selected the records most likely to carry meaningful AI activity. Recommended records remain visible separately and also connect to the parent.</span>
     </div>
     <div class="ob-relationship-list">
       ${recommendedChildren.length
@@ -1240,8 +1240,8 @@ async function renderBusinessContextImportStep(parentObject, children) {
   host._obImportObjectTypes = objectTypes;
   host.innerHTML = `<div class="ob-discovery-head">
       <div><div class="ob-context-eyebrow">Bring in existing business records</div>
-        <h3>Import ${objectTypes.join(" & ")} as CostPilot work items</h3>
-        <p>CostPilot creates a WorkItem and a source link for each record it discovers, so AI activity attaches to the
+        <h3>Bring in your ${objectTypes.join(" & ")}</h3>
+        <p>CostPilot creates a record for each item it discovers, so AI activity connects to the
            real ${objectTypes.join("/")} instead of a generic account bucket. Safe to run more than once -- existing
            records are updated, never duplicated.</p></div>
     </div>
@@ -1347,7 +1347,7 @@ function renderContextDiscoveryMonitor(payload) {
   const rows = changes.map(change => {
     const isRelationship = change.kind === "relationship_added";
     const title = isRelationship
-      ? `${change.label || change.object} can roll up to ${change.parent_object}`
+      ? `${change.label || change.object} can connect to ${change.parent_object}`
       : `${change.label || change.object} is a new Salesforce object`;
     const detail = isRelationship
       ? `${change.object}.${change.parent_field} references the approved parent.`
@@ -2481,15 +2481,15 @@ function _universalVerificationHtml() {
   const liveRows = obSelectedPlatform === "salesforce"
     ? `<div class="ob-verification-row" id="obVerifySalesforceOrg"><span>○</span> Correct Salesforce org and CostPilot workspace <span class="status">Checking</span></div>
        <div class="ob-verification-row" id="obVerifyParentRequest"><span>○</span> Live Account request received <span class="status">Waiting</span></div>
-       <div class="ob-verification-row" id="obVerifyChildRequest"><span>○</span> Live related-record request received and rolled up <span class="status">Waiting</span></div>`
+       <div class="ob-verification-row" id="obVerifyChildRequest"><span>○</span> Live related-record request received and connected <span class="status">Waiting</span></div>`
     : `<div class="ob-verification-row" id="obVerifyRoute"><span>○</span> Routing and pruning test <span class="status">Not tested</span></div>`;
   return `<section class="ob-verification" id="obUniversalVerification">
-    <h3>Verify your CostPilot connection</h3>
-    <p>This test validates CostPilot's live contract, routing, governance, pruning, and attribution envelope. It does not claim that an external agent is connected until you confirm that platform step.</p>
+    <h3>Review your setup</h3>
+    <p>This test confirms CostPilot's connection, routing, and governance are working end to end. It does not claim that an external agent is connected until you confirm that platform step.</p>
     <div class="ob-verification-list">
-      <div class="ob-verification-row pass"><span>✓</span> Business context configured <span class="status">Ready</span></div>
-      <div class="ob-verification-row pass"><span>✓</span> ${_obEsc(platform)} mapping generated <span class="status">Ready</span></div>
-      <div class="ob-verification-row" id="obVerifyContract"><span>○</span> Universal contract available <span class="status">Not tested</span></div>
+      <div class="ob-verification-row pass"><span>✓</span> Setup configured <span class="status">Ready</span></div>
+      <div class="ob-verification-row pass"><span>✓</span> ${_obEsc(platform)} setup ready <span class="status">Ready</span></div>
+      <div class="ob-verification-row" id="obVerifyContract"><span>○</span> Connection verified <span class="status">Not tested</span></div>
       ${liveRows}
       ${actionRow}
     </div>
@@ -2553,7 +2553,7 @@ async function runUniversalSetupTest() {
         _markVerificationRow("obVerifyParentRequest", setup.verification.parent_record_name || "Received");
       }
       if (setup.verification?.child_verified) {
-        _markVerificationRow("obVerifyChildRequest", setup.verification.child_record_name || "Received and rolled up");
+        _markVerificationRow("obVerifyChildRequest", setup.verification.child_record_name || "Received and connected");
       }
       if (!setup.verification?.verified) {
         throw new Error(setup.verification?.message || "Run one request from the Account and one from an approved related record, then check again.");

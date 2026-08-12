@@ -22,17 +22,17 @@
     </div>
 
     <nav class="ob-universal-progress" id="obUniversalProgress" aria-label="Integration setup progress">
-      <div class="ob-universal-stage active" data-stage="1"><span>1</span><strong>Business context</strong></div>
-      <div class="ob-universal-stage" data-stage="2"><span>2</span><strong>Platform</strong></div>
-      <div class="ob-universal-stage" data-stage="3"><span>3</span><strong>Mapping</strong></div>
-      <div class="ob-universal-stage" data-stage="4"><span>4</span><strong>Verify</strong></div>
-      <div class="ob-universal-stage" data-stage="5"><span>5</span><strong>Active</strong></div>
+      <div class="ob-universal-stage active" data-stage="1"><span>1</span><strong>Goals</strong></div>
+      <div class="ob-universal-stage" data-stage="2"><span>2</span><strong>Connect</strong></div>
+      <div class="ob-universal-stage" data-stage="3"><span>3</span><strong>Choose</strong></div>
+      <div class="ob-universal-stage" data-stage="4"><span>4</span><strong>Review</strong></div>
+      <div class="ob-universal-stage" data-stage="5"><span>5</span><strong>Go Live</strong></div>
     </nav>
 
     <main class="ob-business-first" id="obBusinessFirst">
-      <div class="ob-context-eyebrow">Business Context Engine</div>
-      <h1 class="ob-title">What should AI activity roll up to?</h1>
-      <p class="ob-subtitle">Choose the business record that should hold the complete AI story. CostPilot will suggest its related records after you connect your system.</p>
+      <div class="ob-context-eyebrow">Setup</div>
+      <h1 class="ob-title">What would you like CostPilot to track?</h1>
+      <p class="ob-subtitle">Choose what your team calls the work AI touches. CostPilot will recommend what to connect and configure based on your answer.</p>
 
       <section class="ob-question-block" id="obWorkQuestion">
         <div class="ob-choice-grid" id="obWorkChoices">
@@ -98,8 +98,8 @@
       </section>
 
       <section class="ob-template-preview" id="obTemplatePreview" hidden>
-        <div class="ob-context-eyebrow">Your template</div>
-        <h2 id="obTemplateTitle">Business Context Template</h2>
+        <div class="ob-context-eyebrow">CostPilot recommends</div>
+        <h2 id="obTemplateTitle">Your setup</h2>
         <p id="obTemplateDescription"></p>
         <div class="ob-template-flow" id="obTemplateFlow"></div>
       </section>
@@ -107,7 +107,7 @@
       <div class="ob-error" id="obBusinessError"></div>
       <div class="ob-actions">
         <a class="ob-btn-ghost" href="/operate.html">Do this later</a>
-        <button class="ob-btn-primary" id="obBuildTemplateBtn" onclick="buildBusinessContextTemplate()" disabled>Build My Template →</button>
+        <button class="ob-btn-primary" id="obBuildTemplateBtn" onclick="buildBusinessContextTemplate()" disabled>Continue →</button>
       </div>
     </main>
 
@@ -185,9 +185,9 @@
           <div class="ob-sf-path-detail" id="obSalesforceAiPathDetails"></div>
         </section>
         <section class="ob-context-card" id="obBusinessContextCard" hidden>
-          <div class="ob-context-eyebrow">Business Context Engine</div>
+          <div class="ob-context-eyebrow">Setup</div>
           <h2>What should CostPilot understand about this work?</h2>
-          <p>Answer in business language. CostPilot selects the template and builds the technical mapping behind the scenes.</p>
+          <p>Answer in your own words. CostPilot handles the technical setup behind the scenes.</p>
           <div class="ob-context-questions">
             <div class="ob-field">
               <label class="ob-label" for="obContextWorkType">What do you call the work you deliver?</label>
