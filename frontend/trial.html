@@ -166,7 +166,7 @@
     <div class="step-line" id="line1"></div>
     <div class="step-item">
       <div class="step-circle" id="sc2">2</div>
-      <div class="step-label" id="sl2">Your Savings</div>
+      <div class="step-label" id="sl2">Setup</div>
     </div>
     <div class="step-line" id="line2"></div>
     <div class="step-item">
@@ -610,9 +610,17 @@ async function submitStep1() {
   btn.innerHTML = '<span class="spinner"></span> Preparing trial…';
 
   try {
+    // Usage-proof (estimate/CSV/API) used to be a required stop here --
+    // registerTrial() never actually needed it (it only reads _apiKey,
+    // which comes from the optional key field on this same step, and
+    // _provider), so skipping straight to registration removes a step
+    // that was pure friction, not a dependency. The usage-proof panels
+    // (panel-usage-path, panel-provider-api, etc.) stay in the file --
+    // unreachable via this normal flow now, but not deleted, in case
+    // there's a reason to link back into them later (e.g. from inside the
+    // dashboard, to add verified usage proof after signup).
     _apiKey = key;
-    configureUsagePath();
-    goToPanel("panel-usage-path");
+    goToPanel("panel-step3");
   } catch (e) {
     showError("step1Error", e.message || "Something went wrong. Please try again.");
   } finally {
