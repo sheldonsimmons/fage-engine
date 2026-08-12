@@ -728,7 +728,7 @@ function renderObDiscoveryCard(platform) {
       <p>Connect ${_obEsc(label)} so CostPilot can suggest which record is the parent and which related records should roll up to it. CostPilot reads metadata—not customer record contents.</p></div>
       <span class="ob-context-eyebrow">${available ? "Available" : "Adapter next"}</span>
     </div>
-    ${platform === "salesforce" ? `<div class="ob-discovery-actions">
+    ${platform === "salesforce" ? `<div class="ob-field-help" style="margin-bottom:8px">Requires a Salesforce admin. If this org has not had the CostPilot package installed yet, Salesforce will reject the connection with an "External client app is not installed" error -- that is not something you did wrong, it just means the package needs to be installed first. Contact your CostPilot rep if you hit that.</div><div class="ob-discovery-actions">
       <button type="button" class="ob-btn-primary" onclick="connectSalesforceDiscovery('https://login.salesforce.com')">Connect Salesforce</button>
       <button type="button" class="ob-btn-ghost" onclick="connectSalesforceDiscovery('https://test.salesforce.com')">Use a Sandbox</button>
     </div>` : platform === "servicenow" ? `<div class="ob-field">
