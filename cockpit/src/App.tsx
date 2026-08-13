@@ -98,7 +98,7 @@ function App() {
                   title="Business Impact"
                   reason="Needs a real link between AI activity and business outcomes (pipeline, cases resolved, etc.) beyond what's tracked today."
                 />
-                <Recommendations items={data.health.recommendations} />
+                <Recommendations items={data.health.recommendations} budget={data.budget} workspaceId={workspaceId} />
               </div>
 
               <div id="ask-costpilot">

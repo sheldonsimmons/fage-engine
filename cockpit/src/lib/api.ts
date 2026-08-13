@@ -51,7 +51,10 @@ export interface BudgetDepartment {
   monthly_cap_usd: number
   current_spend_usd: number
   used_pct: number
-  state: "healthy" | "warning" | "critical" | string
+  // Real values from core/budget.py's compute_state(): "throttled" means
+  // enforcement is actively limiting this department, not just a display
+  // warning -- there is no "critical" state in the backend.
+  state: "healthy" | "warning" | "throttled" | string
 }
 
 export interface ConnectionHealth {
