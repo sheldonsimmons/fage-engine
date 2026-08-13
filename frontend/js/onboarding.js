@@ -813,6 +813,7 @@ async function restoreOAuthDiscovery() {
   if (obDiscoveryPlatform === "salesforce") {
     const installed = await ensureSalesforcePackageInstalled();
     if (!installed) return;
+    return loadDiscoverAndPreview();
   }
   loadDiscoveryObjects();
 }
@@ -928,6 +929,83 @@ async function restoreServerOnboardingProgress() {
 
 async function loadSalesforceObjects() {
   return loadDiscoveryObjects();
+}
+
+// ── Discover & Preview ──────────────────────────────────────────────────────
+// A single read-only look at everything CostPilot can see in this org --
+// agents, Flows, and objects -- fetched in parallel from the same real
+// endpoints the older sequential flow used one at a time (GET .../objects,
+// GET .../ai-entry-points). Nothing is selected or tracked here; that
+// happens in the existing object-mapping and agent/flow-selection screens
+// this hands off to on "Choose what to track".
+async function loadDiscoverAndPreview() {
+  const section = document.getElementById("obDiscoverPreview");
+  if (!section || !obDiscoveryConnectionId) return loadDiscoveryObjects();
+  section.hidden = false;
+  section.innerHTML = `<div class="ob-discovery-status">Discovering your Salesforce org…</div>`;
+  section.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  let objects = [];
+  let agents = [];
+  let flows = [];
+  try {
+    const [objectsRes, entryRes] = await Promise.all([
+      fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/objects`),
+      fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points`),
+    ]);
+    if (objectsRes.ok) objects = (await objectsRes.json()).objects || [];
+    if (entryRes.ok) {
+      const entryPayload = await entryRes.json();
+      agents = entryPayload.agents || [];
+      flows = entryPayload.flows || [];
+      obSalesforceEntryPoints = { agents, flows };
+    }
+  } catch (error) {
+    // Render whatever came back before the failure -- partial discovery is
+    // still more useful than nothing, and the next step's own discovery
+    // calls will retry.
+  }
+  renderDiscoverAndPreview(objects, agents, flows);
+}
+
+function renderDiscoverAndPreview(objects, agents, flows) {
+  const section = document.getElementById("obDiscoverPreview");
+  if (!section) return;
+  const rows = (items, labelFn, emptyText) => items.length
+    ? items.slice(0, 100).map(item => `<div class="ob-preview-row">${_obEsc(labelFn(item))}</div>`).join("")
+    : `<div class="ob-entry-empty">${_obEsc(emptyText)}</div>`;
+  section.innerHTML = `<div class="ob-discovery-head">
+      <div><div class="ob-context-eyebrow">Discover &amp; Preview</div>
+      <h3>Here's what CostPilot found</h3>
+      <p>CostPilot read your org's available agents, Flows, and business objects. Nothing is tracked yet -- you'll choose what matters on the next step.</p></div>
+    </div>
+    <div class="ob-entry-tabs" role="tablist">
+      <button type="button" class="active" data-preview-tab="agents" onclick="showDiscoverPreviewTab('agents')">Agents <span>${agents.length}</span></button>
+      <button type="button" data-preview-tab="flows" onclick="showDiscoverPreviewTab('flows')">Flows <span>${flows.length}</span></button>
+      <button type="button" data-preview-tab="objects" onclick="showDiscoverPreviewTab('objects')">Objects <span>${objects.length}</span></button>
+    </div>
+    <div class="ob-entry-panel" data-preview-panel="agents">${rows(agents, a => a.label || a.name, "No Agentforce agents were found in this org.")}</div>
+    <div class="ob-entry-panel" data-preview-panel="flows" hidden>${rows(flows, f => f.label || f.name, "No Salesforce Flows were found in this org.")}</div>
+    <div class="ob-entry-panel" data-preview-panel="objects" hidden>${rows(objects, o => o.label || o.name, "No objects were returned.")}</div>
+    <div class="ob-actions" style="margin-top:16px">
+      <button type="button" class="ob-btn-primary" onclick="continueFromDiscoverPreview()">Choose what to track →</button>
+    </div>`;
+}
+
+function showDiscoverPreviewTab(tab) {
+  document.querySelectorAll("[data-preview-tab]").forEach(button =>
+    button.classList.toggle("active", button.dataset.previewTab === tab)
+  );
+  document.querySelectorAll("[data-preview-panel]").forEach(panel =>
+    panel.hidden = panel.dataset.previewPanel !== tab
+  );
+}
+
+function continueFromDiscoverPreview() {
+  const section = document.getElementById("obDiscoverPreview");
+  if (section) section.hidden = true;
+  loadDiscoveryObjects();
+  loadSalesforceAiEntryPoints();
 }
 
 async function loadDiscoveryObjects() {

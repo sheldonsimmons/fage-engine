@@ -351,6 +351,14 @@
 }
 .ob-entry-warning { border-left: 3px solid var(--warning, #d29922); margin-top: 10px; padding-left: 10px; }
 .ob-entry-manual { align-items: center; display: grid; gap: 10px; grid-template-columns: 120px 1fr; margin-top: 6px; }
+.ob-preview-row {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-primary);
+}
 .ob-entry-manual span { color: var(--text-primary); font-size: 10px; font-weight: 700; }
 .ob-entry-footer {
   align-items: center;
