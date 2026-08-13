@@ -12,27 +12,48 @@ import {
   Settings,
 } from "lucide-react"
 
-// Only two items link anywhere real: Business Profiles and Integrations,
-// because those pages already exist (business-profile.html,
-// connector-manager.html) in the existing vanilla-JS site. Everything else
-// in the mockup's nav (AI Spend, Agents, Business Impact, Budgets,
-// Reports...) doesn't have its own page yet -- rendered visibly but inert
-// rather than as dead links or fabricated routes.
+// Real pages in the existing vanilla-JS site, matched honestly to each
+// label rather than left inert -- confirmed by reading each page's actual
+// <title> before wiring the link, not guessed from the filename.
 const primaryNav = [
   { label: "Executive Overview", icon: LayoutDashboard, active: true },
-  { label: "AI Spend", icon: DollarSign },
-  { label: "Agents", icon: Bot },
-  { label: "Business Impact", icon: Target },
-  { label: "Savings & Optimization", icon: Zap },
-  { label: "Budgets", icon: Wallet },
-  { label: "Reports", icon: FileBarChart },
-  { label: "Ask CostPilot", icon: Sparkles },
+  { label: "AI Spend", icon: DollarSign, href: "/operate.html" },
+  { label: "Agents", icon: Bot, href: "/connect.html" },
+  { label: "Business Impact", icon: Target, href: "/work-items.html" },
+  { label: "Savings & Optimization", icon: Zap, href: "/savings.html" },
+  { label: "Budgets", icon: Wallet, href: "/admin.html" },
+  { label: "Reports", icon: FileBarChart, href: "/reports.html" },
+  // No href -- the Ask CostPilot panel is already on this same page,
+  // further down, so this scrolls to it instead of navigating away.
+  { label: "Ask CostPilot", icon: Sparkles, anchor: "#ask-costpilot" },
 ]
 
 const contextNav = [
   { label: "Business Profiles", icon: Building2, href: "/business-profile.html" },
   { label: "Integrations", icon: Plug, href: "/connector-manager.html" },
 ]
+
+function NavItem({ item }: { item: (typeof primaryNav)[number] }) {
+  const className = `flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
+    item.active
+      ? "bg-primary/10 font-medium text-foreground"
+      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+  }`
+  if (item.active) {
+    return (
+      <div className={className}>
+        <item.icon className="h-4 w-4" />
+        {item.label}
+      </div>
+    )
+  }
+  return (
+    <a href={item.href ?? item.anchor} className={className}>
+      <item.icon className="h-4 w-4" />
+      {item.label}
+    </a>
+  )
+}
 
 export function AppSidebar() {
   return (
@@ -48,17 +69,7 @@ export function AppSidebar() {
 
       <nav className="flex-1 space-y-1 px-3">
         {primaryNav.map((item) => (
-          <div
-            key={item.label}
-            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
-              item.active
-                ? "bg-primary/10 font-medium text-foreground"
-                : "text-muted-foreground/70"
-            }`}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </div>
+          <NavItem key={item.label} item={item} />
         ))}
 
         <p className="px-3 pt-5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
@@ -77,10 +88,13 @@ export function AppSidebar() {
       </nav>
 
       <div className="border-t border-border px-3 py-4">
-        <div className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/70">
+        <a
+          href="/admin.html"
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           <Settings className="h-4 w-4" />
           Settings
-        </div>
+        </a>
       </div>
     </aside>
   )

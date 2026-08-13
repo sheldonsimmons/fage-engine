@@ -101,7 +101,9 @@ function App() {
                 <Recommendations items={data.health.recommendations} />
               </div>
 
-              <AskCostPilot workspaceId={workspaceId} />
+              <div id="ask-costpilot">
+                <AskCostPilot workspaceId={workspaceId} />
+              </div>
             </>
           )}
         </main>
