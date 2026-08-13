@@ -5,12 +5,13 @@ import { SpendOverTime } from "@/components/SpendOverTime"
 import { SpendByDepartment } from "@/components/SpendByDepartment"
 import { TopModels } from "@/components/TopModels"
 import { Recommendations } from "@/components/Recommendations"
-import { ComingSoon } from "@/components/ComingSoon"
+import { BusinessImpact } from "@/components/BusinessImpact"
 import { WhatChanged } from "@/components/WhatChanged"
 import { AskCostPilot } from "@/components/AskCostPilot"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   fetchBudget,
+  fetchBusinessImpact,
   fetchConnectionHealth,
   fetchDashboard,
   fetchDashboardChanges,
@@ -18,6 +19,7 @@ import {
   fetchTopModels,
   getWorkspaceId,
   type BudgetDepartment,
+  type BusinessImpact as BusinessImpactData,
   type ConnectionHealth,
   type DashboardChanges,
   type DashboardSummary,
@@ -32,6 +34,7 @@ interface CockpitData {
   health: ConnectionHealth
   changes: DashboardChanges
   topModels: TopModelsResponse
+  businessImpact: BusinessImpactData
 }
 
 function App() {
@@ -47,9 +50,10 @@ function App() {
       fetchConnectionHealth(workspaceId),
       fetchDashboardChanges(workspaceId, 30),
       fetchTopModels(workspaceId, 30, 5),
+      fetchBusinessImpact(workspaceId),
     ])
-      .then(([dashboard, savings, budget, health, changes, topModels]) =>
-        setData({ dashboard, savings, budget, health, changes, topModels })
+      .then(([dashboard, savings, budget, health, changes, topModels, businessImpact]) =>
+        setData({ dashboard, savings, budget, health, changes, topModels, businessImpact })
       )
       .catch((err: Error) => setError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,10 +98,7 @@ function App() {
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <WhatChanged periodDays={data.changes.period_days} changes={data.changes.changes} />
-                <ComingSoon
-                  title="Business Impact"
-                  reason="Needs a real link between AI activity and business outcomes (pipeline, cases resolved, etc.) beyond what's tracked today."
-                />
+                <BusinessImpact data={data.businessImpact} />
                 <Recommendations items={data.health.recommendations} budget={data.budget} workspaceId={workspaceId} />
               </div>
 

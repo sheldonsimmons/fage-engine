@@ -96,6 +96,17 @@ export interface TopModelsResponse {
   models: TopModel[]
 }
 
+export interface BusinessImpact {
+  has_outcome_data: boolean
+  opportunities_won: number
+  opportunities_lost: number
+  opportunities_open: number
+  pipeline_value_usd: number
+  closed_won_value_usd: number
+  support_cases_total: number
+  support_cases_resolved: number
+}
+
 export function fetchDashboard(workspaceId: string) {
   const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""
   return apiGet<DashboardSummary>(`/api/dashboard${qs}`)
@@ -122,6 +133,11 @@ export function fetchTopModels(workspaceId: string, days = 30, limit = 5) {
   const params = new URLSearchParams({ days: String(days), limit: String(limit) })
   if (workspaceId) params.set("workspace_id", workspaceId)
   return apiGet<TopModelsResponse>(`/api/dashboard/top-models?${params}`)
+}
+
+export function fetchBusinessImpact(workspaceId: string) {
+  const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""
+  return apiGet<BusinessImpact>(`/api/dashboard/business-impact${qs}`)
 }
 
 export function fetchConnectionHealth(workspaceId: string) {
