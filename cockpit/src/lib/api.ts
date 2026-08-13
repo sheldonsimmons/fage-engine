@@ -80,6 +80,19 @@ export interface DashboardChanges {
   changes: DashboardChange[]
 }
 
+export interface TopModel {
+  model: string
+  is_tier_only: boolean
+  spend_usd: number
+  calls: number
+  pct_of_total: number
+}
+
+export interface TopModelsResponse {
+  total_spend_usd: number
+  models: TopModel[]
+}
+
 export function fetchDashboard(workspaceId: string) {
   const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""
   return apiGet<DashboardSummary>(`/api/dashboard${qs}`)
@@ -100,6 +113,12 @@ export function fetchDashboardChanges(workspaceId: string, days = 30) {
   const params = new URLSearchParams({ days: String(days) })
   if (workspaceId) params.set("workspace_id", workspaceId)
   return apiGet<DashboardChanges>(`/api/dashboard/changes?${params}`)
+}
+
+export function fetchTopModels(workspaceId: string, days = 30, limit = 5) {
+  const params = new URLSearchParams({ days: String(days), limit: String(limit) })
+  if (workspaceId) params.set("workspace_id", workspaceId)
+  return apiGet<TopModelsResponse>(`/api/dashboard/top-models?${params}`)
 }
 
 export function fetchConnectionHealth(workspaceId: string) {

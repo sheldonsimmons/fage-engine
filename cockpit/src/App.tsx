@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/AppSidebar"
 import { KpiRow } from "@/components/KpiRow"
 import { SpendOverTime } from "@/components/SpendOverTime"
 import { SpendByDepartment } from "@/components/SpendByDepartment"
+import { TopModels } from "@/components/TopModels"
 import { Recommendations } from "@/components/Recommendations"
 import { ComingSoon } from "@/components/ComingSoon"
 import { WhatChanged } from "@/components/WhatChanged"
@@ -14,12 +15,14 @@ import {
   fetchDashboard,
   fetchDashboardChanges,
   fetchSavings,
+  fetchTopModels,
   getWorkspaceId,
   type BudgetDepartment,
   type ConnectionHealth,
   type DashboardChanges,
   type DashboardSummary,
   type SavingsSummary,
+  type TopModelsResponse,
 } from "@/lib/api"
 
 interface CockpitData {
@@ -28,6 +31,7 @@ interface CockpitData {
   budget: BudgetDepartment[]
   health: ConnectionHealth
   changes: DashboardChanges
+  topModels: TopModelsResponse
 }
 
 function App() {
@@ -42,8 +46,11 @@ function App() {
       fetchBudget(workspaceId),
       fetchConnectionHealth(workspaceId),
       fetchDashboardChanges(workspaceId, 30),
+      fetchTopModels(workspaceId, 30, 5),
     ])
-      .then(([dashboard, savings, budget, health, changes]) => setData({ dashboard, savings, budget, health, changes }))
+      .then(([dashboard, savings, budget, health, changes, topModels]) =>
+        setData({ dashboard, savings, budget, health, changes, topModels })
+      )
       .catch((err: Error) => setError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -79,9 +86,10 @@ function App() {
             <>
               <KpiRow dashboard={data.dashboard} savings={data.savings} health={data.health} />
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
                 <SpendOverTime timeline={data.savings.timeline} />
                 <SpendByDepartment budget={data.budget} workspaceId={workspaceId} />
+                <TopModels models={data.topModels.models} />
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
