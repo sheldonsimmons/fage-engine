@@ -4,7 +4,6 @@ import {
   Bot,
   Target,
   Zap,
-  Wallet,
   FileBarChart,
   Sparkles,
   Building2,
@@ -12,16 +11,21 @@ import {
   Settings,
 } from "lucide-react"
 
-// Real pages in the existing vanilla-JS site, matched honestly to each
-// label rather than left inert -- confirmed by reading each page's actual
-// <title> before wiring the link, not guessed from the filename.
+// Labels matched to what left-nav.js (the existing vanilla-JS site's real
+// navigation) already calls these same pages, not invented mockup-style
+// names -- "AI Activity" and "Optimization" and "Connectors" are the
+// product's real, established names for operate.html/savings.html/
+// connector-manager.html. "Agents" (connect.html) has no real-nav
+// precedent but is a genuinely distinct destination. "Budgets" was
+// dropped -- it pointed at the exact same page (admin.html) as Settings
+// under a different name, which is the same kind of misleading
+// duplication as everything else corrected this session.
 const primaryNav = [
   { label: "Executive Overview", icon: LayoutDashboard, active: true },
-  { label: "AI Spend", icon: DollarSign, href: "/operate.html" },
+  { label: "AI Activity", icon: DollarSign, href: "/operate.html" },
   { label: "Agents", icon: Bot, href: "/connect.html" },
   { label: "Business Impact", icon: Target, href: "/work-items.html" },
-  { label: "Savings & Optimization", icon: Zap, href: "/savings.html" },
-  { label: "Budgets", icon: Wallet, href: "/admin.html" },
+  { label: "Optimization", icon: Zap, href: "/savings.html" },
   { label: "Reports", icon: FileBarChart, href: "/reports.html" },
   // No href -- the Ask CostPilot panel is already on this same page,
   // further down, so this scrolls to it instead of navigating away.
@@ -30,7 +34,7 @@ const primaryNav = [
 
 const contextNav = [
   { label: "Business Profiles", icon: Building2, href: "/business-profile.html" },
-  { label: "Integrations", icon: Plug, href: "/connector-manager.html" },
+  { label: "Connectors", icon: Plug, href: "/connector-manager.html" },
 ]
 
 function NavItem({ item }: { item: (typeof primaryNav)[number] }) {
