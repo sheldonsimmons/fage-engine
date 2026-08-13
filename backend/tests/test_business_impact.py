@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database.db import Base, get_db
-from database.models import WorkItem, WorkItemOutcome
+from database.models import TokenTransaction, WorkItem, WorkItemOutcome
 from main import app
 
 
@@ -111,3 +111,30 @@ def test_workspace_scoping_excludes_other_workspaces():
     body = resp.json()
     assert body["opportunities_won"] == 1
     assert body["closed_won_value_usd"] == 1000.0
+
+
+def test_ai_spend_and_tokens_only_count_transactions_linked_to_outcome_work_items():
+    client, db = _client()
+    with_outcome = _work_item(db, external_id="opp-linked")
+    without_outcome = _work_item(db, external_id="opp-unlinked")
+    _outcome(db, with_outcome, outcome_success=True, is_closed=True, outcome_value=5000.0)
+    # No outcome row for `without_outcome` -- its AI spend must not count.
+
+    db.add(TokenTransaction(
+        department="Sales", model_tier="Scout", input_tokens=100, output_tokens=50,
+        cost_usd=2.5, timestamp=datetime.utcnow(), workspace_id="WS1",
+        is_simulation=False, usage_source="estimated", routing_reason="ROUTINE",
+        work_item_id=with_outcome.id,
+    ))
+    db.add(TokenTransaction(
+        department="Sales", model_tier="Scout", input_tokens=999, output_tokens=999,
+        cost_usd=99.0, timestamp=datetime.utcnow(), workspace_id="WS1",
+        is_simulation=False, usage_source="estimated", routing_reason="ROUTINE",
+        work_item_id=without_outcome.id,
+    ))
+    db.commit()
+
+    resp = client.get("/api/dashboard/business-impact", params={"workspace_id": "WS1"})
+    body = resp.json()
+    assert body["ai_spend_usd"] == 2.5
+    assert body["ai_tokens_total"] == 150

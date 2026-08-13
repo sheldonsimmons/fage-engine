@@ -619,6 +619,23 @@ def get_business_impact(
     support_resolved = int(support_resolved or 0)
     has_outcome_data = bool(won_count + lost_count + open_count + support_resolved)
 
+    # AI investment specifically tied to the work items that have real
+    # outcome data -- association, not causation: this is "how much AI
+    # activity touched the deals/cases in this picture," never framed as
+    # "AI caused this result" (same guardrail already enforced in Ask
+    # CostPilot's narration). Only counts transactions actually linked to
+    # an outcome-bearing work item, so it's a subset of total workspace
+    # spend, not a duplicate of the Total AI Spend KPI.
+    ai_spend, ai_tokens = _scoped(
+        db.query(
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.coalesce(func.sum(TokenTransaction.input_tokens + TokenTransaction.output_tokens), 0),
+        )
+        .select_from(TokenTransaction)
+        .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+    ).first()
+
     return {
         "workspace_id": workspace_id,
         "has_outcome_data": has_outcome_data,
@@ -629,4 +646,6 @@ def get_business_impact(
         "closed_won_value_usd": round(float(closed_won_value or 0.0), 2),
         "support_cases_total": int(support_total or 0),
         "support_cases_resolved": support_resolved,
+        "ai_spend_usd": round(float(ai_spend or 0.0), 6),
+        "ai_tokens_total": int(ai_tokens or 0),
     }
