@@ -1,9 +1,26 @@
 import { useState } from "react"
+import ReactMarkdown from "react-markdown"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { askCostPilot } from "@/lib/api"
 import { Send, Sparkles } from "lucide-react"
+
+// The backend returns markdown (bold, bullet/numbered lists) meant to be
+// rendered, not shown as raw "**text**" -- these overrides just apply the
+// dashboard's existing type scale/spacing to each markdown element instead
+// of pulling in a full prose plugin for one panel.
+const markdownComponents = {
+  p: (props: React.ComponentProps<"p">) => <p className="mb-2 last:mb-0" {...props} />,
+  strong: (props: React.ComponentProps<"strong">) => <strong className="font-semibold text-foreground" {...props} />,
+  ul: (props: React.ComponentProps<"ul">) => <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0" {...props} />,
+  ol: (props: React.ComponentProps<"ol">) => <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0" {...props} />,
+  li: (props: React.ComponentProps<"li">) => <li {...props} />,
+  h1: (props: React.ComponentProps<"h1">) => <h1 className="mb-2 text-base font-semibold" {...props} />,
+  h2: (props: React.ComponentProps<"h2">) => <h2 className="mb-2 text-sm font-semibold" {...props} />,
+  h3: (props: React.ComponentProps<"h3">) => <h3 className="mb-1 text-sm font-semibold" {...props} />,
+  code: (props: React.ComponentProps<"code">) => <code className="rounded bg-muted px-1 py-0.5 text-xs" {...props} />,
+}
 
 const SUGGESTIONS = ["What is our total spend this month?", "Which department is over budget?", "What can we optimize?"]
 
@@ -68,7 +85,9 @@ export function AskCostPilot({ workspaceId }: { workspaceId: string }) {
         {loading && <p className="mt-4 text-sm text-muted-foreground">Thinking…</p>}
         {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
         {answer && !loading && (
-          <div className="mt-4 whitespace-pre-wrap rounded-md border bg-muted/30 p-4 text-sm">{answer}</div>
+          <div className="mt-4 rounded-md border bg-muted/30 p-4 text-sm">
+            <ReactMarkdown components={markdownComponents}>{answer}</ReactMarkdown>
+          </div>
         )}
       </CardContent>
     </Card>
