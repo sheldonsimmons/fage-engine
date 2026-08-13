@@ -15,9 +15,10 @@
   // dropped by removing it.
   const items = [
     { label: "Home", href: "/index.html", icon: "home" },
+    { label: "Executive Dashboard", href: "/cockpit/", icon: "dashboard" },
+    { label: "AI Activity", href: "/operate.html", icon: "pulse" },
     { label: "Ask CostPilot", href: "#", icon: "ask", id: "cpLeftNavAsk" },
     { label: "Business Profiles", href: "/business-profile.html", icon: "building" },
-    { label: "AI Activity", href: "/operate.html", icon: "pulse" },
     { label: "Optimization", href: "/savings.html", icon: "target" },
     { label: "Reports", href: "/reports.html", icon: "doc" },
     { label: "Integrations", href: "/onboarding.html", icon: "plug" },
@@ -28,6 +29,7 @@
   // All stroke-based (fill="none") for a consistent line-icon look.
   const icons = {
     home: '<path d="M3 9l7-6 7 6v9a1 1 0 0 1-1 1h-4v-6H8v6H4a1 1 0 0 1-1-1V9z"/>',
+    dashboard: '<path d="M3 15V9l4-3 4 3v6M3 15h14M3 15V6a1 1 0 0 1 1-1h1M13 15V4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v11"/>',
     ask: '<path d="M10 2a8 8 0 1 0 4.9 14.3L18 17l-.7-3.1A8 8 0 0 0 10 2z"/><path d="M10 12.5v-.1c0-.9.5-1.4 1.3-1.9.7-.5 1-.8 1-1.4 0-.7-.6-1.1-1.4-1.1-.6 0-1.1.2-1.5.7"/><path d="M10.4 14.6h-.1"/>',
     grid: '<rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/>',
     building: '<rect x="4" y="2" width="9" height="16" rx="1"/><path d="M13 7h3v11h-3M7 6h1M7 9h1M7 12h1M10 6h1M10 9h1M10 12h1"/>',
