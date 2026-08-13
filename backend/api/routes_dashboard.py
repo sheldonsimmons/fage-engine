@@ -491,3 +491,68 @@ def get_dashboard_changes(
         "prior_period": {"start": prior_start.isoformat(), "end": current_start.isoformat()},
         "changes": changes,
     }
+
+
+@router.get("/top-models")
+def get_top_models(
+    workspace_id: str | None = Query(None),
+    days: int = Query(30, ge=1, le=180),
+    limit: int = Query(5, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """
+    Real per-model spend breakdown, SQL GROUP BY on model_name -- the exact
+    provider/registry model string set at write time (e.g.
+    "claude-3-5-sonnet"), not the coarser Scout/Analyst/Advisor/Strategist
+    tier. Rows where model_name was never populated (older data, or a call
+    path that only recorded tier) are grouped under their model_tier
+    instead of silently dropped, labeled so that's clear rather than
+    implied to be a real model name.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+
+    def _filters(*items):
+        return [x for x in items if x is not None]
+
+    # COALESCE to model_tier (with a "(tier only)" suffix applied in
+    # Python) rather than a SQL literal, so the label logic stays in one
+    # place and is easy to change without touching the query.
+    model_key = func.coalesce(TokenTransaction.model_name, TokenTransaction.model_tier)
+
+    rows = (
+        db.query(model_key, func.sum(TokenTransaction.cost_usd), func.count(TokenTransaction.id))
+        .filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= cutoff))
+        .group_by(model_key)
+        .all()
+    )
+
+    # Tier names that appear ONLY because model_name was never set for that
+    # row (fallback), so those rows can be labeled honestly as tier-only
+    # rather than implied to be a specific model.
+    tier_only_names = {
+        tier for (tier,) in db.query(TokenTransaction.model_tier)
+        .filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= cutoff, TokenTransaction.model_name.is_(None)))
+        .distinct()
+    }
+
+    total_spend = sum(float(spend or 0.0) for _, spend, _ in rows)
+    results = [
+        {
+            "model": name or "Unknown",
+            "is_tier_only": name in tier_only_names,
+            "spend_usd": round(float(spend or 0.0), 6),
+            "calls": count,
+            "pct_of_total": round((float(spend or 0.0) / total_spend) * 100, 1) if total_spend else 0.0,
+        }
+        for name, spend, count in rows
+    ]
+    results.sort(key=lambda r: r["spend_usd"], reverse=True)
+
+    return {
+        "workspace_id": workspace_id,
+        "period_days": days,
+        "total_spend_usd": round(total_spend, 6),
+        "models": results[:limit],
+    }
