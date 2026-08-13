@@ -1,17 +1,100 @@
-import { Scorecard } from "@/components/Scorecard"
+import { useEffect, useState } from "react"
+import { AppSidebar } from "@/components/AppSidebar"
+import { KpiRow } from "@/components/KpiRow"
+import { SpendOverTime } from "@/components/SpendOverTime"
+import { SpendByDepartment } from "@/components/SpendByDepartment"
+import { Recommendations } from "@/components/Recommendations"
+import { ComingSoon } from "@/components/ComingSoon"
+import { AskCostPilot } from "@/components/AskCostPilot"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  fetchBudget,
+  fetchConnectionHealth,
+  fetchDashboard,
+  fetchSavings,
+  getWorkspaceId,
+  type BudgetDepartment,
+  type ConnectionHealth,
+  type DashboardSummary,
+  type SavingsSummary,
+} from "@/lib/api"
+
+interface CockpitData {
+  dashboard: DashboardSummary
+  savings: SavingsSummary
+  budget: BudgetDepartment[]
+  health: ConnectionHealth
+}
 
 function App() {
+  const [data, setData] = useState<CockpitData | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const workspaceId = getWorkspaceId()
+
+  useEffect(() => {
+    Promise.all([
+      fetchDashboard(workspaceId),
+      fetchSavings(workspaceId, 30),
+      fetchBudget(workspaceId),
+      fetchConnectionHealth(workspaceId),
+    ])
+      .then(([dashboard, savings, budget, health]) => setData({ dashboard, savings, budget, health }))
+      .catch((err: Error) => setError(err.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <header className="mb-8">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">CostPilot</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Executive Scorecard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Real-time spend, savings, budget, and setup health for this workspace.
-          </p>
+    <div className="dark flex min-h-screen bg-background text-foreground">
+      <AppSidebar />
+      <div className="flex-1 overflow-x-hidden">
+        <header className="border-b border-border px-8 py-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Executive Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">AI spend, usage, and optimization overview</p>
         </header>
-        <Scorecard />
+
+        <main className="space-y-6 px-8 py-6">
+          {error && (
+            <div className="rounded-md border border-destructive/50 p-4 text-sm text-destructive">
+              Could not load the dashboard: {error}
+            </div>
+          )}
+
+          {!data && !error && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-28 w-full" />
+                ))}
+              </div>
+              <Skeleton className="h-64 w-full" />
+            </div>
+          )}
+
+          {data && (
+            <>
+              <KpiRow dashboard={data.dashboard} savings={data.savings} health={data.health} />
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <SpendOverTime timeline={data.savings.timeline} />
+                <SpendByDepartment budget={data.budget} workspaceId={workspaceId} />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <ComingSoon
+                  title="What Changed"
+                  reason="Needs period-over-period comparison logic that doesn't exist in the backend yet -- not shown with invented numbers."
+                />
+                <ComingSoon
+                  title="Business Impact"
+                  reason="Needs a real link between AI activity and business outcomes (pipeline, cases resolved, etc.) beyond what's tracked today."
+                />
+                <Recommendations items={data.health.recommendations} />
+              </div>
+
+              <AskCostPilot workspaceId={workspaceId} />
+            </>
+          )}
+        </main>
       </div>
     </div>
   )

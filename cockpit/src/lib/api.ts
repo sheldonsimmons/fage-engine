@@ -27,6 +27,15 @@ export interface DashboardSummary {
   total_calls: number
   routing_efficiency_pct: number
   cost_reduction_pct: number
+  agents_total: number
+  agents_active: number
+  agents_idle: number
+}
+
+export interface SavingsTimelinePoint {
+  date: string
+  cost: number
+  calls: number
 }
 
 export interface SavingsSummary {
@@ -34,6 +43,7 @@ export interface SavingsSummary {
   total_cost_usd: number
   total_saved_usd: number
   cost_if_no_fage_usd: number
+  timeline: SavingsTimelinePoint[]
 }
 
 export interface BudgetDepartment {
@@ -49,6 +59,11 @@ export interface ConnectionHealth {
   overall: number
   categories: Record<string, number>
   recommendations: string[]
+}
+
+export interface AskResponse {
+  title: string
+  answer: string
 }
 
 export function fetchDashboard(workspaceId: string) {
@@ -70,4 +85,26 @@ export function fetchBudget(workspaceId: string) {
 export function fetchConnectionHealth(workspaceId: string) {
   const qs = `?workspace_id=${encodeURIComponent(workspaceId || "default")}`
   return apiGet<ConnectionHealth>(`/api/integrations/connections/health${qs}`)
+}
+
+// Strips the "WORKSPACE_ID:" prefix legacy department rows carry -- same
+// convention core/agentlake.py's display_department() applies server-side
+// for every other page; duplicated here rather than adding a new endpoint
+// just to move one string operation server-side.
+export function displayDepartment(raw: string, workspaceId: string): string {
+  const prefix = `${workspaceId}:`
+  return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw
+}
+
+export async function askCostPilot(workspaceId: string, question: string): Promise<AskResponse> {
+  const res = await fetch("/api/reports/bot-efficiency/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, workspace_id: workspaceId || undefined }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `Ask CostPilot failed: ${res.status}`)
+  }
+  return res.json()
 }
