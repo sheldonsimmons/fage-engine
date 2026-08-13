@@ -35,25 +35,25 @@ export function SpendByDepartment({ budget, workspaceId }: { budget: BudgetDepar
       <CardHeader>
         <CardTitle className="text-sm font-medium text-muted-foreground">Spend by Department</CardTitle>
       </CardHeader>
-      <CardContent className="flex items-center gap-6">
-        <ChartContainer config={chartConfig} className="h-[180px] w-[180px] shrink-0">
+      <CardContent>
+        <ChartContainer config={chartConfig} className="mx-auto h-[140px] w-[140px]">
           <PieChart>
             <ChartTooltip content={<ChartTooltipContent formatter={(value) => usd(Number(value))} />} />
-            <Pie data={rows} dataKey="value" nameKey="name" innerRadius={55} outerRadius={80} strokeWidth={2}>
+            <Pie data={rows} dataKey="value" nameKey="name" innerRadius={42} outerRadius={62} strokeWidth={2}>
               {rows.map((r, i) => (
                 <Cell key={r.name} fill={COLORS[i % COLORS.length]} />
               ))}
             </Pie>
           </PieChart>
         </ChartContainer>
-        <div className="flex-1 space-y-2 text-sm">
+        <div className="mt-4 space-y-2 text-sm">
           {rows.map((r, i) => (
-            <div key={r.name} className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                <span>{r.name}</span>
+            <div key={r.name} className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                <span className="truncate">{r.name}</span>
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="flex shrink-0 items-center gap-2 text-muted-foreground">
                 <span>{total ? Math.round((r.value / total) * 100) : 0}%</span>
                 <span className="tabular-nums text-foreground">{usd(r.value)}</span>
               </div>
