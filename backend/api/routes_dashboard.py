@@ -14,14 +14,14 @@ GET /api/dashboard
 
 import json
 from datetime import datetime, date, timedelta
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import (
     TokenTransaction, RegisteredAgent,
-    AuditEvent,
+    AuditEvent, WorkItem, WorkItemOutcome,
 )
 from core.workspace_scope import workspace_filter as _workspace_filter
 
@@ -555,4 +555,78 @@ def get_top_models(
         "period_days": days,
         "total_spend_usd": round(total_spend, 6),
         "models": results[:limit],
+    }
+
+
+@router.get("/business-impact")
+def get_business_impact(
+    workspace_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Workspace-wide version of api/routes_work_items.py's account_profile()
+    outcome totals -- same real WorkItemOutcome aggregation (opportunity
+    won/lost/open counts, pipeline value, closed-won value, resolved
+    support cases), just scoped to every work item in the workspace
+    instead of one account's. Nothing new computed here; this widens an
+    already-proven query's WHERE clause.
+
+    Real data only for workspaces with an outcome-sync-connected platform
+    (Salesforce today) -- has_outcome_data distinguishes "genuinely zero"
+    from "no outcome data exists yet" so the frontend doesn't have to
+    guess which one a set of zeros means.
+    """
+    work_item_scope = _workspace_filter(WorkItem, workspace_id)
+
+    def _scoped(query):
+        return query.filter(work_item_scope) if work_item_scope is not None else query
+
+    is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+    is_open = WorkItemOutcome.is_closed.is_(False)
+    is_won = WorkItemOutcome.outcome_success.is_(True)
+    outcome_value = func.coalesce(WorkItemOutcome.outcome_value, 0.0)
+
+    # Scoped to context_type == "opportunity" specifically -- without this,
+    # a Case that's still open would count toward "opportunities open" too,
+    # since WorkItemOutcome itself doesn't distinguish deal type. Found by
+    # a failing test, not by inspection: a workspace mixing Opportunities
+    # and Cases makes this ambiguity far more visible than it is on
+    # account_profile()'s per-account version, which has the same
+    # characteristic but wasn't in scope to fix here.
+    won_count, lost_count, open_count, pipeline_value, closed_won_value = _scoped(
+        db.query(
+            func.coalesce(func.sum(case((is_won, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_lost, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_open, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_open, outcome_value), else_=0.0)), 0.0),
+            func.coalesce(func.sum(case((is_won, outcome_value), else_=0.0)), 0.0),
+        )
+        .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.context_type == "opportunity")
+    ).first()
+
+    SUPPORT_CONTEXT_TYPES = ("case", "ticket", "incident")
+    support_total, support_resolved = _scoped(
+        db.query(
+            func.count(WorkItem.id),
+            func.coalesce(func.sum(case((WorkItemOutcome.is_closed.is_(True), 1), else_=0)), 0),
+        )
+        .outerjoin(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.context_type.in_(SUPPORT_CONTEXT_TYPES))
+    ).first()
+
+    won_count, lost_count, open_count = int(won_count or 0), int(lost_count or 0), int(open_count or 0)
+    support_resolved = int(support_resolved or 0)
+    has_outcome_data = bool(won_count + lost_count + open_count + support_resolved)
+
+    return {
+        "workspace_id": workspace_id,
+        "has_outcome_data": has_outcome_data,
+        "opportunities_won": won_count,
+        "opportunities_lost": lost_count,
+        "opportunities_open": open_count,
+        "pipeline_value_usd": round(float(pipeline_value or 0.0), 2),
+        "closed_won_value_usd": round(float(closed_won_value or 0.0), 2),
+        "support_cases_total": int(support_total or 0),
+        "support_cases_resolved": support_resolved,
     }
