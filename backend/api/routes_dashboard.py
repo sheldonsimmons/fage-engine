@@ -381,3 +381,113 @@ def get_dashboard(
         # ── Meta ──────────────────────────────────────────────────────────────
         "generated_at":          datetime.utcnow().isoformat(),
     }
+
+
+@router.get("/changes")
+def get_dashboard_changes(
+    workspace_id: str | None = Query(None),
+    days: int = Query(30, ge=1, le=180),
+    db: Session = Depends(get_db),
+):
+    """
+    Real period-over-period comparison -- "what changed" vs the prior period
+    of equal length, entirely from SQL aggregates against real tables. No
+    invented percentages: every number here is `current` and `previous`
+    computed the same way, from the same columns, so the diff is honest.
+
+    This intentionally does NOT try to explain business outcomes (pipeline,
+    cases resolved, etc.) -- that needs a real link between AI activity and
+    outcome data that doesn't exist yet. This only covers what CostPilot's
+    own tables can already answer: spend, call volume, tier mix, new agents.
+    """
+    now = datetime.utcnow()
+    current_start = now - timedelta(days=days)
+    prior_start = current_start - timedelta(days=days)
+
+    tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    agent_scope = _workspace_filter(RegisteredAgent, workspace_id)
+    IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+    ECONOMY_TIERS = ("Scout", "Analyst", "micro")
+
+    def _filters(*items):
+        return [x for x in items if x is not None]
+
+    def _period_totals(period_start, period_end):
+        base = _filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= period_start, TokenTransaction.timestamp < period_end)
+        spend = db.query(func.sum(TokenTransaction.cost_usd)).filter(*base).scalar() or 0.0
+        calls = db.query(func.count(TokenTransaction.id)).filter(*base).scalar() or 0
+        economy_calls = db.query(func.count(TokenTransaction.id)).filter(
+            *base, TokenTransaction.model_tier.in_(ECONOMY_TIERS)
+        ).scalar() or 0
+        economy_pct = round((economy_calls / calls) * 100, 1) if calls else 0.0
+        return {"spend": round(float(spend), 6), "calls": calls, "economy_pct": economy_pct}
+
+    current = _period_totals(current_start, now)
+    previous = _period_totals(prior_start, current_start)
+
+    new_agents = db.query(func.count(RegisteredAgent.id)).filter(
+        *_filters(agent_scope, RegisteredAgent.created_at >= current_start, RegisteredAgent.created_at < now)
+    ).scalar() or 0
+
+    def _pct_change(curr: float, prev: float) -> float | None:
+        if prev == 0:
+            return None  # undefined -- can't express "% change" from a zero baseline honestly
+        return round(((curr - prev) / prev) * 100, 1)
+
+    changes = []
+
+    spend_pct = _pct_change(current["spend"], previous["spend"])
+    if spend_pct is not None:
+        direction = "increased" if spend_pct >= 0 else "decreased"
+        changes.append({
+            "metric": "spend",
+            "label": "AI spend",
+            "current": current["spend"],
+            "previous": previous["spend"],
+            "pct_change": spend_pct,
+            "summary": f"AI spend {direction} {abs(spend_pct):.1f}% (${abs(current['spend'] - previous['spend']):,.2f}) vs the prior {days} days.",
+        })
+
+    calls_pct = _pct_change(current["calls"], previous["calls"])
+    if calls_pct is not None:
+        direction = "increased" if calls_pct >= 0 else "decreased"
+        changes.append({
+            "metric": "calls",
+            "label": "Call volume",
+            "current": current["calls"],
+            "previous": previous["calls"],
+            "pct_change": calls_pct,
+            "summary": f"Call volume {direction} {abs(calls_pct):.1f}% ({current['calls']} vs {previous['calls']}) vs the prior {days} days.",
+        })
+
+    mix_shift = round(current["economy_pct"] - previous["economy_pct"], 1)
+    if previous["calls"] and current["calls"] and abs(mix_shift) >= 1:
+        direction = "toward" if mix_shift > 0 else "away from"
+        changes.append({
+            "metric": "model_mix",
+            "label": "Model mix",
+            "current": current["economy_pct"],
+            "previous": previous["economy_pct"],
+            "pct_change": mix_shift,
+            "summary": f"Routing shifted {direction} economy-tier models ({previous['economy_pct']}% → {current['economy_pct']}% of calls).",
+        })
+
+    if new_agents:
+        changes.append({
+            "metric": "new_agents",
+            "label": "New agents",
+            "current": new_agents,
+            "previous": 0,
+            "pct_change": None,
+            "summary": f"{new_agents} new agent{'s' if new_agents != 1 else ''} started sending AI activity this period.",
+        })
+
+    changes.sort(key=lambda c: abs(c["pct_change"]) if c["pct_change"] is not None else 0, reverse=True)
+
+    return {
+        "workspace_id": workspace_id,
+        "period_days": days,
+        "current_period": {"start": current_start.isoformat(), "end": now.isoformat()},
+        "prior_period": {"start": prior_start.isoformat(), "end": current_start.isoformat()},
+        "changes": changes,
+    }
