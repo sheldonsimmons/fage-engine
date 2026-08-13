@@ -5,16 +5,19 @@ import { SpendOverTime } from "@/components/SpendOverTime"
 import { SpendByDepartment } from "@/components/SpendByDepartment"
 import { Recommendations } from "@/components/Recommendations"
 import { ComingSoon } from "@/components/ComingSoon"
+import { WhatChanged } from "@/components/WhatChanged"
 import { AskCostPilot } from "@/components/AskCostPilot"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   fetchBudget,
   fetchConnectionHealth,
   fetchDashboard,
+  fetchDashboardChanges,
   fetchSavings,
   getWorkspaceId,
   type BudgetDepartment,
   type ConnectionHealth,
+  type DashboardChanges,
   type DashboardSummary,
   type SavingsSummary,
 } from "@/lib/api"
@@ -24,6 +27,7 @@ interface CockpitData {
   savings: SavingsSummary
   budget: BudgetDepartment[]
   health: ConnectionHealth
+  changes: DashboardChanges
 }
 
 function App() {
@@ -37,8 +41,9 @@ function App() {
       fetchSavings(workspaceId, 30),
       fetchBudget(workspaceId),
       fetchConnectionHealth(workspaceId),
+      fetchDashboardChanges(workspaceId, 30),
     ])
-      .then(([dashboard, savings, budget, health]) => setData({ dashboard, savings, budget, health }))
+      .then(([dashboard, savings, budget, health, changes]) => setData({ dashboard, savings, budget, health, changes }))
       .catch((err: Error) => setError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -80,10 +85,7 @@ function App() {
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <ComingSoon
-                  title="What Changed"
-                  reason="Needs period-over-period comparison logic that doesn't exist in the backend yet -- not shown with invented numbers."
-                />
+                <WhatChanged periodDays={data.changes.period_days} changes={data.changes.changes} />
                 <ComingSoon
                   title="Business Impact"
                   reason="Needs a real link between AI activity and business outcomes (pipeline, cases resolved, etc.) beyond what's tracked today."

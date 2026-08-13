@@ -66,6 +66,20 @@ export interface AskResponse {
   answer: string
 }
 
+export interface DashboardChange {
+  metric: string
+  label: string
+  current: number
+  previous: number
+  pct_change: number | null
+  summary: string
+}
+
+export interface DashboardChanges {
+  period_days: number
+  changes: DashboardChange[]
+}
+
 export function fetchDashboard(workspaceId: string) {
   const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""
   return apiGet<DashboardSummary>(`/api/dashboard${qs}`)
@@ -80,6 +94,12 @@ export function fetchSavings(workspaceId: string, days = 30) {
 export function fetchBudget(workspaceId: string) {
   const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""
   return apiGet<BudgetDepartment[]>(`/api/budget${qs}`)
+}
+
+export function fetchDashboardChanges(workspaceId: string, days = 30) {
+  const params = new URLSearchParams({ days: String(days) })
+  if (workspaceId) params.set("workspace_id", workspaceId)
+  return apiGet<DashboardChanges>(`/api/dashboard/changes?${params}`)
 }
 
 export function fetchConnectionHealth(workspaceId: string) {
