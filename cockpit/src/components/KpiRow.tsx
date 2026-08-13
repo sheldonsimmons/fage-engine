@@ -6,6 +6,12 @@ import type { DashboardSummary, SavingsSummary, ConnectionHealth } from "@/lib/a
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 100 ? 2 : 0 })
 
+// Pruning savings are often tiny (fractions of a cent) -- the standard
+// usd() formatter would round small-but-real values down to "$0.00",
+// which reads as "nothing saved" when something genuinely was.
+const usdPrecise = (n: number) =>
+  n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 })
+
 function budgetStatus(pct: number): { label: string; tone: "default" | "secondary" | "destructive" } {
   if (pct >= 90) return { label: "At Risk", tone: "destructive" }
   if (pct >= 70) return { label: "Watch", tone: "secondary" }
@@ -54,7 +60,9 @@ export function KpiRow({
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-semibold tabular-nums">{dashboard.tokens_saved_total.toLocaleString()}</div>
-          <p className="mt-1 text-xs text-muted-foreground">via pruning &amp; optimization</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            ≈ {usdPrecise(dashboard.pruning_savings_usd)} via pruning &amp; optimization
+          </p>
         </CardContent>
       </Card>
 

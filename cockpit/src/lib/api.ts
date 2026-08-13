@@ -31,6 +31,10 @@ export interface DashboardSummary {
   agents_active: number
   agents_idle: number
   tokens_saved_total: number
+  // Estimate: tokens_saved_total priced at the Advisor-tier input rate --
+  // pruning saves against whatever model the call was actually using, so
+  // this is a documented approximation, not an exact accounting figure.
+  pruning_savings_usd: number
 }
 
 export interface SavingsTimelinePoint {
