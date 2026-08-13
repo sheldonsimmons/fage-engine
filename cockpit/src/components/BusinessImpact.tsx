@@ -1,8 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Cpu } from "lucide-react"
 import type { BusinessImpact as BusinessImpactData } from "@/lib/api"
 
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+
+const usdPrecise = (n: number) =>
+  n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 10 ? 2 : 0 })
 
 // Real data from GET /api/dashboard/business-impact -- a workspace-wide
 // widening of the same WorkItemOutcome query that already powers Business
@@ -47,6 +51,15 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
             <span className="tabular-nums font-medium">{r.value}</span>
           </div>
         ))}
+        {/* One compact line, not another row -- association, not causation:
+            AI activity tied to these outcomes, never framed as having
+            caused them. */}
+        <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
+          <Cpu className="h-3.5 w-3.5" />
+          <span>
+            AI activity tied to these outcomes: {usdPrecise(data.ai_spend_usd)} · {data.ai_tokens_total.toLocaleString()} tokens
+          </span>
+        </div>
       </CardContent>
     </Card>
   )

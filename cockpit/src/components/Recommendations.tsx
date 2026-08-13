@@ -39,9 +39,23 @@ function budgetRecommendations(budget: BudgetDepartment[], workspaceId: string):
 }
 
 function Icon({ severity }: { severity: Recommendation["severity"] }) {
-  if (severity === "throttled") return <OctagonAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
-  if (severity === "warning") return <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-  return <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+  if (severity === "throttled")
+    return (
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-400">
+        <OctagonAlert className="h-4 w-4" />
+      </span>
+    )
+  if (severity === "warning")
+    return (
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
+        <AlertTriangle className="h-4 w-4" />
+      </span>
+    )
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-400">
+      <Lightbulb className="h-4 w-4" />
+    </span>
+  )
 }
 
 const SEVERITY_ORDER: Record<Recommendation["severity"], number> = { throttled: 0, warning: 1, info: 2 }
@@ -69,9 +83,9 @@ export function Recommendations({
         {combined.length ? (
           <ul className="space-y-3">
             {combined.map((rec) => (
-              <li key={rec.key} className="flex gap-3 text-sm">
+              <li key={rec.key} className="flex items-start gap-3 text-sm">
                 <Icon severity={rec.severity} />
-                <span>{rec.text}</span>
+                <span className="pt-1.5">{rec.text}</span>
               </li>
             ))}
           </ul>

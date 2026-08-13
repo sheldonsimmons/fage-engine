@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { DollarSign, PiggyBank, Bot, ShieldCheck } from "lucide-react"
+import { DollarSign, PiggyBank, Bot, ShieldCheck, Zap } from "lucide-react"
 import type { DashboardSummary, SavingsSummary, ConnectionHealth } from "@/lib/api"
 
 const usd = (n: number) =>
@@ -24,7 +24,7 @@ export function KpiRow({
   const status = budgetStatus(dashboard.overall_budget_pct)
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Total AI Spend</CardTitle>
@@ -44,6 +44,17 @@ export function KpiRow({
         <CardContent>
           <div className="text-2xl font-semibold tabular-nums">{usd(savings.total_saved_usd)}</div>
           <p className="mt-1 text-xs text-muted-foreground">vs {usd(savings.cost_if_no_fage_usd)} without routing</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Tokens Saved</CardTitle>
+          <Zap className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-semibold tabular-nums">{dashboard.tokens_saved_total.toLocaleString()}</div>
+          <p className="mt-1 text-xs text-muted-foreground">via pruning &amp; optimization</p>
         </CardContent>
       </Card>
 

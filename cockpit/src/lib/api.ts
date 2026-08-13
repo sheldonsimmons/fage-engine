@@ -30,6 +30,7 @@ export interface DashboardSummary {
   agents_total: number
   agents_active: number
   agents_idle: number
+  tokens_saved_total: number
 }
 
 export interface SavingsTimelinePoint {
@@ -105,6 +106,8 @@ export interface BusinessImpact {
   closed_won_value_usd: number
   support_cases_total: number
   support_cases_resolved: number
+  ai_spend_usd: number
+  ai_tokens_total: number
 }
 
 export function fetchDashboard(workspaceId: string) {
