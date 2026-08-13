@@ -1,0 +1,27 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+# dist IS committed -- Heroku's build pipeline here is Python-only (no Node
+# buildpack), so the pre-built static bundle is what actually gets deployed.
+# Run `npm run build` in this directory and commit the result before
+# deploying any change made here.
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

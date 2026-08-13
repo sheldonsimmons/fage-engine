@@ -480,7 +480,7 @@ frontend_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__f
 
 # Explicit routes for HTML pages so they're always read fresh from disk and
 # bypass any StaticFiles path-resolution ambiguity.
-from fastapi.responses import FileResponse as _FileResponse
+from fastapi.responses import FileResponse as _FileResponse, RedirectResponse
 
 @app.get("/reports.html")
 def serve_reports_html():
@@ -489,5 +489,22 @@ def serve_reports_html():
 @app.get("/live-reports.html")
 def serve_live_reports_html():
     return _FileResponse(os.path.join(frontend_path, "live-reports.html"), media_type="text/html")
+
+# The Executive Cockpit (React/Vite/shadcn) is a separate frontend project
+# that only talks to the same REST APIs everything else here uses -- built
+# with `npm run build` in cockpit/, producing cockpit/dist/. Mounted before
+# the catch-all "/" mount below so /cockpit/* resolves here first. If the
+# build hasn't been run (e.g. a fresh checkout before `npm install && npm
+# run build`), this is skipped rather than failing app startup.
+cockpit_dist_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cockpit", "dist"))
+if os.path.isdir(cockpit_dist_path):
+    @app.get("/cockpit")
+    def _redirect_cockpit_root():
+        # StaticFiles mounted at "/cockpit" only matches "/cockpit/..." --
+        # without this, typing the bare path (no trailing slash, the
+        # natural thing to type) 404s instead of loading the app.
+        return RedirectResponse(url="/cockpit/")
+
+    app.mount("/cockpit", StaticFiles(directory=cockpit_dist_path, html=True), name="cockpit")
 
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
