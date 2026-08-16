@@ -2677,6 +2677,8 @@ def _ask_run_agent_tool(
             args.get("status") or "all", int(args.get("usage_threshold") or 10),
             int(args.get("days") or 30), args.get("period_key") or "none",
         )
+    if name == "get_account_outcomes":
+        return executor(db, request.workspace_id, args.get("entity_name") or None)
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -2974,6 +2976,7 @@ def _ask_agent_final_payload(
         "get_change_drivers": "change_drivers",
         "get_budget_status": "budget",
         "get_agent_adoption": "agent_adoption",
+        "get_account_outcomes": "account_outcomes",
     }
     suggestion_category = ""
     suggestion_department = None
@@ -3091,6 +3094,13 @@ Call get_agent_adoption for questions about which agents are active, inactive, u
 used, or recently quiet. get_usage_report only ever returns agents that HAVE activity, so it
 cannot answer "which agents are inactive" — you must call get_agent_adoption for that, never
 infer an answer by subtracting counts.
+Call get_account_outcomes for any question about business outcomes — Opportunities won/lost/open,
+pipeline value, closed-won value, resolved support cases, or AI spend tied to won vs lost deals.
+get_usage_report NEVER returns outcome data, even for a named account's entity_name lookup — it
+only knows spend and call counts. Pass entity_name to scope to one named account (e.g. "Acme");
+leave it empty for a company-wide won/lost comparison. If get_account_outcomes returns
+found: false, tell the user the account wasn't found rather than guessing or falling back to
+get_usage_report's spend data as if it answered an outcome question.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call

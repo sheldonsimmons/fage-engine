@@ -237,6 +237,36 @@ TOOL_SCHEMAS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "get_account_outcomes",
+        "description": (
+            "Get business outcomes (won/lost/open Opportunities, pipeline value, "
+            "closed-won value, resolved support cases) and the AI spend/tokens tied "
+            "to those outcomes. This is the ONLY tool that knows about Opportunities, "
+            "deal outcomes, or win/loss -- get_usage_report only returns spend and "
+            "call counts, never outcome data, even for a named account. Use this for "
+            "any question about a named account's business results, or about won vs "
+            "lost deals company-wide. Set entity_name to scope to one account (e.g. "
+            "'Acme'); leave it empty for a company-wide/workspace-wide answer."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "entity_name": {
+                    "type": "string",
+                    "description": (
+                        "The exact name of a specific account/company the question "
+                        "names (e.g. 'Acme', 'BluePeak Consulting'). Empty string for "
+                        "a company-wide/workspace-wide answer."
+                    ),
+                },
+            },
+            "required": ["entity_name"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 FINAL_ANSWER_TOOL = {
@@ -558,10 +588,129 @@ def run_get_agent_adoption(
     }
 
 
+def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optional[str] = None) -> dict:
+    """
+    Business outcomes (Opportunity won/lost/open, pipeline value, closed-won
+    value, resolved support cases) plus the AI spend/tokens tied to those
+    outcomes -- the same WorkItemOutcome aggregation that powers Business
+    Profile's per-account panel and the Cockpit's workspace-wide Business
+    Impact card (api/routes_dashboard.py's get_business_impact), just
+    reachable from the agent loop and optionally narrowed to one named
+    account. No other tool in this file touches WorkItemOutcome at all --
+    without this, the agent had no way to answer any won/lost/pipeline
+    question, named account or not.
+    """
+    from sqlalchemy import and_, case, func
+    from core.workspace_scope import workspace_filter
+    from database.models import WorkAccount, WorkItem, WorkItemOutcome, TokenTransaction
+
+    account = None
+    matched_accounts = []
+    name = (entity_name or "").strip()
+    if name:
+        account_query = db.query(WorkAccount).filter(WorkAccount.name.ilike(f"%{name}%"))
+        acct_scope = workspace_filter(WorkAccount, workspace_id)
+        if acct_scope is not None:
+            account_query = account_query.filter(acct_scope)
+        matched_accounts = account_query.limit(6).all()
+        if not matched_accounts:
+            return {
+                "entity_name": name,
+                "found": False,
+                "message": f"No account matching '{name}' was found.",
+            }
+        if len(matched_accounts) > 1:
+            return {
+                "entity_name": name,
+                "found": False,
+                "ambiguous": True,
+                "candidates": [a.name for a in matched_accounts],
+                "message": (
+                    f"More than one account matches '{name}': "
+                    f"{', '.join(a.name for a in matched_accounts)}. Ask which one."
+                ),
+            }
+        account = matched_accounts[0]
+
+    work_item_scope = workspace_filter(WorkItem, workspace_id)
+
+    def _scoped(query):
+        q = query.filter(work_item_scope) if work_item_scope is not None else query
+        if account is not None:
+            q = q.filter(WorkItem.account_id == account.id)
+        return q
+
+    is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+    is_open = WorkItemOutcome.is_closed.is_(False)
+    is_won = WorkItemOutcome.outcome_success.is_(True)
+    outcome_value = func.coalesce(WorkItemOutcome.outcome_value, 0.0)
+
+    won_count, lost_count, open_count, pipeline_value, closed_won_value = _scoped(
+        db.query(
+            func.coalesce(func.sum(case((is_won, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_lost, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_open, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((is_open, outcome_value), else_=0.0)), 0.0),
+            func.coalesce(func.sum(case((is_won, outcome_value), else_=0.0)), 0.0),
+        )
+        .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.context_type == "opportunity")
+    ).first()
+
+    SUPPORT_CONTEXT_TYPES = ("case", "ticket", "incident")
+    support_total, support_resolved = _scoped(
+        db.query(
+            func.count(WorkItem.id),
+            func.coalesce(func.sum(case((WorkItemOutcome.is_closed.is_(True), 1), else_=0)), 0),
+        )
+        .outerjoin(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.context_type.in_(SUPPORT_CONTEXT_TYPES))
+    ).first()
+
+    won_count, lost_count, open_count = int(won_count or 0), int(lost_count or 0), int(open_count or 0)
+    support_resolved = int(support_resolved or 0)
+    has_outcome_data = bool(won_count + lost_count + open_count + support_resolved)
+
+    # AI spend/tokens split by won vs lost, tied only to work items that
+    # actually have a synced outcome -- answers "compare AI activity on won
+    # vs lost opportunities" directly instead of making the model subtract.
+    won_spend, won_tokens, lost_spend, lost_tokens = _scoped(
+        db.query(
+            func.coalesce(func.sum(case((is_won, TokenTransaction.cost_usd), else_=0.0)), 0.0),
+            func.coalesce(func.sum(case((is_won, TokenTransaction.input_tokens + TokenTransaction.output_tokens), else_=0)), 0),
+            func.coalesce(func.sum(case((is_lost, TokenTransaction.cost_usd), else_=0.0)), 0.0),
+            func.coalesce(func.sum(case((is_lost, TokenTransaction.input_tokens + TokenTransaction.output_tokens), else_=0)), 0),
+        )
+        .select_from(TokenTransaction)
+        .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.context_type == "opportunity")
+    ).first()
+
+    return {
+        "entity_name": account.name if account else None,
+        "found": True,
+        "scope": "account" if account else "workspace",
+        "has_outcome_data": has_outcome_data,
+        "opportunities_won": won_count,
+        "opportunities_lost": lost_count,
+        "opportunities_open": open_count,
+        "pipeline_value_usd": round(float(pipeline_value or 0.0), 2),
+        "closed_won_value_usd": round(float(closed_won_value or 0.0), 2),
+        "support_cases_total": int(support_total or 0),
+        "support_cases_resolved": support_resolved,
+        "ai_spend_on_won_opportunities_usd": round(float(won_spend or 0.0), 6),
+        "ai_tokens_on_won_opportunities": int(won_tokens or 0),
+        "ai_spend_on_lost_opportunities_usd": round(float(lost_spend or 0.0), 6),
+        "ai_tokens_on_lost_opportunities": int(lost_tokens or 0),
+    }
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
     "get_budget_status": run_get_budget_status,
     "get_product_help": run_get_product_help,
     "get_agent_adoption": run_get_agent_adoption,
+    "get_account_outcomes": run_get_account_outcomes,
 }
