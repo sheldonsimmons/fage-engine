@@ -2693,6 +2693,8 @@ def _ask_run_agent_tool(
             sort=args.get("sort") or None,
             limit=int(args.get("limit") or 20),
         )
+    if name == "get_priority_signals":
+        return executor(db, request.workspace_id, days=int(args.get("days") or 7))
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -3006,6 +3008,7 @@ def _ask_agent_final_payload(
         "get_account_outcomes": "account_outcomes",
         "get_data_coverage": "coverage",
         "query_metrics": "ranking",
+        "get_priority_signals": "budget",
     }
     suggestion_category = ""
     suggestion_department = None
@@ -3147,6 +3150,11 @@ and adding the results yourself. If query_metrics returns unsupported_metrics fo
 asked for, tell the user plainly that it isn't computable yet and why (using the reason given),
 never substitute a different number or guess. If it returns errors (e.g. an ambiguous or
 not-found account name), surface that to the user instead of guessing which account was meant.
+Call get_priority_signals for open-ended attention questions -- "what should I pay attention to
+today", "is anything unusual happening", "what are the top things I should know about". It
+returns a pre-ranked list (budget risk first, then biggest spend swings); narrate that list, do
+not reorder it by your own judgment or add priorities it didn't return. If it returns an empty
+list, say plainly that nothing needs attention right now rather than inventing a concern.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call

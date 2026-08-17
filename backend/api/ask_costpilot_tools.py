@@ -9,7 +9,7 @@ tools returned. The model never sees raw DB access and never supplies a
 number of its own.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from core.analytics_drivers import change_decomposition, dimension_contributors, top_contributor
@@ -318,8 +318,11 @@ TOOL_SCHEMAS = [
                     "description": (
                         "One or more of: ai_spend, ai_requests, input_tokens, output_tokens, "
                         "total_tokens, work_items_touched, accounts_touched, active_agents, "
-                        "won_count, lost_count, open_count, won_value, pipeline_value, "
-                        "support_cases_total, support_cases_resolved."
+                        "savings, pruning_savings, downgrade_savings, won_count, lost_count, "
+                        "open_count, won_value, pipeline_value, support_cases_total, "
+                        "support_cases_resolved. 'savings' is what routing/pruning already saved "
+                        "vs. flagship-rate cost -- use it for 'where can we save money' style "
+                        "questions about savings ALREADY achieved, not future opportunities."
                     ),
                 },
                 "dimensions": {
@@ -356,7 +359,13 @@ TOOL_SCHEMAS = [
                 "compare_to": {
                     "type": "string",
                     "enum": ["none", "previous_period", "same_period_previous_year", "previous_month", "previous_quarter"],
-                    "description": "Compare the primary timeframe to a prior one. 'none' for no comparison.",
+                    "description": (
+                        "Compare the primary timeframe to a prior one. 'none' for no comparison. "
+                        "When set with `dimensions`, the result's comparison.rows come back already "
+                        "ranked by the size of the change (largest absolute difference first) and "
+                        "capped at `limit` -- use this directly for 'which department drove the "
+                        "increase' style questions instead of computing the ranking yourself."
+                    ),
                 },
                 "sort": {
                     "type": "string",
@@ -365,6 +374,31 @@ TOOL_SCHEMAS = [
                 "limit": {"type": "integer", "description": "Max rows to return, ranked by `sort`. Default 20."},
             },
             "required": ["metrics", "dimensions", "filters", "days", "period_key", "compare_to", "sort", "limit"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_priority_signals",
+        "description": (
+            "Get a short, pre-ranked list of what deserves attention right now -- "
+            "departments at or over their budget cap, and the biggest spend swings "
+            "vs the prior period of equal length. Use this for open-ended questions "
+            "like 'what should I pay attention to today', 'is anything unusual "
+            "happening', or 'what are the top things I should know about' -- this "
+            "tool does the ranking; narrate the list it returns, don't invent your "
+            "own priorities or reorder them by your own judgment."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "description": "Window (in days, ending now) used for the spend-change comparison. Default 7.",
+                },
+            },
+            "required": ["days"],
             "additionalProperties": False,
         },
     },
@@ -867,6 +901,64 @@ def run_query_metrics(
     return out
 
 
+def run_get_priority_signals(db, workspace_id: Optional[str], days: int = 7) -> dict:
+    """
+    Combines the same two real sources the Cockpit's own Recommendations
+    panel already combines client-side (core.budget.get_all_budgets for
+    budget risk, cockpit/src/components/Recommendations.tsx) with the
+    now-ranked query_metrics comparison (core/metrics_query.py) for
+    biggest movers -- surfaced here as one structured, pre-ranked tool so
+    Ask CostPilot can answer "what deserves attention" without inventing
+    its own priority list.
+    """
+    from core.budget import get_all_budgets
+    from core.metrics_query import run_metrics_query
+
+    signals = []
+
+    for budget in get_all_budgets(db, workspace_id):
+        pct = float(budget.get("used_pct") or 0)
+        if pct < 80:
+            continue
+        dept = str(budget.get("department") or "Unassigned").split(":")[-1]
+        cap = float(budget.get("monthly_cap_usd") or 0)
+        severity = "critical" if (budget.get("throttled") or pct >= 100) else "warning"
+        signals.append({
+            "type": "budget_risk",
+            "severity": severity,
+            "label": dept,
+            "detail": f"{dept} is at {pct}% of its ${cap:,.0f}/mo AI budget"
+                      + (" and is being throttled" if budget.get("throttled") else ""),
+        })
+
+    window_days = max(1, int(days or 7))
+    now = datetime.utcnow()
+    result = run_metrics_query(
+        db, workspace_id, metrics=["ai_spend"], dimensions=["department"],
+        timeframe={"start": now - timedelta(days=window_days), "end": now},
+        compare_to="previous_period", limit=5,
+    )
+    if result.comparison:
+        for row in result.comparison["rows"]:
+            spend = row.get("ai_spend") or {}
+            pct_diff = spend.get("pct_difference")
+            diff = spend.get("difference") or 0
+            if pct_diff is None or abs(pct_diff) < 15:
+                continue
+            dept = str((row.get("dimensions") or {}).get("department") or "Unassigned").split(":")[-1]
+            direction = "increased" if diff >= 0 else "decreased"
+            signals.append({
+                "type": "spend_change",
+                "severity": "warning" if abs(pct_diff) >= 50 else "info",
+                "label": dept,
+                "detail": f"{dept} AI spend {direction} {abs(pct_diff):.1f}% (${abs(diff):,.2f}) vs the prior {days} days",
+            })
+
+    severity_rank = {"critical": 0, "warning": 1, "info": 2}
+    signals.sort(key=lambda s: severity_rank.get(s["severity"], 3))
+    return {"signals": signals[:5], "period_days": days}
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
@@ -876,4 +968,5 @@ EXECUTORS = {
     "get_agent_adoption": run_get_agent_adoption,
     "get_account_outcomes": run_get_account_outcomes,
     "query_metrics": run_query_metrics,
+    "get_priority_signals": run_get_priority_signals,
 }

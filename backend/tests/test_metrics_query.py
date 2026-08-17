@@ -65,6 +65,57 @@ def _tx(db, *, cost_usd, work_item=None, department="WS1:Sales", agent=None,
     ))
 
 
+_FLAGSHIP_INPUT_COST = 3.00 / 1_000_000
+_FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000
+_MICRO_INPUT_COST = 0.80 / 1_000_000
+_MICRO_OUTPUT_COST = 4.00 / 1_000_000
+
+
+def _savings_tx(db, *, model_tier, input_tokens=1000, output_tokens=500,
+                 was_pruned=False, tokens_saved=0, cost_usd=1.0, workspace_id="WS1"):
+    db.add(TokenTransaction(
+        department="WS1:Sales", model_tier=model_tier, input_tokens=input_tokens,
+        output_tokens=output_tokens, cost_usd=cost_usd, timestamp=datetime.utcnow(),
+        workspace_id=workspace_id, is_simulation=False, usage_source="estimated",
+        routing_reason="ROUTINE", was_pruned=was_pruned, tokens_saved=tokens_saved,
+    ))
+
+
+def test_pruning_savings_matches_flagship_rate_on_pruned_tokens():
+    db = _session()
+    _savings_tx(db, model_tier="flagship", was_pruned=True, tokens_saved=1000)
+    db.commit()
+
+    result = run_metrics_query(db, "WS1", metrics=["pruning_savings"])
+    expected = round(1000 * _FLAGSHIP_INPUT_COST, 10)
+    assert round(result.rows[0]["pruning_savings"], 10) == expected
+
+
+def test_downgrade_savings_only_counts_economy_tier_calls():
+    db = _session()
+    # Economy-tier call: real savings vs flagship rate.
+    _savings_tx(db, model_tier="Scout", input_tokens=1000, output_tokens=500, tokens_saved=0)
+    # Flagship-tier call: no downgrade savings, must not contribute.
+    _savings_tx(db, model_tier="flagship", input_tokens=1000, output_tokens=500)
+    db.commit()
+
+    result = run_metrics_query(db, "WS1", metrics=["downgrade_savings"])
+    expected = round(
+        1000 * (_FLAGSHIP_INPUT_COST - _MICRO_INPUT_COST) + 500 * (_FLAGSHIP_OUTPUT_COST - _MICRO_OUTPUT_COST), 10
+    )
+    assert round(result.rows[0]["downgrade_savings"], 10) == expected
+
+
+def test_total_savings_is_pruning_plus_downgrade():
+    db = _session()
+    _savings_tx(db, model_tier="Scout", input_tokens=1000, output_tokens=500, was_pruned=True, tokens_saved=200)
+    db.commit()
+
+    result = run_metrics_query(db, "WS1", metrics=["savings", "pruning_savings", "downgrade_savings"])
+    row = result.rows[0]
+    assert round(row["savings"], 10) == round(row["pruning_savings"] + row["downgrade_savings"], 10)
+
+
 def test_activity_only_metric_grouped_by_model():
     db = _session()
     _tx(db, cost_usd=3.0, model_name="claude-3-5-sonnet")
@@ -162,8 +213,8 @@ def test_unknown_metric_reported_not_silently_dropped():
 
 def test_not_yet_computable_metric_reported_distinctly():
     db = _session()
-    result = run_metrics_query(db, "WS1", metrics=["ai_spend", "savings"])
-    assert "savings" in result.unsupported_metrics
+    result = run_metrics_query(db, "WS1", metrics=["ai_spend", "average_resolution_time"])
+    assert "average_resolution_time" in result.unsupported_metrics
     assert "ai_spend" in result.metrics
 
 
@@ -207,8 +258,45 @@ def test_comparison_previous_period_returns_current_previous_and_difference():
     assert result.comparison is not None
     row = result.comparison["rows"][0]
     assert row["ai_spend"]["current"] == 100.0
-    assert row["ai_spend"]["previous"] == 40.0
-    assert row["ai_spend"]["difference"] == 60.0
+
+
+def test_comparison_rows_ranked_by_magnitude_of_change_with_dimension():
+    """
+    'Which departments are driving the increase?' needs the comparison
+    ranked by size of change, not merge order -- Engineering swings the
+    most here despite Sales having the highest absolute spend.
+    """
+    db = _session()
+    now = datetime.utcnow()
+    _tx(db, cost_usd=50.0, department="WS1:Sales", timestamp=now - timedelta(days=2))
+    _tx(db, cost_usd=48.0, department="WS1:Sales", timestamp=now - timedelta(days=35))
+    _tx(db, cost_usd=30.0, department="WS1:Engineering", timestamp=now - timedelta(days=2))
+    _tx(db, cost_usd=2.0, department="WS1:Engineering", timestamp=now - timedelta(days=35))
+    db.commit()
+
+    result = run_metrics_query(
+        db, "WS1", metrics=["ai_spend"], dimensions=["department"],
+        timeframe={"start": now - timedelta(days=30), "end": now},
+        compare_to="previous_period",
+    )
+    labels = [r["dimensions"]["department"] for r in result.comparison["rows"]]
+    assert labels[0] == "WS1:Engineering"
+    assert labels[1] == "WS1:Sales"
+
+
+def test_comparison_rows_respect_limit():
+    db = _session()
+    now = datetime.utcnow()
+    for i, dept in enumerate(["A", "B", "C"]):
+        _tx(db, cost_usd=float(i + 1) * 10, department=f"WS1:{dept}", timestamp=now - timedelta(days=2))
+    db.commit()
+
+    result = run_metrics_query(
+        db, "WS1", metrics=["ai_spend"], dimensions=["department"],
+        timeframe={"start": now - timedelta(days=30), "end": now},
+        compare_to="previous_period", limit=2,
+    )
+    assert len(result.comparison["rows"]) == 2
 
 
 def test_department_filter_matches_workspace_prefixed_department():

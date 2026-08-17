@@ -159,7 +159,52 @@ def _activity_metric_expr(metric_key: str):
         return func.count(func.distinct(WorkItem.account_id))
     if metric_key == "active_agents":
         return func.count(func.distinct(TokenTransaction.agent_id))
+    if metric_key in ("savings", "pruning_savings", "downgrade_savings"):
+        return _savings_expr(metric_key)
     raise ValueError(f"unknown activity metric: {metric_key}")
+
+
+# Same per-token rates api/routes_reports.py's savings_report() already
+# uses (Haiku 4.5 for micro/economy tiers, Sonnet 4.6 for flagship) --
+# duplicated here rather than imported because routes_reports.py's
+# constants aren't currently in a shared module; if that endpoint is ever
+# migrated onto this metric (see catalog docstring), these become the one
+# copy instead of two.
+_MICRO_INPUT_COST = 0.80 / 1_000_000
+_MICRO_OUTPUT_COST = 4.00 / 1_000_000
+_FLAGSHIP_INPUT_COST = 3.00 / 1_000_000
+_FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000
+_ECONOMY_TIERS = ("Scout", "Analyst", "micro")
+
+
+def _savings_expr(metric_key: str):
+    """
+    SQL-side version of api/routes_reports.py's savings_report(), which
+    still loads every matching TokenTransaction into Python and sums in a
+    loop -- the exact O(n) pattern this session already moved every other
+    reporting hotspot off of. Same two components, same rates:
+    pruning_savings = tokens pruned x the flagship input rate (what those
+    tokens would have cost if not stripped); downgrade_savings = for each
+    economy-tier call, the delta between what it actually cost and what
+    the same tokens would have cost at flagship rates.
+    """
+    is_micro = TokenTransaction.model_tier.in_(_ECONOMY_TIERS)
+    pruning = func.coalesce(
+        func.sum(case((TokenTransaction.was_pruned.is_(True), TokenTransaction.tokens_saved), else_=0)), 0
+    ) * _FLAGSHIP_INPUT_COST
+    downgrade = func.coalesce(
+        func.sum(case(
+            (is_micro, (
+                (TokenTransaction.input_tokens + TokenTransaction.tokens_saved) * (_FLAGSHIP_INPUT_COST - _MICRO_INPUT_COST)
+                + TokenTransaction.output_tokens * (_FLAGSHIP_OUTPUT_COST - _MICRO_OUTPUT_COST)
+            )), else_=0.0,
+        )), 0.0,
+    )
+    if metric_key == "pruning_savings":
+        return pruning
+    if metric_key == "downgrade_savings":
+        return downgrade
+    return pruning + downgrade
 
 
 def _outcome_metric_expr(metric_key: str):
@@ -455,6 +500,8 @@ def run_metrics_query(
         return _totals_for_period(db, workspace_id, activity_metrics, outcome_metrics, dims_for_merge, filters, s, e, account)
 
     primary = _merge_for(start, end)
+    sort_metric = sort if sort in valid_metrics else (valid_metrics[0] if valid_metrics else None)
+    row_limit = max(1, min(int(limit or 20), 100))
 
     comparison_block = None
     if compare_to and start is not None and end is not None:
@@ -479,16 +526,26 @@ def run_metrics_query(
                 row[m] = {"current": va, "previous": vb, "difference": diff, "pct_difference": pct}
             comparison_block["rows"].append(row)
 
+        # Ranked by magnitude of change on the sort metric, same convention
+        # api/routes_dashboard.py's get_dashboard_changes() already uses for
+        # its `changes` list -- "which department drove the increase"
+        # implies an answer ordered by how much each row moved, not
+        # whatever order the dimension merge happened to produce.
+        if sort_metric:
+            comparison_block["rows"].sort(
+                key=lambda r: abs(r[sort_metric]["difference"]), reverse=True
+            )
+        comparison_block["rows"] = comparison_block["rows"][:row_limit]
+
     rows = []
     for key, bucket in primary.items():
         row = {"dimensions": dict(zip(dims_for_merge, bucket["labels"]))}
         row.update(bucket["values"])
         rows.append(row)
 
-    sort_metric = sort if sort in valid_metrics else (valid_metrics[0] if valid_metrics else None)
     if sort_metric:
         rows.sort(key=lambda r: float(r.get(sort_metric, 0) or 0), reverse=True)
-    rows = rows[: max(1, min(int(limit or 20), 100))]
+    rows = rows[:row_limit]
 
     freshness = _outcome_freshness(db, workspace_id, account) if outcome_metrics else None
 

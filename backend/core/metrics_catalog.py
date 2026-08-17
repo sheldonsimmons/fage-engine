@@ -136,13 +136,34 @@ METRICS: dict[str, MetricDef] = {
         definition="Count of support WorkItems with WorkItemOutcome.is_closed = true.",
         provenance="WorkItemOutcome.is_closed where WorkItem.context_type IN (case, ticket, incident)",
     ),
+    "savings": MetricDef(
+        key="savings", label="Total Savings", source="transaction", unit="usd",
+        definition=(
+            "pruning_savings + downgrade_savings. Same rates and method as "
+            "api/routes_reports.py's savings_report() (GET /api/reports/savings), "
+            "reimplemented as a SQL aggregate here instead of that endpoint's "
+            "Python-loop sum over every matching row. An estimate against a "
+            "counterfactual (what the same tokens would have cost at flagship "
+            "rates), not a stored ledger value."
+        ),
+        provenance="TokenTransaction.tokens_saved, input_tokens, output_tokens, model_tier, was_pruned",
+    ),
+    "pruning_savings": MetricDef(
+        key="pruning_savings", label="Pruning Savings", source="transaction", unit="usd",
+        definition="Tokens removed by pruning, priced at the flagship-tier input rate.",
+        provenance="TokenTransaction.tokens_saved where was_pruned = true",
+    ),
+    "downgrade_savings": MetricDef(
+        key="downgrade_savings", label="Model Downgrade Savings", source="transaction", unit="usd",
+        definition="For economy-tier (Scout/Analyst/micro) calls, the delta between actual cost and what the same tokens would have cost at flagship rates.",
+        provenance="TokenTransaction.input_tokens, output_tokens where model_tier is economy-tier",
+    ),
 }
 
 # Requested by the spec but not backed by any real column yet. Listed
 # explicitly (not silently omitted) so a caller asking for one gets an
 # honest "not yet computable" instead of a KeyError or a guess.
 NOT_YET_COMPUTABLE: dict[str, str] = {
-    "savings": "No stored counterfactual cost exists per call to compare against; SavingsSummary computes an aggregate estimate, not a per-row metric this layer can group/filter by yet.",
     "average_resolution_time": "WorkItemOutcome has no case-open timestamp distinct from outcome_date; can't compute a duration yet.",
     "sla_met_rate": "No SLA target field exists on WorkItem or WorkItemOutcome yet.",
 }
