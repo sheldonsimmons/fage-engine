@@ -4806,3 +4806,93 @@ def generate_efficiency_review(
         "generated_at":            datetime.utcnow().isoformat(),
         "generated_by":            "ai" if MODEL_MODE == "live" else "simulated",
     }
+
+
+# ── AI-powered report builder (Milestone 5) ────────────────────────────────
+
+class NLQueryRequest(BaseModel):
+    question: str
+    workspace_id: Optional[str] = None
+    # A previously returned report_state (see NLQueryResult below), passed
+    # back in for conversational refinement -- "only show Salesforce"
+    # means "add a platform filter to THIS state," not "start over."
+    current_report_state: Optional[dict] = None
+
+
+def _nl_query_translate(question: str, current_report_state: Optional[dict]) -> dict:
+    """
+    Single forced tool call: the model's only job is to emit a valid
+    query_metrics request representing the question (or the refinement of
+    current_report_state). It never sees data and never answers anything
+    -- translation only, same tool_choice={"type": "any"} pattern already
+    used by the agent loop above, just one turn instead of a loop.
+    """
+    import anthropic
+    from api.ask_costpilot_tools import TOOL_SCHEMAS, to_anthropic_tools
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Report builder is not configured (no ANTHROPIC_API_KEY).")
+
+    query_metrics_schema = next(s for s in TOOL_SCHEMAS if s["name"] == "query_metrics")
+    tools = to_anthropic_tools([query_metrics_schema])
+
+    system = (
+        "You translate a business reporting question, or a refinement instruction, into a "
+        "single query_metrics tool call. You do not answer the question, compute any number, "
+        "or narrate a result -- you only decide the metrics, dimensions, filters, timeframe, "
+        "comparison, sort, and limit the report should use. If CURRENT REPORT STATE is not "
+        "empty, treat the request as a refinement of it: 'only show Salesforce' means set "
+        "filters.platform on top of the existing state, not start a new report from scratch, "
+        "unless the request clearly describes a different report entirely. Keep every field "
+        "from the current state that the request doesn't mention."
+    )
+    user_content = (
+        f"CURRENT REPORT STATE: {json.dumps(current_report_state or {}, default=str)}\n\n"
+        f"REQUEST: {question}"
+    )
+
+    model = os.getenv("ASK_COSTPILOT_AGENT_MODEL", os.getenv("ANTHROPIC_FLAGSHIP_MODEL", "claude-sonnet-4-6"))
+    client = anthropic.Anthropic(api_key=api_key, timeout=15.0, max_retries=0)
+    try:
+        response = client.messages.create(
+            model=model, max_tokens=1024, system=system,
+            messages=[{"role": "user", "content": user_content}],
+            tools=tools, tool_choice={"type": "any"},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Report builder translation failed: {exc}")
+
+    tool_uses = [b for b in response.content if getattr(b, "type", None) == "tool_use"]
+    if not tool_uses:
+        raise HTTPException(status_code=502, detail="Could not translate that into a report.")
+    return dict(tool_uses[0].input or {})
+
+
+@router.post("/nl-query")
+def nl_query(request: NLQueryRequest, db: Session = Depends(get_db)):
+    """
+    Natural-language -> report translation for the AI report builder.
+    Returns BOTH the structured report_state (what the visual filter UI
+    should render/sync to) and the executed result (query_metrics's real,
+    SQL-computed numbers) -- the LLM only produced report_state; every
+    number in `result` comes from run_query_metrics, same as every other
+    Ask CostPilot answer path.
+    """
+    from api.ask_costpilot_tools import run_query_metrics
+
+    report_state = _nl_query_translate(request.question, request.current_report_state)
+
+    result = run_query_metrics(
+        db, request.workspace_id,
+        metrics=report_state.get("metrics") or [],
+        dimensions=report_state.get("dimensions") or [],
+        filters=report_state.get("filters") or {},
+        days=int(report_state.get("days") or 30),
+        period_key=report_state.get("period_key") or "none",
+        compare_to=report_state.get("compare_to") or None,
+        sort=report_state.get("sort") or None,
+        limit=int(report_state.get("limit") or 20),
+    )
+
+    return {"report_state": report_state, "result": result}
