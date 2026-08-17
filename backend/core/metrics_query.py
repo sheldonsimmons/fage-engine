@@ -73,6 +73,7 @@ class MetricsResult:
     comparison: Optional[dict] = None
     errors: list = field(default_factory=list)
     unsupported_metrics: dict = field(default_factory=dict)
+    freshness: Optional[dict] = None
 
 
 def _resolve_account(db: Session, workspace_id: Optional[str], name: str):
@@ -302,6 +303,34 @@ def _run_outcome_query(
     return out
 
 
+def _outcome_freshness(db: Session, workspace_id: Optional[str], account) -> Optional[dict]:
+    """
+    Oldest last_synced_at among the WorkItemOutcome rows a request could
+    have drawn from -- reported as the freshness of the whole response
+    (conservative: if any matched outcome is stale, the response is
+    flagged stale), not per-row. Mirrors core.data_coverage's
+    STALE_SYNC_THRESHOLD for what "stale" means, applied to outcome data
+    instead of connector sync recency.
+    """
+    from core.data_coverage import STALE_SYNC_THRESHOLD
+
+    q = db.query(func.min(WorkItemOutcome.last_synced_at)).select_from(WorkItemOutcome).join(
+        WorkItem, WorkItemOutcome.work_item_id == WorkItem.id
+    )
+    scope = workspace_filter(WorkItem, workspace_id)
+    if scope is not None:
+        q = q.filter(scope)
+    if account is not None:
+        q = q.filter(WorkItem.account_id == account.id)
+    oldest = q.scalar()
+    if oldest is None:
+        return None
+    return {
+        "last_synced_at": oldest.isoformat(),
+        "stale": (datetime.utcnow() - oldest) > STALE_SYNC_THRESHOLD,
+    }
+
+
 def _totals_for_period(
     db: Session, workspace_id: Optional[str], activity_metrics: list, outcome_metrics: list,
     dim_keys: list, filters: dict, start: Optional[datetime], end: Optional[datetime], account,
@@ -461,6 +490,8 @@ def run_metrics_query(
         rows.sort(key=lambda r: float(r.get(sort_metric, 0) or 0), reverse=True)
     rows = rows[: max(1, min(int(limit or 20), 100))]
 
+    freshness = _outcome_freshness(db, workspace_id, account) if outcome_metrics else None
+
     return MetricsResult(
         rows=rows,
         metrics=valid_metrics,
@@ -472,4 +503,5 @@ def run_metrics_query(
         comparison=comparison_block,
         errors=errors,
         unsupported_metrics=unsupported,
+        freshness=freshness,
     )

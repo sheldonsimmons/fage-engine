@@ -267,6 +267,22 @@ TOOL_SCHEMAS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "get_data_coverage",
+        "description": (
+            "Check which source platforms (Salesforce, ServiceNow, HubSpot) are "
+            "connected for this workspace, which objects are tracked, and how "
+            "recently outcome data was synced. Call this BEFORE answering any "
+            "question that names a specific platform (e.g. 'across Salesforce, "
+            "HubSpot, and ServiceNow'), or before presenting outcome/business data "
+            "as complete -- never assume a platform is connected or that data is "
+            "current without checking. If a named platform is not connected, say so "
+            "plainly instead of answering as if it were."
+        ),
+        "strict": True,
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+    },
 ]
 
 FINAL_ANSWER_TOOL = {
@@ -706,11 +722,23 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
     }
 
 
+def run_get_data_coverage(db, workspace_id: Optional[str]) -> dict:
+    from core.data_coverage import get_data_coverage
+
+    result = get_data_coverage(db, workspace_id)
+    return {
+        "connected_platforms": result.connected_platforms,
+        "not_connected_platforms": result.not_connected_platforms,
+        "platforms": result.platforms,
+    }
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
     "get_budget_status": run_get_budget_status,
     "get_product_help": run_get_product_help,
+    "get_data_coverage": run_get_data_coverage,
     "get_agent_adoption": run_get_agent_adoption,
     "get_account_outcomes": run_get_account_outcomes,
 }

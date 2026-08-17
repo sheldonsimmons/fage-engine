@@ -2679,6 +2679,8 @@ def _ask_run_agent_tool(
         )
     if name == "get_account_outcomes":
         return executor(db, request.workspace_id, args.get("entity_name") or None)
+    if name == "get_data_coverage":
+        return executor(db, request.workspace_id)
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -2977,6 +2979,7 @@ def _ask_agent_final_payload(
         "get_budget_status": "budget",
         "get_agent_adoption": "agent_adoption",
         "get_account_outcomes": "account_outcomes",
+        "get_data_coverage": "coverage",
     }
     suggestion_category = ""
     suggestion_department = None
@@ -3101,6 +3104,13 @@ only knows spend and call counts. Pass entity_name to scope to one named account
 leave it empty for a company-wide won/lost comparison. If get_account_outcomes returns
 found: false, tell the user the account wasn't found rather than guessing or falling back to
 get_usage_report's spend data as if it answered an outcome question.
+Call get_data_coverage before answering any question that names a specific source platform
+(Salesforce, ServiceNow, HubSpot) -- for example "show AI activity across Salesforce, HubSpot,
+and ServiceNow" -- and check whether each named platform is actually connected before answering
+for it. If a named platform is not connected, say so plainly (e.g. "I can answer this for
+Salesforce; HubSpot and ServiceNow are not currently connected") instead of answering only for
+the connected ones without noting what's missing, and never imply a platform's data is included
+when get_data_coverage shows it is not connected.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call

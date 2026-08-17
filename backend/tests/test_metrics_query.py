@@ -221,6 +221,39 @@ def test_department_filter_matches_workspace_prefixed_department():
     assert result.rows[0]["ai_spend"] == 8.0
 
 
+def test_freshness_omitted_when_no_outcome_metrics_requested():
+    db = _session()
+    _tx(db, cost_usd=1.0)
+    db.commit()
+
+    result = run_metrics_query(db, "WS1", metrics=["ai_spend"])
+    assert result.freshness is None
+
+
+def test_freshness_reports_oldest_sync_and_stale_flag():
+    db = _session()
+    won = _work_item(db, external_id="opp-1")
+    _outcome(db, won, outcome_success=True, is_closed=True, outcome_value=1000.0)
+    db.commit()
+    outcome_row = db.query(WorkItemOutcome).filter(WorkItemOutcome.work_item_id == won.id).first()
+    outcome_row.last_synced_at = datetime.utcnow() - timedelta(days=2)
+    db.commit()
+
+    result = run_metrics_query(db, "WS1", metrics=["won_count"])
+    assert result.freshness is not None
+    assert result.freshness["stale"] is True
+
+
+def test_freshness_not_stale_for_recent_sync():
+    db = _session()
+    won = _work_item(db, external_id="opp-1")
+    _outcome(db, won, outcome_success=True, is_closed=True, outcome_value=1000.0)
+    db.commit()
+
+    result = run_metrics_query(db, "WS1", metrics=["won_count"])
+    assert result.freshness["stale"] is False
+
+
 def test_agent_filter_scopes_active_agents_metric():
     db = _session()
     agent = RegisteredAgent(name="Support Summarizer", department="WS1:Support", source_platform="Salesforce", permissions="read")
