@@ -283,6 +283,91 @@ TOOL_SCHEMAS = [
         "strict": True,
         "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     },
+    {
+        "type": "function",
+        "name": "query_metrics",
+        "description": (
+            "General-purpose analytics: request any combination of CostPilot's "
+            "defined metrics, grouped by any combination of its defined "
+            "dimensions, filtered, over a timeframe, optionally compared to a "
+            "prior period. This is the PREFERRED tool for ordinary reporting "
+            "questions -- ranking, breakdowns, filtered totals, comparisons -- "
+            "instead of get_usage_report or get_change_drivers, which exist "
+            "mainly for backward compatibility. Every metric has one fixed "
+            "definition (see the metric_definitions field in the result); you "
+            "never need to guess what a number means or compute one yourself. "
+            "Metrics come from two sources that get merged automatically: "
+            "activity metrics (ai_spend, ai_requests, tokens, active_agents, "
+            "work_items_touched, accounts_touched) and outcome metrics "
+            "(won_count, lost_count, open_count, won_value, pipeline_value, "
+            "support_cases_total, support_cases_resolved). You can request both "
+            "kinds together (e.g. ai_spend + won_value) but when you do, only "
+            "the 'account' dimension can be used to group them -- request them "
+            "separately if you need another dimension. Requesting a metric this "
+            "tool doesn't support yet returns it in unsupported_metrics with a "
+            "reason instead of an error -- read that back to the user honestly "
+            "rather than substituting a different number."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "metrics": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "One or more of: ai_spend, ai_requests, input_tokens, output_tokens, "
+                        "total_tokens, work_items_touched, accounts_touched, active_agents, "
+                        "won_count, lost_count, open_count, won_value, pipeline_value, "
+                        "support_cases_total, support_cases_resolved."
+                    ),
+                },
+                "dimensions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Zero or more of: account, department, agent, platform, model, outcome_status.",
+                },
+                "filters": {
+                    "type": "object",
+                    "properties": {
+                        "account": {"type": "string", "description": "Named account, e.g. 'Acme'. Empty string for none."},
+                        "department": {"type": "string", "description": "Named department. Empty string for none."},
+                        "agent": {"type": "string", "description": "Named agent. Empty string for none."},
+                        "platform": {"type": "string", "description": "Named source platform. Empty string for none."},
+                        "model": {"type": "string", "description": "Named model. Empty string for none."},
+                        "outcome_status": {
+                            "type": "string", "enum": ["", "won", "lost", "open"],
+                            "description": "Restrict outcome metrics to this status. Empty string for none.",
+                        },
+                    },
+                    "required": ["account", "department", "agent", "platform", "model", "outcome_status"],
+                    "additionalProperties": False,
+                },
+                "days": {"type": "integer", "description": "Rolling window in days ending now, used only if period_key is 'none'."},
+                "period_key": {
+                    "type": "string",
+                    "enum": [
+                        "none", "today", "yesterday", "this_week", "last_week",
+                        "this_month", "last_month", "this_quarter", "last_quarter",
+                        "this_year", "last_year",
+                    ],
+                    "description": "A named calendar period. Use 'none' to fall back to a rolling `days` window. Ignored for outcome-only metric requests, which are not time-windowed.",
+                },
+                "compare_to": {
+                    "type": "string",
+                    "enum": ["none", "previous_period", "same_period_previous_year", "previous_month", "previous_quarter"],
+                    "description": "Compare the primary timeframe to a prior one. 'none' for no comparison.",
+                },
+                "sort": {
+                    "type": "string",
+                    "description": "Which requested metric to sort rows by, descending. Empty string to sort by the first requested metric.",
+                },
+                "limit": {"type": "integer", "description": "Max rows to return, ranked by `sort`. Default 20."},
+            },
+            "required": ["metrics", "dimensions", "filters", "days", "period_key", "compare_to", "sort", "limit"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 FINAL_ANSWER_TOOL = {
@@ -733,6 +818,55 @@ def run_get_data_coverage(db, workspace_id: Optional[str]) -> dict:
     }
 
 
+def run_query_metrics(
+    db, workspace_id: Optional[str], metrics: list, dimensions: Optional[list] = None,
+    filters: Optional[dict] = None, days: int = 30, period_key: str = "none",
+    compare_to: Optional[str] = None, sort: Optional[str] = None, limit: int = 20,
+) -> dict:
+    from core.metrics_query import run_metrics_query
+
+    # Clean "" sentinels (the strict tool schema requires every filter key
+    # present, so the model sends empty string for "not filtering on this")
+    # into the None the reporting layer actually expects.
+    clean_filters = {k: v for k, v in (filters or {}).items() if v}
+
+    date_from, date_to = _period_bounds(days, "none" if period_key in (None, "none") else period_key)
+    if date_from is None:
+        period = resolve_primary_period(period_key="none", days=int(days or 30))
+        date_from, date_to = period.start, period.end
+    timeframe = {"start": date_from, "end": date_to}
+
+    result = run_metrics_query(
+        db, workspace_id,
+        metrics=metrics or [],
+        dimensions=dimensions or [],
+        filters=clean_filters,
+        timeframe=timeframe,
+        compare_to=None if compare_to in (None, "none") else compare_to,
+        sort=sort or None,
+        limit=int(limit or 20),
+    )
+    out = {
+        "rows": result.rows,
+        "metrics": result.metrics,
+        "dimensions": result.dimensions,
+        "metric_definitions": result.metric_definitions,
+        "scope": result.scope,
+        "filters_applied": result.filters_applied,
+        "timeframe": {
+            "start": timeframe["start"].isoformat() if timeframe["start"] else None,
+            "end": timeframe["end"].isoformat() if timeframe["end"] else None,
+        },
+        "errors": result.errors,
+        "unsupported_metrics": result.unsupported_metrics,
+    }
+    if result.comparison is not None:
+        out["comparison"] = result.comparison
+    if result.freshness is not None:
+        out["freshness"] = result.freshness
+    return out
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
@@ -741,4 +875,5 @@ EXECUTORS = {
     "get_data_coverage": run_get_data_coverage,
     "get_agent_adoption": run_get_agent_adoption,
     "get_account_outcomes": run_get_account_outcomes,
+    "query_metrics": run_query_metrics,
 }

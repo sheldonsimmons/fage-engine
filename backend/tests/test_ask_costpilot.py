@@ -1719,6 +1719,33 @@ def test_agent_validate_answer_ignores_non_budget_tool_calls():
     assert issues == []
 
 
+def test_agent_validate_answer_flags_causal_language_from_query_metrics_facts():
+    # The causal-language guardrail previously only ran on the separate
+    # OpenAI-narration path (_ask_grounded_narrative) -- an agent-loop
+    # answer built from query_metrics/get_account_outcomes facts had
+    # nothing checking it. This is the gap being closed.
+    tool_call_log = [(
+        "query_metrics", {},
+        {"rows": [{"dimensions": {"account": "Acme"}, "ai_spend": 196.0, "won_value": 600000.0}]},
+    )]
+    issues = _ask_agent_validate_answer(
+        tool_call_log, "AI generated $600,000 in revenue for this deal."
+    )
+    assert any("causal" in issue for issue in issues)
+
+
+def test_agent_validate_answer_allows_association_language_from_query_metrics_facts():
+    tool_call_log = [(
+        "query_metrics", {},
+        {"rows": [{"dimensions": {"account": "Acme"}, "ai_spend": 196.0, "won_value": 600000.0}]},
+    )]
+    issues = _ask_agent_validate_answer(
+        tool_call_log,
+        "This $600,000 Closed Won opportunity had $196 of tracked AI activity associated with it.",
+    )
+    assert issues == []
+
+
 def test_agent_final_payload_rejects_answer_missing_title_or_answer():
     tool_call_log = [("get_usage_report", {}, {"top_people": []})]
     payload = _ask_agent_final_payload(

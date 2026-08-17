@@ -2681,6 +2681,18 @@ def _ask_run_agent_tool(
         return executor(db, request.workspace_id, args.get("entity_name") or None)
     if name == "get_data_coverage":
         return executor(db, request.workspace_id)
+    if name == "query_metrics":
+        return executor(
+            db, request.workspace_id,
+            metrics=args.get("metrics") or [],
+            dimensions=args.get("dimensions") or [],
+            filters=args.get("filters") or {},
+            days=int(args.get("days") or 30),
+            period_key=args.get("period_key") or "none",
+            compare_to=args.get("compare_to") or None,
+            sort=args.get("sort") or None,
+            limit=int(args.get("limit") or 20),
+        )
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -2706,6 +2718,19 @@ def _ask_agent_validate_answer(tool_call_log: list, answer_text: str) -> list[st
     otherwise), not a general-purpose fact-checker.
     """
     issues: list[str] = []
+
+    # Causal-language guardrail: previously only wired into the
+    # deterministic OpenAI-narration path (_ask_grounded_narrative), never
+    # into this agent tool-loop path -- meaning an agent-loop answer built
+    # from query_metrics/get_account_outcomes facts could claim "AI
+    # generated $600,000" with nothing catching it. Same check, same
+    # pattern, now applied here too so the guardrail covers both answer
+    # paths instead of just one.
+    issues.extend(
+        f"answer uses causal language not supported by the data: {claim!r}"
+        for claim in _ask_narration_causal_claims(answer_text)
+    )
+
     budget_rows: list[dict] = []
     for tool_name, _args, result in tool_call_log:
         if tool_name == "get_budget_status":
@@ -2980,6 +3005,7 @@ def _ask_agent_final_payload(
         "get_agent_adoption": "agent_adoption",
         "get_account_outcomes": "account_outcomes",
         "get_data_coverage": "coverage",
+        "query_metrics": "ranking",
     }
     suggestion_category = ""
     suggestion_department = None
@@ -3111,6 +3137,16 @@ for it. If a named platform is not connected, say so plainly (e.g. "I can answer
 Salesforce; HubSpot and ServiceNow are not currently connected") instead of answering only for
 the connected ones without noting what's missing, and never imply a platform's data is included
 when get_data_coverage shows it is not connected.
+Prefer query_metrics for ordinary reporting questions -- spend/usage/outcome totals, breakdowns,
+rankings, filtered questions, and comparisons -- over get_usage_report or get_change_drivers,
+which remain only for backward compatibility. query_metrics can combine an activity metric
+(ai_spend, ai_requests, tokens, active_agents) with an outcome metric (won_count, won_value,
+pipeline_value, etc.) in one call when the question needs both, e.g. "AI spend on Acme's won
+deals" -- pass filters.account and request both metrics together rather than calling two tools
+and adding the results yourself. If query_metrics returns unsupported_metrics for something you
+asked for, tell the user plainly that it isn't computable yet and why (using the reason given),
+never substitute a different number or guess. If it returns errors (e.g. an ambiguous or
+not-found account name), surface that to the user instead of guessing which account was meant.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call
