@@ -501,54 +501,53 @@ def get_top_models(
     db: Session = Depends(get_db),
 ):
     """
-    Real per-model spend breakdown, SQL GROUP BY on model_name -- the exact
-    provider/registry model string set at write time (e.g.
-    "claude-3-5-sonnet"), not the coarser Scout/Analyst/Advisor/Strategist
-    tier. Rows where model_name was never populated (older data, or a call
-    path that only recorded tier) are grouped under their model_tier
-    instead of silently dropped, labeled so that's clear rather than
-    implied to be a real model name.
+    Real per-model spend breakdown, grouped via the shared metrics layer
+    (core.metrics_query -- Milestone 4 of the reporting-intelligence
+    upgrade) instead of a locally-written SUM/COUNT/GROUP BY, so "ai_spend"
+    means exactly the same thing here as everywhere else that calls
+    query_metrics. Model rows where model_name was never populated (older
+    data, or a call path that only recorded tier) are grouped under their
+    model_tier instead of silently dropped -- that tier-only labeling is
+    bespoke to this endpoint (the shared "model" dimension doesn't carry
+    it), so it's computed here as a thin second query, same pattern
+    already used by this file's own provider_breakdown-style derivations.
     """
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    from core.metrics_query import run_metrics_query
+
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
     IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+    cutoff = datetime.utcnow() - timedelta(days=days)
 
     def _filters(*items):
         return [x for x in items if x is not None]
 
-    # COALESCE to model_tier (with a "(tier only)" suffix applied in
-    # Python) rather than a SQL literal, so the label logic stays in one
-    # place and is easy to change without touching the query.
-    model_key = func.coalesce(TokenTransaction.model_name, TokenTransaction.model_tier)
-
-    rows = (
-        db.query(model_key, func.sum(TokenTransaction.cost_usd), func.count(TokenTransaction.id))
-        .filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= cutoff))
-        .group_by(model_key)
-        .all()
-    )
-
-    # Tier names that appear ONLY because model_name was never set for that
-    # row (fallback), so those rows can be labeled honestly as tier-only
-    # rather than implied to be a specific model.
     tier_only_names = {
         tier for (tier,) in db.query(TokenTransaction.model_tier)
         .filter(*_filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= cutoff, TokenTransaction.model_name.is_(None)))
         .distinct()
     }
 
-    total_spend = sum(float(spend or 0.0) for _, spend, _ in rows)
+    # total_spend_usd must reflect every model, not just the top `limit`
+    # (the old unlimited-GROUP-BY-then-slice behavior) -- request
+    # run_metrics_query's own row cap (100) rather than `limit` itself, so
+    # pct_of_total/total_spend_usd stay correct unless a single workspace
+    # has more than 100 distinct models, which no real workspace has hit
+    # so far.
+    result = run_metrics_query(
+        db, workspace_id, metrics=["ai_spend", "ai_requests"], dimensions=["model"],
+        timeframe={"start": cutoff, "end": datetime.utcnow()}, sort="ai_spend", limit=100,
+    )
+    total_spend = sum(r["ai_spend"] for r in result.rows)
     results = [
         {
-            "model": name or "Unknown",
-            "is_tier_only": name in tier_only_names,
-            "spend_usd": round(float(spend or 0.0), 6),
-            "calls": count,
-            "pct_of_total": round((float(spend or 0.0) / total_spend) * 100, 1) if total_spend else 0.0,
+            "model": r["dimensions"]["model"],
+            "is_tier_only": r["dimensions"]["model"] in tier_only_names,
+            "spend_usd": round(r["ai_spend"], 6),
+            "calls": r["ai_requests"],
+            "pct_of_total": round((r["ai_spend"] / total_spend) * 100, 1) if total_spend else 0.0,
         }
-        for name, spend, count in rows
+        for r in result.rows
     ]
-    results.sort(key=lambda r: r["spend_usd"], reverse=True)
 
     return {
         "workspace_id": workspace_id,
