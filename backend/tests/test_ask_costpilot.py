@@ -42,6 +42,35 @@ from api.routes_efficiency import (
 from core.analytics_metrics import metric_for_keywords
 
 
+def _named_department_db(*departments, workspace_id="WORKSPACE-1"):
+    """
+    A real in-memory SQLite session with real TokenTransaction rows, one
+    per department -- needed because _ask_named_department() (unlike the
+    report data, which _run_with_controlled_report mocks) runs a real
+    `db.query(TokenTransaction.department)...` lookup that a plain stub or
+    db=None can't satisfy (db=None makes it return None immediately,
+    which would make this regression test pass for the wrong reason).
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from database.db import Base
+    from database.models import TokenTransaction
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    for dept in departments:
+        db.add(TokenTransaction(
+            department=f"{workspace_id}:{dept}", model_tier="Analyst", input_tokens=1, output_tokens=1,
+            cost_usd=0.01, timestamp=datetime.utcnow(), workspace_id=workspace_id,
+            is_simulation=False, usage_source="estimated", routing_reason="ROUTINE",
+        ))
+    db.commit()
+    return db
+
+
 def _controlled_report():
     return {
         "summary": {
@@ -989,6 +1018,51 @@ def test_independent_question_does_not_inherit_stale_context():
     assert parsed.get("source_platform") is None
     assert parsed.get("subject_filter_name") is None
     assert parsed.get("subject_filter_value") is None
+
+
+def test_named_department_comparison_does_not_filter_out_other_departments():
+    """
+    Regression test for a live bug: "How does Sales compare to other
+    departments?" was scoping the ENTIRE report to charged_unit=Sales,
+    leaving nothing to compare Sales against -- the answer degenerated
+    into just Sales's own number instead of a cross-department ranking.
+    """
+    report = _controlled_report()
+    report["organizational_unit_breakdown"] = [
+        {"id": "WORKSPACE-1:Sales", "label": "Sales", "request_count": 12, "spend_usd": 8.0},
+        {"id": "WORKSPACE-1:Operations", "label": "Operations", "request_count": 8, "spend_usd": 3.0},
+    ]
+    db = _named_department_db("Sales", "Operations")
+
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(
+            question="How does Sales compare to other departments?",
+            workspace_id="WORKSPACE-1",
+        ),
+        report=report,
+        db=db,
+    )
+
+    assert calls[0].get("charged_unit") in (None, "")
+
+
+def test_named_department_single_lookup_still_filters_correctly():
+    """The fix above must not break the case it was explicitly designed
+    for: "what did Sales spend" (or "what models is Sales using") really
+    is scoped to Sales alone, not a comparison."""
+    report = _controlled_report()
+    report["organizational_unit_breakdown"] = [
+        {"id": "WORKSPACE-1:Sales", "label": "Sales", "request_count": 12, "spend_usd": 8.0},
+    ]
+    db = _named_department_db("Sales", "Operations")
+
+    response, calls = _run_with_controlled_report(
+        AskCostPilotRequest(question="What did Sales spend?", workspace_id="WORKSPACE-1"),
+        report=report,
+        db=db,
+    )
+
+    assert calls[0].get("charged_unit") == "Sales"
 
 
 def test_independent_question_hides_prior_transcript_from_planner():

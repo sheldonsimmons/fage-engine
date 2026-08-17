@@ -3321,6 +3321,8 @@ def _ask_workspace_name(db: Session, workspace_id: Optional[str]) -> str:
     """
     from database.models import Workspace
 
+    if db is None:
+        return workspace_id or "Default"
     lookup_id = workspace_id or "default"
     row = db.query(Workspace).filter(Workspace.workspace_id == lookup_id).first()
     if row:
@@ -3386,7 +3388,22 @@ def _ask_costpilot_answer(
         # _ask_named_department for why entity alone can't carry this.
         named_department = _ask_named_department(question, request.workspace_id, db)
         if named_department:
-            reporting_filters["charged_unit"] = named_department
+            # "How does Sales compare to other departments?" names Sales
+            # but asks for the full cross-department ranking with Sales as
+            # the subject of interest -- filtering to charged_unit=Sales
+            # here would leave no "other departments" left to compare
+            # against, silently turning a comparison into a single-number
+            # lookup (confirmed live: this exact phrasing returned "$11.99
+            # for Sales" with a failed period comparison instead of where
+            # Sales ranks against the rest). Only skip the filter for that
+            # specific phrasing -- "what did Sales spend" or "what models
+            # is Sales using" still correctly filter to Sales alone.
+            asks_cross_department_comparison = bool(re.search(
+                r"\b(compare|compared|vs\.?|versus)\b.{0,30}\b(other|another)\b.{0,20}\b(department|team)s?\b",
+                question, re.IGNORECASE,
+            ))
+            if not asks_cross_department_comparison:
+                reporting_filters["charged_unit"] = named_department
             if parsed.get("entity") == "overview":
                 # No other ranking dimension was named (e.g. "what did
                 # Sales spend" rather than "what models is Sales using") --
