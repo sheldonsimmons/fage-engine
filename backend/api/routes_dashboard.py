@@ -400,6 +400,8 @@ def get_dashboard_changes(
     outcome data that doesn't exist yet. This only covers what CostPilot's
     own tables can already answer: spend, call volume, tier mix, new agents.
     """
+    from core.metrics_query import run_metrics_query
+
     now = datetime.utcnow()
     current_start = now - timedelta(days=days)
     prior_start = current_start - timedelta(days=days)
@@ -412,18 +414,38 @@ def get_dashboard_changes(
     def _filters(*items):
         return [x for x in items if x is not None]
 
-    def _period_totals(period_start, period_end):
+    # spend/calls current-vs-prior comes from the shared metrics layer's
+    # own comparison support (Milestone 4) instead of a locally re-run
+    # pair of SUM/COUNT queries -- same ai_spend/ai_requests definitions
+    # every other caller uses. economy_pct (a derived ratio, not a
+    # catalog metric) still needs its own query below.
+    spend_calls = run_metrics_query(
+        db, workspace_id, metrics=["ai_spend", "ai_requests"],
+        timeframe={"start": current_start, "end": now}, compare_to="previous_period",
+    )
+    cmp_row = spend_calls.comparison["rows"][0] if spend_calls.comparison and spend_calls.comparison["rows"] else {
+        "ai_spend": {"current": 0.0, "previous": 0.0, "pct_difference": None},
+        "ai_requests": {"current": 0, "previous": 0, "pct_difference": None},
+    }
+
+    def _period_economy_pct(period_start, period_end):
         base = _filters(tx_scope, IS_AI_CALL, TokenTransaction.timestamp >= period_start, TokenTransaction.timestamp < period_end)
-        spend = db.query(func.sum(TokenTransaction.cost_usd)).filter(*base).scalar() or 0.0
         calls = db.query(func.count(TokenTransaction.id)).filter(*base).scalar() or 0
         economy_calls = db.query(func.count(TokenTransaction.id)).filter(
             *base, TokenTransaction.model_tier.in_(ECONOMY_TIERS)
         ).scalar() or 0
-        economy_pct = round((economy_calls / calls) * 100, 1) if calls else 0.0
-        return {"spend": round(float(spend), 6), "calls": calls, "economy_pct": economy_pct}
+        return round((economy_calls / calls) * 100, 1) if calls else 0.0
 
-    current = _period_totals(current_start, now)
-    previous = _period_totals(prior_start, current_start)
+    current = {
+        "spend": round(cmp_row["ai_spend"]["current"], 6),
+        "calls": int(cmp_row["ai_requests"]["current"]),
+        "economy_pct": _period_economy_pct(current_start, now),
+    }
+    previous = {
+        "spend": round(cmp_row["ai_spend"]["previous"], 6),
+        "calls": int(cmp_row["ai_requests"]["previous"]),
+        "economy_pct": _period_economy_pct(prior_start, current_start),
+    }
 
     new_agents = db.query(func.count(RegisteredAgent.id)).filter(
         *_filters(agent_scope, RegisteredAgent.created_at >= current_start, RegisteredAgent.created_at < now)
