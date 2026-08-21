@@ -1080,22 +1080,28 @@
    Tabler supplies the component foundation; this scoped layer preserves
    CostPilot's identity and adds color-vision-safe states. */
 html.cp-executive-theme {
-  --cp-color-canvas: #f2f5f9;
-  --cp-color-surface-1: #ffffff;
-  --cp-color-surface-2: #f7f9fc;
-  --cp-color-surface-raised: #ffffff;
-  --cp-color-border: #d6dee8;
-  --cp-color-border-strong: #aebac8;
-  --cp-color-text: #182433;
-  --cp-color-text-secondary: #526273;
-  --cp-color-text-muted: #687789;
-  --cp-color-primary: #1d5fd1;
-  --cp-color-positive: #087f5b;
-  --cp-color-warning: #8a5a00;
-  --cp-color-danger: #b42318;
-  --cp-color-info: #6d3cc7;
-  --cp-shadow-focus: 0 0 0 3px rgba(29, 95, 209, 0.2);
-  --cp-shadow-raised: 0 8px 24px rgba(24, 36, 51, 0.08);
+  /* Matched to the rest of the site's dark palette (styles.css/tokens.css,
+     both remapped to the Cockpit's shadcn ".dark" theme) instead of this
+     page's own previously-independent light palette. Accent colors reuse
+     the exact same values styles.css already uses (--accent/--accent-green/
+     etc.) rather than inventing new ones, since those were already tuned
+     for contrast against this same near-black background elsewhere. */
+  --cp-color-canvas: #0a0a0a;
+  --cp-color-surface-1: #171717;
+  --cp-color-surface-2: #171717;
+  --cp-color-surface-raised: #262626;
+  --cp-color-border: rgba(255, 255, 255, 0.1);
+  --cp-color-border-strong: rgba(255, 255, 255, 0.15);
+  --cp-color-text: #fafafa;
+  --cp-color-text-secondary: #d4d4d4;
+  --cp-color-text-muted: #a3a3a3;
+  --cp-color-primary: #58a6ff;
+  --cp-color-positive: #3fb950;
+  --cp-color-warning: #d29922;
+  --cp-color-danger: #f85149;
+  --cp-color-info: #bc8cff;
+  --cp-shadow-focus: 0 0 0 3px rgba(88, 166, 255, 0.25);
+  --cp-shadow-raised: 0 10px 28px rgba(0, 0, 0, 0.5);
   --tblr-body-bg: var(--cp-color-canvas);
   --tblr-bg-surface: var(--cp-color-surface-1);
   --tblr-bg-surface-secondary: var(--cp-color-surface-2);
@@ -1103,7 +1109,7 @@ html.cp-executive-theme {
   --tblr-secondary-color: var(--cp-color-text-secondary);
   --tblr-border-color: var(--cp-color-border);
   --tblr-primary: var(--cp-color-primary);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 .cp-executive-page {
