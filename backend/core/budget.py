@@ -349,22 +349,58 @@ def reconcile_throttle_state(b: DepartmentBudget) -> bool:
     return False
 
 
-def effective_budget_context(db: Session, department: str) -> dict | None:
+def effective_budget_context(db: Session, department: str, workspace_id: str | None = None) -> dict | None:
     """
     Summarize the effective budget state for a displayed department group.
 
     This keeps audit snapshots and routing controls aligned with the dashboard
     when the same department has multiple underlying rows.
+
+    workspace_id is optional and, when omitted, preserves the exact prior
+    behavior (raw DepartmentBudget.current_spend_usd/.throttled columns,
+    always). When given, this now applies the SAME workspace-type branch
+    get_all_budgets() already uses for display: for any workspace not typed
+    "production" (demo, simulation, or the "legacy" default workspace), the
+    raw current_spend_usd column is known-stale (never touched by
+    backfilled/simulated traffic -- see recomputed_department_spend's
+    docstring), so both spend AND throttled are derived fresh from real
+    TokenTransaction data instead of trusting that column. Production
+    workspaces are completely unaffected -- same raw-column read, same
+    cost, same result as before this parameter existed.
+
+    This closes a real bug found live: a department at 13% of its real cap
+    was throttling every request with a "BUDGET CAP ENFORCED" rationale,
+    because the raw throttled column had gone stale for a non-production
+    workspace and nothing ever recomputed it at decision time -- only the
+    dashboard's display value was ever corrected.
     """
     rows = related_budget_rows(db, department)
     if not rows:
         return None
 
-    spend = round(sum((row.current_spend_usd or 0.0) for row in rows), 4)
-    cap = max((row.monthly_cap_usd or 0.0) for row in rows) or 0.0
-    used_pct = round((spend / cap) * 100, 1) if cap else 0.0
-    override_granted = any(bool(row.override_granted) for row in rows)
-    throttled = any(bool(row.throttled) for row in rows) and not override_granted
+    use_recompute = bool(workspace_id) and workspace_type_for(db, workspace_id) != "production"
+    if use_recompute:
+        cap = max((row.monthly_cap_usd or 0.0) for row in rows) or 0.0
+        spend_by_department = recomputed_department_spend(db, workspace_id)
+        # Strip using the ACTUAL workspace_id we were given, not
+        # clean_budget_department_name's generic length-based heuristic
+        # (which requires a 12+ char prefix and would leave a short
+        # workspace_id's prefix on, silently missing the lookup key
+        # recomputed_department_spend produces via an exact-match strip).
+        raw_label = str(department or "").strip()
+        if raw_label.startswith(f"{workspace_id}:"):
+            raw_label = raw_label[len(workspace_id) + 1:]
+        key = raw_label.casefold()
+        spend = round(spend_by_department.get(key, 0.0), 4)
+        used_pct = round((spend / cap) * 100, 1) if cap else 0.0
+        override_granted = any(bool(row.override_granted) for row in rows)
+        throttled = (spend >= cap and cap > 0) and not override_granted
+    else:
+        spend = round(sum((row.current_spend_usd or 0.0) for row in rows), 4)
+        cap = max((row.monthly_cap_usd or 0.0) for row in rows) or 0.0
+        used_pct = round((spend / cap) * 100, 1) if cap else 0.0
+        override_granted = any(bool(row.override_granted) for row in rows)
+        throttled = any(bool(row.throttled) for row in rows) and not override_granted
     throttle_tiers = [getattr(row, "throttle_tier", 1) or 1 for row in rows]
     retention_days = max((getattr(row, "raw_retention_days", 30) or 30) for row in rows)
 

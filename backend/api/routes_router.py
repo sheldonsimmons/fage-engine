@@ -883,7 +883,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
     budget       = db.query(DepartmentBudget).filter_by(department=department).first()
     if budget:
         reconcile_throttle_state(budget)
-    budget_context = effective_budget_context(db, department)
+    budget_context = effective_budget_context(db, department, workspace_id=req.actor_workspace_id or "default")
     is_throttled   = bool(budget_context.get("throttled")) if budget_context else (budget.throttled if budget else False)
     throttle_tier  = (budget_context.get("throttle_tier") if budget_context else (getattr(budget, "throttle_tier", 1) if budget else 1)) or 1
 
@@ -1038,7 +1038,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
         # Determine if raw payload should be stored for this department
         _pruning_fired   = result.get("tokens_saved_by_pruning", 0) > 0
-        _effective_budget_context = effective_budget_context(db, department) or budget_context or {}
+        _effective_budget_context = effective_budget_context(db, department, workspace_id=req.actor_workspace_id or "default") or budget_context or {}
         _raw_logging_on  = _effective_budget_context.get("raw_payload_logging_enabled", getattr(budget, "raw_payload_logging_enabled", False) if budget else False) or False
         _retention_days  = _effective_budget_context.get("raw_retention_days", getattr(budget, "raw_retention_days", 30) if budget else 30) or 30
         _raw_to_store    = _raw_text_for_logging[:5000] if (_pruning_fired and _raw_logging_on) else None
@@ -1098,7 +1098,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             db.commit()
 
     # ── Budget stats for the response ──────────────────────────────────────────
-    response_budget_context = effective_budget_context(db, department)
+    response_budget_context = effective_budget_context(db, department, workspace_id=req.actor_workspace_id or "default")
     if work_item and work_item.monthly_ai_budget is not None and work_item.monthly_ai_budget > 0:
         project_spend_after = project_spend_month + (0.0 if req.is_test else float(result["cost_usd"]))
         budget_used_pct = round(
