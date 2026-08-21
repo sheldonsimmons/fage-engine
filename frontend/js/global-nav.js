@@ -139,6 +139,15 @@
     header.querySelectorAll(".header-status").forEach((status) => status.classList.add("cp-global-nav-source"));
     const legacyStatusLabel = header.querySelector("#statusLabel");
     if (legacyStatusLabel?.parentElement) legacyStatusLabel.parentElement.classList.add("cp-global-nav-source");
+    // The "AI Cost Control · CRM · Support · Engineering · Finance" tagline
+    // sits next to the logo in .header-brand, a sibling of the nav-links
+    // wrapper above -- never hidden by that selector, so it stayed visible
+    // and collided with this injected nav bar (confirmed live: "Overview"
+    // rendering on top of "Engineering · Finance" on admin.html and every
+    // other page sharing this header markup). The real global nav's
+    // workspace switcher already conveys equivalent context, so hiding
+    // this redundant tagline is safe, not just a visual patch.
+    header.querySelectorAll(".header-sub").forEach((sub) => sub.classList.add("cp-global-nav-source"));
 
     const nav = document.createElement("nav");
     nav.className = "cp-global-nav";
