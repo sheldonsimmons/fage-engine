@@ -17,7 +17,7 @@
     </div>
     <div class="mg-links">
       <a href="/live-landing.html" class="mg-btn-primary">📊 View Performance Overview</a>
-      <a href="/savings.html" class="mg-btn-secondary">💰 Calculate My Savings</a>
+      <a href="/operate.html" class="mg-btn-secondary">◈ Open Dashboard</a>
     </div>
     <div class="mg-rotate">↻ Or rotate your tablet to landscape</div>
   `;

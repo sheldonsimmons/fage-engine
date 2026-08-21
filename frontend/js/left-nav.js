@@ -19,7 +19,7 @@
     { label: "AI Activity", href: "/operate.html", icon: "pulse" },
     { label: "Ask CostPilot", href: "#", icon: "ask", id: "cpLeftNavAsk" },
     { label: "Business Profiles", href: "/business-profile.html", icon: "building" },
-    { label: "Optimization", href: "/savings.html", icon: "target" },
+    { label: "Optimization", href: "/operate.html", icon: "target" },
     { label: "Reports", href: "/reports.html", icon: "doc" },
     { label: "Integrations", href: "/onboarding.html", icon: "plug" },
     { label: "Connectors", href: "/connector-manager.html", icon: "grid" },

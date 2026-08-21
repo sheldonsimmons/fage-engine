@@ -14,18 +14,21 @@ import {
 // Labels matched to what left-nav.js (the existing vanilla-JS site's real
 // navigation) already calls these same pages, not invented mockup-style
 // names -- "AI Activity" and "Optimization" and "Connectors" are the
-// product's real, established names for operate.html/savings.html/
-// connector-manager.html. "Agents" (connect.html) has no real-nav
-// precedent but is a genuinely distinct destination. "Budgets" was
-// dropped -- it pointed at the exact same page (admin.html) as Settings
-// under a different name, which is the same kind of misleading
-// duplication as everything else corrected this session.
+// product's real, established names for operate.html/connector-manager.html.
+// "Agents" (connect.html) has no real-nav precedent but is a genuinely
+// distinct destination. "Budgets" was dropped -- it pointed at the exact
+// same page (admin.html) as Settings under a different name, which is the
+// same kind of misleading duplication as everything else corrected this
+// session. "Optimization" pointed at savings.html (the pre-sale "3-minute
+// savings calculator" marketing page) until that page was retired --
+// repointed to operate.html, which is where left-nav.js's own
+// "Optimization" item now goes too.
 const primaryNav = [
   { label: "Executive Overview", icon: LayoutDashboard, active: true },
   { label: "AI Activity", icon: DollarSign, href: "/operate.html" },
   { label: "Agents", icon: Bot, href: "/connect.html" },
   { label: "Business Impact", icon: Target, href: "/work-items.html" },
-  { label: "Optimization", icon: Zap, href: "/savings.html" },
+  { label: "Optimization", icon: Zap, href: "/operate.html" },
   { label: "Reports", icon: FileBarChart, href: "/reports.html" },
   // No href -- the Ask CostPilot panel is already on this same page,
   // further down, so this scrolls to it instead of navigating away.

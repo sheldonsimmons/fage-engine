@@ -507,4 +507,15 @@ if os.path.isdir(cockpit_dist_path):
 
     app.mount("/cockpit", StaticFiles(directory=cockpit_dist_path, html=True), name="cockpit")
 
+
+@app.get("/savings.html")
+def _redirect_retired_savings_page():
+    # Retired: the pre-sale "3-minute savings calculator" marketing page.
+    # Redirected (not deleted outright) so any external bookmark or link
+    # still lands somewhere real instead of 404ing. Registered before the
+    # catch-all "/" mount below so it wins even though the physical file
+    # is gone from frontend/.
+    return RedirectResponse(url="/operate.html")
+
+
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
