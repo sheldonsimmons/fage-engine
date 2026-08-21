@@ -29,7 +29,17 @@ def _parse_salesforce_datetime(value: Optional[str]) -> Optional[datetime]:
     try:
         if len(value) <= 10:
             return datetime.strptime(value, "%Y-%m-%d")
-        return datetime.fromisoformat(value.replace("+0000", "+00:00"))
+        # Salesforce datetime fields (e.g. Case.ClosedDate, unlike the
+        # date-only Opportunity.CloseDate) come back as full ISO-8601 with
+        # a UTC offset -- fromisoformat() on that string produces a
+        # timezone-AWARE datetime, while the DB column and every other
+        # branch here are naive. Comparing naive != aware in Python never
+        # raises, it just always evaluates True, which made every sync
+        # think this field had changed even when it hadn't -- confirmed in
+        # production: the same Case record got a new (identical-content)
+        # WorkItemOutcomeEvent row on every ~10-minute sync for 11+ days.
+        # Stripping tzinfo keeps every return path naive and comparable.
+        return datetime.fromisoformat(value.replace("+0000", "+00:00")).replace(tzinfo=None)
     except ValueError:
         return None
 

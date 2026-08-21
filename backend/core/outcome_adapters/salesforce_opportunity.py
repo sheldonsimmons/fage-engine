@@ -35,7 +35,16 @@ def _parse_salesforce_datetime(value: Optional[str]) -> Optional[datetime]:
         # as full ISO-8601 with a trailing "+0000" offset (not "Z").
         if len(value) <= 10:
             return datetime.strptime(value, "%Y-%m-%d")
-        return datetime.fromisoformat(value.replace("+0000", "+00:00"))
+        # fromisoformat() on a string with a UTC offset produces a
+        # timezone-AWARE datetime, while the DB column and the date-only
+        # branch above are naive -- naive != aware never raises in Python,
+        # it just always evaluates True, which made every sync think
+        # LastModifiedDate/CloseDate had changed even when it hadn't (see
+        # salesforce_case.py, where this was confirmed live in production:
+        # the same Case got a new identical-content WorkItemOutcomeEvent
+        # every ~10-minute sync for 11+ days). Stripping tzinfo keeps every
+        # return path naive and comparable.
+        return datetime.fromisoformat(value.replace("+0000", "+00:00")).replace(tzinfo=None)
     except ValueError:
         return None
 

@@ -131,3 +131,61 @@ def test_sync_outcomes_handles_both_opportunity_and_case_work_items(monkeypatch)
 
     history = db.query(WorkItemOutcomeEvent).filter_by(work_item_id=case_item.id).all()
     assert len(history) == 1
+
+
+def test_repeated_sync_with_unchanged_full_timestamp_closed_date_does_not_duplicate_events(monkeypatch):
+    """
+    Regression test for a real production bug: Case.ClosedDate (unlike the
+    date-only Opportunity.CloseDate) comes back from Salesforce as a full
+    ISO-8601 timestamp with a UTC offset. _parse_salesforce_datetime()
+    used to return a timezone-AWARE datetime for that shape, while the DB
+    column and every other parse path are naive -- naive != aware never
+    raises in Python, it just always evaluates True, so every sync thought
+    outcome_date had changed even when it hadn't. Confirmed live: one
+    production Case record had 1594 near-identical WorkItemOutcomeEvent
+    rows, one per ~10-minute scheduled sync over 11+ days.
+    """
+    db = _session()
+    connection = IntegrationConnection(
+        workspace_id="WS-REPEAT",
+        platform="salesforce",
+        display_name="Salesforce (repeat sync test)",
+        status="connected",
+        instance_url="https://acme.my.salesforce.com",
+        access_token_encrypted=_encrypt("fake-token"),
+    )
+    db.add(connection)
+    case_item = WorkItem(
+        external_id="PROJECT-REPEAT-CASE", name="Test Support Case",
+        context_type="case", context_template="salesforce_case",
+        source_platform="Salesforce", source_record_type="Case",
+        source_record_id="500REPEATCASE0001", workspace_id="WS-REPEAT",
+    )
+    db.add(case_item)
+    db.commit()
+    db.refresh(connection)
+
+    # Real Salesforce shape: ClosedDate as a full timestamp with offset,
+    # identical on every fetch (nothing actually changed in the org).
+    async def fake_salesforce_try_query(_item, _query):
+        return ([{
+            "Id": "500REPEATCASE0001", "Status": "Closed", "IsClosed": True,
+            "ClosedDate": "2024-04-20T18:59:51.000+0000",
+            "OwnerId": "005Y", "AccountId": "001X",
+            "LastModifiedDate": "2024-04-20T18:59:51.000+0000",
+        }], None)
+
+    monkeypatch.setattr(
+        "api.routes_connections._salesforce_try_query",
+        lambda item, query, db=None: fake_salesforce_try_query(item, query),
+    )
+
+    first = asyncio.run(sync_outcomes(connection.id, db=db))
+    assert first["updated"] == 1
+
+    second = asyncio.run(sync_outcomes(connection.id, db=db))
+    assert second["updated"] == 0
+    assert second["unchanged"] == 1
+
+    history = db.query(WorkItemOutcomeEvent).filter_by(work_item_id=case_item.id).all()
+    assert len(history) == 1
