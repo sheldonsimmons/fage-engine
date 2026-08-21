@@ -1,4 +1,5 @@
 import {
+  Home,
   LayoutDashboard,
   DollarSign,
   Bot,
@@ -12,7 +13,7 @@ import {
 
 // Labels matched to what left-nav.js (the existing vanilla-JS site's real
 // navigation) already calls these same pages, not invented mockup-style
-// names -- "AI Activity" and "Connectors" are the product's real,
+// names -- "Home" (index.html), "AI Activity", and "Connectors" are the product's real,
 // established names for operate.html/connector-manager.html. "Agents"
 // (connect.html) has no real-nav precedent but is a genuinely distinct
 // destination. "Budgets" was dropped -- it pointed at the exact same page
@@ -23,6 +24,7 @@ import {
 // was retired, and operate.html is already reachable via "AI Activity",
 // so repointing it there would have been a duplicate entry.
 const primaryNav = [
+  { label: "Home", icon: Home, href: "/index.html" },
   { label: "Executive Overview", icon: LayoutDashboard, active: true },
   { label: "AI Activity", icon: DollarSign, href: "/operate.html" },
   { label: "Agents", icon: Bot, href: "/connect.html" },
