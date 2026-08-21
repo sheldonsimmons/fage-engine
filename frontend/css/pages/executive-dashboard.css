@@ -1109,13 +1109,61 @@ html.cp-executive-theme {
   --tblr-secondary-color: var(--cp-color-text-secondary);
   --tblr-border-color: var(--cp-color-border);
   --tblr-primary: var(--cp-color-primary);
+
+  /* The block above only covered the ~7 Tabler variables this file
+     originally touched. Tabler's OWN [data-bs-theme=dark] rule (loaded
+     first, in vendor/tabler/tabler.min.css) sets ~40 --tblr-* variables
+     to its default blue-slate palette (--tblr-body-bg:#111827 etc.) --
+     since this selector (html.cp-executive-theme) has higher specificity
+     than Tabler's bare attribute selector, these overrides win regardless
+     of load order, but ONLY for variables actually listed here. Every one
+     Tabler sets that isn't overridden below still renders Tabler's blue
+     default, which is exactly what caused the reported "light grey and
+     dark blue" mixed look -- most of the page's borders, subtle
+     backgrounds, and link/emphasis colors were still Tabler's own. */
+  --tblr-emphasis-color: var(--cp-color-text);
+  --tblr-tertiary-color: var(--cp-color-text-muted);
+  --tblr-tertiary-bg: var(--cp-color-surface-raised);
+  --tblr-primary-text-emphasis: var(--cp-color-primary);
+  --tblr-secondary-text-emphasis: var(--cp-color-text-secondary);
+  --tblr-success-text-emphasis: var(--cp-color-positive);
+  --tblr-info-text-emphasis: var(--cp-color-info);
+  --tblr-warning-text-emphasis: var(--cp-color-warning);
+  --tblr-danger-text-emphasis: var(--cp-color-danger);
+  --tblr-light-text-emphasis: var(--cp-color-text);
+  --tblr-dark-text-emphasis: var(--cp-color-text-secondary);
+  --tblr-primary-bg-subtle: rgba(88, 166, 255, 0.12);
+  --tblr-secondary-bg-subtle: var(--cp-color-surface-2);
+  --tblr-success-bg-subtle: rgba(63, 185, 80, 0.12);
+  --tblr-info-bg-subtle: rgba(188, 140, 255, 0.12);
+  --tblr-warning-bg-subtle: rgba(210, 153, 34, 0.12);
+  --tblr-danger-bg-subtle: rgba(248, 81, 73, 0.12);
+  --tblr-light-bg-subtle: var(--cp-color-surface-1);
+  --tblr-dark-bg-subtle: var(--cp-color-canvas);
+  --tblr-primary-border-subtle: rgba(88, 166, 255, 0.35);
+  --tblr-secondary-border-subtle: var(--cp-color-border-strong);
+  --tblr-success-border-subtle: rgba(63, 185, 80, 0.35);
+  --tblr-info-border-subtle: rgba(188, 140, 255, 0.35);
+  --tblr-warning-border-subtle: rgba(210, 153, 34, 0.35);
+  --tblr-danger-border-subtle: rgba(248, 81, 73, 0.35);
+  --tblr-light-border-subtle: var(--cp-color-border);
+  --tblr-dark-border-subtle: var(--cp-color-border);
+  --tblr-border-color-translucent: rgba(255, 255, 255, 0.1);
+  --tblr-link-color: var(--cp-color-primary);
+  --tblr-link-hover-color: var(--cp-color-primary);
+  --tblr-highlight-color: var(--cp-color-text);
+  --tblr-highlight-bg: rgba(210, 153, 34, 0.2);
+  --tblr-form-valid-color: var(--cp-color-positive);
+  --tblr-form-valid-border-color: var(--cp-color-positive);
+  --tblr-form-invalid-color: var(--cp-color-danger);
+  --tblr-form-invalid-border-color: var(--cp-color-danger);
   color-scheme: dark;
 }
 
 .cp-executive-page {
   color: var(--cp-color-text);
   background:
-    linear-gradient(180deg, rgba(29, 95, 209, 0.035), transparent 260px),
+    linear-gradient(180deg, rgba(88, 166, 255, 0.035), transparent 260px),
     var(--cp-color-canvas);
 }
 
