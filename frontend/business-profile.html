@@ -638,7 +638,7 @@
         return;
       }
       const palette = ["--accent", "--accent-purple", "--accent-green", "--accent-yellow", "--accent-red"];
-      const colors = palette.map((v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#8b949e");
+      const colors = palette.map((v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#a3a3a3");
       const total = rows.reduce((sum, r) => sum + r.spend_usd, 0) || 1;
 
       if (bpFunctionChart) bpFunctionChart.destroy();

@@ -338,7 +338,7 @@
       color: rgba(46,160,67,0.9); font-weight: 700; margin-bottom: 6px;
     }
     .hero-number {
-      font-size: 92px; font-weight: 900; color: #3fb950;
+      font-size: 92px; font-weight: 900; color: var(--accent-green);
       letter-spacing: -2px; line-height: 1; font-family: var(--font-mono);
       margin-bottom: 10px; text-shadow: 0 0 18px rgba(63,185,80,0.18);
     }
@@ -460,7 +460,7 @@
       border: 1px solid rgba(139,148,158,0.25); background: var(--border);
     }
     .impact-bar-actual {
-      height: 100%; background: #8b949e; min-width: 2px; transition: width 0.7s ease;
+      height: 100%; background: var(--text-muted); min-width: 2px; transition: width 0.7s ease;
     }
     .impact-bar-saved {
       height: 100%; background: var(--accent-green); min-width: 0; transition: width 0.7s ease;
@@ -902,7 +902,7 @@
       overflow: hidden;
     }
     .prune-fill {
-      height: 100%; border-radius: 999px; background: #8b949e;
+      height: 100%; border-radius: 999px; background: var(--text-muted);
       transition: width 0.7s ease;
     }
     .prune-fill.clean { background: var(--accent-green); }
@@ -964,7 +964,7 @@
       padding: 10px 12px;
       border: 1px solid rgba(88,166,255,0.35);
       border-radius: 8px;
-      background: #0d1117;
+      background: var(--bg-base);
       color: var(--text-primary);
       box-shadow: 0 12px 32px rgba(0,0,0,0.45);
       font-size: 11px;
@@ -986,7 +986,7 @@
       width: 10px;
       height: 10px;
       transform: translateX(-50%) rotate(45deg);
-      background: #0d1117;
+      background: var(--bg-base);
       border-right: 1px solid rgba(88,166,255,0.35);
       border-bottom: 1px solid rgba(88,166,255,0.35);
       opacity: 0;
@@ -1014,7 +1014,7 @@
       padding: 11px 13px;
       border: 1px solid rgba(88,166,255,0.45);
       border-radius: 8px;
-      background: #0d1117;
+      background: var(--bg-base);
       color: var(--text-primary);
       box-shadow: 0 18px 45px rgba(0,0,0,0.58);
       font-size: 12px;
@@ -1032,7 +1032,7 @@
       width: 10px;
       height: 10px;
       transform: translateX(-50%) rotate(45deg);
-      background: #0d1117;
+      background: var(--bg-base);
       border-right: 1px solid rgba(88,166,255,0.45);
       border-bottom: 1px solid rgba(88,166,255,0.45);
     }
@@ -1400,7 +1400,7 @@
     <span id="trialBannerMsg" style="color:var(--text-muted)">Loading trial status…</span>
   </div>
   <a href="/upgrade.html" id="trialUpgradeLink" style="font-size:11px;font-weight:700;
-    color:#0d1117;background:var(--accent-green);border-radius:5px;padding:4px 12px;
+    color:var(--bg-base);background:var(--accent-green);border-radius:5px;padding:4px 12px;
     text-decoration:none;white-space:nowrap">Upgrade Plan →</a>
 </div>
 
@@ -1857,7 +1857,7 @@ function renderSpendChart(timeseries) {
   const y = v => padT + plotH - (plotH * v) / max;
 
   const accent = styleVar("--accent") || "#58a6ff";
-  const grid = styleVar("--border") || "#30363d";
+  const grid = styleVar("--border") || "rgba(255,255,255,0.1)";
 
   ctx.clearRect(0, 0, w, h);
   ctx.strokeStyle = grid; ctx.lineWidth = 1;
@@ -1905,7 +1905,7 @@ function renderTierDonut(dashboard) {
     { name: "Analyst",    pct: Number(dashboard.analyst_pct || 0),    cssVar: "--tier-analyst" },
     { name: "Advisor",    pct: Number(dashboard.advisor_pct || 0),    cssVar: "--tier-advisor" },
     { name: "Strategist", pct: Number(dashboard.strategist_pct || 0), cssVar: "--tier-strategist" },
-  ].map(t => ({ ...t, color: styleVar(t.cssVar) || "#8b949e" }));
+  ].map(t => ({ ...t, color: styleVar(t.cssVar) || "#a3a3a3" }));
 
   const { ctx, w, h } = hiDPICanvas(canvas);
   const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 5, thickness = 12;
@@ -1920,7 +1920,7 @@ function renderTierDonut(dashboard) {
     angle += sweep;
   });
   const top = tiers.slice().sort((a, b) => b.pct - a.pct)[0] || { name: "—", pct: 0 };
-  ctx.fillStyle = styleVar("--text-primary") || "#e6edf3";
+  ctx.fillStyle = styleVar("--text-primary") || "#fafafa";
   ctx.font = "600 14px ui-monospace, SFMono-Regular, Consolas, monospace";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(`${top.pct.toFixed(0)}%`, cx, cy - 5);

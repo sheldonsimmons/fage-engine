@@ -116,14 +116,14 @@
 
     /* ── Code block ───────────────────────────────────────────────────────────── */
     .code-block {
-      background:#0d1117; border:1px solid var(--border); border-radius:8px;
+      background:var(--bg-base); border:1px solid var(--border); border-radius:8px;
       padding:18px 20px; font-family:var(--font-mono); font-size:12px;
-      color:#e6edf3; line-height:1.8; margin-bottom:14px;
+      color:var(--text-primary); line-height:1.8; margin-bottom:14px;
       position:relative; white-space:pre; overflow-x:auto;
     }
     .code-kw   { color:#ff7b72; }
     .code-str  { color:#a5d6ff; }
-    .code-cmt  { color:#8b949e; font-style:italic; }
+    .code-cmt  { color:var(--text-muted); font-style:italic; }
     .code-key  { color:#ffa657; }
     .code-val  { color:#3fb950; }
     .code-copy {
@@ -137,7 +137,7 @@
     /* ── Buttons ──────────────────────────────────────────────────────────────── */
     .btn-primary {
       width:100%; padding:14px; border-radius:8px; background:var(--accent-green);
-      color:#0d1117; font:inherit; font-size:15px; font-weight:800; border:none;
+      color:var(--bg-base); font:inherit; font-size:15px; font-weight:800; border:none;
       cursor:pointer; transition:opacity .15s; display:flex; align-items:center;
       justify-content:center; gap:8px;
     }

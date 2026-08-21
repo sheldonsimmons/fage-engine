@@ -494,11 +494,11 @@ function buildChart() {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: "#161b22",
-          borderColor: "#30363d",
+          backgroundColor: "#171717",
+          borderColor: "rgba(255,255,255,0.1)",
           borderWidth: 1,
-          titleColor: "#e6edf3",
-          bodyColor: "#8b949e",
+          titleColor: "#fafafa",
+          bodyColor: "#a3a3a3",
           callbacks: {
             label: c => ` ${c.dataset.label}: $${c.parsed.y.toFixed(4)}`,
           },
@@ -507,12 +507,12 @@ function buildChart() {
       scales: {
         x: {
           grid: { color: "rgba(48,54,61,0.5)" },
-          ticks: { color: "#8b949e", font: { size: 10 }, maxTicksLimit: 6 },
+          ticks: { color: "#a3a3a3", font: { size: 10 }, maxTicksLimit: 6 },
         },
         y: {
           grid: { color: "rgba(48,54,61,0.5)" },
           ticks: {
-            color: "#8b949e", font: { size: 10 },
+            color: "#a3a3a3", font: { size: 10 },
             callback: v => "$" + v.toFixed(v >= 1 ? 0 : 2),
           },
         },
