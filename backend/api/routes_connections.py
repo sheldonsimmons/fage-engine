@@ -115,15 +115,26 @@ class PackageRelationshipApproval(BaseModel):
     children: list[PackageRelationshipChild] = Field(default_factory=list, max_length=100)
 
 
-def _salesforce_package_install_error(payload: dict) -> str:
-    """Turn Salesforce installer output into customer-safe guidance."""
-    raw_errors = payload.get("Errors") or payload.get("errors") or []
+def _salesforce_package_install_error(payload) -> str:
+    """Turn Salesforce installer output into customer-safe guidance.
+
+    Salesforce's REST/Tooling APIs return error bodies as either a JSON
+    object (package install status shape) or a bare JSON array of error
+    records (standard REST validation-error shape) -- both are real,
+    documented response shapes, not malformed responses.
+    """
+    if isinstance(payload, list):
+        raw_errors = payload
+    elif isinstance(payload, dict):
+        raw_errors = payload.get("Errors") or payload.get("errors") or []
+    else:
+        raw_errors = []
     if isinstance(raw_errors, dict):
         raw_errors = raw_errors.get("errors") or raw_errors.get("records") or [raw_errors]
     if not isinstance(raw_errors, list):
         raw_errors = [raw_errors]
     message = " ".join(
-        str(value.get("message") or value.get("Message") or value)
+        str(value.get("message") or value.get("Message") or value) if isinstance(value, dict) else str(value)
         for value in raw_errors
         if value
     ).strip()
@@ -993,7 +1004,8 @@ async def install_salesforce_package(connection_id: int, db: Session = Depends(g
         result = response.json()
     except (TypeError, ValueError):
         result = {}
-    if response.status_code >= 400 or not result.get("id"):
+    result_id = result.get("id") if isinstance(result, dict) else None
+    if response.status_code >= 400 or not result_id:
         message = _salesforce_package_install_error(result)
         mapping["salesforce_package_install"] = {"status": "error", "message": message}
         item.mapping_json = json.dumps(mapping)
@@ -1042,7 +1054,7 @@ async def get_salesforce_package_install(connection_id: int, db: Session = Depen
             detail="CostPilot could not read Salesforce installation progress. Try again shortly.",
         )
 
-    raw_status = str(result.get("Status") or "UNKNOWN").upper()
+    raw_status = str((result.get("Status") if isinstance(result, dict) else None) or "UNKNOWN").upper()
     status = {
         "SUCCESS": "success",
         "IN_PROGRESS": "in_progress",

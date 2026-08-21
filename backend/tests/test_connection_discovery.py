@@ -70,6 +70,22 @@ def test_salesforce_package_compile_failure_never_tells_customer_to_fix_code():
     assert "no CostPilot user should edit unrelated code" in message
 
 
+def test_salesforce_package_install_error_handles_bare_rest_error_array():
+    # Salesforce's standard REST/Tooling error shape for validation failures
+    # is a bare JSON array of error records, not an {"Errors": [...]} object --
+    # this crashed in production with AttributeError: 'list' object has no
+    # attribute 'get' before payload-shape detection was added.
+    message = _salesforce_package_install_error([
+        {"message": "Invalid SubscriberPackageVersionKey", "errorCode": "MALFORMED_ID"},
+    ])
+    assert "Invalid SubscriberPackageVersionKey" in message
+
+
+def test_salesforce_package_install_error_handles_bare_string_list():
+    message = _salesforce_package_install_error(["Something went wrong"])
+    assert "Something went wrong" in message
+
+
 def test_salesforce_missing_external_app_has_dedicated_customer_reason():
     assert _salesforce_oauth_error_reason(
         "OAUTH_EC_APP_NOT_FOUND",
