@@ -59,6 +59,19 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Loading /cockpit/#ask-costpilot directly (a bookmark, a sidebar link
+  // typed fresh, or the Ask CostPilot sidebar item's own href) hits the
+  // browser's native anchor-scroll before this section has rendered --
+  // it only exists inside `{data && (...)}` below, so on first paint the
+  // element genuinely isn't in the DOM yet and the browser's scroll is a
+  // silent no-op. Once `data` arrives and the element exists, do the
+  // scroll ourselves.
+  useEffect(() => {
+    if (data && window.location.hash === "#ask-costpilot") {
+      document.getElementById("ask-costpilot")?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [data])
+
   return (
     <div className="dark flex min-h-screen bg-background text-foreground">
       <AppSidebar />
