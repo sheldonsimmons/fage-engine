@@ -373,8 +373,35 @@ def effective_budget_context(db: Session, department: str, workspace_id: str | N
     because the raw throttled column had gone stale for a non-production
     workspace and nothing ever recomputed it at decision time -- only the
     dashboard's display value was ever corrected.
+
+    When workspace_id is given, rows are scoped to that workspace via
+    DepartmentBudget.workspace_id (the real column, populated for every
+    row -- confirmed directly against production) instead of
+    related_budget_rows()'s cross-workspace name-matching. That matching
+    is correct for its one real use (grouping same-named rows on an
+    all-company dashboard) but wrong here: given a specific workspace_id,
+    an unqualified department name like "Legal" (the "default" workspace
+    stores names unprefixed) would otherwise also pull in every OTHER
+    workspace's same-named "Legal" budget row and take the max cap across
+    all of them -- confirmed live: effective_budget_context(db, "Legal",
+    workspace_id="default") returned budget_cap_usd=10.0 by blending in
+    two other workspaces' $10 caps, when the "default" workspace's real
+    cap is $1.00.
     """
-    rows = related_budget_rows(db, department)
+    if workspace_id:
+        from core.workspace_scope import workspace_filter
+
+        target = clean_budget_department_name(department).lower()
+        query = db.query(DepartmentBudget)
+        scope = workspace_filter(DepartmentBudget, workspace_id)
+        if scope is not None:
+            query = query.filter(scope)
+        rows = [r for r in query.all() if target and clean_budget_department_name(r.department).lower() == target]
+        if not rows:
+            exact = query.filter_by(department=department).first()
+            rows = [exact] if exact else []
+    else:
+        rows = related_budget_rows(db, department)
     if not rows:
         return None
 

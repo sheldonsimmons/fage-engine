@@ -32,10 +32,10 @@ def _workspace(db, workspace_id, workspace_type):
     db.add(Workspace(workspace_id=workspace_id, name=workspace_id, workspace_type=workspace_type))
 
 
-def _budget(db, *, department, cap, raw_spend, throttled, override_granted=False):
+def _budget(db, *, department, cap, raw_spend, throttled, override_granted=False, workspace_id=None):
     db.add(DepartmentBudget(
         department=department, monthly_cap_usd=cap, current_spend_usd=raw_spend,
-        throttled=throttled, override_granted=override_granted,
+        throttled=throttled, override_granted=override_granted, workspace_id=workspace_id,
     ))
 
 
@@ -107,7 +107,7 @@ def test_legacy_default_workspace_uses_recompute_path_too():
     exact workspace the live bug was confirmed on."""
     db = _session()
     _workspace(db, "default", "legacy")
-    _budget(db, department="Legal", cap=1.0, raw_spend=1.069955, throttled=True)
+    _budget(db, department="Legal", cap=1.0, raw_spend=1.069955, throttled=True, workspace_id="default")
     db.commit()
 
     context = effective_budget_context(db, "Legal", workspace_id="default")
@@ -126,3 +126,24 @@ def test_workspace_id_omitted_preserves_exact_prior_behavior():
     context = effective_budget_context(db, "WS-X:Ops")
     assert context["throttled"] is True
     assert context["budget_spent_usd"] == 5.0
+
+
+def test_unqualified_department_name_does_not_leak_other_workspaces_cap():
+    """
+    Regression test for a real bug found live: calling
+    effective_budget_context(db, "Legal", workspace_id="default") returned
+    budget_cap_usd=10.0 by blending in OTHER workspaces' same-named "Legal"
+    budget rows (via related_budget_rows()'s cross-workspace name
+    matching, meant for a different use case), when the "default"
+    workspace's real cap is $1.00. Uses DepartmentBudget.workspace_id (a
+    real, always-populated column) to scope instead.
+    """
+    db = _session()
+    _workspace(db, "default", "legacy")
+    _workspace(db, "WS-OTHER", "demo")
+    _budget(db, department="Legal", cap=1.0, raw_spend=0.0, throttled=False, workspace_id="default")
+    _budget(db, department="WS-OTHER:Legal", cap=10.0, raw_spend=0.0, throttled=False, workspace_id="WS-OTHER")
+    db.commit()
+
+    context = effective_budget_context(db, "Legal", workspace_id="default")
+    assert context["budget_cap_usd"] == 1.0
