@@ -10,7 +10,12 @@ from api.routes_efficiency import (
     get_workspace_analytics_settings,
     update_workspace_analytics_settings,
 )
-from api.routes_trial import RegisterTrialRequest, register_trial
+from api.routes_trial import (
+    AiEnvironmentEstimateRequest,
+    RegisterTrialRequest,
+    estimate_ai_environment,
+    register_trial,
+)
 from core.analytics_coverage import (
     comparison_data_coverage,
     period_coverage,
@@ -18,7 +23,7 @@ from core.analytics_coverage import (
 )
 from core.analytics_periods import comparison_plan, resolve_primary_period
 from database.db import Base
-from database.models import TokenTransaction, TrialAccount
+from database.models import TokenTransaction, TrialAccount, Workspace
 
 
 def _session():
@@ -75,6 +80,68 @@ def test_trial_registration_persists_timezone_and_collection_start():
     assert settings["configured"] is True
     assert settings["timezone_name"] == "America/Chicago"
     assert settings["collection_started_at"] is not None
+
+
+def test_trial_registration_creates_real_workspace_row():
+    db = _session()
+    result = register_trial(
+        RegisterTrialRequest(
+            email="workspace-row@example.com",
+            name="Workspace Row Test",
+            company="Acme Co",
+        ),
+        db,
+    )
+
+    ws = db.query(Workspace).filter_by(workspace_id=result["workspace_id"]).first()
+
+    assert ws is not None
+    assert ws.name == "Acme Co"
+    assert ws.source == "trial_signup"
+    assert ws.workspace_type == "production"
+
+
+def test_trial_registration_backfills_workspace_row_for_returning_account():
+    db = _session()
+    first = register_trial(
+        RegisterTrialRequest(email="returning@example.com", name="Returning User"),
+        db,
+    )
+    # Simulate a pre-existing account created before the Workspace table backfill.
+    db.query(Workspace).filter_by(workspace_id=first["workspace_id"]).delete()
+    db.commit()
+
+    register_trial(
+        RegisterTrialRequest(email="returning@example.com", name="Returning User"),
+        db,
+    )
+
+    ws = db.query(Workspace).filter_by(workspace_id=first["workspace_id"]).first()
+    assert ws is not None
+
+
+def test_estimate_ai_environment_requires_no_inputs():
+    result = estimate_ai_environment(AiEnvironmentEstimateRequest())
+
+    assert result["is_estimate"] is True
+    assert result["savings_estimate"] is None
+    assert len(result["opportunities"]) >= 2
+
+
+def test_estimate_ai_environment_labels_savings_as_estimate():
+    result = estimate_ai_environment(
+        AiEnvironmentEstimateRequest(
+            monthly_spend_usd=1000,
+            providers=["anthropic", "openai"],
+            agent_count=5,
+            monthly_requests=20000,
+        )
+    )
+
+    assert result["is_estimate"] is True
+    assert "estimate" in result["estimate_disclaimer"].lower()
+    assert result["savings_estimate"]["estimated_monthly_savings_usd"] > 0
+    assert any(o["area"] == "governance" for o in result["opportunities"])
 
 
 def test_workspace_creation_proves_earlier_history_is_unavailable():

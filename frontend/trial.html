@@ -187,43 +187,52 @@
     ════════════════════════════════════════════════════════════ -->
     <div class="panel active" id="panel-step1">
       <div class="card-eyebrow">Free 30-Day Trial · No Credit Card</div>
-      <h1 class="card-title">See what CostPilot saves <span>your</span> team</h1>
-      <p class="card-sub">Choose your AI provider. CostPilot gives you a 30-day workspace key and routes calls through our managed trial proxy — no provider key required to get started.</p>
+      <h1 class="card-title">Tell us about your <span>AI environment</span></h1>
+      <p class="card-sub">No API key needed. Answer what you can — everything below is optional — and we'll show you where CostPilot may help. Takes about a minute.</p>
 
-      <div class="provider-grid">
-        <div class="provider-tile" id="tile-openai" onclick="selectProvider('openai')">
-          <div class="provider-icon">🟢</div>
-          <div class="provider-name">OpenAI</div>
-          <span class="provider-badge badge-auto">⚡ Managed trial</span>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Start routing through CostPilot immediately. Usage import can be added later.</div>
+      <div class="field">
+        <label>Approximate monthly AI spend (USD)</label>
+        <input type="number" id="qMonthlySpend" placeholder="e.g. 2000" min="0" />
+      </div>
+
+      <div class="field">
+        <label>Which providers do you use?</label>
+        <div class="provider-grid" id="qProviderGrid">
+          <div class="provider-tile" data-provider="openai" onclick="toggleQuestionnaireProvider('openai')">
+            <div class="provider-icon">🟢</div>
+            <div class="provider-name">OpenAI</div>
+          </div>
+          <div class="provider-tile" data-provider="anthropic" onclick="toggleQuestionnaireProvider('anthropic')">
+            <div class="provider-icon">🔵</div>
+            <div class="provider-name">Anthropic</div>
+          </div>
+          <div class="provider-tile" data-provider="other" onclick="toggleQuestionnaireProvider('other')">
+            <div class="provider-icon">⚙️</div>
+            <div class="provider-name">Other / Not sure</div>
+          </div>
         </div>
-        <div class="provider-tile" id="tile-anthropic" onclick="selectProvider('anthropic')">
-          <div class="provider-icon">🔵</div>
-          <div class="provider-name">Anthropic</div>
-          <span class="provider-badge badge-steps">Managed trial</span>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Start routing through CostPilot immediately. Manual savings estimates are optional.</div>
-        </div>
+      </div>
+
+      <div class="field">
+        <label>Number of agents / use cases</label>
+        <input type="number" id="qAgentCount" placeholder="e.g. 3" min="0" />
+      </div>
+
+      <div class="field">
+        <label>Estimated monthly requests</label>
+        <input type="number" id="qMonthlyRequests" placeholder="e.g. 10000" min="0" />
       </div>
 
       <div class="error-box" id="step1Error"></div>
 
-      <div class="field" id="keyField" style="display:none">
-        <label id="keyLabel">API Key</label>
-        <div class="key-wrap">
-          <input type="password" id="apiKey" placeholder="" autocomplete="off" />
-          <button class="key-toggle" onclick="toggleKeyVis()">👁</button>
-        </div>
-        <div class="field-hint" id="keyHint"></div>
+      <div class="trust-row">
+        <span class="trust-chip">✓ No API key required</span>
+        <span class="trust-chip">✓ Every field is optional</span>
+        <span class="trust-chip">✓ Just an estimate — nothing is connected yet</span>
       </div>
 
-      <div class="trust-row" id="trustRow" style="display:none">
-        <span class="trust-chip">✓ Read-only validation</span>
-        <span class="trust-chip" id="trustChip2">✓ Key never stored at this step</span>
-        <span class="trust-chip">✓ No credits spent</span>
-      </div>
-
-      <button class="btn-primary" id="step1Btn" style="display:none" onclick="submitStep1()">
-        Continue →
+      <button class="btn-primary" id="step1Btn" onclick="submitQuestionnaire()">
+        See where CostPilot may help →
       </button>
     </div>
 
@@ -374,79 +383,31 @@
          STEP 2 — Savings results
     ════════════════════════════════════════════════════════════ -->
     <div class="panel" id="panel-step2">
-      <div class="card-eyebrow">Your 30-Day Results</div>
+      <div class="card-eyebrow">Estimated Opportunity</div>
+      <h2 class="card-title">Here's where CostPilot <span>may help</span></h2>
+      <div style="background:rgba(210,153,34,.08);border:1px solid rgba(210,153,34,.3);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--text-primary)" id="estimateDisclaimer">
+        ⚠️ This is an estimate based on what you told us — not a measurement of your actual usage. Real numbers appear once you connect your AI inside the product.
+      </div>
 
-      <!-- Hero number -->
-      <div class="results-hero">
+      <!-- Hero number (only shown if a spend estimate could be computed) -->
+      <div class="results-hero" id="resHeroWrap" style="display:none">
         <div class="results-saved" id="resSaved">—</div>
-        <div class="results-label">You would have saved in the last 30 days</div>
+        <div class="results-label">Estimated monthly savings opportunity</div>
         <div class="results-source" id="resSource"></div>
       </div>
 
-      <!-- KPI strip -->
-      <div class="kpi-grid">
-        <div class="kpi-box">
-          <div class="kpi-box-val red"    id="resActual">—</div>
-          <div class="kpi-box-lbl">Actual Spend</div>
-        </div>
-        <div class="kpi-box">
-          <div class="kpi-box-val green"  id="resWith">—</div>
-          <div class="kpi-box-lbl">With CostPilot</div>
-        </div>
+      <div class="kpi-grid" id="resKpiWrap" style="display:none">
         <div class="kpi-box">
           <div class="kpi-box-val yellow" id="resAnnual">—</div>
-          <div class="kpi-box-lbl">Annual Projection</div>
+          <div class="kpi-box-lbl">Estimated Annual Opportunity</div>
         </div>
       </div>
 
-      <!-- Biggest opportunity callout -->
-      <div id="topModelCallout" style="display:none;background:rgba(63,185,80,.07);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--text-primary)"></div>
+      <!-- Opportunity cards (visibility / governance / optimization) -->
+      <div id="opportunityCards" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px"></div>
 
-      <!-- Per-model breakdown table -->
-      <div style="margin-bottom:4px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--text-muted);margin-bottom:10px">Where the savings come from</div>
-        <table class="model-table">
-          <thead>
-            <tr>
-              <th>Model</th>
-              <th>Tier</th>
-              <th>You Paid</th>
-              <th>With CostPilot</th>
-              <th style="color:var(--accent-green)">Saved</th>
-            </tr>
-          </thead>
-          <tbody id="modelBreakdownTable"></tbody>
-        </table>
-      </div>
-
-      <!-- Methodology footnote — collapsible -->
-      <div style="margin-bottom:20px">
-        <button onclick="toggleMethodology()" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:8px 0;display:flex;align-items:center;gap:6px;font-family:inherit">
-          <span id="methodologyArrow">▸</span> How was this calculated?
-        </button>
-        <div id="methodologyPanel" style="display:none;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:16px 18px;font-size:12px;color:var(--text-muted);line-height:1.75">
-          <div style="font-weight:700;color:var(--text-primary);margin-bottom:10px">The routing model</div>
-          <p style="margin:0 0 10px">CostPilot uses a <strong style="color:var(--text-primary)">70/30 routing split</strong> as its baseline assumption:</p>
-          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;padding-left:4px">
-            <div style="display:flex;gap:10px;align-items:flex-start">
-              <span style="color:var(--accent-green);font-weight:700;flex-shrink:0">70%</span>
-              <span>Routine calls — FAQs, lookups, summaries, simple tasks — route to <strong style="color:var(--text-primary)">Scout</strong> (the cheapest capable model at $0.25/$1.25 per 1M tokens)</span>
-            </div>
-            <div style="display:flex;gap:10px;align-items:flex-start">
-              <span style="color:var(--accent-yellow);font-weight:700;flex-shrink:0">30%</span>
-              <span>Complex calls — reasoning, drafting, analysis — stay on your <strong style="color:var(--text-primary)">current model</strong> at full rate</span>
-            </div>
-          </div>
-          <div style="font-weight:700;color:var(--text-primary);margin-bottom:6px">Pricing</div>
-          <p style="margin:0 0 10px">Model rates are taken from published Anthropic and OpenAI pricing pages. Your CSV token counts (or manual inputs) are multiplied against those rates to calculate your actual spend.</p>
-          <div style="background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:6px;padding:10px 14px;color:var(--text-primary)">
-            💡 <strong>This is a conservative estimate.</strong> CostPilot learns your actual call patterns from day one — if more than 30% of your calls are routine, your real savings will be higher. The dashboard shows live actuals once you're connected.
-          </div>
-        </div>
-      </div>
-
-      <button class="btn-primary" onclick="goToPanel('panel-step3')">Start My Free 30-Day Trial →</button>
-      <button class="btn-secondary" onclick="goToPanel('panel-step1')">← Use a different key</button>
+      <button class="btn-primary" onclick="goToPanel('panel-step3')">Create My Workspace →</button>
+      <button class="btn-secondary" onclick="goToPanel('panel-step1')">← Edit my answers</button>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════
@@ -559,34 +520,20 @@ function goToPanel(id) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-// ── Provider selection ─────────────────────────────────────────────────────
-function selectProvider(p) {
-  _provider = p;
-  document.getElementById("tile-openai").className    = "provider-tile" + (p === "openai"    ? " selected-openai"    : "");
-  document.getElementById("tile-anthropic").className = "provider-tile" + (p === "anthropic" ? " selected-anthropic" : "");
+// ── Questionnaire (no-credential estimate) ─────────────────────────────────
+let _qProviders = [];
 
-  const keyField = document.getElementById("keyField");
-  const keyLabel = document.getElementById("keyLabel");
-  const keyInput = document.getElementById("apiKey");
-  const keyHint  = document.getElementById("keyHint");
-  const trustChip2 = document.getElementById("trustChip2");
-
-  if (p === "openai") {
-    keyField.style.display = "none";
-    document.getElementById("trustRow").style.display = "flex";
-    document.getElementById("step1Btn").style.display = "flex";
-    keyLabel.textContent    = "OpenAI API Key (optional)";
-    keyInput.placeholder    = "sk-proj-...";
-    keyHint.innerHTML       = "Optional: import existing usage later for a savings estimate.";
-    document.getElementById("step1Btn").innerHTML = "Continue →";
-    trustChip2.textContent = "✓ No provider key required";
-  } else {
-    document.getElementById("trustRow").style.display = "flex";
-    document.getElementById("step1Btn").style.display = "flex";
-    keyField.style.display = "none";
-    document.getElementById("step1Btn").innerHTML = "Continue →";
-    trustChip2.textContent = "✓ No provider key required";
-  }
+function toggleQuestionnaireProvider(p) {
+  const idx = _qProviders.indexOf(p);
+  if (idx === -1) _qProviders.push(p); else _qProviders.splice(idx, 1);
+  document.querySelectorAll("#qProviderGrid .provider-tile").forEach(tile => {
+    const selected = _qProviders.includes(tile.dataset.provider);
+    tile.className = "provider-tile" + (selected ? " selected-openai" : "");
+  });
+  // "anthropic" and "openai" both drive the backend's _provider field for
+  // registerTrial() below; "other"/unset falls back to the API default.
+  _provider = _qProviders.includes("openai") ? "openai"
+            : _qProviders.includes("anthropic") ? "anthropic" : "";
 }
 
 function toggleKeyVis() {
@@ -599,34 +546,66 @@ function toggleProviderKeyVis() {
   inp.type = inp.type === "password" ? "text" : "password";
 }
 
-// ── Step 1 submit ──────────────────────────────────────────────────────────
-async function submitStep1() {
+// ── Step 1 submit — questionnaire → estimate (no credentials) ─────────────
+async function submitQuestionnaire() {
   hideError("step1Error");
-  const key = document.getElementById("apiKey").value.trim();
 
   const btn = document.getElementById("step1Btn");
   btn.disabled = true;
   const origText = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner"></span> Preparing trial…';
+  btn.innerHTML = '<span class="spinner"></span> Estimating…';
+
+  const toNum = id => {
+    const v = document.getElementById(id).value.trim();
+    return v === "" ? null : Number(v);
+  };
 
   try {
-    // Usage-proof (estimate/CSV/API) used to be a required stop here --
-    // registerTrial() never actually needed it (it only reads _apiKey,
-    // which comes from the optional key field on this same step, and
-    // _provider), so skipping straight to registration removes a step
-    // that was pure friction, not a dependency. The usage-proof panels
-    // (panel-usage-path, panel-provider-api, etc.) stay in the file --
-    // unreachable via this normal flow now, but not deleted, in case
-    // there's a reason to link back into them later (e.g. from inside the
-    // dashboard, to add verified usage proof after signup).
-    _apiKey = key;
-    goToPanel("panel-step3");
+    const payload = {
+      monthly_spend_usd: toNum("qMonthlySpend"),
+      providers:         _qProviders,
+      agent_count:       toNum("qAgentCount"),
+      monthly_requests:  toNum("qMonthlyRequests"),
+    };
+    const data = await apiPost("/api/trial/estimate", payload);
+    renderEstimate(data);
+    goToPanel("panel-step2");
   } catch (e) {
     showError("step1Error", e.message || "Something went wrong. Please try again.");
   } finally {
     btn.disabled = false;
     btn.innerHTML = origText;
   }
+}
+
+function renderEstimate(data) {
+  const heroWrap = document.getElementById("resHeroWrap");
+  const kpiWrap  = document.getElementById("resKpiWrap");
+
+  if (data.savings_estimate) {
+    heroWrap.style.display = "block";
+    kpiWrap.style.display  = "grid";
+    document.getElementById("resSaved").textContent  = fmt(data.savings_estimate.estimated_monthly_savings_usd);
+    document.getElementById("resAnnual").textContent = fmt(data.savings_estimate.estimated_annual_savings_usd);
+    document.getElementById("resSource").textContent = `Estimated from the monthly spend you told us about — ${data.savings_estimate.pct_saved}% potential reduction`;
+  } else {
+    heroWrap.style.display = "none";
+    kpiWrap.style.display  = "none";
+  }
+
+  const areaMeta = {
+    visibility:   { icon: "👀", color: "var(--accent-green)" },
+    governance:   { icon: "🛡️", color: "var(--accent-yellow)" },
+    optimization: { icon: "⚡", color: "var(--accent-green)" },
+  };
+  const cards = document.getElementById("opportunityCards");
+  cards.innerHTML = (data.opportunities || []).map(o => {
+    const meta = areaMeta[o.area] || { icon: "•", color: "var(--text-primary)" };
+    return `<div style="background:var(--bg-base);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
+      <div style="font-weight:700;color:${meta.color};margin-bottom:4px">${meta.icon} ${o.headline}</div>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6">${o.detail}</div>
+    </div>`;
+  }).join("");
 }
 
 // ── Usage proof path selection ─────────────────────────────────────────────

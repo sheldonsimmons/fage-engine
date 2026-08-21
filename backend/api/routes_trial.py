@@ -16,13 +16,13 @@ import csv
 import uuid
 import httpx
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import TrialAccount, WorkspaceAnalyticsSettings
+from database.models import TrialAccount, WorkspaceAnalyticsSettings, Workspace
 
 router = APIRouter()
 
@@ -358,6 +358,16 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
             req.timezone_name,
             existing.created_at or existing.trial_start or datetime.utcnow(),
         )
+        if not db.query(Workspace).filter_by(workspace_id=existing.workspace_id).first():
+            db.add(Workspace(
+                workspace_id   = existing.workspace_id,
+                name           = existing.company or existing.name,
+                workspace_type = "production",
+                source         = "trial_signup",
+                owner_trial_account_id = existing.id,
+                is_active      = existing.is_active,
+                last_activity_at = datetime.utcnow(),
+            ))
         db.commit()
         now = datetime.utcnow()
         status = _trial_status_payload(existing, db)
@@ -407,6 +417,17 @@ def register_trial(req: RegisterTrialRequest, db: Session = Depends(get_db)):
     )
     db.commit()
     db.refresh(account)
+
+    db.add(Workspace(
+        workspace_id   = workspace_id,
+        name           = req.company or req.name,
+        workspace_type = "production",
+        source         = "trial_signup",
+        owner_trial_account_id = account.id,
+        is_active      = True,
+        last_activity_at = trial_start,
+    ))
+    db.commit()
 
     return {
         "workspace_id":   workspace_id,
@@ -723,6 +744,84 @@ async def validate_anthropic(req: ValidateAnthropicRequest):
             "the Anthropic Console. To show your real savings we need one extra step: either tell "
             "us your approximate usage, or upload the CSV export from your Console."
         ),
+    }
+
+
+# ── 4b. Questionnaire-based opportunity estimate (no credentials required) ────
+
+class AiEnvironmentEstimateRequest(BaseModel):
+    monthly_spend_usd:      Optional[float] = None
+    providers:              List[str] = []
+    agent_count:            Optional[int] = None
+    monthly_requests:       Optional[int] = None
+
+@router.post("/estimate")
+def estimate_ai_environment(req: AiEnvironmentEstimateRequest):
+    """
+    Turns a short, no-credential questionnaire into a clearly-labeled
+    *estimate* of where CostPilot may help. Every field is optional --
+    this must never block a prospect from moving forward.
+    """
+    spend = req.monthly_spend_usd or 0.0
+
+    savings_estimate = None
+    if spend > 0:
+        meta = ANTHROPIC_MODEL_COSTS.get("claude-3-5-sonnet-20241022",
+                   {"input": 3.00, "output": 15.00, "tier": "Advisor"})
+        avg_cost_per_call = (meta["input"] * 2000 + meta["output"] * 500) / 1_000_000
+        estimated_calls   = req.monthly_requests or max(1, int(spend / avg_cost_per_call))
+        rows = [{
+            "model":         "claude-3-5-sonnet-20241022",
+            "input_tokens":  2000 * estimated_calls,
+            "output_tokens": 500  * estimated_calls,
+        }]
+        savings = _anthropic_savings_from_rows(rows)
+        scale   = spend / savings["actual_cost_usd"] if savings["actual_cost_usd"] > 0 else 1.0
+        saved_usd = round(max(0, spend - savings["costpilot_cost_usd"] * scale), 4)
+        savings_estimate = {
+            "estimated_monthly_savings_usd": saved_usd,
+            "estimated_annual_savings_usd":  round(saved_usd * 12, 2),
+            "pct_saved":                     round(saved_usd / spend * 100, 1) if spend > 0 else 0,
+        }
+
+    opportunities = []
+    opportunities.append({
+        "area": "visibility",
+        "headline": "See spend and usage across every provider in one place",
+        "detail": (
+            f"With {len(req.providers) or 'multiple'} provider(s) in play, "
+            "cost and usage data is likely fragmented across separate consoles today."
+        ) if req.providers else "Centralized visibility into AI spend, by model, team, and use case.",
+    })
+    if req.agent_count and req.agent_count > 1:
+        opportunities.append({
+            "area": "governance",
+            "headline": f"Set guardrails across {req.agent_count} agents/use cases",
+            "detail": "Budget caps, anomaly alerts, and per-agent attribution become harder to manage by hand as agent count grows.",
+        })
+    else:
+        opportunities.append({
+            "area": "governance",
+            "headline": "Guardrails and budget caps as usage grows",
+            "detail": "Spend caps, anomaly alerts, and audit trails without slowing teams down.",
+        })
+    opportunities.append({
+        "area": "optimization",
+        "headline": "Route routine calls to cheaper models automatically",
+        "detail": "Many workloads sent to premium models today could be served by lighter-weight models at a fraction of the cost.",
+    })
+
+    return {
+        "is_estimate": True,
+        "estimate_disclaimer": "This is an estimate based on what you told us, not a measurement of your actual usage.",
+        "inputs": {
+            "monthly_spend_usd": req.monthly_spend_usd,
+            "providers":         req.providers,
+            "agent_count":       req.agent_count,
+            "monthly_requests":  req.monthly_requests,
+        },
+        "savings_estimate": savings_estimate,
+        "opportunities": opportunities,
     }
 
 
