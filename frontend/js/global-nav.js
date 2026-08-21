@@ -18,7 +18,6 @@
 
   const toolItems = [
     { label: "Sandbox", href: "/sandbox.html" },
-    { label: "Optimization", href: "/operate.html" },
     { label: "Live Demo", href: "/demo-crm.html" },
     { label: "Live Monitor", href: "/live-landing.html" },
   ];
