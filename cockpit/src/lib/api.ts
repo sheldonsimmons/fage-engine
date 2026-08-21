@@ -56,10 +56,15 @@ export interface BudgetDepartment {
   monthly_cap_usd: number
   current_spend_usd: number
   used_pct: number
-  // Real values from core/budget.py's compute_state(): "throttled" means
+  // Real values from core/budget.py's _enrich(): "throttled" means live
   // enforcement is actively limiting this department, not just a display
-  // warning -- there is no "critical" state in the backend.
+  // warning -- there is no "critical"/"over" state in the backend, so a
+  // department can be past 100% of used_pct while state is still
+  // "warning" (enforcement never fired for demo/simulated workspaces).
+  // Callers that need to detect that must check used_pct >= 100
+  // separately, not rely on state alone -- see Recommendations.tsx.
   state: "healthy" | "warning" | "throttled" | string
+  throttled: boolean
 }
 
 export interface ConnectionHealth {

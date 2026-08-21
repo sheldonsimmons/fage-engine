@@ -4,22 +4,26 @@ import { displayDepartment, type BudgetDepartment } from "@/lib/api"
 
 interface Recommendation {
   key: string
-  severity: "throttled" | "warning" | "info"
+  severity: "over" | "throttled" | "warning" | "info"
   text: string
 }
 
 // Budget-derived recommendations use the backend's own authoritative
-// per-department `state` (core/budget.py's compute_state(), 80% warning
-// threshold) -- not a threshold re-invented here. This is the same field
-// /api/budget already returns; nothing new is computed, just surfaced.
-// (Worth noting separately: operate.html's DEPT HEALTH strip uses its own
-// hardcoded 70% threshold in dashboard.js, which can disagree with this
-// 80%-based state for departments in the 70-80% band -- a pre-existing
-// inconsistency between two display surfaces, not something introduced
-// here.)
+// per-department `state` (core/budget.py's _enrich(), 80% warning
+// threshold) as the baseline -- but `state` only ever reaches "throttled"
+// if live enforcement actually fired, which never happens for
+// demo/simulated workspaces (current_spend_usd there is a stale counter
+// -- see core/budget.py). A department can sail past 100% of its real,
+// recomputed spend and still report state:"warning", identical to one at
+// 81% -- confirmed live (SIM-HISTORICAL-2Y's Engineering: used_pct 101.5,
+// throttled false, state "warning"). operate.html's DEPT HEALTH strip
+// already guards against exactly this by computing "OVER" client-side
+// from the percentage itself, not the state field alone
+// (frontend/js/dashboard.js's isOver = pct >= 100 || throttled) -- this
+// applies that same guard here, so the two surfaces can't disagree again.
 function budgetRecommendations(budget: BudgetDepartment[], workspaceId: string): Recommendation[] {
   return budget
-    .filter((b) => b.state === "warning" || b.state === "throttled")
+    .filter((b) => b.state === "warning" || b.state === "throttled" || b.used_pct >= 100)
     .map((b) => {
       const dept = displayDepartment(b.department, workspaceId)
       const cap = b.monthly_cap_usd.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
@@ -28,6 +32,13 @@ function budgetRecommendations(budget: BudgetDepartment[], workspaceId: string):
           key: `budget-${b.department}`,
           severity: "throttled" as const,
           text: `${dept} is over budget (${b.used_pct}% of ${cap}/mo) and is being throttled.`,
+        }
+      }
+      if (b.used_pct >= 100) {
+        return {
+          key: `budget-${b.department}`,
+          severity: "over" as const,
+          text: `${dept} is over budget (${b.used_pct}% of ${cap}/mo) with no throttle in effect -- spend is not being capped.`,
         }
       }
       return {
@@ -39,7 +50,7 @@ function budgetRecommendations(budget: BudgetDepartment[], workspaceId: string):
 }
 
 function Icon({ severity }: { severity: Recommendation["severity"] }) {
-  if (severity === "throttled")
+  if (severity === "over" || severity === "throttled")
     return (
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-400">
         <OctagonAlert className="h-4 w-4" />
@@ -58,7 +69,10 @@ function Icon({ severity }: { severity: Recommendation["severity"] }) {
   )
 }
 
-const SEVERITY_ORDER: Record<Recommendation["severity"], number> = { throttled: 0, warning: 1, info: 2 }
+// "over" ranks first -- an over-cap department with no active throttle is
+// actively overspending right now with nothing stopping it, which is a
+// more urgent signal than one already being contained by enforcement.
+const SEVERITY_ORDER: Record<Recommendation["severity"], number> = { over: 0, throttled: 1, warning: 2, info: 3 }
 
 export function Recommendations({
   items,

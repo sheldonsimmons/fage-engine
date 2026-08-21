@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { DollarSign, PiggyBank, Bot, ShieldCheck, Zap } from "lucide-react"
-import type { DashboardSummary, SavingsSummary, ConnectionHealth } from "@/lib/api"
+import type { BudgetDepartment, DashboardSummary, SavingsSummary, ConnectionHealth } from "@/lib/api"
 
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 100 ? 2 : 0 })
@@ -12,22 +12,36 @@ const usd = (n: number) =>
 const usdPrecise = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 })
 
-function budgetStatus(pct: number): { label: string; tone: "default" | "secondary" | "destructive" } {
-  if (pct >= 90) return { label: "At Risk", tone: "destructive" }
-  if (pct >= 70) return { label: "Watch", tone: "secondary" }
-  return { label: "On Track", tone: "default" }
+// dashboard.overall_budget_pct is a company-wide average across every
+// department -- one department blowing past its cap is invisible here if
+// the rest are healthy (confirmed live: SIM-HISTORICAL-2Y's Engineering
+// at 101.5% didn't move this card at all). Status must be driven by the
+// worst individual department, not the blended total, or this card can
+// say "On Track" while a real department is over budget with nothing
+// capping it. Same used_pct >= 100 guard as Recommendations.tsx and
+// operate.html's DEPT HEALTH strip, so all three surfaces agree.
+function budgetStatus(
+  budget: BudgetDepartment[],
+): { label: string; tone: "default" | "secondary" | "destructive"; overCount: number } {
+  const overCount = budget.filter((b) => b.used_pct >= 100 || b.throttled).length
+  if (overCount > 0) return { label: "At Risk", tone: "destructive", overCount }
+  const watchCount = budget.filter((b) => b.state === "warning").length
+  if (watchCount > 0) return { label: "Watch", tone: "secondary", overCount: 0 }
+  return { label: "On Track", tone: "default", overCount: 0 }
 }
 
 export function KpiRow({
   dashboard,
   savings,
   health,
+  budget,
 }: {
   dashboard: DashboardSummary
   savings: SavingsSummary
   health: ConnectionHealth
+  budget: BudgetDepartment[]
 }) {
-  const status = budgetStatus(dashboard.overall_budget_pct)
+  const status = budgetStatus(budget)
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -85,7 +99,9 @@ export function KpiRow({
         <CardContent>
           <Badge variant={status.tone} className="text-sm">{status.label}</Badge>
           <p className="mt-2 text-xs text-muted-foreground">
-            {usd(dashboard.total_spend_usd)} of {usd(dashboard.total_cap_usd)} cap · Setup health {Math.round(health.overall)}%
+            {status.overCount > 0
+              ? `${status.overCount} department${status.overCount === 1 ? "" : "s"} over budget cap`
+              : `${usd(dashboard.total_spend_usd)} of ${usd(dashboard.total_cap_usd)} cap · Setup health ${Math.round(health.overall)}%`}
           </p>
         </CardContent>
       </Card>
