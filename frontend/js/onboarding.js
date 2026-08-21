@@ -332,8 +332,12 @@ let departments = (IS_TRIAL ? trialDefaultDepartments : defaultDepartments).map(
 
 function selectProvider(provider) {
   selectedProvider = provider;
-  document.getElementById("prov-openai").classList.toggle("selected",    provider === "openai");
-  document.getElementById("prov-anthropic").classList.toggle("selected", provider === "anthropic");
+  // #prov-openai/#prov-anthropic only exist on the legacy company-setup
+  // screen, which no longer appears in the primary onboarding experience --
+  // this must stay a no-op (not throw) when they're absent, since it also
+  // runs unconditionally on page load for any trial with a stored provider.
+  document.getElementById("prov-openai")?.classList.toggle("selected",    provider === "openai");
+  document.getElementById("prov-anthropic")?.classList.toggle("selected", provider === "anthropic");
 }
 
 // ── Screen navigation ─────────────────────────────────────────────────────────
