@@ -2,15 +2,18 @@
    Shared semantic values for incremental page migrations. Existing variables
    remain available so current pages and JavaScript-generated markup keep working. */
 :root {
-  --cp-color-canvas: #0b0f14;
-  --cp-color-surface-1: #111820;
-  --cp-color-surface-2: #17202a;
-  --cp-color-surface-raised: #1b2530;
-  --cp-color-border: #293442;
-  --cp-color-border-strong: #3a4858;
-  --cp-color-text: #edf2f7;
-  --cp-color-text-secondary: #a7b2c0;
-  --cp-color-text-muted: #748192;
+  /* Matched to the Cockpit's (cockpit/src/index.css) shadcn ".dark" theme
+     -- see styles.css for the same remap applied to its variables. Status
+     colors below are intentionally untouched. */
+  --cp-color-canvas: #0a0a0a;
+  --cp-color-surface-1: #171717;
+  --cp-color-surface-2: #171717;
+  --cp-color-surface-raised: #262626;
+  --cp-color-border: rgba(255, 255, 255, 0.1);
+  --cp-color-border-strong: rgba(255, 255, 255, 0.15);
+  --cp-color-text: #fafafa;
+  --cp-color-text-secondary: #d4d4d4;
+  --cp-color-text-muted: #a3a3a3;
 
   --cp-color-primary: #4c9aff;
   --cp-color-positive: #39b980;

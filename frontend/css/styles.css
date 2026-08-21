@@ -3,12 +3,18 @@
    ───────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --bg-base:       #0d1117;
-  --bg-panel:      #161b22;
-  --bg-input:      #0d1117;
-  --border:        #30363d;
-  --text-primary:  #e6edf3;
-  --text-muted:    #8b949e;
+  /* Neutral dark palette matched to the Cockpit's (cockpit/src/index.css)
+     shadcn ".dark" theme -- oklch(0.145 0 0)/oklch(0.205 0 0)/oklch(1 0 0
+     /10%) converted to their standard hex/rgba equivalents, so the vanilla
+     site's already-shared styles.css variables render the same "black" as
+     the React app instead of GitHub-dark's blue-tinted near-black. Accent
+     colors (below) are intentionally untouched -- a separate design call. */
+  --bg-base:       #0a0a0a;
+  --bg-panel:      #171717;
+  --bg-input:      #0a0a0a;
+  --border:        rgba(255, 255, 255, 0.1);
+  --text-primary:  #fafafa;
+  --text-muted:    #a3a3a3;
   --accent:        #58a6ff;
   --accent-green:  #3fb950;
   --accent-yellow: #d29922;
