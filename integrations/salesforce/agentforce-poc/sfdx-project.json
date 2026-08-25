@@ -5,12 +5,12 @@
       "default": true
     },
     {
-      "versionName": "ver 0.1",
-      "versionNumber": "0.1.0.NEXT",
+      "versionName": "ver 0.1.2",
+      "versionNumber": "0.1.2.NEXT",
       "path": "package-source",
       "default": false,
-      "package": "CostPilot for Salesforce",
-      "versionDescription": "CostPilot governed AI routing, attribution, onboarding, and Agentforce or Flow actions for Salesforce."
+      "package": "CostPilot Salesforce Connector",
+      "versionDescription": "CostPilot governed AI routing, attribution, and Agentforce or Flow actions. Reframes the Agentforce action as a governance utility (Governed AI Request / Governed AI Work) rather than a visible responder."
     }
   ],
   "name": "costpilot-agentforce-poc",

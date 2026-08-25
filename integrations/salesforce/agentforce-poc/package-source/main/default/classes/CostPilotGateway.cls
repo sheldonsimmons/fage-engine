@@ -83,8 +83,8 @@ public with sharing class CostPilotGateway {
     }
 
     @InvocableMethod(
-        label='Route Through CostPilot'
-        description='Govern and execute any Agentforce request through CostPilot.'
+        label='Governed AI Request'
+        description='Applies your org\'s AI governance policy (routing, budget, and pruning rules) to this request before it executes. Powered by CostPilot.'
         callout=true
     )
     public static List<Response> send(List<Request> requests) {

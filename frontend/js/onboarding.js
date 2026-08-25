@@ -681,7 +681,7 @@ function renderSalesforceAiPath(platform) {
 
   const detail = document.getElementById("obSalesforceAiPathDetails");
   if (!detail) return;
-  detail.innerHTML = `<strong>One universal action: CostPilot Governed AI Work.</strong>
+  detail.innerHTML = `<strong>One universal action: Governed AI Request.</strong>
     Add it only to the Agentforce agents and Flows whose AI requests should be governed. Connecting OAuth alone discovers metadata; it does not count ordinary Salesforce activity as AI usage.`;
 }
 
@@ -698,7 +698,7 @@ function renderObConnectionPlan(platform) {
   }
   const install = platform === "salesforce"
     ? (obSalesforceAiMode === "agentforce"
-      ? "Add CostPilot Governed AI Work to Agentforce"
+      ? "Add Governed AI Request to Agentforce"
       : "Invoke CostPilot from Flow, Apex, or custom AI")
     : plan.install;
   container.innerHTML = `
@@ -1653,6 +1653,17 @@ function _getApprovedRelationshipMapping() {
 }
 
 let obSelectedPlatform = null;
+// observe | control -- only applies to "code"-kind platforms (Python/Node/Java/Ruby/REST).
+// Defaults to observe: CostPilot should never generate code that actively
+// executes AI calls on a customer's behalf without an explicit choice.
+let obSelectedGenMode = "observe";
+
+function selectObGenMode(mode) {
+  if (!["observe", "control"].includes(mode)) return;
+  obSelectedGenMode = mode;
+  document.getElementById("ob-genmode-observe")?.classList.toggle("selected", mode === "observe");
+  document.getElementById("ob-genmode-control")?.classList.toggle("selected", mode === "control");
+}
 let _obLastPlatform = null;
 let obBusinessContext = null;
 
@@ -1933,6 +1944,11 @@ function selectObPlatform(platform) {
   const cfg = OB_PLATFORMS[platform];
   const isCode = cfg.kind === "code";
   const copy = OB_PLATFORM_COPY[platform] || (isCode ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
+  // Salesforce's generated code has no dual-mode support yet (its Agentforce,
+  // trial, and full-version paths need their own redesign) -- hide the
+  // selector there so it doesn't imply a choice that isn't wired up.
+  const genModeWrap = document.getElementById("obGenModeWrap");
+  if (genModeWrap) genModeWrap.hidden = platform === "salesforce";
   const objectLabel = document.getElementById("obObjectLabel");
   const fieldsLabel = document.getElementById("obFieldsLabel");
   const fieldsLabelHint = document.getElementById("obFieldsLabelHint");
@@ -2538,14 +2554,38 @@ async function generateObCode() {
     ruby:_genRuby,
     rest:_genRest,
   };
+  // Salesforce doesn't support dual-mode generation yet -- see the note in
+  // selectObPlatform(). Every other platform (code-kind and the other 4
+  // business-kind CRMs) now does.
+  const activeGenMode  = obSelectedPlatform === "salesforce" ? "control" : obSelectedGenMode;
   const html   = _businessContextSummaryHtml()
-    + (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields)
+    + _modeNoticeHtml(activeGenMode)
+    + (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields, activeGenMode)
     + _universalVerificationHtml();
   const out   = document.getElementById("obPlatOutput");
   out.innerHTML = html;
   out.style.display = "block";
   setUniversalSetupStage(4);
   out.scrollIntoView({ behavior: "smooth" });
+}
+
+function _modeNoticeHtml(mode) {
+  const style = `background:var(--bg-panel,#171717);border:1px solid var(--border,rgba(255,255,255,0.1));border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:12.5px;line-height:1.6;color:var(--text-secondary,#d4d4d4)`;
+  if (mode === "observe") {
+    return `<div class="ob-mode-notice" style="${style}">
+      <strong style="color:var(--text-primary,#fafafa)">Observe mode.</strong>
+      Your existing AI calls stay exactly as they are. CostPilot receives this
+      activity for reporting and intelligence — it does not make the call or
+      choose the model.
+    </div>`;
+  }
+  return `<div class="ob-mode-notice" style="${style}">
+    <strong style="color:var(--text-primary,#fafafa)">Control mode.</strong>
+    This workload is routed through CostPilot so approved routing, budgets,
+    pruning, and governance can be enforced. Prefer to keep your AI calls
+    exactly as they are and just have CostPilot track them? Switch to Observe
+    above.
+  </div>`;
 }
 
 function _universalVerificationHtml() {
@@ -2558,7 +2598,7 @@ function _universalVerificationHtml() {
     ? `<div class="ob-verification-row" id="obVerifyAgentAction"><span>○</span> CostPilot action added to ${_obEsc(entryPointLabel)} <span class="status">Confirm below</span></div>`
     : "";
   const installText = obSelectedPlatform === "salesforce"
-    ? `I added <strong>CostPilot Governed AI Work</strong> to every selected Agentforce agent and Salesforce Flow that I want governed.`
+    ? `I added <strong>Governed AI Request</strong> to every selected Agentforce agent and Salesforce Flow that I want governed.`
     : `I installed the generated setup in ${_obEsc(platform)}. This confirms the external platform step that CostPilot cannot inspect directly.`;
   const liveRows = obSelectedPlatform === "salesforce"
     ? `<div class="ob-verification-row" id="obVerifySalesforceOrg"><span>○</span> Correct Salesforce org and CostPilot workspace <span class="status">Checking</span></div>
@@ -2724,12 +2764,15 @@ async function activateUniversalConnection() {
       return;
     }
   }
+  const returnFields = typeof getObReturnFields === "function" ? getObReturnFields() : [];
   const record = {
     platform: obSelectedPlatform,
     platform_label: OB_PLATFORMS[obSelectedPlatform]?.label || obSelectedPlatform,
     object: document.getElementById("obPlatObject").value.trim(),
     department: document.getElementById("obPlatDept").value,
     agent_name: document.getElementById("obPlatAgent").value.trim(),
+    mode: obSelectedPlatform === "salesforce" ? "control" : obSelectedGenMode,
+    has_return_fields: returnFields.length > 0,
     salesforce_ai_mode: obSelectedPlatform === "salesforce" ? obSalesforceAiMode : null,
     salesforce_entry_points: obSelectedPlatform === "salesforce" ? _getSelectedSalesforceEntryPoints() : [],
     governed_record_types: obSelectedPlatform === "salesforce" ? getSalesforceGovernedObjects() : [],
@@ -2742,14 +2785,44 @@ async function activateUniversalConnection() {
   setUniversalSetupStage(5);
   const section = document.getElementById("obUniversalVerification");
   const nextStep = record.platform === "salesforce"
-    ? `Run one real request from a selected agent or Flow. When it invokes <strong>CostPilot Governed AI Work</strong>, the request will appear in Audit and reporting with its user, entry point, department, and Salesforce record.`
+    ? `Run one real request from a selected agent or Flow. When it invokes <strong>Governed AI Request</strong>, the request will appear in Audit and reporting with its user, entry point, department, and Salesforce record.`
     : `Run one real request from ${_obEsc(record.platform_label)} to confirm live attribution.`;
-  section.innerHTML = `<div class="ob-context-eyebrow">Connection active</div>
-    <h3>${_obEsc(record.platform_label)} is ready for CostPilot</h3>
-    <p>Requests can now be attributed to the user, ${_obEsc(obBusinessContext?.work_label || "work record")}, agent, department, and platform.</p>
-    <p><strong>Final live check:</strong> ${nextStep}</p>
+  section.innerHTML = _unlockSummaryHtml(record)
+    + `<p><strong>Final live check:</strong> ${nextStep}</p>
     <div class="ob-actions"><button class="ob-btn-primary" onclick="goToDashboard()">Open Dashboard →</button></div>`;
   section.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function _unlockSummaryHtml(record) {
+  const workLabel = record.business_context?.work_label || "work";
+  const customerLabel = record.business_context?.customer_label;
+  const agentLabel = record.agent_name || record.platform_label;
+  const modeLabel = record.mode === "observe" ? "Observe mode" : "Control mode";
+
+  const checklistRows = [
+    `<strong>${_obEsc(agentLabel)}</strong> reporting AI activity`,
+    modeLabel,
+    record.object ? `<strong>${_obEsc(record.object)}</strong> connected` : null,
+    customerLabel ? `Customer = <strong>${_obEsc(customerLabel)}</strong>` : null,
+  ].filter(Boolean);
+
+  if (record.has_return_fields) {
+    checklistRows.push("Business outcome fields configured");
+    checklistRows.push("Return values will write back automatically");
+  }
+
+  const rowsHtml = checklistRows.map(row =>
+    `<div class="ob-verification-row pass"><span>✓</span> ${row}</div>`
+  ).join("");
+
+  const closingLine = record.has_return_fields
+    ? `<p>CostPilot can now answer questions about AI spend and activity associated with your ${_obEsc(workLabel)} work.</p>`
+    : `<p class="ob-code-hint" style="margin-top:8px">Connect ${_obEsc(workLabel)} outcomes later to unlock Business Impact.</p>`;
+
+  return `<div class="ob-context-eyebrow">${record.has_return_fields ? "You're connected." : "AI visibility is ready."}</div>
+    <h3>${_obEsc(record.platform_label)} is ready for CostPilot</h3>
+    <div class="ob-verification-list">${rowsHtml}</div>
+    ${closingLine}`;
 }
 
 function _isSalesforceApiName(name) {
@@ -2793,16 +2866,17 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
           <span class="ob-code-hint">This is the step that places CostPilot in the AI request path.</span>
         </div>
         <div class="ob-flow-steps">
+          <div class="ob-flow-step"><span class="ob-flow-num">0</span><div><strong>Install CostPilot in this org, if you haven't already</strong><br/><a href="/install-salesforce.html" target="_blank" rel="noopener">Install the package →</a> — a one-time step per org, before the action below is available.</div></div>
           <div class="ob-flow-step"><span class="ob-flow-num">1</span><div><strong>Open Agentforce Builder</strong><br/>Open the agent you want CostPilot to govern. Create or select a general AI-work topic.</div></div>
-          <div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add Action → Apex → Route Through CostPilot</strong><br/>Give the agent-facing action the label <code>CostPilot Governed AI Work</code>. This synchronous packaged action returns CostPilot's AI response to Agentforce and can be reused for summaries, drafting, analysis, recommendations, and other governed AI tasks.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add Action → Apex → Governed AI Request</strong><br/>This packaged action applies your org's AI governance policy — routing, budget, and pruning rules — to the request behind the scenes, then hands the response back to your topic. Your agent stays the one talking to the user; CostPilot never appears in the conversation.</div></div>
           <div class="ob-flow-step"><span class="ob-flow-num">3</span><div><strong>Map the context</strong><br/>Pass the current record ID, record name, user request, agent name, and department. Selected record types: <strong>${_obEsc(governedObjects.join(", ") || obj)}</strong>.</div></div>
-          <div class="ob-flow-step"><span class="ob-flow-num">4</span><div><strong>Tell the topic when to use it</strong><br/>“For AI work involving a Salesforce record, call CostPilot Governed AI Work and return its AI response to the user.”</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">4</span><div><strong>Tell the topic when to use it</strong><br/>“For AI work involving a Salesforce record, call Governed AI Request and use its response to answer the user.”</div></div>
           <div class="ob-flow-step"><span class="ob-flow-num">5</span><div><strong>Test one real request</strong><br/>A successful CostPilot setup test verifies the gateway. A real Agentforce request appearing in CostPilot Audit verifies the agent itself.</div></div>
         </div>
       </div>`
     : `<div class="ob-code-section" style="margin-top:20px">
         <div class="ob-code-header"><span class="ob-code-label">Flow, Apex, or custom AI</span></div>
-        <p class="ob-code-hint">Invoke <code>Send to CostPilot</code> only when AI work occurs. Do not attach it to every record save, because ordinary CRM activity is not AI usage. For a conversational Agentforce response, use the packaged <code>Route Through CostPilot</code> action instead.</p>
+        <p class="ob-code-hint">Invoke <code>Send to CostPilot</code> only when AI work occurs. Do not attach it to every record save, because ordinary CRM activity is not AI usage. For a conversational Agentforce response, use the packaged <code>Governed AI Request</code> action instead.</p>
       </div>`;
 
   // Agentforce customers should see the short packaged-action workflow, not
@@ -2833,17 +2907,17 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
       <span>Flows: ${_obEsc(selectedFlowNames || "None selected")}</span>
     </div>`;
     const agentSteps = selectedAgents.length || (!selectedEntryPoints.length && obSalesforceAiMode === "agentforce")
-      ? `<div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add the action to Agentforce</strong><br/>Open each selected agent in Agentforce Builder, choose the topic that handles governed AI work, then select <code>Add Action → Apex → Route Through CostPilot</code>. Label it <code>CostPilot Governed AI Work</code>.</div></div>`
+      ? `<div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>Add the action to Agentforce</strong><br/>Open each selected agent in Agentforce Builder, choose the topic that handles governed AI work, then select <code>Add Action → Apex → Governed AI Request</code>.</div></div>`
       : "";
     const flowSteps = selectedFlows.length
-      ? `<div class="ob-flow-step"><span class="ob-flow-num">${selectedAgents.length ? "3" : "2"}</span><div><strong>Add the action to each selected Flow</strong><br/>Open the Flow, place <code>Route Through CostPilot</code> exactly where AI work should occur, and map the prompt, record ID, record name, flow name, and department. Do not attach it to every record save.</div></div>`
+      ? `<div class="ob-flow-step"><span class="ob-flow-num">${selectedAgents.length ? "3" : "2"}</span><div><strong>Add the action to each selected Flow</strong><br/>Open the Flow, place <code>Governed AI Request</code> exactly where AI work should occur, and map the prompt, record ID, record name, flow name, and department. Do not attach it to every record save.</div></div>`
       : "";
     const contextStepNumber = 2 + (agentSteps ? 1 : 0) + (flowSteps ? 1 : 0);
     const setupSteps = `${selectedSummary}<div class="ob-flow-steps">
-      <div class="ob-flow-step"><span class="ob-flow-num">1</span><div><strong>Confirm the CostPilot Salesforce components are installed</strong><br/>In Salesforce Setup, verify that the Apex action <code>Route Through CostPilot</code> is available. If it is missing, install the CostPilot pilot components first.</div></div>
+      <div class="ob-flow-step"><span class="ob-flow-num">1</span><div><strong>Confirm the CostPilot Salesforce components are installed</strong><br/>In Salesforce Setup, verify that the Apex action <code>Governed AI Request</code> is available. Haven't installed CostPilot yet? <a href="/install-salesforce.html" target="_blank" rel="noopener">Install the package first →</a></div></div>
       ${agentSteps}${flowSteps}
       <div class="ob-flow-step"><span class="ob-flow-num">${contextStepNumber}</span><div><strong>Map the request context</strong><br/>Pass the user request, current record ID, record name, agent or Flow name, and department. CostPilot uses the approved relationship above to connect related records to <strong>${_obEsc(parentObject)}</strong>.</div></div>
-      ${agentSteps ? `<div class="ob-flow-step"><span class="ob-flow-num">${contextStepNumber + 1}</span><div><strong>Add one Agentforce instruction</strong><br/><code>For AI work involving a Salesforce record, call CostPilot Governed AI Work and return its AI response to the user.</code></div></div>` : ""}
+      ${agentSteps ? `<div class="ob-flow-step"><span class="ob-flow-num">${contextStepNumber + 1}</span><div><strong>Add one Agentforce instruction</strong><br/><code>For AI work involving a Salesforce record, call Governed AI Request and use its response to answer the user.</code></div></div>` : ""}
       <div class="ob-flow-step"><span class="ob-flow-num">${contextStepNumber + (agentSteps ? 2 : 1)}</span><div><strong>Test each selected entry point</strong><br/>Run one real request from every selected agent and Flow. Verify each request appears in CostPilot with its user, entry-point name, record, tokens, cost, and parent context.</div></div>
     </div>`;
     return relationshipPreview
@@ -3062,8 +3136,68 @@ CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ re
     + _obBanner("salesforce", obj, dept, agent) + _obActions();
 }
 
-function _genServiceNow(obj, dept, agent, fields, returnFields = []) {
-  const code =
+function _genServiceNow(obj, dept, agent, fields, returnFields = [], mode = "control") {
+  const code = mode === "observe"
+    ?
+`// ServiceNow Flow Designer custom Action — Script step
+// Runs AFTER a Flow, UI Action, Virtual Agent, or Now Assist workflow has
+// already called an AI provider itself. CostPilot does not make the call or
+// choose the model here -- it only records what happened.
+(function execute(inputs, outputs) {
+    var tableName = String(inputs.record_table || '${obj}').trim();
+    var recordSysId = String(inputs.record_sys_id || '').trim();
+    var modelName = String(inputs.model_name || '').trim();
+    var inputTokens = Number(inputs.input_tokens || 0);
+    var outputTokens = Number(inputs.output_tokens || 0);
+    if (!tableName || !recordSysId || !modelName) {
+        throw new Error('record_table, record_sys_id, and model_name are required.');
+    }
+
+    var record = new GlideRecordSecure(tableName);
+    if (!record.get(recordSysId)) {
+        throw new Error('The requested ServiceNow record was not found or is not accessible.');
+    }
+
+    var apiBaseUrl = String(gs.getProperty(
+        'costpilot.api_base_url',
+        '${CostPilot_URL}'
+    )).replace(/\\/+$/, '');
+    var rm = new sn_ws.RESTMessageV2();
+    rm.setEndpoint(apiBaseUrl + '/api/route');
+    rm.setHttpMethod('POST');
+    rm.setRequestHeader('Content-Type', 'application/json');
+    rm.setHttpTimeout(120000);
+    rm.setRequestBody(JSON.stringify({
+        contract_version: '2026-07-26',
+        mode: 'observe',
+        source: {
+            platform: 'ServiceNow',
+            workspace_id: gs.getProperty('instance_name'),
+            agent_name: String(inputs.agent_name || '${agent}'),
+            department: String(inputs.department || '${dept}')
+        },
+        work: {
+            external_id: record.getUniqueValue(),
+            type: tableName,
+            name: record.getDisplayValue() || tableName + ' ' + record.getUniqueValue(),
+            sync_if_missing: true
+        },
+        usage: {
+            model_name: modelName,
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            cost_usd: inputs.cost_usd != null ? Number(inputs.cost_usd) : null
+        }
+    }));
+
+    var response = rm.execute();
+    var status = response.getStatusCode();
+    if (status < 200 || status >= 300) {
+        throw new Error('CostPilot report failed (' + status + '): ' + response.getBody());
+    }
+    outputs.reported = true;
+})(inputs, outputs);`
+    :
 `// ServiceNow Flow Designer custom Action — Script step
 // Runs only when a Flow, UI Action, Virtual Agent, or Now Assist workflow
 // explicitly invokes "CostPilot Governed AI Request".
@@ -3156,12 +3290,51 @@ function _genServiceNow(obj, dept, agent, fields, returnFields = []) {
     ) + setupHtml + _obBanner("servicenow", obj, dept, agent) + _obActions();
 }
 
-function _genHubSpot(obj, dept, agent, fields, returnFields = []) {
+function _genHubSpot(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const prompt = _jsPrompt(fields, "event.inputFields", (v, f) => `(${v}['${_codeStr(f)}'] || '')`);
   const outputFields = returnFields.length
     ? returnFields.map(f => `      '${_codeStr(f.name)}': ${_jsResultExpr(f.source, "res.data")}`).join(",\n")
     : "      // No return properties configured. CostPilot still routes, logs, and reports this request.";
-  const code =
+
+  const code = mode === "observe"
+    ?
+`// HubSpot Custom Code Action (Node.js)
+// Operations Hub → Workflows → Add Action → Custom Code
+// Runs AFTER this workflow has already called an AI provider itself.
+// CostPilot does not make the call or choose the model here -- it only
+// records what happened so it shows up in your dashboards and reports.
+const axios = require('axios');
+
+exports.main = async (event, callback) => {
+  // Replace with the model/token counts your own AI call actually returned.
+  const modelName    = event.inputFields['model_name'] || 'gpt-4o';
+  const inputTokens  = Number(event.inputFields['input_tokens'] || 0);
+  const outputTokens = Number(event.inputFields['output_tokens'] || 0);
+
+  const res  = await axios.post('${CostPilot_URL}/api/route', {
+    contract_version: '2026-07-26',
+    mode: 'observe',
+    source: {
+      platform: 'HubSpot',
+      workspace_id: String(event.origin?.portalId || 'hubspot'),
+      agent_name: '${agent}',
+      department: '${dept}',
+    },
+    work: {
+      external_id: String(event.object?.objectId || event.callbackId),
+      type: '${obj}',
+      name: '${obj} ' + String(event.object?.objectId || event.callbackId),
+      sync_if_missing: true,
+    },
+    usage: {
+      model_name: modelName,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+    },
+  });
+  callback({ outputFields: { reported: true } });
+};`
+    :
 `// HubSpot Custom Code Action (Node.js)
 // Operations Hub → Workflows → Add Action → Custom Code
 const axios = require('axios');
@@ -3209,12 +3382,39 @@ ${outputFields}
   ) + _obBanner("hubspot", obj, dept, agent) + _obActions();
 }
 
-function _genDynamics(obj, dept, agent, fields, returnFields = []) {
+function _genDynamics(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const dynPrompt = _plainPromptTemplate(fields, f => `@{triggerOutputs()?['body/${f.name}']}`);
   const dynReturns = returnFields.length
     ? returnFields.map(f => `${f.name}: @{body('HTTP')?['${_routeResultKey(f.source)}']}`).join("\n")
     : "No return fields configured. CostPilot still routes, logs, and reports this request.";
-  const code =
+
+  const code = mode === "observe"
+    ?
+`// Power Automate — HTTP Action Configuration
+// Add this step AFTER a step that has already called your AI provider.
+// CostPilot does not make the call or choose the model here -- it only
+// records what happened so it shows up in your dashboards and reports.
+// Trigger: When a row is added, modified or deleted · Table: ${obj}
+
+Method:  POST
+URI:     ${CostPilot_URL}/api/route
+Headers: { "Content-Type": "application/json" }
+Body:
+{
+  "mode":            "observe",
+  "department":      "${dept}",
+  "agent_name":      "${agent}",
+  "source_platform": "Dynamics365",
+  "usage": {
+    "model_name":    "@{outputs('Your_AI_Step')?['model']}",
+    "input_tokens":  "@{outputs('Your_AI_Step')?['prompt_tokens']}",
+    "output_tokens": "@{outputs('Your_AI_Step')?['completion_tokens']}"
+  }
+}
+
+// Replace "Your_AI_Step" with the name of the earlier action in this Flow
+// that actually called your AI provider.`
+    :
 `// Power Automate — HTTP Action Configuration
 // Trigger: When a row is added, modified or deleted · Table: ${obj}
 
@@ -3241,14 +3441,49 @@ ${dynReturns}`;
   ) + _obBanner("dynamics", obj, dept, agent) + _obActions();
 }
 
-function _genZendesk(obj, dept, agent, fields, returnFields = []) {
+function _genZendesk(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const prompt = _jsPrompt(fields, "event.payload", (v, f) =>
     `((${v}.ticket && ${v}.ticket['${_codeStr(f)}']) || ${v}['${_codeStr(f)}'] || '')`
   );
   const returnObject = returnFields.length
     ? returnFields.map(f => `    ${_safeVar(f.name)}: ${_routeResultExpr(f.source)}`).join(",\n")
     : "    message: 'No return fields configured; CostPilot routed and logged the request.'";
-  const code =
+
+  const code = mode === "observe"
+    ?
+`// Zendesk Sunshine Function (Node.js 18)
+// Admin Center → Apps and integrations → Sunshine Functions → Create
+// Runs AFTER this function has already called an AI provider itself.
+// CostPilot does not make the call or choose the model here -- it only
+// records what happened so it shows up in your dashboards and reports.
+const fetch = require('node-fetch');
+
+module.exports = async (event) => {
+  // Replace with the model/token counts your own AI call actually returned.
+  const modelName    = event.payload.model_name || 'gpt-4o';
+  const inputTokens  = Number(event.payload.input_tokens || 0);
+  const outputTokens = Number(event.payload.output_tokens || 0);
+
+  const res  = await fetch('${CostPilot_URL}/api/route', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'observe',
+      department: '${dept}',
+      agent_name: '${agent}',
+      source_platform: 'Zendesk',
+      usage: {
+        model_name: modelName,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+      },
+    }),
+  });
+  const data = await res.json();
+
+  return { status: 200, reported: true };
+};`
+    :
 `// Zendesk Sunshine Function (Node.js 18)
 // Admin Center → Apps and integrations → Sunshine Functions → Create
 const fetch = require('node-fetch');
@@ -3282,13 +3517,43 @@ ${returnObject}
   ) + _obBanner("zendesk", obj, dept, agent) + _obActions();
 }
 
-function _genPython(obj, dept, agent, fields, returnFields = []) {
+function _genPython(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const params = fields.map(f => `${_safeVar(f.name)}: str`).join(", ");
   const prompt = _pythonPrompt(fields);
   const returnMap = returnFields.length
     ? returnFields.map(f => `# ${f.name} = ${_routeResultExpr(f.source, "python")}`).join("\n")
     : "# No return fields configured. CostPilot still routes, logs, and reports this request.";
-  const python =
+
+  const python = mode === "observe"
+    ?
+`import requests
+
+CostPilot_URL = "${CostPilot_URL}"
+
+def report_to_costpilot(model_name: str, input_tokens: int, output_tokens: int, cost_usd: float = None) -> dict:
+    """
+    Call this AFTER your own code has already called your AI provider.
+    CostPilot does not make the call or choose the model here -- it only
+    records what happened so it shows up in your dashboards and reports.
+    """
+    resp = requests.post(CostPilot_URL + "/api/route", json={
+        "mode":            "observe",
+        "department":      "${dept}",
+        "agent_name":      "${agent}",
+        "source_platform": "Python",
+        "usage": {
+            "model_name":    model_name,
+            "input_tokens":  input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd":      cost_usd,
+        },
+    }, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+# After you call your AI provider yourself, report what happened:
+# result = report_to_costpilot(model_name="gpt-4o", input_tokens=812, output_tokens=140, cost_usd=0.0091)`
+    :
 `import requests
 
 CostPilot_URL = "${CostPilot_URL}"
@@ -3314,13 +3579,46 @@ ${returnMap}`;
     + _obBanner("python", obj, dept, agent) + _obActions();
 }
 
-function _genNode(obj, dept, agent, fields, returnFields = []) {
+function _genNode(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const prompt = _jsPrompt(fields, "input", (v, f) => `(${v}.${_safeVar(f)} || '')`);
   const exampleObj = fields.map(f => `//   ${_safeVar(f.name)}: '...'`).join(",\n");
   const returnMap = returnFields.length
     ? returnFields.map(f => `// const ${_safeVar(f.name)} = ${_jsResultExpr(f.source, "result")};`).join("\n")
     : "// No return fields configured. CostPilot still routes, logs, and reports this request.";
-  const code =
+
+  const code = mode === "observe"
+    ?
+`// Node.js 18+
+const CostPilot_URL = '${CostPilot_URL}';
+
+// Call this AFTER your own code has already called your AI provider.
+// CostPilot does not make the call or choose the model here -- it only
+// records what happened so it shows up in your dashboards and reports.
+async function reportToCostPilot({ modelName, inputTokens, outputTokens, costUsd }) {
+  const res = await fetch(CostPilot_URL + '/api/route', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'observe',
+      department: '${dept}',
+      agent_name: '${agent}',
+      source_platform: 'Node.js',
+      usage: {
+        model_name: modelName,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cost_usd: costUsd,
+      },
+    }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// After you call your AI provider yourself, report what happened:
+// const result = await reportToCostPilot({ modelName: 'gpt-4o', inputTokens: 812, outputTokens: 140, costUsd: 0.0091 });`
+    :
 `// Node.js 18+
 const CostPilot_URL = '${CostPilot_URL}';
 
@@ -3353,13 +3651,59 @@ ${returnMap}`;
     + _obBanner("nodejs", obj, dept, agent) + _obActions();
 }
 
-function _genJava(obj, dept, agent, fields, returnFields = []) {
+function _genJava(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const params = fields.map(f => `String ${_safeVar(f.name)}`).join(", ");
   const textExpr = fields.map((f, i) => {
     const join = i < fields.length - 1 ? ' + "\\n\\n" +\n            ' : "";
     return `"${_doubleCodeStr(f.label || f.name)}:\\n" + ${_safeVar(f.name)}${join}`;
   }).join("");
-  const code =
+
+  const code = mode === "observe"
+    ?
+`import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+// Call this AFTER your own code has already called your AI provider.
+// CostPilot does not make the call or choose the model here -- it only
+// records what happened so it shows up in your dashboards and reports.
+public class CostPilotClient {
+    private static final String COSTPILOT_URL = "${CostPilot_URL}";
+    private static final HttpClient CLIENT = HttpClient.newHttpClient();
+
+    public static String reportToCostPilot(String modelName, int inputTokens, int outputTokens, Double costUsd) throws Exception {
+        String costField = costUsd == null ? "null" : String.valueOf(costUsd);
+        String body = "{"
+            + "\\"mode\\":\\"observe\\","
+            + "\\"department\\":\\"${_doubleCodeStr(dept)}\\","
+            + "\\"agent_name\\":\\"${_doubleCodeStr(agent)}\\","
+            + "\\"source_platform\\":\\"Java\\","
+            + "\\"usage\\":{"
+                + "\\"model_name\\":\\"" + escapeJson(modelName) + "\\","
+                + "\\"input_tokens\\":" + inputTokens + ","
+                + "\\"output_tokens\\":" + outputTokens + ","
+                + "\\"cost_usd\\":" + costField
+            + "}"
+            + "}";
+
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(COSTPILOT_URL + "/api/route"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+
+        return CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+    }
+
+    private static String escapeJson(String value) {
+        return value == null ? "" : value.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\"").replace("\\n", "\\\\n");
+    }
+}
+
+// After you call your AI provider yourself, report what happened:
+// reportToCostPilot("gpt-4o", 812, 140, 0.0091);`
+    :
 `import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -3403,12 +3747,49 @@ public class CostPilotClient {
     + _obBanner("java", obj, dept, agent) + _obActions();
 }
 
-function _genRuby(obj, dept, agent, fields, returnFields = []) {
+function _genRuby(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const params = fields.map(f => `${_safeVar(f.name)}:`).join(", ");
   const prompt = fields.map(f => `#{${_safeVar(f.name)}}`).map((token, i) =>
     `${_doubleCodeStr(fields[i].label || fields[i].name)}:\\n${token}`
   ).join("\\n\\n");
-  const code =
+
+  const code = mode === "observe"
+    ?
+`require "json"
+require "net/http"
+require "uri"
+
+COSTPILOT_URL = "${CostPilot_URL}"
+
+# Call this AFTER your own code has already called your AI provider.
+# CostPilot does not make the call or choose the model here -- it only
+# records what happened so it shows up in your dashboards and reports.
+def report_to_costpilot(model_name:, input_tokens:, output_tokens:, cost_usd: nil)
+  uri = URI("#{COSTPILOT_URL}/api/route")
+
+  req = Net::HTTP::Post.new(uri)
+  req["Content-Type"] = "application/json"
+  req.body = {
+    mode: "observe",
+    department: "${_codeStr(dept)}",
+    agent_name: "${_codeStr(agent)}",
+    source_platform: "Ruby",
+    usage: {
+      model_name: model_name,
+      input_tokens: input_tokens,
+      output_tokens: output_tokens,
+      cost_usd: cost_usd
+    }
+  }.to_json
+
+  Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
+    http.request(req)
+  end
+end
+
+# After you call your AI provider yourself, report what happened:
+# response = report_to_costpilot(model_name: "gpt-4o", input_tokens: 812, output_tokens: 140, cost_usd: 0.0091)`
+    :
 `require "json"
 require "net/http"
 require "uri"
@@ -3442,9 +3823,29 @@ ${returnFields.length ? returnFields.map(f => `# ${_safeVar(f.name)} = ${_routeR
     + _obBanner("ruby", obj, dept, agent) + _obActions();
 }
 
-function _genRest(obj, dept, agent, fields, returnFields = []) {
+function _genRest(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const prompt = _plainPromptTemplate(fields, f => `\${${_safeVar(f.name)}}`);
-  const curl =
+
+  const curl = mode === "observe"
+    ?
+`# Call this AFTER your own code has already called your AI provider.
+# CostPilot does not make the call or choose the model here -- it only
+# records what happened so it shows up in your dashboards and reports.
+curl -X POST ${CostPilot_URL}/api/route \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "mode":            "observe",
+    "department":      "${dept}",
+    "agent_name":      "${agent}",
+    "source_platform": "REST",
+    "usage": {
+      "model_name":    "gpt-4o",
+      "input_tokens":  812,
+      "output_tokens": 140,
+      "cost_usd":      0.0091
+    }
+  }'`
+    :
 `curl -X POST ${CostPilot_URL}/api/route \\
   -H "Content-Type: application/json" \\
   -d '{

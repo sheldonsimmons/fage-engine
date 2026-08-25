@@ -255,6 +255,19 @@
               <input type="text" id="obPlatAgent" class="ob-input" placeholder="e.g. SF-CaseBot" />
             </div>
           </div>
+          <div class="ob-field" id="obGenModeWrap" hidden>
+            <label class="ob-label">How involved should CostPilot be?</label>
+            <div class="ob-choice-grid" id="obGenModeChoices">
+              <div class="ob-provider selected" id="ob-genmode-observe" onclick="selectObGenMode('observe')">
+                <strong>Observe — Recommended</strong>
+                <p style="margin:4px 0 0;font-size:11.5px;color:var(--text-muted,#a3a3a3)">Keep your existing AI calls exactly as they are. CostPilot receives the activity for reporting and intelligence.</p>
+              </div>
+              <div class="ob-provider" id="ob-genmode-control" onclick="selectObGenMode('control')">
+                <strong>Control</strong>
+                <p style="margin:4px 0 0;font-size:11.5px;color:var(--text-muted,#a3a3a3)">Route this workload through CostPilot so approved routing, budgets, pruning and governance can be enforced.</p>
+              </div>
+            </div>
+          </div>
 
           <details class="ob-advanced-mapping">
             <summary>Advanced field mapping <span>Optional — CostPilot has already selected sensible defaults</span></summary>

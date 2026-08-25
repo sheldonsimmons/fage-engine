@@ -5,8 +5,8 @@ public with sharing class CostPilotAgentforceAction {
     private static String workspaceId = '4BE43240A6674314';
 
     @InvocableMethod(
-        label='Govern AI Work with CostPilot'
-        description='Attributes Agentforce work to a project and returns the CostPilot governance decision.'
+        label='Governed AI Work'
+        description='Applies your org\'s AI governance policy to this work and attributes it to a project. Powered by CostPilot.'
         category='CostPilot'
         callout=true
     )

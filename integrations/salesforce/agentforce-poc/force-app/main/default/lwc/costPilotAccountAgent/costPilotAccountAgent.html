@@ -1,0 +1,32 @@
+<template>
+    <lightning-card
+        title="CostPilot Account Intelligence"
+        icon-name="standard:bot"
+    >
+        <div class="slds-p-around_medium">
+
+            <p class="slds-m-bottom_medium">
+                Ask Agentforce about this Salesforce Account.
+            </p>
+
+            <lightning-button
+                label="Analyze Account"
+                variant="brand"
+                onclick={handleAnalyzeAccount}
+                class="slds-m-right_small">
+            </lightning-button>
+
+            <lightning-button
+                label="Show Opportunities"
+                onclick={handleShowOpportunities}>
+            </lightning-button>
+
+            <template if:true={errorMessage}>
+                <div class="slds-text-color_error slds-m-top_medium">
+                    {errorMessage}
+                </div>
+            </template>
+
+        </div>
+    </lightning-card>
+</template>
