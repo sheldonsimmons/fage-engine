@@ -267,6 +267,9 @@
               <div class="bp-section-head"><h3>Business Journey &amp; AI Investment</h3></div>
               <div class="panel" id="bpJourneyPanel"></div>
 
+              <div class="bp-section-head"><h3>AI Investment by Opportunity Stage</h3></div>
+              <div class="panel" id="bpStagePanel"></div>
+
               <div class="bp-grid-2">
                 <div>
                   <div class="bp-section-head"><h3>AI Investment by Business Function</h3></div>
@@ -490,6 +493,7 @@
 
       bpRenderFunctionDonut(profile.business_function_breakdown || []);
       bpRenderJourney(profile.journey_breakdown || [], kpis.ai_investment_usd);
+      bpRenderStageFunnel(profile.stage_breakdown || [], kpis.ai_investment_usd);
       bpRenderInsights(profile);
       bpRenderSummaryBanner(profile, businessValue);
     }
@@ -531,6 +535,29 @@
           <div class="bp-journey-label">${stage.label}</div>
           <div class="bp-journey-value">${bpFmtUsd(stage.spend_usd)}</div>
           <div class="bp-journey-sub">${pct}% of AI spend</div>
+        </div>`;
+      }).join("")}</div>`;
+    }
+
+    // Real Opportunity-stage funnel, driven by WorkItemOutcomeEvent history
+    // (see routes_work_items.py's stage_breakdown computation) rather than
+    // work-item type -- rows already arrive in chronological order (by
+    // first-observed stage), so this just renders them as given.
+    function bpRenderStageFunnel(rows, totalSpend) {
+      const panel = document.getElementById("bpStagePanel");
+      if (!panel) return;
+      if (!rows.length) {
+        panel.innerHTML = `<div class="bp-empty">No Opportunity stage history recorded for this account's AI activity yet.</div>`;
+        return;
+      }
+      panel.innerHTML = `<div class="bp-journey-row">${rows.map((stage, index) => {
+        const pct = totalSpend > 0 ? Math.round((stage.spend_usd / totalSpend) * 100) : 0;
+        const isUntracked = stage.stage === "Before tracking began";
+        return `<div class="bp-journey-stage">
+          <div class="bp-journey-dot">${isUntracked ? "…" : index + 1}</div>
+          <div class="bp-journey-label">${stage.stage}</div>
+          <div class="bp-journey-value">${bpFmtUsd(stage.spend_usd)}</div>
+          <div class="bp-journey-sub">${stage.request_count.toLocaleString()} requests · ${pct}% of AI spend</div>
         </div>`;
       }).join("")}</div>`;
     }

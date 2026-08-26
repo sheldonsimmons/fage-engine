@@ -20,6 +20,7 @@ from database.models import (
     WorkItem,
     WorkItemAgent,
     WorkItemOutcome,
+    WorkItemOutcomeEvent,
     WorkItemSourceLink,
     WorkItemUser,
     WorkUser,
@@ -860,6 +861,7 @@ def account_profile(
             },
             "business_function_breakdown": [],
             "journey_breakdown": [],
+            "stage_breakdown": [],
             "outcomes": {
                 "won_count": 0, "lost_count": 0, "open_count": 0,
                 "pipeline_value_usd": 0.0, "closed_won_value_usd": 0.0,
@@ -992,6 +994,72 @@ def account_profile(
         for context_type, spend, count in stage_rows
     ]
 
+    # Real Opportunity-stage funnel: which stage was active when each AI
+    # request happened, using WorkItemOutcomeEvent's already-populated
+    # change history (see its docstring -- built for exactly this). Scoped
+    # to this one account's Opportunity work items, so row-level Python
+    # processing here is proportionate, not the unbounded company-wide
+    # pattern that hurt project_activity_reporting() before it was fixed --
+    # this is a small, per-account row count, not a global one.
+    opportunity_ids = [
+        row[0] for row in db.query(WorkItem.id)
+        .filter(WorkItem.id.in_(work_item_ids), WorkItem.context_type == "opportunity")
+        .all()
+    ]
+    stage_breakdown = []
+    if opportunity_ids:
+        events_by_item: dict[int, list] = {}
+        for wi_id, status, recorded_at in (
+            db.query(WorkItemOutcomeEvent.work_item_id, WorkItemOutcomeEvent.outcome_status, WorkItemOutcomeEvent.recorded_at)
+            .filter(WorkItemOutcomeEvent.work_item_id.in_(opportunity_ids))
+            .order_by(WorkItemOutcomeEvent.work_item_id, WorkItemOutcomeEvent.recorded_at)
+            .all()
+        ):
+            events_by_item.setdefault(wi_id, []).append((recorded_at, status))
+
+        NO_STAGE_YET = "Before tracking began"
+        stage_totals: dict[str, dict] = {}
+        stage_first_seen: dict[str, datetime] = {}
+
+        opp_txs = (
+            tx_base
+            .filter(TokenTransaction.work_item_id.in_(opportunity_ids))
+            .with_entities(TokenTransaction.work_item_id, TokenTransaction.timestamp, TokenTransaction.cost_usd)
+            .order_by(TokenTransaction.work_item_id, TokenTransaction.timestamp)
+            .all()
+        )
+        event_cursor: dict[int, int] = {}
+        for wi_id, ts, cost in opp_txs:
+            events = events_by_item.get(wi_id, [])
+            idx = event_cursor.get(wi_id, 0)
+            while idx < len(events) and events[idx][0] <= ts:
+                idx += 1
+            event_cursor[wi_id] = idx
+            stage = events[idx - 1][1] if idx > 0 else NO_STAGE_YET
+            stage = stage or NO_STAGE_YET
+
+            bucket = stage_totals.setdefault(stage, {"spend_usd": 0.0, "request_count": 0})
+            bucket["spend_usd"] += float(cost or 0.0)
+            bucket["request_count"] += 1
+            if stage != NO_STAGE_YET:
+                first_seen = next((e[0] for e in events if e[1] == stage), ts)
+                if stage not in stage_first_seen or first_seen < stage_first_seen[stage]:
+                    stage_first_seen[stage] = first_seen
+
+        def _stage_sort_key(name: str):
+            if name == NO_STAGE_YET:
+                return datetime.min
+            return stage_first_seen.get(name, datetime.max)
+
+        stage_breakdown = [
+            {
+                "stage": stage,
+                "spend_usd": round(totals["spend_usd"], 6),
+                "request_count": totals["request_count"],
+            }
+            for stage, totals in sorted(stage_totals.items(), key=lambda kv: _stage_sort_key(kv[0]))
+        ]
+
     # Everything below is a heuristic derived from real data, not a CRM
     # field CostPilot actually stores -- each is documented as such so the
     # frontend doesn't present it as more authoritative than it is.
@@ -1079,6 +1147,7 @@ def account_profile(
         },
         "business_function_breakdown": business_function_breakdown,
         "journey_breakdown": journey_breakdown,
+        "stage_breakdown": stage_breakdown,
         "outcomes": {
             "won_count": int(won_count or 0),
             "lost_count": int(lost_count or 0),
