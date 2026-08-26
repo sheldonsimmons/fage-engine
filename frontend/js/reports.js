@@ -2781,6 +2781,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // right on top of it.
   if (requestedTab && document.getElementById(`tab-${requestedTab}`)) {
     openReportView(requestedTab, { preserveUrl: true });
+  } else {
+    // No ?tab= param -- the normal case when reaching this page from the
+    // nav sidebar rather than a deep link. The default tab's pane is
+    // already active in markup, but its data was never fetched, so it
+    // showed empty/stale until the 30s auto-refresh interval first fired.
+    loadActiveTab();
   }
   if (Object.keys(drillScope).length) {
     setTimeout(() => drillFromAskCostPilot(drillScope), 100);

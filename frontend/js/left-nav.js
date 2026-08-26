@@ -19,9 +19,11 @@
     { label: "AI Activity", href: "/operate.html", icon: "pulse" },
     { label: "Ask CostPilot", href: "#", icon: "ask", id: "cpLeftNavAsk" },
     { label: "Business Profiles", href: "/business-profile.html", icon: "building" },
+    { label: "Projects", href: "/work-items.html", icon: "briefcase" },
     { label: "Reports", href: "/reports.html", icon: "doc" },
     { label: "Integrations", href: "/onboarding.html", icon: "plug" },
     { label: "Connectors", href: "/connector-manager.html", icon: "grid" },
+    { label: "Models", href: "/models.html", icon: "layers" },
     { label: "Policy", href: "/policy.html", icon: "target" },
     { label: "Settings", href: "/admin.html", icon: "gear" },
   ];
@@ -38,6 +40,8 @@
     doc: '<path d="M5 2h7l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M12 2v3h3M7 10h6M7 13h6"/>',
     plug: '<path d="M7 3v4M13 3v4M5 7h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7zM10 15v3"/>',
     gear: '<circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.4 4.6l-1.4 1.4M6 12.6l-1.4 1.4M15.4 15.4l-1.4-1.4M6 7.4L4.6 6"/>',
+    briefcase: '<rect x="2.5" y="6.5" width="15" height="10" rx="1.5"/><path d="M7 6.5V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 13 5v1.5M2.5 11h15"/>',
+    layers: '<path d="M10 2.5 17 6.5 10 10.5 3 6.5z"/><path d="M3 10.5 10 14.5 17 10.5"/><path d="M3 14 10 18 17 14"/>',
   };
 
   function svgIcon(name) {
