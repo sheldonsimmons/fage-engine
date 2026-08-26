@@ -1532,8 +1532,9 @@ def business_context_reporting(
             group["monthly_ai_budget"] = None
         elif group["monthly_ai_budget"] and group["monthly_ai_budget"] > 0:
             group["budget_used_pct"] = round(group["spend_usd"] / group["monthly_ai_budget"] * 100, 1)
+        origin_covered_requests = group.pop("_origin_covered_requests")
         group["origin_coverage_pct"] = round(
-            group.pop("_origin_covered_requests") / group["request_count"] * 100, 1
+            origin_covered_requests / group["request_count"] * 100, 1
         ) if group["request_count"] else 0.0
         group["children"].sort(key=lambda row: (-row["spend_usd"], -row["request_count"]))
 
