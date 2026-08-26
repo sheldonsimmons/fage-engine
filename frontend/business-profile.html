@@ -571,7 +571,9 @@
       const maxSpend = Math.max(...rows.map((stage) => stage.spend_usd), 0);
       panel.innerHTML = `<div class="bp-stage-list">${rows.map((stage, index) => {
         const pct = totalSpend > 0 ? Math.round((stage.spend_usd / totalSpend) * 100) : 0;
-        const barPct = maxSpend > 0 ? Math.max(2, Math.round((stage.spend_usd / maxSpend) * 100)) : 0;
+        // No minimum floor -- a zero-spend stage must show zero bar, or it
+        // becomes visually indistinguishable from a genuinely small one.
+        const barPct = maxSpend > 0 ? (stage.spend_usd / maxSpend) * 100 : 0;
         const isUntracked = stage.stage === "Before tracking began";
         return `<div class="bp-stage-row">
           <div class="bp-stage-index">${isUntracked ? "…" : index + 1}</div>
