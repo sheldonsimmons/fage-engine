@@ -136,6 +136,17 @@ def _resolve_or_create_project(
     # rather than getting a standalone WorkItem -- that's a different,
     # deliberate design, not the same bug.
     has_deterministic_identity = source_record_type == "Opportunity"
+    if project and has_deterministic_identity:
+        expected_external_id = f"SF-{source_record_type.upper()}-{source_record_id}"
+        if project.external_id != expected_external_id:
+            # Stale link from before this record type had deterministic
+            # identity (or a genuine account-rollup mis-share). Drop it and
+            # let the resolution path below find-or-create the correct
+            # dedicated WorkItem; the source_link repoint logic further
+            # down (`if source_link.work_item_id != project.id: ...`) then
+            # heals the link automatically, same self-heal pattern the
+            # bulk importer already uses.
+            project = None
     grouped_by_account = False
     # Normal requests retain the legacy account-grouping fallback. When an
     # onboarding-approved relationship resolved a canonical parent, use that
