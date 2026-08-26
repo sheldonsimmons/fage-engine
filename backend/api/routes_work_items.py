@@ -1416,6 +1416,113 @@ def business_context_reporting(
             ) if stats["request_count"] else 0.0,
             "children": children,
         })
+
+    # Fold sibling WorkItems that share a WorkAccount into one row -- an
+    # Account, its Opportunities, and its Cases are separate WorkItem rows
+    # by design (each is its own source-of-truth record), but Salesforce
+    # sync already links all of them to one shared WorkAccount via
+    # WorkItem.account_id (see routes_connections.py). Without this fold,
+    # the same real-world customer shows up as one card per record type
+    # instead of rolling up to a single account-level card.
+    account_ids = {item.account_id for item in items if item.account_id}
+    accounts_by_id = {}
+    if account_ids:
+        accounts_by_id = {
+            account.id: account
+            for account in db.query(WorkAccount).filter(WorkAccount.id.in_(account_ids)).all()
+        }
+
+    standalone = []
+    folded_by_account_id: dict[int, dict] = {}
+    for parent, item in zip(parents, items):
+        account = accounts_by_id.get(item.account_id) if item.account_id else None
+        if not account:
+            standalone.append(parent)
+            continue
+        group = folded_by_account_id.get(account.id)
+        if group is None:
+            group = {
+                "id": parent["id"],
+                "external_id": account.external_id,
+                "name": account.name,
+                "context_type": "account",
+                "status": account.status,
+                "department": account.department or parent["department"],
+                "source_platform": parent["source_platform"],
+                "request_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "tokens_saved": 0,
+                "spend_usd": 0.0,
+                "monthly_ai_budget": None,
+                "budget_used_pct": None,
+                "risk_event_count": 0,
+                "last_activity_at": None,
+                "related_record_count": 0,
+                "assigned_agent_count": 0,
+                "agent_count": 0,
+                "_origin_covered_requests": 0,
+                "children": [],
+            }
+            folded_by_account_id[account.id] = group
+
+        group["request_count"] += parent["request_count"]
+        group["input_tokens"] += parent["input_tokens"]
+        group["output_tokens"] += parent["output_tokens"]
+        group["total_tokens"] += parent["total_tokens"]
+        group["tokens_saved"] += parent["tokens_saved"]
+        group["spend_usd"] = round(group["spend_usd"] + parent["spend_usd"], 6)
+        group["risk_event_count"] += parent["risk_event_count"]
+        group["related_record_count"] += parent["related_record_count"]
+        group["assigned_agent_count"] += parent["assigned_agent_count"]
+        group["agent_count"] += parent["agent_count"]
+        group["_origin_covered_requests"] += round(
+            parent["origin_coverage_pct"] / 100 * parent["request_count"]
+        ) if parent["request_count"] else 0
+        if parent["last_activity_at"] and (
+            not group["last_activity_at"] or parent["last_activity_at"] > group["last_activity_at"]
+        ):
+            group["last_activity_at"] = parent["last_activity_at"]
+        # A WorkAccount carries no budget of its own -- only individual
+        # WorkItems do. Merging differing per-record budgets into one
+        # percentage would be misleading, so only surface a budget when
+        # exactly one sibling record actually has one set.
+        if parent["monthly_ai_budget"] is not None:
+            if group["monthly_ai_budget"] is None:
+                group["monthly_ai_budget"] = parent["monthly_ai_budget"]
+            else:
+                group["monthly_ai_budget"] = "__mixed__"
+        # This sibling WorkItem becomes a related-record row on the merged
+        # account card, same shape as the source-link children below it so
+        # the frontend needs no changes to render either kind.
+        group["children"].append({
+            "source_record_id": item.source_record_id or item.external_id,
+            "source_record_type": item.source_record_type or item.context_type,
+            "source_record_name": item.name,
+            "source_platform": item.source_platform,
+            "is_primary": item.context_type == "account",
+            "origin_recorded": True,
+            "request_count": parent["request_count"],
+            "input_tokens": parent["input_tokens"],
+            "output_tokens": parent["output_tokens"],
+            "tokens_saved": parent["tokens_saved"],
+            "spend_usd": parent["spend_usd"],
+            "last_activity_at": parent["last_activity_at"],
+        })
+        group["children"].extend(parent["children"])
+
+    for group in folded_by_account_id.values():
+        if group["monthly_ai_budget"] == "__mixed__":
+            group["monthly_ai_budget"] = None
+        elif group["monthly_ai_budget"] and group["monthly_ai_budget"] > 0:
+            group["budget_used_pct"] = round(group["spend_usd"] / group["monthly_ai_budget"] * 100, 1)
+        group["origin_coverage_pct"] = round(
+            group.pop("_origin_covered_requests") / group["request_count"] * 100, 1
+        ) if group["request_count"] else 0.0
+        group["children"].sort(key=lambda row: (-row["spend_usd"], -row["request_count"]))
+
+    parents = standalone + list(folded_by_account_id.values())
     parents.sort(key=lambda row: (-row["spend_usd"], -row["request_count"], row["name"]))
 
     active_types = [row["context_type"] for row in parents if row["request_count"]]
