@@ -834,6 +834,12 @@ restorePanelStates();
 // Staggered 200ms, dashboard poll reduced from 5s → 15s to reduce API burst
 setTimeout(checkHealth,   200);
 setTimeout(loadDashboard, 200);
+// agentlake.js's loadAgents() self-schedules its own live-status poll
+// (1s while an agent is active, 5s otherwise) via scheduleAgentPoll --
+// it just needs this one initial call to start that chain. Without it,
+// the AgentLake panel never fetches on page load and its metrics (e.g.
+// "Active now") stay frozen at whatever value happened to be in the DOM.
+setTimeout(() => { if (typeof loadAgents === "function") loadAgents(); }, 200);
 
 setInterval(checkHealth,   15000);
 setInterval(loadDashboard, 15000);
