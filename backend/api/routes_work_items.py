@@ -1033,6 +1033,10 @@ def account_profile(
         ):
             events_by_item.setdefault(wi_id, []).append((recorded_at, status))
 
+        # Only for Opportunities with zero outcome-sync history at all --
+        # activity that predates the *first* known event on an otherwise-
+        # tracked Opportunity is attributed to that earliest stage instead
+        # (see the merge loop below), not lumped in here.
         NO_STAGE_YET = "Before tracking began"
         stage_totals: dict[str, dict] = {}
         stage_first_seen: dict[str, datetime] = {}
@@ -1051,7 +1055,18 @@ def account_profile(
             while idx < len(events) and events[idx][0] <= ts:
                 idx += 1
             event_cursor[wi_id] = idx
-            stage = events[idx - 1][1] if idx > 0 else NO_STAGE_YET
+            if idx > 0:
+                stage = events[idx - 1][1]
+            elif events:
+                # No event recorded before this transaction, but the
+                # Opportunity does have known history -- CostPilot just
+                # hadn't synced yet at that moment, not that there was no
+                # real stage. The stage didn't change because we weren't
+                # watching, so attribute retroactively to the earliest
+                # stage we've ever observed rather than an "unknown" bucket.
+                stage = events[0][1]
+            else:
+                stage = NO_STAGE_YET
             stage = stage or NO_STAGE_YET
 
             bucket = stage_totals.setdefault(stage, {"spend_usd": 0.0, "request_count": 0})
