@@ -149,6 +149,21 @@
     .bp-journey-value { font-size: 15px; font-weight: 650; font-family: var(--font-mono); color: var(--text-primary); }
     .bp-journey-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
 
+    .bp-stage-list { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+    .bp-stage-row { display: flex; align-items: flex-start; gap: 10px; }
+    .bp-stage-index {
+      width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      background: var(--bg-base); border: 1px solid var(--accent); color: var(--accent);
+      font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    }
+    .bp-stage-main { flex: 1; min-width: 0; }
+    .bp-stage-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .bp-stage-name { font-size: 12.5px; color: var(--text-primary); font-weight: 600; }
+    .bp-stage-value { font-size: 13px; font-weight: 650; font-family: var(--font-mono); color: var(--text-primary); flex-shrink: 0; }
+    .bp-stage-bar-track { height: 6px; border-radius: 3px; background: var(--bg-base); margin-top: 5px; overflow: hidden; }
+    .bp-stage-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-purple)); }
+    .bp-stage-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; }
+
     .bp-insight { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 11px; padding: 15px 16px; display: flex; gap: 11px; margin-bottom: 11px; }
     .bp-insight .icon { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; background: rgba(88,166,255,0.12); color: var(--accent); display: flex; align-items: center; justify-content: center; }
     .bp-insight .headline { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 5px; }
@@ -550,14 +565,24 @@
         panel.innerHTML = `<div class="bp-empty">No Opportunity stage history recorded for this account's AI activity yet.</div>`;
         return;
       }
-      panel.innerHTML = `<div class="bp-journey-row">${rows.map((stage, index) => {
+      // Bar width is relative to the largest stage here, not the account's
+      // total spend -- keeps the funnel shape readable even when spend is
+      // concentrated in one or two stages instead of every bar looking tiny.
+      const maxSpend = Math.max(...rows.map((stage) => stage.spend_usd), 0);
+      panel.innerHTML = `<div class="bp-stage-list">${rows.map((stage, index) => {
         const pct = totalSpend > 0 ? Math.round((stage.spend_usd / totalSpend) * 100) : 0;
+        const barPct = maxSpend > 0 ? Math.max(2, Math.round((stage.spend_usd / maxSpend) * 100)) : 0;
         const isUntracked = stage.stage === "Before tracking began";
-        return `<div class="bp-journey-stage">
-          <div class="bp-journey-dot">${isUntracked ? "…" : index + 1}</div>
-          <div class="bp-journey-label">${stage.stage}</div>
-          <div class="bp-journey-value">${bpFmtUsd(stage.spend_usd)}</div>
-          <div class="bp-journey-sub">${stage.request_count.toLocaleString()} requests · ${pct}% of AI spend</div>
+        return `<div class="bp-stage-row">
+          <div class="bp-stage-index">${isUntracked ? "…" : index + 1}</div>
+          <div class="bp-stage-main">
+            <div class="bp-stage-head">
+              <span class="bp-stage-name">${stage.stage}</span>
+              <span class="bp-stage-value">${bpFmtUsd(stage.spend_usd)}</span>
+            </div>
+            <div class="bp-stage-bar-track"><div class="bp-stage-bar-fill" style="width:${barPct}%"></div></div>
+            <div class="bp-stage-sub">${stage.request_count.toLocaleString()} requests · ${pct}% of AI spend</div>
+          </div>
         </div>`;
       }).join("")}</div>`;
     }

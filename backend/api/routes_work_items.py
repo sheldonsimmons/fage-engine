@@ -965,15 +965,28 @@ def account_profile(
     # doesn't track a work item moving through stages over time today, only
     # what type it is and (for Opportunities) its outcome. Showing that
     # invented pipeline would misrepresent what's actually known.
+    # Prefer source_record_type over context_type when it names a
+    # recognized real object: the live Agentforce path hardcodes
+    # context_type to a generic "project" bucket for every non-Account
+    # record regardless of its actual Salesforce object type (see the
+    # stage_breakdown computation below for the same issue), so an
+    # Opportunity or Case's activity would otherwise show up mislabeled
+    # instead of under its real type.
+    effective_type = case(
+        (func.lower(WorkItem.source_record_type) == "opportunity", literal("opportunity")),
+        (func.lower(WorkItem.source_record_type) == "case", literal("case")),
+        (func.lower(WorkItem.source_record_type) == "account", literal("account")),
+        else_=WorkItem.context_type,
+    )
     stage_rows = (
         tx_base
         .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
         .with_entities(
-            WorkItem.context_type,
+            effective_type,
             func.sum(TokenTransaction.cost_usd),
             func.count(TokenTransaction.id),
         )
-        .group_by(WorkItem.context_type)
+        .group_by(effective_type)
         .order_by(func.sum(TokenTransaction.cost_usd).desc())
         .all()
     )
@@ -986,14 +999,14 @@ def account_profile(
     }
     journey_breakdown = [
         {
-            "stage": context_type or "custom",
-            "label": stage_labels.get(context_type or "custom", (context_type or "Other").replace("_", " ").title()),
+            "stage": effective_type_value or "custom",
+            "label": stage_labels.get(effective_type_value or "custom", (effective_type_value or "Other").replace("_", " ").title()),
             "spend_usd": round(float(spend), 6),
             "request_count": int(count),
             # Only the Opportunity stage has a won/lost concept today.
-            "won_count": int(won_count or 0) if context_type == "opportunity" else None,
+            "won_count": int(won_count or 0) if effective_type_value == "opportunity" else None,
         }
-        for context_type, spend, count in stage_rows
+        for effective_type_value, spend, count in stage_rows
     ]
 
     # Real Opportunity-stage funnel: which stage was active when each AI
