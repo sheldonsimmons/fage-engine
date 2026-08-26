@@ -111,8 +111,17 @@ def get_agent_activity(
         flagship_calls = sum(1 for t in txs if t.model_tier not in ECONOMY)
         pruned_calls   = sum(1 for t in txs if t.was_pruned)
         tokens_saved   = sum(t.tokens_saved or 0 for t in txs)
-        last_active    = max((t.timestamp for t in txs), default=ag.last_used_at)
-        if include_unused and not txs and not last_active:
+        if txs:
+            last_active = max(t.timestamp for t in txs)
+        else:
+            # RegisteredAgent.last_used_at is stamped as soon as a request
+            # starts being processed (see routes_enrich.py/routes_proxy.py),
+            # before it's known whether that request ever produces a real,
+            # billed TokenTransaction -- a blocked or incomplete request can
+            # set it with zero real usage behind it. "Never used" reporting
+            # needs a true evidence-of-a-real-call signal, so look up this
+            # agent's actual last transaction (outside the requested window,
+            # if any) instead of trusting that field.
             last_active = (
                 db.query(TokenTransaction.timestamp)
                 .filter(TokenTransaction.agent_id == ag.id)
