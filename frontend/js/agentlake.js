@@ -51,7 +51,7 @@ function effectiveAgentStatus(agent) {
   if (status !== "active") return "idle";
   if (agent.active_recently) return "active";
 
-  const lastSeenMs = agent.last_used_at ? new Date(agent.last_used_at).getTime() : 0;
+  const lastSeenMs = agent.last_used_at ? (agentlakeDate(agent.last_used_at)?.getTime() || 0) : 0;
   const recentlyUsed = lastSeenMs && (Date.now() - lastSeenMs <= AGENT_ACTIVE_WINDOW_MS);
   return recentlyUsed ? "active" : "idle";
 }
@@ -140,7 +140,7 @@ function renderAgentTable(agents) {
                       : "var(--accent-red)";
 
     const lastActive = a.last_used_at
-      ? new Date(a.last_used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      ? agentlakeDate(a.last_used_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
       : "—";
 
     const platform = a.source_platform || "Custom";
@@ -230,7 +230,7 @@ function renderAdminAgentTable(agents, tbody) {
       : status === "idle" ? "badge-idle"
       : "badge-locked";
     const lastActive = agent.last_used_at
-      ? new Date(agent.last_used_at).toLocaleString("en-US", {
+      ? agentlakeDate(agent.last_used_at).toLocaleString("en-US", {
           month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
         })
       : "Never";
@@ -311,7 +311,7 @@ function renderAdminAgentDrawer(agent) {
         <div><span>Target</span><strong>${target}</strong></div>
         <div><span>Permissions</span><strong>${agent.permissions || "—"}</strong></div>
         <div><span>Collision policy</span><strong>${policy}</strong></div>
-        <div><span>Last active</span><strong>${agent.last_used_at ? new Date(agent.last_used_at).toLocaleString() : "Never"}</strong></div>
+        <div><span>Last active</span><strong>${agent.last_used_at ? agentlakeDate(agent.last_used_at).toLocaleString() : "Never"}</strong></div>
       </div>
     </div>
     <div class="admin-drawer-section">
@@ -794,7 +794,7 @@ function renderAgentlakeViews() {
 
   const recent = [...agents]
     .filter(agent => agent.last_used_at)
-    .sort((a, b) => new Date(b.last_used_at) - new Date(a.last_used_at))
+    .sort((a, b) => agentlakeDate(b.last_used_at) - agentlakeDate(a.last_used_at))
     .slice(0, 5);
   renderAgentlakeCompactList("agentlakeRecentList", recent, agent => ({
     name: displayAgentName(agent),
