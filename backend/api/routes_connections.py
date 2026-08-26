@@ -2148,6 +2148,16 @@ async def discover_object_fields(
                 "readable": True,
                 "writable": bool(field.get("createable") or field.get("updateable")),
                 "reference_to": field.get("referenceTo") or [],
+                # Admin-defined picklist order (e.g. StageName's stage
+                # sequence) -- captured here because it's already part of
+                # this describe() response, so surfacing it costs nothing
+                # extra. Used to show every stage in a funnel/breakdown even
+                # ones with zero AI activity, in the org's real order,
+                # instead of only the stages CostPilot happened to observe.
+                "picklist_values": [
+                    pv.get("value") for pv in field.get("picklistValues") or []
+                    if pv.get("active") and pv.get("value")
+                ] if field.get("picklistValues") else None,
             }
             for field in payload.get("fields", [])
         ]

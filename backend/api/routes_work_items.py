@@ -1,5 +1,6 @@
 """Work Attribution API — accounts and projects/matters/engagements."""
 
+import json
 import re
 import uuid
 from datetime import datetime, timedelta
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import (
     AuditEvent,
+    IntegrationConnection,
     RegisteredAgent,
     TokenTransaction,
     WorkAccount,
@@ -1046,10 +1048,52 @@ def account_profile(
                 if stage not in stage_first_seen or first_seen < stage_first_seen[stage]:
                     stage_first_seen[stage] = first_seen
 
-        def _stage_sort_key(name: str):
+        # Show every stage the org actually defines -- not just the ones
+        # CostPilot happened to observe activity or a stage-change on --
+        # when the picklist is known. Captured from the Opportunity
+        # StageName field's admin-defined picklist, already fetched during
+        # object discovery (see routes_connections.py's discover_object());
+        # existing connections need to re-run discovery once to populate
+        # this. Falls back to observed-only stages (today's behavior) when
+        # it isn't available yet.
+        picklist_stages: list[str] = []
+        connection = (
+            db.query(IntegrationConnection)
+            .filter(
+                IntegrationConnection.workspace_id == account.workspace_id,
+                IntegrationConnection.platform == "salesforce",
+                IntegrationConnection.selected_object == "Opportunity",
+            )
+            .order_by(IntegrationConnection.last_success_at.desc())
+            .first()
+        )
+        if connection and connection.discovery_json:
+            try:
+                discovery = json.loads(connection.discovery_json)
+            except (TypeError, ValueError):
+                discovery = {}
+            stage_field = next(
+                (f for f in discovery.get("fields") or [] if f.get("name") == "StageName"),
+                None,
+            )
+            if stage_field and stage_field.get("picklist_values"):
+                picklist_stages = [s for s in stage_field["picklist_values"] if s]
+
+        for stage in picklist_stages:
+            if stage not in stage_totals:
+                stage_totals[stage] = {"spend_usd": 0.0, "request_count": 0}
+
+        def _final_sort_key(name: str):
+            if name in picklist_stages:
+                # Picklist order first and foremost -- an org's defined
+                # stage sequence beats a first-observed-timestamp guess.
+                return (0, picklist_stages.index(name))
             if name == NO_STAGE_YET:
-                return datetime.min
-            return stage_first_seen.get(name, datetime.max)
+                return (1, 0)
+            # Anything observed but outside the known picklist (a stage
+            # from a different platform/vocabulary, or a stale value no
+            # longer active) sorts after the real picklist, chronologically.
+            return (2, stage_first_seen.get(name, datetime.max).timestamp())
 
         stage_breakdown = [
             {
@@ -1057,7 +1101,7 @@ def account_profile(
                 "spend_usd": round(totals["spend_usd"], 6),
                 "request_count": totals["request_count"],
             }
-            for stage, totals in sorted(stage_totals.items(), key=lambda kv: _stage_sort_key(kv[0]))
+            for stage, totals in sorted(stage_totals.items(), key=lambda kv: _final_sort_key(kv[0]))
         ]
 
     # Everything below is a heuristic derived from real data, not a CRM
