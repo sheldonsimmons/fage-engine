@@ -1493,9 +1493,13 @@ def business_context_reporting(
                 group["monthly_ai_budget"] = parent["monthly_ai_budget"]
             else:
                 group["monthly_ai_budget"] = "__mixed__"
-        # This sibling WorkItem becomes a related-record row on the merged
-        # account card, same shape as the source-link children below it so
-        # the frontend needs no changes to render either kind.
+        # This sibling WorkItem becomes a single related-record row on the
+        # merged account card (same shape as a source-link child, so the
+        # frontend needs no changes). Deliberately not also appending the
+        # sibling's own finer-grained origin children here -- when a
+        # sibling's entire activity came from one origin record, that would
+        # produce two near-identical rows for the same numbers, recreating
+        # the duplicate-looking-row problem this fold is meant to fix.
         group["children"].append({
             "source_record_id": item.source_record_id or item.external_id,
             "source_record_type": item.source_record_type or item.context_type,
@@ -1510,7 +1514,6 @@ def business_context_reporting(
             "spend_usd": parent["spend_usd"],
             "last_activity_at": parent["last_activity_at"],
         })
-        group["children"].extend(parent["children"])
 
     for group in folded_by_account_id.values():
         if group["monthly_ai_budget"] == "__mixed__":
