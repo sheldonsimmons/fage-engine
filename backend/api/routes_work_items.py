@@ -1003,9 +1003,23 @@ def account_profile(
     # processing here is proportionate, not the unbounded company-wide
     # pattern that hurt project_activity_reporting() before it was fixed --
     # this is a small, per-account row count, not a global one.
+    #
+    # Matching on context_type == "opportunity" alone misses real
+    # Opportunities ingested via the live Agentforce path: its Apex action
+    # hardcodes context_type to the generic "project" bucket regardless of
+    # the actual Salesforce object type (see CostPilotAgentforceAction.cls,
+    # governOne()'s 'context_type' => 'project'), while source_record_type
+    # (set from the record's real SObject type on both ingestion paths) is
+    # reliably "Opportunity" either way -- so match on that too.
     opportunity_ids = [
         row[0] for row in db.query(WorkItem.id)
-        .filter(WorkItem.id.in_(work_item_ids), WorkItem.context_type == "opportunity")
+        .filter(
+            WorkItem.id.in_(work_item_ids),
+            or_(
+                WorkItem.context_type == "opportunity",
+                func.lower(WorkItem.source_record_type) == "opportunity",
+            ),
+        )
         .all()
     ]
     stage_breakdown = []
