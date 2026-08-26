@@ -1495,11 +1495,7 @@ def business_context_reporting(
                 group["monthly_ai_budget"] = "__mixed__"
         # This sibling WorkItem becomes a single related-record row on the
         # merged account card (same shape as a source-link child, so the
-        # frontend needs no changes). Deliberately not also appending the
-        # sibling's own finer-grained origin children here -- when a
-        # sibling's entire activity came from one origin record, that would
-        # produce two near-identical rows for the same numbers, recreating
-        # the duplicate-looking-row problem this fold is meant to fix.
+        # frontend needs no changes).
         group["children"].append({
             "source_record_id": item.source_record_id or item.external_id,
             "source_record_type": item.source_record_type or item.context_type,
@@ -1514,6 +1510,22 @@ def business_context_reporting(
             "spend_usd": parent["spend_usd"],
             "last_activity_at": parent["last_activity_at"],
         })
+        # Only append the sibling's own finer-grained origin children when
+        # they add real information. When a sibling's entire activity came
+        # from exactly one origin record (100% coverage, one child), that
+        # child is identical to the summary row just added above and would
+        # just be a duplicate-looking row. But an Account-type sibling in
+        # particular routinely accumulates activity from several different
+        # origin records (e.g. Cases that never got their own WorkItem via
+        # the live Agentforce path -- see is_account_rollup in
+        # routes_agentforce.py -- their activity lands here as origin
+        # metadata, not a separate WorkItem). Dropping that breakdown would
+        # hide real per-record detail, not just remove a duplicate.
+        is_single_fully_covered_origin = (
+            len(parent["children"]) == 1 and parent["origin_coverage_pct"] == 100.0
+        )
+        if not is_single_fully_covered_origin:
+            group["children"].extend(parent["children"])
 
     for group in folded_by_account_id.values():
         if group["monthly_ai_budget"] == "__mixed__":
