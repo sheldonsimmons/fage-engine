@@ -1037,8 +1037,12 @@ def account_profile(
     ]
     stage_breakdown = []
     if opportunity_ids:
+        # Lowercased and stripped so this matches present_platforms/
+        # PLATFORM_ORDER/PLATFORM_LABELS exactly -- otherwise the same
+        # platform (e.g. "HubSpot" from real data vs "hubspot" from the
+        # fallback picklist) gets treated as two different platforms.
         platform_by_item: dict[int, str] = {
-            row[0]: (row[1] or "").strip()
+            row[0]: (row[1] or "").strip().lower()
             for row in db.query(WorkItem.id, WorkItem.source_platform).filter(WorkItem.id.in_(opportunity_ids)).all()
         }
         stage_platform: dict[str, str] = {}
