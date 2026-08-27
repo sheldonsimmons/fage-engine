@@ -9,9 +9,10 @@ GET /api/workspaces
   unreachable through the UI the moment a user touched the switcher.
 """
 
+import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import nullslast
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,12 @@ from database.db import get_db
 from database.models import Workspace
 
 router = APIRouter()
+
+
+def _new_api_key() -> str:
+    # "cp_live_" prefix mirrors the trial flow's TRIAL_SK naming so both
+    # credential types are visually identifiable in logs and generated code.
+    return f"cp_live_{secrets.token_hex(24)}"
 
 
 def _workspace_json(w: Workspace) -> dict:
@@ -55,3 +62,42 @@ def list_workspaces(
         nullslast(Workspace.last_activity_at.desc()), Workspace.name
     ).all()
     return {"workspaces": [_workspace_json(w) for w in workspaces]}
+
+
+def _require_workspace(db: Session, workspace_id: str) -> Workspace:
+    workspace = db.query(Workspace).filter(Workspace.workspace_id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found.")
+    return workspace
+
+
+@router.get("/{workspace_id}/api-key")
+def get_api_key(workspace_id: str, db: Session = Depends(get_db)):
+    """
+    Returns whether a key has been issued, without exposing the key value
+    itself outside of the moment it's issued/regenerated -- avoids the key
+    sitting in a GET response (and browser history/logs) every time the
+    Policy page loads.
+    """
+    workspace = _require_workspace(db, workspace_id)
+    return {
+        "workspace_id": workspace.workspace_id,
+        "has_key": bool(workspace.api_key),
+        "key_preview": f"{workspace.api_key[:12]}…{workspace.api_key[-4:]}" if workspace.api_key else None,
+    }
+
+
+@router.post("/{workspace_id}/api-key/regenerate")
+def regenerate_api_key(workspace_id: str, db: Session = Depends(get_db)):
+    """
+    Issues a new key, invalidating any previous one immediately -- there is
+    no "list of valid keys," just the single current value on the row, so
+    regenerating is also how a leaked key gets revoked.
+    """
+    workspace = _require_workspace(db, workspace_id)
+    workspace.api_key = _new_api_key()
+    db.commit()
+    return {
+        "workspace_id": workspace.workspace_id,
+        "api_key": workspace.api_key,
+    }

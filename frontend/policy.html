@@ -219,6 +219,7 @@
   <button id="policyTabRoutingButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('routing')">Routing Rules</button>
   <button id="policyTabTermsButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('terms')">Sensitive Terms</button>
   <button id="policyTabTestButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('test')">Test Policy</button>
+  <button id="policyTabCredentialsButton" class="policy-tab" role="tab" aria-selected="false" onclick="setPolicyTab('credentials')">API Credentials</button>
 </nav>
 
 <main class="policy-main">
@@ -407,6 +408,27 @@
       <div id="policyTestResult" class="policy-test-result"><div class="policy-test-empty">Enter a sample request to preview its policy outcome.</div></div>
     </div>
   </section>
+
+  <section id="policyTabCredentials" class="policy-panel" hidden>
+    <div class="policy-panel-heading"><div><h2>API credentials</h2><p>The key this workspace's integrations use to authenticate calls to <code>/api/route</code>.</p></div></div>
+    <div class="policy-card">
+      <h3>Workspace key</h3>
+      <p>Include this value as the <code>X-CostPilot-Key</code> header on every <code>/api/route</code> call. Integrations built before a key existed keep working unauthenticated for now; once enforcement is turned on, requests without a valid key will be rejected.</p>
+      <div id="credentialsStatus" class="policy-test-empty">Loading…</div>
+      <div id="credentialsKeyBox" hidden style="margin-top:12px">
+        <label class="field-label">Current key</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="credentialsKeyValue" class="reg-input" type="text" readonly style="flex:1;font-family:var(--font-mono)" />
+          <button class="btn-secondary" type="button" onclick="copyCredentialsKey()">Copy</button>
+        </div>
+        <div id="credentialsCopyStatus" style="font-size:10px;margin-top:4px;color:var(--text-muted)"></div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn-primary" type="button" onclick="regenerateCredentialsKey()" id="credentialsRegenerateBtn">Generate new key</button>
+        <span id="credentialsRegenerateHint" style="font-size:10px;color:var(--text-muted);margin-left:8px"></span>
+      </div>
+    </div>
+  </section>
 </main>
 
 <div id="policyTermDrawerBackdrop" class="policy-drawer-backdrop" onclick="closePolicyTermDrawer()"></div>
@@ -429,8 +451,9 @@
 <script src="js/keywords.js?v=20260724-v453"></script>
 <script src="js/help.js"></script>
 <script>
-const POLICY_TABS = ["overview", "pruning", "routing", "terms", "test"];
+const POLICY_TABS = ["overview", "pruning", "routing", "terms", "test", "credentials"];
 let policyPruningAgents = [];
+let credentialsLoaded = false;
 
 function setPolicyTab(tab) {
   const selected = POLICY_TABS.includes(tab) ? tab : "overview";
@@ -446,6 +469,72 @@ function setPolicyTab(tab) {
     }
   });
   history.replaceState(null, "", `#${selected}`);
+  if (selected === "credentials" && !credentialsLoaded) {
+    credentialsLoaded = true;
+    loadCredentials();
+  }
+}
+
+function credentialsWorkspaceId() {
+  return localStorage.getItem("cp_workspace_id") || "default";
+}
+
+async function loadCredentials() {
+  const statusEl = document.getElementById("credentialsStatus");
+  const keyBox = document.getElementById("credentialsKeyBox");
+  const hint = document.getElementById("credentialsRegenerateHint");
+  try {
+    const response = await fetch(`/api/workspaces/${encodeURIComponent(credentialsWorkspaceId())}/api-key`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (data.has_key) {
+      statusEl.hidden = true;
+      keyBox.hidden = false;
+      document.getElementById("credentialsKeyValue").value = data.key_preview;
+      hint.textContent = "Generating a new key immediately invalidates the current one.";
+    } else {
+      statusEl.hidden = false;
+      statusEl.textContent = "No key has been issued for this workspace yet. Integrations currently authenticate without one.";
+      keyBox.hidden = true;
+      hint.textContent = "";
+    }
+  } catch (error) {
+    statusEl.hidden = false;
+    statusEl.textContent = "Could not load API credential status.";
+  }
+}
+
+async function regenerateCredentialsKey() {
+  const button = document.getElementById("credentialsRegenerateBtn");
+  const hint = document.getElementById("credentialsRegenerateHint");
+  const confirmed = document.getElementById("credentialsKeyBox").hidden
+    || confirm("Generating a new key immediately invalidates the current one for this workspace. Continue?");
+  if (!confirmed) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/workspaces/${encodeURIComponent(credentialsWorkspaceId())}/api-key/regenerate`, { method: "POST" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    document.getElementById("credentialsStatus").hidden = true;
+    document.getElementById("credentialsKeyBox").hidden = false;
+    document.getElementById("credentialsKeyValue").value = data.api_key;
+    hint.textContent = "New key generated. Copy it now and update your integration — it won't be shown in full again.";
+  } catch (error) {
+    hint.textContent = "Failed to generate a new key. Try again.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function copyCredentialsKey() {
+  const input = document.getElementById("credentialsKeyValue");
+  const status = document.getElementById("credentialsCopyStatus");
+  navigator.clipboard.writeText(input.value).then(() => {
+    status.textContent = "Copied.";
+    setTimeout(() => { status.textContent = ""; }, 2000);
+  }).catch(() => {
+    status.textContent = "Could not copy — select and copy manually.";
+  });
 }
 
 function policyTierName(number) {
