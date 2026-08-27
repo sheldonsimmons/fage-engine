@@ -149,6 +149,12 @@
     .bp-journey-value { font-size: 15px; font-weight: 650; font-family: var(--font-mono); color: var(--text-primary); }
     .bp-journey-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
 
+    .bp-stage-group { margin-bottom: 18px; }
+    .bp-stage-group:last-child { margin-bottom: 0; }
+    .bp-stage-group-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+      color: var(--text-muted); margin: 0 0 8px 2px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+    }
     .bp-stage-list { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
     .bp-stage-row { display: flex; align-items: flex-start; gap: 10px; }
     .bp-stage-index {
@@ -569,7 +575,25 @@
       // total spend -- keeps the funnel shape readable even when spend is
       // concentrated in one or two stages instead of every bar looking tiny.
       const maxSpend = Math.max(...rows.map((stage) => stage.spend_usd), 0);
-      panel.innerHTML = `<div class="bp-stage-list">${rows.map((stage, index) => {
+
+      // Group into sections by platform -- Salesforce and HubSpot (etc.)
+      // use entirely different stage vocabularies, so showing them as one
+      // continuously-numbered list read as a single confusing pipeline
+      // instead of two real, separate ones. The backend already returns
+      // rows pre-sorted with same-platform rows contiguous, so this just
+      // needs to split on platform_label changing, not re-sort anything.
+      const groups = [];
+      for (const stage of rows) {
+        const label = stage.platform_label || "Other";
+        const current = groups[groups.length - 1];
+        if (current && current.label === label) {
+          current.rows.push(stage);
+        } else {
+          groups.push({ label, rows: [stage] });
+        }
+      }
+
+      const renderRow = (stage, index) => {
         const pct = totalSpend > 0 ? Math.round((stage.spend_usd / totalSpend) * 100) : 0;
         // No minimum floor -- a zero-spend stage must show zero bar, or it
         // becomes visually indistinguishable from a genuinely small one.
@@ -586,7 +610,14 @@
             <div class="bp-stage-sub">${stage.request_count.toLocaleString()} requests · ${pct}% of AI spend</div>
           </div>
         </div>`;
-      }).join("")}</div>`;
+      };
+
+      panel.innerHTML = groups.map((group) => `
+        <div class="bp-stage-group">
+          ${groups.length > 1 ? `<div class="bp-stage-group-label">${group.label}</div>` : ""}
+          <div class="bp-stage-list">${group.rows.map(renderRow).join("")}</div>
+        </div>
+      `).join("");
     }
 
     const BP_INSIGHT_ICON_SPEND = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10h4l2-6 3 12 2-8 1.5 2H18"/></svg>`;

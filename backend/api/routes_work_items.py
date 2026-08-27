@@ -1037,6 +1037,11 @@ def account_profile(
     ]
     stage_breakdown = []
     if opportunity_ids:
+        platform_by_item: dict[int, str] = {
+            row[0]: (row[1] or "").strip()
+            for row in db.query(WorkItem.id, WorkItem.source_platform).filter(WorkItem.id.in_(opportunity_ids)).all()
+        }
+        stage_platform: dict[str, str] = {}
         events_by_item: dict[int, list] = {}
         for wi_id, status, recorded_at in (
             db.query(WorkItemOutcomeEvent.work_item_id, WorkItemOutcomeEvent.outcome_status, WorkItemOutcomeEvent.recorded_at)
@@ -1085,6 +1090,8 @@ def account_profile(
             bucket = stage_totals.setdefault(stage, {"spend_usd": 0.0, "request_count": 0})
             bucket["spend_usd"] += float(cost or 0.0)
             bucket["request_count"] += 1
+            if stage not in stage_platform and platform_by_item.get(wi_id):
+                stage_platform[stage] = platform_by_item[wi_id]
             if stage != NO_STAGE_YET:
                 first_seen = next((e[0] for e in events if e[1] == stage), ts)
                 if stage not in stage_first_seen or first_seen < stage_first_seen[stage]:
@@ -1120,6 +1127,8 @@ def account_profile(
             )
             if stage_field and stage_field.get("picklist_values"):
                 picklist_stages = [s for s in stage_field["picklist_values"] if s]
+                for stage in picklist_stages:
+                    stage_platform.setdefault(stage, "salesforce")
 
         # Simulated/demo workspaces (and any platform without a live
         # connection's cached picklist -- only Salesforce discovery
@@ -1152,26 +1161,47 @@ def account_profile(
             if new_stages:
                 picklist_stages = picklist_stages + new_stages
                 known_stages.update(new_stages)
+                for stage in new_stages:
+                    stage_platform.setdefault(stage, platform)
 
         for stage in picklist_stages:
             if stage not in stage_totals:
                 stage_totals[stage] = {"spend_usd": 0.0, "request_count": 0}
 
+        # Group stages by which platform they belong to (Salesforce and
+        # HubSpot use entirely different vocabularies, so mixing them into
+        # one flat numbered list read as one confusing pipeline instead of
+        # two real, separate ones). A fixed order keeps this deterministic
+        # rather than depending on set-iteration order.
+        PLATFORM_ORDER = ["salesforce", "hubspot"]
+        PLATFORM_LABELS = {"salesforce": "Salesforce", "hubspot": "HubSpot"}
+
+        def _platform_rank(platform_key: str):
+            if platform_key in PLATFORM_ORDER:
+                return (0, PLATFORM_ORDER.index(platform_key))
+            if platform_key:
+                return (1, platform_key)
+            return (2, "")  # no known platform (e.g. NO_STAGE_YET) sorts last
+
         def _final_sort_key(name: str):
+            platform_key = stage_platform.get(name, "")
             if name in picklist_stages:
                 # Picklist order first and foremost -- an org's defined
                 # stage sequence beats a first-observed-timestamp guess.
-                return (0, picklist_stages.index(name))
-            if name == NO_STAGE_YET:
-                return (1, 0)
-            # Anything observed but outside the known picklist (a stage
-            # from a different platform/vocabulary, or a stale value no
-            # longer active) sorts after the real picklist, chronologically.
-            return (2, stage_first_seen.get(name, datetime.max).timestamp())
+                within = (0, picklist_stages.index(name))
+            elif name == NO_STAGE_YET:
+                within = (1, 0)
+            else:
+                # Observed but outside the known picklist (a stale value no
+                # longer active) sorts after the real picklist, chronologically.
+                within = (2, stage_first_seen.get(name, datetime.max).timestamp())
+            return (_platform_rank(platform_key), within)
 
         stage_breakdown = [
             {
                 "stage": stage,
+                "platform": stage_platform.get(stage) or None,
+                "platform_label": PLATFORM_LABELS.get(stage_platform.get(stage), (stage_platform.get(stage) or "").title() or None),
                 "spend_usd": round(totals["spend_usd"], 6),
                 "request_count": totals["request_count"],
             }
