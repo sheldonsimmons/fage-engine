@@ -3947,6 +3947,7 @@ ${returnFields.length ? returnFields.map(f => `# ${_safeVar(f.name)} = ${_routeR
 
 function _genRest(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const prompt = _plainPromptTemplate(fields, f => `\${${_safeVar(f.name)}}`);
+  const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
 
   const curl = mode === "observe"
     ?
@@ -3955,11 +3956,28 @@ function _genRest(obj, dept, agent, fields, returnFields = [], mode = "control")
 # records what happened so it shows up in your dashboards and reports.
 curl -X POST ${CostPilot_URL}/api/route \\
   -H "Content-Type: application/json" \\
+  -H "X-CostPilot-Key: \${COSTPILOT_API_KEY}" \\
   -d '{
-    "mode":            "observe",
-    "department":      "${dept}",
-    "agent_name":      "${agent}",
-    "source_platform": "REST",
+    "contract_version": "2026-07-26",
+    "mode":             "observe",
+    "source": {
+      "platform":     "REST",
+      "workspace_id": "${workspaceId}",
+      "agent_name":   "${agent}",
+      "department":   "${dept}"
+    },
+    "actor": {
+      "external_id": "\${USER_ID}",
+      "name":        "\${USER_NAME}",
+      "role":        "Member",
+      "can_use_ai":  true
+    },
+    "work": {
+      "external_id":     "\${RECORD_ID}",
+      "type":            "${_codeStr(obj)}",
+      "name":            "${_codeStr(obj)} \${RECORD_ID}",
+      "sync_if_missing": true
+    },
     "usage": {
       "model_name":    "gpt-4o",
       "input_tokens":  812,
@@ -3970,18 +3988,45 @@ curl -X POST ${CostPilot_URL}/api/route \\
     :
 `curl -X POST ${CostPilot_URL}/api/route \\
   -H "Content-Type: application/json" \\
+  -H "X-CostPilot-Key: \${COSTPILOT_API_KEY}" \\
   -d '{
-    "text":            ${_jsonStr(prompt)},
-    "department":      "${dept}",
-    "auto_prune":      true,
-    "agent_name":      "${agent}",
-    "source_platform": "REST"
+    "contract_version": "2026-07-26",
+    "mode":             "control",
+    "source": {
+      "platform":     "REST",
+      "workspace_id": "${workspaceId}",
+      "agent_name":   "${agent}",
+      "department":   "${dept}"
+    },
+    "actor": {
+      "external_id": "\${USER_ID}",
+      "name":        "\${USER_NAME}",
+      "role":        "Member",
+      "can_use_ai":  true
+    },
+    "work": {
+      "external_id":     "\${RECORD_ID}",
+      "type":            "${_codeStr(obj)}",
+      "name":            "${_codeStr(obj)} \${RECORD_ID}",
+      "sync_if_missing": true
+    },
+    "request": {
+      "task":         "Process ${_codeStr(obj)} record",
+      "content":      ${_jsonStr(prompt)},
+      "payload_type": "text",
+      "auto_prune":   true
+    }
   }'`;
   const returnNote = returnFields.length
     ? returnFields.map(f => `${f.name} <= response.${_routeResultKey(f.source)} (${_returnSourceLabel(f.source)})`).join("\n")
     : "No return fields configured. CostPilot still routes, logs, and reports this request.";
+  const keyNote = `<div class="ob-code-section" style="margin-top:20px">
+    <div class="ob-code-header"><span class="ob-code-label">This is the universal contract</span><span class="ob-code-hint">One contract, many ways to connect.</span></div>
+    <p class="ob-code-hint">This is the exact JSON every CostPilot integration sends — Salesforce, ServiceNow, HubSpot, or code you write yourself all produce this same <code>source</code> / <code>actor</code> / <code>work</code> / <code>request</code> or <code>usage</code> shape. Replace <code>\${COSTPILOT_API_KEY}</code> with your workspace's key from <a href="/policy.html#credentials" target="_blank" rel="noopener">Policy → API Credentials</a> — generate one there if you haven't yet. Keep it out of source control; load it from an environment variable or secret store, not a literal string in committed code.</p>
+  </div>`;
 
   return _platformMappingHtml("rest", obj, fields, returnFields)
+    + keyNote
     + _obCodeSection("REST / cURL", "Replace ${...} placeholders with values from your app or shell", curl)
     + _obCodeSection("Return Mapping", "Read these response keys if you want write-back in your app", returnNote)
     + _obBanner("rest", obj, dept, agent) + _obActions();
