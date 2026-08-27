@@ -125,6 +125,11 @@ class RouteRequest(BaseModel):
     enforce_project_membership: bool = False
     contract_version:       Optional[str] = None
     mode:                   str = "control"
+    # Client-supplied idempotency key. A resubmission of the same event_id
+    # returns the original result instead of recording (and billing) the
+    # event again -- optional and additive, existing callers that never
+    # send one see no behavior change.
+    event_id:               Optional[str] = None
     source_context:         Optional[UniversalSourceContext] = Field(default=None, alias="source")
     actor_context:          Optional[UniversalActorContext] = Field(default=None, alias="actor")
     work_context:           Optional[UniversalWorkContext] = Field(default=None, alias="work")
@@ -601,6 +606,7 @@ def _record_observed_usage(
 
         tx = TokenTransaction(
             governed_request_id=governed_request_id,
+            event_id=req.event_id,
             department=department,
             source_platform=agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
             agent_id=agent.id if agent else req.agent_id,
@@ -720,6 +726,36 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       6. Record transaction and update department spend in the DB
     """
     req = _normalize_universal_request(req)
+
+    if req.event_id:
+        # Idempotency: a resubmission of the same event_id (a retry, a
+        # network hiccup, an at-least-once delivery guarantee on the
+        # caller's side) must not be billed or recorded twice. Look up the
+        # original transaction and return a replay response instead of
+        # re-running the pipeline. Budget fields are zeroed rather than
+        # recomputed -- the caller already received the real numbers on
+        # the original call; this response's job is only to confirm "not
+        # double-charged," not to make a fresh billing decision.
+        existing = db.query(TokenTransaction).filter(TokenTransaction.event_id == req.event_id).first()
+        if existing:
+            return RouteResponse(
+                governed_request_id=existing.governed_request_id,
+                department=existing.department,
+                complexity="DUPLICATE",
+                routing_decision="DUPLICATE",
+                routing_reason=f"event_id '{req.event_id}' was already recorded; returning the original transaction unchanged, not re-processed.",
+                model_tier=existing.resolved_model_tier or existing.model_tier or "",
+                model_name=existing.model_name or "",
+                input_tokens=existing.input_tokens,
+                output_tokens=existing.output_tokens,
+                cost_usd=existing.cost_usd,
+                was_pruned=bool(existing.was_pruned),
+                tokens_saved_by_pruning=existing.tokens_saved or 0,
+                budget_used_pct=0.0,
+                budget_remaining_usd=0.0,
+                work_item_id=str(existing.work_item_id) if existing.work_item_id else None,
+            )
+
     from core.governed_requests import new_governed_request_id, ROUTING_POLICY_VERSION
     governed_request_id = new_governed_request_id()
     department = _resolve_department(db, req)
@@ -762,10 +798,30 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             collision_policy = "lock",
             status           = "idle",
             discovery_source = "event",
+            # An agent discovered from its own first live request has already
+            # proven it's operating in whatever mode that request claims --
+            # bootstrapping it to "observe" here would reject the very
+            # request that's creating it. Admin-registered agents (via
+            # POST /register) still default to "observe" via the column
+            # default, since those don't carry a live request to bootstrap
+            # from. See docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md step 4/9/10.
+            mode             = req.mode,
         )
         db.add(agent)
         db.commit()
         db.refresh(agent)
+
+    if req.mode == "control" and agent and agent.mode == "observe" and not req.is_test:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Agent '{agent.name}' has not been approved for Control mode. "
+                "It is currently in Observe -- tracking only, no enforcement. "
+                f"An admin must explicitly enable Control for this agent "
+                f"(PATCH /api/agents/{agent.id}/mode) before it can execute "
+                "AI calls through CostPilot. See docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md."
+            ),
+        )
 
     if agent and not req.is_test:
         agent.status       = "active"
@@ -841,7 +897,6 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
             routing_reason_code = "SENSITIVE_TERM_BLOCK",
             execution_status = "blocked",
         )
-        from fastapi import HTTPException
         raise HTTPException(
             status_code=451,
             detail={
@@ -962,6 +1017,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
 
         tx = TokenTransaction(
             governed_request_id = governed_request_id,
+            event_id        = req.event_id,
             department      = department,
             source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
             agent_id        = agent.id if agent else req.agent_id,

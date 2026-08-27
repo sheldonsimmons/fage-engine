@@ -19,15 +19,25 @@ def create_tables():
 
 def run_migrations():
     """Add new columns to existing tables without requiring Alembic."""
-    def ensure_column(conn, table: str, column: str, definition: str):
+    def ensure_column(conn, table: str, column: str, definition: str) -> bool:
+        """Returns True only the first time this column is actually created,
+        so callers can run one-time backfill logic exactly once."""
         if engine.dialect.name == "sqlite":
             existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
-            if column not in existing:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
-                conn.commit()
+            if column in existing:
+                return False
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+            conn.commit()
+            return True
         else:
+            existing = conn.execute(text(
+                "SELECT 1 FROM information_schema.columns WHERE table_name = :t AND column_name = :c"
+            ), {"t": table, "c": column}).fetchone()
+            if existing:
+                return False
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"))
             conn.commit()
+            return True
 
     with engine.connect() as conn:
         try:
@@ -115,6 +125,21 @@ def run_migrations():
                 conn.commit()
             except Exception:
                 pass
+        try:
+            ensure_column(conn, "token_transactions", "event_id", "VARCHAR")
+        except Exception:
+            pass
+        try:
+            # Client-supplied idempotency key -- a real unique constraint,
+            # not just an index, since it's what route_payload() relies on
+            # to detect and reject a resubmitted event.
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_token_transactions_event_id "
+                "ON token_transactions (event_id) WHERE event_id IS NOT NULL"
+            ))
+            conn.commit()
+        except Exception:
+            pass
         try:
             ensure_column(conn, "token_transactions", "work_item_id", "INTEGER REFERENCES work_items(id)")
         except Exception:
@@ -247,6 +272,31 @@ def run_migrations():
             pass
         try:
             ensure_column(conn, "registered_agents", "discovery_source", "TEXT")
+        except Exception:
+            pass
+        try:
+            mode_column_just_created = ensure_column(conn, "registered_agents", "mode", "VARCHAR DEFAULT 'observe'")
+            if mode_column_just_created:
+                # One-time backfill, the moment this column is first created:
+                # agents that already show activity (not idle, or have logged
+                # token transactions) were already operating as Control in
+                # practice, so mark them as such rather than resetting live
+                # production integrations to Observe out from under them.
+                # Genuinely brand-new agents registered after this point still
+                # get the "mode" column's own DEFAULT 'observe'.
+                conn.execute(text("""
+                    UPDATE registered_agents
+                    SET mode = 'control'
+                    WHERE mode = 'observe'
+                      AND (
+                        status != 'idle'
+                        OR EXISTS (
+                            SELECT 1 FROM token_transactions
+                            WHERE token_transactions.agent_id = registered_agents.id
+                        )
+                      )
+                """))
+                conn.commit()
         except Exception:
             pass
         # trial_accounts — create + add new columns

@@ -89,6 +89,7 @@ class RegisteredAgent(Base):
     max_tier         = Column(Integer,  nullable=True, default=4)      # ceiling tier: routing never goes above this (4=Strategist)
     pruning_enabled  = Column(Boolean,  nullable=True, default=True)   # False = skip context pruner entirely for this agent
     discovery_source = Column(String,   nullable=True, default="manual")  # manual | event -- "event" means this row was auto-created on first traffic, not registered ahead of time
+    mode             = Column(String,   nullable=True, default="observe")  # observe | control -- see docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md; "optimize" is not a stored value, it's observe + recommendations
 
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")
@@ -414,6 +415,13 @@ class TokenTransaction(Base):
 
     id              = Column(Integer,  primary_key=True, index=True)
     governed_request_id = Column(String, nullable=True, index=True)
+    # Client-supplied idempotency key (RouteRequest.event_id) -- distinct
+    # from governed_request_id, which CostPilot generates itself on every
+    # call. Nullable+unique: existing callers that never send one are
+    # unaffected; two calls that do send the same value collide here,
+    # which route_payload() uses to return the original result instead of
+    # recording (and billing) the same event twice.
+    event_id        = Column(String, nullable=True, unique=True, index=True)
     department      = Column(String,   nullable=False)
     source_platform = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     agent_id        = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
