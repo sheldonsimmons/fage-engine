@@ -7,10 +7,12 @@ POST /api/route
   in the database, and updates the department's running spend total.
 """
 
+import logging
+import os
 import re
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -25,7 +27,10 @@ from database.models import (
     WorkItem,
     WorkItemUser,
     WorkUser,
+    Workspace,
 )
+
+logger = logging.getLogger(__name__)
 from core.router import route
 from core.auditor import write_audit_event
 from api.routes_work_items import resolve_account_through_merge
@@ -714,8 +719,54 @@ def _record_observed_usage(
     )
 
 
+def _check_workspace_api_key(db: Session, workspace_id: str, provided_key: str) -> None:
+    """
+    Authenticate a production /api/route caller against Workspace.api_key.
+
+    Time-based grace period, not a hard cutover: before
+    API_KEY_ENFORCEMENT_CUTOVER, a missing/wrong key is accepted and only
+    logged as a warning, so already-deployed integrations (CostPilotCallout,
+    CostPilotObserve.cls, and anything else generated before a key existed
+    to embed) keep working unmodified while they're updated. After the
+    cutover, a workspace with a key set requires it to match.
+
+    A workspace with no key yet (every workspace today, until one is
+    issued via Policy's API Credentials section) is never blocked by this
+    -- there's nothing to check it against, so it's treated the same as
+    "not yet enforced" regardless of the cutover date.
+    """
+    cutover = os.environ.get("API_KEY_ENFORCEMENT_CUTOVER", "").strip()
+    enforced = False
+    if cutover:
+        try:
+            enforced = datetime.utcnow() >= datetime.fromisoformat(cutover)
+        except ValueError:
+            enforced = False
+
+    workspace = db.query(Workspace).filter(Workspace.workspace_id == workspace_id).first()
+    if not workspace or not workspace.api_key:
+        return  # nothing issued yet -- can't check against a key that doesn't exist
+
+    if provided_key and provided_key == workspace.api_key:
+        return  # correct key -- always fine, enforced or not
+
+    if not enforced:
+        logger.warning(
+            "Unauthenticated /api/route call for workspace %s (has a key, none/wrong provided) "
+            "-- accepted during the grace period, will be rejected after %s.",
+            workspace_id, cutover or "(no cutover set)",
+        )
+        return
+
+    raise HTTPException(status_code=401, detail="Invalid or missing X-CostPilot-Key for this workspace.")
+
+
 @router.post("", response_model=RouteResponse)
-def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
+def route_payload(
+    req: RouteRequest,
+    db: Session = Depends(get_db),
+    x_costpilot_key: str = Header(default="", alias="X-CostPilot-Key"),
+):
     """
     Run the full routing pipeline on a text payload:
       1. Prune junk (if auto_prune=True)
@@ -726,6 +777,7 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
       6. Record transaction and update department spend in the DB
     """
     req = _normalize_universal_request(req)
+    _check_workspace_api_key(db, (req.actor_workspace_id or "").strip() or "default", x_costpilot_key)
 
     if req.event_id:
         # Idempotency: a resubmission of the same event_id (a retry, a
