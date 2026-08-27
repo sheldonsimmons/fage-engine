@@ -41,6 +41,18 @@ def run_migrations():
 
     with engine.connect() as conn:
         try:
+            ensure_column(conn, "workspaces", "api_key", "VARCHAR")
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_workspaces_api_key "
+                "ON workspaces (api_key) WHERE api_key IS NOT NULL"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        try:
             ensure_column(conn, "registered_agents", "archived", "BOOLEAN DEFAULT FALSE")
         except Exception:
             pass  # Column already exists or DB doesn't support IF NOT EXISTS

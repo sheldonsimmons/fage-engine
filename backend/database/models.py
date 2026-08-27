@@ -677,27 +677,6 @@ class RoutingConfig(Base):
         self.tier_names_json = json.dumps({str(k): str(v) for k, v in value.items()})
 
 
-class Workspace(Base):
-    """
-    The canonical row a `workspace_id` string belongs to. Every table that
-    carries a workspace_id column (WorkItem, TokenTransaction,
-    IntegrationConnection, ...) has always treated it as a loose string by
-    convention -- there was no real row anything could attach a production
-    API key to. This is that row, added specifically so /api/route can
-    authenticate production (non-trial) callers; see TrialAccount below
-    for the separate trial-signup credential, which this does not replace.
-    """
-    __tablename__ = "workspaces"
-
-    id          = Column(Integer,  primary_key=True, index=True)
-    workspace_id = Column(String,  nullable=False, unique=True, index=True)
-    name        = Column(String,   nullable=True)
-    api_key     = Column(String,   nullable=False, unique=True, index=True)
-    status      = Column(String,   nullable=False, default="active")
-    created_at  = Column(DateTime, default=datetime.utcnow)
-    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
 class TrialAccount(Base):
     """
     A CostPilot free-trial customer.
@@ -744,6 +723,12 @@ class Workspace(Base):
     workspace_type     = Column(String, nullable=False, default="production")  # production | demo | simulation | legacy
     source             = Column(String, nullable=True)  # trial_signup | historical_backfill | manual_seed | sandbox
     owner_trial_account_id = Column(Integer, ForeignKey("trial_accounts.id"), nullable=True)
+    # Authenticates production /api/route callers via X-CostPilot-Key --
+    # distinct from TrialAccount.secret_key (the trial-signup credential).
+    # Nullable: existing workspaces have none until one is generated for
+    # them, which is exactly the unauthenticated-but-accepted grace-period
+    # state /api/route's auth check is built around.
+    api_key            = Column(String, nullable=True, unique=True, index=True)
     is_active          = Column(Boolean, default=True)
     last_activity_at   = Column(DateTime, nullable=True)
     default_monthly_budget_usd = Column(Float, nullable=True)
