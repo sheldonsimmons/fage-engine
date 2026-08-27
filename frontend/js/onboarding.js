@@ -1944,11 +1944,11 @@ function selectObPlatform(platform) {
   const cfg = OB_PLATFORMS[platform];
   const isCode = cfg.kind === "code";
   const copy = OB_PLATFORM_COPY[platform] || (isCode ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
-  // Salesforce's generated code has no dual-mode support yet (its Agentforce,
-  // trial, and full-version paths need their own redesign) -- hide the
-  // selector there so it doesn't imply a choice that isn't wired up.
+  // Salesforce's full-version Agentforce and Flow/Apex paths both support
+  // Observe mode (CostPilotObserve / a reportUsage Apex variant). The trial
+  // path is still control-only -- hide the selector only there.
   const genModeWrap = document.getElementById("obGenModeWrap");
-  if (genModeWrap) genModeWrap.hidden = platform === "salesforce";
+  if (genModeWrap) genModeWrap.hidden = platform === "salesforce" && IS_TRIAL;
   const objectLabel = document.getElementById("obObjectLabel");
   const fieldsLabel = document.getElementById("obFieldsLabel");
   const fieldsLabelHint = document.getElementById("obFieldsLabelHint");
@@ -2554,10 +2554,10 @@ async function generateObCode() {
     ruby:_genRuby,
     rest:_genRest,
   };
-  // Salesforce doesn't support dual-mode generation yet -- see the note in
-  // selectObPlatform(). Every other platform (code-kind and the other 4
-  // business-kind CRMs) now does.
-  const activeGenMode  = obSelectedPlatform === "salesforce" ? "control" : obSelectedGenMode;
+  // Salesforce's trial path is still control-only -- see the note in
+  // selectObPlatform(). The full version and every other platform now
+  // support dual-mode generation.
+  const activeGenMode  = (obSelectedPlatform === "salesforce" && IS_TRIAL) ? "control" : obSelectedGenMode;
   const html   = _businessContextSummaryHtml()
     + _modeNoticeHtml(activeGenMode)
     + (fns[obSelectedPlatform] || _genRest)(obj, dept, agent, fields, returnFields, activeGenMode)
@@ -2831,7 +2831,7 @@ function _isSalesforceApiName(name) {
 
 // ── Code generators ───────────────────────────────────────────────────────────
 
-function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
+function _genSalesforce(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const sfFields = fields && fields.length ? fields : [{label:"Subject",name:"Subject"},{label:"Description",name:"Description"}];
   const apexVars = _apexVarNames(sfFields);
   const requestVars = sfFields.map((f, i) =>
@@ -2860,7 +2860,21 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
   const selectedAgentNames = selectedAgents.map(item => item.label || item.name).join(", ");
   const selectedFlowNames = selectedFlows.map(item => item.label || item.name).join(", ");
   const agentforceGuide = obSalesforceAiMode === "agentforce"
-    ? `<div class="ob-code-section" style="margin-top:20px">
+    ? (mode === "observe"
+      ? `<div class="ob-code-section" style="margin-top:20px">
+        <div class="ob-code-header">
+          <span class="ob-code-label">Agentforce — add the usage-reporting action</span>
+          <span class="ob-code-hint">CostPilot logs this activity; it never touches your agent's AI call or response.</span>
+        </div>
+        <div class="ob-flow-steps">
+          <div class="ob-flow-step"><span class="ob-flow-num">0</span><div><strong>Install CostPilot in this org, if you haven't already</strong><br/><a href="/install-salesforce.html" target="_blank" rel="noopener">Install the package →</a> — a one-time step per org, before the action below is available.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">1</span><div><strong>Open Agentforce Builder</strong><br/>Open the agent you want CostPilot to observe. Go to the topic that already calls your own AI model or Prompt Template.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">2</span><div><strong>After your agent's own AI action, add Action → Apex → Report AI Usage</strong><br/>This runs after your agent already has its answer — it only reports the activity to CostPilot for cost tracking and attribution. Your agent's response is untouched.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">3</span><div><strong>Map the usage fields</strong><br/>Pass the model name, input tokens, output tokens, and cost your AI action returned, plus the current record ID, agent name, and department. Selected record types: <strong>${_obEsc(governedObjects.join(", ") || obj)}</strong>.</div></div>
+          <div class="ob-flow-step"><span class="ob-flow-num">4</span><div><strong>Test one real request</strong><br/>A successful CostPilot setup test verifies the connection. A real Agentforce request appearing in CostPilot Audit as Observed confirms the agent itself.</div></div>
+        </div>
+      </div>`
+      : `<div class="ob-code-section" style="margin-top:20px">
         <div class="ob-code-header">
           <span class="ob-code-label">Agentforce — add the universal action</span>
           <span class="ob-code-hint">This is the step that places CostPilot in the AI request path.</span>
@@ -2873,10 +2887,12 @@ function _genSalesforce(obj, dept, agent, fields, returnFields = []) {
           <div class="ob-flow-step"><span class="ob-flow-num">4</span><div><strong>Tell the topic when to use it</strong><br/>“For AI work involving a Salesforce record, call Governed AI Request and use its response to answer the user.”</div></div>
           <div class="ob-flow-step"><span class="ob-flow-num">5</span><div><strong>Test one real request</strong><br/>A successful CostPilot setup test verifies the gateway. A real Agentforce request appearing in CostPilot Audit verifies the agent itself.</div></div>
         </div>
-      </div>`
+      </div>`)
     : `<div class="ob-code-section" style="margin-top:20px">
         <div class="ob-code-header"><span class="ob-code-label">Flow, Apex, or custom AI</span></div>
-        <p class="ob-code-hint">Invoke <code>Send to CostPilot</code> only when AI work occurs. Do not attach it to every record save, because ordinary CRM activity is not AI usage. For a conversational Agentforce response, use the packaged <code>Governed AI Request</code> action instead.</p>
+        <p class="ob-code-hint">${mode === "observe"
+          ? `Invoke <code>Report AI Usage</code> after your own AI call completes, only when AI work occurs. It logs the activity without routing or blocking anything. For a conversational Agentforce response with governance applied first, use the packaged <code>Governed AI Request</code> action instead.`
+          : `Invoke <code>Send to CostPilot</code> only when AI work occurs. Do not attach it to every record save, because ordinary CRM activity is not AI usage. For a conversational Agentforce response, use the packaged <code>Governed AI Request</code> action instead.`}</p>
       </div>`;
 
   // Agentforce customers should see the short packaged-action workflow, not
@@ -3024,8 +3040,81 @@ ${requestVars}
   }
 
   // ── Full version: internal routing + custom fields ────────────────────────
-  const apex =
-`public class CostPilotCallout {
+  const isObserveMode = mode === "observe";
+  const apex = isObserveMode
+    ? `public class CostPilotCallout {
+    private static final String CP_DEPARTMENT = '${_codeStr(dept)}';
+    private static final String CP_AGENT      = '${_codeStr(agent)}';
+
+    @InvocableMethod(label='Report AI Usage')
+    public static void reportUsage(List<CostPilotUsage> requests) {
+        if (System.isFuture() || System.isBatch()) return;
+        CostPilotUsage req = requests[0];
+        String department = String.isBlank(req.department) ? CP_DEPARTMENT : req.department;
+        String agentName  = String.isBlank(req.agentName)  ? CP_AGENT      : req.agentName;
+        sendAsync(req.recordId, req.modelName, req.inputTokens, req.outputTokens, req.costUsd, department, agentName);
+    }
+
+    @future(callout=true)
+    public static void sendAsync(String recordId, String modelName, Integer inputTokens, Integer outputTokens, Decimal costUsd, String department, String agentName) {
+        Http http = new Http();
+        HttpRequest httpReq = new HttpRequest();
+        // Routed through the CostPilot Named Credential set up by Connect
+        // CostPilot -- Salesforce attaches the workspace's auth header
+        // automatically. No key ever appears in this class.
+        httpReq.setEndpoint('callout:CostPilot/api/route');
+        httpReq.setMethod('POST');
+        httpReq.setHeader('Content-Type', 'application/json');
+        httpReq.setBody(JSON.serialize(new Map<String, Object>{
+            'contract_version' => '2026-07-26',
+            'mode'             => 'observe',
+            'source' => new Map<String, Object>{
+                'platform'     => 'Salesforce',
+                'workspace_id' => UserInfo.getOrganizationId(),
+                'agent_name'   => agentName,
+                'department'   => department
+            },
+            'actor' => new Map<String, Object>{
+                'external_id' => UserInfo.getUserId(),
+                'name'        => UserInfo.getName(),
+                'email'       => UserInfo.getUserEmail(),
+                'role'        => 'Member',
+                'can_use_ai'  => true
+            },
+            'work' => new Map<String, Object>{
+                'external_id'    => recordId,
+                'type'           => '${_codeStr(obj)}',
+                'name'           => '${_codeStr(obj)} ' + recordId,
+                'sync_if_missing'=> true
+            },
+            'usage' => new Map<String, Object>{
+                'model_name'    => modelName,
+                'input_tokens'  => inputTokens,
+                'output_tokens' => outputTokens,
+                'cost_usd'      => costUsd
+            }
+        }));
+        httpReq.setTimeout(30000);
+        System.debug('CostPilot usage report endpoint: ' + httpReq.getEndpoint());
+        System.debug('CostPilot usage report department=' + department + ', agent=' + agentName);
+        HttpResponse res = http.send(httpReq);
+        System.debug('CostPilot response status=' + res.getStatusCode() + ', body=' + res.getBody());
+        if (res.getStatusCode() < 200 || res.getStatusCode() >= 300) {
+            throw new CalloutException('CostPilot callout failed: HTTP ' + res.getStatusCode() + ' — ' + res.getBody());
+        }
+    }
+
+    public class CostPilotUsage {
+        @InvocableVariable(required=false label='agentName')  public String agentName;
+        @InvocableVariable(required=false label='department') public String department;
+        @InvocableVariable(required=true  label='Record ID')          public String recordId;
+        @InvocableVariable(required=true  label='Model Name')         public String modelName;
+        @InvocableVariable(required=true  label='Input Tokens')       public Integer inputTokens;
+        @InvocableVariable(required=true  label='Output Tokens')      public Integer outputTokens;
+        @InvocableVariable(required=false label='Cost USD')           public Decimal costUsd;
+    }
+}`
+    : `public class CostPilotCallout {
     private static final String CP_DEPARTMENT = '${_codeStr(dept)}';
     private static final String CP_AGENT      = '${_codeStr(agent)}';
 
@@ -3043,7 +3132,10 @@ ${requestVars}
     public static void sendAsync(String recordId, String payload, String department, String agentName) {
         Http http = new Http();
         HttpRequest httpReq = new HttpRequest();
-        httpReq.setEndpoint('${CostPilot_URL}/api/route');
+        // Routed through the CostPilot Named Credential set up by Connect
+        // CostPilot -- Salesforce attaches the workspace's auth header
+        // automatically. No key ever appears in this class.
+        httpReq.setEndpoint('callout:CostPilot/api/route');
         httpReq.setMethod('POST');
         httpReq.setHeader('Content-Type', 'application/json');
         httpReq.setBody(JSON.serialize(new Map<String, Object>{
@@ -3103,7 +3195,20 @@ ${requestVars}
     }
 }`;
 
-  const flowHtml = `<div class="ob-flow-steps">
+  const connectPrereqStep = `<div class="ob-flow-step"><span class="ob-flow-num">0</span>
+      <div><strong>Connect CostPilot, if you haven't already</strong><br/><a href="/install-salesforce.html" target="_blank" rel="noopener">Install the package and connect →</a> — this provisions the <code>CostPilot</code> Named Credential the class below calls through. No key to copy or paste; Salesforce attaches it automatically once connected.</div></div>`;
+  const flowHtml = isObserveMode
+    ? `<div class="ob-flow-steps">
+    ${connectPrereqStep}
+    <div class="ob-flow-step"><span class="ob-flow-num">1</span>
+      <div><strong>Setup → Flows</strong><br/>Open the Flow (or Prompt Builder trigger) that already calls your own AI model for <strong>${_obEsc(obj)}</strong>.</div></div>
+    <div class="ob-flow-step"><span class="ob-flow-num">2</span>
+      <div><strong>After your AI step, add Action → Apex → Report AI Usage</strong><br/>Map: <code>agentName</code> → <strong>${_obEsc(agent)}</strong> · <code>department</code> → <strong>${_obEsc(dept)}</strong> · Record ID · <code>modelName</code>, <code>inputTokens</code>, <code>outputTokens</code>, <code>costUsd</code> from your AI step's own output.<br/>This does not change what your Flow does with the AI response — it only reports the usage to CostPilot.</div></div>
+    <div class="ob-flow-step"><span class="ob-flow-num">3</span>
+      <div><strong>Save &amp; Activate</strong><br/>If CostPilot does not show an event, check Setup → Apex Jobs and Setup → Paused and Failed Flow Interviews.</div></div>
+  </div>`
+    : `<div class="ob-flow-steps">
+    ${connectPrereqStep}
     <div class="ob-flow-step"><span class="ob-flow-num">1</span>
       <div><strong>Setup → Flows → New Flow</strong><br/>Type: <em>Record-Triggered</em> · Object: <strong>${_obEsc(obj)}</strong> · Trigger: <em>Created or updated</em> · Optimize for: <em>Actions and Related Records</em></div></div>
     <div class="ob-flow-step"><span class="ob-flow-num">2</span>
@@ -3112,8 +3217,19 @@ ${requestVars}
       <div><strong>Save &amp; Activate</strong><br/>If CostPilot does not show an event, check Setup → Apex Jobs and Setup → Paused and Failed Flow Interviews.</div></div>
   </div>`;
 
-  const testApex =
-`// Developer Console → Debug → Open Execute Anonymous Window
+  const testApex = isObserveMode
+    ? `// Developer Console → Debug → Open Execute Anonymous Window
+// Replace the sample record ID with a real ${obj} ID from your org.
+CostPilotCallout.CostPilotUsage req = new CostPilotCallout.CostPilotUsage();
+req.recordId = 'REPLACE_WITH_${obj.toUpperCase()}_ID';
+req.agentName = '${_codeStr(agent)}';
+req.department = '${_codeStr(dept)}';
+req.modelName = 'gpt-4o';
+req.inputTokens = 250;
+req.outputTokens = 80;
+req.costUsd = 0.01;
+CostPilotCallout.reportUsage(new List<CostPilotCallout.CostPilotUsage>{ req });`
+    : `// Developer Console → Debug → Open Execute Anonymous Window
 // Replace the sample record ID with a real ${obj} ID from your org.
 CostPilotCallout.CostPilotRequest req = new CostPilotCallout.CostPilotRequest();
 req.recordId = 'REPLACE_WITH_${obj.toUpperCase()}_ID';
@@ -3127,7 +3243,13 @@ CostPilotCallout.sendToCostPilot(new List<CostPilotCallout.CostPilotRequest>{ re
     ${returnFields.length ? returnFields.map(f => `<div class="ob-field-row"><span>${_obEsc(_returnSourceLabel(f.source))}</span><span class="mono">${_obEsc(f.name)}</span><span>${f.source === "cost" ? "Currency" : f.source === "response" ? "Long Text" : "Text"}</span><span>${f.source === "cost" ? "12,6" : f.source === "response" ? "32,768 chars" : "255 chars"}</span></div>`).join("") : `<div class="ob-field-row"><span>No return fields configured</span><span class="mono">—</span><span>—</span><span>Add fields above and regenerate if you want write-back</span></div>`}
   </div>`;
 
+  const universalContractNote = `<div class="ob-code-section" style="margin-top:20px">
+    <div class="ob-code-header"><span class="ob-code-label">The class below is just JSON</span><span class="ob-code-hint">One contract, many ways to connect.</span></div>
+    <p class="ob-code-hint">Every CostPilot integration — this Apex class, ServiceNow, HubSpot, or a script you write yourself — sends the same normalized event (<code>source</code> / <code>actor</code> / <code>work</code> / <code>usage</code>) to <code>/api/route</code> and authenticates with the same workspace key. If you can produce that JSON from anywhere, you can skip this generated class entirely. See <a href="/policy.html#credentials" target="_blank" rel="noopener">Policy → API Credentials</a> for your workspace's key.</p>
+  </div>`;
+
   return `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Salesforce Mapping</span><span class="ob-code-hint">These are the exact object and field API names this setup will route.</span></div>${mappingHtml}</div>`
+    + universalContractNote
     + _obCodeSection("Step 1 — Apex Class", "Developer Console → File → Open → CostPilotCallout → Replace all → Save", apex)
     + agentforceGuide
     + `<div class="ob-code-section" style="margin-top:20px"><div class="ob-code-header"><span class="ob-code-label">Step 2 — Salesforce Flow</span></div>${flowHtml}</div>`
