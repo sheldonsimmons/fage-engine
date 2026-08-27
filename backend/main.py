@@ -347,16 +347,40 @@ def populate_demo_data():
     return {"status": "ok", "message": "Demo data loaded. Refresh your dashboard."}
 
 # Dev/Demo — Populate dashboard with enterprise-scale demo data for CFO/CTO presentations
+def _seed_outcome_demo_data_task():
+    """Runs seed_outcome_demo_data.seed() with its own DB session -- this
+    populates the account/Opportunity/Case/Deal/Incident + stage-history
+    data (WorkAccount, WorkItem, WorkItemOutcome, WorkItemOutcomeEvent)
+    that populate_enterprise() itself never creates, so Business Profiles,
+    Work Attribution, and AgentLake's Accounts tab have something to show
+    for the enterprise demo too, not just the dashboard/agent-registry
+    side. Idempotent-ish (skips records that already exist), so re-running
+    "Load Enterprise Demo" doesn't duplicate this data."""
+    from database.db import SessionLocal
+    from database.seed_outcome_demo_data import seed
+
+    db = SessionLocal()
+    try:
+        seed(db)
+    finally:
+        db.close()
+
+
 @app.post("/api/admin/populate-enterprise-demo", tags=["Admin"])
 def populate_enterprise_demo_data(background_tasks: BackgroundTasks):
     """
     DEV/DEMO ONLY — Loads the real CostPilot dashboard with enterprise-scale data.
     12 named agents, 4 departments, 9K transactions over 30 days, Marketing throttled,
     and 12 rich audit events covering blocks, escalations, GDPR, HIPAA, and more.
-    Returns immediately — data loads in the background. Refresh dashboard in ~10 seconds.
+    Also seeds a separate set of realistic multi-platform accounts (Salesforce
+    Opportunities/Cases, HubSpot Deals, ServiceNow Incidents) with real stage
+    history, so Business Profiles and the Opportunity Stage funnel have data
+    to show too. Returns immediately — data loads in the background. Refresh
+    dashboard in ~10 seconds.
     """
     from database.populate_enterprise import populate_enterprise
     background_tasks.add_task(populate_enterprise)
+    background_tasks.add_task(_seed_outcome_demo_data_task)
     return {"status": "ok", "message": "Enterprise demo loading in background. Refresh dashboard in 10 seconds."}
 
 # Dev/Demo — Full factory reset (clears everything except departments, terms, and budget caps)

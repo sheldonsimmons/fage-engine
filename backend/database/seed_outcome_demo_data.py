@@ -92,6 +92,9 @@ INCIDENT_SUBJECTS = [
 INCIDENT_STATES = ["New", "In Progress", "On Hold", "Resolved", "Closed"]
 DEAL_NAMES = ["New Business", "Expansion", "Renewal", "Upsell", "Cross-sell"]
 DEAL_STAGES_OPEN = ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "contractsent"]
+OPPORTUNITY_STAGES_OPEN = ["Qualification", "Needs Analysis", "Proposal", "Negotiation"]
+CASE_STATES_OPEN = ["New", "Working"]
+INCIDENT_STATES_OPEN = ["New", "In Progress", "On Hold"]
 
 # A shared rep pool -- a real business has a handful of people covering
 # many accounts, not a unique employee per client. Owners are internal to
@@ -159,6 +162,47 @@ def _weighted_past_datetime(rng, days_ago_min, days_ago_max):
     skewed = rng.random() ** 2.2  # exponent > 1 skews toward 0 (recent)
     days_ago = days_ago_min + skewed * span
     return datetime.utcnow() - timedelta(days=days_ago)
+
+
+def _seed_stage_progression(
+    db, work_item, item_rng, open_stages, final_status, outcome_value,
+    outcome_success, is_closed, outcome_date_or_now, workspace_id,
+):
+    """Emit a short, plausible walk through this item's real stage order
+    ending at its current/final status, instead of one snapshot event --
+    so a time-based stage funnel (spend by stage active at request time)
+    shows real movement through the funnel instead of every dollar of a
+    deal's history piling into whichever stage it ended up at.
+
+    Closed items walk every open stage then the terminal status; open
+    items walk the prefix of open_stages up to (and including) whichever
+    stage they currently sit in.
+    """
+    if is_closed:
+        sequence = list(open_stages) + [final_status]
+    elif final_status in open_stages:
+        sequence = open_stages[: open_stages.index(final_status) + 1]
+    else:
+        sequence = [final_status]
+
+    # Walk backward from the final/current date so earlier stages always
+    # land strictly before later ones, regardless of how recent the final
+    # outcome date happens to be (avoids any chance of an inverted span).
+    dates = [outcome_date_or_now]
+    for _ in range(len(sequence) - 1):
+        dates.append(dates[-1] - timedelta(days=item_rng.uniform(15, 55)))
+    dates.reverse()
+
+    for status, recorded_at in zip(sequence, dates):
+        is_final = status == sequence[-1]
+        db.add(WorkItemOutcomeEvent(
+            work_item_id=work_item.id, workspace_id=workspace_id,
+            outcome_status=status,
+            outcome_value=outcome_value if is_final else None,
+            outcome_success=outcome_success if is_final else None,
+            is_closed=is_closed if is_final else False,
+            retrieval_method="seed", recorded_at=recorded_at,
+        ))
 
 
 def _seed_reps(db, dry_run_existing):
@@ -399,7 +443,7 @@ def seed(db, dry_run=False):
                 status, success, closed, value, outcome_counts["lost"] = "Closed Lost", False, True, deal_value, outcome_counts["lost"] + 1
             else:
                 status, success, closed, value = item_rng.choice(
-                    ["Qualification", "Needs Analysis", "Proposal", "Negotiation"]
+                    OPPORTUNITY_STAGES_OPEN
                 ), None, False, deal_value
                 outcome_counts["open"] += 1
             outcome_date = _weighted_past_datetime(item_rng, 5, 730) if closed else None
@@ -411,11 +455,10 @@ def seed(db, dry_run=False):
                 external_id=opp.source_record_id, source_modified_at=outcome_date or now,
                 last_synced_at=now, retrieval_method="seed",
             ))
-            db.add(WorkItemOutcomeEvent(
-                work_item_id=opp.id, workspace_id=WORKSPACE_ID,
-                outcome_status=status, outcome_value=value, outcome_success=success,
-                is_closed=closed, retrieval_method="seed", recorded_at=outcome_date or now,
-            ))
+            _seed_stage_progression(
+                db, opp, item_rng, OPPORTUNITY_STAGES_OPEN, status, value,
+                success, closed, outcome_date or now, WORKSPACE_ID,
+            )
             _make_transactions(item_rng, db, opp, "Sales", owner, agent, item_rng.randint(6, 22), 3, 730)
             _make_activity_notes(item_rng, db, opp, "Sales", owner, agent, 3, 730)
             note_count += 1
@@ -458,11 +501,10 @@ def seed(db, dry_run=False):
                 external_id=case.source_record_id, source_modified_at=outcome_date or now,
                 last_synced_at=now, retrieval_method="seed",
             ))
-            db.add(WorkItemOutcomeEvent(
-                work_item_id=case.id, workspace_id=WORKSPACE_ID,
-                outcome_status=status, outcome_value=None, outcome_success=None,
-                is_closed=is_closed, retrieval_method="seed", recorded_at=outcome_date or now,
-            ))
+            _seed_stage_progression(
+                db, case, item_rng, CASE_STATES_OPEN, status, None,
+                None, is_closed, outcome_date or now, WORKSPACE_ID,
+            )
             _make_transactions(item_rng, db, case, department, owner, agent, item_rng.randint(4, 14), 2, 730)
             _make_activity_notes(item_rng, db, case, department, owner, agent, 2, 730)
             note_count += 1
@@ -496,7 +538,7 @@ def seed(db, dry_run=False):
 
             now = datetime.utcnow()
             is_closed = item_rng.random() < 0.6
-            status = item_rng.choice(["Resolved", "Closed"]) if is_closed else item_rng.choice(["New", "In Progress", "On Hold"])
+            status = item_rng.choice(["Resolved", "Closed"]) if is_closed else item_rng.choice(INCIDENT_STATES_OPEN)
             outcome_counts["incident_closed" if is_closed else "incident_open"] += 1
             outcome_date = _weighted_past_datetime(item_rng, 2, 730) if is_closed else None
 
@@ -507,11 +549,10 @@ def seed(db, dry_run=False):
                 external_id=incident.source_record_id, source_modified_at=outcome_date or now,
                 last_synced_at=now, retrieval_method="seed",
             ))
-            db.add(WorkItemOutcomeEvent(
-                work_item_id=incident.id, workspace_id=WORKSPACE_ID,
-                outcome_status=status, outcome_value=None, outcome_success=None,
-                is_closed=is_closed, retrieval_method="seed", recorded_at=outcome_date or now,
-            ))
+            _seed_stage_progression(
+                db, incident, item_rng, INCIDENT_STATES_OPEN, status, None,
+                None, is_closed, outcome_date or now, WORKSPACE_ID,
+            )
             _make_transactions(item_rng, db, incident, department, owner, agent, item_rng.randint(3, 10), 2, 730, source_platform="ServiceNow")
             _make_activity_notes(item_rng, db, incident, department, owner, agent, 2, 730, source_platform="ServiceNow")
             note_count += 1
@@ -562,11 +603,10 @@ def seed(db, dry_run=False):
                 external_id=deal.source_record_id, source_modified_at=outcome_date or now,
                 last_synced_at=now, retrieval_method="seed",
             ))
-            db.add(WorkItemOutcomeEvent(
-                work_item_id=deal.id, workspace_id=WORKSPACE_ID,
-                outcome_status=stage, outcome_value=value, outcome_success=success,
-                is_closed=closed, retrieval_method="seed", recorded_at=outcome_date or now,
-            ))
+            _seed_stage_progression(
+                db, deal, item_rng, DEAL_STAGES_OPEN, stage, value,
+                success, closed, outcome_date or now, WORKSPACE_ID,
+            )
             _make_transactions(item_rng, db, deal, "Sales", owner, agent, item_rng.randint(6, 22), 3, 730, source_platform="HubSpot")
             _make_activity_notes(item_rng, db, deal, "Sales", owner, agent, 3, 730, source_platform="HubSpot")
             note_count += 1

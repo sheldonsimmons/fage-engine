@@ -1121,6 +1121,38 @@ def account_profile(
             if stage_field and stage_field.get("picklist_values"):
                 picklist_stages = [s for s in stage_field["picklist_values"] if s]
 
+        # Simulated/demo workspaces (and any platform without a live
+        # connection's cached picklist -- only Salesforce discovery
+        # captures one today) have no IntegrationConnection to source a
+        # real picklist from. Fall back to each recognized platform's own
+        # standard stage list, appended for whichever platforms actually
+        # appear among this account's Opportunity-type work items, so the
+        # zero-fill still shows a complete, correctly-ordered funnel.
+        FALLBACK_STAGE_PICKLISTS = {
+            "salesforce": [
+                "Prospecting", "Qualification", "Needs Analysis", "Value Proposition",
+                "Id. Decision Makers", "Perception Analysis", "Proposal/Price Quote",
+                "Negotiation/Review", "Closed Won", "Closed Lost",
+            ],
+            "hubspot": [
+                "appointmentscheduled", "qualifiedtobuy", "presentationscheduled",
+                "contractsent", "closedwon", "closedlost",
+            ],
+        }
+        present_platforms = {
+            (row[0] or "").strip().lower()
+            for row in db.query(WorkItem.source_platform).filter(WorkItem.id.in_(opportunity_ids)).distinct().all()
+        }
+        known_stages = set(picklist_stages)
+        for platform in present_platforms:
+            fallback = FALLBACK_STAGE_PICKLISTS.get(platform)
+            if not fallback:
+                continue
+            new_stages = [s for s in fallback if s not in known_stages]
+            if new_stages:
+                picklist_stages = picklist_stages + new_stages
+                known_stages.update(new_stages)
+
         for stage in picklist_stages:
             if stage not in stage_totals:
                 stage_totals[stage] = {"spend_usd": 0.0, "request_count": 0}
