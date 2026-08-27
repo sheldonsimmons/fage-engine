@@ -154,7 +154,16 @@
     .bp-stage-group-label {
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
       color: var(--text-muted); margin: 0 0 8px 2px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+      cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px;
+      list-style: none;
     }
+    .bp-stage-group-label::-webkit-details-marker { display: none; }
+    .bp-stage-group-label::before {
+      content: "▸"; display: inline-block; font-size: 9px; color: var(--text-muted);
+      transition: transform 0.15s;
+    }
+    details[open] > .bp-stage-group-label::before { transform: rotate(90deg); }
+    details.bp-stage-group .bp-stage-list { margin-top: 8px; }
     .bp-stage-list { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
     .bp-stage-row { display: flex; align-items: flex-start; gap: 10px; }
     .bp-stage-index {
@@ -612,12 +621,18 @@
         </div>`;
       };
 
-      panel.innerHTML = groups.map((group) => `
-        <div class="bp-stage-group">
-          ${groups.length > 1 ? `<div class="bp-stage-group-label">${group.label}</div>` : ""}
-          <div class="bp-stage-list">${group.rows.map(renderRow).join("")}</div>
-        </div>
-      `).join("");
+      panel.innerHTML = groups.map((group) => {
+        const list = `<div class="bp-stage-list">${group.rows.map(renderRow).join("")}</div>`;
+        // Only one platform present -- nothing to collapse against, so skip
+        // the <details> wrapper and header entirely (unchanged from before).
+        if (groups.length === 1) {
+          return `<div class="bp-stage-group">${list}</div>`;
+        }
+        return `<details class="bp-stage-group" open>
+          <summary class="bp-stage-group-label">${group.label}</summary>
+          ${list}
+        </details>`;
+      }).join("");
     }
 
     const BP_INSIGHT_ICON_SPEND = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 10h4l2-6 3 12 2-8 1.5 2H18"/></svg>`;
