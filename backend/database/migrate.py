@@ -130,12 +130,24 @@ def run_migrations():
         except Exception:
             pass
         try:
+            # Superseded by the workspace-scoped index below -- an earlier
+            # deploy created this globally-unique-on-event_id-alone index,
+            # which would let two different customers' event_id values
+            # collide. Drop it before the correctly-scoped one takes over.
+            conn.execute(text("DROP INDEX IF EXISTS uq_token_transactions_event_id"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
             # Client-supplied idempotency key -- a real unique constraint,
             # not just an index, since it's what route_payload() relies on
-            # to detect and reject a resubmitted event.
+            # to detect and reject a resubmitted event. Scoped to
+            # (workspace_id, event_id), not event_id alone, so two
+            # different customers reusing the same event_id string can
+            # never collide with or see each other's transaction.
             conn.execute(text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_token_transactions_event_id "
-                "ON token_transactions (event_id) WHERE event_id IS NOT NULL"
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_token_transactions_workspace_event_id "
+                "ON token_transactions (workspace_id, event_id) WHERE event_id IS NOT NULL"
             ))
             conn.commit()
         except Exception:

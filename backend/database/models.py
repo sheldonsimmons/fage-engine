@@ -417,11 +417,11 @@ class TokenTransaction(Base):
     governed_request_id = Column(String, nullable=True, index=True)
     # Client-supplied idempotency key (RouteRequest.event_id) -- distinct
     # from governed_request_id, which CostPilot generates itself on every
-    # call. Nullable+unique: existing callers that never send one are
-    # unaffected; two calls that do send the same value collide here,
-    # which route_payload() uses to return the original result instead of
-    # recording (and billing) the same event twice.
-    event_id        = Column(String, nullable=True, unique=True, index=True)
+    # call. Nullable, and uniqueness is scoped to (workspace_id, event_id)
+    # -- see the migration's composite unique index -- not to event_id
+    # alone, so two different customers reusing the same event_id string
+    # can never collide with or see each other's transaction.
+    event_id        = Column(String, nullable=True, index=True)
     department      = Column(String,   nullable=False)
     source_platform = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     agent_id        = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
@@ -675,6 +675,27 @@ class RoutingConfig(Base):
     def tier_names(self, value: dict):
         import json
         self.tier_names_json = json.dumps({str(k): str(v) for k, v in value.items()})
+
+
+class Workspace(Base):
+    """
+    The canonical row a `workspace_id` string belongs to. Every table that
+    carries a workspace_id column (WorkItem, TokenTransaction,
+    IntegrationConnection, ...) has always treated it as a loose string by
+    convention -- there was no real row anything could attach a production
+    API key to. This is that row, added specifically so /api/route can
+    authenticate production (non-trial) callers; see TrialAccount below
+    for the separate trial-signup credential, which this does not replace.
+    """
+    __tablename__ = "workspaces"
+
+    id          = Column(Integer,  primary_key=True, index=True)
+    workspace_id = Column(String,  nullable=False, unique=True, index=True)
+    name        = Column(String,   nullable=True)
+    api_key     = Column(String,   nullable=False, unique=True, index=True)
+    status      = Column(String,   nullable=False, default="active")
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class TrialAccount(Base):

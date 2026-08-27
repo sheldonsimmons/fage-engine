@@ -736,7 +736,11 @@ def route_payload(req: RouteRequest, db: Session = Depends(get_db)):
         # recomputed -- the caller already received the real numbers on
         # the original call; this response's job is only to confirm "not
         # double-charged," not to make a fresh billing decision.
-        existing = db.query(TokenTransaction).filter(TokenTransaction.event_id == req.event_id).first()
+        idempotency_workspace = (req.actor_workspace_id or "").strip() or "default"
+        existing = db.query(TokenTransaction).filter(
+            TokenTransaction.event_id == req.event_id,
+            TokenTransaction.workspace_id == idempotency_workspace,
+        ).first()
         if existing:
             return RouteResponse(
                 governed_request_id=existing.governed_request_id,
