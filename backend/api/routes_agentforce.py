@@ -25,11 +25,33 @@ from database.models import (
     WorkAccount,
     WorkItem,
     WorkItemSourceLink,
+    Workspace,
 )
 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _authenticate_governed_workspace(workspace_id: str, x_costpilot_key: str, db: Session) -> None:
+    """
+    Checks the real Workspace table first -- production Salesforce package
+    connections should authenticate as a production workspace, not as a
+    trial account with a 30-day expiry and a 500-call/$10 cap. Falls back
+    to the legacy TrialAccount-based _get_account() check only when no
+    Workspace row exists yet for this id, so orgs connected before the
+    Workspace backfill keep working unmodified.
+    """
+    workspace = db.query(Workspace).filter(Workspace.workspace_id == workspace_id).first()
+    if workspace is not None:
+        if workspace.api_key and workspace.api_key == x_costpilot_key:
+            return
+        if workspace.api_key:
+            raise HTTPException(status_code=401, detail="Invalid X-CostPilot-Key.")
+        # No key issued yet for this workspace -- nothing to check against,
+        # same grace-period logic as /api/route's _check_workspace_api_key.
+        return
+    _get_account(workspace_id, x_costpilot_key, db)
 
 
 class AgentforceGovernRequest(BaseModel):
@@ -482,7 +504,7 @@ async def govern_agentforce_work(
     db: Session = Depends(get_db),
 ):
     """Resolve the Salesforce project, run CostPilot, and return agent-ready output."""
-    _get_account(workspace_id, x_costpilot_key, db)
+    _authenticate_governed_workspace(workspace_id, x_costpilot_key, db)
     canonical_parent = await _apply_approved_relationship_mapping(db, workspace_id, body)
     project = _resolve_or_create_project(
         db,

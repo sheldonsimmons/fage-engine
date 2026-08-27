@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import (
-    AuditEvent, IntegrationConnection, TrialAccount,
+    AuditEvent, IntegrationConnection, TrialAccount, Workspace,
     WorkAccount, WorkItem, WorkItemOutcome, WorkItemOutcomeEvent, WorkItemSourceLink,
 )
 
@@ -164,50 +164,54 @@ def _new_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-def _new_salesforce_workspace(identity: dict, db: Session) -> TrialAccount:
-    """Resolve the CostPilot workspace for a verified Salesforce administrator."""
-    email = str(identity.get("email") or identity.get("username") or "").strip().lower()
-    if email:
-        existing = db.query(TrialAccount).filter(TrialAccount.email == email).first()
-        if existing:
-            if not existing.secret_key:
-                existing.secret_key = "sk-cp-" + secrets.token_urlsafe(32)
-            existing.platform = "salesforce"
-            existing.is_active = True
-            db.flush()
-            return existing
+def _new_salesforce_workspace(identity: dict, db: Session) -> Workspace:
+    """
+    Resolve the real production CostPilot Workspace for a verified Salesforce
+    administrator's org -- not a TrialAccount. Package-connected Salesforce
+    orgs used to be created as plan="trial" rows with a 30-day expiry and a
+    500-call/$10 cap, which silently trial-capped every "production"
+    Salesforce customer. A Workspace has no expiry and no such cap.
 
+    Reconnects are matched by the org's IntegrationConnection row (keyed on
+    external_tenant_id), since Workspace itself has no email/org column --
+    an org that already has a connected Salesforce IntegrationConnection
+    reuses that same workspace_id rather than minting a new one.
+    """
     org_id = str(identity.get("organization_id") or "salesforce").strip()
-    fallback_email = f"salesforce-{org_id.lower()}@connected.costpilot.local"
-    existing = db.query(TrialAccount).filter(TrialAccount.email == fallback_email).first()
-    if existing:
-        if not existing.secret_key:
-            existing.secret_key = "sk-cp-" + secrets.token_urlsafe(32)
-        existing.is_active = True
+    existing_connection = db.query(IntegrationConnection).filter(
+        IntegrationConnection.platform == "salesforce",
+        IntegrationConnection.external_tenant_id == org_id,
+        IntegrationConnection.workspace_id.isnot(None),
+        IntegrationConnection.workspace_id != "",
+    ).order_by(IntegrationConnection.updated_at.desc()).first()
+
+    workspace = None
+    if existing_connection:
+        workspace = db.query(Workspace).filter(
+            Workspace.workspace_id == existing_connection.workspace_id
+        ).first()
+
+    if workspace:
+        if not workspace.api_key:
+            workspace.api_key = "cp_live_" + secrets.token_hex(24)
+        workspace.is_active = True
+        workspace.last_activity_at = datetime.utcnow()
         db.flush()
-        return existing
+        return workspace
 
     workspace_id = uuid.uuid4().hex[:16].upper()
-    account = TrialAccount(
-        email=email or fallback_email,
-        name=str(identity.get("display_name") or identity.get("username") or "Salesforce Administrator"),
-        company=str(identity.get("organization_id") or "Salesforce"),
-        api_key_enc=b64encode(b"").decode(),
-        provider="openai",
+    workspace = Workspace(
         workspace_id=workspace_id,
-        secret_key="sk-cp-" + secrets.token_urlsafe(32),
-        platform="salesforce",
-        setup_complete=False,
-        trial_start=datetime.utcnow(),
-        trial_end=datetime.utcnow() + timedelta(days=30),
-        plan="trial",
+        name=str(identity.get("display_name") or identity.get("username") or org_id or "Salesforce Workspace"),
+        workspace_type="production",
+        source="salesforce_package_connect",
+        api_key="cp_live_" + secrets.token_hex(24),
         is_active=True,
-        trial_call_cap=500,
-        trial_spend_cap_usd=10.0,
+        last_activity_at=datetime.utcnow(),
     )
-    db.add(account)
+    db.add(workspace)
     db.flush()
-    return account
+    return workspace
 
 
 def _merge_salesforce_package_connection(
@@ -823,19 +827,27 @@ async def salesforce_package_status(
         and item.last_error
         and "credential provisioning" in item.last_error.lower()
     ):
-        account = (
-            db.query(TrialAccount)
-            .filter(TrialAccount.workspace_id == item.workspace_id)
+        workspace = (
+            db.query(Workspace)
+            .filter(Workspace.workspace_id == item.workspace_id)
             .first()
         )
-        if account and account.secret_key:
+        retry_key = workspace.api_key if workspace else None
+        if not retry_key:
+            legacy_account = (
+                db.query(TrialAccount)
+                .filter(TrialAccount.workspace_id == item.workspace_id)
+                .first()
+            )
+            retry_key = legacy_account.secret_key if legacy_account else None
+        if retry_key:
             item.status = "provisioning"
             item.last_error = None
             db.commit()
             provisioned, provision_error = await _populate_salesforce_costpilot_credential(
                 instance_url=item.instance_url,
                 access_token=_decrypt(item.access_token_encrypted),
-                secret_key=account.secret_key,
+                secret_key=retry_key,
             )
             item.status = "connected" if provisioned else "error"
             item.last_success_at = datetime.utcnow() if provisioned else None
@@ -1313,7 +1325,7 @@ async def salesforce_callback(
         provisioned, provision_error = await _populate_salesforce_costpilot_credential(
             instance_url=item.instance_url,
             access_token=access_token,
-            secret_key=account.secret_key,
+            secret_key=account.api_key,
         )
         item = _merge_salesforce_package_connection(item, account.workspace_id, db)
         item.status = "connected" if provisioned else "error"
