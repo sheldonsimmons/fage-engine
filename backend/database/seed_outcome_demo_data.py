@@ -92,7 +92,7 @@ INCIDENT_SUBJECTS = [
 INCIDENT_STATES = ["New", "In Progress", "On Hold", "Resolved", "Closed"]
 DEAL_NAMES = ["New Business", "Expansion", "Renewal", "Upsell", "Cross-sell"]
 DEAL_STAGES_OPEN = ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "contractsent"]
-OPPORTUNITY_STAGES_OPEN = ["Qualification", "Needs Analysis", "Proposal", "Negotiation"]
+OPPORTUNITY_STAGES_OPEN = ["Qualification", "Needs Analysis", "Proposal/Price Quote", "Negotiation/Review"]
 CASE_STATES_OPEN = ["New", "Working"]
 INCIDENT_STATES_OPEN = ["New", "In Progress", "On Hold"]
 
