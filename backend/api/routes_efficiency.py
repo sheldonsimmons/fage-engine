@@ -2408,7 +2408,7 @@ def _ask_help_response(
     }
 
 
-_ASK_NUMBER_PATTERN = re.compile(r"-?\$?\d[\d,]*(?:\.\d+)?%?")
+_ASK_NUMBER_PATTERN = re.compile(r"(~\s*)?-?\$?\d[\d,]*(?:\.\d+)?%?\s*([mMkK])?\b")
 
 
 def _ask_extract_numbers(value) -> set[float]:
@@ -2419,19 +2419,51 @@ def _ask_extract_numbers(value) -> set[float]:
     contain" against "what numbers were actually in the source facts",
     since the two need to name the same values even though one is prose
     and the other is JSON.
+
+    Reproduced live (agent-loop numeric-fidelity check false positives):
+    a correct, fact-grounded answer's own natural-language rounding --
+    "~1.2M tokens" for 1,224,008, "August 2026" for the current date --
+    was flagged as fabricated, because the extractor had no concept of an
+    M/K magnitude suffix (so "1.2M" became the bare number 1.2, which
+    naturally matches nothing) and no notion that a bare 4-digit number
+    might be a calendar year rather than a dollar/token figure. Both are
+    now handled explicitly rather than left to trip the guardrail meant
+    to catch fabricated numbers, not correct paraphrasing.
     """
     numbers: set[float] = set()
     text = value if isinstance(value, str) else json.dumps(value, default=str)
-    for match in _ASK_NUMBER_PATTERN.findall(text):
-        cleaned = match.replace("$", "").replace(",", "").replace("%", "")
+    for full_match in _ASK_NUMBER_PATTERN.finditer(text):
+        approx_marker, suffix = full_match.group(1), full_match.group(2)
+        if approx_marker:
+            # "~1.2M tokens" -- the model itself is flagging this as a
+            # rounded approximation, not asserting an exact fact. Verifying
+            # it against the precise source figure would only catch the
+            # model being honest about rounding, not catch a fabrication --
+            # skip it entirely rather than fight over how much tolerance a
+            # single "M"/"K"-suffixed significant figure deserves.
+            continue
+        match = full_match.group(0)
+        cleaned = match.replace("$", "").replace(",", "").replace("%", "").strip()
+        if suffix:
+            cleaned = cleaned[: -len(suffix)].rstrip()
         try:
             number = float(cleaned)
         except ValueError:
             continue
+        if suffix and suffix.lower() == "m":
+            number *= 1_000_000
+        elif suffix and suffix.lower() == "k":
+            number *= 1_000
         # Skip tiny integers (0-9): "top 5", "5 departments", list positions,
         # and years/dates would otherwise flood false mismatches for values
         # that were never meant to be verified as a spend/token figure.
         if abs(number) < 10 and number == int(number):
+            continue
+        # A bare 4-digit integer in a plausible calendar-year range (no
+        # currency/percent sign, no magnitude suffix) is almost always a
+        # date mention ("August 2026"), never a real spend/token figure --
+        # those are either much larger (raw token counts) or carry a $/%.
+        if not suffix and "$" not in match and "%" not in match and 2000 <= number <= 2099 and number == int(number):
             continue
         numbers.add(round(number, 2))
     return numbers
