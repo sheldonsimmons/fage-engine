@@ -4074,7 +4074,11 @@ def _ask_costpilot_answer(
         account_label = named_entity["row"].get("label") or "The selected account"
         outcomes = run_get_account_outcomes(db, request.workspace_id, account_label)
         entity = "account"
-        intent = "account_outcomes"
+        # Not "account_outcomes" -- ask_interpretation_label()'s template is
+        # f"{entity.title()} {intent} using {metric}", and entity is already
+        # "Account", so that would render the redundant "Account account
+        # outcomes using spend usd".
+        intent = "outcomes"
         if not outcomes.get("found"):
             title = f"{account_label} outcomes"
             answer = f"CostPilot could not find a single matching account for '{account_label}'."
