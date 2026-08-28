@@ -4079,9 +4079,31 @@ def _ask_costpilot_answer(
         # "Account", so that would render the redundant "Account account
         # outcomes using spend usd".
         intent = "outcomes"
+        # A question naming both outcomes ("won/lost", "won and lost") only
+        # ever set outcome_filter to one value (_ask_intent's won/lost
+        # detection is an elif chain, first match wins) -- answering just
+        # that one half silently ignored the other half of what was asked.
+        question_lower = (request.question or "").lower()
+        asks_both = bool(re.search(r"\bwon\b", question_lower)) and bool(re.search(r"\blost\b", question_lower))
         if not outcomes.get("found"):
             title = f"{account_label} outcomes"
             answer = f"CostPilot could not find a single matching account for '{account_label}'."
+        elif asks_both:
+            won_count = int(outcomes.get("opportunities_won") or 0)
+            lost_count = int(outcomes.get("opportunities_lost") or 0)
+            open_count = int(outcomes.get("opportunities_open") or 0)
+            title = f"{account_label} won/lost opportunities"
+            answer = (
+                f"{account_label} has {won_count:,} won and {lost_count:,} lost opportunit"
+                f"{'y' if (won_count + lost_count) == 1 else 'ies'}"
+                + (
+                    f", out of {won_count + lost_count + open_count:,} total tracked "
+                    f"({open_count:,} still open)."
+                    if outcomes.get("has_outcome_data") else "."
+                )
+            )
+            if not outcomes.get("has_outcome_data"):
+                answer += " No business outcome data is currently synced for this account."
         else:
             count = outcomes.get("opportunities_won") if outcome_filter == "won" else outcomes.get("opportunities_lost")
             outcome_word = "won" if outcome_filter == "won" else "lost"
@@ -4098,6 +4120,10 @@ def _ask_costpilot_answer(
                 answer += " No business outcome data is currently synced for this account."
         evidence = []
         calculation_row_count = None
+        calculation_formula = (
+            "Count of WorkItemOutcome rows for this account's Opportunities, "
+            "grouped by outcome_success/is_closed"
+        )
     elif named_entity and intent not in {
         "budget", "savings", "optimization", "pruning", "blocked", "risk_events", "ranking"
     }:
