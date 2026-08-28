@@ -2408,7 +2408,7 @@ def _ask_help_response(
     }
 
 
-_ASK_NUMBER_PATTERN = re.compile(r"(~\s*)?-?\$?\d[\d,]*(?:\.\d+)?%?\s*([mMkK])?\b")
+_ASK_NUMBER_PATTERN = re.compile(r"(~\s*)?-?\$?\d[\d,]*(?:\.\d+)?(%)?([mMkK](?![a-zA-Z]))?(×|[xX]\b)?")
 
 
 def _ask_extract_numbers(value) -> set[float]:
@@ -2433,7 +2433,7 @@ def _ask_extract_numbers(value) -> set[float]:
     numbers: set[float] = set()
     text = value if isinstance(value, str) else json.dumps(value, default=str)
     for full_match in _ASK_NUMBER_PATTERN.finditer(text):
-        approx_marker, suffix = full_match.group(1), full_match.group(2)
+        approx_marker, suffix, ratio_marker = full_match.group(1), full_match.group(3), full_match.group(4)
         if approx_marker:
             # "~1.2M tokens" -- the model itself is flagging this as a
             # rounded approximation, not asserting an exact fact. Verifying
@@ -2441,6 +2441,14 @@ def _ask_extract_numbers(value) -> set[float]:
             # model being honest about rounding, not catch a fabrication --
             # skip it entirely rather than fight over how much tolerance a
             # single "M"/"K"-suffixed significant figure deserves.
+            continue
+        if ratio_marker:
+            # "2.6× last month's total" -- a multiplier the model computed
+            # itself from two numbers that ARE in the source facts
+            # (current/previous), not a figure asserted to exist in the
+            # facts directly. Reproduced live: "more than 2.6x" flagged as
+            # unverified even though 3,229,417 / 1,224,008 ~= 2.64 is a
+            # correct derivation from data already confirmed present.
             continue
         match = full_match.group(0)
         cleaned = match.replace("$", "").replace(",", "").replace("%", "").strip()
