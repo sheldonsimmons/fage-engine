@@ -2763,6 +2763,23 @@ def _ask_agent_validate_answer(tool_call_log: list, answer_text: str) -> list[st
         for claim in _ask_narration_causal_claims(answer_text)
     )
 
+    # Numeric-fidelity guardrail: previously only wired into the
+    # deterministic path's OpenAI narration step (_ask_grounded_narrative),
+    # never into this agent-loop path -- reproduced live: an agent-loop
+    # answer stated "$87.16 in associated AI spend (27,955 tokens)" for a
+    # lost opportunity whose actual tool-returned figure was $0.09 for that
+    # same token count, with nothing catching the fabricated number before
+    # it reached the user. Same check, same tolerance, now applied here too.
+    # A list, not a dict keyed by tool name -- the same tool can legitimately
+    # be called more than once in one loop (e.g. get_usage_report per
+    # provider for a comparison question), and a dict would silently drop
+    # every call but the last, losing real facts the fidelity check needs.
+    all_facts = [result for _tool_name, _args, result in tool_call_log]
+    issues.extend(
+        f"answer states ${number:,.2f} which does not match any figure the tools returned"
+        for number in _ask_narration_unverified_numbers(all_facts, answer_text)
+    )
+
     budget_rows: list[dict] = []
     for tool_name, _args, result in tool_call_log:
         if tool_name == "get_budget_status":
