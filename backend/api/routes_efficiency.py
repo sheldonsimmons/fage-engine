@@ -654,13 +654,19 @@ def _ask_intent(question: str, default_days: int) -> dict:
     # (opportunities/projects are the only rows with outcome data today).
     outcome_filter = None
     if entity == "context":
+        # \bwon\b / \blost\b, not " won " / " lost " substring checks --
+        # the substring form required a literal trailing space after the
+        # word, which a naturally-phrased question ending in "?" (e.g.
+        # "...has Brightwater Marine won?") never has, so this almost
+        # never matched a real question. Word-boundary regex handles
+        # "won?", "won.", "won," etc. the same as "won ".
         if any(term in text for term in (
             "closed won", "won opportunit", "we won", "opportunities we won",
-        )) or (" won " in f" {text} " and "opportunit" in text):
+        )) or (re.search(r"\bwon\b", text) and "opportunit" in text):
             outcome_filter = "won"
         elif any(term in text for term in (
             "closed lost", "lost opportunit", "we lost", "opportunities we lost",
-        )) or (" lost " in f" {text} " and "opportunit" in text):
+        )) or (re.search(r"\blost\b", text) and "opportunit" in text):
             outcome_filter = "lost"
 
     comparison_key = None
