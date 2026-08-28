@@ -136,6 +136,37 @@ METRICS: dict[str, MetricDef] = {
         definition="Count of support WorkItems with WorkItemOutcome.is_closed = true.",
         provenance="WorkItemOutcome.is_closed where WorkItem.context_type IN (case, ticket, incident)",
     ),
+    "successful_outcomes": MetricDef(
+        key="successful_outcomes", label="Successful Outcomes", source="outcome", unit="count",
+        definition=(
+            "Count of WorkItems with WorkItemOutcome.outcome_success = true, "
+            "for ANY context_type -- not restricted to opportunities. The "
+            "generic form of won_count, for work types with no won/lost "
+            "language (a resolved case, a shipped feature, a processed "
+            "invoice, a hired candidate)."
+        ),
+        provenance="WorkItemOutcome.outcome_success = true, any WorkItem.context_type",
+    ),
+    "unsuccessful_outcomes": MetricDef(
+        key="unsuccessful_outcomes", label="Unsuccessful Outcomes", source="outcome", unit="count",
+        definition="Count of closed WorkItems with WorkItemOutcome.outcome_success = false, for ANY context_type. The generic form of lost_count.",
+        provenance="WorkItemOutcome.outcome_success = false, is_closed = true, any WorkItem.context_type",
+    ),
+    "open_outcomes": MetricDef(
+        key="open_outcomes", label="Open Work Items", source="outcome", unit="count",
+        definition="Count of WorkItems with WorkItemOutcome.is_closed = false, for ANY context_type. The generic form of open_count.",
+        provenance="WorkItemOutcome.is_closed = false, any WorkItem.context_type",
+    ),
+    "successful_outcome_value": MetricDef(
+        key="successful_outcome_value", label="Successful Outcome Value", source="outcome", unit="usd",
+        definition="Sum of WorkItemOutcome.outcome_value for successful WorkItems, for ANY context_type. The generic form of won_value.",
+        provenance="WorkItemOutcome.outcome_value where outcome_success = true, any WorkItem.context_type",
+    ),
+    "outcomes_with_data": MetricDef(
+        key="outcomes_with_data", label="Work Items With Known Outcome", source="outcome", unit="count",
+        definition="Count of WorkItems that have any WorkItemOutcome row at all (synced from a source system), regardless of status -- the denominator for outcome coverage.",
+        provenance="COUNT(WorkItemOutcome.work_item_id)",
+    ),
     "savings": MetricDef(
         key="savings", label="Total Savings", source="transaction", unit="usd",
         definition=(

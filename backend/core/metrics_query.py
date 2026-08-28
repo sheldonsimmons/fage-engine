@@ -215,6 +215,14 @@ def _outcome_metric_expr(metric_key: str):
     is_open_opp = and_(is_opp, WorkItemOutcome.is_closed.is_(False))
     value = func.coalesce(WorkItemOutcome.outcome_value, 0.0)
 
+    # Generic (any context_type) forms, added for non-Salesforce-Opportunity
+    # work types -- recruiting, engineering, finance, etc. have no won/lost
+    # language, but outcome_success/is_closed already mean the same thing
+    # regardless of context_type, so these simply drop the is_opp gate.
+    is_successful = WorkItemOutcome.outcome_success.is_(True)
+    is_unsuccessful = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+    is_open_any = WorkItemOutcome.is_closed.is_(False)
+
     if metric_key == "won_count":
         return func.coalesce(func.sum(case((is_won, 1), else_=0)), 0)
     if metric_key == "lost_count":
@@ -231,6 +239,16 @@ def _outcome_metric_expr(metric_key: str):
         return func.coalesce(
             func.sum(case((and_(is_support, WorkItemOutcome.is_closed.is_(True)), 1), else_=0)), 0
         )
+    if metric_key == "successful_outcomes":
+        return func.coalesce(func.sum(case((is_successful, 1), else_=0)), 0)
+    if metric_key == "unsuccessful_outcomes":
+        return func.coalesce(func.sum(case((is_unsuccessful, 1), else_=0)), 0)
+    if metric_key == "open_outcomes":
+        return func.coalesce(func.sum(case((is_open_any, 1), else_=0)), 0)
+    if metric_key == "successful_outcome_value":
+        return func.coalesce(func.sum(case((is_successful, value), else_=0.0)), 0.0)
+    if metric_key == "outcomes_with_data":
+        return func.coalesce(func.count(WorkItemOutcome.work_item_id), 0)
     raise ValueError(f"unknown outcome metric: {metric_key}")
 
 
@@ -319,6 +337,14 @@ def _run_outcome_query(
         clause = _outcome_status_clause(filters["outcome_status"])
         if clause is not None:
             q = q.filter(clause)
+    if filters.get("context_type"):
+        # Scopes the generic (any-context-type) outcome metrics --
+        # successful_outcomes, unsuccessful_outcomes, open_outcomes,
+        # successful_outcome_value, outcomes_with_data -- to one work type,
+        # e.g. "case" for support or a custom context_type for recruiting/
+        # engineering/finance, without needing a dedicated metric per type
+        # the way won_count/support_cases_total are.
+        q = q.filter(WorkItem.context_type == filters["context_type"])
 
     dim_exprs = [_dimension_expr(d) for d in dim_keys]
     key_exprs = [e[0] for e in dim_exprs]

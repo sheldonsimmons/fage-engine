@@ -734,10 +734,17 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
     account. No other tool in this file touches WorkItemOutcome at all --
     without this, the agent had no way to answer any won/lost/pipeline
     question, named account or not.
+
+    Milestone 4: won/lost/support numbers now come from the shared
+    core.metrics_query catalog instead of a bespoke query duplicated a
+    fourth time here, plus the catalog's generic (any context_type)
+    successful/unsuccessful/open outcome metrics, so recruiting/engineering/
+    finance work items -- not just Salesforce Opportunities and support
+    cases -- are answerable through this same tool.
     """
-    from sqlalchemy import and_, case, func
+    from core.metrics_query import run_metrics_query
     from core.workspace_scope import workspace_filter
-    from database.models import WorkAccount, WorkItem, WorkItemOutcome, TokenTransaction
+    from database.models import WorkAccount, WorkItem
 
     account = None
     matched_accounts = []
@@ -767,6 +774,33 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
             }
         account = matched_accounts[0]
 
+    outcome_metrics = [
+        "won_count", "lost_count", "open_count", "won_value", "pipeline_value",
+        "support_cases_total", "support_cases_resolved",
+        "successful_outcomes", "unsuccessful_outcomes", "open_outcomes",
+        "successful_outcome_value", "outcomes_with_data",
+    ]
+    outcome_result = run_metrics_query(
+        db, workspace_id, metrics=outcome_metrics,
+        filters={"account": account.name} if account is not None else None,
+    )
+    o = outcome_result.rows[0]["values"] if outcome_result.rows else {m: 0 for m in outcome_metrics}
+
+    won_count, lost_count, open_count = int(o["won_count"]), int(o["lost_count"]), int(o["open_count"])
+    pipeline_value, closed_won_value = float(o["pipeline_value"]), float(o["won_value"])
+    support_total, support_resolved = int(o["support_cases_total"]), int(o["support_cases_resolved"])
+    successful_outcomes, unsuccessful_outcomes = int(o["successful_outcomes"]), int(o["unsuccessful_outcomes"])
+    open_outcomes = int(o["open_outcomes"])
+    successful_outcome_value = float(o["successful_outcome_value"])
+    outcomes_with_data = int(o["outcomes_with_data"])
+    has_outcome_data = bool(outcomes_with_data)
+
+    # AI spend/tokens split by won vs lost, tied only to work items that
+    # actually have a synced outcome -- answers "compare AI activity on won
+    # vs lost opportunities" directly instead of making the model subtract.
+    from sqlalchemy import and_, case, func
+    from database.models import WorkItemOutcome, TokenTransaction
+
     work_item_scope = workspace_filter(WorkItem, workspace_id)
 
     def _scoped(query):
@@ -775,40 +809,11 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
             q = q.filter(WorkItem.account_id == account.id)
         return q
 
-    is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
-    is_open = WorkItemOutcome.is_closed.is_(False)
-    is_won = WorkItemOutcome.outcome_success.is_(True)
-    outcome_value = func.coalesce(WorkItemOutcome.outcome_value, 0.0)
-
-    won_count, lost_count, open_count, pipeline_value, closed_won_value = _scoped(
-        db.query(
-            func.coalesce(func.sum(case((is_won, 1), else_=0)), 0),
-            func.coalesce(func.sum(case((is_lost, 1), else_=0)), 0),
-            func.coalesce(func.sum(case((is_open, 1), else_=0)), 0),
-            func.coalesce(func.sum(case((is_open, outcome_value), else_=0.0)), 0.0),
-            func.coalesce(func.sum(case((is_won, outcome_value), else_=0.0)), 0.0),
-        )
-        .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
-        .filter(WorkItem.context_type == "opportunity")
-    ).first()
-
-    SUPPORT_CONTEXT_TYPES = ("case", "ticket", "incident")
-    support_total, support_resolved = _scoped(
-        db.query(
-            func.count(WorkItem.id),
-            func.coalesce(func.sum(case((WorkItemOutcome.is_closed.is_(True), 1), else_=0)), 0),
-        )
-        .outerjoin(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
-        .filter(WorkItem.context_type.in_(SUPPORT_CONTEXT_TYPES))
-    ).first()
-
-    won_count, lost_count, open_count = int(won_count or 0), int(lost_count or 0), int(open_count or 0)
-    support_resolved = int(support_resolved or 0)
-    has_outcome_data = bool(won_count + lost_count + open_count + support_resolved)
-
-    # AI spend/tokens split by won vs lost, tied only to work items that
-    # actually have a synced outcome -- answers "compare AI activity on won
-    # vs lost opportunities" directly instead of making the model subtract.
+    is_won = and_(WorkItem.context_type == "opportunity", WorkItemOutcome.outcome_success.is_(True))
+    is_lost = and_(
+        WorkItem.context_type == "opportunity",
+        WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True),
+    )
     won_spend, won_tokens, lost_spend, lost_tokens = _scoped(
         db.query(
             func.coalesce(func.sum(case((is_won, TokenTransaction.cost_usd), else_=0.0)), 0.0),
@@ -819,7 +824,6 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
         .select_from(TokenTransaction)
         .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
         .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
-        .filter(WorkItem.context_type == "opportunity")
     ).first()
 
     return {
@@ -838,6 +842,13 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
         "ai_tokens_on_won_opportunities": int(won_tokens or 0),
         "ai_spend_on_lost_opportunities_usd": round(float(lost_spend or 0.0), 6),
         "ai_tokens_on_lost_opportunities": int(lost_tokens or 0),
+        # Generic fields -- work for any context_type (recruiting, engineering,
+        # finance, custom), not just Salesforce Opportunities/support cases.
+        "successful_outcomes": successful_outcomes,
+        "unsuccessful_outcomes": unsuccessful_outcomes,
+        "open_outcomes": open_outcomes,
+        "successful_outcome_value_usd": round(successful_outcome_value, 2),
+        "outcomes_with_known_data": outcomes_with_data,
     }
 
 
