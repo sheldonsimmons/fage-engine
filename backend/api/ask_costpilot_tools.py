@@ -269,6 +269,45 @@ TOOL_SCHEMAS = [
     },
     {
         "type": "function",
+        "name": "get_cost_per_outcome",
+        "description": (
+            "Get Cost per Outcome: AI spend associated with successful work "
+            "divided by the count of successful outcomes -- e.g. cost per Closed "
+            "Won opportunity, cost per resolved case, cost per hire, cost per "
+            "shipped feature. Works for ANY work type, not just Opportunities. "
+            "Use this for any 'cost per X' or 'return on AI spend' question. The "
+            "result always reports an evidence_label (early_signal / meaningful / "
+            "executive_eligible) based on sample size -- always state that label "
+            "in the answer, and never present a result labeled early_signal as a "
+            "confident finding. This measures association between AI activity and "
+            "outcomes, never causation -- never say AI caused these outcomes."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "context_type": {
+                    "type": "string",
+                    "description": (
+                        "Narrow to one work type: 'opportunity', 'case', 'ticket', "
+                        "'incident', 'project', or any other context_type the "
+                        "workspace uses. Empty string for every work type combined."
+                    ),
+                },
+                "entity_name": {
+                    "type": "string",
+                    "description": (
+                        "The exact name of a specific account/company to scope to. "
+                        "Empty string for a company-wide/workspace-wide answer."
+                    ),
+                },
+            },
+            "required": ["context_type", "entity_name"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "get_data_coverage",
         "description": (
             "Check which source platforms (Salesforce, ServiceNow, HubSpot) are "
@@ -852,6 +891,17 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
     }
 
 
+def run_get_cost_per_outcome(
+    db, workspace_id: Optional[str],
+    context_type: Optional[str] = None, entity_name: Optional[str] = None,
+) -> dict:
+    from core.metrics_query import compute_cost_per_outcome
+
+    ct = (context_type or "").strip() or None
+    name = (entity_name or "").strip() or None
+    return compute_cost_per_outcome(db, workspace_id, context_type=ct, account_name=name)
+
+
 def run_get_data_coverage(db, workspace_id: Optional[str]) -> dict:
     from core.data_coverage import get_data_coverage
 
@@ -978,6 +1028,7 @@ EXECUTORS = {
     "get_data_coverage": run_get_data_coverage,
     "get_agent_adoption": run_get_agent_adoption,
     "get_account_outcomes": run_get_account_outcomes,
+    "get_cost_per_outcome": run_get_cost_per_outcome,
     "query_metrics": run_query_metrics,
     "get_priority_signals": run_get_priority_signals,
 }

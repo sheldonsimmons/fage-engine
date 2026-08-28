@@ -107,6 +107,15 @@ def _outcome_status_clause(value: str):
         return and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
     if v == "open":
         return WorkItemOutcome.is_closed.is_(False)
+    # Generic (any context_type) forms -- the successful_outcomes/
+    # unsuccessful_outcomes analog of won/lost, for work types with no
+    # won/lost language.
+    if v == "successful":
+        return WorkItemOutcome.outcome_success.is_(True)
+    if v == "unsuccessful":
+        return and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+    if v == "any":
+        return WorkItemOutcome.work_item_id.isnot(None)
     return None
 
 
@@ -285,11 +294,22 @@ def _run_activity_query(
             TokenTransaction.model_name.ilike(filters["model"]),
             TokenTransaction.model_tier.ilike(filters["model"]),
         ))
+    # Legacy values (won/lost/open) keep the opportunity-only gate for
+    # backward compatibility with existing callers; the generic values
+    # (successful/unsuccessful/any) apply to whatever WorkItem the caller's
+    # own context_type filter (or none) already scopes to -- no implicit
+    # opportunity restriction, since the whole point of adding them was to
+    # answer this for non-opportunity work types too.
     if filters.get("outcome_status"):
         q = q.outerjoin(WorkItemOutcome, WorkItem.id == WorkItemOutcome.work_item_id)
         clause = _outcome_status_clause(filters["outcome_status"])
         if clause is not None:
-            q = q.filter(WorkItem.context_type == "opportunity", clause)
+            if filters["outcome_status"].lower() in ("won", "lost", "open"):
+                q = q.filter(WorkItem.context_type == "opportunity", clause)
+            else:
+                q = q.filter(clause)
+    if filters.get("context_type"):
+        q = q.filter(WorkItem.context_type == filters["context_type"])
 
     dim_exprs = [_dimension_expr(d) for d in dim_keys]
     key_exprs = [e[0] for e in dim_exprs]
@@ -588,3 +608,83 @@ def run_metrics_query(
         unsupported_metrics=unsupported,
         freshness=freshness,
     )
+
+
+# Sample-size thresholds settled for the ROI/Business Impact investigation
+# (see the approved plan): below MIN_MEANINGFUL_SAMPLE, a comparison is
+# labeled "Early Signal / Insufficient Sample" rather than presented as a
+# meaningful result; below MIN_EXECUTIVE_SAMPLE, it should not feed an
+# executive-level claim even if shown descriptively. Configuration values,
+# not permanent constants -- Phase F's Baseline model is where these become
+# overridable per workspace/context_type instead of a shared default.
+MIN_MEANINGFUL_SAMPLE = 30
+MIN_EXECUTIVE_SAMPLE = 50
+
+
+def compute_cost_per_outcome(
+    db: Session,
+    workspace_id: Optional[str],
+    context_type: Optional[str] = None,
+    account_name: Optional[str] = None,
+) -> dict:
+    """
+    AI investment associated with successful outcomes, divided by the count
+    of successful outcomes -- "Cost per Outcome" from the ROI/Business
+    Impact investigation (Phase B). Association, not causation: this is how
+    much AI activity touched the work that turned out successful, not proof
+    AI caused that success -- same guardrail as get_business_impact() and
+    run_get_account_outcomes().
+
+    Built entirely from existing catalog metrics (ai_spend, successful_
+    outcomes, outcomes_with_data) via two run_metrics_query() calls -- one
+    per metric source, per the catalog's own "never mix sources in one
+    query" rule -- and a Python division, not new SQL.
+    """
+    filters: dict = {}
+    if context_type:
+        filters["context_type"] = context_type
+    if account_name:
+        filters["account"] = account_name
+
+    spend_result = run_metrics_query(
+        db, workspace_id, metrics=["ai_spend"],
+        filters={**filters, "outcome_status": "successful"},
+    )
+    outcome_result = run_metrics_query(
+        db, workspace_id, metrics=["successful_outcomes", "outcomes_with_data"],
+        filters=filters,
+    )
+
+    ai_spend = float(spend_result.rows[0].get("ai_spend", 0.0)) if spend_result.rows else 0.0
+    successful_outcomes = int(outcome_result.rows[0].get("successful_outcomes", 0)) if outcome_result.rows else 0
+    outcomes_with_data = int(outcome_result.rows[0].get("outcomes_with_data", 0)) if outcome_result.rows else 0
+
+    cost_per_outcome = round(ai_spend / successful_outcomes, 2) if successful_outcomes else None
+
+    if successful_outcomes >= MIN_EXECUTIVE_SAMPLE:
+        evidence_label = "executive_eligible"
+    elif successful_outcomes >= MIN_MEANINGFUL_SAMPLE:
+        evidence_label = "meaningful"
+    else:
+        evidence_label = "early_signal"
+
+    return {
+        "context_type": context_type,
+        "account": account_name,
+        "ai_spend_on_successful_outcomes_usd": round(ai_spend, 6),
+        "successful_outcomes": successful_outcomes,
+        "outcomes_with_known_data": outcomes_with_data,
+        "cost_per_successful_outcome_usd": cost_per_outcome,
+        "sample_size": successful_outcomes,
+        "evidence_label": evidence_label,
+        "evidence_note": (
+            "Early Signal / Insufficient Sample: fewer than 30 successful outcomes -- descriptive only."
+            if evidence_label == "early_signal" else
+            "Meaningful sample (30+), but below the 50+ preferred for executive-level claims."
+            if evidence_label == "meaningful" else
+            "Sample size supports an executive-level claim (50+ successful outcomes)."
+        ),
+        "association_note": (
+            "This is AI activity associated with successful outcomes, not evidence AI caused them."
+        ),
+    }
