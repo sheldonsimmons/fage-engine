@@ -2679,6 +2679,11 @@ def _ask_run_agent_tool(
         )
     if name == "get_account_outcomes":
         return executor(db, request.workspace_id, args.get("entity_name") or None)
+    if name == "get_cost_per_outcome":
+        return executor(
+            db, request.workspace_id,
+            args.get("context_type") or None, args.get("entity_name") or None,
+        )
     if name == "get_data_coverage":
         return executor(db, request.workspace_id)
     if name == "query_metrics":
@@ -3133,6 +3138,15 @@ only knows spend and call counts. Pass entity_name to scope to one named account
 leave it empty for a company-wide won/lost comparison. If get_account_outcomes returns
 found: false, tell the user the account wasn't found rather than guessing or falling back to
 get_usage_report's spend data as if it answered an outcome question.
+Call get_cost_per_outcome for any "cost per X" or "return on AI spend" question -- cost per
+closed-won opportunity, cost per resolved case, cost per hire, cost per shipped feature, or any
+similar ratio of AI spend to successful outcomes. Works for any work type via its context_type
+argument (e.g. 'opportunity', 'case'), not just Opportunities; leave context_type empty for
+every work type combined. Its result always includes an evidence_label (early_signal / meaningful
+/ executive_eligible) based on sample size -- you must state that label in your answer, and must
+not present an early_signal result as a confident finding. This measures association between AI
+activity and outcomes, never causation -- never say AI caused these outcomes, only that AI
+activity was associated with them.
 Call get_data_coverage before answering any question that names a specific source platform
 (Salesforce, ServiceNow, HubSpot) -- for example "show AI activity across Salesforce, HubSpot,
 and ServiceNow" -- and check whether each named platform is actually connected before answering
