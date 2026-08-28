@@ -4052,6 +4052,42 @@ def _ask_costpilot_answer(
             f"in spend to the {(parsed.get('model_tier') or 'selected').title()} tier for {period_label}."
         )
         evidence = _ask_evidence(report.get("model_breakdown") or [], metric, None, limit=result_limit)
+    elif named_entity and outcome_filter and named_entity["entity"] == "account":
+        # "How many opportunities has Brightwater Marine won?" used to fall
+        # into the named-entity branch below, which has no concept of won/
+        # lost at all and silently answered with a generic AI-spend total
+        # instead -- outcome_filter was computed correctly but discarded
+        # because this branch order let the named-entity match win first.
+        # Reuses the same trusted, already-correct account-outcomes lookup
+        # the agent tool loop uses (run_get_account_outcomes) rather than
+        # hand-rolling a second won/lost computation in this regex-driven
+        # path -- this fallback path is being kept minimal, not extended,
+        # per the Ask CostPilot architecture review.
+        from api.ask_costpilot_tools import run_get_account_outcomes
+
+        account_label = named_entity["row"].get("label") or "The selected account"
+        outcomes = run_get_account_outcomes(db, request.workspace_id, account_label)
+        entity = "account"
+        intent = "account_outcomes"
+        if not outcomes.get("found"):
+            title = f"{account_label} outcomes"
+            answer = f"CostPilot could not find a single matching account for '{account_label}'."
+        else:
+            count = outcomes.get("opportunities_won") if outcome_filter == "won" else outcomes.get("opportunities_lost")
+            outcome_word = "won" if outcome_filter == "won" else "lost"
+            title = f"{account_label} {outcome_word} opportunities"
+            answer = (
+                f"{account_label} has {int(count or 0):,} {outcome_word} opportunit"
+                f"{'y' if count == 1 else 'ies'}"
+                + (
+                    f", out of {int(outcomes.get('opportunities_won') or 0) + int(outcomes.get('opportunities_lost') or 0) + int(outcomes.get('opportunities_open') or 0):,} total tracked."
+                    if outcomes.get("has_outcome_data") else "."
+                )
+            )
+            if not outcomes.get("has_outcome_data"):
+                answer += " No business outcome data is currently synced for this account."
+        evidence = []
+        calculation_row_count = None
     elif named_entity and intent not in {
         "budget", "savings", "optimization", "pruning", "blocked", "risk_events", "ranking"
     }:
@@ -4800,9 +4836,17 @@ def _ask_costpilot_answer(
             ),
         },
         "assistant_mode": assistant_mode,
-        "interpreted_as": ask_interpretation_label(parsed),
+        # entity/intent are reassigned inside several branches above (e.g.
+        # the named-entity and account-outcomes branches) to reflect what
+        # actually answered the question -- parsed still held whatever the
+        # initial classifier guessed before those branches ran, so
+        # ask_interpretation_label() rendered a stale, sometimes-misleading
+        # label ("Context total using spend usd" for an answer that was
+        # really an account-scoped outcomes lookup). Synced here so the
+        # label always matches the branch that actually produced the answer.
+        "interpreted_as": ask_interpretation_label({**parsed, "entity": entity, "intent": intent}),
         "contract_status": "passed",
-        "interpreted_intent": parsed,
+        "interpreted_intent": {**parsed, "entity": entity, "intent": intent},
         "conversation_context": conversation_context,
         "suggested_questions": _ask_suggested_questions(
             "no_activity" if data_scope == "no_activity" and latest_available_at else intent,
