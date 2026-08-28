@@ -2456,15 +2456,18 @@ def _ask_narration_unverified_numbers(facts: dict, narrated_answer: str) -> set[
 _ASK_CAUSAL_VERBS = (
     "generated", "drove", "caused", "resulted in", "produced", "created",
     "delivered", "led to", "responsible for",
-    # "won"/"closed" as bare verbs (e.g. "AI won the contract", "the agent
-    # closed this $500K deal") -- guarded against matching inside
-    # "closed-won"/"closed-lost", which are Cost per Outcome's own
-    # outcome-status vocabulary (Business Impact investigation, Phase B),
-    # not a causal claim. Without these lookaround guards, nearly every
-    # legitimate association-language answer that mentions a closed-won/
-    # closed-lost opportunity near "AI" and a dollar figure -- exactly the
-    # phrasing this guardrail is supposed to encourage -- false-positived.
-    r"(?<!closed-)won",
+    # "closed" as a bare verb (e.g. "the agent closed this $500K deal") --
+    # guarded against matching inside "closed-won"/"closed-lost", Cost per
+    # Outcome's own outcome-status vocabulary (Business Impact
+    # investigation, Phase B). "won" was here too, but as a bare word it's
+    # structurally indistinguishable from "AI spend associated with won
+    # opportunities" (legitimate, adjective use) vs. "AI won the contract"
+    # (causal, verb use) -- proximity matching can't tell those apart, and
+    # every Cost per Outcome answer legitimately says "won"/"closed-won"
+    # near "AI" and a dollar figure. Reproduced live: correct, carefully-
+    # worded answers were silently discarded three separate ways by this
+    # pattern before "won" was removed. The remaining verbs still catch
+    # the primary risk (AI generated/caused/produced/delivered a result).
     r"closed(?!-won|-lost)",
 )
 _ASK_CAUSAL_CLAIM_PATTERN = re.compile(
