@@ -64,7 +64,13 @@ MICRO_OUT    = 1.50  / 1_000_000
 
 _ASK_OPENAI_DISABLED_UNTIL = 0.0
 _ASK_WRITER_DISABLED_UNTIL = 0.0
-_ASK_AGENT_DISABLED_UNTIL = 0.0
+# Keyed by workspace_id ("default" for unset/None) -- was a single float
+# disabling the agent loop for every workspace on any one failure, which
+# let one workspace's transient provider timeout suppress correct answers
+# for every other workspace for the full cooldown window. Reliability fix,
+# scoped separately from the tool-dispatch and causal-language bugs fixed
+# alongside it this session.
+_ASK_AGENT_DISABLED_UNTIL: dict[str, float] = {}
 
 
 def _ask_env_seconds(name: str, default: float, minimum: float, maximum: float) -> float:
@@ -3077,6 +3083,22 @@ def _ask_agent_final_payload(
     return payload
 
 
+def _ask_record_agent_fallback(workspace_id: Optional[str], reason: str, detail: str = "") -> None:
+    """
+    Always-on record of why the agent tool loop was skipped in favor of the
+    deterministic fallback -- unlike _ask_debug_log, this isn't gated behind
+    ASK_COSTPILOT_DEBUG, so "which workspace fell back, when, and why" is
+    visible in heroku logs by default, not only during a debug session.
+    provider="anthropic" is included even though this loop only calls one
+    provider today, so if a second provider is ever added to this path, the
+    log records already carry the field needed to filter by it.
+    """
+    logger.warning(
+        "ask_costpilot_fallback workspace=%s provider=anthropic reason=%s%s",
+        workspace_id or "default", reason, f" detail={detail}" if detail else "",
+    )
+
+
 def _ask_costpilot_agent(request: "AskCostPilotRequest", db: Session) -> Optional[dict]:
     """
     Bounded tool-calling loop: the model chooses which deterministic lookups
@@ -3086,6 +3108,7 @@ def _ask_costpilot_agent(request: "AskCostPilotRequest", db: Session) -> Optiona
     18-intent path — this path is purely additive.
     """
     global _ASK_AGENT_DISABLED_UNTIL
+    breaker_key = request.workspace_id or "default"
 
     if not _ask_agent_mode_enabled():
         return None
@@ -3097,11 +3120,13 @@ def _ask_costpilot_agent(request: "AskCostPilotRequest", db: Session) -> Optiona
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key or api_key.startswith("YOUR"):
         _ask_debug_log(request, "abort_no_api_key", {})
+        _ask_record_agent_fallback(request.workspace_id, "no_api_key")
         return None
-    if time.monotonic() < _ASK_AGENT_DISABLED_UNTIL:
-        _ask_debug_log(request, "abort_in_cooldown", {
-            "seconds_remaining": round(_ASK_AGENT_DISABLED_UNTIL - time.monotonic(), 1),
-        })
+    disabled_until = _ASK_AGENT_DISABLED_UNTIL.get(breaker_key, 0.0)
+    if time.monotonic() < disabled_until:
+        seconds_remaining = round(disabled_until - time.monotonic(), 1)
+        _ask_debug_log(request, "abort_in_cooldown", {"seconds_remaining": seconds_remaining})
+        _ask_record_agent_fallback(request.workspace_id, "in_cooldown", f"seconds_remaining={seconds_remaining}")
         return None
 
     from api.ask_costpilot_tools import TOOL_SCHEMAS, FINAL_ANSWER_TOOL, to_anthropic_tools
@@ -3238,6 +3263,7 @@ depend on that exact range mattering."""
                     "turn": _turn, "elapsed": round(elapsed, 2),
                     "timeout_seconds": timeout_seconds, "total_budget_seconds": total_budget_seconds,
                 })
+                _ask_record_agent_fallback(request.workspace_id, "budget_preflight", f"turn={_turn}")
                 return None
             _ask_debug_log(request, "calling_model", {"turn": _turn, "model": model})
             response = client.messages.create(
@@ -3255,6 +3281,7 @@ depend on that exact range mattering."""
                     "stop_reason": getattr(response, "stop_reason", None),
                     "content_types": [getattr(b, "type", None) for b in response.content],
                 })
+                _ask_record_agent_fallback(request.workspace_id, "no_tool_use_block", f"turn={_turn}")
                 return None
 
             messages.append({"role": "assistant", "content": response.content})
@@ -3268,12 +3295,15 @@ depend on that exact range mattering."""
                 })
                 payload = _ask_agent_final_payload(request, db, final_args, tool_call_log)
                 _ask_debug_log(request, "response", {"payload": payload})
+                if payload is None:
+                    _ask_record_agent_fallback(request.workspace_id, "validation_failed", f"turn={_turn}")
                 return payload
 
             tool_results = []
             for call in tool_uses:
                 if len(tool_call_log) >= max_tool_calls:
                     _ask_debug_log(request, "abort_max_tool_calls", {"turn": _turn})
+                    _ask_record_agent_fallback(request.workspace_id, "max_tool_calls", f"turn={_turn}")
                     return None
                 call_args = dict(call.input or {})
                 result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters)
@@ -3288,13 +3318,20 @@ depend on that exact range mattering."""
                 })
             messages.append({"role": "user", "content": tool_results})
         _ask_debug_log(request, "abort_loop_exhausted", {"turns": max_tool_calls + 1})
+        _ask_record_agent_fallback(request.workspace_id, "loop_exhausted", f"turns={max_tool_calls + 1}")
         return None
     except Exception as exc:
         cooldown_seconds = _ask_env_seconds(
             "ASK_COSTPILOT_AGENT_COOLDOWN_SECONDS", 300.0, 15.0, 3600.0
         )
-        _ASK_AGENT_DISABLED_UNTIL = time.monotonic() + cooldown_seconds
+        # Scoped to this one workspace -- a transient provider timeout or a
+        # genuine bug hit while answering one workspace's question no
+        # longer suppresses correct answers for every other workspace for
+        # the whole cooldown window (see plan: "Scope the Ask CostPilot
+        # circuit breaker to workspace, not global").
+        _ASK_AGENT_DISABLED_UNTIL[breaker_key] = time.monotonic() + cooldown_seconds
         logger.warning("Ask CostPilot agent loop failed: %s", exc)
+        _ask_record_agent_fallback(request.workspace_id, "exception", str(exc)[:200])
         return None
 
 
