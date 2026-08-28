@@ -646,9 +646,19 @@ def compute_cost_per_outcome(
     if account_name:
         filters["account"] = account_name
 
+    # Explicit empty timeframe -- run_metrics_query() defaults to a 30-day
+    # window when timeframe is None (see its "elif timeframe is None"
+    # branch), but successful_outcomes/outcomes_with_data below are
+    # unbounded (WorkItemOutcome is current-state, not time-windowed).
+    # Dividing a 30-day spend number by an all-time outcome count silently
+    # understated cost-per-outcome -- caught via a live run before this
+    # shipped further (see commit history). Passing {} (falsy, but not
+    # None) skips both the explicit-range and the 30-day-default branches,
+    # leaving activity unbounded to match the outcome side.
     spend_result = run_metrics_query(
         db, workspace_id, metrics=["ai_spend"],
         filters={**filters, "outcome_status": "successful"},
+        timeframe={},
     )
     outcome_result = run_metrics_query(
         db, workspace_id, metrics=["successful_outcomes", "outcomes_with_data"],
