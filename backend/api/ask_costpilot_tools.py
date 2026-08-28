@@ -784,7 +784,7 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
         db, workspace_id, metrics=outcome_metrics,
         filters={"account": account.name} if account is not None else None,
     )
-    o = outcome_result.rows[0]["values"] if outcome_result.rows else {m: 0 for m in outcome_metrics}
+    o = outcome_result.rows[0] if outcome_result.rows else {m: 0 for m in outcome_metrics}
 
     won_count, lost_count, open_count = int(o["won_count"]), int(o["lost_count"]), int(o["open_count"])
     pipeline_value, closed_won_value = float(o["pipeline_value"]), float(o["won_value"])
