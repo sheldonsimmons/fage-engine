@@ -3642,61 +3642,109 @@ ${returnObject}
 function _genPython(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const params = fields.map(f => `${_safeVar(f.name)}: str`).join(", ");
   const prompt = _pythonPrompt(fields);
+  const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
   const returnMap = returnFields.length
     ? returnFields.map(f => `# ${f.name} = ${_routeResultExpr(f.source, "python")}`).join("\n")
     : "# No return fields configured. CostPilot still routes, logs, and reports this request.";
 
   const python = mode === "observe"
     ?
-`import requests
+`import os
+import requests
 
 CostPilot_URL = "${CostPilot_URL}"
+COSTPILOT_API_KEY = os.environ["COSTPILOT_API_KEY"]  # from Policy -> API Credentials
 
-def report_to_costpilot(model_name: str, input_tokens: int, output_tokens: int, cost_usd: float = None) -> dict:
+def report_to_costpilot(model_name: str, input_tokens: int, output_tokens: int, cost_usd: float = None,
+                         record_id: str = None) -> dict:
     """
     Call this AFTER your own code has already called your AI provider.
     CostPilot does not make the call or choose the model here -- it only
     records what happened so it shows up in your dashboards and reports.
     """
-    resp = requests.post(CostPilot_URL + "/api/route", json={
-        "mode":            "observe",
-        "department":      "${dept}",
-        "agent_name":      "${agent}",
-        "source_platform": "Python",
-        "usage": {
-            "model_name":    model_name,
-            "input_tokens":  input_tokens,
-            "output_tokens": output_tokens,
-            "cost_usd":      cost_usd,
-        },
-    }, timeout=30)
+    resp = requests.post(CostPilot_URL + "/api/route",
+        headers={"X-CostPilot-Key": COSTPILOT_API_KEY},
+        json={
+            "contract_version": "2026-07-26",
+            "mode":             "observe",
+            "source": {
+                "platform":     "Python",
+                "workspace_id": "${workspaceId}",
+                "agent_name":   "${agent}",
+                "department":   "${dept}",
+            },
+            "actor": {
+                "external_id": "REPLACE_WITH_USER_ID",
+                "name":        "REPLACE_WITH_USER_NAME",
+                "role":        "Member",
+                "can_use_ai":  True,
+            },
+            "work": {
+                "external_id":     record_id,
+                "type":            "${_codeStr(obj)}",
+                "name":            f"${_codeStr(obj)} {record_id}",
+                "sync_if_missing": True,
+            },
+            "usage": {
+                "model_name":    model_name,
+                "input_tokens":  input_tokens,
+                "output_tokens": output_tokens,
+                "cost_usd":      cost_usd,
+            },
+        }, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
 # After you call your AI provider yourself, report what happened:
-# result = report_to_costpilot(model_name="gpt-4o", input_tokens=812, output_tokens=140, cost_usd=0.0091)`
+# result = report_to_costpilot(model_name="gpt-4o", input_tokens=812, output_tokens=140, cost_usd=0.0091, record_id="123")`
     :
-`import requests
+`import os
+import requests
 
 CostPilot_URL = "${CostPilot_URL}"
+COSTPILOT_API_KEY = os.environ["COSTPILOT_API_KEY"]  # from Policy -> API Credentials
 
-def route_to_costpilot(${params}) -> dict:
+def route_to_costpilot(record_id: str, ${params}) -> dict:
     prompt = f"""${prompt}"""
-    resp = requests.post(CostPilot_URL + "/api/route", json={
-        "text":            prompt,
-        "department":      "${dept}",
-        "auto_prune":      True,
-        "agent_name":      "${agent}",
-        "source_platform": "Python",
-    }, timeout=30)
+    resp = requests.post(CostPilot_URL + "/api/route",
+        headers={"X-CostPilot-Key": COSTPILOT_API_KEY},
+        json={
+            "contract_version": "2026-07-26",
+            "mode":             "control",
+            "source": {
+                "platform":     "Python",
+                "workspace_id": "${workspaceId}",
+                "agent_name":   "${agent}",
+                "department":   "${dept}",
+            },
+            "actor": {
+                "external_id": "REPLACE_WITH_USER_ID",
+                "name":        "REPLACE_WITH_USER_NAME",
+                "role":        "Member",
+                "can_use_ai":  True,
+            },
+            "work": {
+                "external_id":     record_id,
+                "type":            "${_codeStr(obj)}",
+                "name":            f"${_codeStr(obj)} {record_id}",
+                "sync_if_missing": True,
+            },
+            "request": {
+                "task":         "Process ${_codeStr(obj)} record",
+                "content":      prompt,
+                "payload_type": "text",
+                "auto_prune":   True,
+            },
+        }, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
-# result = route_to_costpilot(${fields.map(f => `${_safeVar(f.name)}="..."`).join(", ")})
+# result = route_to_costpilot("REPLACE_WITH_RECORD_ID", ${fields.map(f => `${_safeVar(f.name)}="..."`).join(", ")})
 # print(result["simulated_response"])
 ${returnMap}`;
 
   return _platformMappingHtml("python", obj, fields, returnFields)
+    + _obUniversalContractNote()
     + _obCodeSection("Python", "pip install requests · call this function from your app or workflow", python)
     + _obBanner("python", obj, dept, agent) + _obActions();
 }
@@ -3704,6 +3752,7 @@ ${returnMap}`;
 function _genNode(obj, dept, agent, fields, returnFields = [], mode = "control") {
   const prompt = _jsPrompt(fields, "input", (v, f) => `(${v}.${_safeVar(f)} || '')`);
   const exampleObj = fields.map(f => `//   ${_safeVar(f.name)}: '...'`).join(",\n");
+  const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
   const returnMap = returnFields.length
     ? returnFields.map(f => `// const ${_safeVar(f.name)} = ${_jsResultExpr(f.source, "result")};`).join("\n")
     : "// No return fields configured. CostPilot still routes, logs, and reports this request.";
@@ -3712,19 +3761,36 @@ function _genNode(obj, dept, agent, fields, returnFields = [], mode = "control")
     ?
 `// Node.js 18+
 const CostPilot_URL = '${CostPilot_URL}';
+const COSTPILOT_API_KEY = process.env.COSTPILOT_API_KEY; // from Policy -> API Credentials
 
 // Call this AFTER your own code has already called your AI provider.
 // CostPilot does not make the call or choose the model here -- it only
 // records what happened so it shows up in your dashboards and reports.
-async function reportToCostPilot({ modelName, inputTokens, outputTokens, costUsd }) {
+async function reportToCostPilot({ modelName, inputTokens, outputTokens, costUsd, recordId }) {
   const res = await fetch(CostPilot_URL + '/api/route', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CostPilot-Key': COSTPILOT_API_KEY },
     body: JSON.stringify({
+      contract_version: '2026-07-26',
       mode: 'observe',
-      department: '${dept}',
-      agent_name: '${agent}',
-      source_platform: 'Node.js',
+      source: {
+        platform: 'Node.js',
+        workspace_id: '${workspaceId}',
+        agent_name: '${agent}',
+        department: '${dept}',
+      },
+      actor: {
+        external_id: 'REPLACE_WITH_USER_ID',
+        name: 'REPLACE_WITH_USER_NAME',
+        role: 'Member',
+        can_use_ai: true,
+      },
+      work: {
+        external_id: recordId,
+        type: '${_codeStr(obj)}',
+        name: \`${_codeStr(obj)} \${recordId}\`,
+        sync_if_missing: true,
+      },
       usage: {
         model_name: modelName,
         input_tokens: inputTokens,
@@ -3739,23 +3805,45 @@ async function reportToCostPilot({ modelName, inputTokens, outputTokens, costUsd
 }
 
 // After you call your AI provider yourself, report what happened:
-// const result = await reportToCostPilot({ modelName: 'gpt-4o', inputTokens: 812, outputTokens: 140, costUsd: 0.0091 });`
+// const result = await reportToCostPilot({ modelName: 'gpt-4o', inputTokens: 812, outputTokens: 140, costUsd: 0.0091, recordId: '123' });`
     :
 `// Node.js 18+
 const CostPilot_URL = '${CostPilot_URL}';
+const COSTPILOT_API_KEY = process.env.COSTPILOT_API_KEY; // from Policy -> API Credentials
 
-async function routeToCostPilot(input) {
+async function routeToCostPilot(recordId, input) {
   const text = ${prompt};
 
   const res = await fetch(CostPilot_URL + '/api/route', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CostPilot-Key': COSTPILOT_API_KEY },
     body: JSON.stringify({
-      text,
-      department: '${dept}',
-      auto_prune: true,
-      agent_name: '${agent}',
-      source_platform: 'Node.js',
+      contract_version: '2026-07-26',
+      mode: 'control',
+      source: {
+        platform: 'Node.js',
+        workspace_id: '${workspaceId}',
+        agent_name: '${agent}',
+        department: '${dept}',
+      },
+      actor: {
+        external_id: 'REPLACE_WITH_USER_ID',
+        name: 'REPLACE_WITH_USER_NAME',
+        role: 'Member',
+        can_use_ai: true,
+      },
+      work: {
+        external_id: recordId,
+        type: '${_codeStr(obj)}',
+        name: \`${_codeStr(obj)} \${recordId}\`,
+        sync_if_missing: true,
+      },
+      request: {
+        task: 'Process ${_codeStr(obj)} record',
+        content: text,
+        payload_type: 'text',
+        auto_prune: true,
+      },
     }),
   });
 
@@ -3763,12 +3851,13 @@ async function routeToCostPilot(input) {
   return res.json();
 }
 
-// const result = await routeToCostPilot({
+// const result = await routeToCostPilot('REPLACE_WITH_RECORD_ID', {
 ${exampleObj}
 // });
 ${returnMap}`;
 
   return _platformMappingHtml("nodejs", obj, fields, returnFields)
+    + _obUniversalContractNote()
     + _obCodeSection("Node.js", "Uses built-in fetch in Node 18+", code)
     + _obBanner("nodejs", obj, dept, agent) + _obActions();
 }
@@ -3779,6 +3868,7 @@ function _genJava(obj, dept, agent, fields, returnFields = [], mode = "control")
     const join = i < fields.length - 1 ? ' + "\\n\\n" +\n            ' : "";
     return `"${_doubleCodeStr(f.label || f.name)}:\\n" + ${_safeVar(f.name)}${join}`;
   }).join("");
+  const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
 
   const code = mode === "observe"
     ?
@@ -3792,15 +3882,32 @@ import java.net.http.HttpResponse;
 // records what happened so it shows up in your dashboards and reports.
 public class CostPilotClient {
     private static final String COSTPILOT_URL = "${CostPilot_URL}";
+    private static final String COSTPILOT_API_KEY = System.getenv("COSTPILOT_API_KEY"); // from Policy -> API Credentials
     private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
-    public static String reportToCostPilot(String modelName, int inputTokens, int outputTokens, Double costUsd) throws Exception {
+    public static String reportToCostPilot(String modelName, int inputTokens, int outputTokens, Double costUsd, String recordId) throws Exception {
         String costField = costUsd == null ? "null" : String.valueOf(costUsd);
         String body = "{"
+            + "\\"contract_version\\":\\"2026-07-26\\","
             + "\\"mode\\":\\"observe\\","
-            + "\\"department\\":\\"${_doubleCodeStr(dept)}\\","
-            + "\\"agent_name\\":\\"${_doubleCodeStr(agent)}\\","
-            + "\\"source_platform\\":\\"Java\\","
+            + "\\"source\\":{"
+                + "\\"platform\\":\\"Java\\","
+                + "\\"workspace_id\\":\\"${_doubleCodeStr(workspaceId)}\\","
+                + "\\"agent_name\\":\\"${_doubleCodeStr(agent)}\\","
+                + "\\"department\\":\\"${_doubleCodeStr(dept)}\\""
+            + "},"
+            + "\\"actor\\":{"
+                + "\\"external_id\\":\\"REPLACE_WITH_USER_ID\\","
+                + "\\"name\\":\\"REPLACE_WITH_USER_NAME\\","
+                + "\\"role\\":\\"Member\\","
+                + "\\"can_use_ai\\":true"
+            + "},"
+            + "\\"work\\":{"
+                + "\\"external_id\\":\\"" + escapeJson(recordId) + "\\","
+                + "\\"type\\":\\"${_doubleCodeStr(obj)}\\","
+                + "\\"name\\":\\"${_doubleCodeStr(obj)} " + escapeJson(recordId) + "\\","
+                + "\\"sync_if_missing\\":true"
+            + "},"
             + "\\"usage\\":{"
                 + "\\"model_name\\":\\"" + escapeJson(modelName) + "\\","
                 + "\\"input_tokens\\":" + inputTokens + ","
@@ -3812,6 +3919,7 @@ public class CostPilotClient {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(COSTPILOT_URL + "/api/route"))
             .header("Content-Type", "application/json")
+            .header("X-CostPilot-Key", COSTPILOT_API_KEY)
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
@@ -3824,7 +3932,7 @@ public class CostPilotClient {
 }
 
 // After you call your AI provider yourself, report what happened:
-// reportToCostPilot("gpt-4o", 812, 140, 0.0091);`
+// reportToCostPilot("gpt-4o", 812, 140, 0.0091, "123");`
     :
 `import java.net.URI;
 import java.net.http.HttpClient;
@@ -3833,21 +3941,44 @@ import java.net.http.HttpResponse;
 
 public class CostPilotClient {
     private static final String COSTPILOT_URL = "${CostPilot_URL}";
+    private static final String COSTPILOT_API_KEY = System.getenv("COSTPILOT_API_KEY"); // from Policy -> API Credentials
     private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
-    public static String routeToCostPilot(${params}) throws Exception {
+    public static String routeToCostPilot(String recordId, ${params}) throws Exception {
         String text = ${textExpr};
         String body = "{"
-            + "\\"text\\":\\"" + escapeJson(text) + "\\","
-            + "\\"department\\":\\"${_doubleCodeStr(dept)}\\","
-            + "\\"auto_prune\\":true,"
-            + "\\"agent_name\\":\\"${_doubleCodeStr(agent)}\\","
-            + "\\"source_platform\\":\\"Java\\""
+            + "\\"contract_version\\":\\"2026-07-26\\","
+            + "\\"mode\\":\\"control\\","
+            + "\\"source\\":{"
+                + "\\"platform\\":\\"Java\\","
+                + "\\"workspace_id\\":\\"${_doubleCodeStr(workspaceId)}\\","
+                + "\\"agent_name\\":\\"${_doubleCodeStr(agent)}\\","
+                + "\\"department\\":\\"${_doubleCodeStr(dept)}\\""
+            + "},"
+            + "\\"actor\\":{"
+                + "\\"external_id\\":\\"REPLACE_WITH_USER_ID\\","
+                + "\\"name\\":\\"REPLACE_WITH_USER_NAME\\","
+                + "\\"role\\":\\"Member\\","
+                + "\\"can_use_ai\\":true"
+            + "},"
+            + "\\"work\\":{"
+                + "\\"external_id\\":\\"" + escapeJson(recordId) + "\\","
+                + "\\"type\\":\\"${_doubleCodeStr(obj)}\\","
+                + "\\"name\\":\\"${_doubleCodeStr(obj)} " + escapeJson(recordId) + "\\","
+                + "\\"sync_if_missing\\":true"
+            + "},"
+            + "\\"request\\":{"
+                + "\\"task\\":\\"Process ${_doubleCodeStr(obj)} record\\","
+                + "\\"content\\":\\"" + escapeJson(text) + "\\","
+                + "\\"payload_type\\":\\"text\\","
+                + "\\"auto_prune\\":true"
+            + "}"
             + "}";
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(COSTPILOT_URL + "/api/route"))
             .header("Content-Type", "application/json")
+            .header("X-CostPilot-Key", COSTPILOT_API_KEY)
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
@@ -3864,6 +3995,7 @@ public class CostPilotClient {
     : "\n// No return fields configured. CostPilot still routes, logs, and reports this request.";
 
   return _platformMappingHtml("java", obj, fields, returnFields)
+    + _obUniversalContractNote()
     + _obCodeSection("Java", "Java 11+ HttpClient", code)
     + _obCodeSection("Java Return Mapping", "Parse these response keys if you want write-back in your app", returnNote)
     + _obBanner("java", obj, dept, agent) + _obActions();
@@ -3874,6 +4006,7 @@ function _genRuby(obj, dept, agent, fields, returnFields = [], mode = "control")
   const prompt = fields.map(f => `#{${_safeVar(f.name)}}`).map((token, i) =>
     `${_doubleCodeStr(fields[i].label || fields[i].name)}:\\n${token}`
   ).join("\\n\\n");
+  const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
 
   const code = mode === "observe"
     ?
@@ -3882,20 +4015,38 @@ require "net/http"
 require "uri"
 
 COSTPILOT_URL = "${CostPilot_URL}"
+COSTPILOT_API_KEY = ENV.fetch("COSTPILOT_API_KEY") # from Policy -> API Credentials
 
 # Call this AFTER your own code has already called your AI provider.
 # CostPilot does not make the call or choose the model here -- it only
 # records what happened so it shows up in your dashboards and reports.
-def report_to_costpilot(model_name:, input_tokens:, output_tokens:, cost_usd: nil)
+def report_to_costpilot(model_name:, input_tokens:, output_tokens:, cost_usd: nil, record_id: nil)
   uri = URI("#{COSTPILOT_URL}/api/route")
 
   req = Net::HTTP::Post.new(uri)
   req["Content-Type"] = "application/json"
+  req["X-CostPilot-Key"] = COSTPILOT_API_KEY
   req.body = {
+    contract_version: "2026-07-26",
     mode: "observe",
-    department: "${_codeStr(dept)}",
-    agent_name: "${_codeStr(agent)}",
-    source_platform: "Ruby",
+    source: {
+      platform: "Ruby",
+      workspace_id: "${_codeStr(workspaceId)}",
+      agent_name: "${_codeStr(agent)}",
+      department: "${_codeStr(dept)}"
+    },
+    actor: {
+      external_id: "REPLACE_WITH_USER_ID",
+      name: "REPLACE_WITH_USER_NAME",
+      role: "Member",
+      can_use_ai: true
+    },
+    work: {
+      external_id: record_id,
+      type: "${_codeStr(obj)}",
+      name: "${_codeStr(obj)} #{record_id}",
+      sync_if_missing: true
+    },
     usage: {
       model_name: model_name,
       input_tokens: input_tokens,
@@ -3910,26 +4061,49 @@ def report_to_costpilot(model_name:, input_tokens:, output_tokens:, cost_usd: ni
 end
 
 # After you call your AI provider yourself, report what happened:
-# response = report_to_costpilot(model_name: "gpt-4o", input_tokens: 812, output_tokens: 140, cost_usd: 0.0091)`
+# response = report_to_costpilot(model_name: "gpt-4o", input_tokens: 812, output_tokens: 140, cost_usd: 0.0091, record_id: "123")`
     :
 `require "json"
 require "net/http"
 require "uri"
 
 COSTPILOT_URL = "${CostPilot_URL}"
+COSTPILOT_API_KEY = ENV.fetch("COSTPILOT_API_KEY") # from Policy -> API Credentials
 
-def route_to_costpilot(${params})
+def route_to_costpilot(record_id:, ${params})
   text = "${prompt}"
   uri = URI("#{COSTPILOT_URL}/api/route")
 
   req = Net::HTTP::Post.new(uri)
   req["Content-Type"] = "application/json"
+  req["X-CostPilot-Key"] = COSTPILOT_API_KEY
   req.body = {
-    text: text,
-    department: "${_codeStr(dept)}",
-    auto_prune: true,
-    agent_name: "${_codeStr(agent)}",
-    source_platform: "Ruby"
+    contract_version: "2026-07-26",
+    mode: "control",
+    source: {
+      platform: "Ruby",
+      workspace_id: "${_codeStr(workspaceId)}",
+      agent_name: "${_codeStr(agent)}",
+      department: "${_codeStr(dept)}"
+    },
+    actor: {
+      external_id: "REPLACE_WITH_USER_ID",
+      name: "REPLACE_WITH_USER_NAME",
+      role: "Member",
+      can_use_ai: true
+    },
+    work: {
+      external_id: record_id,
+      type: "${_codeStr(obj)}",
+      name: "${_codeStr(obj)} #{record_id}",
+      sync_if_missing: true
+    },
+    request: {
+      task: "Process ${_codeStr(obj)} record",
+      content: text,
+      payload_type: "text",
+      auto_prune: true
+    }
   }.to_json
 
   Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
@@ -3937,12 +4111,20 @@ def route_to_costpilot(${params})
   end
 end
 
-# response = route_to_costpilot(${fields.map(f => `${_safeVar(f.name)}: "..."`).join(", ")})
+# response = route_to_costpilot(record_id: "REPLACE_WITH_RECORD_ID", ${fields.map(f => `${_safeVar(f.name)}: "..."`).join(", ")})
 ${returnFields.length ? returnFields.map(f => `# ${_safeVar(f.name)} = ${_routeResultExpr(f.source, "ruby")}`).join("\n") : "# No return fields configured. CostPilot still routes, logs, and reports this request."}`;
 
   return _platformMappingHtml("ruby", obj, fields, returnFields)
+    + _obUniversalContractNote()
     + _obCodeSection("Ruby", "Uses Net::HTTP from the Ruby standard library", code)
     + _obBanner("ruby", obj, dept, agent) + _obActions();
+}
+
+function _obUniversalContractNote() {
+  return `<div class="ob-code-section" style="margin-top:20px">
+    <div class="ob-code-header"><span class="ob-code-label">This is the universal contract</span><span class="ob-code-hint">One contract, many ways to connect.</span></div>
+    <p class="ob-code-hint">This is the exact JSON every CostPilot integration sends — Salesforce, ServiceNow, HubSpot, or code you write yourself all produce this same <code>source</code> / <code>actor</code> / <code>work</code> / <code>request</code> or <code>usage</code> shape. Replace the API key placeholder with your workspace's key from <a href="/policy.html#credentials" target="_blank" rel="noopener">Policy → API Credentials</a> — generate one there if you haven't yet. Keep it out of source control; load it from an environment variable or secret store, not a literal string in committed code.</p>
+  </div>`;
 }
 
 function _genRest(obj, dept, agent, fields, returnFields = [], mode = "control") {
@@ -4020,13 +4202,8 @@ curl -X POST ${CostPilot_URL}/api/route \\
   const returnNote = returnFields.length
     ? returnFields.map(f => `${f.name} <= response.${_routeResultKey(f.source)} (${_returnSourceLabel(f.source)})`).join("\n")
     : "No return fields configured. CostPilot still routes, logs, and reports this request.";
-  const keyNote = `<div class="ob-code-section" style="margin-top:20px">
-    <div class="ob-code-header"><span class="ob-code-label">This is the universal contract</span><span class="ob-code-hint">One contract, many ways to connect.</span></div>
-    <p class="ob-code-hint">This is the exact JSON every CostPilot integration sends — Salesforce, ServiceNow, HubSpot, or code you write yourself all produce this same <code>source</code> / <code>actor</code> / <code>work</code> / <code>request</code> or <code>usage</code> shape. Replace <code>\${COSTPILOT_API_KEY}</code> with your workspace's key from <a href="/policy.html#credentials" target="_blank" rel="noopener">Policy → API Credentials</a> — generate one there if you haven't yet. Keep it out of source control; load it from an environment variable or secret store, not a literal string in committed code.</p>
-  </div>`;
-
   return _platformMappingHtml("rest", obj, fields, returnFields)
-    + keyNote
+    + _obUniversalContractNote()
     + _obCodeSection("REST / cURL", "Replace ${...} placeholders with values from your app or shell", curl)
     + _obCodeSection("Return Mapping", "Read these response keys if you want write-back in your app", returnNote)
     + _obBanner("rest", obj, dept, agent) + _obActions();

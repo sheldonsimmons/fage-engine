@@ -602,6 +602,28 @@
   margin: 0 0 28px;
   line-height: 1.6;
 }
+.ob-universal-banner {
+  background: var(--bg-panel, #171717);
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: -12px 0 28px;
+}
+.ob-universal-banner strong {
+  display: block;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.ob-universal-banner p {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+.ob-universal-banner .ob-btn-ghost {
+  display: inline-block;
+}
 
 /* ── Form elements ───────────────────────────────────────────────────────────── */
 .ob-form { display: flex; flex-direction: column; gap: 20px; }
