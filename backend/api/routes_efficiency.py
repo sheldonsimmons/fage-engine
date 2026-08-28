@@ -1730,6 +1730,20 @@ def _ask_named_entity_candidates(question: str, report: dict) -> list:
     merged: dict[tuple, dict] = {}
     for entity, breakdown_key, filter_name, entity_label in configs:
         for row in report.get(breakdown_key) or []:
+            if entity == "context" and str(row.get("id") or "").startswith("SF-ACCOUNT-"):
+                # An account-level AI-activity rollup (created when a
+                # Governed AI Request runs directly on an Account record,
+                # not a child Opportunity/Case) -- same real-world entity
+                # the "account" dimension already represents for this same
+                # WorkAccount, under the identical name. Reproduced live:
+                # "Dickenson plc" existed as both an account_breakdown row
+                # and a project_breakdown row (id "SF-ACCOUNT-..."), tying
+                # in match score and triggering a false "which Dickenson
+                # plc do you mean?" for a name that was never actually
+                # ambiguous. See business_context_json()'s own
+                # is_account_rollup check (core/business_context.py) for
+                # the same "SF-ACCOUNT-" convention used to detect this.
+                continue
             label = str(row.get("label") or "").strip()
             label_tokens = _ask_name_tokens(label)
             overlap = question_tokens & label_tokens
