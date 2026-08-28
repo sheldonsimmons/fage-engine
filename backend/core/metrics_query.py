@@ -58,7 +58,15 @@ MAX_GROUPS = 500
 # excluded from every activity metric. Matches api/routes_dashboard.py's
 # IS_AI_CALL convention (see core/metrics_catalog.py's ai_spend definition
 # for why this differs from project_activity_reporting()'s older SUM).
-IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+#
+# NULL-safe: plain `!= "VOICE_GUARD_PRUNE"` evaluates to SQL NULL (not
+# true) for any row where routing_reason was never set, silently excluding
+# it from every metric built on this filter -- caught when Cost per
+# Outcome (Phase B) returned $0 despite real spend existing, traced to
+# 99.6% of a real workspace's TokenTransaction rows having a NULL
+# routing_reason. or_(...is_(None), ...) treats "never set" the same as
+# "not pruned", which is what every caller actually wants.
+IS_AI_CALL = or_(TokenTransaction.routing_reason.is_(None), TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE")
 
 
 @dataclass

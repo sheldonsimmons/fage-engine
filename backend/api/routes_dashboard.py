@@ -103,7 +103,7 @@ def get_dashboard(
 
     # ── Call counts — exclude Voice Guard prune-only records (cost=$0, no AI call) ──
     # VOICE_GUARD_PRUNE rows exist only to record token savings; they are not AI calls.
-    IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+    IS_AI_CALL = or_(TokenTransaction.routing_reason.is_(None), TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE")
 
     total_calls = db.query(func.count(TokenTransaction.id)).filter(*_filters(tx_scope, IS_AI_CALL)).scalar() or 0
     simulation_routed_calls = db.query(func.count(TokenTransaction.id)).filter(
@@ -408,7 +408,7 @@ def get_dashboard_changes(
 
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
     agent_scope = _workspace_filter(RegisteredAgent, workspace_id)
-    IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+    IS_AI_CALL = or_(TokenTransaction.routing_reason.is_(None), TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE")
     ECONOMY_TIERS = ("Scout", "Analyst", "micro")
 
     def _filters(*items):
@@ -537,7 +537,7 @@ def get_top_models(
     from core.metrics_query import run_metrics_query
 
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
-    IS_AI_CALL = TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE"
+    IS_AI_CALL = or_(TokenTransaction.routing_reason.is_(None), TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE")
     cutoff = datetime.utcnow() - timedelta(days=days)
 
     def _filters(*items):
