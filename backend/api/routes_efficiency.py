@@ -2455,11 +2455,21 @@ def _ask_narration_unverified_numbers(facts: dict, narrated_answer: str) -> set[
 # that the AI activity caused it).
 _ASK_CAUSAL_VERBS = (
     "generated", "drove", "caused", "resulted in", "produced", "created",
-    "delivered", "led to", "responsible for", "won", "closed",
+    "delivered", "led to", "responsible for",
+    # "won"/"closed" as bare verbs (e.g. "AI won the contract", "the agent
+    # closed this $500K deal") -- guarded against matching inside
+    # "closed-won"/"closed-lost", which are Cost per Outcome's own
+    # outcome-status vocabulary (Business Impact investigation, Phase B),
+    # not a causal claim. Without these lookaround guards, nearly every
+    # legitimate association-language answer that mentions a closed-won/
+    # closed-lost opportunity near "AI" and a dollar figure -- exactly the
+    # phrasing this guardrail is supposed to encourage -- false-positived.
+    r"(?<!closed-)won",
+    r"closed(?!-won|-lost)",
 )
 _ASK_CAUSAL_CLAIM_PATTERN = re.compile(
     r"\b(ai|the model|claude|gpt|the agent)\b[^.?!]{0,40}\b("
-    + "|".join(re.escape(verb) for verb in _ASK_CAUSAL_VERBS)
+    + "|".join(verb if verb.startswith(("closed", "(?<!")) else re.escape(verb) for verb in _ASK_CAUSAL_VERBS)
     + r")\b[^.?!]{0,40}[\$\d]",
     re.IGNORECASE,
 )
