@@ -172,6 +172,33 @@ export function fetchConnectionHealth(workspaceId: string) {
   return apiGet<ConnectionHealth>(`/api/integrations/connections/health${qs}`)
 }
 
+// One shared contract every Recommendations engine detector returns
+// (core/recommendations.py) -- deterministic, not LLM-generated. The
+// frontend renders one shape regardless of which detector produced it.
+export interface Recommendation {
+  recommendation_type: string
+  title: string
+  why_it_matters: string
+  evidence: string
+  current_state: string
+  recommended_action: string
+  estimated_impact: number | null
+  impact_type: "savings_usd" | "risk_usd" | "none"
+  confidence: "measured" | "estimated" | "associated" | "early_signal"
+  affected_agent: string | null
+  affected_department: string | null
+  affected_work_item: string | null
+  source_metrics: Record<string, unknown>
+  generated_at: string
+}
+
+export function fetchRecommendations(workspaceId: string) {
+  const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""
+  return apiGet<{ workspace_id: string | null; recommendations: Recommendation[] }>(
+    `/api/dashboard/recommendations${qs}`
+  )
+}
+
 // Strips the "WORKSPACE_ID:" prefix legacy department rows carry -- same
 // convention core/agentlake.py's display_department() applies server-side
 // for every other page; duplicated here rather than adding a new endpoint

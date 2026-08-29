@@ -16,6 +16,7 @@ import {
   fetchConnectionHealth,
   fetchDashboard,
   fetchDashboardChanges,
+  fetchRecommendations,
   fetchSavings,
   fetchTopModels,
   getWorkspaceId,
@@ -24,6 +25,7 @@ import {
   type ConnectionHealth,
   type DashboardChanges,
   type DashboardSummary,
+  type Recommendation,
   type SavingsSummary,
   type TopModelsResponse,
 } from "@/lib/api"
@@ -36,6 +38,7 @@ interface CockpitData {
   changes: DashboardChanges
   topModels: TopModelsResponse
   businessImpact: BusinessImpactData
+  recommendations: Recommendation[]
 }
 
 function App() {
@@ -52,9 +55,13 @@ function App() {
       fetchDashboardChanges(workspaceId, 30),
       fetchTopModels(workspaceId, 30, 5),
       fetchBusinessImpact(workspaceId),
+      fetchRecommendations(workspaceId),
     ])
-      .then(([dashboard, savings, budget, health, changes, topModels, businessImpact]) =>
-        setData({ dashboard, savings, budget, health, changes, topModels, businessImpact })
+      .then(([dashboard, savings, budget, health, changes, topModels, businessImpact, recommendationsResponse]) =>
+        setData({
+          dashboard, savings, budget, health, changes, topModels, businessImpact,
+          recommendations: recommendationsResponse.recommendations,
+        })
       )
       .catch((err: Error) => setError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,7 +134,7 @@ function App() {
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <WhatChanged periodDays={data.changes.period_days} changes={data.changes.changes} />
                 <BusinessImpact data={data.businessImpact} />
-                <Recommendations items={data.health.recommendations} budget={data.budget} workspaceId={workspaceId} />
+                <Recommendations recommendations={data.recommendations} />
               </div>
 
               <div id="ask-costpilot">
