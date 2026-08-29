@@ -144,20 +144,27 @@ def _resolve_or_create_project(
         project = None
 
     is_explicit_project = source_record_type.lower() == "costpilot_project__c"
-    # Opportunity now has full deterministic per-record identity via the
-    # bulk importer (routes_connections.py:_import_salesforce_work_items,
+    # Opportunity and Case both have full deterministic per-record identity
+    # via the bulk importer (routes_connections.py:_import_salesforce_work_items,
     # external_id f"SF-{TYPE}-{record_id}"). Routing live AI activity for
-    # an Opportunity into the account-level bucket instead of its own
-    # WorkItem is exactly the "reactive fallback merges unrelated records"
-    # pattern the bulk importer's claimed_work_item_ids self-heal exists to
-    # clean up after the fact -- better to never create the mis-shared link
-    # in the first place. Case is deliberately excluded here: it has its
-    # own tested, intentional account-rollup contract (see
-    # test_business_context.py::test_salesforce_case_with_customer_is_a_stable_account_rollup_with_origin_activity)
-    # where the origin Case stays visible via related_record_activity
-    # rather than getting a standalone WorkItem -- that's a different,
-    # deliberate design, not the same bug.
-    has_deterministic_identity = source_record_type == "Opportunity"
+    # either into the account-level bucket instead of its own WorkItem is
+    # exactly the "reactive fallback merges unrelated records" pattern the
+    # bulk importer's claimed_work_item_ids self-heal exists to clean up
+    # after the fact -- better to never create the mis-shared link in the
+    # first place.
+    #
+    # Case used to be deliberately excluded here (its own tested
+    # account-rollup contract, sharing one WorkItem per account instead of
+    # getting a standalone one). That design turned out to be unsafe:
+    # WorkItemOutcome has exactly one row per WorkItem, so a second
+    # live-path Case for the same account silently overwrote the first
+    # Case's outcome instead of merely being undercounted -- reproduced
+    # live on EdgeMX, where the shared rollup WorkItem could only ever
+    # reflect one Case's status at a time. Giving Case the same
+    # deterministic identity Opportunity already has fixes this at the
+    # root; see scripts/backfill_rollup_cases.py for migrating Cases that
+    # are already stuck sharing an old rollup WorkItem.
+    has_deterministic_identity = source_record_type in ("Opportunity", "Case")
     if project and has_deterministic_identity:
         expected_external_id = f"SF-{source_record_type.upper()}-{source_record_id}"
         if project.external_id != expected_external_id:

@@ -241,7 +241,17 @@ def test_salesforce_template_resolves_universal_business_context():
     }
 
 
-def test_salesforce_case_with_customer_is_a_stable_account_rollup_with_origin_activity():
+def test_reactive_case_gets_its_own_work_item_not_the_account_rollup():
+    # Case used to be deliberately merged onto a shared per-account rollup
+    # WorkItem instead of getting its own (the account-rollup contract this
+    # test replaces). That was found unsafe in production: WorkItemOutcome
+    # has exactly one row per WorkItem, so a second live-path Case for the
+    # same account silently overwrote the first Case's outcome instead of
+    # being merely undercounted (reproduced live on a real account with two
+    # Cases sharing one rollup WorkItem). Case now gets the same
+    # deterministic per-record identity Opportunity already has -- see
+    # test_unimported_opportunity_gets_its_own_work_item_not_the_account_bucket
+    # for the equivalent Opportunity test this mirrors.
     db = _session()
     body = AgentforceGovernRequest(
         record_id="500-CASE-1",
@@ -255,41 +265,29 @@ def test_salesforce_case_with_customer_is_a_stable_account_rollup_with_origin_ac
     )
 
     item = _resolve_or_create_project(db, "WORKSPACE-ACCOUNT-ROLLUP", body)
-    db.add(TokenTransaction(
-        department="Sales",
-        workspace_id="WORKSPACE-ACCOUNT-ROLLUP",
-        work_item_id=item.id,
-        source_platform="Salesforce Agentforce",
-        origin_record_id="500-CASE-1",
-        origin_record_type="Case",
-        origin_record_name="Repeated motor breakdown while shutting off",
-        model_tier="Scout",
-        input_tokens=100,
-        output_tokens=50,
-        cost_usd=0.003,
-    ))
-    db.commit()
 
-    payload = _work_item_json(item, db)
+    assert item.external_id == "SF-CASE-500-CASE-1"
+    assert item.name == "Repeated motor breakdown while shutting off"
+    assert item.context_type == "case"
+    assert item.source_record_type == "Case"
+    assert item.source_record_id == "500-CASE-1"
 
-    assert item.external_id == "SF-ACCOUNT-001-ARIZONA"
-    assert item.name == "University of Arizona"
-    assert item.context_type == "account"
-    assert item.source_record_type == "Account"
-    assert item.source_record_id == "001-ARIZONA"
-    assert payload["name"] == "University of Arizona"
-    assert payload["business_context"]["work_label"] == "Account"
-    assert payload["related_record_activity"] == [{
-        "source_record_id": "500-CASE-1",
-        "source_record_type": "Case",
-        "source_record_name": "Repeated motor breakdown while shutting off",
-        "request_count": 1,
-        "total_tokens": 150,
-        "spend_usd": 0.003,
-        "last_activity_at": payload["related_record_activity"][0]["last_activity_at"],
-        "source_platform": "Salesforce",
-        "is_primary": True,
-    }]
+    # A second, genuinely different Case for the SAME account must get its
+    # own WorkItem too, not share the first one (or the account) -- the
+    # exact scenario that caused outcome data loss under the old design.
+    other_body = AgentforceGovernRequest(
+        record_id="500-CASE-2",
+        task_description="Summarize the case",
+        project_name="Generator will not start",
+        source_record_name="Generator will not start",
+        source_type="Case",
+        source_record_type="Case",
+        customer_external_id="001-ARIZONA",
+        customer_name="University of Arizona",
+    )
+    other_item = _resolve_or_create_project(db, "WORKSPACE-ACCOUNT-ROLLUP", other_body)
+    assert other_item.id != item.id
+    assert other_item.external_id == "SF-CASE-500-CASE-2"
 
 
 def test_unimported_opportunity_gets_its_own_work_item_not_the_account_bucket():
