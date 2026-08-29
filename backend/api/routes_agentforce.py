@@ -115,6 +115,31 @@ def _normalized_project_status(value: str) -> str:
     return aliases.get(normalized, normalized)
 
 
+def _resolve_merge_target(db: Session, item: Optional[WorkItem]) -> Optional[WorkItem]:
+    """
+    Follow merged_into_work_item_id to the live, canonical WorkItem --
+    every lookup in _resolve_or_create_project() that can return an
+    already-merged row needs this, or new AI activity keeps landing on an
+    archived WorkItem that account_profile()/outcome sync already exclude
+    (see their own merged_into_work_item_id.is_(None) filters added
+    earlier this session).
+
+    Reproduced live: WorkItem 67 (external_id "SF-ACCOUNT-...", the
+    account-rollup for a real account) had merged_into_work_item_id=68
+    set, but its own status column still read "active" -- the merge
+    endpoint's archiving didn't take (or predates that behavior) -- so
+    every lookup in this function that matched by external_id or by
+    "oldest active WorkItem for this account" kept finding 67 directly,
+    silently absorbing new AI activity into a WorkItem the Business
+    Profile page can no longer see at all.
+    """
+    seen_ids: set[int] = set()
+    while item is not None and item.merged_into_work_item_id and item.id not in seen_ids:
+        seen_ids.add(item.id)
+        item = db.query(WorkItem).filter(WorkItem.id == item.merged_into_work_item_id).first()
+    return item
+
+
 def _resolve_or_create_project(
     db: Session,
     workspace_id: str,
@@ -136,9 +161,10 @@ def _resolve_or_create_project(
         )
         .first()
     )
-    project = (
+    project = _resolve_merge_target(
+        db,
         db.query(WorkItem).filter(WorkItem.id == source_link.work_item_id).first()
-        if source_link else None
+        if source_link else None,
     )
     if force_canonical_parent:
         project = None
@@ -188,18 +214,21 @@ def _resolve_or_create_project(
         and not has_deterministic_identity
         and not force_canonical_parent
     ):
-        project = (
+        project = _resolve_merge_target(
+            db,
             db.query(WorkItem)
             .filter(
                 WorkItem.workspace_id == workspace_id,
                 WorkItem.account_id == account.id,
                 WorkItem.status != "archived",
+                WorkItem.merged_into_work_item_id.is_(None),
             )
             .order_by(WorkItem.created_at)
-            .first()
+            .first(),
         )
         if not project:
-            project = (
+            project = _resolve_merge_target(
+                db,
                 db.query(WorkItem)
                 .filter(
                     WorkItem.workspace_id == workspace_id,
@@ -207,7 +236,7 @@ def _resolve_or_create_project(
                         (account.external_id, f"SF-{account.external_id}")
                     ),
                 )
-                .first()
+                .first(),
             )
         grouped_by_account = project is not None
 
@@ -220,7 +249,9 @@ def _resolve_or_create_project(
     elif account and not is_explicit_project:
         external_id = f"SF-ACCOUNT-{account.external_id}"
     if not project:
-        project = db.query(WorkItem).filter(WorkItem.external_id == external_id).first()
+        project = _resolve_merge_target(
+            db, db.query(WorkItem).filter(WorkItem.external_id == external_id).first()
+        )
     if not project and has_deterministic_identity:
         # Neither the source_link lookup nor the external_id lookup finds
         # a WorkItem created before this record type had a deterministic
@@ -242,21 +273,20 @@ def _resolve_or_create_project(
         # self-healing when project is found but source_link isn't) fill
         # in the missing link, same as the external_id-mismatch repoint
         # case above.
-        project = (
+        project = _resolve_merge_target(
+            db,
             db.query(WorkItem)
             .filter(
                 WorkItem.workspace_id == workspace_id,
                 WorkItem.source_platform == source_platform,
                 WorkItem.source_record_id == source_record_id,
             )
-            .first()
+            .first(),
         )
     if not project and body.project_external_id:
         legacy_external_id = f"SF-{body.record_id.strip()}"
-        project = (
-            db.query(WorkItem)
-            .filter(WorkItem.external_id == legacy_external_id)
-            .first()
+        project = _resolve_merge_target(
+            db, db.query(WorkItem).filter(WorkItem.external_id == legacy_external_id).first()
         )
         if project:
             project.external_id = external_id
