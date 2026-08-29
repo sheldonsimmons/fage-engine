@@ -84,6 +84,17 @@ def build_all_cases_query() -> str:
     return f"SELECT {fields} FROM Case"
 
 
+def build_cases_for_account_query(account_id: str) -> str:
+    """SOQL for every Case under one Account -- account-scoped counterpart
+    to build_all_cases_query(), see
+    salesforce_opportunity.build_opportunities_for_account_query()'s
+    docstring for why this exists."""
+    if not (account_id and account_id.isalnum() and 15 <= len(account_id) <= 18):
+        raise ValueError("account_id is not a valid Salesforce record id")
+    fields = ", ".join(SALESFORCE_CASE_OUTCOME_FIELDS) + ", CaseNumber, Subject, Account.Name"
+    return f"SELECT {fields} FROM Case WHERE AccountId = '{account_id}'"
+
+
 def map_salesforce_case_to_work_item_fields(record: dict) -> dict:
     account = record.get("Account") or {}
     case_number = record.get("CaseNumber")

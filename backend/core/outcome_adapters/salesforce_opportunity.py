@@ -107,6 +107,22 @@ def build_all_opportunities_query() -> str:
     return f"SELECT {fields} FROM Opportunity"
 
 
+def build_opportunities_for_account_query(account_id: str) -> str:
+    """SOQL for every Opportunity under one Account -- used to backfill an
+    account the moment it gets its first AI activity (see
+    api/routes_agentforce.py's account-discovery background task), not
+    the whole-org bulk import. Without this, a brand-new Opportunity
+    created after the last full import stays invisible to CostPilot
+    forever unless AI happens to run on that exact record (reproduced
+    live: a new Account + Opportunity where AI only ran on the Account
+    left the Opportunity with zero footprint anywhere -- no WorkItem, no
+    outcome, nothing)."""
+    if not (account_id and account_id.isalnum() and 15 <= len(account_id) <= 18):
+        raise ValueError("account_id is not a valid Salesforce record id")
+    fields = ", ".join(SALESFORCE_OPPORTUNITY_OUTCOME_FIELDS) + ", Name, Account.Name"
+    return f"SELECT {fields} FROM Opportunity WHERE AccountId = '{account_id}'"
+
+
 def map_salesforce_opportunity_to_work_item_fields(record: dict) -> dict:
     """The work-item-identity half of a bulk-imported record -- name,
     account linkage -- kept separate from map_salesforce_opportunity_to_

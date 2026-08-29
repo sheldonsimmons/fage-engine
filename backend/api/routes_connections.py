@@ -3089,3 +3089,72 @@ async def import_work_items(
         )
 
     return result
+
+
+async def import_account_records(db: Session, item: IntegrationConnection, account_external_id: str) -> dict:
+    """
+    Backfill one Account's Opportunities and Cases from Salesforce --
+    account-scoped counterpart to import_work_items()'s whole-org import,
+    triggered reactively (see api/routes_agentforce.py's govern_
+    agentforce_work) the moment an account gets its first AI activity.
+
+    Without this, a brand-new Opportunity/Case created after the last
+    full org import stays invisible to CostPilot forever unless AI
+    happens to run on that exact record -- CostPilot otherwise only
+    learns about a Salesforce record via direct AI activity on it or a
+    manual/on-demand full-org import, neither of which is a "new record
+    appeared" discovery mechanism. Reproduced live: a new Account +
+    Opportunity where AI only ran on the Account left the Opportunity
+    with zero footprint anywhere in CostPilot.
+
+    Only Salesforce Opportunity/Case today, matching this file's existing
+    "prove it on Salesforce first" pattern for every other adapter added
+    this session -- ServiceNow's ticket/incident types would need their
+    own account-scoped queries built the same way before this could cover
+    them too.
+    """
+    if item.platform != "salesforce":
+        return {"discovered": 0, "created": 0, "updated": 0, "healed": 0, "errors": []}
+
+    from core.outcome_adapters.salesforce_opportunity import (
+        build_opportunities_for_account_query,
+        map_salesforce_opportunity_to_work_item_fields,
+        map_salesforce_opportunity_to_canonical_outcome,
+    )
+    from core.outcome_adapters.salesforce_case import (
+        build_cases_for_account_query,
+        map_salesforce_case_to_work_item_fields,
+        map_salesforce_case_to_canonical_outcome,
+    )
+
+    opp_result = await _import_work_items(
+        db, item,
+        source_platform="Salesforce",
+        source_record_type="Opportunity",
+        context_type="opportunity",
+        external_id_prefix="SF-OPPORTUNITY",
+        fetch_records=lambda: _salesforce_query_all(
+            item, build_opportunities_for_account_query(account_external_id), db=db,
+        ),
+        map_to_work_item=map_salesforce_opportunity_to_work_item_fields,
+        map_to_outcome=map_salesforce_opportunity_to_canonical_outcome,
+    )
+    case_result = await _import_work_items(
+        db, item,
+        source_platform="Salesforce",
+        source_record_type="Case",
+        context_type="case",
+        external_id_prefix="SF-CASE",
+        fetch_records=lambda: _salesforce_query_all(
+            item, build_cases_for_account_query(account_external_id), db=db,
+        ),
+        map_to_work_item=map_salesforce_case_to_work_item_fields,
+        map_to_outcome=map_salesforce_case_to_canonical_outcome,
+    )
+    return {
+        "discovered": opp_result["discovered"] + case_result["discovered"],
+        "created": opp_result["created"] + case_result["created"],
+        "updated": opp_result["updated"] + case_result["updated"],
+        "healed": opp_result["healed"] + case_result["healed"],
+        "errors": opp_result["errors"] + case_result["errors"],
+    }

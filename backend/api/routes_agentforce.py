@@ -6,10 +6,11 @@ reusing CostPilot's existing work-attribution and routing pipeline.
 
 import json
 import logging
+from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -579,6 +580,54 @@ async def _apply_approved_relationship_mapping(
     return True
 
 
+def _discover_account_records_task(workspace_id: str, account_id: int) -> None:
+    """
+    Runs after the governed AI response has already been sent (see
+    govern_agentforce_work's background_tasks.add_task call) -- opens its
+    own DB session rather than reusing the request's, since that session
+    may already be closed by the time a background task actually runs.
+    """
+    from database.db import SessionLocal
+    from database.models import WorkAccount, IntegrationConnection
+    from api.routes_connections import import_account_records
+    import asyncio
+
+    db = SessionLocal()
+    try:
+        account = db.query(WorkAccount).filter(WorkAccount.id == account_id).first()
+        if not account:
+            return
+        connection = (
+            db.query(IntegrationConnection)
+            .filter(
+                IntegrationConnection.workspace_id == workspace_id,
+                IntegrationConnection.platform == "salesforce",
+                IntegrationConnection.status.notin_(["error", "superseded"]),
+                IntegrationConnection.access_token_encrypted.isnot(None),
+            )
+            .order_by(IntegrationConnection.last_success_at.desc().nullslast())
+            .first()
+        )
+        if not connection:
+            logger.warning(
+                "Account discovery skipped for workspace=%s account_id=%s: no working Salesforce connection",
+                workspace_id, account_id,
+            )
+            return
+        result = asyncio.run(import_account_records(db, connection, account.external_id))
+        logger.info(
+            "Account discovery for workspace=%s account=%s: discovered=%s created=%s updated=%s errors=%s",
+            workspace_id, account.external_id, result["discovered"], result["created"],
+            result["updated"], result["errors"],
+        )
+    except Exception:
+        logger.exception(
+            "Account discovery failed for workspace=%s account_id=%s", workspace_id, account_id,
+        )
+    finally:
+        db.close()
+
+
 @router.post(
     "/{workspace_id}/govern",
     response_model=AgentforceGovernResponse,
@@ -587,18 +636,36 @@ async def _apply_approved_relationship_mapping(
 async def govern_agentforce_work(
     workspace_id: str,
     body: AgentforceGovernRequest,
+    background_tasks: BackgroundTasks,
     x_costpilot_key: str = Header(default="", alias="X-CostPilot-Key"),
     db: Session = Depends(get_db),
 ):
     """Resolve the Salesforce project, run CostPilot, and return agent-ready output."""
     _authenticate_governed_workspace(workspace_id, x_costpilot_key, db)
     canonical_parent = await _apply_approved_relationship_mapping(db, workspace_id, body)
+    resolution_started_at = datetime.utcnow()
     project = _resolve_or_create_project(
         db,
         workspace_id,
         body,
         force_canonical_parent=canonical_parent,
     )
+
+    # An account-rollup WorkItem just created for the first time means
+    # this is the first AI activity CostPilot has ever seen for this
+    # Account -- a good moment to also pull in that Account's
+    # Opportunities/Cases from Salesforce, since nothing else ever will
+    # (see import_account_records()'s docstring for why this gap exists).
+    # Scheduled as a background task, not awaited inline, so a live
+    # Salesforce API round-trip never adds latency to the governed AI
+    # call this request exists to serve.
+    if (
+        project.source_record_type == "Account"
+        and project.created_at
+        and project.created_at >= resolution_started_at
+        and project.account_id
+    ):
+        background_tasks.add_task(_discover_account_records_task, workspace_id, project.account_id)
 
     if project.status != "active":
         return AgentforceGovernResponse(
