@@ -53,7 +53,14 @@ class _BayeuxSession:
     clientId and its own long-lived HTTP connection."""
 
     def __init__(self, instance_url: str, api_version: str, get_token, on_refresh_needed):
-        self._base = f"{instance_url.rstrip('/')}/cometd/{api_version}"
+        # The Streaming API's CometD endpoint takes a bare numeric version
+        # ("65.0") -- unlike every REST endpoint elsewhere in this codebase,
+        # which uses the "v65.0"-prefixed SALESFORCE_API_VERSION. Passing
+        # that value through unstripped produces /cometd/v65.0, which
+        # Salesforce rejects with a 400 on the handshake itself (confirmed
+        # live: every connection failed immediately on its first request).
+        numeric_version = api_version.lstrip("vV")
+        self._base = f"{instance_url.rstrip('/')}/cometd/{numeric_version}"
         self._get_token = get_token
         self._on_refresh_needed = on_refresh_needed
         self._client_id: Optional[str] = None
