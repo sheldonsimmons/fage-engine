@@ -397,6 +397,117 @@ def get_dashboard(
     }
 
 
+def _spend_driver_department(
+    db: Session, workspace_id: str | None,
+    current_start: datetime, current_end: datetime, prior_start: datetime, prior_end: datetime,
+    *, total_delta: float,
+) -> dict | None:
+    """
+    Which department contributed most to an overall spend swing --
+    "driver attribution" for the "AI spend" change entry. Per-department
+    spend for the same current/prior windows already computed for the
+    overall total, just grouped one more dimension. Returns None when the
+    total delta is negligible (avoids a meaningless "100% of a $0.01
+    swing" driver) or no single department explains a meaningful share.
+    """
+    if abs(total_delta) < 0.01:
+        return None
+    tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+
+    def _spend_by_department(start, end):
+        base = [tx_scope] if tx_scope is not None else []
+        rows = (
+            db.query(TokenTransaction.department, func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+            .filter(*base, TokenTransaction.timestamp >= start, TokenTransaction.timestamp < end)
+            .group_by(TokenTransaction.department)
+            .all()
+        )
+        return {(dept or "Unassigned").split(":")[-1]: float(spend or 0.0) for dept, spend in rows}
+
+    current_by_dept = _spend_by_department(current_start, current_end)
+    prior_by_dept = _spend_by_department(prior_start, prior_end)
+    all_depts = set(current_by_dept) | set(prior_by_dept)
+    if not all_depts:
+        return None
+
+    best_dept, best_delta = None, 0.0
+    for dept in all_depts:
+        delta = current_by_dept.get(dept, 0.0) - prior_by_dept.get(dept, 0.0)
+        # Same sign as the overall change -- a department moving opposite
+        # the overall trend isn't "driving" it.
+        if abs(delta) > abs(best_delta) and (delta >= 0) == (total_delta >= 0):
+            best_dept, best_delta = dept, delta
+    if not best_dept or abs(total_delta) < 0.01:
+        return None
+    contribution_pct = round(min(100.0, abs(best_delta / total_delta) * 100), 1)
+    if contribution_pct < 20:
+        return None  # no single department meaningfully explains this swing
+    return {"department": best_dept, "delta_usd": round(best_delta, 6), "contribution_pct": contribution_pct}
+
+
+def _biggest_model_spend_shift(
+    db: Session, workspace_id: str | None,
+    current_start: datetime, current_end: datetime, prior_start: datetime, prior_end: datetime,
+    days: int,
+) -> dict | None:
+    """
+    Which specific model (not just tier) had the largest spend increase --
+    "Claude Sonnet usage increased 43%. Estimated additional monthly cost:
+    $4,800" from the approved recommendation spec. Estimated monthly cost
+    scales the observed window's delta to a 30-day-equivalent rate,
+    regardless of the actual `days` window requested, so this number means
+    the same thing whether the caller asked for a 7-day or 90-day change.
+    """
+    tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+
+    def _spend_by_model(start, end):
+        base = [tx_scope] if tx_scope is not None else []
+        rows = (
+            db.query(
+                func.coalesce(TokenTransaction.model_name, TokenTransaction.model_tier, "Unknown model"),
+                func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+                func.count(TokenTransaction.id),
+            )
+            .filter(*base, TokenTransaction.timestamp >= start, TokenTransaction.timestamp < end)
+            .group_by(func.coalesce(TokenTransaction.model_name, TokenTransaction.model_tier, "Unknown model"))
+            .all()
+        )
+        return {model: (float(spend or 0.0), int(count or 0)) for model, spend, count in rows}
+
+    current_by_model = _spend_by_model(current_start, current_end)
+    prior_by_model = _spend_by_model(prior_start, prior_end)
+    all_models = set(current_by_model) | set(prior_by_model)
+
+    best_model, best_delta, best_pct = None, 0.0, None
+    for model in all_models:
+        curr_spend, _ = current_by_model.get(model, (0.0, 0))
+        prev_spend, _ = prior_by_model.get(model, (0.0, 0))
+        if prev_spend <= 0 or curr_spend <= 0:
+            continue  # a brand-new or discontinued model isn't a "usage shift" -- new_agents/other entries cover new activity
+        pct = ((curr_spend - prev_spend) / prev_spend) * 100
+        delta = curr_spend - prev_spend
+        if abs(delta) > abs(best_delta):
+            best_model, best_delta, best_pct = model, delta, pct
+
+    if not best_model or abs(best_pct or 0) < 20 or abs(best_delta) < 0.01:
+        return None  # not a meaningful shift
+
+    monthly_delta = best_delta * (30.0 / max(days, 1))
+    direction = "increased" if best_delta >= 0 else "decreased"
+    cost_word = "additional" if best_delta >= 0 else "reduced"
+    return {
+        "metric": "model_shift",
+        "label": f"{best_model} usage",
+        "current": round(current_by_model.get(best_model, (0.0, 0))[0], 6),
+        "previous": round(prior_by_model.get(best_model, (0.0, 0))[0], 6),
+        "pct_change": round(best_pct, 1),
+        "summary": (
+            f"{best_model} usage {direction} {abs(best_pct):.0f}%. "
+            f"Estimated {cost_word} monthly cost: ${abs(monthly_delta):,.0f}."
+        ),
+    }
+
+
 @router.get("/changes")
 def get_dashboard_changes(
     workspace_id: str | None = Query(None),
@@ -475,13 +586,22 @@ def get_dashboard_changes(
     spend_pct = _pct_change(current["spend"], previous["spend"])
     if spend_pct is not None:
         direction = "increased" if spend_pct >= 0 else "decreased"
+        change_noun = "increase" if spend_pct >= 0 else "decrease"
+        summary = f"AI spend {direction} {abs(spend_pct):.1f}% (${abs(current['spend'] - previous['spend']):,.2f}) vs the prior {days} days."
+        driver = _spend_driver_department(
+            db, workspace_id, current_start, now, prior_start, current_start,
+            total_delta=current["spend"] - previous["spend"],
+        )
+        if driver:
+            summary += f" Primary driver: {driver['department']} ({driver['contribution_pct']:.0f}% of the {change_noun})."
         changes.append({
             "metric": "spend",
             "label": "AI spend",
             "current": current["spend"],
             "previous": previous["spend"],
             "pct_change": spend_pct,
-            "summary": f"AI spend {direction} {abs(spend_pct):.1f}% (${abs(current['spend'] - previous['spend']):,.2f}) vs the prior {days} days.",
+            "summary": summary,
+            "driver": driver,
         })
 
     calls_pct = _pct_change(current["calls"], previous["calls"])
@@ -507,6 +627,10 @@ def get_dashboard_changes(
             "pct_change": mix_shift,
             "summary": f"Routing shifted {direction} economy-tier models ({previous['economy_pct']}% → {current['economy_pct']}% of calls).",
         })
+
+    model_shift = _biggest_model_spend_shift(db, workspace_id, current_start, now, prior_start, current_start, days)
+    if model_shift:
+        changes.append(model_shift)
 
     if new_agents:
         changes.append({
