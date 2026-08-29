@@ -43,10 +43,24 @@ logger = logging.getLogger(__name__)
 
 def _find_rollup_case_groups(db):
     """
-    Every (rollup WorkItem, distinct Case origin_record_id) pair with at
-    least one TokenTransaction -- the unit of work this script corrects.
+    Every (rollup WorkItem, distinct Case) pair -- the unit of work this
+    script corrects. A Case can reach a rollup WorkItem two different
+    ways, and both need to be detected:
+
+    - Live Agentforce activity: a TokenTransaction tagged
+      origin_record_type="Case" on the rollup WorkItem.
+    - Bulk import: a WorkItemSourceLink with source_record_type="Case"
+      pointing at the rollup WorkItem, with no TokenTransaction at all --
+      confirmed live on a real rollup WorkItem that had a Case source
+      link (plus, in the same row, an unrelated OpportunityLineItem link
+      and a Contact link -- this rollup pattern is not Case-specific, but
+      only the Case link is this script's concern).
+
+    WorkItemSourceLink is checked first since it is the more reliable,
+    ingestion-path-independent signal; TokenTransaction only adds cases
+    that have live activity but, for whatever reason, no source link yet.
     """
-    from database.models import WorkItem, TokenTransaction
+    from database.models import WorkItem, WorkItemSourceLink, TokenTransaction
 
     rollups = (
         db.query(WorkItem)
@@ -55,7 +69,20 @@ def _find_rollup_case_groups(db):
     )
     groups = []
     for rollup in rollups:
-        case_origin_rows = (
+        by_case_id = {}
+
+        for source_id, source_name in (
+            db.query(WorkItemSourceLink.source_record_id, WorkItemSourceLink.source_record_name)
+            .filter(
+                WorkItemSourceLink.work_item_id == rollup.id,
+                WorkItemSourceLink.source_record_type == "Case",
+            )
+            .distinct()
+            .all()
+        ):
+            by_case_id.setdefault(source_id, source_name)
+
+        for origin_id, origin_name in (
             db.query(TokenTransaction.origin_record_id, TokenTransaction.origin_record_name)
             .filter(
                 TokenTransaction.work_item_id == rollup.id,
@@ -64,12 +91,11 @@ def _find_rollup_case_groups(db):
             )
             .distinct()
             .all()
-        )
-        if not case_origin_rows:
-            continue
-        by_case_id = {}
-        for origin_id, origin_name in case_origin_rows:
+        ):
             by_case_id.setdefault(origin_id, origin_name)
+
+        if not by_case_id:
+            continue
         groups.append((rollup, by_case_id))
     return groups
 
@@ -151,15 +177,36 @@ def _run(dry_run: bool):
                 db.add(new_item)
                 db.flush()
 
-                db.add(WorkItemSourceLink(
-                    work_item_id=new_item.id,
-                    workspace_id=rollup.workspace_id,
-                    source_platform=rollup.source_platform,
-                    source_record_type="Case",
-                    source_record_id=case_id,
-                    source_record_name=case_name,
-                    is_primary=True,
-                ))
+                # A WorkItemSourceLink for this Case may already exist,
+                # pointing at the rollup (that's how this Case was found
+                # if detected via WorkItemSourceLink rather than
+                # TokenTransaction) -- WorkItemSourceLink has a unique
+                # constraint on (workspace_id, source_platform,
+                # source_record_id), so repoint the existing row instead
+                # of inserting a duplicate that would violate it.
+                existing_link = (
+                    db.query(WorkItemSourceLink)
+                    .filter(
+                        WorkItemSourceLink.workspace_id == rollup.workspace_id,
+                        WorkItemSourceLink.source_platform == rollup.source_platform,
+                        WorkItemSourceLink.source_record_id == case_id,
+                    )
+                    .first()
+                )
+                if existing_link:
+                    existing_link.work_item_id = new_item.id
+                    existing_link.source_record_type = "Case"
+                    existing_link.source_record_name = case_name or existing_link.source_record_name
+                else:
+                    db.add(WorkItemSourceLink(
+                        work_item_id=new_item.id,
+                        workspace_id=rollup.workspace_id,
+                        source_platform=rollup.source_platform,
+                        source_record_type="Case",
+                        source_record_id=case_id,
+                        source_record_name=case_name,
+                        is_primary=True,
+                    ))
 
                 db.query(TokenTransaction).filter(
                     TokenTransaction.work_item_id == rollup.id,
