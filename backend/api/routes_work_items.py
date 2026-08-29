@@ -1081,6 +1081,49 @@ def account_profile(
         if (project_in_progress + project_completed) else None
     )
 
+    # Per-WorkItem list -- feeds the Business Profile drill-down (click a
+    # row, see that one WorkItem's own Business Impact Profile). Lean by
+    # design: only the columns a list row needs, not the full
+    # _work_item_json() per item (which does several extra queries per
+    # item -- agents, model tiers, source links -- fine for a single-item
+    # page, wasteful for a whole account's worth of rows here).
+    work_item_spend_rows = (
+        tx_base.filter(TokenTransaction.work_item_id.in_(work_item_ids))
+        .with_entities(
+            TokenTransaction.work_item_id,
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.count(TokenTransaction.id),
+        )
+        .group_by(TokenTransaction.work_item_id)
+        .all()
+    )
+    work_item_spend = {
+        wi_id: {"spend_usd": round(float(spend or 0.0), 6), "request_count": int(count or 0)}
+        for wi_id, spend, count in work_item_spend_rows
+    }
+    work_items_list = []
+    for wi, outcome_row in (
+        db.query(WorkItem, WorkItemOutcome)
+        .outerjoin(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.id.in_(work_item_ids))
+        .all()
+    ):
+        activity = work_item_spend.get(wi.id, {"spend_usd": 0.0, "request_count": 0})
+        work_items_list.append({
+            "id": wi.id,
+            "external_id": wi.external_id,
+            "name": wi.name,
+            "context_type": wi.context_type,
+            "status": wi.status,
+            "spend_usd": activity["spend_usd"],
+            "request_count": activity["request_count"],
+            "outcome_status": outcome_row.outcome_status if outcome_row else None,
+            "outcome_value": outcome_row.outcome_value if outcome_row else None,
+            "outcome_success": outcome_row.outcome_success if outcome_row else None,
+            "outcome_is_closed": outcome_row.is_closed if outcome_row else None,
+        })
+    work_items_list.sort(key=lambda row: (-row["spend_usd"], row["name"] or ""))
+
     return {
         "account": {
             **_account_json(account),
@@ -1090,6 +1133,7 @@ def account_profile(
         },
         "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
         "work_item_count": len(work_item_ids),
+        "work_items": work_items_list,
         "kpis": {
             "ai_investment_usd": round(float(spend_usd), 6),
             "ai_activity_count": int(activity_count),
