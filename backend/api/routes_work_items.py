@@ -841,7 +841,17 @@ def account_profile(
     if period_start >= period_end:
         raise HTTPException(status_code=400, detail="date_from must be before date_to")
 
-    work_item_ids_query = db.query(WorkItem.id).filter(WorkItem.account_id == account.id)
+    # Exclude merged-away WorkItems (see the /merge endpoint) -- a merged
+    # source row survives archived with merged_into_work_item_id set and
+    # zeroed-out activity (everything real was reassigned to its target),
+    # but including it here double-counted it as a second, empty "AI-
+    # Supported WorkItem" in both work_item_count and the Business Profile
+    # UI's work item list. Same exclusion already used elsewhere in this
+    # file (see line ~1387) for the equivalent single-WorkItem lookup.
+    work_item_ids_query = db.query(WorkItem.id).filter(
+        WorkItem.account_id == account.id,
+        WorkItem.merged_into_work_item_id.is_(None),
+    )
     work_item_ids = [row[0] for row in work_item_ids_query.all()]
 
     empty_kpis = {
