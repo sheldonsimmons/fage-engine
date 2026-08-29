@@ -4366,17 +4366,17 @@ def _ask_costpilot_answer(
                 continue
             bucket = activity_by_department.setdefault(department_key, {"requests": 0})
             bucket["requests"] += int(activity_row.get("request_count") or 0)
-        from core.budget import recomputed_department_spend, workspace_type_for
-        _ask_budget_is_production_workspace = workspace_type_for(db, request.workspace_id) == "production"
-        # current_spend_usd is the live-tracked counter Admin > Budgets
-        # displays and real throttling enforcement acts on — the source of
-        # truth for a real (production) workspace. It never gets touched by
-        # backfilled/simulated data though, so for demo/simulation
-        # workspaces it reads $0.00 forever even with real recorded
-        # activity — recompute from the ledger for those instead, via the
-        # same shared function core.budget.get_all_budgets (Admin) and
-        # ask_costpilot_tools.run_get_budget_status use, so this answer
-        # can't disagree with either of them.
+        from core.budget import recomputed_department_spend
+        # Always recomputed from the ledger now -- current_spend_usd used
+        # to be trusted as authoritative for "production" workspaces, but
+        # that live-incremented counter was found to drift arbitrarily far
+        # from the real transaction ledger with no self-correction
+        # (confirmed live: a production workspace's counter had been
+        # accumulating for 3 weeks before any matching real transaction
+        # existed). Recomputing here via the same shared function
+        # core.budget.get_all_budgets (Admin) and
+        # ask_costpilot_tools.run_get_budget_status use means this answer
+        # can't disagree with either of them, for every workspace type.
         #
         # Deliberately NOT passing this question's own date_from/date_to or
         # its already-fetched `report` through here, even though doing so
@@ -4389,10 +4389,7 @@ def _ask_costpilot_answer(
         # to every answer correctly reported nothing over budget — the same
         # bug this function's docstring says was already fixed once, since
         # get_all_budgets and the badge always use true month-to-date.
-        _ask_budget_spend_by_department = (
-            None if _ask_budget_is_production_workspace
-            else recomputed_department_spend(db, request.workspace_id)
-        )
+        _ask_budget_spend_by_department = recomputed_department_spend(db, request.workspace_id)
         budget_rows = []
         for budget in budgets:
             cap = float(budget.monthly_cap_usd or 0)
@@ -4402,10 +4399,7 @@ def _ask_costpilot_answer(
             elif ":" in raw_budget_department:
                 raw_budget_department = raw_budget_department.rsplit(":", 1)[-1]
             activity = activity_by_department.get(raw_budget_department.casefold(), {})
-            spent = (
-                float(budget.current_spend_usd or 0) if _ask_budget_is_production_workspace
-                else _ask_budget_spend_by_department.get(raw_budget_department.casefold(), 0.0)
-            )
+            spent = _ask_budget_spend_by_department.get(raw_budget_department.casefold(), 0.0)
             matched_requests = int(activity.get("requests") or 0)
             pct = spent / cap * 100 if cap > 0 else 0
             if cap <= 0:

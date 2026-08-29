@@ -155,10 +155,24 @@ def get_dashboard(
     def _today_pct(n): return round((n / tier_split_today_total) * 100, 1) if tier_split_today_total else 0
 
     # ── Agent counts ───────────────────────────────────────────────────────────
+    # Active/idle used to be judged by RegisteredAgent.status -- an
+    # administrative field nothing in the codebase ever sets to "active"
+    # based on real traffic (confirmed via search: it only ever changes via
+    # direct edit, e.g. admin.html, and defaults to "idle" forever
+    # otherwise). Reproduced live: a workspace with two agents that had
+    # both just sent real AI activity ("What Changed" correctly detected
+    # this from the transaction ledger) still showed Active Agents = 0,
+    # 2 idle, because status had simply never been touched. last_used_at
+    # is a real column, updated by every live call (see routes_router.py/
+    # routes_enrich.py/routes_proxy.py) -- recency of real activity is
+    # what "active" should mean here, not a manually-set label.
     agents_total  = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope)).scalar() or 0
-    agents_active = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "active")).scalar()  or 0
     agents_locked = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "locked")).scalar()  or 0
-    agents_idle   = db.query(func.count(RegisteredAgent.id)).filter(*_filters(agent_scope, RegisteredAgent.status == "idle")).scalar()    or 0
+    active_cutoff = datetime.utcnow() - timedelta(days=7)
+    agents_active = db.query(func.count(RegisteredAgent.id)).filter(
+        *_filters(agent_scope, RegisteredAgent.status != "locked", RegisteredAgent.last_used_at >= active_cutoff)
+    ).scalar() or 0
+    agents_idle = max(0, agents_total - agents_active - agents_locked)
 
     # ── Budget summaries ───────────────────────────────────────────────────────
     # current_spend_usd is the live-tracked counter real throttling enforcement
@@ -646,9 +660,10 @@ def get_business_impact(
     # sidesteps the name-collision bug already found once this session in
     # an account_name-based lookup (two WorkAccount rows sharing one
     # name) -- there's no equivalent risk at workspace scope.
-    from core.metrics_query import compute_outcome_coverage, MIN_MEANINGFUL_SAMPLE, MIN_EXECUTIVE_SAMPLE
+    from core.metrics_query import compute_outcome_coverage, compute_cost_per_outcome, MIN_MEANINGFUL_SAMPLE, MIN_EXECUTIVE_SAMPLE
 
     coverage = compute_outcome_coverage(db, workspace_id)
+    cost_per_outcome = compute_cost_per_outcome(db, workspace_id)
     if won_count >= MIN_EXECUTIVE_SAMPLE:
         evidence_label = "executive_eligible"
     elif won_count >= MIN_MEANINGFUL_SAMPLE:
@@ -671,4 +686,5 @@ def get_business_impact(
         "outcome_coverage_pct": coverage["outcome_coverage_pct"],
         "successful_outcomes": won_count,
         "evidence_label": evidence_label,
+        "cost_per_successful_outcome_usd": cost_per_outcome["cost_per_successful_outcome_usd"],
     }

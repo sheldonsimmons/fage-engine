@@ -655,9 +655,13 @@ def _record_observed_usage(
         db.add(tx)
 
         if budget:
-            budget.current_spend_usd = round(budget.current_spend_usd + cost_usd, 6)
-            if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
-                budget.throttled = True
+            # Recomputed from the ledger, not incremented -- an
+            # incrementally-maintained counter can drift from the real
+            # transaction ledger with no way to self-correct (see
+            # sync_current_spend_from_ledger()'s docstring for the live
+            # drift this was found causing).
+            from core.budget import sync_current_spend_from_ledger
+            sync_current_spend_from_ledger(db, req.actor_workspace_id or "default", commit=False)
         db.commit()
 
         try:
@@ -1113,12 +1117,12 @@ def route_payload(
         db.add(tx)
 
         # ── Update department running spend ────────────────────────────────────
+        # Recomputed from the ledger, not incremented by cost_usd -- see
+        # sync_current_spend_from_ledger()'s docstring for the drift a
+        # plain += counter was found causing in production.
         if budget:
-            budget.current_spend_usd = round(
-                budget.current_spend_usd + result["cost_usd"], 6
-            )
-            if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
-                budget.throttled = True
+            from core.budget import sync_current_spend_from_ledger
+            sync_current_spend_from_ledger(db, req.actor_workspace_id or "default", commit=False)
 
         # ── Set agent back to idle after routing ──────────────────────────────
         # Keep "active" visible for 4s so the frontend polling can catch it

@@ -335,9 +335,11 @@ async def enrich_and_route_salesforce(
     db.add(tx)
 
     if budget:
-        budget.current_spend_usd = round(budget.current_spend_usd + result["cost_usd"], 6)
-        if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
-            budget.throttled = True
+        # Recomputed from the ledger, not incremented -- see
+        # sync_current_spend_from_ledger()'s docstring for the drift a
+        # plain += counter was found causing in production.
+        from core.budget import sync_current_spend_from_ledger
+        sync_current_spend_from_ledger(db, None, commit=False)
 
     if agent:
         import threading

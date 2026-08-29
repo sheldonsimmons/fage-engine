@@ -172,6 +172,53 @@ def recomputed_department_spend(
     return spend_by_department
 
 
+def sync_current_spend_from_ledger(db: Session, workspace_id: str | None, *, commit: bool = True) -> None:
+    """
+    Overwrite every department's current_spend_usd (and re-derive throttled)
+    from the real transaction ledger -- the one place this workspace's
+    budget rows get corrected, whether called from a live request-routing
+    decision or a display read.
+
+    Why this exists: current_spend_usd used to be a separately-maintained
+    running counter, incremented by += at four different call sites
+    (api/routes_router.py x2, routes_enrich.py, routes_proxy.py) instead of
+    ever being derived from source-of-truth data -- "production" workspaces
+    trusted it completely (see the removed branch this replaced in
+    get_all_budgets). Reproduced live: one production workspace's Sales
+    department showed current_spend_usd=$3.92 while its real transaction
+    ledger summed to $0.027, and the counter had been accumulating since 3
+    weeks before any real transaction for that department even existed --
+    a genuine, untraceable drift, not a scope/window mismatch. A
+    separately-incremented counter can always drift from its source of
+    truth; recomputing it here removes that possibility entirely, the same
+    protection recomputed_department_spend() already gave non-production
+    workspaces alone.
+
+    Cost tradeoff, accepted deliberately: this calls
+    recomputed_department_spend(), which scans the transaction ledger for
+    the period -- more work per real AI call than a plain increment. At
+    today's traffic volume this is negligible; if call volume grows enough
+    for this to matter, the fix is scoping the recompute to one department
+    instead of the whole workspace, not reverting to an unreconciled
+    counter.
+    """
+    budgets = db.query(DepartmentBudget).filter(
+        DepartmentBudget.workspace_id == (workspace_id or "default")
+    ).all()
+    if not budgets:
+        return
+    spend_by_department = recomputed_department_spend(db, workspace_id)
+    for b in budgets:
+        key = (b.department or "").split(":")[-1].casefold()
+        b.current_spend_usd = round(spend_by_department.get(key, 0.0), 6)
+        if b.current_spend_usd >= b.monthly_cap_usd and not b.override_granted:
+            b.throttled = True
+        elif b.current_spend_usd < b.monthly_cap_usd:
+            b.throttled = False
+    if commit:
+        db.commit()
+
+
 def get_all_budgets(db: Session, workspace_id: str | None = None) -> list:
     """
     Return budget status for every department in one workspace, enriched
@@ -195,19 +242,12 @@ def get_all_budgets(db: Session, workspace_id: str | None = None) -> list:
     if dirty:
         db.commit()
 
-    if workspace_type_for(db, workspace_id) == "production":
-        return [_enrich(b) for b in budgets]
-
-    # Non-production workspace (demo/simulation/legacy): current_spend_usd
-    # never gets touched by backfilled/simulated data, so it would show
-    # $0.00 forever even with real recorded activity. Recompute for display.
-    spend_by_department = recomputed_department_spend(db, workspace_id)
-    return [
-        _enrich(b, spend_override=spend_by_department.get(
-            (b.department or "").split(":")[-1].casefold(), 0.0
-        ))
-        for b in budgets
-    ]
+    # Always reconciled against the real ledger now, production workspaces
+    # included -- see sync_current_spend_from_ledger()'s docstring for why
+    # the old "production workspaces can trust their own counter" branch
+    # was removed (that counter is exactly what was found to drift).
+    sync_current_spend_from_ledger(db, workspace_id)
+    return [_enrich(b) for b in budgets]
 
 
 def get_budget(db: Session, department: str):
@@ -405,8 +445,11 @@ def effective_budget_context(db: Session, department: str, workspace_id: str | N
     if not rows:
         return None
 
-    use_recompute = bool(workspace_id) and workspace_type_for(db, workspace_id) != "production"
-    if use_recompute:
+    # Always recomputed from the ledger now, workspace_id given or not --
+    # see sync_current_spend_from_ledger()'s docstring for the drift the
+    # old "production workspaces can trust their own current_spend_usd"
+    # assumption was found causing live.
+    if workspace_id:
         cap = max((row.monthly_cap_usd or 0.0) for row in rows) or 0.0
         spend_by_department = recomputed_department_spend(db, workspace_id)
         # Strip using the ACTUAL workspace_id we were given, not
@@ -423,11 +466,13 @@ def effective_budget_context(db: Session, department: str, workspace_id: str | N
         override_granted = any(bool(row.override_granted) for row in rows)
         throttled = (spend >= cap and cap > 0) and not override_granted
     else:
-        spend = round(sum((row.current_spend_usd or 0.0) for row in rows), 4)
+        spend_by_department = recomputed_department_spend(db, None)
         cap = max((row.monthly_cap_usd or 0.0) for row in rows) or 0.0
+        key = str(department or "").strip().casefold()
+        spend = round(spend_by_department.get(key, 0.0), 4)
         used_pct = round((spend / cap) * 100, 1) if cap else 0.0
         override_granted = any(bool(row.override_granted) for row in rows)
-        throttled = any(bool(row.throttled) for row in rows) and not override_granted
+        throttled = (spend >= cap and cap > 0) and not override_granted
     throttle_tiers = [getattr(row, "throttle_tier", 1) or 1 for row in rows]
     retention_days = max((getattr(row, "raw_retention_days", 30) or 30) for row in rows)
 

@@ -378,9 +378,11 @@ def _log_transaction(db, workspace_id: str, department: str, model: str,
         "captured_at": now.isoformat(),
     }
     if budget:
-        budget.current_spend_usd = round((budget.current_spend_usd or 0.0) + cost_usd, 6)
-        if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
-            budget.throttled = True
+        # Recomputed from the ledger, not incremented -- see
+        # sync_current_spend_from_ledger()'s docstring for the drift a
+        # plain += counter was found causing in production.
+        from core.budget import sync_current_spend_from_ledger
+        sync_current_spend_from_ledger(db, workspace_id, commit=False)
         used_pct = round(budget.current_spend_usd / budget.monthly_cap_usd * 100, 1) if budget.monthly_cap_usd else 0
         budget_ctx.update({
             "department":       budget.department,
