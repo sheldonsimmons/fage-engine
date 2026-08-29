@@ -1198,7 +1198,12 @@ def account_profile(
         else:
             cost_evidence = "early_signal"
         business_impact_summary["cost_per_successful_outcome_usd"] = {
-            "value": round(successful_spend / won_count_int, 2),
+            # 6, not 2, decimal places -- a real cost-per-outcome in the
+            # fractional-cent range (typical for demo/early-stage accounts)
+            # silently rounded to $0.00 at 2 decimals, the same precision
+            # bug already found and fixed once this session for the
+            # per-WorkItem AI Cost / Associated Business Value ratio.
+            "value": round(successful_spend / won_count_int, 6),
             "evidence": cost_evidence,
             "label": "Cost per Successful Outcome",
             "sample_size": won_count_int,

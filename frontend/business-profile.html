@@ -807,7 +807,14 @@
       section.style.display = "";
       const fmt = (metricKey, value) => {
         if (value === null || value === undefined) return "—";
-        if (metricKey.endsWith("_usd")) return bpFmtUsdFull(value);
+        if (metricKey.endsWith("_usd")) {
+          // A real value under a cent (typical for a demo/early-stage
+          // account) rounds to "$0.00" at fixed 2-decimal formatting --
+          // that reads as "nothing" when the number is real, just small.
+          const n = Number(value);
+          if (n !== 0 && Math.abs(n) < 0.01) return `$${n.toFixed(6)}`;
+          return bpFmtUsdFull(value);
+        }
         if (metricKey.endsWith("_pct")) return `${value}%`;
         return bpFmtNum(value);
       };
