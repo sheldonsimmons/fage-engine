@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { EvidenceBadge } from "@/components/EvidenceBadge"
-import { DollarSign, PiggyBank, ShieldCheck, TrendingUp, TrendingDown, Target, Calculator } from "lucide-react"
+import { DollarSign, PiggyBank, ShieldCheck, TrendingUp, TrendingDown, Calculator } from "lucide-react"
 import type { BudgetDepartment, DashboardSummary, SavingsSummary, ConnectionHealth, BusinessImpact } from "@/lib/api"
 
 const usd = (n: number) =>
@@ -63,7 +63,7 @@ export function KpiRow({
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">AI Investment</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">AI Investment — Month to Date</CardTitle>
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -96,25 +96,39 @@ export function KpiRow({
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold tabular-nums">{usdAdaptive(businessImpact.potential_savings_usd)}</div>
+            {businessImpact.potential_savings_usd > 0 ? (
+              <>
+                <div className="text-2xl font-semibold tabular-nums">{usdAdaptive(businessImpact.potential_savings_usd)}</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {businessImpact.potential_savings_top_agents[0]
+                    ? `Top: ${businessImpact.potential_savings_top_agents[0].agent_name}`
+                    : `${businessImpact.potential_savings_candidate_count} routine calls above Scout tier`}
+                </p>
+              </>
+            ) : (
+              // Zero here means "checked, nothing qualifies" -- distinct
+              // from the card being hidden outright (insufficient_data,
+              // above), so it shouldn't read as broken or missing data.
+              <>
+                <div className="text-lg font-semibold text-muted-foreground">No qualified opportunities</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Current workloads do not meet the threshold for a model right-sizing recommendation.
+                </p>
+              </>
+            )}
             <div className="mt-1.5 flex items-center gap-1.5">
               <EvidenceBadge
                 evidence={businessImpact.potential_savings_evidence}
                 note={businessImpact.potential_savings_note}
               />
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {businessImpact.potential_savings_top_agents[0]
-                ? `Top: ${businessImpact.potential_savings_top_agents[0].agent_name}`
-                : `${businessImpact.potential_savings_candidate_count} routine calls above Scout tier`}
-            </p>
           </CardContent>
         </Card>
       )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Budget Health</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Budget Health — Month to Date</CardTitle>
           <ShieldCheck className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -171,21 +185,6 @@ export function KpiRow({
               </Card>
             </a>
           )}
-
-          <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
-            <Card className="h-full">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Outcome Coverage</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold tabular-nums">
-                  {businessImpact.outcome_coverage_pct === null ? "—" : `${businessImpact.outcome_coverage_pct}%`}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">AI-supported work items with a known outcome</p>
-              </CardContent>
-            </Card>
-          </a>
         </>
       )}
     </div>

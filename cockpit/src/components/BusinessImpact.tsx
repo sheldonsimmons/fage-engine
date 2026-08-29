@@ -45,7 +45,7 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
     )
   }
 
-  const rows = [
+  const rows: { label: string; value: string; trendPct?: number | null }[] = [
     { label: "Opportunities Won", value: data.opportunities_won.toLocaleString() },
     { label: "Opportunities Open", value: data.opportunities_open.toLocaleString() },
     { label: "Opportunities Lost", value: data.opportunities_lost.toLocaleString() },
@@ -55,24 +55,41 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
   if (data.support_cases_total > 0) {
     rows.push({ label: "Support Cases Resolved", value: `${data.support_cases_resolved} / ${data.support_cases_total}` })
   }
-  if (data.outcome_coverage_pct !== null) {
-    rows.push({ label: "Outcome Coverage", value: `${data.outcome_coverage_pct}%` })
-  }
   // Deeper economics -- each only appended when its denominator is
   // non-zero (e.g. no won opportunities yet -> no Cost per Won
   // Opportunity row), same "omit rather than show a misleading number"
-  // rule as everywhere else this session.
+  // rule as everywhere else this session. trendPct (30d vs prior 30d) is
+  // shown alongside when the backend has enough history to compute one;
+  // omitted (not zeroed) otherwise.
   if (data.cost_per_won_opportunity_usd !== null) {
-    rows.push({ label: "Cost per Won Opportunity", value: usdAdaptive(data.cost_per_won_opportunity_usd) })
+    rows.push({
+      label: "Cost per Won Opportunity", value: usdAdaptive(data.cost_per_won_opportunity_usd),
+      trendPct: data.trend_pct_change.cost_per_won_opportunity_usd,
+    })
   }
   if (data.ai_investment_on_lost_opportunities_usd !== null) {
-    rows.push({ label: "AI Investment on Lost Opportunities", value: usdAdaptive(data.ai_investment_on_lost_opportunities_usd) })
+    rows.push({
+      label: "AI Investment on Lost Opportunities", value: usdAdaptive(data.ai_investment_on_lost_opportunities_usd),
+      trendPct: data.trend_pct_change.ai_investment_on_lost_opportunities_usd,
+    })
   }
   if (data.avg_ai_investment_per_opportunity_usd !== null) {
-    rows.push({ label: "Avg. AI Investment per Opportunity", value: usdAdaptive(data.avg_ai_investment_per_opportunity_usd) })
+    rows.push({
+      label: "Avg. AI Investment per Opportunity", value: usdAdaptive(data.avg_ai_investment_per_opportunity_usd),
+      trendPct: data.trend_pct_change.avg_ai_investment_per_opportunity_usd,
+    })
   }
   if (data.support_cost_per_resolution_usd !== null) {
-    rows.push({ label: "Support Cost per Resolution", value: usdAdaptive(data.support_cost_per_resolution_usd) })
+    rows.push({
+      label: "Support Cost per Resolution", value: usdAdaptive(data.support_cost_per_resolution_usd),
+      trendPct: data.trend_pct_change.support_cost_per_resolution_usd,
+    })
+  }
+  // Outcome Coverage stays here as the one place it's independently
+  // browsable (also summarized in the Associated Business Value evidence
+  // badge above) rather than duplicated into its own KPI card too.
+  if (data.outcome_coverage_pct !== null) {
+    rows.push({ label: "Outcome Coverage", value: `${data.outcome_coverage_pct}%` })
   }
 
   return (
@@ -85,16 +102,29 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
         {rows.map((r) => (
           <div key={r.label} className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">{r.label}</span>
-            <span className="tabular-nums font-medium">{r.value}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="tabular-nums font-medium">{r.value}</span>
+              {/* All four trended rows are cost/investment figures -- lower
+                  is always the improvement, so a negative delta is green
+                  regardless of which row it's on. */}
+              {r.trendPct != null && (
+                <span className={`text-xs tabular-nums ${r.trendPct < 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                  {r.trendPct < 0 ? "↓" : "↑"} {Math.abs(r.trendPct)}%
+                </span>
+              )}
+            </span>
           </div>
         ))}
         {/* One compact line, not another row -- association, not causation:
             AI activity tied to these outcomes, never framed as having
-            caused them. */}
+            caused them. All-time, outcome-linked spend only -- a
+            different scope than the workspace's Month-to-Date AI
+            Investment KPI above the fold, so it's labeled explicitly
+            rather than reading as a second, disagreeing "total spend." */}
         <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
           <Cpu className="h-3.5 w-3.5" />
           <span>
-            AI activity tied to these outcomes: {usdPrecise(data.ai_spend_usd)} · {data.ai_tokens_total.toLocaleString()} tokens
+            AI investment tied to known outcomes (all-time): {usdPrecise(data.ai_spend_usd)} · {data.ai_tokens_total.toLocaleString()} tokens
           </span>
         </div>
         <a href="/business-profile.html" className="mt-2 block text-xs font-medium text-primary hover:underline">

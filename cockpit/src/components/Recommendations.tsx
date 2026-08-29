@@ -19,6 +19,21 @@ const ICON: Record<string, typeof OctagonAlert> = {
   connection_health: Plug,
 }
 
+const PRIORITY_STYLE: Record<string, string> = {
+  critical: "bg-red-500/15 text-red-400",
+  high: "bg-amber-500/15 text-amber-400",
+  medium: "bg-blue-500/15 text-blue-400",
+  low: "bg-muted text-muted-foreground",
+}
+
+function PriorityBadge({ priority }: { priority: string }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${PRIORITY_STYLE[priority] ?? PRIORITY_STYLE.low}`}>
+      {priority}
+    </span>
+  )
+}
+
 function RecIcon({ type }: { type: string }) {
   const Icon = ICON[type] ?? Lightbulb
   const isRisk = type === "budget_risk" || type === "high_spend_weak_outcome" || type === "high_spend_stalled_work"
@@ -44,12 +59,13 @@ export function Recommendations({ recommendations }: { recommendations: Recommen
       <CardContent>
         {recommendations.length ? (
           <ul className="space-y-4">
-            {recommendations.map((rec, i) => (
-              <li key={`${rec.recommendation_type}-${i}`} className="flex items-start gap-3 text-sm">
+            {recommendations.map((rec) => (
+              <li key={rec.id} className="flex items-start gap-3 text-sm">
                 <RecIcon type={rec.recommendation_type} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{rec.title}</span>
+                    <PriorityBadge priority={rec.priority} />
                     <EvidenceBadge evidence={rec.confidence} />
                   </div>
                   <p className="mt-0.5 text-muted-foreground">{rec.current_state}</p>

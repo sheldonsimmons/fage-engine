@@ -445,6 +445,53 @@ def _spend_driver_department(
     return {"department": best_dept, "delta_usd": round(best_delta, 6), "contribution_pct": contribution_pct}
 
 
+def _spend_driver_agent(
+    db: Session, workspace_id: str | None,
+    current_start: datetime, current_end: datetime, prior_start: datetime, prior_end: datetime,
+    *, total_delta: float,
+) -> dict | None:
+    """
+    Same shape as _spend_driver_department, one dimension down -- which
+    single agent contributed most to the overall spend swing, so the
+    summary sentence can name both the department and the agent behind it
+    ("Sales accounted for 32% of the increase, primarily driven by Agent
+    X") instead of stopping at department level.
+    """
+    if abs(total_delta) < 0.01:
+        return None
+    tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+
+    def _spend_by_agent(start, end):
+        base = [tx_scope] if tx_scope is not None else []
+        rows = (
+            db.query(RegisteredAgent.name, func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+            .select_from(TokenTransaction)
+            .join(RegisteredAgent, TokenTransaction.agent_id == RegisteredAgent.id)
+            .filter(*base, TokenTransaction.timestamp >= start, TokenTransaction.timestamp < end)
+            .group_by(RegisteredAgent.name)
+            .all()
+        )
+        return {name: float(spend or 0.0) for name, spend in rows}
+
+    current_by_agent = _spend_by_agent(current_start, current_end)
+    prior_by_agent = _spend_by_agent(prior_start, prior_end)
+    all_agents = set(current_by_agent) | set(prior_by_agent)
+    if not all_agents:
+        return None
+
+    best_agent, best_delta = None, 0.0
+    for agent in all_agents:
+        delta = current_by_agent.get(agent, 0.0) - prior_by_agent.get(agent, 0.0)
+        if abs(delta) > abs(best_delta) and (delta >= 0) == (total_delta >= 0):
+            best_agent, best_delta = agent, delta
+    if not best_agent:
+        return None
+    contribution_pct = round(min(100.0, abs(best_delta / total_delta) * 100), 1)
+    if contribution_pct < 20:
+        return None
+    return {"agent": best_agent, "delta_usd": round(best_delta, 6), "contribution_pct": contribution_pct}
+
+
 def _biggest_model_spend_shift(
     db: Session, workspace_id: str | None,
     current_start: datetime, current_end: datetime, prior_start: datetime, prior_end: datetime,
@@ -592,8 +639,13 @@ def get_dashboard_changes(
             db, workspace_id, current_start, now, prior_start, current_start,
             total_delta=current["spend"] - previous["spend"],
         )
+        agent_driver = _spend_driver_agent(
+            db, workspace_id, current_start, now, prior_start, current_start,
+            total_delta=current["spend"] - previous["spend"],
+        )
         if driver:
-            summary += f" Primary driver: {driver['department']} ({driver['contribution_pct']:.0f}% of the {change_noun})."
+            summary += f" Primary driver: {driver['department']} ({driver['contribution_pct']:.0f}% of the {change_noun})"
+            summary += f", primarily driven by {agent_driver['agent']}." if agent_driver else "."
         changes.append({
             "metric": "spend",
             "label": "AI spend",
@@ -602,6 +654,7 @@ def get_dashboard_changes(
             "pct_change": spend_pct,
             "summary": summary,
             "driver": driver,
+            "agent_driver": agent_driver,
         })
 
     calls_pct = _pct_change(current["calls"], previous["calls"])
@@ -842,6 +895,84 @@ def get_business_impact(
         round(float(support_resolved_spend or 0.0) / support_resolved, 6) if support_resolved else None
     )
 
+    # Period-over-period trend for the four cost-per-outcome ratios above.
+    # These ratios are all-time by design (a small workspace needs its
+    # full history to clear MIN_SAMPLE-style noise floors), so there's no
+    # natural "prior period" for the ratio itself -- this instead recomputes
+    # the same ratio restricted to two adjacent 30-day windows (by
+    # WorkItemOutcome.outcome_date for the count side, TokenTransaction.
+    # timestamp for the spend side, same join shape as above) and diffs
+    # those. Reuses the same current-vs-prior-period-of-equal-length shape
+    # as get_dashboard_changes rather than inventing a second comparison
+    # method. Null (not zero) whenever a window's denominator is zero --
+    # never fabricates a trend from an empty period.
+    def _period_ratios(period_start, period_end):
+        base_outcome_filter = [
+            WorkItemOutcome.outcome_date >= period_start,
+            WorkItemOutcome.outcome_date < period_end,
+        ]
+        won_n = _scoped(
+            db.query(func.count(WorkItemOutcome.id))
+            .select_from(WorkItemOutcome).join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+            .filter(WorkItem.context_type == "opportunity", is_won, *base_outcome_filter)
+        ).scalar() or 0
+        lost_n = _scoped(
+            db.query(func.count(WorkItemOutcome.id))
+            .select_from(WorkItemOutcome).join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+            .filter(WorkItem.context_type == "opportunity", is_lost, *base_outcome_filter)
+        ).scalar() or 0
+        resolved_n = _scoped(
+            db.query(func.count(WorkItemOutcome.id))
+            .select_from(WorkItemOutcome).join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+            .filter(WorkItem.context_type == "case", WorkItemOutcome.is_closed.is_(True), *base_outcome_filter)
+        ).scalar() or 0
+
+        tx_filter = [TokenTransaction.timestamp >= period_start, TokenTransaction.timestamp < period_end]
+        won_spend, lost_spend, opp_spend = _scoped(
+            db.query(
+                func.coalesce(func.sum(case((is_won, TokenTransaction.cost_usd), else_=0.0)), 0.0),
+                func.coalesce(func.sum(case((is_lost, TokenTransaction.cost_usd), else_=0.0)), 0.0),
+                func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            )
+            .select_from(TokenTransaction)
+            .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+            .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+            .filter(WorkItem.context_type == "opportunity", *tx_filter)
+        ).first()
+        support_spend = _scoped(
+            db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+            .select_from(TokenTransaction)
+            .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+            .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+            .filter(WorkItem.context_type == "case", WorkItemOutcome.is_closed.is_(True), *tx_filter)
+        ).scalar() or 0.0
+        # Closed opportunities only (won + lost) -- unlike the all-time
+        # avg_ai_investment_per_opportunity_usd figure above, this window
+        # can't see currently-open opportunities that haven't closed yet,
+        # so it's a "closed-opportunity" trend, not a literal window
+        # version of that all-time metric.
+        closed_n = won_n + lost_n
+
+        return {
+            "cost_per_won_opportunity_usd": (float(won_spend) / won_n) if won_n else None,
+            "ai_investment_on_lost_opportunities_usd": float(lost_spend) if lost_n else None,
+            "avg_ai_investment_per_opportunity_usd": (float(opp_spend) / closed_n) if closed_n else None,
+            "support_cost_per_resolution_usd": (float(support_spend) / resolved_n) if resolved_n else None,
+        }
+
+    def _trend_pct(curr: float | None, prev: float | None) -> float | None:
+        if curr is None or prev is None or prev == 0:
+            return None
+        return round(((curr - prev) / prev) * 100, 1)
+
+    _now = datetime.utcnow()
+    _current_period = _period_ratios(_now - timedelta(days=30), _now)
+    _prior_period = _period_ratios(_now - timedelta(days=60), _now - timedelta(days=30))
+    trend_pct_change = {
+        key: _trend_pct(_current_period[key], _prior_period[key])
+        for key in _current_period
+    }
+
     return {
         "workspace_id": workspace_id,
         "has_outcome_data": has_outcome_data,
@@ -862,6 +993,7 @@ def get_business_impact(
         "ai_investment_on_lost_opportunities_usd": ai_investment_on_lost_opportunities_usd,
         "avg_ai_investment_per_opportunity_usd": avg_ai_investment_per_opportunity_usd,
         "support_cost_per_resolution_usd": support_cost_per_resolution_usd,
+        "trend_pct_change": trend_pct_change,
         "potential_savings_usd": potential_savings["potential_savings_usd"],
         "potential_savings_evidence": potential_savings["evidence"],
         "potential_savings_candidate_count": potential_savings["candidate_request_count"],

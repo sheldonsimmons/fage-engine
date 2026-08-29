@@ -15,6 +15,7 @@ which detector produced it, and so a future detector slots in without a
 new frontend case.
 """
 
+import hashlib
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -46,7 +47,11 @@ def _recommendation(
     affected_work_item: Optional[str] = None,
     source_metrics: Optional[dict] = None,
 ) -> dict:
+    id_basis = "|".join([
+        recommendation_type, affected_agent or "", affected_department or "", affected_work_item or "",
+    ])
     return {
+        "id": hashlib.sha1(id_basis.encode("utf-8")).hexdigest()[:16],
         "recommendation_type": recommendation_type,
         "title": title,
         "why_it_matters": why_it_matters,
@@ -456,10 +461,84 @@ _SEVERITY_ORDER = {
     "low_cost_strong_outcome": 7,
 }
 
+# Plural label used for the rollup title when a type fires more than once
+# in the same run (e.g. 5 separate idle agents) -- singular items keep
+# whatever specific title their detector already generated.
+_PLURAL_LABEL = {
+    "budget_risk": "departments are at budget risk",
+    "model_right_sizing": "model right-sizing opportunities",
+    "high_spend_weak_outcome": "stages show high AI investment on unsuccessful work",
+    "low_cost_strong_outcome": "efficient AI usage patterns found",
+    "high_spend_stalled_work": "stalled WorkItems have high AI spend",
+    "inactive_agent": "inactive agents may need review",
+    "connection_health": "data connection issues need attention",
+}
+
+
+def _priority_for(rec: dict) -> str:
+    """
+    Deterministic priority from signals already on the recommendation --
+    no LLM scoring. Combines the type's inherent severity rank with its
+    dollar impact (when the type carries one), per the "explainable, not
+    opaque" requirement.
+    """
+    rtype = rec["recommendation_type"]
+    metrics = rec.get("source_metrics") or {}
+
+    if rtype == "budget_risk":
+        return "critical" if metrics.get("used_pct", 0) >= 100 or metrics.get("throttled") else "high"
+    if rtype == "high_spend_stalled_work":
+        return "critical"
+    if rtype == "high_spend_weak_outcome":
+        return "high"
+    if rtype == "model_right_sizing":
+        impact = rec.get("estimated_impact") or 0
+        return "high" if impact >= 50 else "medium"
+    if rtype in ("outcome_coverage_gap", "connection_health"):
+        return "medium"
+    return "low"  # inactive_agent, low_cost_strong_outcome
+
+
+def _aggregate_by_type(results: list[dict]) -> list[dict]:
+    """
+    Collapses same-type recommendations into one rollup entry with an
+    example list and a total count, instead of showing e.g. five nearly
+    identical "inactive agent" cards. A type that only fired once keeps
+    its original, specific title/current_state untouched.
+    """
+    groups: dict[str, list[dict]] = {}
+    for r in results:
+        groups.setdefault(r["recommendation_type"], []).append(r)
+
+    out: list[dict] = []
+    for rtype, items in groups.items():
+        if len(items) == 1:
+            out.append(items[0])
+            continue
+
+        examples = [
+            r.get("affected_agent") or r.get("affected_department") or r.get("affected_work_item")
+            for r in items
+        ]
+        examples = [e for e in examples if e]
+        shown, extra = examples[:3], max(0, len(examples) - 3)
+        example_line = ", ".join(shown) + (f", +{extra} more" if extra else "")
+
+        primary = items[0]
+        rollup = dict(primary)
+        rollup["id"] = hashlib.sha1(f"{rtype}|rollup".encode("utf-8")).hexdigest()[:16]
+        rollup["title"] = f"{len(items)} {_PLURAL_LABEL.get(rtype, rtype + ' issues found')}"
+        rollup["current_state"] = example_line or primary["current_state"]
+        rollup["affected_count"] = len(items)
+        rollup["examples"] = shown
+        out.append(rollup)
+    return out
+
 
 def run_recommendations(db: Session, workspace_id: Optional[str]) -> list[dict]:
     """
-    Runs every detector and returns one ranked list. Each detector is
+    Runs every detector, aggregates same-type results, assigns a
+    deterministic priority, and returns one ranked list. Each detector is
     independent and best-effort -- one raising an exception (e.g. a
     workspace with no KnownModel rows yet) doesn't take down the others.
     """
@@ -478,5 +557,10 @@ def run_recommendations(db: Session, workspace_id: Optional[str]) -> list[dict]:
             results.extend(detector(db, workspace_id))
         except Exception:
             continue
+
+    results = _aggregate_by_type(results)
+    for r in results:
+        r["priority"] = _priority_for(r)
+        r.setdefault("affected_count", 1)
     results.sort(key=lambda r: _SEVERITY_ORDER.get(r["recommendation_type"], 99))
     return results

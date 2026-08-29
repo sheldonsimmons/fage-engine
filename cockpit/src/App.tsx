@@ -87,7 +87,7 @@ function App() {
         <header className="border-b border-border px-8 py-6">
           <h1 className="text-2xl font-semibold tracking-tight">Executive Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            AI spend, usage, and optimization overview
+            Enterprise AI economics, business impact, and optimization
             {/* Active Agents moved out of the top KPI row (executive
                 feedback: it doesn't warrant premium scorecard space next
                 to dollar figures) -- kept visible here rather than

@@ -22,7 +22,13 @@ const markdownComponents = {
   code: (props: React.ComponentProps<"code">) => <code className="rounded bg-muted px-1 py-0.5 text-xs" {...props} />,
 }
 
-const SUGGESTIONS = ["What is our total spend this month?", "Which department is over budget?", "What can we optimize?"]
+const SUGGESTIONS = [
+  "Why did AI spend increase?",
+  "Where are we wasting money?",
+  "Are our AI economics improving?",
+  "Which agents need attention?",
+  "What should I review first?",
+]
 
 export function AskCostPilot({ workspaceId }: { workspaceId: string }) {
   const [question, setQuestion] = useState("")

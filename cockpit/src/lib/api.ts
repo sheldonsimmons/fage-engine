@@ -127,6 +127,14 @@ export interface BusinessImpact {
   ai_investment_on_lost_opportunities_usd: number | null
   avg_ai_investment_per_opportunity_usd: number | null
   support_cost_per_resolution_usd: number | null
+  // 30d-vs-prior-30d trend for the four ratios above -- null (not 0)
+  // whenever a window's denominator is empty, never a fabricated trend.
+  trend_pct_change: {
+    cost_per_won_opportunity_usd: number | null
+    ai_investment_on_lost_opportunities_usd: number | null
+    avg_ai_investment_per_opportunity_usd: number | null
+    support_cost_per_resolution_usd: number | null
+  }
   potential_savings_usd: number | null
   potential_savings_evidence: "insufficient_data" | "early_signal" | "estimated"
   potential_savings_candidate_count: number
@@ -176,6 +184,7 @@ export function fetchConnectionHealth(workspaceId: string) {
 // (core/recommendations.py) -- deterministic, not LLM-generated. The
 // frontend renders one shape regardless of which detector produced it.
 export interface Recommendation {
+  id: string
   recommendation_type: string
   title: string
   why_it_matters: string
@@ -185,6 +194,9 @@ export interface Recommendation {
   estimated_impact: number | null
   impact_type: "savings_usd" | "risk_usd" | "none"
   confidence: "measured" | "estimated" | "associated" | "early_signal"
+  priority: "critical" | "high" | "medium" | "low"
+  affected_count: number
+  examples?: string[]
   affected_agent: string | null
   affected_department: string | null
   affected_work_item: string | null
