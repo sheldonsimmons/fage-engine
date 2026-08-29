@@ -214,6 +214,36 @@ def _resolve_or_create_project(
         external_id = f"SF-ACCOUNT-{account.external_id}"
     if not project:
         project = db.query(WorkItem).filter(WorkItem.external_id == external_id).first()
+    if not project and has_deterministic_identity:
+        # Neither the source_link lookup nor the external_id lookup finds
+        # a WorkItem created before this record type had a deterministic
+        # external_id convention (or created through a different ingestion
+        # path entirely, e.g. an early demo/seed script) -- such a row can
+        # still have source_record_id/source_platform set directly on the
+        # WorkItem itself with no WorkItemSourceLink ever created for it.
+        # Without this, every one of those pre-existing rows is invisible
+        # to this lookup and a fresh, duplicate WorkItem gets created on
+        # the next AI activity for the same real Salesforce record.
+        # Reproduced live: a WorkItem from 2026-08-10 with external_id
+        # "PROJECT-EDGEMX-INSTALLATION" (pre-dating the "SF-OPPORTUNITY-*"
+        # convention) already had source_record_id set to a real
+        # Opportunity, but a later AI request against that same
+        # Opportunity created a second WorkItem instead of reusing it --
+        # both ended up under the same account, but split the tracked
+        # spend/activity across two rows instead of one. Adopting the
+        # existing row here lets the source_link creation below (already
+        # self-healing when project is found but source_link isn't) fill
+        # in the missing link, same as the external_id-mismatch repoint
+        # case above.
+        project = (
+            db.query(WorkItem)
+            .filter(
+                WorkItem.workspace_id == workspace_id,
+                WorkItem.source_platform == source_platform,
+                WorkItem.source_record_id == source_record_id,
+            )
+            .first()
+        )
     if not project and body.project_external_id:
         legacy_external_id = f"SF-{body.record_id.strip()}"
         project = (
