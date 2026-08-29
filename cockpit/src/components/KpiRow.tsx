@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { EvidenceBadge } from "@/components/EvidenceBadge"
-import { DollarSign, PiggyBank, ShieldCheck, TrendingUp, Target, Calculator } from "lucide-react"
+import { DollarSign, PiggyBank, ShieldCheck, TrendingUp, TrendingDown, Target, Calculator } from "lucide-react"
 import type { BudgetDepartment, DashboardSummary, SavingsSummary, ConnectionHealth, BusinessImpact } from "@/lib/api"
 
 const usd = (n: number) =>
@@ -82,6 +82,35 @@ export function KpiRow({
           <p className="mt-1 text-xs text-muted-foreground">vs {usd(savings.cost_if_no_fage_usd)} without routing</p>
         </CardContent>
       </Card>
+
+      {/* Potential Savings -- omitted (not shown as $0) when there's no
+          real candidate data yet, e.g. a workspace whose ROUTINE calls
+          already all run at the cheapest tier has genuinely nothing to
+          flag here. Evidence-labeled "Estimated": this is what these
+          calls could have cost at a cheaper tier, never mixed with
+          Realized Savings (money already saved). */}
+      {businessImpact.potential_savings_usd !== null && businessImpact.potential_savings_evidence !== "insufficient_data" && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Potential Savings</CardTitle>
+            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold tabular-nums">{usdAdaptive(businessImpact.potential_savings_usd)}</div>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <EvidenceBadge
+                evidence={businessImpact.potential_savings_evidence}
+                note={businessImpact.potential_savings_note}
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {businessImpact.potential_savings_top_agents[0]
+                ? `Top: ${businessImpact.potential_savings_top_agents[0].agent_name}`
+                : `${businessImpact.potential_savings_candidate_count} routine calls above Scout tier`}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">

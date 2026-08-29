@@ -9,6 +9,13 @@ const usd = (n: number) =>
 const usdPrecise = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 10 ? 2 : 0 })
 
+// Ratios computed from this workspace's real spend are often sub-cent
+// (typical at low-to-moderate volume) -- the standard usd() formatter
+// would round them to "$0.00", reading as free when the number is real,
+// just small. Same fix already applied on business-profile.html/
+// work-item-profile.html for the equivalent ratios.
+const usdAdaptive = (n: number) => (n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : usd(n))
+
 // Real data from GET /api/dashboard/business-impact -- a workspace-wide
 // widening of the same WorkItemOutcome query that already powers Business
 // Profile's per-account "Business Outcomes" panel. Only meaningful for
@@ -41,6 +48,22 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
   }
   if (data.outcome_coverage_pct !== null) {
     rows.push({ label: "Outcome Coverage", value: `${data.outcome_coverage_pct}%` })
+  }
+  // Deeper economics -- each only appended when its denominator is
+  // non-zero (e.g. no won opportunities yet -> no Cost per Won
+  // Opportunity row), same "omit rather than show a misleading number"
+  // rule as everywhere else this session.
+  if (data.cost_per_won_opportunity_usd !== null) {
+    rows.push({ label: "Cost per Won Opportunity", value: usdAdaptive(data.cost_per_won_opportunity_usd) })
+  }
+  if (data.ai_investment_on_lost_opportunities_usd !== null) {
+    rows.push({ label: "AI Investment on Lost Opportunities", value: usdAdaptive(data.ai_investment_on_lost_opportunities_usd) })
+  }
+  if (data.avg_ai_investment_per_opportunity_usd !== null) {
+    rows.push({ label: "Avg. AI Investment per Opportunity", value: usdAdaptive(data.avg_ai_investment_per_opportunity_usd) })
+  }
+  if (data.support_cost_per_resolution_usd !== null) {
+    rows.push({ label: "Support Cost per Resolution", value: usdAdaptive(data.support_cost_per_resolution_usd) })
   }
 
   return (

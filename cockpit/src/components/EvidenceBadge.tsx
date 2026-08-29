@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const LABELS: Record<string, string> = {
   measured: "Measured",
   associated: "Associated",
+  estimated: "Estimated",
   early_signal: "Early Signal",
   meaningful: "Meaningful",
   executive_eligible: "Executive",
@@ -33,7 +34,7 @@ export function EvidenceBadge({
   note?: string
 }) {
   const label = LABELS[evidence] ?? evidence
-  const variant = evidence === "early_signal" ? "secondary" : evidence === "associated" ? "outline" : "default"
+  const variant = evidence === "early_signal" ? "secondary" : evidence === "associated" || evidence === "estimated" ? "outline" : "default"
   const text = coveragePct !== undefined && coveragePct !== null ? `${label} · ${coveragePct}% Coverage` : label
   const badge = (
     <Badge variant={variant} className="max-w-full overflow-hidden text-ellipsis uppercase tracking-wide">

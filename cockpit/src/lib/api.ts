@@ -123,6 +123,15 @@ export interface BusinessImpact {
   successful_outcomes: number
   evidence_label: "early_signal" | "meaningful" | "executive_eligible"
   cost_per_successful_outcome_usd: number | null
+  cost_per_won_opportunity_usd: number | null
+  ai_investment_on_lost_opportunities_usd: number | null
+  avg_ai_investment_per_opportunity_usd: number | null
+  support_cost_per_resolution_usd: number | null
+  potential_savings_usd: number | null
+  potential_savings_evidence: "insufficient_data" | "early_signal" | "estimated"
+  potential_savings_candidate_count: number
+  potential_savings_top_agents: { agent_id: number | null; agent_name: string; potential_savings_usd: number }[]
+  potential_savings_note: string
 }
 
 export function fetchDashboard(workspaceId: string) {
