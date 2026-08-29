@@ -2449,6 +2449,7 @@ async def _sync_object_outcomes(
     source_record_type: str,
     fetch_batch,
     map_record,
+    only_record_ids: Optional[list[str]] = None,
 ) -> dict:
     """
     Shared sync loop for any connected-system object with an outcome
@@ -2459,17 +2460,23 @@ async def _sync_object_outcomes(
     themselves. fetch_batch(batch_ids) -> (records, error) hides the
     platform-specific bounded-query shape (SOQL "WHERE Id IN (...)" vs
     ServiceNow's "sys_idIN..." encoded query).
+
+    only_record_ids narrows the sweep to a specific set of already-known
+    source_record_ids instead of every WorkItem of this type -- used by
+    the CDC subscriber (core/cdc_subscriber.py) to react to one changed
+    record immediately instead of waiting for the next full scheduled
+    sweep. None (the default) preserves the original "check everything"
+    behavior the scheduled sync and manual Sync Now button rely on.
     """
-    work_items = (
-        db.query(WorkItem)
-        .filter(
-            WorkItem.workspace_id == item.workspace_id,
-            WorkItem.source_platform == source_platform,
-            WorkItem.source_record_type == source_record_type,
-            WorkItem.source_record_id.isnot(None),
-        )
-        .all()
+    work_items_query = db.query(WorkItem).filter(
+        WorkItem.workspace_id == item.workspace_id,
+        WorkItem.source_platform == source_platform,
+        WorkItem.source_record_type == source_record_type,
+        WorkItem.source_record_id.isnot(None),
     )
+    if only_record_ids is not None:
+        work_items_query = work_items_query.filter(WorkItem.source_record_id.in_(only_record_ids))
+    work_items = work_items_query.all()
     if not work_items:
         return {"checked": 0, "updated": 0, "unchanged": 0, "errors": []}
 
@@ -2570,7 +2577,9 @@ async def _sync_object_outcomes(
     }
 
 
-async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationConnection) -> dict:
+async def _sync_salesforce_opportunity_outcomes(
+    db: Session, item: IntegrationConnection, *, only_record_ids: Optional[list[str]] = None,
+) -> dict:
     from core.outcome_adapters.salesforce_opportunity import (
         build_opportunity_query,
         map_salesforce_opportunity_to_canonical_outcome,
@@ -2583,10 +2592,13 @@ async def _sync_salesforce_opportunity_outcomes(db: Session, item: IntegrationCo
         source_record_type="Opportunity",
         fetch_batch=fetch_batch,
         map_record=map_salesforce_opportunity_to_canonical_outcome,
+        only_record_ids=only_record_ids,
     )
 
 
-async def _sync_salesforce_case_outcomes(db: Session, item: IntegrationConnection) -> dict:
+async def _sync_salesforce_case_outcomes(
+    db: Session, item: IntegrationConnection, *, only_record_ids: Optional[list[str]] = None,
+) -> dict:
     from core.outcome_adapters.salesforce_case import (
         build_case_query,
         map_salesforce_case_to_canonical_outcome,
@@ -2599,7 +2611,19 @@ async def _sync_salesforce_case_outcomes(db: Session, item: IntegrationConnectio
         source_record_type="Case",
         fetch_batch=fetch_batch,
         map_record=map_salesforce_case_to_canonical_outcome,
+        only_record_ids=only_record_ids,
     )
+
+
+# Entity name (as CDC's ChangeEventHeader.entityName reports it) -> the
+# matching targeted-sync function above. Used only by the CDC subscriber
+# (core/cdc_subscriber.py) to dispatch a change event to the right
+# adapter without the subscriber needing to know anything about how
+# Salesforce outcome sync works internally.
+SALESFORCE_CDC_ENTITY_SYNC_FUNCS = {
+    "Opportunity": _sync_salesforce_opportunity_outcomes,
+    "Case": _sync_salesforce_case_outcomes,
+}
 
 
 async def _servicenow_try_query(
