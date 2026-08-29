@@ -122,6 +122,7 @@ export interface BusinessImpact {
   outcome_coverage_pct: number | null
   successful_outcomes: number
   evidence_label: "early_signal" | "meaningful" | "executive_eligible"
+  cost_per_successful_outcome_usd: number | null
 }
 
 export function fetchDashboard(workspaceId: string) {

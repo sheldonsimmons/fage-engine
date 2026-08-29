@@ -1,17 +1,21 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { EvidenceBadge } from "@/components/EvidenceBadge"
-import { DollarSign, PiggyBank, Bot, ShieldCheck, Zap, TrendingUp, Target } from "lucide-react"
+import { DollarSign, PiggyBank, ShieldCheck, TrendingUp, Target, Calculator } from "lucide-react"
 import type { BudgetDepartment, DashboardSummary, SavingsSummary, ConnectionHealth, BusinessImpact } from "@/lib/api"
 
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 100 ? 2 : 0 })
 
-// Pruning savings are often tiny (fractions of a cent) -- the standard
-// usd() formatter would round small-but-real values down to "$0.00",
-// which reads as "nothing saved" when something genuinely was.
-const usdPrecise = (n: number) =>
-  n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 })
+const usdCompact = (n: number) =>
+  n.toLocaleString("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 })
+
+// A cost-per-outcome in the fractional-cent range (typical for a young
+// or low-volume account) rounds to "$0.00" at 2 decimals -- reads as
+// "free" when the number is real, just small. Same fix already applied
+// on business-profile.html/work-item-profile.html for the equivalent
+// ratio.
+const usdAdaptive = (n: number) => (n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : usd(n))
 
 // dashboard.overall_budget_pct is a company-wide average across every
 // department -- one department blowing past its cap is invisible here if
@@ -31,6 +35,15 @@ function budgetStatus(
   return { label: "On Track", tone: "default", overCount: 0 }
 }
 
+// Top-row KPIs, reordered per direct executive feedback: AI Investment ->
+// Realized Savings -> Budget Health -> Associated Business Value -> Cost
+// per Successful Outcome -> Outcome Coverage. Tokens Saved was dropped
+// entirely -- a CEO/CFO doesn't need a token count, and its dollar
+// equivalent is already folded into Realized Savings, so nothing is lost
+// by removing the technical framing. Active Agents moved out of this row
+// too (see WhatChanged/AppSidebar for where agent activity is still
+// visible) -- it doesn't earn premium scorecard space next to dollar
+// figures that describe investment, value, and risk.
 export function KpiRow({
   dashboard,
   savings,
@@ -45,14 +58,12 @@ export function KpiRow({
   businessImpact: BusinessImpact
 }) {
   const status = budgetStatus(budget)
-  const usdCompact = (n: number) =>
-    n.toLocaleString("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 })
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-7">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Total AI Spend</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">AI Investment</CardTitle>
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -63,7 +74,7 @@ export function KpiRow({
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Total Savings ({savings.period_days}d)</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Realized Savings ({savings.period_days}d)</CardTitle>
           <PiggyBank className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -74,31 +85,7 @@ export function KpiRow({
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Tokens Saved</CardTitle>
-          <Zap className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-semibold tabular-nums">{dashboard.tokens_saved_total.toLocaleString()}</div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            ≈ {usdPrecise(dashboard.pruning_savings_usd)} via pruning &amp; optimization
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Active Agents</CardTitle>
-          <Bot className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-semibold tabular-nums">{dashboard.agents_active}</div>
-          <p className="mt-1 text-xs text-muted-foreground">{dashboard.agents_total} total, {dashboard.agents_idle} idle</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Budget Status</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Budget Health</CardTitle>
           <ShieldCheck className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -111,13 +98,13 @@ export function KpiRow({
         </CardContent>
       </Card>
 
-      {/* Associated Business Value + Outcome Coverage -- promoted from
-          the secondary Business Impact card to top-row KPIs, matching
-          the executive scorecard the Business Profile pages already use.
-          Only shown once real outcome data exists (has_outcome_data),
-          same "omit rather than show a misleading zero" rule those pages
-          already follow -- a workspace with no CRM outcome sync
-          shouldn't see a $0 Business Value card. */}
+      {/* Associated Business Value, Cost per Successful Outcome, and
+          Outcome Coverage -- only shown once real outcome data exists
+          (has_outcome_data), same "omit rather than show a misleading
+          zero" rule those pages already follow -- a workspace with no
+          CRM outcome sync shouldn't see a $0 Business Value card. Each
+          links through to Business Profile (drill-down, not a dead
+          end). */}
       {businessImpact.has_outcome_data && (
         <>
           <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
@@ -129,11 +116,32 @@ export function KpiRow({
               <CardContent>
                 <div className="text-2xl font-semibold tabular-nums">{usdCompact(businessImpact.closed_won_value_usd)}</div>
                 <div className="mt-1.5 flex items-center gap-1.5">
-                  <EvidenceBadge evidence={businessImpact.evidence_label} />
+                  <EvidenceBadge
+                    evidence={businessImpact.evidence_label}
+                    coveragePct={businessImpact.outcome_coverage_pct}
+                    note={`${usdCompact(businessImpact.closed_won_value_usd)} in business value is associated with WorkItems containing tracked AI activity. Outcome coverage is ${businessImpact.outcome_coverage_pct ?? 0}%. Association does not imply causation.`}
+                  />
                 </div>
               </CardContent>
             </Card>
           </a>
+
+          {businessImpact.cost_per_successful_outcome_usd !== null && (
+            <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
+              <Card className="h-full">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Cost per Successful Outcome</CardTitle>
+                  <Calculator className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-semibold tabular-nums">
+                    {usdAdaptive(businessImpact.cost_per_successful_outcome_usd)}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">AI investment ÷ {businessImpact.successful_outcomes} won outcomes</p>
+                </CardContent>
+              </Card>
+            </a>
+          )}
 
           <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
             <Card className="h-full">

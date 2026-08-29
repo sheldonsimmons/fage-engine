@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { AppSidebar } from "@/components/AppSidebar"
 import { KpiRow } from "@/components/KpiRow"
+import { ExecutiveBrief } from "@/components/ExecutiveBrief"
 import { SpendOverTime } from "@/components/SpendOverTime"
 import { SpendByDepartment } from "@/components/SpendByDepartment"
 import { TopModels } from "@/components/TopModels"
@@ -78,7 +79,14 @@ function App() {
       <div className="flex-1 overflow-x-hidden">
         <header className="border-b border-border px-8 py-6">
           <h1 className="text-2xl font-semibold tracking-tight">Executive Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">AI spend, usage, and optimization overview</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            AI spend, usage, and optimization overview
+            {/* Active Agents moved out of the top KPI row (executive
+                feedback: it doesn't warrant premium scorecard space next
+                to dollar figures) -- kept visible here rather than
+                dropped, pending a dedicated Agent Portfolio section. */}
+            {data && ` · ${data.dashboard.agents_active} of ${data.dashboard.agents_total} agents active`}
+          </p>
         </header>
 
         <main className="space-y-6 px-8 py-6">
@@ -101,6 +109,13 @@ function App() {
 
           {data && (
             <>
+              <ExecutiveBrief
+                dashboard={data.dashboard}
+                savings={data.savings}
+                budget={data.budget}
+                businessImpact={data.businessImpact}
+                workspaceId={workspaceId}
+              />
               <KpiRow dashboard={data.dashboard} savings={data.savings} health={data.health} budget={data.budget} businessImpact={data.businessImpact} />
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">

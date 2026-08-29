@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // Same evidence-label vocabulary used on business-profile.html and
 // work-item-profile.html (Measured/Associated/Early Signal/Meaningful
@@ -19,12 +20,33 @@ const LABELS: Record<string, string> = {
   executive_eligible: "Executive",
 }
 
-export function EvidenceBadge({ evidence }: { evidence: string }) {
+export function EvidenceBadge({
+  evidence,
+  coveragePct,
+  note,
+}: {
+  evidence: string
+  // When provided, pairs the evidence word with coverage inline (e.g.
+  // "Associated · 75% Coverage") so the trust signal doesn't require a
+  // hover to see at all -- the hover just adds the full disclosure.
+  coveragePct?: number | null
+  note?: string
+}) {
   const label = LABELS[evidence] ?? evidence
   const variant = evidence === "early_signal" ? "secondary" : evidence === "associated" ? "outline" : "default"
-  return (
+  const text = coveragePct !== undefined && coveragePct !== null ? `${label} · ${coveragePct}% Coverage` : label
+  const badge = (
     <Badge variant={variant} className="max-w-full overflow-hidden text-ellipsis uppercase tracking-wide">
-      {label}
+      {text}
     </Badge>
+  )
+  if (!note) return badge
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger className="max-w-full cursor-help">{badge}</TooltipTrigger>
+        <TooltipContent className="max-w-64 text-xs normal-case">{note}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
