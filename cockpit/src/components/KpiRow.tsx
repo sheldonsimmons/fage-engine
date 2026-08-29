@@ -120,7 +120,7 @@ export function KpiRow({
           shouldn't see a $0 Business Value card. */}
       {businessImpact.has_outcome_data && (
         <>
-          <a href="/business-profile.html" className="block transition-opacity hover:opacity-80">
+          <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
             <Card className="h-full">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Associated Business Value</CardTitle>
@@ -135,7 +135,7 @@ export function KpiRow({
             </Card>
           </a>
 
-          <a href="/business-profile.html" className="block transition-opacity hover:opacity-80">
+          <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
             <Card className="h-full">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Outcome Coverage</CardTitle>
