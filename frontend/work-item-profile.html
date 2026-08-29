@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Business Impact Profile</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="css/styles.css?v=20260821-dark-theme" />
+  <link rel="stylesheet" href="css/tokens.css?v=20260821-dark-theme" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
+  <style>
+    /* Same token/convention reuse as business-profile.html -- no new
+       palette, this is the WorkItem-level drill-down from that page. */
+    body { margin: 0; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); }
+    .wi-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 28px 40px; }
+    .wi-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .wi-back { color: var(--text-muted); font-size: 13px; text-decoration: none; }
+    .wi-back:hover { color: var(--text-primary); }
+    .wi-header { margin: 14px 0 22px; }
+    .wi-header h1 { font-size: 25px; font-weight: 650; margin: 4px 0 6px; letter-spacing: -0.01em; }
+    .wi-meta { font-size: 13px; color: var(--text-muted); }
+    .wi-status-pill { font-size: 11px; font-weight: 650; padding: 3px 10px; border-radius: 20px; text-transform: capitalize; }
+    .wi-status-pill.active { background: rgba(63,185,80,0.12); color: var(--accent-green); }
+    .wi-status-pill.archived, .wi-status-pill.on_hold { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+
+    .wi-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+    .wi-kpi-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .wi-kpi-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .wi-kpi-value { font-size: 21px; font-weight: 650; }
+
+    .wi-section { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    .wi-section h2 { font-size: 14px; font-weight: 650; margin: 0 0 12px; }
+    .wi-section-hint { font-size: 12px; color: var(--text-muted); margin: -8px 0 12px; }
+
+    .wi-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .wi-table th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    .wi-table td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .wi-table tr:last-child td { border-bottom: none; }
+
+    .wi-impact-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 10px; padding: 10px 12px; background: var(--bg-base); border-radius: 8px; border: 1px solid var(--border); }
+    .wi-evidence-tag { display: inline-block; font-size: 10.5px; font-weight: 650; padding: 2px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .wi-evidence-tag.associated { background: rgba(88,166,255,0.14); color: #58a6ff; }
+    .wi-evidence-tag.insufficient_data { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+
+    .wi-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
+    .wi-outcome-history-item { display: flex; gap: 12px; align-items: baseline; padding: 6px 0; font-size: 12.5px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .wi-outcome-history-item:last-child { border-bottom: none; }
+    .wi-outcome-history-time { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; min-width: 140px; }
+  </style>
+</head>
+<body>
+  <div class="wi-wrap">
+    <a class="wi-back" id="wiBackLink" href="/business-profile.html">← Back to Business Profile</a>
+
+    <div id="wiEmptyState" class="wi-empty" style="display:none"></div>
+
+    <div id="wiContent" style="display:none">
+      <div class="wi-header">
+        <span class="wi-status-pill" id="wiStatusPill"></span>
+        <h1 id="wiName">—</h1>
+        <div class="wi-meta" id="wiMeta"></div>
+      </div>
+
+      <div class="wi-kpi-row">
+        <div class="wi-kpi-card">
+          <div class="wi-kpi-label">AI Investment</div>
+          <div class="wi-kpi-value wi-num" id="wiKpiInvestment">—</div>
+        </div>
+        <div class="wi-kpi-card">
+          <div class="wi-kpi-label">AI Requests</div>
+          <div class="wi-kpi-value wi-num" id="wiKpiRequests">—</div>
+        </div>
+        <div class="wi-kpi-card">
+          <div class="wi-kpi-label">Associated Business Value</div>
+          <div class="wi-kpi-value wi-num" id="wiKpiValue">—</div>
+        </div>
+        <div class="wi-kpi-card">
+          <div class="wi-kpi-label">AI Cost / Business Value</div>
+          <div class="wi-kpi-value wi-num" id="wiKpiRatio">—</div>
+        </div>
+      </div>
+
+      <div class="wi-section">
+        <h2>Business Outcome</h2>
+        <div id="wiOutcomeBody"></div>
+      </div>
+
+      <div class="wi-section">
+        <h2>Business Impact</h2>
+        <div id="wiImpactBody"></div>
+      </div>
+
+      <div class="wi-section">
+        <h2>AI Activity Timeline</h2>
+        <p class="wi-section-hint">Each request shown with the outcome status that was active at the moment it happened — not this work item's current or eventual status.</p>
+        <table class="wi-table">
+          <thead><tr><th>Time</th><th>Model</th><th>Stage at time</th><th>Tokens</th><th>Cost</th></tr></thead>
+          <tbody id="wiTimelineBody"></tbody>
+        </table>
+      </div>
+
+      <div class="wi-section">
+        <h2>Agents &amp; Models</h2>
+        <table class="wi-table">
+          <thead><tr><th>Agent</th><th>Requests</th><th>Spend</th></tr></thead>
+          <tbody id="wiAgentsBody"></tbody>
+        </table>
+        <table class="wi-table" style="margin-top:12px">
+          <thead><tr><th>Model</th><th>Requests</th></tr></thead>
+          <tbody id="wiModelsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="wi-section" id="wiOutcomeHistorySection">
+        <h2>Outcome History</h2>
+        <p class="wi-section-hint">Every observed change to this work item's status, in order.</p>
+        <div id="wiOutcomeHistoryBody"></div>
+      </div>
+
+      <div class="wi-section">
+        <h2>Source / Audit Information</h2>
+        <table class="wi-table">
+          <thead><tr><th>Platform</th><th>Record Type</th><th>Record</th></tr></thead>
+          <tbody id="wiSourceBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // WorkItem Business Impact drill-down -- backed entirely by:
+    //   GET /api/work-items/{identifier}/business-impact
+    // No demo/placeholder values; every section renders only what the
+    // endpoint actually returns.
+    const wiParams = new URLSearchParams(location.search);
+    const wiIdentifier = wiParams.get("id") || "";
+    const wiAccountExternalId = wiParams.get("account") || "";
+
+    if (wiAccountExternalId) {
+      document.getElementById("wiBackLink").href =
+        `/business-profile.html?account=${encodeURIComponent(wiAccountExternalId)}`;
+    }
+
+    function wiFmtUsd(value, decimals = 2) {
+      if (value === null || value === undefined) return "—";
+      const n = Number(value);
+      if (Math.abs(n) > 0 && Math.abs(n) < 0.01) return `$${n.toFixed(6)}`;
+      return `$${n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+    }
+    function wiFmtNum(value) {
+      return Number(value || 0).toLocaleString();
+    }
+    function wiFmtRatioPct(ratio) {
+      // A tiny ratio (typical: a few cents of AI spend against a $15K
+      // deal) rounds to "0.0%" at normal precision -- that reads as
+      // "nothing," when the real number is meaningful just very small.
+      // Scale decimal places to the magnitude instead of a fixed 1-2.
+      if (ratio === null || ratio === undefined) return "—";
+      const pct = Number(ratio) * 100;
+      if (pct === 0) return "0%";
+      const abs = Math.abs(pct);
+      const decimals = abs >= 1 ? 1 : abs >= 0.01 ? 3 : 6;
+      return `${pct.toFixed(decimals)}%`;
+    }
+    function wiEsc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function wiFmtDate(iso) {
+      if (!iso) return "—";
+      return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+
+    function wiShowEmpty(message) {
+      document.getElementById("wiEmptyState").style.display = "block";
+      document.getElementById("wiEmptyState").textContent = message;
+      document.getElementById("wiContent").style.display = "none";
+    }
+
+    async function wiLoad() {
+      if (!wiIdentifier) {
+        wiShowEmpty("No work item specified. Open this page from a Business Profile's work item list.");
+        return;
+      }
+      try {
+        const data = await apiGet(`/api/work-items/${encodeURIComponent(wiIdentifier)}/business-impact`);
+        document.getElementById("wiEmptyState").style.display = "none";
+        document.getElementById("wiContent").style.display = "block";
+        wiRender(data);
+      } catch (err) {
+        wiShowEmpty(`Could not load this work item: ${(err.message || "").replace(/</g, "&lt;")}`);
+      }
+    }
+
+    function wiRender(data) {
+      const work = data.work;
+      const outcome = data.outcome;
+      const impact = data.business_impact;
+
+      document.getElementById("wiName").textContent = work.name || "Unnamed work item";
+      document.title = `CostPilot — ${work.name || "Business Impact Profile"}`;
+      const pill = document.getElementById("wiStatusPill");
+      pill.textContent = work.status || "unknown";
+      pill.className = `wi-status-pill ${wiEsc(work.status || "")}`;
+
+      const metaParts = [];
+      if (work.account_name) metaParts.push(work.account_name);
+      if (work.context_type) metaParts.push(work.context_type.replace(/_/g, " "));
+      if (work.source_platform) metaParts.push(work.source_platform);
+      if (work.last_activity_at) metaParts.push(`Last activity ${wiFmtDate(work.last_activity_at)}`);
+      document.getElementById("wiMeta").textContent = metaParts.join(" · ");
+
+      document.getElementById("wiKpiInvestment").textContent = wiFmtUsd(work.spend_usd, 4);
+      document.getElementById("wiKpiRequests").textContent = wiFmtNum(work.request_count);
+      document.getElementById("wiKpiValue").textContent = impact.associated_business_value_usd != null
+        ? wiFmtUsd(impact.associated_business_value_usd, 0)
+        : "—";
+      document.getElementById("wiKpiRatio").textContent = wiFmtRatioPct(impact.ai_cost_to_business_value_ratio);
+
+      // Business Outcome
+      const outcomeBody = document.getElementById("wiOutcomeBody");
+      if (outcome) {
+        outcomeBody.innerHTML = `
+          <table class="wi-table">
+            <tbody>
+              <tr><td>Status</td><td>${wiEsc(outcome.status || "—")}</td></tr>
+              <tr><td>Value</td><td>${outcome.value != null ? wiFmtUsd(outcome.value, 0) : "—"}</td></tr>
+              <tr><td>Success</td><td>${outcome.success === null ? "—" : outcome.success ? "Yes" : "No"}</td></tr>
+              <tr><td>Closed</td><td>${outcome.is_closed === null ? "—" : outcome.is_closed ? "Yes" : "No"}</td></tr>
+              <tr><td>Source</td><td>${wiEsc(outcome.source_system || "—")}</td></tr>
+              <tr><td>Last synced</td><td>${wiFmtDate(outcome.last_synced_at)}</td></tr>
+            </tbody>
+          </table>`;
+      } else {
+        outcomeBody.innerHTML = `<p class="wi-section-hint" style="margin:0">No business outcome has been synced for this work item yet.</p>`;
+      }
+
+      // Business Impact
+      const impactBody = document.getElementById("wiImpactBody");
+      const evidenceClass = impact.evidence === "associated" ? "associated" : "insufficient_data";
+      const evidenceLabel = impact.evidence === "associated" ? "Associated" : "Insufficient Data";
+      impactBody.innerHTML = `
+        <span class="wi-evidence-tag ${evidenceClass}">${evidenceLabel}</span>
+        <div class="wi-impact-note">${wiEsc(impact.note)}</div>`;
+
+      // Activity timeline
+      const timelineBody = document.getElementById("wiTimelineBody");
+      timelineBody.innerHTML = (data.activity_timeline || []).length
+        ? data.activity_timeline.map((row) => `
+            <tr>
+              <td>${wiFmtDate(row.timestamp)}</td>
+              <td>${wiEsc(row.model_name || "—")}</td>
+              <td>${wiEsc(row.stage_at_time || "—")}</td>
+              <td class="wi-num">${wiFmtNum((row.input_tokens || 0) + (row.output_tokens || 0))}</td>
+              <td class="wi-num">${wiFmtUsd(row.cost_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="5" class="wi-section-hint">No tracked AI activity yet.</td></tr>`;
+
+      // Agents (from work.agents / work.agent_team, already returned by _work_item_json)
+      const agentsBody = document.getElementById("wiAgentsBody");
+      const agentTeam = work.agent_team || [];
+      agentsBody.innerHTML = agentTeam.length
+        ? agentTeam.map((a) => `
+            <tr>
+              <td>${wiEsc(a.name || a.display_name || "Unknown agent")}</td>
+              <td class="wi-num">${wiFmtNum(a.call_count)}</td>
+              <td class="wi-num">${wiFmtUsd(a.spend_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="3" class="wi-section-hint">No agents recorded.</td></tr>`;
+
+      const modelsBody = document.getElementById("wiModelsBody");
+      modelsBody.innerHTML = (data.models_used || []).length
+        ? data.models_used.map((m) => `<tr><td>${wiEsc(m.model_name)}</td><td class="wi-num">${wiFmtNum(m.request_count)}</td></tr>`).join("")
+        : `<tr><td colspan="2" class="wi-section-hint">No models recorded.</td></tr>`;
+
+      // Outcome history
+      const historySection = document.getElementById("wiOutcomeHistorySection");
+      const historyBody = document.getElementById("wiOutcomeHistoryBody");
+      const history = data.outcome_history || [];
+      if (history.length) {
+        historySection.style.display = "block";
+        historyBody.innerHTML = history.map((e) => `
+          <div class="wi-outcome-history-item">
+            <span class="wi-outcome-history-time">${wiFmtDate(e.recorded_at)}</span>
+            <span>${wiEsc(e.status || "—")}${e.value != null ? ` · ${wiFmtUsd(e.value, 0)}` : ""}</span>
+          </div>`).join("");
+      } else {
+        historySection.style.display = "none";
+      }
+
+      // Source links
+      const sourceBody = document.getElementById("wiSourceBody");
+      sourceBody.innerHTML = (work.source_links || []).length
+        ? work.source_links.map((l) => `
+            <tr>
+              <td>${wiEsc(l.source_platform || "—")}</td>
+              <td>${wiEsc(l.source_record_type || "—")}</td>
+              <td>${wiEsc(l.source_record_name || l.source_record_id || "—")}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="3" class="wi-section-hint">No linked source records.</td></tr>`;
+    }
+
+    wiLoad();
+  </script>
+</body>
+</html>

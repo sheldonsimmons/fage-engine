@@ -323,6 +323,22 @@
               </div>
 
               <div class="bp-note" id="bpMeasurementNote"></div>
+
+              <div class="bp-section-head"><h3>Work Items</h3></div>
+              <div class="panel" id="bpWorkItemsPanel" style="padding:0;overflow:hidden">
+                <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+                  <thead>
+                    <tr style="text-align:left;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em">
+                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Name</th>
+                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Type</th>
+                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Outcome</th>
+                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">AI Spend</th>
+                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Requests</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bpWorkItemsBody"></tbody>
+                </table>
+              </div>
             </div>
 
             <aside class="bp-main-col">
@@ -521,6 +537,7 @@
       document.getElementById("bpFooterNote").textContent =
         "All data is workspace-scoped." + (profile.period ? ` Showing ${profile.period.days} days.` : "");
 
+      bpRenderWorkItems(profile.work_items || []);
       bpRenderFunctionDonut(profile.business_function_breakdown || []);
       bpRenderJourney(profile.journey_breakdown || [], kpis.ai_investment_usd);
       bpRenderStageFunnel(profile.stage_breakdown || [], kpis.ai_investment_usd);
@@ -736,6 +753,31 @@
       }
       banner.style.display = "flex";
       banner.innerHTML = `<span class="icon">${BP_INSIGHT_ICON_SPEND}</span><span>${parts.join(" ")}</span>`;
+    }
+
+    function bpRenderWorkItems(rows) {
+      const body = document.getElementById("bpWorkItemsBody");
+      if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="5" style="padding:14px;color:var(--text-muted)">No work items linked to this account yet.</td></tr>`;
+        return;
+      }
+      const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      body.innerHTML = rows.map((wi) => {
+        const outcomeLabel = wi.outcome_status
+          ? esc(wi.outcome_status)
+          : "—";
+        const href = `/work-item-profile.html?id=${encodeURIComponent(wi.id)}&account=${encodeURIComponent(bpCurrentAccount)}`;
+        return `
+          <tr style="cursor:pointer" onclick="location.href='${href}'">
+            <td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05)">
+              <a href="${href}" style="color:var(--text-primary);text-decoration:none">${esc(wi.name || "Unnamed")}</a>
+            </td>
+            <td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05);color:var(--text-muted)">${esc((wi.context_type || "").replace(/_/g, " "))}</td>
+            <td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05)">${outcomeLabel}</td>
+            <td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05)" class="bp-num">${bpFmtUsdFull(wi.spend_usd)}</td>
+            <td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05)" class="bp-num">${bpFmtNum(wi.request_count)}</td>
+          </tr>`;
+      }).join("");
     }
 
     function bpRenderFunctionDonut(rows) {
