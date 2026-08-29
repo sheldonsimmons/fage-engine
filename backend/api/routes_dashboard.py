@@ -185,9 +185,19 @@ def get_dashboard(
     enriched_budgets = get_all_budgets(db, workspace_id)
     throttled_count = sum(1 for b in enriched_budgets if b["throttled"])
 
-    total_cap   = sum(b["monthly_cap_usd"]   for b in enriched_budgets)
-    total_spend = sum(b["current_spend_usd"] for b in enriched_budgets)
-    overall_pct = round((total_spend / total_cap) * 100, 1) if total_cap else 0
+    total_cap = sum(b["monthly_cap_usd"] for b in enriched_budgets)
+    # budgeted_spend (sum of only the departments with a configured budget
+    # row) drives overall_pct -- cap utilization is only meaningful against
+    # spend a cap actually covers. total_spend_usd itself now reuses
+    # spend_month (the same all-department MTD sum "AI Investment" shows)
+    # instead of a second independent sum-of-budgets total: confirmed live
+    # on SIM-HISTORICAL-2Y these two disagreed by $0.0165/mo because a
+    # "Marketing" department had real spend but no DepartmentBudget row,
+    # so the old sum-of-budgets total silently dropped it. Both KPI cards
+    # now share one variable and can't drift apart again.
+    budgeted_spend = sum(b["current_spend_usd"] for b in enriched_budgets)
+    unbudgeted_spend = max(0.0, round(spend_month - budgeted_spend, 6))
+    overall_pct = round((budgeted_spend / total_cap) * 100, 1) if total_cap else 0
 
     budget_summaries = [
         {
@@ -355,7 +365,8 @@ def get_dashboard(
         # ── Budgets ───────────────────────────────────────────────────────────
         "throttled_count":       throttled_count,
         "total_cap_usd":         round(total_cap, 2),
-        "total_spend_usd":       round(total_spend, 4),
+        "total_spend_usd":       round(spend_month, 4),
+        "unbudgeted_spend_usd":  unbudgeted_spend,
         "overall_budget_pct":    overall_pct,
         "budget_summaries":      budget_summaries,
 

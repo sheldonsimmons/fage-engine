@@ -138,6 +138,15 @@ export function KpiRow({
               ? `${status.overCount} department${status.overCount === 1 ? "" : "s"} over budget cap`
               : `${usd(dashboard.total_spend_usd)} of ${usd(dashboard.total_cap_usd)} cap · Setup health ${Math.round(health.overall)}%`}
           </p>
+          {/* Real spend from a department with no configured budget row
+              yet -- included in the total above but invisible to cap
+              utilization, so called out here instead of silently making
+              the cap total look tighter than what's actually tracked. */}
+          {dashboard.unbudgeted_spend_usd > 0.001 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Includes {usd(dashboard.unbudgeted_spend_usd)} from department(s) with no budget cap set
+            </p>
+          )}
         </CardContent>
       </Card>
 

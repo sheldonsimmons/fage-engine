@@ -23,6 +23,12 @@ export interface DashboardSummary {
   spend_month_usd: number
   total_spend_usd: number
   total_cap_usd: number
+  // Real MTD spend from departments with no configured DepartmentBudget
+  // row yet -- included in total_spend_usd (which is now the same total
+  // as spend_month_usd) but excluded from overall_budget_pct's
+  // numerator, since cap utilization can't be measured against a cap
+  // that doesn't exist for that department.
+  unbudgeted_spend_usd: number
   overall_budget_pct: number
   total_calls: number
   routing_efficiency_pct: number
