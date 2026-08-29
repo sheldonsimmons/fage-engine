@@ -324,21 +324,26 @@
 
               <div class="bp-note" id="bpMeasurementNote"></div>
 
-              <div class="bp-section-head"><h3>Work Items</h3></div>
-              <div class="panel" id="bpWorkItemsPanel" style="padding:0;overflow:hidden">
-                <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-                  <thead>
-                    <tr style="text-align:left;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em">
-                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Name</th>
-                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Type</th>
-                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Outcome</th>
-                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">AI Spend</th>
-                      <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Requests</th>
-                    </tr>
-                  </thead>
-                  <tbody id="bpWorkItemsBody"></tbody>
-                </table>
-              </div>
+              <details class="bp-stage-group" id="bpWorkItemsDetails" open>
+                <summary class="bp-stage-group-label">
+                  Work Items
+                  <span id="bpWorkItemsCount" style="text-transform:none;letter-spacing:normal;font-weight:400"></span>
+                </summary>
+                <div class="panel" id="bpWorkItemsPanel" style="padding:0;overflow:hidden;margin-top:8px">
+                  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+                    <thead>
+                      <tr style="text-align:left;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em">
+                        <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Name</th>
+                        <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Type</th>
+                        <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Outcome</th>
+                        <th style="padding:8px 14px;border-bottom:1px solid var(--border)">AI Spend</th>
+                        <th style="padding:8px 14px;border-bottom:1px solid var(--border)">Requests</th>
+                      </tr>
+                    </thead>
+                    <tbody id="bpWorkItemsBody"></tbody>
+                  </table>
+                </div>
+              </details>
             </div>
 
             <aside class="bp-main-col">
@@ -757,6 +762,8 @@
 
     function bpRenderWorkItems(rows) {
       const body = document.getElementById("bpWorkItemsBody");
+      document.getElementById("bpWorkItemsCount").textContent =
+        rows.length ? `(${rows.length})` : "";
       if (!rows.length) {
         body.innerHTML = `<tr><td colspan="5" style="padding:14px;color:var(--text-muted)">No work items linked to this account yet.</td></tr>`;
         return;
