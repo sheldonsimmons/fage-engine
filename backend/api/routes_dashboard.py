@@ -744,3 +744,20 @@ def get_business_impact(
         "potential_savings_top_agents": potential_savings["top_agents"],
         "potential_savings_note": potential_savings["note"],
     }
+
+
+@router.get("/recommendations")
+def get_recommendations(
+    workspace_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Recommendations engine v1 -- see core/recommendations.py for the full
+    detector list and the shared contract every recommendation returns.
+    Deterministic: every entry here comes from a plain SQL/Python
+    condition over real data, nothing LLM-generated.
+    """
+    from core.recommendations import run_recommendations
+
+    recommendations = run_recommendations(db, workspace_id)
+    return {"workspace_id": workspace_id, "recommendations": recommendations}
