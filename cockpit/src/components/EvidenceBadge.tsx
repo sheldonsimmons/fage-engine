@@ -35,9 +35,13 @@ export function EvidenceBadge({
 }) {
   const label = LABELS[evidence] ?? evidence
   const variant = evidence === "early_signal" ? "secondary" : evidence === "associated" || evidence === "estimated" ? "outline" : "default"
-  const text = coveragePct !== undefined && coveragePct !== null ? `${label} · ${coveragePct}% Coverage` : label
+  // "Coverage" dropped from the inline text -- confirmed live that
+  // "Executive · 97.4% Coverage" doesn't fit a KPI card's width even with
+  // truncation and was clipping unreadably. The full word still appears
+  // in the hover tooltip's `note`.
+  const text = coveragePct !== undefined && coveragePct !== null ? `${label} · ${coveragePct}%` : label
   const badge = (
-    <Badge variant={variant} className="max-w-full overflow-hidden text-ellipsis uppercase tracking-wide">
+    <Badge variant={variant} className="block max-w-full truncate uppercase tracking-wide">
       {text}
     </Badge>
   )
@@ -45,7 +49,7 @@ export function EvidenceBadge({
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger className="max-w-full cursor-help">{badge}</TooltipTrigger>
+        <TooltipTrigger className="block max-w-full min-w-0 cursor-help">{badge}</TooltipTrigger>
         <TooltipContent className="max-w-64 text-xs normal-case">{note}</TooltipContent>
       </Tooltip>
     </TooltipProvider>

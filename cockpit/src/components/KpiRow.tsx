@@ -116,7 +116,7 @@ export function KpiRow({
                 </p>
               </>
             )}
-            <div className="mt-1.5 flex items-center gap-1.5">
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
               <EvidenceBadge
                 evidence={businessImpact.potential_savings_evidence}
                 note={businessImpact.potential_savings_note}
@@ -158,7 +158,7 @@ export function KpiRow({
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-semibold tabular-nums">{usdCompact(businessImpact.closed_won_value_usd)}</div>
-                <div className="mt-1.5 flex items-center gap-1.5">
+                <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
                   <EvidenceBadge
                     evidence={businessImpact.evidence_label}
                     coveragePct={businessImpact.outcome_coverage_pct}
