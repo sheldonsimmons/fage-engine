@@ -244,7 +244,14 @@ async function loadEventStream(limit) {
   const targetLimit = limit || (_streamHasActiveFilters() ? STREAM_FILTER_LIMIT : STREAM_DEFAULT_LIMIT);
 
   try {
-    const events = await apiGet(`/api/audit?limit=${targetLimit}`);
+    // Scoped to the active workspace, same as budget's workspaceScopedApiPath
+    // usage in dashboard.js -- without it, /api/audit's workspace_id defaults
+    // to unset, which pools EVERY workspace's events together, unfiltered.
+    // Confirmed live: SIM-HISTORICAL-2Y alone has 478 simulated audit events
+    // vs. 37 real ones for an actual production workspace, so this panel
+    // was showing almost entirely simulated demo data regardless of which
+    // real workspace was selected.
+    const events = await apiGet(workspaceScopedApiPath(`/api/audit?limit=${targetLimit}`));
     _streamEvents = events;
     _streamLoadedLimit = targetLimit;
 

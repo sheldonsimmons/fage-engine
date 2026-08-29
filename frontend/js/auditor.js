@@ -78,7 +78,7 @@ function formatExecutiveRationale(detail, snapshot = {}) {
 
 async function loadAuditLog() {
   try {
-    const events = await apiGet("/api/audit?limit=50");
+    const events = await apiGet(workspaceScopedApiPath("/api/audit?limit=50"));
     auditAllEvents = events;
     _populateAuditDeptFilter(events);
     updateBlockedBanner(events);
@@ -361,7 +361,7 @@ async function loadLiveRoutingFeed() {
   const tbody = document.getElementById("liveRoutingBody");
   if (!tbody) return;
   try {
-    const events = await apiGet("/api/audit?limit=50");
+    const events = await apiGet(workspaceScopedApiPath("/api/audit?limit=50"));
     _routingEvents = events;
     applyRoutingFilters();
   } catch (err) {
