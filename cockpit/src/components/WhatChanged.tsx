@@ -13,6 +13,7 @@ const METRIC_STYLE: Record<string, { bg: string; icon: ComponentType<{ className
   spend: { bg: "bg-red-500/15 text-red-400", icon: DollarSign },
   calls: { bg: "bg-blue-500/15 text-blue-400", icon: Phone },
   model_mix: { bg: "bg-indigo-500/15 text-indigo-400", icon: Cpu },
+  model_shift: { bg: "bg-violet-500/15 text-violet-400", icon: Cpu },
   new_agents: { bg: "bg-emerald-500/15 text-emerald-400", icon: Sparkles },
 }
 

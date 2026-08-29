@@ -1,8 +1,25 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { EvidenceBadge } from "@/components/EvidenceBadge"
-import { DollarSign, PiggyBank, ShieldCheck, TrendingUp, TrendingDown, Calculator } from "lucide-react"
+import { DollarSign, PiggyBank, ShieldCheck, TrendingUp, TrendingDown, Calculator, type LucideIcon } from "lucide-react"
 import type { BudgetDepartment, DashboardSummary, SavingsSummary, ConnectionHealth, BusinessImpact } from "@/lib/api"
+
+// One fixed categorical hue per KPI's identity (never reassigned by
+// position/order), so each card reads as its own thing at a glance
+// instead of six identical gray tiles. Budget Health uses the reserved
+// status palette instead -- it's a genuine state (on track/at risk), not
+// an identity, so it gets its own color channel below rather than one of
+// these.
+function KpiIcon({ icon: Icon, chartSlot }: { icon: LucideIcon; chartSlot: 1 | 2 | 3 | 4 | 6 | 7 }) {
+  return (
+    <span
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+      style={{ backgroundColor: `color-mix(in oklab, var(--chart-${chartSlot}) 18%, transparent)` }}
+    >
+      <Icon className="h-3.5 w-3.5" style={{ color: `var(--chart-${chartSlot})` }} />
+    </span>
+  )
+}
 
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 100 ? 2 : 0 })
@@ -25,6 +42,12 @@ const usdAdaptive = (n: number) => (n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : usd
 // say "On Track" while a real department is over budget with nothing
 // capping it. Same used_pct >= 100 guard as Recommendations.tsx and
 // operate.html's DEPT HEALTH strip, so all three surfaces agree.
+const STATUS_COLOR: Record<"default" | "secondary" | "destructive", string> = {
+  default: "var(--status-good)",
+  secondary: "var(--status-warning)",
+  destructive: "var(--status-critical)",
+}
+
 function budgetStatus(
   budget: BudgetDepartment[],
 ): { label: string; tone: "default" | "secondary" | "destructive"; overCount: number } {
@@ -64,7 +87,7 @@ export function KpiRow({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">AI Investment — Month to Date</CardTitle>
-          <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <KpiIcon icon={DollarSign} chartSlot={1} />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-semibold tabular-nums">{usd(dashboard.spend_month_usd)}</div>
@@ -75,7 +98,7 @@ export function KpiRow({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Realized Savings ({savings.period_days}d)</CardTitle>
-          <PiggyBank className="h-4 w-4 text-muted-foreground" />
+          <KpiIcon icon={PiggyBank} chartSlot={3} />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-semibold tabular-nums">{usd(savings.total_saved_usd)}</div>
@@ -93,7 +116,7 @@ export function KpiRow({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Potential Savings</CardTitle>
-            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+            <KpiIcon icon={TrendingDown} chartSlot={2} />
           </CardHeader>
           <CardContent>
             {businessImpact.potential_savings_usd > 0 ? (
@@ -129,7 +152,16 @@ export function KpiRow({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Budget Health — Month to Date</CardTitle>
-          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          {/* Status color, not a categorical hue -- this icon reflects a
+              real state (on track/watch/at risk), the one case in this
+              row where the reserved status palette applies instead of a
+              fixed per-KPI identity color. */}
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: `color-mix(in oklab, ${STATUS_COLOR[status.tone]} 18%, transparent)` }}
+          >
+            <ShieldCheck className="h-3.5 w-3.5" style={{ color: STATUS_COLOR[status.tone] }} />
+          </span>
         </CardHeader>
         <CardContent>
           <Badge variant={status.tone} className="text-sm">{status.label}</Badge>
@@ -163,7 +195,7 @@ export function KpiRow({
             <Card className="h-full">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Associated Business Value</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <KpiIcon icon={TrendingUp} chartSlot={6} />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-semibold tabular-nums">{usdCompact(businessImpact.closed_won_value_usd)}</div>
@@ -183,7 +215,7 @@ export function KpiRow({
               <Card className="h-full">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Cost per Successful Outcome</CardTitle>
-                  <Calculator className="h-4 w-4 text-muted-foreground" />
+                  <KpiIcon icon={Calculator} chartSlot={7} />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-semibold tabular-nums">
