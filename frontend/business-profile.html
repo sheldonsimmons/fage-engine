@@ -909,7 +909,12 @@
       try {
         const result = await apiPost(`/api/integrations/connections/${connectionId}/sync-outcomes`, {});
         buttonEl.textContent = result.errors && result.errors.length ? "Sync had errors" : "Synced";
-        await bpLoadConnections(bpWorkspaceId());
+        // A sync can change this account's outcome/stage data (the whole
+        // reason someone clicks this instead of waiting for the ~10-minute
+        // background scheduler) -- reloading just the connections panel
+        // left the stage funnel, work items table, and outcomes stale
+        // until the next full page load. Refresh the whole profile too.
+        await bpLoadProfile();
       } catch (err) {
         buttonEl.textContent = "Sync failed";
         buttonEl.disabled = false;
