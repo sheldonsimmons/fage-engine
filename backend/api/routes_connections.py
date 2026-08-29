@@ -2473,6 +2473,18 @@ async def _sync_object_outcomes(
         WorkItem.source_platform == source_platform,
         WorkItem.source_record_type == source_record_type,
         WorkItem.source_record_id.isnot(None),
+        # A merged-away WorkItem (see /work-items/{id}/merge) survives
+        # archived with its own source_record_id left untouched -- if its
+        # merge target shares that same source_record_id (the normal case:
+        # both point at the same real Salesforce record), by_record_id
+        # below can end up keyed to whichever row the DB happens to
+        # return last, not the live one. Reproduced live: an Opportunity's
+        # Closed Lost outcome synced onto the archived, merged-away
+        # duplicate instead of the active WorkItem everyone actually
+        # looks at, so the account profile kept showing the stale
+        # pre-merge outcome. Same exclusion already applied to
+        # account_profile()'s WorkItem query for the equivalent reason.
+        WorkItem.merged_into_work_item_id.is_(None),
     )
     if only_record_ids is not None:
         work_items_query = work_items_query.filter(WorkItem.source_record_id.in_(only_record_ids))
