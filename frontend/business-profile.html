@@ -425,7 +425,14 @@
     }
     function bpFmtUsd(value) {
       const n = Number(value || 0);
-      if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}K`;
+      const abs = Math.abs(n);
+      // Only had a "K" tier -- a real $10,000,000 Business Value (a
+      // large Opportunity's pipeline/closed-won amount, not a demo
+      // artifact) rendered as "$10000.0K" instead of "$10.0M", reading
+      // as a garbled number rather than ten million dollars.
+      if (abs >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
+      if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+      if (abs >= 1000) return `$${(n / 1000).toFixed(1)}K`;
       return `$${n.toFixed(2)}`;
     }
     function bpFmtUsdFull(value) {
