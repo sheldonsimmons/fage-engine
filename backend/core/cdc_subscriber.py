@@ -50,7 +50,19 @@ CDC_CHANNELS = {
 class _BayeuxSession:
     """One CometD handshake + subscriptions + long-poll loop for a single
     Salesforce org. Not reused across orgs -- each org gets its own
-    clientId and its own long-lived HTTP connection."""
+    clientId and its own long-lived HTTP connection.
+
+    Salesforce's Streaming API load-balances CometD traffic across
+    multiple backend servers, pinned to a session via a cookie set on the
+    handshake response -- a clientId is only known to the specific server
+    that issued it. Opening a fresh httpx.AsyncClient (and therefore a
+    fresh, empty cookie jar) for every request breaks that pinning: the
+    very next request after a successful handshake can get routed to a
+    different server that has never heard of the clientId, and fails with
+    403 "Unknown client" -- confirmed live, immediately after every
+    successful handshake. One AsyncClient (and its cookie jar) must be
+    reused for the whole handshake -> subscribe -> connect lifecycle.
+    """
 
     def __init__(self, instance_url: str, api_version: str, get_token, on_refresh_needed):
         # The Streaming API's CometD endpoint takes a bare numeric version
@@ -64,26 +76,30 @@ class _BayeuxSession:
         self._get_token = get_token
         self._on_refresh_needed = on_refresh_needed
         self._client_id: Optional[str] = None
+        self._client = httpx.AsyncClient(timeout=_CONNECT_TIMEOUT)
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     async def _post(self, body: list[dict], *, timeout: httpx.Timeout) -> list[dict]:
         token = await self._get_token()
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                self._base,
-                json=body,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            )
+        response = await self._client.post(
+            self._base,
+            json=body,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            timeout=timeout,
+        )
         if response.status_code == 401:
             refreshed = await self._on_refresh_needed()
             if not refreshed:
                 raise PermissionError("Salesforce authorization failed and could not be refreshed")
             token = await self._get_token()
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    self._base,
-                    json=body,
-                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                )
+            response = await self._client.post(
+                self._base,
+                json=body,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                timeout=timeout,
+            )
         response.raise_for_status()
         return response.json()
 
@@ -191,6 +207,8 @@ async def subscribe_connection(
             logger.error("cdc connection_id=%s auth failure, backing off: %s", connection_id, exc)
         except Exception as exc:
             logger.warning("cdc connection_id=%s stream error, reconnecting: %s", connection_id, exc)
+        finally:
+            await session.aclose()
 
         if stop_event.is_set():
             break
