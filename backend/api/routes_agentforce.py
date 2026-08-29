@@ -284,6 +284,26 @@ def _resolve_or_create_project(
     is_account_rollup = bool(account and not is_explicit_project and not has_deterministic_identity)
     if is_account_rollup:
         context_type = "account"
+    elif has_deterministic_identity:
+        # The live Agentforce package hardcodes context_type to a generic
+        # "project" bucket for every non-Account record regardless of its
+        # real Salesforce object type (CostPilotAgentforceAction.cls's
+        # governOne()) -- body.context_type can't be trusted for a record
+        # that already has a known, deterministic source_record_type.
+        # Without this override, the WorkItem's stored context_type
+        # silently disagreed with source_record_type, and several metrics
+        # (open_count, pipeline_value, won_count -- see
+        # core/metrics_catalog.py) filter directly on the raw context_type
+        # column, not a resolved/effective type -- so a real Opportunity
+        # stored as context_type="project" was invisible to them.
+        # Reproduced live: EdgeMX's "Edge Emergency Generator" Opportunity
+        # (Id. Decision Makers, $35,000) had context_type="project" despite
+        # source_record_type="Opportunity", and Ask CostPilot's Opportunity
+        # outcome tool undercounted Open Opportunities/pipeline value by
+        # exactly that one record. business_context_json() already applies
+        # this same resolution for *display* -- this fixes the stored
+        # value at the source instead of only correcting it downstream.
+        context_type = source_record_type.lower()
 
     if project:
         if is_account_rollup:
