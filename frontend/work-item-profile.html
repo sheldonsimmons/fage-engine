@@ -167,9 +167,22 @@
     function wiEsc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
+    function wiParseUtc(iso) {
+      // Backend timestamps are naive UTC datetimes serialized without a
+      // "Z"/offset suffix (e.g. "2026-08-29T13:11:35.526777"). A date-time
+      // string with no timezone designator is parsed as LOCAL time per the
+      // JS Date spec, not UTC -- so this displayed the raw UTC clock time
+      // as if it were already the viewer's local time, with no conversion
+      // at all. Reproduced live: a 13:11 UTC activity timestamp showed as
+      // "1:11 PM" for a Central-time viewer instead of converting to
+      // ~8:11 AM. Appending "Z" when no offset is already present forces
+      // correct UTC parsing before toLocaleString does the real
+      // local-timezone conversion.
+      return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`);
+    }
     function wiFmtDate(iso) {
       if (!iso) return "—";
-      return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      return wiParseUtc(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     }
 
     function wiShowEmpty(message) {

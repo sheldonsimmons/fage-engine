@@ -410,6 +410,19 @@
     let bpCurrentAccount = bpParams.get("account") || "";
     let bpFunctionChart = null;
 
+    function bpParseUtc(iso) {
+      // Backend timestamps are naive UTC datetimes serialized without a
+      // "Z"/offset suffix -- a date-time string with no timezone
+      // designator is parsed as LOCAL time per the JS Date spec, not UTC.
+      // Beyond just displaying the wrong clock time, this silently threw
+      // off every "how long ago" computation on this page (Connected
+      // Systems' fresh/stale threshold, "Xm ago" labels) by the viewer's
+      // UTC offset -- e.g. a sync from 5 hours ago could misreport as
+      // "in the future" or fail the freshness check entirely for a
+      // Central-time viewer. Appending "Z" when no offset is already
+      // present forces correct UTC parsing everywhere this is used.
+      return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`);
+    }
     function bpFmtUsd(value) {
       const n = Number(value || 0);
       if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}K`;
@@ -505,7 +518,7 @@
       const metaParts = [];
       if (account.tier) metaParts.push(account.tier);
       if (account.active_since) {
-        metaParts.push(`Active since ${new Date(account.active_since).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`);
+        metaParts.push(`Active since ${bpParseUtc(account.active_since).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`);
       }
       metaParts.push(`${profile.work_item_count} linked work item${profile.work_item_count === 1 ? "" : "s"}`);
       document.getElementById("bpAccountMeta").textContent = metaParts.join(" · ");
@@ -914,7 +927,7 @@
         const byPlatform = new Map();
         for (const c of candidates) {
           const existing = byPlatform.get(c.platform);
-          if (!existing || new Date(c.last_success_at) > new Date(existing.last_success_at)) {
+          if (!existing || bpParseUtc(c.last_success_at) > bpParseUtc(existing.last_success_at)) {
             byPlatform.set(c.platform, c);
           }
         }
@@ -924,13 +937,13 @@
           return;
         }
         container.innerHTML = items.map((c) => {
-          const ageMs = Date.now() - new Date(c.last_success_at).getTime();
+          const ageMs = Date.now() - bpParseUtc(c.last_success_at).getTime();
           const isFresh = ageMs < 24 * 3600 * 1000;
           const dotClass = isFresh ? "" : "stale";
           const agoMinutes = Math.round(ageMs / 60000);
           const statusText = isFresh
             ? (agoMinutes < 1 ? "Connected · just now" : `Connected · ${agoMinutes}m ago`)
-            : "Stale — last synced " + new Date(c.last_success_at).toLocaleDateString();
+            : "Stale — last synced " + bpParseUtc(c.last_success_at).toLocaleDateString();
 
           // last_outcome_sync_at tracks the outcome-enrichment sweep
           // specifically (runs automatically ~every 10 min via Heroku
@@ -964,13 +977,13 @@
     }
 
     function bpTimeAgo(isoTimestamp) {
-      const ms = Date.now() - new Date(isoTimestamp).getTime();
+      const ms = Date.now() - bpParseUtc(isoTimestamp).getTime();
       const minutes = Math.round(ms / 60000);
       if (minutes < 1) return "just now";
       if (minutes < 60) return `${minutes}m ago`;
       const hours = Math.round(minutes / 60);
       if (hours < 24) return `${hours}h ago`;
-      return new Date(isoTimestamp).toLocaleDateString();
+      return bpParseUtc(isoTimestamp).toLocaleDateString();
     }
 
     async function bpSyncNow(connectionId, buttonEl) {
