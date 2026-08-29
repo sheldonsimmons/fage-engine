@@ -338,8 +338,8 @@ async def enrich_and_route_salesforce(
         # Recomputed from the ledger, not incremented -- see
         # sync_current_spend_from_ledger()'s docstring for the drift a
         # plain += counter was found causing in production.
-        from core.budget import sync_current_spend_from_ledger
-        sync_current_spend_from_ledger(db, None, commit=False)
+        from core.budget import sync_one_budget_from_ledger
+        sync_one_budget_from_ledger(db, budget, None)
 
     if agent:
         import threading

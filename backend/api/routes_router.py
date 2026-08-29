@@ -660,8 +660,8 @@ def _record_observed_usage(
             # transaction ledger with no way to self-correct (see
             # sync_current_spend_from_ledger()'s docstring for the live
             # drift this was found causing).
-            from core.budget import sync_current_spend_from_ledger
-            sync_current_spend_from_ledger(db, req.actor_workspace_id or "default", commit=False)
+            from core.budget import sync_one_budget_from_ledger
+            sync_one_budget_from_ledger(db, budget, req.actor_workspace_id or "default")
         db.commit()
 
         try:
@@ -1121,8 +1121,8 @@ def route_payload(
         # sync_current_spend_from_ledger()'s docstring for the drift a
         # plain += counter was found causing in production.
         if budget:
-            from core.budget import sync_current_spend_from_ledger
-            sync_current_spend_from_ledger(db, req.actor_workspace_id or "default", commit=False)
+            from core.budget import sync_one_budget_from_ledger
+            sync_one_budget_from_ledger(db, budget, req.actor_workspace_id or "default")
 
         # ── Set agent back to idle after routing ──────────────────────────────
         # Keep "active" visible for 4s so the frontend polling can catch it

@@ -219,6 +219,40 @@ def sync_current_spend_from_ledger(db: Session, workspace_id: str | None, *, com
         db.commit()
 
 
+def sync_one_budget_from_ledger(db: Session, budget: DepartmentBudget, workspace_id: str | None) -> None:
+    """
+    Same recompute as sync_current_spend_from_ledger(), for exactly one
+    already-resolved DepartmentBudget row instead of every row scoped by
+    workspace_id.
+
+    Why a separate function: the four live request-routing write sites
+    (api/routes_router.py x2, routes_enrich.py, routes_proxy.py) already
+    have the specific budget row in hand -- found the same way this
+    codebase has always found it, an exact match on DepartmentBudget.
+    department, which does not require DepartmentBudget.workspace_id to
+    be populated. sync_current_spend_from_ledger()'s bulk query filters by
+    that column instead, which some rows (confirmed live via a test
+    fixture reproducing a real shape: a budget row created with an
+    unprefixed department name and no workspace_id column set at all) never
+    had backfilled -- such a row is invisible to the bulk query and never
+    gets updated, even though it is the exact row real traffic is
+    supposed to update. Operating on the row the caller already resolved
+    sidesteps that column entirely.
+    """
+    spend_by_department = recomputed_department_spend(db, workspace_id)
+    raw_label = str(budget.department or "").strip()
+    if workspace_id and raw_label.startswith(f"{workspace_id}:"):
+        raw_label = raw_label[len(workspace_id) + 1:]
+    elif ":" in raw_label:
+        raw_label = raw_label.rsplit(":", 1)[-1]
+    key = raw_label.casefold()
+    budget.current_spend_usd = round(spend_by_department.get(key, 0.0), 6)
+    if budget.current_spend_usd >= budget.monthly_cap_usd and not budget.override_granted:
+        budget.throttled = True
+    elif budget.current_spend_usd < budget.monthly_cap_usd:
+        budget.throttled = False
+
+
 def get_all_budgets(db: Session, workspace_id: str | None = None) -> list:
     """
     Return budget status for every department in one workspace, enriched
@@ -466,13 +500,17 @@ def effective_budget_context(db: Session, department: str, workspace_id: str | N
         override_granted = any(bool(row.override_granted) for row in rows)
         throttled = (spend >= cap and cap > 0) and not override_granted
     else:
-        spend_by_department = recomputed_department_spend(db, None)
+        # No workspace_id given at all -- not the case the live drift bug
+        # was reproduced against (that always had a real workspace_id in
+        # hand), and a documented existing caller
+        # (test_audit_trust_semantics.py) depends on this exact path
+        # trusting the raw columns unconditionally. Left as-is
+        # deliberately, not swept into the "always recompute" change.
+        spend = round(sum((row.current_spend_usd or 0.0) for row in rows), 4)
         cap = max((row.monthly_cap_usd or 0.0) for row in rows) or 0.0
-        key = str(department or "").strip().casefold()
-        spend = round(spend_by_department.get(key, 0.0), 4)
         used_pct = round((spend / cap) * 100, 1) if cap else 0.0
         override_granted = any(bool(row.override_granted) for row in rows)
-        throttled = (spend >= cap and cap > 0) and not override_granted
+        throttled = any(bool(row.throttled) for row in rows) and not override_granted
     throttle_tiers = [getattr(row, "throttle_tier", 1) or 1 for row in rows]
     retention_days = max((getattr(row, "raw_retention_days", 30) or 30) for row in rows)
 

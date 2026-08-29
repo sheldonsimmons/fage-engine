@@ -47,6 +47,11 @@ def test_no_signals_when_nothing_needs_attention():
 def test_over_budget_department_flagged_critical():
     db = _session()
     _budget(db, department="WS1:Engineering", monthly_cap_usd=100.0, current_spend_usd=120.0, throttled=True)
+    # Budget spend is now always recomputed from the real ledger (see
+    # core.budget.sync_current_spend_from_ledger) -- current_spend_usd
+    # above is no longer trusted on its own, so a real matching
+    # transaction is required for this scenario to actually be "over cap".
+    _tx(db, cost_usd=120.0, department="WS1:Engineering")
     db.commit()
 
     result = run_get_priority_signals(db, "WS1")
@@ -58,6 +63,7 @@ def test_over_budget_department_flagged_critical():
 def test_near_budget_department_flagged_warning_not_critical():
     db = _session()
     _budget(db, department="WS1:Marketing", monthly_cap_usd=100.0, current_spend_usd=85.0, throttled=False)
+    _tx(db, cost_usd=85.0, department="WS1:Marketing")
     db.commit()
 
     result = run_get_priority_signals(db, "WS1")
@@ -102,6 +108,7 @@ def test_critical_signals_ranked_before_spend_changes():
     db = _session()
     now = datetime.utcnow()
     _budget(db, department="WS1:Ops", monthly_cap_usd=100.0, current_spend_usd=150.0, throttled=True)
+    _tx(db, cost_usd=150.0, department="WS1:Ops")
     _tx(db, cost_usd=100.0, department="WS1:Support", timestamp=now - timedelta(days=2))
     _tx(db, cost_usd=10.0, department="WS1:Support", timestamp=now - timedelta(days=10))
     db.commit()

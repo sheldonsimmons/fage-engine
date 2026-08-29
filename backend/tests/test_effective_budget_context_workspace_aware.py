@@ -7,9 +7,12 @@ DepartmentBudget.current_spend_usd/.throttled columns are never updated
 for non-production (demo/simulation/legacy) workspaces -- only the
 dashboard's display value was ever corrected via recomputed_department_spend.
 
-effective_budget_context(db, department, workspace_id=...) now applies the
-same workspace-type branch get_all_budgets() already uses for display, so
-the live throttle decision and the dashboard can never disagree again.
+effective_budget_context(db, department, workspace_id=...) now always
+recomputes spend from the ledger when a workspace_id is given -- for
+every workspace type, production included (see
+core.budget.sync_current_spend_from_ledger's docstring for the separate,
+later bug that proved production's own raw counter drifts too) -- so the
+live throttle decision and the dashboard can never disagree.
 """
 from datetime import datetime
 
@@ -47,21 +50,33 @@ def _tx(db, *, department, cost_usd, workspace_id):
     ))
 
 
-def test_production_workspace_still_uses_raw_column_even_if_recompute_would_disagree():
-    """Zero behavior change for real customer workspaces -- confirmed by
-    making the raw column and the real transaction ledger disagree, and
-    asserting the raw column still wins."""
+def test_production_workspace_also_recomputes_from_ledger_now():
+    """
+    Production workspaces used to trust their own raw current_spend_usd/
+    throttled columns unconditionally -- found live to be unsafe: that
+    counter is a separately-maintained running total (incremented by +=
+    at four call sites), not derived from the real transaction ledger, and
+    was confirmed to drift arbitrarily far from it with nothing to
+    self-correct (one real workspace's department showed a $3.92 counter
+    against a $0.027 real ledger, accumulated over 3 weeks before any
+    matching transaction existed). Production workspaces now get the same
+    ledger-derived recompute non-production workspaces already did --
+    this test asserts the corrected behavior, replacing the old
+    "zero behavior change for production" guarantee this file used to
+    protect.
+    """
     db = _session()
     _workspace(db, "WS-PROD", "production")
     _budget(db, department="WS-PROD:Legal", cap=10.0, raw_spend=1.0, throttled=True)
-    # Real activity says Legal is nowhere near its cap -- must be ignored
-    # for a production workspace, since the raw column is authoritative there.
+    # Real activity says Legal is nowhere near its cap -- the raw column
+    # is stale drift, and must no longer be trusted for a production
+    # workspace either.
     _tx(db, department="WS-PROD:Legal", cost_usd=0.01, workspace_id="WS-PROD")
     db.commit()
 
     context = effective_budget_context(db, "WS-PROD:Legal", workspace_id="WS-PROD")
-    assert context["throttled"] is True
-    assert context["budget_spent_usd"] == 1.0
+    assert context["throttled"] is False
+    assert context["budget_spent_usd"] == 0.01
 
 
 def test_non_production_workspace_clears_stale_throttle_when_real_spend_is_under_cap():

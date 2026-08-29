@@ -784,3 +784,119 @@ def compute_outcome_coverage(
             "reflect only the WorkItems with known outcomes, not the whole account."
         ),
     }
+
+
+# Legacy two-tier labels ("micro"/"flagship", pre-dating the four-tier
+# Scout/Analyst/Advisor/Strategist naming used by KnownModel/core.budget/
+# core.router) alongside the newer names -- both are live in the real
+# transaction ledger simultaneously (confirmed: model_tier is 100%
+# populated across every row, unlike the sparser model_name field, so
+# this is the reliable column to key off of). "flagship" is treated as
+# tier 3 (Advisor-equivalent), matching the ~$0.03/call FLAGSHIP_AVG
+# estimate used elsewhere in the codebase (routes_dashboard.py) -- a
+# documented approximation, not an exact mapping.
+_TIER_RANK = {
+    "Scout": 1, "micro": 1,
+    "Analyst": 2,
+    "Advisor": 3, "flagship": 3,
+    "Strategist": 4,
+}
+
+
+def compute_potential_savings(
+    db: Session,
+    workspace_id: Optional[str],
+    *,
+    top_agent_limit: int = 5,
+) -> dict:
+    """
+    "Potential Savings" (Business Impact upgrade plan, Part B) -- v1:
+    model right-sizing. Estimated, never mixed with Realized Savings: this
+    quantifies what a ROUTINE call *could have cost* at the cheapest
+    active tier, not money actually saved.
+
+    Real data only, no invented heuristic: TokenTransaction.routing_reason
+    already distinguishes ROUTINE calls (CostPilot's own router judged
+    them simple) from COMPLEX/THROTTLED ones, and KnownModel already
+    stores real admin-maintained $/1M-token rates per tier. A ROUTINE call
+    that ran above tier 1 is exactly the doc's own example ("this agent
+    could downgrade to a cheaper model"), quantified from a real pricing
+    table instead of a guess.
+    """
+    from database.models import KnownModel
+
+    cheapest_tier1 = (
+        db.query(KnownModel)
+        .filter(KnownModel.tier == 1, KnownModel.is_active.is_(True))
+        .order_by((KnownModel.cost_input_per_1m + KnownModel.cost_output_per_1m).asc())
+        .first()
+    )
+    if not cheapest_tier1:
+        return {
+            "potential_savings_usd": None,
+            "candidate_request_count": 0,
+            "top_agents": [],
+            "evidence": "insufficient_data",
+            "note": "No active tier-1 (Scout) model is configured to compare against.",
+        }
+    scout_input_rate = cheapest_tier1.cost_input_per_1m / 1_000_000
+    scout_output_rate = cheapest_tier1.cost_output_per_1m / 1_000_000
+
+    scope = workspace_filter(TokenTransaction, workspace_id)
+    query = db.query(
+        TokenTransaction.agent_id,
+        TokenTransaction.model_tier,
+        TokenTransaction.input_tokens,
+        TokenTransaction.output_tokens,
+        TokenTransaction.cost_usd,
+    ).filter(TokenTransaction.routing_reason == "ROUTINE")
+    if scope is not None:
+        query = query.filter(scope)
+
+    savings_by_agent: dict[Optional[int], float] = {}
+    total_savings = 0.0
+    candidate_count = 0
+    for agent_id, model_tier, input_tokens, output_tokens, cost_usd in query.all():
+        rank = _TIER_RANK.get(model_tier)
+        if not rank or rank <= 1:
+            continue
+        hypothetical_cost = (input_tokens or 0) * scout_input_rate + (output_tokens or 0) * scout_output_rate
+        delta = float(cost_usd or 0.0) - hypothetical_cost
+        if delta <= 0:
+            continue
+        total_savings += delta
+        candidate_count += 1
+        savings_by_agent[agent_id] = savings_by_agent.get(agent_id, 0.0) + delta
+
+    top_agent_ids = sorted(savings_by_agent, key=lambda k: -savings_by_agent[k])[:top_agent_limit]
+    agent_names = {
+        row.id: row.name
+        for row in db.query(RegisteredAgent).filter(RegisteredAgent.id.in_(
+            [a for a in top_agent_ids if a is not None]
+        )).all()
+    } if top_agent_ids else {}
+    top_agents = [
+        {
+            "agent_id": agent_id,
+            "agent_name": agent_names.get(agent_id, "Unassigned" if agent_id is None else f"Agent {agent_id}"),
+            "potential_savings_usd": round(savings_by_agent[agent_id], 6),
+        }
+        for agent_id in top_agent_ids
+    ]
+
+    if candidate_count >= MIN_MEANINGFUL_SAMPLE:
+        evidence = "estimated"
+    else:
+        evidence = "early_signal"
+
+    return {
+        "potential_savings_usd": round(total_savings, 6),
+        "candidate_request_count": candidate_count,
+        "top_agents": top_agents,
+        "evidence": evidence,
+        "note": (
+            "Estimated: what these ROUTINE-classified requests would have cost at the cheapest "
+            f"active tier-1 model ({cheapest_tier1.display_name}) versus what they actually cost. "
+            "This is a potential optimization, not money already saved."
+        ),
+    }

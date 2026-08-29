@@ -14,7 +14,7 @@ GET /api/dashboard
 
 import json
 from datetime import datetime, date, timedelta
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -660,16 +660,63 @@ def get_business_impact(
     # sidesteps the name-collision bug already found once this session in
     # an account_name-based lookup (two WorkAccount rows sharing one
     # name) -- there's no equivalent risk at workspace scope.
-    from core.metrics_query import compute_outcome_coverage, compute_cost_per_outcome, MIN_MEANINGFUL_SAMPLE, MIN_EXECUTIVE_SAMPLE
+    from core.metrics_query import (
+        compute_outcome_coverage, compute_cost_per_outcome, compute_potential_savings,
+        MIN_MEANINGFUL_SAMPLE, MIN_EXECUTIVE_SAMPLE,
+    )
 
     coverage = compute_outcome_coverage(db, workspace_id)
     cost_per_outcome = compute_cost_per_outcome(db, workspace_id)
+    potential_savings = compute_potential_savings(db, workspace_id)
     if won_count >= MIN_EXECUTIVE_SAMPLE:
         evidence_label = "executive_eligible"
     elif won_count >= MIN_MEANINGFUL_SAMPLE:
         evidence_label = "meaningful"
     else:
         evidence_label = "early_signal"
+
+    # Business Impact's deeper economics layer -- same TokenTransaction ->
+    # WorkItem -> WorkItemOutcome join the ai_spend query above already
+    # uses, split by outcome instead of pooled, and scoped to
+    # context_type == "opportunity" specifically (the ai_spend query above
+    # pools every context_type with an outcome -- Opportunity, Case,
+    # etc. -- these are Opportunity-specific by design, matching "Cost per
+    # Won Opportunity" rather than the generic workspace-wide "Cost per
+    # Successful Outcome" KPI already shipped).
+    is_won = WorkItemOutcome.outcome_success.is_(True)
+    is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+    opp_won_spend, opp_lost_spend, opp_total_spend = _scoped(
+        db.query(
+            func.coalesce(func.sum(case((is_won, TokenTransaction.cost_usd), else_=0.0)), 0.0),
+            func.coalesce(func.sum(case((is_lost, TokenTransaction.cost_usd), else_=0.0)), 0.0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        )
+        .select_from(TokenTransaction)
+        .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.context_type == "opportunity")
+    ).first()
+    opp_won_spend = float(opp_won_spend or 0.0)
+    opp_lost_spend = float(opp_lost_spend or 0.0)
+    opp_total_spend = float(opp_total_spend or 0.0)
+    opp_count = won_count + lost_count + open_count
+
+    cost_per_won_opportunity_usd = round(opp_won_spend / won_count, 6) if won_count else None
+    ai_investment_on_lost_opportunities_usd = round(opp_lost_spend, 6) if lost_count else None
+    avg_ai_investment_per_opportunity_usd = round(opp_total_spend / opp_count, 6) if opp_count else None
+
+    # Support Cost per Resolution -- same shape, Case-scoped, divided by
+    # the resolved-case count already computed above.
+    support_resolved_spend = _scoped(
+        db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+        .select_from(TokenTransaction)
+        .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItem.context_type == "case", WorkItemOutcome.is_closed.is_(True))
+    ).scalar()
+    support_cost_per_resolution_usd = (
+        round(float(support_resolved_spend or 0.0) / support_resolved, 6) if support_resolved else None
+    )
 
     return {
         "workspace_id": workspace_id,
@@ -687,4 +734,13 @@ def get_business_impact(
         "successful_outcomes": won_count,
         "evidence_label": evidence_label,
         "cost_per_successful_outcome_usd": cost_per_outcome["cost_per_successful_outcome_usd"],
+        "cost_per_won_opportunity_usd": cost_per_won_opportunity_usd,
+        "ai_investment_on_lost_opportunities_usd": ai_investment_on_lost_opportunities_usd,
+        "avg_ai_investment_per_opportunity_usd": avg_ai_investment_per_opportunity_usd,
+        "support_cost_per_resolution_usd": support_cost_per_resolution_usd,
+        "potential_savings_usd": potential_savings["potential_savings_usd"],
+        "potential_savings_evidence": potential_savings["evidence"],
+        "potential_savings_candidate_count": potential_savings["candidate_request_count"],
+        "potential_savings_top_agents": potential_savings["top_agents"],
+        "potential_savings_note": potential_savings["note"],
     }
