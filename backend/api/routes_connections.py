@@ -2545,7 +2545,19 @@ async def _sync_object_outcomes(
                 outcome_success=canonical["outcome_success"],
                 is_closed=canonical["is_closed"],
                 retrieval_method="sync",
-                recorded_at=now,
+                # Point-in-time stage attribution (core/stage_attribution.py
+                # and the per-WorkItem activity timeline) walks this
+                # timestamp to decide which stage was active when a given
+                # AI transaction happened. Using `now` (when our poller
+                # happened to catch the change) instead of Salesforce's own
+                # LastModifiedDate means any AI activity that occurs in the
+                # gap between the real field change and the next poll gets
+                # misattributed to the stage that was already stale by the
+                # time the AI ran. source_modified_at is Salesforce's own
+                # timestamp for when the record actually changed -- use it
+                # when present, falling back to `now` only if Salesforce
+                # didn't give us one.
+                recorded_at=canonical["source_modified_at"] or now,
             ))
             updated += 1
 
@@ -2916,7 +2928,7 @@ async def _import_work_items(
                 outcome_success=canonical["outcome_success"],
                 is_closed=canonical["is_closed"],
                 retrieval_method="import",
-                recorded_at=now,
+                recorded_at=canonical["source_modified_at"] or now,
             ))
         outcome.last_synced_at = now
 
