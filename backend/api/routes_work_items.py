@@ -2610,6 +2610,140 @@ def get_work_item(identifier: str, db: Session = Depends(get_db)):
     return _work_item_json(item, db)
 
 
+@router.get("/{identifier}/business-impact")
+def get_work_item_business_impact(
+    identifier: str,
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """
+    Single-WorkItem drill-down: the same real data _work_item_json() already
+    aggregates, plus what it never has -- an ordered activity timeline, the
+    full outcome-change history, and a business-impact figure that is
+    explicitly labeled "AI Cost / Associated Business Value" rather than
+    "ROI" (see the WorkItem Business Impact Profile investigation: dividing
+    an outcome's dollar value by AI spend implies AI caused that value,
+    which CostPilot never has evidence for).
+
+    Every activity_timeline row is annotated with the outcome status/stage
+    that was active AT THAT MOMENT -- not the work item's current/eventual
+    status -- using the same point-in-time cursor-walk already proven in
+    core/stage_attribution.py's account-level stage funnel, just applied to
+    one item's own transactions instead of an account's aggregate buckets.
+    """
+    item = resolve_work_item(db, identifier)
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+
+    work = _work_item_json(item, db)
+
+    outcome = db.query(WorkItemOutcome).filter(WorkItemOutcome.work_item_id == item.id).first()
+    outcome_json = None
+    if outcome:
+        outcome_json = {
+            "status": outcome.outcome_status,
+            "value": outcome.outcome_value,
+            "date": outcome.outcome_date.isoformat() if outcome.outcome_date else None,
+            "success": outcome.outcome_success,
+            "is_closed": outcome.is_closed,
+            "source_system": outcome.source_system,
+            "last_synced_at": outcome.last_synced_at.isoformat() if outcome.last_synced_at else None,
+        }
+
+    events = (
+        db.query(WorkItemOutcomeEvent)
+        .filter(WorkItemOutcomeEvent.work_item_id == item.id)
+        .order_by(WorkItemOutcomeEvent.recorded_at)
+        .all()
+    )
+    outcome_history = [
+        {
+            "status": e.outcome_status,
+            "value": e.outcome_value,
+            "success": e.outcome_success,
+            "is_closed": e.is_closed,
+            "recorded_at": e.recorded_at.isoformat() if e.recorded_at else None,
+        }
+        for e in events
+    ]
+
+    model_rows = (
+        db.query(TokenTransaction.model_name, func.count(TokenTransaction.id))
+        .filter(TokenTransaction.work_item_id == item.id, TokenTransaction.model_name.isnot(None))
+        .group_by(TokenTransaction.model_name)
+        .order_by(func.count(TokenTransaction.id).desc())
+        .all()
+    )
+    models_used = [{"model_name": row[0], "request_count": int(row[1])} for row in model_rows]
+
+    txs = (
+        db.query(TokenTransaction)
+        .filter(TokenTransaction.work_item_id == item.id)
+        .order_by(TokenTransaction.timestamp)
+        .limit(limit)
+        .all()
+    )
+    NO_STAGE_YET = "Before tracking began"
+    event_pairs = [(e.recorded_at, e.outcome_status) for e in events]
+    cursor = 0
+    activity_timeline = []
+    for tx in txs:
+        while cursor < len(event_pairs) and event_pairs[cursor][0] <= tx.timestamp:
+            cursor += 1
+        if cursor > 0:
+            stage_at_time = event_pairs[cursor - 1][1] or NO_STAGE_YET
+        elif event_pairs:
+            # Activity that predates the first known event on an otherwise-
+            # tracked item -- CostPilot just hadn't synced yet, not that
+            # there was no real stage. Same retroactive-attribution rule
+            # core/stage_attribution.py already uses.
+            stage_at_time = event_pairs[0][1] or NO_STAGE_YET
+        else:
+            stage_at_time = NO_STAGE_YET
+        activity_timeline.append({
+            "id": tx.id,
+            "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
+            "model_name": tx.model_name,
+            "agent_id": tx.agent_id,
+            "cost_usd": round(float(tx.cost_usd or 0.0), 6),
+            "input_tokens": int(tx.input_tokens or 0),
+            "output_tokens": int(tx.output_tokens or 0),
+            "stage_at_time": stage_at_time,
+        })
+
+    ai_investment_usd = work["spend_usd"]
+    if outcome is not None and outcome.outcome_value:
+        business_impact = {
+            "ai_investment_usd": ai_investment_usd,
+            "associated_business_value_usd": outcome.outcome_value,
+            "ai_cost_to_business_value_ratio": round(ai_investment_usd / float(outcome.outcome_value), 6),
+            "evidence": "associated",
+            "label": "AI Cost / Associated Business Value",
+            "note": (
+                "This reflects AI activity tracked alongside this outcome, "
+                "not evidence that the AI activity caused it."
+            ),
+        }
+    else:
+        business_impact = {
+            "ai_investment_usd": ai_investment_usd,
+            "associated_business_value_usd": None,
+            "ai_cost_to_business_value_ratio": None,
+            "evidence": "insufficient_data",
+            "label": "AI Cost / Associated Business Value",
+            "note": "No outcome value is available for this work item yet.",
+        }
+
+    return {
+        "work": work,
+        "outcome": outcome_json,
+        "outcome_history": outcome_history,
+        "models_used": models_used,
+        "activity_timeline": activity_timeline,
+        "business_impact": business_impact,
+    }
+
+
 @router.patch("/{identifier}")
 def update_work_item(identifier: str, body: WorkItemUpdate, db: Session = Depends(get_db)):
     item = resolve_work_item(db, identifier)
