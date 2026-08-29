@@ -722,33 +722,46 @@ def compute_outcome_coverage(
     are being computed over a small, possibly unrepresentative slice of the
     account's real work, not "no impact happened."
 
-    Built entirely from existing catalog metrics (work_items_touched,
-    outcomes_with_data) via two run_metrics_query() calls, same shape as
-    compute_cost_per_outcome() -- no new SQL.
+    Deliberately NOT two independent run_metrics_query() calls (an earlier
+    version of this function was): work_items_touched (has a
+    TokenTransaction) and outcomes_with_data (has a WorkItemOutcome) are
+    not nested sets -- a WorkItem can have an outcome from bulk import
+    without ever having any tracked AI activity. Reproduced live: one
+    workspace had 190 WorkItems with outcome data but only 11 with any AI
+    transaction at all, so dividing the two independent totals produced a
+    physically impossible 1727% "coverage." Coverage has to be the actual
+    intersection -- of the WorkItems AI has touched, how many also have a
+    known outcome -- which needs one query, not two merged after the
+    fact.
     """
-    filters: dict = {}
+    touched_query = (
+        db.query(WorkItem.id)
+        .join(TokenTransaction, TokenTransaction.work_item_id == WorkItem.id)
+        .distinct()
+    )
+    scope = workspace_filter(WorkItem, workspace_id)
+    if scope is not None:
+        touched_query = touched_query.filter(scope)
     if context_type:
-        filters["context_type"] = context_type
+        touched_query = touched_query.filter(WorkItem.context_type == context_type)
     if account_name:
-        filters["account"] = account_name
+        account, error = _resolve_account(db, workspace_id, account_name)
+        if error:
+            return {
+                "context_type": context_type, "account": account_name,
+                "work_items_touched": 0, "outcomes_with_known_data": 0,
+                "outcome_coverage_pct": None, "coverage_note": error["message"],
+            }
+        touched_query = touched_query.filter(WorkItem.account_id == account.id)
 
-    # work_items_touched is a transaction-source metric (defaults to a
-    # 30-day window if timeframe is left None); outcomes_with_data is an
-    # outcome-source metric reflecting current state, not a time window.
-    # Same mismatch compute_cost_per_outcome() already had to guard
-    # against -- pass {} on both sides so "how many WorkItems have we ever
-    # touched with AI" and "how many of those have a known outcome" are
-    # measured over the same unbounded scope, not a 30-day slice of one
-    # against the all-time count of the other.
-    touched_result = run_metrics_query(
-        db, workspace_id, metrics=["work_items_touched"], filters=filters, timeframe={},
+    touched_ids = [row[0] for row in touched_query.all()]
+    work_items_touched = len(touched_ids)
+    outcomes_with_data = (
+        db.query(func.count(WorkItemOutcome.id))
+        .filter(WorkItemOutcome.work_item_id.in_(touched_ids))
+        .scalar()
+        if touched_ids else 0
     )
-    outcome_result = run_metrics_query(
-        db, workspace_id, metrics=["outcomes_with_data"], filters=filters,
-    )
-
-    work_items_touched = int(touched_result.rows[0].get("work_items_touched", 0)) if touched_result.rows else 0
-    outcomes_with_data = int(outcome_result.rows[0].get("outcomes_with_data", 0)) if outcome_result.rows else 0
 
     coverage_pct = (
         round(100.0 * outcomes_with_data / work_items_touched, 1) if work_items_touched else None
