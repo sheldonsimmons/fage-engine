@@ -2760,7 +2760,15 @@ def get_work_item_business_impact(
         business_impact = {
             "ai_investment_usd": ai_investment_usd,
             "associated_business_value_usd": outcome.outcome_value,
-            "ai_cost_to_business_value_ratio": round(ai_investment_usd / float(outcome.outcome_value), 6),
+            # A typical ratio here is tiny -- a few cents of AI spend
+            # against a five- or six-figure deal value -- and rounding to
+            # 6 decimals silently zeroes it out (e.g. 7.7e-8 rounds to
+            # 0.000000), which the frontend's own display-precision fix
+            # can't recover from once the value is already gone. 10
+            # decimals preserves real precision down to roughly a
+            # billionth, comfortably covering any realistic AI-spend/
+            # deal-value ratio without ever displaying a fabricated zero.
+            "ai_cost_to_business_value_ratio": round(ai_investment_usd / float(outcome.outcome_value), 10),
             "evidence": "associated",
             "label": "AI Cost / Associated Business Value",
             "note": (
