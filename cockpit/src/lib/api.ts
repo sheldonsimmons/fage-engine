@@ -117,6 +117,11 @@ export interface BusinessImpact {
   support_cases_resolved: number
   ai_spend_usd: number
   ai_tokens_total: number
+  // Coverage/evidence, both scoped to the whole workspace (no account
+  // name filter -- see routes_dashboard.py's get_business_impact()).
+  outcome_coverage_pct: number | null
+  successful_outcomes: number
+  evidence_label: "early_signal" | "meaningful" | "executive_eligible"
 }
 
 export function fetchDashboard(workspaceId: string) {

@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { DollarSign, PiggyBank, Bot, ShieldCheck, Zap } from "lucide-react"
-import type { BudgetDepartment, DashboardSummary, SavingsSummary, ConnectionHealth } from "@/lib/api"
+import { EvidenceBadge } from "@/components/EvidenceBadge"
+import { DollarSign, PiggyBank, Bot, ShieldCheck, Zap, TrendingUp, Target } from "lucide-react"
+import type { BudgetDepartment, DashboardSummary, SavingsSummary, ConnectionHealth, BusinessImpact } from "@/lib/api"
 
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 100 ? 2 : 0 })
@@ -35,16 +36,20 @@ export function KpiRow({
   savings,
   health,
   budget,
+  businessImpact,
 }: {
   dashboard: DashboardSummary
   savings: SavingsSummary
   health: ConnectionHealth
   budget: BudgetDepartment[]
+  businessImpact: BusinessImpact
 }) {
   const status = budgetStatus(budget)
+  const usdCompact = (n: number) =>
+    n.toLocaleString("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 })
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-7">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Total AI Spend</CardTitle>
@@ -105,6 +110,47 @@ export function KpiRow({
           </p>
         </CardContent>
       </Card>
+
+      {/* Associated Business Value + Outcome Coverage -- promoted from
+          the secondary Business Impact card to top-row KPIs, matching
+          the executive scorecard the Business Profile pages already use.
+          Only shown once real outcome data exists (has_outcome_data),
+          same "omit rather than show a misleading zero" rule those pages
+          already follow -- a workspace with no CRM outcome sync
+          shouldn't see a $0 Business Value card. */}
+      {businessImpact.has_outcome_data && (
+        <>
+          <a href="/business-profile.html" className="block transition-opacity hover:opacity-80">
+            <Card className="h-full">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Associated Business Value</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold tabular-nums">{usdCompact(businessImpact.closed_won_value_usd)}</div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <EvidenceBadge evidence={businessImpact.evidence_label} />
+                </div>
+              </CardContent>
+            </Card>
+          </a>
+
+          <a href="/business-profile.html" className="block transition-opacity hover:opacity-80">
+            <Card className="h-full">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Outcome Coverage</CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold tabular-nums">
+                  {businessImpact.outcome_coverage_pct === null ? "—" : `${businessImpact.outcome_coverage_pct}%`}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">AI-supported work items with a known outcome</p>
+              </CardContent>
+            </Card>
+          </a>
+        </>
+      )}
     </div>
   )
 }

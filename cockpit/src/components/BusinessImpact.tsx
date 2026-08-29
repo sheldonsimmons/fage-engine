@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EvidenceBadge } from "@/components/EvidenceBadge"
 import { Cpu } from "lucide-react"
 import type { BusinessImpact as BusinessImpactData } from "@/lib/api"
 
@@ -38,11 +39,15 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
   if (data.support_cases_total > 0) {
     rows.push({ label: "Support Cases Resolved", value: `${data.support_cases_resolved} / ${data.support_cases_total}` })
   }
+  if (data.outcome_coverage_pct !== null) {
+    rows.push({ label: "Outcome Coverage", value: `${data.outcome_coverage_pct}%` })
+  }
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-medium text-muted-foreground">Business Impact</CardTitle>
+        <EvidenceBadge evidence={data.evidence_label} />
       </CardHeader>
       <CardContent className="space-y-2">
         {rows.map((r) => (
@@ -60,6 +65,9 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
             AI activity tied to these outcomes: {usdPrecise(data.ai_spend_usd)} · {data.ai_tokens_total.toLocaleString()} tokens
           </span>
         </div>
+        <a href="/business-profile.html" className="mt-2 block text-xs font-medium text-primary hover:underline">
+          View per-account business profiles →
+        </a>
       </CardContent>
     </Card>
   )

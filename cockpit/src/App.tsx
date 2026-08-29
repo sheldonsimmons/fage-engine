@@ -101,7 +101,7 @@ function App() {
 
           {data && (
             <>
-              <KpiRow dashboard={data.dashboard} savings={data.savings} health={data.health} budget={data.budget} />
+              <KpiRow dashboard={data.dashboard} savings={data.savings} health={data.health} budget={data.budget} businessImpact={data.businessImpact} />
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
                 <SpendOverTime timeline={data.savings.timeline} />

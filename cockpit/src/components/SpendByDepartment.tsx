@@ -1,23 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
-import { Pie, PieChart, Cell } from "recharts"
 import type { BudgetDepartment } from "@/lib/api"
 import { displayDepartment } from "@/lib/api"
 
-const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
-
 const usd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
 
+// Horizontal ranked bars, not a pie chart -- comparing five-plus
+// near-equal wedges by eye is genuinely harder than comparing bar
+// lengths, and this is the same treatment TopModels.tsx already uses for
+// the equivalent "rank by spend" view, so the two ranked breakdowns on
+// this page now read consistently instead of one being a pie and the
+// other a bar list.
 export function SpendByDepartment({ budget, workspaceId }: { budget: BudgetDepartment[]; workspaceId: string }) {
   const rows = budget
     .map((b) => ({ name: displayDepartment(b.department, workspaceId), value: b.current_spend_usd }))
     .filter((r) => r.value > 0)
     .sort((a, b) => b.value - a.value)
   const total = rows.reduce((sum, r) => sum + r.value, 0)
-
-  const chartConfig = Object.fromEntries(
-    rows.map((r, i) => [r.name, { label: r.name, color: COLORS[i % COLORS.length] }])
-  ) satisfies ChartConfig
+  const maxSpend = Math.max(...rows.map((r) => r.value), 0.0001)
 
   if (!rows.length) {
     return (
@@ -36,30 +35,27 @@ export function SpendByDepartment({ budget, workspaceId }: { budget: BudgetDepar
         <CardTitle className="text-sm font-medium text-muted-foreground">Spend by Department</CardTitle>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="mx-auto h-[140px] w-[140px]">
-          <PieChart>
-            <ChartTooltip content={<ChartTooltipContent formatter={(value) => usd(Number(value))} />} />
-            <Pie data={rows} dataKey="value" nameKey="name" innerRadius={42} outerRadius={62} strokeWidth={2}>
-              {rows.map((r, i) => (
-                <Cell key={r.name} fill={COLORS[i % COLORS.length]} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ChartContainer>
-        <div className="mt-4 space-y-2 text-sm">
-          {rows.map((r, i) => (
-            <div key={r.name} className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                <span className="truncate">{r.name}</span>
+        <ul className="space-y-3">
+          {rows.map((r) => (
+            <li key={r.name} className="text-sm">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="truncate font-medium">{r.name}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {usd(r.value)} · {total ? Math.round((r.value / total) * 100) : 0}%
+                </span>
               </div>
-              <div className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                <span>{total ? Math.round((r.value / total) * 100) : 0}%</span>
-                <span className="tabular-nums text-foreground">{usd(r.value)}</span>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${Math.max((r.value / maxSpend) * 100, 2)}%` }}
+                />
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
+        <a href="/reports.html" className="mt-4 block text-xs font-medium text-primary hover:underline">
+          View full department scorecard →
+        </a>
       </CardContent>
     </Card>
   )

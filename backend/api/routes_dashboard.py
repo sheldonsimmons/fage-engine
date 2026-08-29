@@ -639,6 +639,23 @@ def get_business_impact(
         .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
     ).first()
 
+    # Outcome Coverage + evidence label -- reuses the exact functions
+    # built for the account-level Business Impact summary
+    # (routes_work_items.py's account_profile()), widened to the whole
+    # workspace via workspace_id alone (no account_name filter), which
+    # sidesteps the name-collision bug already found once this session in
+    # an account_name-based lookup (two WorkAccount rows sharing one
+    # name) -- there's no equivalent risk at workspace scope.
+    from core.metrics_query import compute_outcome_coverage, MIN_MEANINGFUL_SAMPLE, MIN_EXECUTIVE_SAMPLE
+
+    coverage = compute_outcome_coverage(db, workspace_id)
+    if won_count >= MIN_EXECUTIVE_SAMPLE:
+        evidence_label = "executive_eligible"
+    elif won_count >= MIN_MEANINGFUL_SAMPLE:
+        evidence_label = "meaningful"
+    else:
+        evidence_label = "early_signal"
+
     return {
         "workspace_id": workspace_id,
         "has_outcome_data": has_outcome_data,
@@ -651,4 +668,7 @@ def get_business_impact(
         "support_cases_resolved": support_resolved,
         "ai_spend_usd": round(float(ai_spend or 0.0), 6),
         "ai_tokens_total": int(ai_tokens or 0),
+        "outcome_coverage_pct": coverage["outcome_coverage_pct"],
+        "successful_outcomes": won_count,
+        "evidence_label": evidence_label,
     }
