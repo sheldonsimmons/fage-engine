@@ -800,18 +800,44 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
                 "found": False,
                 "message": f"No account matching '{name}' was found.",
             }
-        if len(matched_accounts) > 1:
+        # A duplicate WorkAccount row is not a second real account -- e.g.
+        # a workspace with the same customer connected via two Salesforce
+        # orgs ends up with two "Dickenson plc" rows, one already marked
+        # merged_into_work_account_id pointing at the other (the account
+        # profile UI already treats these as one entity). Without folding
+        # merged rows into their canonical target first, this looked
+        # ambiguous even when every match ultimately resolves to the same
+        # account -- reproduced live: "Dickenson plc" existed as two
+        # WorkAccount rows in the same workspace, one merged into the
+        # other, and this tool asked "which one?" for a name that only
+        # ever meant one real account.
+        canonical_ids: set[int] = set()
+        canonical_by_id: dict[int, WorkAccount] = {}
+        for candidate in matched_accounts:
+            canonical = candidate
+            seen_ids = set()
+            while canonical.merged_into_work_account_id and canonical.id not in seen_ids:
+                seen_ids.add(canonical.id)
+                target = db.query(WorkAccount).filter(
+                    WorkAccount.id == canonical.merged_into_work_account_id
+                ).first()
+                if target is None:
+                    break
+                canonical = target
+            canonical_ids.add(canonical.id)
+            canonical_by_id[canonical.id] = canonical
+        if len(canonical_ids) > 1:
             return {
                 "entity_name": name,
                 "found": False,
                 "ambiguous": True,
-                "candidates": [a.name for a in matched_accounts],
+                "candidates": [a.name for a in canonical_by_id.values()],
                 "message": (
                     f"More than one account matches '{name}': "
-                    f"{', '.join(a.name for a in matched_accounts)}. Ask which one."
+                    f"{', '.join(a.name for a in canonical_by_id.values())}. Ask which one."
                 ),
             }
-        account = matched_accounts[0]
+        account = next(iter(canonical_by_id.values()))
 
     outcome_metrics = [
         "won_count", "lost_count", "open_count", "won_value", "pipeline_value",
