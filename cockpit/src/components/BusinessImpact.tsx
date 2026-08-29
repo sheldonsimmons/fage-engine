@@ -9,12 +9,21 @@ const usd = (n: number) =>
 const usdPrecise = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 10 ? 2 : 0 })
 
-// Ratios computed from this workspace's real spend are often sub-cent
-// (typical at low-to-moderate volume) -- the standard usd() formatter
-// would round them to "$0.00", reading as free when the number is real,
-// just small. Same fix already applied on business-profile.html/
-// work-item-profile.html for the equivalent ratios.
-const usdAdaptive = (n: number) => (n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : usd(n))
+// Ratios computed from this workspace's real spend land anywhere from
+// sub-cent to tens of dollars -- usd() above always rounds to 0 decimals
+// (correct for the large Pipeline/Closed-Won rows it's built for, which
+// is why it isn't changed here), but applying it to a per-outcome ratio
+// silently collapsed real, non-trivial values to "$0". Confirmed live:
+// a real cost-per-won-opportunity of $0.079247 rendered as "$0" --
+// not a sub-cent value needing more decimals, just a value under $1
+// that usd()'s 0-decimal rounding was never meant to handle. Picks
+// decimal precision by magnitude instead of delegating to usd().
+const usdAdaptive = (n: number) => {
+  if (n === 0) return "$0"
+  if (n < 0.01) return `$${n.toFixed(4)}`
+  if (n < 100) return `$${n.toFixed(2)}`
+  return usd(n)
+}
 
 // Real data from GET /api/dashboard/business-impact -- a workspace-wide
 // widening of the same WorkItemOutcome query that already powers Business
