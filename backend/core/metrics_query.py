@@ -706,3 +706,63 @@ def compute_cost_per_outcome(
             "This is AI activity associated with successful outcomes, not evidence AI caused them."
         ),
     }
+
+
+def compute_outcome_coverage(
+    db: Session,
+    workspace_id: Optional[str],
+    context_type: Optional[str] = None,
+    account_name: Optional[str] = None,
+) -> dict:
+    """
+    What share of AI-supported WorkItems actually have a known outcome --
+    "Outcome Coverage" from the Business Impact upgrade plan. This is a
+    prerequisite trust signal for every other Business Impact number: a low
+    coverage percentage means Associated Business Value / Cost per Outcome
+    are being computed over a small, possibly unrepresentative slice of the
+    account's real work, not "no impact happened."
+
+    Built entirely from existing catalog metrics (work_items_touched,
+    outcomes_with_data) via two run_metrics_query() calls, same shape as
+    compute_cost_per_outcome() -- no new SQL.
+    """
+    filters: dict = {}
+    if context_type:
+        filters["context_type"] = context_type
+    if account_name:
+        filters["account"] = account_name
+
+    # work_items_touched is a transaction-source metric (defaults to a
+    # 30-day window if timeframe is left None); outcomes_with_data is an
+    # outcome-source metric reflecting current state, not a time window.
+    # Same mismatch compute_cost_per_outcome() already had to guard
+    # against -- pass {} on both sides so "how many WorkItems have we ever
+    # touched with AI" and "how many of those have a known outcome" are
+    # measured over the same unbounded scope, not a 30-day slice of one
+    # against the all-time count of the other.
+    touched_result = run_metrics_query(
+        db, workspace_id, metrics=["work_items_touched"], filters=filters, timeframe={},
+    )
+    outcome_result = run_metrics_query(
+        db, workspace_id, metrics=["outcomes_with_data"], filters=filters,
+    )
+
+    work_items_touched = int(touched_result.rows[0].get("work_items_touched", 0)) if touched_result.rows else 0
+    outcomes_with_data = int(outcome_result.rows[0].get("outcomes_with_data", 0)) if outcome_result.rows else 0
+
+    coverage_pct = (
+        round(100.0 * outcomes_with_data / work_items_touched, 1) if work_items_touched else None
+    )
+
+    return {
+        "context_type": context_type,
+        "account": account_name,
+        "work_items_touched": work_items_touched,
+        "outcomes_with_known_data": outcomes_with_data,
+        "outcome_coverage_pct": coverage_pct,
+        "coverage_note": (
+            "Share of AI-supported WorkItems that have a synced outcome from the connected system. "
+            "Below this coverage level, Associated Business Value and Cost per Successful Outcome "
+            "reflect only the WorkItems with known outcomes, not the whole account."
+        ),
+    }

@@ -856,6 +856,7 @@ def account_profile(
             "account": {**_account_json(account), "active_since": None, "tier": None, "health_status": None},
             "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
             "work_item_count": 0,
+            "business_impact_summary": {},
             "kpis": empty_kpis,
             "prior_period": {
                 "date_from": None, "date_to": None,
@@ -1129,6 +1130,80 @@ def account_profile(
         })
     work_items_list.sort(key=lambda row: (-row["spend_usd"], row["name"] or ""))
 
+    # AI Business Impact summary -- Phase 1 of the Business Impact upgrade
+    # (see the approved plan). Deliberately computed here from
+    # work_items_list/outcome_totals, which are already scoped to this
+    # exact account by account_id, rather than by routing through
+    # compute_cost_per_outcome()/compute_outcome_coverage()'s
+    # account_name=... filter: that filter matches by ilike name across the
+    # whole workspace, and this workspace has a real, live example of two
+    # distinct WorkAccount rows sharing one name ("Dickenson plc", one
+    # merged into the other) -- the exact ambiguity class already found and
+    # fixed once this session in the Ask CostPilot account tool. Scoping by
+    # account_id here avoids that bug class entirely instead of
+    # reintroducing it in a new code path.
+    from core.metrics_query import MIN_MEANINGFUL_SAMPLE, MIN_EXECUTIVE_SAMPLE
+
+    known_outcome_items = [row for row in work_items_list if row["outcome_status"] is not None]
+    ai_supported_items = [row for row in work_items_list if row["request_count"] > 0]
+    successful_spend = sum(
+        row["spend_usd"] for row in work_items_list if row["outcome_success"] is True
+    )
+    won_count_int = int(won_count or 0)
+
+    business_impact_summary = {
+        "tracked_ai_investment_usd": {
+            "value": round(float(spend_usd), 6),
+            "evidence": "measured",
+            "label": "Tracked AI Investment",
+        },
+        "ai_supported_work_items": {
+            "value": len(ai_supported_items),
+            "evidence": "measured",
+            "label": "AI-Supported WorkItems",
+        },
+        "outcome_coverage_pct": {
+            "value": (
+                round(100.0 * len(known_outcome_items) / len(work_items_list), 1)
+                if work_items_list else None
+            ),
+            "evidence": "measured",
+            "label": "Outcome Coverage",
+            "note": (
+                "Share of this account's WorkItems that have a synced outcome from the "
+                "connected system. Below this coverage level, Associated Business Value and "
+                "Cost per Successful Outcome reflect only the WorkItems with known outcomes."
+            ),
+        },
+    }
+    # These three depend on outcome data existing at all -- per the plan's
+    # own rule, omit rather than show a misleading zero when there is none.
+    if known_outcome_items:
+        business_impact_summary["successful_outcomes"] = {
+            "value": won_count_int,
+            "evidence": "measured",
+            "label": "Successful Outcomes",
+        }
+    if won_count_int:
+        business_impact_summary["associated_business_value_usd"] = {
+            "value": round(float(closed_won_value or 0.0), 6),
+            "evidence": "associated",
+            "label": "Associated Business Value",
+            "note": "AI activity occurred on work that later closed won -- not evidence AI caused the outcome.",
+        }
+        if won_count_int >= MIN_EXECUTIVE_SAMPLE:
+            cost_evidence = "executive_eligible"
+        elif won_count_int >= MIN_MEANINGFUL_SAMPLE:
+            cost_evidence = "meaningful"
+        else:
+            cost_evidence = "early_signal"
+        business_impact_summary["cost_per_successful_outcome_usd"] = {
+            "value": round(successful_spend / won_count_int, 2),
+            "evidence": cost_evidence,
+            "label": "Cost per Successful Outcome",
+            "sample_size": won_count_int,
+        }
+
     return {
         "account": {
             **_account_json(account),
@@ -1139,6 +1214,7 @@ def account_profile(
         "period": {"date_from": period_start.isoformat(), "date_to": period_end.isoformat(), "days": days},
         "work_item_count": len(work_item_ids),
         "work_items": work_items_list,
+        "business_impact_summary": business_impact_summary,
         "kpis": {
             "ai_investment_usd": round(float(spend_usd), 6),
             "ai_activity_count": int(activity_count),

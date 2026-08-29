@@ -149,6 +149,21 @@
     .bp-journey-value { font-size: 15px; font-weight: 650; font-family: var(--font-mono); color: var(--text-primary); }
     .bp-journey-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
 
+    .bp-impact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .bp-impact-card { background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .bp-impact-value { font-size: 18px; font-weight: 650; font-family: var(--font-mono); color: var(--text-primary); }
+    .bp-impact-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .bp-impact-note { font-size: 10.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
+    .bp-evidence-tag {
+      display: inline-block; font-size: 9.5px; font-weight: 650; padding: 2px 7px; border-radius: 12px;
+      text-transform: uppercase; letter-spacing: 0.03em; margin-top: 6px;
+    }
+    .bp-evidence-tag.measured { background: rgba(63,185,80,0.14); color: var(--accent-green); }
+    .bp-evidence-tag.associated { background: rgba(88,166,255,0.14); color: #58a6ff; }
+    .bp-evidence-tag.early_signal { background: rgba(210,153,34,0.14); color: #d29922; }
+    .bp-evidence-tag.meaningful { background: rgba(210,153,34,0.14); color: #d29922; }
+    .bp-evidence-tag.executive_eligible { background: rgba(63,185,80,0.14); color: var(--accent-green); }
+
     .bp-stage-group { margin-bottom: 18px; }
     .bp-stage-group:last-child { margin-bottom: 0; }
     .bp-stage-group-label {
@@ -293,6 +308,11 @@
                   <div class="delta" id="bpKpiActivityDelta"></div>
                 </div>
               </div>
+
+              <details class="bp-stage-group" id="bpImpactSummaryDetails" open>
+                <summary class="bp-stage-group-label">AI Business Impact</summary>
+                <div class="panel" id="bpImpactSummaryPanel" style="margin-top:8px"></div>
+              </details>
 
               <div class="bp-section-head"><h3>Business Journey &amp; AI Investment</h3></div>
               <div class="panel" id="bpJourneyPanel"></div>
@@ -544,6 +564,7 @@
       document.getElementById("bpFooterNote").textContent =
         "All data is workspace-scoped." + (profile.period ? ` Showing ${profile.period.days} days.` : "");
 
+      bpRenderImpactSummary(profile.business_impact_summary || {});
       bpRenderWorkItems(profile.work_items || []);
       bpRenderFunctionDonut(profile.business_function_breakdown || []);
       bpRenderJourney(profile.journey_breakdown || [], kpis.ai_investment_usd);
@@ -760,6 +781,49 @@
       }
       banner.style.display = "flex";
       banner.innerHTML = `<span class="icon">${BP_INSIGHT_ICON_SPEND}</span><span>${parts.join(" ")}</span>`;
+    }
+
+    const BP_EVIDENCE_LABELS = {
+      measured: "Measured",
+      associated: "Associated",
+      early_signal: "Early Signal",
+      meaningful: "Meaningful Sample",
+      executive_eligible: "Executive-Eligible",
+    };
+
+    // Renders whichever metrics the backend actually included -- the API
+    // omits a metric entirely (not zero, not "N/A") when the underlying
+    // outcome data doesn't exist yet, per the Business Impact plan's own
+    // rule against implying more confidence than the data supports. This
+    // function must never invent a placeholder for a missing key.
+    function bpRenderImpactSummary(summary) {
+      const section = document.getElementById("bpImpactSummaryDetails");
+      const panel = document.getElementById("bpImpactSummaryPanel");
+      const keys = Object.keys(summary || {});
+      if (!keys.length) {
+        section.style.display = "none";
+        return;
+      }
+      section.style.display = "";
+      const fmt = (metricKey, value) => {
+        if (value === null || value === undefined) return "—";
+        if (metricKey.endsWith("_usd")) return bpFmtUsdFull(value);
+        if (metricKey.endsWith("_pct")) return `${value}%`;
+        return bpFmtNum(value);
+      };
+      panel.innerHTML = `<div class="bp-impact-grid">${
+        keys.map((key) => {
+          const metric = summary[key];
+          const evidenceClass = metric.evidence || "measured";
+          const evidenceLabel = BP_EVIDENCE_LABELS[evidenceClass] || evidenceClass;
+          return `<div class="bp-impact-card">
+            <div class="bp-impact-value">${fmt(key, metric.value)}</div>
+            <div class="bp-impact-label">${metric.label || key}</div>
+            <span class="bp-evidence-tag ${evidenceClass}">${evidenceLabel}</span>
+            ${metric.note ? `<div class="bp-impact-note">${metric.note}</div>` : ""}
+          </div>`;
+        }).join("")
+      }</div>`;
     }
 
     function bpRenderWorkItems(rows) {
