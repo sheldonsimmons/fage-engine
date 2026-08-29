@@ -162,14 +162,34 @@ def business_context_json(item) -> dict:
     template = get_context_template(getattr(item, "context_template", None))
     account = getattr(item, "account", None)
     stored_type = getattr(item, "context_type", None) or "project"
+    source_record_type = str(getattr(item, "source_record_type", "") or "").lower()
     is_account_rollup = bool(
         account
         and (
             str(getattr(item, "external_id", "") or "").startswith("SF-ACCOUNT-")
-            or str(getattr(item, "source_record_type", "") or "").lower() == "account"
+            or source_record_type == "account"
         )
     )
-    resolved_type = "account" if is_account_rollup else stored_type
+    # source_record_type wins over the stored context_type for opportunity/
+    # case too, not just the account-rollup case above -- the live
+    # Agentforce path hardcodes context_type to a generic "project" bucket
+    # for every non-Account record regardless of its real Salesforce object
+    # type (CostPilotAgentforceAction.cls's governOne()), while
+    # source_record_type is set from the record's actual SObject type on
+    # both ingestion paths and is reliable either way. Reproduced live: a
+    # real Opportunity ("Edge Emergency Generator") had context_type=
+    # "project" and source_record_type="Opportunity" -- without this,
+    # every caller of business_context_json() (this WorkItem's own
+    # drill-down page included) displayed it as a generic project instead
+    # of the Opportunity it actually is. Same resolution rule
+    # routes_work_items.py's SQL-side effective_type expression already
+    # applies for the stage/journey breakdown -- kept in sync here rather
+    # than diverging.
+    resolved_type = (
+        "account" if is_account_rollup
+        else source_record_type if source_record_type in ("opportunity", "case")
+        else stored_type
+    )
     work_labels = {
         "account": "Account", "customer": "Customer", "matter": "Matter",
         "project": "Project", "case": "Case", "opportunity": "Opportunity",

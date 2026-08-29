@@ -1109,11 +1109,16 @@ def account_profile(
         .all()
     ):
         activity = work_item_spend.get(wi.id, {"spend_usd": 0.0, "request_count": 0})
+        # business_context_json() now resolves source_record_type over the
+        # raw stored context_type for opportunity/case/account (fixed
+        # alongside this) -- reuse it here rather than a second,
+        # independent resolution that could quietly drift from it.
+        effective_context_type = business_context_json(wi)["type"]
         work_items_list.append({
             "id": wi.id,
             "external_id": wi.external_id,
             "name": wi.name,
-            "context_type": wi.context_type,
+            "context_type": effective_context_type,
             "status": wi.status,
             "spend_usd": activity["spend_usd"],
             "request_count": activity["request_count"],
