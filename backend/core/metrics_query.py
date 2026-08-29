@@ -677,7 +677,12 @@ def compute_cost_per_outcome(
     successful_outcomes = int(outcome_result.rows[0].get("successful_outcomes", 0)) if outcome_result.rows else 0
     outcomes_with_data = int(outcome_result.rows[0].get("outcomes_with_data", 0)) if outcome_result.rows else 0
 
-    cost_per_outcome = round(ai_spend / successful_outcomes, 2) if successful_outcomes else None
+    # 6, not 2, decimal places -- a real cost-per-outcome in the
+    # fractional-cent range (typical for low-volume/early-stage accounts)
+    # rounded to $0.00 at 2 decimals, the same precision bug already found
+    # and fixed for the equivalent per-account and per-WorkItem ratios
+    # this session.
+    cost_per_outcome = round(ai_spend / successful_outcomes, 6) if successful_outcomes else None
 
     if successful_outcomes >= MIN_EXECUTIVE_SAMPLE:
         evidence_label = "executive_eligible"
