@@ -52,12 +52,19 @@ def _timeline_dates(start: datetime, end: datetime):
 
 # ── Savings Report ─────────────────────────────────────────────────────────────
 
-@router.get("/savings")
-def savings_report(days: int = Query(30, ge=1, le=365),
-                   workspace_id: str = Query(None),
-                   date_from: Optional[datetime] = Query(None),
-                   date_to: Optional[datetime] = Query(None),
-                   db: Session = Depends(get_db)):
+def compute_realized_savings(
+    db: Session, workspace_id: Optional[str], days: int,
+    date_from: Optional[datetime] = None, date_to: Optional[datetime] = None,
+    *, agent_id: Optional[int] = None,
+) -> dict:
+    """
+    The trusted "Realized Savings" calculation (pruning + model-downgrade
+    savings already achieved, not a hypothetical) -- extracted from
+    savings_report() so the Agent Intelligence Profile can reuse the exact
+    same formula scoped to one agent's transactions instead of reimplementing
+    it. savings_report() below is unchanged in behavior; it now just calls
+    this with agent_id=None.
+    """
     start, end = _parse_range(days, date_from, date_to)
 
     q = db.query(TokenTransaction).filter(
@@ -66,6 +73,8 @@ def savings_report(days: int = Query(30, ge=1, le=365),
     )
     if workspace_id:
         q = q.filter(workspace_filter(TokenTransaction, workspace_id))
+    if agent_id is not None:
+        q = q.filter(TokenTransaction.agent_id == agent_id)
     txns = q.all()
 
     total_cost       = sum(t.cost_usd for t in txns)
@@ -119,6 +128,15 @@ def savings_report(days: int = Query(30, ge=1, le=365),
         "cost_if_no_fage_usd":   round(cost_if_all_flagship, 6),
         "timeline":              timeline,
     }
+
+
+@router.get("/savings")
+def savings_report(days: int = Query(30, ge=1, le=365),
+                   workspace_id: str = Query(None),
+                   date_from: Optional[datetime] = Query(None),
+                   date_to: Optional[datetime] = Query(None),
+                   db: Session = Depends(get_db)):
+    return compute_realized_savings(db, workspace_id, days, date_from, date_to)
 
 
 # ── Risk Report ────────────────────────────────────────────────────────────────

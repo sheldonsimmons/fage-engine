@@ -295,6 +295,8 @@ def _run_activity_query(
         q = q.filter(_department_clause(filters["department"]))
     if filters.get("agent"):
         q = q.filter(RegisteredAgent.name.ilike(f"%{filters['agent']}%"))
+    if filters.get("agent_id") is not None:
+        q = q.filter(TokenTransaction.agent_id == filters["agent_id"])
     if filters.get("platform"):
         q = q.filter(TokenTransaction.source_platform.ilike(filters["platform"]))
     if filters.get("model"):
@@ -373,6 +375,14 @@ def _run_outcome_query(
         # engineering/finance, without needing a dedicated metric per type
         # the way won_count/support_cases_total are.
         q = q.filter(WorkItem.context_type == filters["context_type"])
+    if filters.get("work_item_ids") is not None:
+        # WorkItemOutcome has no agent_id of its own -- a caller scoping to
+        # one agent (e.g. compute_cost_per_outcome's agent_id param) passes
+        # the distinct WorkItem ids that agent's TokenTransactions touched,
+        # pre-computed once, rather than joining TokenTransaction in here
+        # (which would duplicate WorkItemOutcome rows for any WorkItem with
+        # more than one transaction and inflate every count/sum below).
+        q = q.filter(WorkItem.id.in_(filters["work_item_ids"]))
 
     dim_exprs = [_dimension_expr(d) for d in dim_keys]
     key_exprs = [e[0] for e in dim_exprs]
@@ -634,6 +644,7 @@ def compute_cost_per_outcome(
     workspace_id: Optional[str],
     context_type: Optional[str] = None,
     account_name: Optional[str] = None,
+    agent_id: Optional[int] = None,
 ) -> dict:
     """
     AI investment associated with successful outcomes, divided by the count
@@ -647,12 +658,30 @@ def compute_cost_per_outcome(
     outcomes, outcomes_with_data) via two run_metrics_query() calls -- one
     per metric source, per the catalog's own "never mix sources in one
     query" rule -- and a Python division, not new SQL.
+
+    agent_id (added for the Agent Intelligence Profile) scopes both sides
+    to one agent's activity: the spend side via a direct
+    TokenTransaction.agent_id filter, the outcome side via the distinct
+    WorkItems that agent's transactions touched (WorkItemOutcome carries
+    no agent_id of its own) -- same "AI activity associated with an
+    outcome" definition as the unscoped case, just narrowed to one agent's
+    transactions instead of the whole workspace's.
     """
     filters: dict = {}
     if context_type:
         filters["context_type"] = context_type
     if account_name:
         filters["account"] = account_name
+
+    touched_work_item_ids: Optional[list] = None
+    if agent_id is not None:
+        scope = workspace_filter(TokenTransaction, workspace_id)
+        touched_query = db.query(TokenTransaction.work_item_id).filter(
+            TokenTransaction.agent_id == agent_id, TokenTransaction.work_item_id.isnot(None),
+        ).distinct()
+        if scope is not None:
+            touched_query = touched_query.filter(scope)
+        touched_work_item_ids = [row[0] for row in touched_query.all()]
 
     # Explicit empty timeframe -- run_metrics_query() defaults to a 30-day
     # window when timeframe is None (see its "elif timeframe is None"
@@ -665,12 +694,15 @@ def compute_cost_per_outcome(
     # leaving activity unbounded to match the outcome side.
     spend_result = run_metrics_query(
         db, workspace_id, metrics=["ai_spend"],
-        filters={**filters, "outcome_status": "successful"},
+        filters={**filters, "outcome_status": "successful", **({"agent_id": agent_id} if agent_id is not None else {})},
         timeframe={},
     )
+    outcome_filters = dict(filters)
+    if agent_id is not None:
+        outcome_filters["work_item_ids"] = touched_work_item_ids
     outcome_result = run_metrics_query(
         db, workspace_id, metrics=["successful_outcomes", "outcomes_with_data"],
-        filters=filters,
+        filters=outcome_filters,
     )
 
     ai_spend = float(spend_result.rows[0].get("ai_spend", 0.0)) if spend_result.rows else 0.0
@@ -694,6 +726,7 @@ def compute_cost_per_outcome(
     return {
         "context_type": context_type,
         "account": account_name,
+        "agent_id": agent_id,
         "ai_spend_on_successful_outcomes_usd": round(ai_spend, 6),
         "successful_outcomes": successful_outcomes,
         "outcomes_with_known_data": outcomes_with_data,
@@ -718,6 +751,7 @@ def compute_outcome_coverage(
     workspace_id: Optional[str],
     context_type: Optional[str] = None,
     account_name: Optional[str] = None,
+    agent_id: Optional[int] = None,
 ) -> dict:
     """
     What share of AI-supported WorkItems actually have a known outcome --
@@ -758,6 +792,11 @@ def compute_outcome_coverage(
                 "outcome_coverage_pct": None, "coverage_note": error["message"],
             }
         touched_query = touched_query.filter(WorkItem.account_id == account.id)
+    if agent_id is not None:
+        # The TokenTransaction join already exists above -- scoping "touched"
+        # to one agent is just one more filter on it, same definition of
+        # coverage narrowed to one agent's transactions.
+        touched_query = touched_query.filter(TokenTransaction.agent_id == agent_id)
 
     touched_ids = [row[0] for row in touched_query.all()]
     work_items_touched = len(touched_ids)
@@ -775,6 +814,7 @@ def compute_outcome_coverage(
     return {
         "context_type": context_type,
         "account": account_name,
+        "agent_id": agent_id,
         "work_items_touched": work_items_touched,
         "outcomes_with_known_data": outcomes_with_data,
         "outcome_coverage_pct": coverage_pct,
@@ -808,6 +848,7 @@ def compute_potential_savings(
     workspace_id: Optional[str],
     *,
     top_agent_limit: int = 5,
+    agent_id: Optional[int] = None,
 ) -> dict:
     """
     "Potential Savings" (Business Impact upgrade plan, Part B) -- v1:
@@ -852,6 +893,8 @@ def compute_potential_savings(
     ).filter(TokenTransaction.routing_reason == "ROUTINE")
     if scope is not None:
         query = query.filter(scope)
+    if agent_id is not None:
+        query = query.filter(TokenTransaction.agent_id == agent_id)
 
     savings_by_agent: dict[Optional[int], float] = {}
     total_savings = 0.0
