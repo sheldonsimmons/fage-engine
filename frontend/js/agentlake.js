@@ -184,7 +184,8 @@ function renderAgentTable(agents) {
     return `
       <tr id="agent-row-${a.id}" ${rowClass ? `class="${rowClass}"` : ""}>
         <td ${lockTip}>
-          <span>${displayAgentName(a)}</span>
+          <a href="/agent-profile.html?id=${a.id}" title="Open Agent Intelligence Profile"
+            style="color:var(--text-primary);text-decoration:none">${displayAgentName(a)}</a>
           <button type="button" onclick="event.stopPropagation(); renameAgent(${a.id}, '${jsString(displayAgentName(a))}')"
             title="Rename agent"
             style="margin-left:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer">Rename</button>

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Agent Intelligence Profile</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="css/styles.css?v=20260821-dark-theme" />
+  <link rel="stylesheet" href="css/tokens.css?v=20260821-dark-theme" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
+  <style>
+    /* Same token/convention reuse as work-item-profile.html -- no new
+       palette, this is the agent-level equivalent drill-down. */
+    body { margin: 0; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); }
+    .ap-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 28px 40px; }
+    .ap-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .ap-back { color: var(--text-muted); font-size: 13px; text-decoration: none; }
+    .ap-back:hover { color: var(--text-primary); }
+    .ap-header { margin: 14px 0 22px; }
+    .ap-header h1 { font-size: 25px; font-weight: 650; margin: 4px 0 6px; letter-spacing: -0.01em; }
+    .ap-meta { font-size: 13px; color: var(--text-muted); }
+
+    /* Runtime and lifecycle pills are visually distinct (different shape/
+       treatment) so the two dimensions never look like one status. */
+    .ap-pill { font-size: 11px; font-weight: 650; padding: 3px 10px; border-radius: 20px; text-transform: capitalize; margin-right: 6px; }
+    .ap-pill.runtime-active { background: rgba(63,185,80,0.12); color: var(--accent-green); }
+    .ap-pill.runtime-idle { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+    .ap-pill.runtime-locked, .ap-pill.runtime-queued { background: rgba(240,136,62,0.14); color: #f0883e; }
+    .ap-lifecycle-pill { font-size: 11px; font-weight: 650; padding: 3px 10px; border-radius: 4px; text-transform: capitalize; margin-right: 6px; }
+    .ap-lifecycle-pill.unreviewed { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+    .ap-lifecycle-pill.pending_review { background: rgba(240,136,62,0.14); color: #f0883e; }
+    .ap-lifecycle-pill.approved { background: rgba(63,185,80,0.12); color: var(--accent-green); }
+    .ap-lifecycle-pill.deprecated, .ap-lifecycle-pill.retired { background: rgba(248,81,73,0.14); color: #f85149; }
+
+    .ap-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+    .ap-kpi-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .ap-kpi-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .ap-kpi-value { font-size: 21px; font-weight: 650; }
+    .ap-kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    .ap-section { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    .ap-section h2 { font-size: 14px; font-weight: 650; margin: 0 0 12px; }
+    .ap-section-hint { font-size: 12px; color: var(--text-muted); margin: -8px 0 12px; }
+
+    .ap-signal { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 12.5px; }
+    .ap-signal:last-child { border-bottom: none; }
+    .ap-signal-dot { width: 8px; height: 8px; border-radius: 50%; background: #f0883e; margin-top: 4px; flex-shrink: 0; }
+    .ap-signal-label { font-weight: 600; }
+    .ap-signal-detail { color: var(--text-muted); }
+
+    .ap-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .ap-table th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    .ap-table td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .ap-table tr:last-child td { border-bottom: none; }
+
+    .ap-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 10px; padding: 10px 12px; background: var(--bg-base); border-radius: 8px; border: 1px solid var(--border); }
+    .ap-evidence-tag { display: inline-block; font-size: 10.5px; font-weight: 650; padding: 2px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.03em; background: rgba(88,166,255,0.14); color: #58a6ff; margin-left: 8px; }
+    .ap-evidence-tag.insufficient_data { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+
+    .ap-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    .ap-form-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    .ap-form-row label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .ap-form-row input, .ap-form-row select, .ap-form-row textarea {
+      background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);
+      padding: 8px 10px; font-size: 13px; font-family: inherit;
+    }
+    .ap-form-row textarea { resize: vertical; min-height: 60px; }
+    .ap-save-btn { background: #58a6ff; color: #0d1117; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .ap-save-btn:hover { opacity: 0.85; }
+    .ap-save-status { font-size: 12px; color: var(--text-muted); margin-left: 10px; }
+
+    .ap-config-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 12.5px; }
+    .ap-config-item { color: var(--text-muted); }
+    .ap-config-item strong { color: var(--text-primary); display: block; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="ap-wrap">
+    <a class="ap-back" href="/admin.html">← Back to Agent Registry</a>
+
+    <div id="apEmptyState" class="ap-empty" style="display:none"></div>
+
+    <div id="apContent" style="display:none">
+      <div class="ap-header">
+        <span class="ap-pill" id="apRuntimePill"></span>
+        <span class="ap-lifecycle-pill" id="apLifecyclePill"></span>
+        <h1 id="apName">—</h1>
+        <div class="ap-meta" id="apMeta"></div>
+      </div>
+
+      <div class="ap-kpi-row">
+        <div class="ap-kpi-card">
+          <div class="ap-kpi-label">AI Investment (MTD)</div>
+          <div class="ap-kpi-value ap-num" id="apKpiInvestment">—</div>
+        </div>
+        <div class="ap-kpi-card">
+          <div class="ap-kpi-label">Realized Savings (30d)</div>
+          <div class="ap-kpi-value ap-num" id="apKpiSavings">—</div>
+        </div>
+        <div class="ap-kpi-card">
+          <div class="ap-kpi-label">Associated Business Value</div>
+          <div class="ap-kpi-value ap-num" id="apKpiValue">—</div>
+        </div>
+        <div class="ap-kpi-card">
+          <div class="ap-kpi-label">Cost per Successful Outcome</div>
+          <div class="ap-kpi-value ap-num" id="apKpiCostPerOutcome">—</div>
+        </div>
+      </div>
+
+      <div class="ap-section" id="apSignalsSection">
+        <h2>Attention Signals</h2>
+        <div id="apSignalsBody"></div>
+      </div>
+
+      <div class="ap-section">
+        <h2>Business Purpose &amp; Ownership</h2>
+        <p class="ap-section-hint">Lifecycle/governance metadata — kept entirely separate from the runtime status above.</p>
+        <div class="ap-form-row">
+          <label>Business Purpose</label>
+          <textarea id="apFormPurpose" placeholder="What does this agent do?"></textarea>
+        </div>
+        <div class="ap-form-row">
+          <label>Owner</label>
+          <input id="apFormOwner" type="text" placeholder="Accountable person or team" />
+        </div>
+        <div class="ap-form-row">
+          <label>Approval Status</label>
+          <select id="apFormApproval">
+            <option value="unreviewed">Unreviewed</option>
+            <option value="pending_review">Pending Review</option>
+            <option value="approved">Approved</option>
+            <option value="deprecated">Deprecated</option>
+            <option value="retired">Retired</option>
+          </select>
+        </div>
+        <button class="ap-save-btn" id="apSaveBtn">Save</button>
+        <span class="ap-save-status" id="apSaveStatus"></span>
+      </div>
+
+      <div class="ap-section">
+        <h2>Business Impact</h2>
+        <div id="apImpactBody"></div>
+      </div>
+
+      <div class="ap-section">
+        <h2>Governance Configuration</h2>
+        <p class="ap-section-hint">Routing and collision controls — read-only here; edit from the Agent Registry's operational drawer.</p>
+        <div class="ap-config-grid" id="apConfigGrid"></div>
+      </div>
+
+      <div class="ap-section">
+        <h2>Model Usage</h2>
+        <table class="ap-table">
+          <thead><tr><th>Model</th><th>Requests</th><th>Spend</th></tr></thead>
+          <tbody id="apModelsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="ap-section">
+        <h2>WorkItem &amp; Outcome Attribution</h2>
+        <p class="ap-section-hint">WorkItems this agent's activity touched, ranked by this agent's spend on each.</p>
+        <table class="ap-table">
+          <thead><tr><th>WorkItem</th><th>Type</th><th>Outcome</th><th>Requests</th><th>Spend</th></tr></thead>
+          <tbody id="apWorkItemsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="ap-section">
+        <h2>Recent Activity</h2>
+        <table class="ap-table">
+          <thead><tr><th>Time</th><th>Model</th><th>WorkItem</th><th>Cost</th></tr></thead>
+          <tbody id="apTimelineBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Agent Intelligence Profile -- backed entirely by:
+    //   GET   /api/agents/{id}/intelligence-profile
+    //   PATCH /api/agents/{id}/governance
+    // No demo/placeholder values; every section renders only what the
+    // endpoint actually returns.
+    const apParams = new URLSearchParams(location.search);
+    const apAgentId = apParams.get("id") || "";
+
+    function apFmtUsd(value, decimals = 2) {
+      if (value === null || value === undefined) return "—";
+      const n = Number(value);
+      if (Math.abs(n) > 0 && Math.abs(n) < 0.01) return `$${n.toFixed(6)}`;
+      return `$${n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+    }
+    function apFmtNum(value) {
+      return Number(value || 0).toLocaleString();
+    }
+    function apEsc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function apParseUtc(iso) {
+      // See work-item-profile.html's identical helper: naive UTC
+      // timestamps with no "Z" parse as local time in JS otherwise.
+      return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`);
+    }
+    function apFmtDate(iso) {
+      if (!iso) return "—";
+      return apParseUtc(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+
+    function apShowEmpty(message) {
+      document.getElementById("apEmptyState").style.display = "block";
+      document.getElementById("apEmptyState").textContent = message;
+      document.getElementById("apContent").style.display = "none";
+    }
+
+    async function apLoad() {
+      if (!apAgentId) {
+        apShowEmpty("No agent specified. Open this page from the Agent Registry.");
+        return;
+      }
+      try {
+        const data = await apiGet(`/api/agents/${encodeURIComponent(apAgentId)}/intelligence-profile`);
+        document.getElementById("apEmptyState").style.display = "none";
+        document.getElementById("apContent").style.display = "block";
+        apRender(data);
+      } catch (err) {
+        apShowEmpty(`Could not load this agent: ${(err.message || "").replace(/</g, "&lt;")}`);
+      }
+    }
+
+    function apRender(data) {
+      const agent = data.agent;
+      const econ = data.economics;
+
+      document.getElementById("apName").textContent = agent.name || "Unnamed agent";
+      document.title = `CostPilot — ${agent.name || "Agent Intelligence Profile"}`;
+
+      const runtimePill = document.getElementById("apRuntimePill");
+      runtimePill.textContent = agent.runtime_status || "unknown";
+      runtimePill.className = `ap-pill runtime-${apEsc(agent.runtime_status || "")}`;
+
+      const lifecyclePill = document.getElementById("apLifecyclePill");
+      const approval = agent.lifecycle.approval_status || "unreviewed";
+      lifecyclePill.textContent = approval.replace(/_/g, " ");
+      lifecyclePill.className = `ap-lifecycle-pill ${apEsc(approval)}`;
+
+      const metaParts = [];
+      if (agent.department) metaParts.push(agent.department);
+      if (agent.source_platform) metaParts.push(agent.source_platform);
+      if (agent.last_activity_at) metaParts.push(`Last activity ${apFmtDate(agent.last_activity_at)}`);
+      else metaParts.push("No recorded activity");
+      document.getElementById("apMeta").textContent = metaParts.join(" · ");
+
+      // KPIs -- all reused, trusted calculations (see core/agent_intelligence.py)
+      document.getElementById("apKpiInvestment").textContent = apFmtUsd(econ.ai_investment_month_to_date_usd, 4);
+      document.getElementById("apKpiSavings").textContent = apFmtUsd(econ.realized_savings_30d_usd, 4);
+      document.getElementById("apKpiValue").textContent = apFmtUsd(econ.associated_business_value_usd, 0);
+      document.getElementById("apKpiCostPerOutcome").textContent = econ.cost_per_successful_outcome_usd != null
+        ? apFmtUsd(econ.cost_per_successful_outcome_usd, 4)
+        : "—";
+
+      // Attention signals
+      const signalsSection = document.getElementById("apSignalsSection");
+      const signalsBody = document.getElementById("apSignalsBody");
+      const signals = data.attention_signals || [];
+      if (signals.length) {
+        signalsSection.style.display = "block";
+        signalsBody.innerHTML = signals.map((s) => `
+          <div class="ap-signal">
+            <span class="ap-signal-dot"></span>
+            <div>
+              <div class="ap-signal-label">${apEsc(s.label)}</div>
+              <div class="ap-signal-detail">${apEsc(s.detail)}</div>
+            </div>
+          </div>`).join("");
+      } else {
+        signalsSection.style.display = "none";
+      }
+
+      // Governance form -- populated from current state, saved via PATCH
+      document.getElementById("apFormPurpose").value = agent.lifecycle.business_purpose || "";
+      document.getElementById("apFormOwner").value = agent.lifecycle.owner || "";
+      document.getElementById("apFormApproval").value = approval;
+
+      // Business Impact -- Associated Value-to-AI-Investment Ratio,
+      // architected but shown only when the evidence gate clears (see
+      // core/agent_intelligence.py's _economics). Never called "ROI".
+      const impactBody = document.getElementById("apImpactBody");
+      const ratio = econ.associated_value_to_ai_investment_ratio;
+      const ratioEvidence = econ.associated_value_to_ai_investment_evidence;
+      impactBody.innerHTML = `
+        <table class="ap-table">
+          <tbody>
+            <tr><td>Total AI Spend (all-time)</td><td class="ap-num">${apFmtUsd(econ.total_ai_spend_usd, 4)}</td></tr>
+            <tr><td>Potential Savings</td><td class="ap-num">${apFmtUsd(econ.potential_savings_usd, 4)}</td></tr>
+            <tr><td>Outcome Coverage</td><td class="ap-num">${econ.outcome_coverage_pct != null ? econ.outcome_coverage_pct + "%" : "—"} (${apFmtNum(econ.outcomes_with_known_data)} of ${apFmtNum(econ.work_items_touched)} WorkItems)</td></tr>
+            <tr><td>Associated Value-to-AI-Investment Ratio</td><td class="ap-num">${ratio != null ? ratio.toLocaleString() + "x" : "—"}
+              <span class="ap-evidence-tag ${ratioEvidence === "insufficient_data" ? "insufficient_data" : ""}">${apEsc((ratioEvidence || "insufficient_data").replace(/_/g, " "))}</span>
+            </td></tr>
+          </tbody>
+        </table>
+        <div class="ap-note">${apEsc(econ.associated_value_note)}</div>`;
+
+      // Governance config (read-only)
+      const config = agent.governance_config;
+      document.getElementById("apConfigGrid").innerHTML = `
+        <div class="ap-config-item">Tier Bounds<strong>${apEsc(config.min_tier)}–${apEsc(config.max_tier)}</strong></div>
+        <div class="ap-config-item">Pruning<strong>${config.pruning_enabled ? "Enabled" : "Disabled"}</strong></div>
+        <div class="ap-config-item">Mode<strong>${apEsc(config.mode)}</strong></div>
+        <div class="ap-config-item">Collision Policy<strong>${apEsc(config.collision_policy)}</strong></div>`;
+
+      // Model usage
+      const modelsBody = document.getElementById("apModelsBody");
+      modelsBody.innerHTML = (data.model_usage || []).length
+        ? data.model_usage.map((m) => `
+            <tr>
+              <td>${apEsc(m.model)}</td>
+              <td class="ap-num">${apFmtNum(m.call_count)}</td>
+              <td class="ap-num">${apFmtUsd(m.spend_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="3" class="ap-section-hint">No model usage recorded.</td></tr>`;
+
+      // WorkItem attribution
+      const wiBody = document.getElementById("apWorkItemsBody");
+      wiBody.innerHTML = (data.work_item_attribution || []).length
+        ? data.work_item_attribution.map((w) => `
+            <tr>
+              <td>${apEsc(w.name || "Unnamed")}</td>
+              <td>${apEsc((w.context_type || "—").replace(/_/g, " "))}</td>
+              <td>${apEsc(w.outcome_status || "—")}${w.outcome_success === true ? " (won)" : w.outcome_success === false ? " (lost)" : ""}</td>
+              <td class="ap-num">${apFmtNum(w.call_count)}</td>
+              <td class="ap-num">${apFmtUsd(w.ai_spend_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="5" class="ap-section-hint">No WorkItems touched yet.</td></tr>`;
+
+      // Recent activity
+      const timelineBody = document.getElementById("apTimelineBody");
+      timelineBody.innerHTML = (data.activity_timeline || []).length
+        ? data.activity_timeline.map((row) => `
+            <tr>
+              <td>${apFmtDate(row.timestamp)}</td>
+              <td>${apEsc(row.model || "—")}</td>
+              <td>${apEsc(row.work_item_name || "—")}</td>
+              <td class="ap-num">${apFmtUsd(row.cost_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="4" class="ap-section-hint">No tracked AI activity yet.</td></tr>`;
+    }
+
+    document.getElementById("apSaveBtn").addEventListener("click", async () => {
+      const statusEl = document.getElementById("apSaveStatus");
+      statusEl.textContent = "Saving…";
+      try {
+        await apiPatch(`/api/agents/${encodeURIComponent(apAgentId)}/governance`, {
+          business_purpose: document.getElementById("apFormPurpose").value || null,
+          owner: document.getElementById("apFormOwner").value || null,
+          approval_status: document.getElementById("apFormApproval").value,
+        });
+        statusEl.textContent = "Saved.";
+        setTimeout(() => { statusEl.textContent = ""; }, 2000);
+        apLoad();
+      } catch (err) {
+        statusEl.textContent = `Failed to save: ${(err.message || "").replace(/</g, "&lt;")}`;
+      }
+    });
+
+    apLoad();
+  </script>
+</body>
+</html>
