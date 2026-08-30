@@ -39,6 +39,11 @@ def test_register_agent_creates_idle_agent():
                              permissions="read,write", target_table="opportunities")
     assert result["status"] == "idle"
     assert result["name"] == "Agent A"
+    # Governance/lifecycle fields (added for the Agent Intelligence
+    # Profile) default sensibly and don't disturb runtime status.
+    assert result["approval_status"] == "unreviewed"
+    assert result["business_purpose"] is None
+    assert result["owner"] is None
 
 
 def test_register_agent_rejects_duplicate_name_and_leaves_session_usable():

@@ -267,6 +267,12 @@ app.include_router(routes_budget.router, prefix="/api/budget", tags=["Budget"])
 from api import routes_agentlake
 app.include_router(routes_agentlake.router, prefix="/api/agents", tags=["Agentlake"])
 
+# Agent Intelligence Profile -- financial/business-impact story per agent,
+# deliberately a separate router/file from Agentlake's collision/claim
+# surface above, sharing only the URL prefix.
+from api import routes_agent_profile
+app.include_router(routes_agent_profile.router, prefix="/api/agents", tags=["Agent Intelligence"])
+
 # Step 6 — AI Decision Auditor
 from api import routes_auditor
 app.include_router(routes_auditor.router, prefix="/api/audit", tags=["Auditor"])

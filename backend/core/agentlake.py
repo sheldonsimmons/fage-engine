@@ -375,4 +375,12 @@ def _serialize(a: RegisteredAgent) -> dict:
         "min_tier":         a.min_tier if a.min_tier is not None else 1,
         "max_tier":         a.max_tier if a.max_tier is not None else 4,
         "pruning_enabled":  a.pruning_enabled if a.pruning_enabled is not None else True,
+        # Governance/lifecycle metadata (Agent Intelligence Profile) --
+        # purely additive fields, no change to any collision/routing
+        # behavior above. workspace_id may be None for legacy agents; see
+        # models.py's comment.
+        "workspace_id":     a.workspace_id,
+        "business_purpose": a.business_purpose,
+        "owner":            a.owner,
+        "approval_status":  a.approval_status or "unreviewed",
     }

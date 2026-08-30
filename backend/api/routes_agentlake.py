@@ -47,6 +47,10 @@ class AgentStatus(BaseModel):
     min_tier:         Optional[int]  = 1
     max_tier:         Optional[int]  = 4
     pruning_enabled:  Optional[bool] = True
+    workspace_id:     Optional[str]  = None
+    business_purpose: Optional[str]  = None
+    owner:            Optional[str]  = None
+    approval_status:  Optional[str]  = "unreviewed"
 
 
 class TierBoundsRequest(BaseModel):
