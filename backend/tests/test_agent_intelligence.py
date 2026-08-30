@@ -121,6 +121,26 @@ def test_inactive_agent_signal_fires_past_the_idle_threshold():
     assert "inactive_agent" not in {s["signal"] for s in get_agent_intelligence_profile(db, archived_agent.id)["attention_signals"]}
 
 
+def test_inactive_agent_signal_uses_ledger_not_just_stale_last_used_at_column():
+    # Confirmed live on a real production agent: last_used_at is only ever
+    # touched by live request routing, so a backfilled/simulated agent
+    # with real recent TokenTransaction activity can still show
+    # last_used_at=NULL. The inactive signal must not false-positive on
+    # that -- it has to check the ledger, not just the column.
+    db = _session()
+    recently = datetime.utcnow() - timedelta(days=1)
+    agent = RegisteredAgent(name="Backfilled Agent", department="WS-1:Sales", permissions="read,write")
+    db.add(agent); db.flush()
+    db.add(TokenTransaction(department="WS-1:Sales", agent_id=agent.id, model_tier="Scout",
+                             input_tokens=10, output_tokens=5, cost_usd=0.01, timestamp=recently))
+    db.commit()
+
+    profile = get_agent_intelligence_profile(db, agent.id)
+    assert profile["agent"]["last_used_at"] is None
+    assert profile["agent"]["last_activity_at"] is not None
+    assert "inactive_agent" not in {s["signal"] for s in profile["attention_signals"]}
+
+
 def test_governance_concern_signal_fires_for_active_deprecated_agent():
     db = _session()
     recently = datetime.utcnow() - timedelta(minutes=1)

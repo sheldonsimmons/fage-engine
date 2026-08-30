@@ -37,16 +37,35 @@ INACTIVE_IDLE_DAYS = 60  # matches core/recommendations.py's detect_inactive_age
 OUTCOME_COVERAGE_GAP_THRESHOLD_PCT = 60.0  # matches detect_outcome_coverage_gaps' default
 
 
-def _agent_active_recently_relaxed(agent: RegisteredAgent) -> bool:
+def _last_real_activity_at(db: Session, agent: RegisteredAgent) -> Optional[datetime]:
+    """
+    RegisteredAgent.last_used_at is only ever touched by live request
+    routing -- confirmed live on a real production agent (id 876) with
+    transactions as recent as 6 days ago but last_used_at still NULL,
+    the same "separately-maintained field silently drifts from the
+    ledger" bug class already found and fixed for Budget Health's spend
+    total this session. The transaction ledger is the source of truth
+    for "was this agent actually used," so attention signals here check
+    both and take whichever is more recent, never last_used_at alone.
+    """
+    ledger_last = db.query(func.max(TokenTransaction.timestamp)).filter(
+        TokenTransaction.agent_id == agent.id
+    ).scalar()
+    if agent.last_used_at and ledger_last:
+        return max(agent.last_used_at, ledger_last)
+    return ledger_last or agent.last_used_at
+
+
+def _agent_active_recently_relaxed(last_activity_at: Optional[datetime]) -> bool:
     """
     A looser "has this agent done anything lately" check than
     core.agentlake.agent_active_recently's 5-second window (which answers
     "is it mid-request right now", not "is it in regular use") -- used only
     for attention signals here, not for anything AgentLake itself relies on.
     """
-    if not agent.last_used_at:
+    if not last_activity_at:
         return False
-    return datetime.utcnow() - agent.last_used_at <= timedelta(days=7)
+    return datetime.utcnow() - last_activity_at <= timedelta(days=7)
 
 
 def _economics(db: Session, agent: RegisteredAgent) -> dict:
@@ -203,7 +222,7 @@ def _recent_activity(db: Session, agent: RegisteredAgent, limit: int = 50) -> li
     ]
 
 
-def _attention_signals(agent: RegisteredAgent, economics: dict) -> list[dict]:
+def _attention_signals(agent: RegisteredAgent, economics: dict, last_activity_at: Optional[datetime]) -> list[dict]:
     """
     Deterministic signals only -- every condition below is a plain
     comparison against numbers already computed in `economics` or plain
@@ -212,7 +231,7 @@ def _attention_signals(agent: RegisteredAgent, economics: dict) -> list[dict]:
     Outcome Coverage Gap).
     """
     signals = []
-    active_recently = _agent_active_recently_relaxed(agent)
+    active_recently = _agent_active_recently_relaxed(last_activity_at)
     approval_status = agent.approval_status or "unreviewed"
 
     if active_recently and approval_status == "unreviewed":
@@ -223,7 +242,7 @@ def _attention_signals(agent: RegisteredAgent, economics: dict) -> list[dict]:
         })
 
     idle_cutoff = datetime.utcnow() - timedelta(days=INACTIVE_IDLE_DAYS)
-    if not agent.archived and (not agent.last_used_at or agent.last_used_at < idle_cutoff):
+    if not agent.archived and (not last_activity_at or last_activity_at < idle_cutoff):
         signals.append({
             "signal": "inactive_agent",
             "label": "Inactive agent",
@@ -271,7 +290,8 @@ def get_agent_intelligence_profile(db: Session, agent_id: int) -> Optional[dict]
         return None
 
     economics = _economics(db, agent)
-    signals = _attention_signals(agent, economics)
+    last_activity_at = _last_real_activity_at(db, agent)
+    signals = _attention_signals(agent, economics, last_activity_at)
 
     return {
         "agent": {
@@ -297,6 +317,11 @@ def get_agent_intelligence_profile(db: Session, agent_id: int) -> Optional[dict]
                 "collision_policy": agent.collision_policy or "lock",
             },
             "last_used_at": agent.last_used_at.isoformat() if agent.last_used_at else None,
+            # Ledger-corrected -- see _last_real_activity_at's docstring.
+            # Can be more recent than last_used_at above for agents whose
+            # activity came from a backfill/simulation rather than live
+            # request routing.
+            "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
             "archived": bool(agent.archived),
         },
         "economics": economics,
