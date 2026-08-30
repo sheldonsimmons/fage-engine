@@ -90,6 +90,20 @@ def run_migrations():
         except Exception:
             pass
         try:
+            # Governance/lifecycle metadata, fully separate from the
+            # runtime `status` column above -- see models.py's comment.
+            ensure_column(conn, "registered_agents", "business_purpose", "TEXT")
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "registered_agents", "owner", "VARCHAR")
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "registered_agents", "approval_status", "VARCHAR DEFAULT 'unreviewed'")
+        except Exception:
+            pass
+        try:
             ensure_column(conn, "department_budgets", "raw_payload_logging_enabled", "BOOLEAN DEFAULT FALSE")
         except Exception:
             pass

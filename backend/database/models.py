@@ -101,6 +101,16 @@ class RegisteredAgent(Base):
     discovery_source = Column(String,   nullable=True, default="manual")  # manual | event -- "event" means this row was auto-created on first traffic, not registered ahead of time
     mode             = Column(String,   nullable=True, default="observe")  # observe | control -- see docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md; "optimize" is not a stored value, it's observe + recommendations
 
+    # Governance/lifecycle metadata -- deliberately separate from `status`
+    # above, which is pure runtime state (idle/active/locked/queued) owned
+    # by AgentLake's collision logic. An agent can be Active + Unreviewed
+    # at the same time; these two dimensions must never be merged into one
+    # enum. Informational only for now -- approval_status does not gate
+    # routing/collision behavior.
+    business_purpose = Column(Text,     nullable=True)   # human-entered description of what this agent does
+    owner            = Column(String,   nullable=True)   # accountable person/team (distinct from owner_org_unit_id, which is organizational)
+    approval_status  = Column(String,   nullable=True, default="unreviewed")  # unreviewed | pending_review | approved | deprecated | retired
+
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")
     project_assignments = relationship("WorkItemAgent", back_populates="agent", cascade="all, delete-orphan")
