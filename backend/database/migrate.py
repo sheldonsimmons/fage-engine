@@ -81,6 +81,15 @@ def run_migrations():
         except Exception:
             pass
         try:
+            # Nullable/unbackfilled here (unlike department_budgets.workspace_id
+            # below, which backfills unprefixed rows to "default") -- a real
+            # chunk of RegisteredAgent rows have no reliable single-workspace
+            # signal at all. backfill_workspaces.py only fills the unambiguous
+            # "workspace_id:Dept"-prefixed rows; see models.py's comment.
+            ensure_column(conn, "registered_agents", "workspace_id", "VARCHAR")
+        except Exception:
+            pass
+        try:
             ensure_column(conn, "department_budgets", "raw_payload_logging_enabled", "BOOLEAN DEFAULT FALSE")
         except Exception:
             pass

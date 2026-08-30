@@ -4,12 +4,15 @@ database/backfill_workspaces.py — one-time backfill of the workspaces table.
 Populates the new `workspaces` registry (see database/models.py Workspace)
 from the workspace identifiers already scattered across the database — a
 pure read of existing data, nothing is moved, renamed, or deleted. Also
-backfills DepartmentBudget.workspace_id, which never had it, from the
-existing "workspace_id:DeptName" prefix convention on `department`.
+backfills DepartmentBudget.workspace_id and RegisteredAgent.workspace_id,
+neither of which ever had it, from the existing "workspace_id:DeptName"
+prefix convention on `department`. RegisteredAgent rows with no such
+prefix are left NULL rather than defaulted to "default" (unlike
+DepartmentBudget) -- see the backfill loop below for why.
 
-Safe to re-run: workspace rows are upserted by workspace_id, and the
-DepartmentBudget backfill only fills rows where workspace_id is currently
-NULL.
+Safe to re-run: workspace rows are upserted by workspace_id, and both the
+DepartmentBudget and RegisteredAgent backfills only fill rows where
+workspace_id is currently NULL.
 
 Usage:
     cd backend
@@ -24,7 +27,7 @@ from sqlalchemy import func
 
 from database.db import SessionLocal
 from database.migrate import create_tables, run_migrations
-from database.models import DepartmentBudget, TokenTransaction, TrialAccount, Workspace
+from database.models import DepartmentBudget, RegisteredAgent, TokenTransaction, TrialAccount, Workspace
 
 # Human-readable labels and types for known non-customer workspace_ids that
 # only ever appear as scattered activity rows (no TrialAccount owner).
@@ -138,11 +141,30 @@ def backfill_workspaces(db, dry_run: bool = False) -> dict:
         budget.workspace_id = prefix if prefix != DEFAULT_WORKSPACE_ID else DEFAULT_WORKSPACE_ID
         budget_rows_updated += 1
 
+    # Backfill RegisteredAgent.workspace_id -- unlike DepartmentBudget above,
+    # only rows with an unambiguous "workspace_id:Dept" prefix get one.
+    # Confirmed live: a real chunk of agents have a plain, unprefixed
+    # department ("Engineering", "Sales", ...) with no reliable single-
+    # workspace signal in their transaction history (one such agent had
+    # 12,854 NULL-workspace transactions vs. 33 attributed to
+    # SIM-HISTORICAL-2Y -- noise, not a real attribution). Those rows are
+    # deliberately left NULL rather than guessed at; workspace_filter()
+    # already falls back to the department-prefix match for them, so
+    # nothing about their current (non-)scoping behavior changes.
+    agents_backfilled = 0
+    for agent in db.query(RegisteredAgent).filter(RegisteredAgent.workspace_id.is_(None)).all():
+        text = (agent.department or "").strip()
+        if ":" not in text:
+            continue
+        agent.workspace_id = text.split(":", 1)[0]
+        agents_backfilled += 1
+
     result = {
         "discovered_workspace_ids": len(discovered),
         "workspaces_created": created,
         "workspaces_updated": updated,
         "department_budgets_backfilled": budget_rows_updated,
+        "registered_agents_backfilled": agents_backfilled,
     }
     if dry_run:
         db.rollback()

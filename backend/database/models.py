@@ -73,6 +73,16 @@ class RegisteredAgent(Base):
     id               = Column(Integer,  primary_key=True, index=True)
     name             = Column(String,   nullable=False, unique=True)
     department       = Column(String,   nullable=False)
+    # Nullable/unbackfilled by design -- unlike WorkItem/TokenTransaction/
+    # DepartmentBudget, a real chunk of existing rows have an unprefixed
+    # department ("Engineering", "Sales", ...) with no reliable single-
+    # workspace signal in their transaction history (confirmed live: one
+    # such agent had 12,854 NULL-workspace transactions vs. 33 attributed
+    # to SIM-HISTORICAL-2Y -- noise, not a real attribution). Only rows
+    # with an unambiguous "workspace_id:Dept" prefix get backfilled; see
+    # database/backfill_workspaces.py. workspace_filter() already falls
+    # back to the department-prefix match for any row where this is NULL.
+    workspace_id     = Column(String,   nullable=True, index=True)
     owner_org_unit_id = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
     source_platform  = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
     permissions      = Column(String,   nullable=False)   # e.g. "read,write"
