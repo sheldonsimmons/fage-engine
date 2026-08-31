@@ -250,6 +250,11 @@ def _dimension_expr(dim_key: str):
             else_="unknown",
         )
         return expr, expr
+    if dim_key == "work_item":
+        return (
+            func.coalesce(WorkItem.external_id, "__unassigned__"),
+            func.coalesce(WorkItem.name, "Unassigned work item"),
+        )
     raise ValueError(f"unknown dimension: {dim_key}")
 
 

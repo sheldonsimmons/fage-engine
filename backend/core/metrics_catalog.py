@@ -332,6 +332,21 @@ DIMENSIONS: dict[str, DimensionDef] = {
         key="outcome_status", label="Outcome Status", sources=("outcome",),
         definition="Derived: 'won' | 'lost' | 'open' from WorkItemOutcome.outcome_success/is_closed.",
     ),
+    "work_item": DimensionDef(
+        key="work_item", label="Work Item", sources=("transaction",),
+        definition=(
+            "WorkItem.external_id (via TokenTransaction.work_item_id), "
+            "labeled by WorkItem.name, coalesced to 'Unassigned work item' "
+            "when absent. Simpler than project_activity_reporting()'s "
+            "project_breakdown, which also carries a '__simulator__' "
+            "fallback bucket and inline outcome metadata (status/value/"
+            "freshness) per row -- reconciling that is a Milestone 4 "
+            "follow-up, same precedent as the 'person'/'department' "
+            "dimensions above. Outcome data for a WorkItem is available "
+            "separately via the outcome-source metrics (won_count, "
+            "successful_outcomes, etc.), not duplicated onto this row."
+        ),
+    ),
 }
 
 
