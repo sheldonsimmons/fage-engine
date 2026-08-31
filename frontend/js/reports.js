@@ -526,7 +526,7 @@ function onCustomReportDateChange() {
 function loadActiveTab() {
   if (activeTab === "savings")     loadSavings();
   if (activeTab === "risk")        loadRisk();
-  if (activeTab === "contexts")    loadBusinessContexts();
+  if (activeTab === "contexts")    { initExplorerControls(); loadBusinessContexts(); }
   if (activeTab === "departments") loadDepartments();
   if (activeTab === "activity")    loadAgentActivity();
   if (activeTab === "efficiency") {
@@ -852,6 +852,12 @@ async function loadBusinessContexts() {
       `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"} · ` +
       `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation · ` +
       `${reportTimeZoneLabel()}`;
+
+    // AI Activity Explorer's View By / Break Down By pivot lives in the
+    // same tab, keyed off the same Department/Team filter -- refreshed
+    // here (loadBusinessContexts' single hub) rather than duplicating a
+    // call at every filter-select onclick handler above.
+    loadExplorerPivot();
   } catch (err) {
     document.getElementById("ctx-activity-rows").innerHTML =
       `<tr><td colspan="12">Could not load AI usage attribution: ${escapeHtml(err.message)}</td></tr>`;
@@ -877,6 +883,214 @@ function exportContextCsv() {
   ]);
   downloadCsv(`costpilot_ai_usage_attribution_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 }
+
+// ── AI Activity Explorer — Tableau-style View By / Break Down By pivot ─────
+//
+// Backed by POST /api/metrics/query (core.metrics_query.run_metrics_query,
+// the metrics registry) -- deliberately NOT project_activity_reporting()
+// (the /api/work-items/activity-report call the rest of this tab uses).
+// Per the approved reporting plan's architectural guardrail, the registry
+// is this Explorer's only source of truth; the fixed Usage-by-Work/Person/
+// Agent tables above stay on their existing data source for this phase.
+//
+// Click-to-filter is consistent: clicking any row always drills in place
+// (breadcrumb pushes, table re-pivots) -- it never navigates away. Opening
+// a full entity profile is always the separate, explicit "View Profile →"
+// action next to the row.
+
+const EXPLORER_DIMENSIONS = [
+  { key: "department", label: "Department / Team" },
+  { key: "person",     label: "Person" },
+  { key: "agent",      label: "Agent" },
+  { key: "account",    label: "Account / Customer" },
+  { key: "work_item",  label: "Work Item" },
+  { key: "model",      label: "Model" },
+  { key: "provider",   label: "Provider" },
+  { key: "platform",   label: "Platform" },
+];
+
+// Maps a dimension to (a) the run_metrics_query filter key it drills by,
+// using the row's real dimension_ids value (never the display label --
+// see core/metrics_query.py's dimension_ids for why that's required for
+// "person" specifically), and (b) the profile page it links to, if any.
+// department/model/provider/platform have no profile page: drilling is
+// the only interaction those rows support.
+const EXPLORER_DIMENSION_CONFIG = {
+  department: { filterKey: "department", byId: false },
+  person:     { filterKey: "person",     byId: true, profile: (id, ws) => `/person-profile.html?id=${encodeURIComponent(id)}&workspace_id=${encodeURIComponent(ws || "")}` },
+  agent:      { filterKey: "agent_id",   byId: true, numeric: true, profile: (id) => `/agent-profile.html?id=${encodeURIComponent(id)}` },
+  account:    { filterKey: "account",    byId: true, profile: (id, ws) => `/business-profile.html?account=${encodeURIComponent(id)}&workspace_id=${encodeURIComponent(ws || "")}` },
+  work_item:  { filterKey: "work_item",  byId: true, profile: (id) => `/work-item-profile.html?id=${encodeURIComponent(id)}` },
+  model:      { filterKey: "model",      byId: false },
+  provider:   { filterKey: "provider",   byId: false },
+  platform:   { filterKey: "platform",   byId: false },
+};
+
+let _explorerViewBy = "department";
+let _explorerBreakDownBy = "";
+let _explorerScope = []; // [{dim, value, label}, ...] -- breadcrumb/drill stack, root-to-leaf
+
+function initExplorerControls() {
+  const viewBySel = document.getElementById("explorerViewBy");
+  if (!viewBySel || viewBySel.options.length) return; // already built once
+  EXPLORER_DIMENSIONS.forEach(d => viewBySel.appendChild(new Option(d.label, d.key)));
+  viewBySel.value = _explorerViewBy;
+  rebuildExplorerBreakDownOptions();
+}
+
+function rebuildExplorerBreakDownOptions() {
+  const sel = document.getElementById("explorerBreakDownBy");
+  if (!sel) return;
+  const previous = _explorerBreakDownBy;
+  sel.innerHTML = "";
+  sel.appendChild(new Option("None", ""));
+  EXPLORER_DIMENSIONS.filter(d => d.key !== _explorerViewBy).forEach(d => sel.appendChild(new Option(d.label, d.key)));
+  _explorerBreakDownBy = EXPLORER_DIMENSIONS.some(d => d.key === previous && previous !== _explorerViewBy) ? previous : "";
+  sel.value = _explorerBreakDownBy;
+}
+
+function explorerViewByChanged() {
+  _explorerViewBy = document.getElementById("explorerViewBy").value;
+  _explorerScope = []; // changing the primary dimension starts a fresh drill
+  rebuildExplorerBreakDownOptions();
+  document.getElementById("explorerSecondaryWrap").hidden = true;
+  loadExplorerPivot();
+}
+
+function explorerBreakDownByChanged() {
+  _explorerBreakDownBy = document.getElementById("explorerBreakDownBy").value;
+  document.getElementById("explorerSecondaryWrap").hidden = true;
+}
+
+function explorerCrossFilters() {
+  // The one filter shared with the rest of this tab (see the approved
+  // plan's Phase 1 scope note): the other filter selects use id-vs-name
+  // matching semantics that don't line up with the registry's filters
+  // yet -- reconciling that is a later-phase item, not silently guessed
+  // at here.
+  const filters = {};
+  const dept = typeof projectAttributionFilterValue === "function" ? projectAttributionFilterValue("ctxOrgFilter") : "";
+  if (dept) filters.department = dept;
+  return filters;
+}
+
+function explorerScopeFilters() {
+  const filters = explorerCrossFilters();
+  _explorerScope.forEach(level => {
+    const cfg = EXPLORER_DIMENSION_CONFIG[level.dim];
+    filters[cfg.filterKey] = cfg.numeric ? Number(level.value) : level.value;
+  });
+  return filters;
+}
+
+async function loadExplorerPivot() {
+  const dimDef = EXPLORER_DIMENSIONS.find(d => d.key === _explorerViewBy);
+  const head = document.getElementById("explorerPrimaryHead");
+  if (!head) return; // Explorer markup not on this page/tab
+  head.innerHTML = `<th>${escapeHtml(dimDef ? dimDef.label : _explorerViewBy)}</th><th>AI Investment</th><th>Requests</th><th>Tokens</th><th></th>`;
+
+  const { days } = getActiveDateRange();
+  const body = {
+    workspace_id: reportWorkspaceId() || null,
+    metrics: ["ai_spend", "ai_requests", "total_tokens"],
+    dimensions: [_explorerViewBy],
+    filters: explorerScopeFilters(),
+    days: Math.min(365, days),
+    period_key: "none",
+    sort: "ai_spend",
+    limit: 50,
+  };
+  try {
+    const data = await apiPost("/api/metrics/query", body);
+    renderExplorerBreadcrumb();
+    const rows = data.rows || [];
+    document.getElementById("explorerPrimaryRows").innerHTML = rows.length
+      ? rows.map(row => explorerRowHtml(row, _explorerViewBy)).join("")
+      : `<tr><td colspan="5">No AI activity matches this view.</td></tr>`;
+    document.getElementById("explorerSecondaryWrap").hidden = true;
+  } catch (err) {
+    document.getElementById("explorerPrimaryRows").innerHTML =
+      `<tr><td colspan="5">Could not load: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function explorerRowHtml(row, dim) {
+  const cfg = EXPLORER_DIMENSION_CONFIG[dim];
+  const label = row.dimensions?.[dim] ?? "Unassigned";
+  const idValue = cfg.byId ? row.dimension_ids?.[dim] : label;
+  const profileHref = cfg.profile && idValue != null ? cfg.profile(idValue, reportWorkspaceId()) : null;
+  const profileHtml = profileHref
+    ? `<a href="${profileHref}" class="context-view-toggle" onclick="event.stopPropagation()">View Profile →</a>`
+    : "";
+  const clickable = idValue != null && idValue !== "__unassigned__" && idValue !== "__unknown__";
+  const onclick = clickable
+    ? `onclick="explorerDrill('${escapeHtml(dim)}', '${escapeHtml(String(idValue))}', '${escapeHtml(String(label))}')"`
+    : "";
+  return `<tr class="${clickable ? "explorer-row" : ""}" ${onclick}>
+    <td>${escapeHtml(String(label))}</td>
+    <td>${fmtUsd(Number(row.ai_spend || 0))}</td>
+    <td>${fmtNum(row.ai_requests || 0)}</td>
+    <td>${fmtNum(row.total_tokens || 0)}</td>
+    <td>${profileHtml}</td>
+  </tr>`;
+}
+
+function explorerDrill(dim, value, label) {
+  _explorerScope.push({ dim, value, label });
+  loadExplorerPivot();
+  if (_explorerBreakDownBy) loadExplorerSecondary();
+}
+
+function explorerBreadcrumbReset(toIndex) {
+  _explorerScope = _explorerScope.slice(0, toIndex);
+  loadExplorerPivot();
+}
+
+function renderExplorerBreadcrumb() {
+  const nav = document.getElementById("explorerBreadcrumb");
+  if (!nav) return;
+  const crumbs = [`<button type="button" class="ctx-drill-button" onclick="explorerBreadcrumbReset(0)"><strong>Company</strong></button>`];
+  _explorerScope.forEach((level, i) => {
+    crumbs.push(`<span><button type="button" class="ctx-drill-button" onclick="explorerBreadcrumbReset(${i + 1})">${escapeHtml(level.label)}</button></span>`);
+  });
+  nav.innerHTML = crumbs.join("");
+}
+
+async function loadExplorerSecondary() {
+  const wrap = document.getElementById("explorerSecondaryWrap");
+  if (!wrap || !_explorerBreakDownBy) return;
+  const current = _explorerScope[_explorerScope.length - 1];
+  const dimDef = EXPLORER_DIMENSIONS.find(d => d.key === _explorerBreakDownBy);
+  document.getElementById("explorerSecondaryTitle").textContent =
+    `${current ? current.label : "Company"} — break down by ${dimDef ? dimDef.label : _explorerBreakDownBy}`;
+  document.getElementById("explorerSecondaryHead").innerHTML =
+    `<th>${escapeHtml(dimDef ? dimDef.label : _explorerBreakDownBy)}</th><th>AI Investment</th><th>Requests</th><th>Tokens</th><th></th>`;
+  wrap.hidden = false;
+
+  const body = {
+    workspace_id: reportWorkspaceId() || null,
+    metrics: ["ai_spend", "ai_requests", "total_tokens"],
+    dimensions: [_explorerBreakDownBy],
+    filters: explorerScopeFilters(),
+    days: Math.min(365, getActiveDateRange().days),
+    period_key: "none",
+    sort: "ai_spend",
+    limit: 25,
+  };
+  try {
+    const data = await apiPost("/api/metrics/query", body);
+    const rows = data.rows || [];
+    document.getElementById("explorerSecondaryRows").innerHTML = rows.length
+      ? rows.map(row => explorerRowHtml(row, _explorerBreakDownBy)).join("")
+      : `<tr><td colspan="5">No AI activity matches this breakdown.</td></tr>`;
+  } catch (err) {
+    document.getElementById("explorerSecondaryRows").innerHTML =
+      `<tr><td colspan="5">Could not load: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+// ── end AI Activity Explorer (Ask CostPilot scope inheritance is wired
+// into the existing window.getCostPilotAskScope below) ─────────────────
 
 function isReportFilterActive() {
   const active = document.activeElement;
@@ -2216,6 +2430,19 @@ window.getCostPilotAskScope = function getCostPilotAskScope() {
   delete payload.question;
   delete payload.conversation;
   delete payload.context;
+  // charged_unit already covers the Department/Team filter (read from the
+  // same ctxOrgFilter select the Explorer's department drill also uses).
+  // Layer the Explorer's own id-based drill scope (Person/Agent/Account/
+  // Work Item) on top when present -- these come from real dimension_ids,
+  // the same fields askCostPilotPayload already sends for the legacy
+  // filter selects, so Ask CostPilot inherits validated scope either way
+  // it was set.
+  _explorerScope.forEach(level => {
+    if (level.dim === "person") payload.user_external_id = level.value;
+    if (level.dim === "agent") payload.agent_id = Number(level.value);
+    if (level.dim === "account") payload.account_id = level.value;
+    if (level.dim === "work_item") payload.project_id = level.value;
+  });
   return payload;
 };
 

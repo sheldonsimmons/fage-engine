@@ -1567,6 +1567,48 @@
   margin-bottom: 14px;
   padding: 16px;
 }
+.explorer-pivot-panel {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+.explorer-pivot-controls {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(180px, 260px));
+  margin: 12px 0;
+}
+.explorer-pivot-controls label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.explorer-pivot-controls select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 7px 8px;
+}
+.explorer-row {
+  cursor: pointer;
+}
+.explorer-row:hover {
+  background: rgba(88, 166, 255, .06);
+}
+.explorer-row td:first-child {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+#explorerSecondaryWrap {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 12px;
+}
 .purpose-usage-head {
   align-items: flex-end;
   display: flex;

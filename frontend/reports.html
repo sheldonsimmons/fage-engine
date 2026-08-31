@@ -391,6 +391,42 @@
         <strong>Company</strong><span>All AI activity</span>
       </nav>
 
+      <div class="panel explorer-pivot-panel">
+        <div class="context-card-heading">
+          <div>
+            <div class="rpt-chart-title">AI Activity Explorer</div>
+            <div class="project-attribution-sub">Pivot the same trusted metrics across any dimension, then break down further. Click a row to drill in; use "View Profile" to open that entity's full story.</div>
+          </div>
+        </div>
+        <div class="explorer-pivot-controls">
+          <label>View By
+            <select id="explorerViewBy" onchange="explorerViewByChanged()"></select>
+          </label>
+          <label>Break Down By
+            <select id="explorerBreakDownBy" onchange="explorerBreakDownByChanged()"></select>
+          </label>
+        </div>
+        <nav class="project-attribution-drill-path" id="explorerBreadcrumb" aria-label="Explorer drill-down">
+          <strong>Company</strong>
+        </nav>
+        <div class="context-breakdown-table-wrap">
+          <table class="rpt-context-table">
+            <thead><tr id="explorerPrimaryHead"></tr></thead>
+            <tbody id="explorerPrimaryRows"><tr><td colspan="5">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div id="explorerSecondaryWrap" hidden>
+          <div class="rpt-chart-title" id="explorerSecondaryTitle"></div>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table">
+              <thead><tr id="explorerSecondaryHead"></tr></thead>
+              <tbody id="explorerSecondaryRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="project-attribution-note">CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.</div>
+      </div>
+
       <div class="panel org-usage-overview">
         <div class="org-usage-head">
           <div>
