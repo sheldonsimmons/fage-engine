@@ -55,15 +55,16 @@ def _timeline_dates(start: datetime, end: datetime):
 def compute_realized_savings(
     db: Session, workspace_id: Optional[str], days: int,
     date_from: Optional[datetime] = None, date_to: Optional[datetime] = None,
-    *, agent_id: Optional[int] = None,
+    *, agent_id: Optional[int] = None, person_external_id: Optional[str] = None,
 ) -> dict:
     """
     The trusted "Realized Savings" calculation (pruning + model-downgrade
     savings already achieved, not a hypothetical) -- extracted from
-    savings_report() so the Agent Intelligence Profile can reuse the exact
-    same formula scoped to one agent's transactions instead of reimplementing
-    it. savings_report() below is unchanged in behavior; it now just calls
-    this with agent_id=None.
+    savings_report() so the Agent Intelligence Profile (and now the Person
+    Intelligence Profile) can reuse the exact same formula scoped to one
+    agent's or person's transactions instead of reimplementing it.
+    savings_report() below is unchanged in behavior; it now just calls
+    this with agent_id=None, person_external_id=None.
     """
     start, end = _parse_range(days, date_from, date_to)
 
@@ -71,10 +72,16 @@ def compute_realized_savings(
         TokenTransaction.timestamp >= start,
         TokenTransaction.timestamp < end,
     )
+    if person_external_id is not None:
+        from database.models import WorkUser
+        q = q.outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
     if workspace_id:
         q = q.filter(workspace_filter(TokenTransaction, workspace_id))
     if agent_id is not None:
         q = q.filter(TokenTransaction.agent_id == agent_id)
+    if person_external_id is not None:
+        from core.metrics_query import person_clause
+        q = q.filter(person_clause(person_external_id))
     txns = q.all()
 
     total_cost       = sum(t.cost_usd for t in txns)

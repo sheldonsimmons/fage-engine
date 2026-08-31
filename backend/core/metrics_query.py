@@ -171,6 +171,23 @@ def _department_clause(value: str):
     return or_(TokenTransaction.department.ilike(f"%:{value}"), TokenTransaction.department.ilike(value))
 
 
+def person_clause(person_external_id: str):
+    """
+    Matches the "person" dimension's own precedence exactly (see
+    _dimension_expr's "person" case): prefer the linked WorkUser's
+    external_id, falling back to actor_external_id when there's no
+    WorkUser link. Exported (not module-private) so compute_realized_
+    savings (api/routes_reports.py) can scope to one person the same way
+    it already scopes to one agent_id -- shared clause instead of a
+    second, possibly-diverging person-matching rule. Caller must already
+    have WorkUser outerjoined via TokenTransaction.work_user_id == WorkUser.id.
+    """
+    return or_(
+        WorkUser.external_id == person_external_id,
+        and_(TokenTransaction.work_user_id.is_(None), TokenTransaction.actor_external_id == person_external_id),
+    )
+
+
 def _outcome_status_clause(value: str):
     v = (value or "").lower()
     if v == "won":
@@ -508,6 +525,13 @@ def _run_activity_query(
         q = q.filter(RegisteredAgent.name.ilike(f"%{filters['agent']}%"))
     if filters.get("agent_id") is not None:
         q = q.filter(TokenTransaction.agent_id == filters["agent_id"])
+    if filters.get("person"):
+        # Scopes to one person's activity -- the AI Activity Explorer's
+        # Person profile needs this the same way agent_id already scopes
+        # Agent Intelligence Profile's queries. WorkUser is already
+        # outerjoined above, so this reuses the exact same precedence as
+        # the "person" dimension itself (see _dimension_expr).
+        q = q.filter(person_clause(filters["person"]))
     if filters.get("platform"):
         q = q.filter(TokenTransaction.source_platform.ilike(filters["platform"]))
     if filters.get("model"):
@@ -874,6 +898,7 @@ def compute_cost_per_outcome(
     context_type: Optional[str] = None,
     account_name: Optional[str] = None,
     agent_id: Optional[int] = None,
+    person_external_id: Optional[str] = None,
 ) -> dict:
     """
     AI investment associated with successful outcomes, divided by the count
@@ -903,11 +928,17 @@ def compute_cost_per_outcome(
         filters["account"] = account_name
 
     touched_work_item_ids: Optional[list] = None
-    if agent_id is not None:
+    if agent_id is not None or person_external_id is not None:
         scope = workspace_filter(TokenTransaction, workspace_id)
         touched_query = db.query(TokenTransaction.work_item_id).filter(
-            TokenTransaction.agent_id == agent_id, TokenTransaction.work_item_id.isnot(None),
+            TokenTransaction.work_item_id.isnot(None),
         ).distinct()
+        if agent_id is not None:
+            touched_query = touched_query.filter(TokenTransaction.agent_id == agent_id)
+        if person_external_id is not None:
+            touched_query = touched_query.outerjoin(
+                WorkUser, TokenTransaction.work_user_id == WorkUser.id
+            ).filter(person_clause(person_external_id))
         if scope is not None:
             touched_query = touched_query.filter(scope)
         touched_work_item_ids = [row[0] for row in touched_query.all()]
@@ -921,13 +952,18 @@ def compute_cost_per_outcome(
     # shipped further (see commit history). Passing {} (falsy, but not
     # None) skips both the explicit-range and the 30-day-default branches,
     # leaving activity unbounded to match the outcome side.
+    spend_scope_filters = {}
+    if agent_id is not None:
+        spend_scope_filters["agent_id"] = agent_id
+    if person_external_id is not None:
+        spend_scope_filters["person"] = person_external_id
     spend_result = run_metrics_query(
         db, workspace_id, metrics=["ai_spend"],
-        filters={**filters, "outcome_status": "successful", **({"agent_id": agent_id} if agent_id is not None else {})},
+        filters={**filters, "outcome_status": "successful", **spend_scope_filters},
         timeframe={},
     )
     outcome_filters = dict(filters)
-    if agent_id is not None:
+    if agent_id is not None or person_external_id is not None:
         outcome_filters["work_item_ids"] = touched_work_item_ids
     outcome_result = run_metrics_query(
         db, workspace_id, metrics=["successful_outcomes", "outcomes_with_data"],
@@ -951,6 +987,7 @@ def compute_cost_per_outcome(
         "context_type": context_type,
         "account": account_name,
         "agent_id": agent_id,
+        "person_external_id": person_external_id,
         "ai_spend_on_successful_outcomes_usd": round(ai_spend, 6),
         "successful_outcomes": successful_outcomes,
         "outcomes_with_known_data": outcomes_with_data,
@@ -970,6 +1007,7 @@ def compute_outcome_coverage(
     context_type: Optional[str] = None,
     account_name: Optional[str] = None,
     agent_id: Optional[int] = None,
+    person_external_id: Optional[str] = None,
 ) -> dict:
     """
     What share of AI-supported WorkItems actually have a known outcome --
@@ -1015,6 +1053,10 @@ def compute_outcome_coverage(
         # to one agent is just one more filter on it, same definition of
         # coverage narrowed to one agent's transactions.
         touched_query = touched_query.filter(TokenTransaction.agent_id == agent_id)
+    if person_external_id is not None:
+        touched_query = touched_query.outerjoin(
+            WorkUser, TokenTransaction.work_user_id == WorkUser.id
+        ).filter(person_clause(person_external_id))
 
     touched_ids = [row[0] for row in touched_query.all()]
     work_items_touched = len(touched_ids)
@@ -1033,6 +1075,7 @@ def compute_outcome_coverage(
         "context_type": context_type,
         "account": account_name,
         "agent_id": agent_id,
+        "person_external_id": person_external_id,
         "work_items_touched": work_items_touched,
         "outcomes_with_known_data": outcomes_with_data,
         "outcome_coverage_pct": coverage_pct,
@@ -1067,6 +1110,7 @@ def compute_potential_savings(
     *,
     top_agent_limit: int = 5,
     agent_id: Optional[int] = None,
+    person_external_id: Optional[str] = None,
 ) -> dict:
     """
     "Potential Savings" (Business Impact upgrade plan, Part B) -- v1:
@@ -1109,10 +1153,14 @@ def compute_potential_savings(
         TokenTransaction.output_tokens,
         TokenTransaction.cost_usd,
     ).filter(TokenTransaction.routing_reason == "ROUTINE")
+    if person_external_id is not None:
+        query = query.outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
     if scope is not None:
         query = query.filter(scope)
     if agent_id is not None:
         query = query.filter(TokenTransaction.agent_id == agent_id)
+    if person_external_id is not None:
+        query = query.filter(person_clause(person_external_id))
 
     savings_by_agent: dict[Optional[int], float] = {}
     total_savings = 0.0

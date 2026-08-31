@@ -273,6 +273,12 @@ app.include_router(routes_agentlake.router, prefix="/api/agents", tags=["Agentla
 from api import routes_agent_profile
 app.include_router(routes_agent_profile.router, prefix="/api/agents", tags=["Agent Intelligence"])
 
+# Person Intelligence Profile -- factual AI-usage story per person, the
+# same "one entity's full story" pattern as Agent Intelligence Profile
+# and account_profile(), for the AI Activity Explorer's Person drill-down.
+from api import routes_person_profile
+app.include_router(routes_person_profile.router, prefix="/api/people", tags=["Person Intelligence"])
+
 # Step 6 — AI Decision Auditor
 from api import routes_auditor
 app.include_router(routes_auditor.router, prefix="/api/audit", tags=["Auditor"])
