@@ -15,6 +15,8 @@ from core.analytics_drivers import change_decomposition, dimension_contributors
 from api.routes_efficiency import (
     _ask_agent_final_payload,
     _ask_agent_validate_answer,
+    _ask_build_query_plan,
+    _ask_query_plan_step_summary,
     _ask_conversation_text,
     _ask_evidence,
     _ask_extract_numbers,
@@ -1894,6 +1896,60 @@ def test_agent_final_payload_falls_back_to_primary_breakdown_when_no_ids_cited()
     assert payload is not None
     assert len(payload["evidence"]) == 1
     assert payload["evidence"][0]["label"] == "Sheldon"
+
+
+def test_agent_final_payload_includes_query_plan_trace():
+    """
+    Ask CostPilot architecture audit Recommendation #5: the sequence of
+    tool calls behind an agent-loop answer used to exist only internally
+    (tool_call_log) and in a debug log gated behind an env flag -- never
+    in the API response itself. This locks in that the final payload now
+    carries a redacted, structured trace of what was actually looked up.
+    """
+    tool_call_log = [(
+        "get_usage_report", {"days": 30, "limit": 5},
+        {
+            "period": {"label": "This month"},
+            "summary": {"live_count": 5, "simulation_count": 0, "spend_usd": 42.5, "request_count": 12},
+            "data_scope": "live",
+            "top_people": [{"id": "USER-1", "label": "Sheldon", "spend_usd": 12.5}],
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="How much did we spend?"),
+        db=None,
+        final_args={"title": "Spend", "answer": "We spent $42.50 this month.", "evidence_ids": []},
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    assert payload["query_plan"] == [{
+        "step": 1, "tool": "get_usage_report", "args": {"days": 30, "limit": 5},
+        "status": "ok", "summary": "$42.50 spend, 12 requests",
+    }]
+
+
+def test_query_plan_step_summary_surfaces_tool_errors():
+    assert _ask_query_plan_step_summary("query_metrics", {"error": "unknown metric 'foo'"}) == "unknown metric 'foo'"
+
+
+def test_query_plan_step_summary_falls_back_to_row_count():
+    result = {"rows": [{"a": 1}, {"a": 2}, {"a": 3}]}
+    assert _ask_query_plan_step_summary("query_metrics", result) == "3 row(s)"
+
+
+def test_query_plan_step_summary_reports_not_found():
+    assert _ask_query_plan_step_summary("get_account_outcomes", {"found": False}) == "not found"
+
+
+def test_build_query_plan_numbers_steps_in_call_order():
+    tool_call_log = [
+        ("get_budget_status", {"alerts_only": True}, {"departments": []}),
+        ("query_metrics", {"metrics": ["ai_spend"]}, {"error": "unknown_metric"}),
+    ]
+    plan = _ask_build_query_plan(tool_call_log)
+    assert [p["step"] for p in plan] == [1, 2]
+    assert plan[0]["tool"] == "get_budget_status"
+    assert plan[1]["status"] == "error"
 
 
 def test_named_department_resolves_from_real_department_labels():

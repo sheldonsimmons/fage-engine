@@ -3139,6 +3139,7 @@ def _ask_agent_final_payload(
             "simulator_requests": simulator_requests,
         },
         "assistant_mode": "agent_tool_loop",
+        "query_plan": _ask_build_query_plan(tool_call_log),
         "suggested_questions": _ask_suggested_questions(
             "no_activity" if (data_scope or "no_activity") == "no_activity" else suggestion_category,
             department=suggestion_department,
@@ -3158,6 +3159,62 @@ def _ask_agent_final_payload(
         logger.warning("Ask CostPilot proactive signal lookup failed: %s", exc)
 
     return payload
+
+
+def _ask_query_plan_step_summary(tool_name: str, result: dict) -> str:
+    """
+    One-line, generic summary of a tool call's result for the query_plan
+    trace -- Ask CostPilot architecture audit Recommendation #5 (item 6,
+    Traceability): the full tool_call_log already existed internally, but
+    was explicitly acknowledged as never reaching the API response, only
+    a debug log gated behind an env flag. This is deliberately generic
+    (checks a handful of shapes common across every tool) rather than one
+    branch per tool name -- a new tool doesn't need this function edited
+    to get a reasonable summary instead of silently falling through to
+    the "ok" default.
+    """
+    if not isinstance(result, dict):
+        return "ok"
+    if result.get("error"):
+        return str(result["error"])[:200]
+    if isinstance(result.get("summary"), dict):
+        s = result["summary"]
+        if "spend_usd" in s:
+            return f"${float(s.get('spend_usd') or 0):,.2f} spend, {int(s.get('request_count') or 0)} requests"
+    if result.get("found") is False:
+        return "not found"
+    for rows_key in ("rows", "departments", "evidence"):
+        if isinstance(result.get(rows_key), list):
+            return f"{len(result[rows_key])} row(s)"
+    return "ok"
+
+
+def _ask_build_query_plan(tool_call_log: list) -> list[dict]:
+    """
+    Redacted, structured trace of every tool call the agent loop made
+    before its final answer -- args and a one-line result summary, not
+    the full (potentially large) raw result blob. This is the "structured,
+    pre-execution-validated query-plan object" the deterministic path
+    already has as AskCostPilotContext, made visible for the agent-loop
+    path too, closing the gap the architecture audit flagged: every tool
+    call already runs through each tool's own strict-mode JSON schema
+    (enum/type/required-field validation happens before the model's
+    arguments ever reach this codebase) and, for query_metrics, a second
+    semantic validation pass inside run_metrics_query() itself (unknown_
+    metric/unknown_dimension/no_valid_metrics) -- this trace is what makes
+    that validated plan auditable after the fact, not a new validation
+    layer duplicating either of those.
+    """
+    return [
+        {
+            "step": i + 1,
+            "tool": name,
+            "args": args,
+            "status": "error" if (isinstance(result, dict) and result.get("error")) else "ok",
+            "summary": _ask_query_plan_step_summary(name, result),
+        }
+        for i, (name, args, result) in enumerate(tool_call_log)
+    ]
 
 
 def _ask_record_agent_fallback(workspace_id: Optional[str], reason: str, detail: str = "") -> None:
