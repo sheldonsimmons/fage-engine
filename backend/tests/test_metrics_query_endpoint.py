@@ -103,3 +103,35 @@ def test_metrics_query_endpoint_applies_rolling_days_window_not_unbounded():
     # 2020 transaction must be excluded by the rolling window, not just
     # "no rows at all" (which a no-dimension query never produces anyway).
     assert body["rows"][0]["ai_spend"] == 0.0
+
+
+def test_account_filter_resolves_by_exact_external_id_over_fuzzy_name():
+    from database.models import WorkAccount
+
+    client, db = _client()
+    a = WorkAccount(workspace_id="WS-1", name="Acme Corp", external_id="ACC-1")
+    b = WorkAccount(workspace_id="WS-1", name="Acme Corp West", external_id="ACC-2")
+    db.add_all([a, b]); db.flush()
+    from database.models import WorkItem
+    item_a = WorkItem(workspace_id="WS-1", account_id=a.id, context_type="opportunity", external_id="OPP-A", name="Deal A")
+    item_b = WorkItem(workspace_id="WS-1", account_id=b.id, context_type="opportunity", external_id="OPP-B", name="Deal B")
+    db.add_all([item_a, item_b]); db.flush()
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=item_a.id,
+        model_tier="Scout", input_tokens=100, output_tokens=50, cost_usd=4.0, timestamp=datetime.utcnow(),
+    ))
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=item_b.id,
+        model_tier="Scout", input_tokens=100, output_tokens=50, cost_usd=9.0, timestamp=datetime.utcnow(),
+    ))
+    db.commit()
+
+    # "ACC-1" would also fuzzy-match nothing by name, but resolves exactly
+    # by external_id -- the point of this fix (drilling from a row must
+    # never resolve to a different, similarly-named account).
+    resp = client.post("/api/metrics/query", json={
+        "workspace_id": "WS-1", "metrics": ["ai_spend"], "filters": {"account": "ACC-1"},
+    })
+    body = resp.json()
+    assert not body["errors"]
+    assert body["rows"][0]["ai_spend"] == 4.0

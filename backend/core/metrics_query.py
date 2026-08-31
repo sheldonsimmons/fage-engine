@@ -149,10 +149,22 @@ class MetricsResult:
 
 
 def _resolve_account(db: Session, workspace_id: Optional[str], name: str):
-    """Fuzzy-match an account name to a single WorkAccount, scoped to the
-    workspace. Returns (account_or_None, error_or_None)."""
-    q = db.query(WorkAccount).filter(WorkAccount.name.ilike(f"%{name}%"))
+    """Resolve one WorkAccount, scoped to the workspace. Tries an exact
+    external_id match first -- the AI Activity Explorer's account
+    drill-down passes the real external_id (from a row's dimension_ids,
+    not its display label) so a click always resolves to exactly the
+    row that was clicked, never a different, similarly-named account --
+    falling back to fuzzy name search for every existing (name-based)
+    caller. Returns (account_or_None, error_or_None)."""
     scope = workspace_filter(WorkAccount, workspace_id)
+    exact_q = db.query(WorkAccount).filter(WorkAccount.external_id == name)
+    if scope is not None:
+        exact_q = exact_q.filter(scope)
+    exact_match = exact_q.first()
+    if exact_match:
+        return exact_match, None
+
+    q = db.query(WorkAccount).filter(WorkAccount.name.ilike(f"%{name}%"))
     if scope is not None:
         q = q.filter(scope)
     matches = q.limit(6).all()
