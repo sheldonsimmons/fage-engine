@@ -1007,7 +1007,12 @@ async function loadExplorerPivot() {
     document.getElementById("explorerPrimaryRows").innerHTML = rows.length
       ? rows.map(row => explorerRowHtml(row, _explorerViewBy)).join("")
       : `<tr><td colspan="5">No AI activity matches this view.</td></tr>`;
-    document.getElementById("explorerSecondaryWrap").hidden = true;
+    // Secondary-panel visibility is NOT decided here -- this function is
+    // called concurrently with loadExplorerSecondary() from explorerDrill()
+    // (both fired without awaiting each other), so unconditionally hiding
+    // it here raced against that reveal and silently hid a fully-loaded
+    // breakdown (found via live browser verification). explorerDrill() /
+    // explorerBreadcrumbReset() own showing/hiding it instead.
   } catch (err) {
     document.getElementById("explorerPrimaryRows").innerHTML =
       `<tr><td colspan="5">Could not load: ${escapeHtml(err.message)}</td></tr>`;
@@ -1038,12 +1043,25 @@ function explorerRowHtml(row, dim) {
 function explorerDrill(dim, value, label) {
   _explorerScope.push({ dim, value, label });
   loadExplorerPivot();
-  if (_explorerBreakDownBy) loadExplorerSecondary();
+  if (_explorerBreakDownBy) {
+    loadExplorerSecondary();
+  } else {
+    document.getElementById("explorerSecondaryWrap").hidden = true;
+  }
 }
 
 function explorerBreadcrumbReset(toIndex) {
   _explorerScope = _explorerScope.slice(0, toIndex);
   loadExplorerPivot();
+  // A secondary breakdown is scoped to "the row currently drilled into" --
+  // resetting to Company (or any level) with no deeper row selected has
+  // nothing left to break down, so hide it; re-show/refresh only happens
+  // via a fresh explorerDrill() click.
+  if (_explorerScope.length === 0 || !_explorerBreakDownBy) {
+    document.getElementById("explorerSecondaryWrap").hidden = true;
+  } else {
+    loadExplorerSecondary();
+  }
 }
 
 function renderExplorerBreadcrumb() {
