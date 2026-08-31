@@ -280,8 +280,8 @@ def test_comparison_rows_ranked_by_magnitude_of_change_with_dimension():
         compare_to="previous_period",
     )
     labels = [r["dimensions"]["department"] for r in result.comparison["rows"]]
-    assert labels[0] == "WS1:Engineering"
-    assert labels[1] == "WS1:Sales"
+    assert labels[0] == "Engineering"
+    assert labels[1] == "Sales"
 
 
 def test_comparison_rows_respect_limit():

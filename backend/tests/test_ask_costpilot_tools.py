@@ -7,8 +7,36 @@ builder expects.
 """
 import sys
 import types
+from datetime import datetime, timedelta
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 import api.ask_costpilot_tools as tools
+from database.db import Base
+from database.models import TokenTransaction
+
+
+def _usage_session():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    return sessionmaker(bind=engine)()
+
+
+def _seed_people(db, n, workspace_id="ws1"):
+    # Spend descends with i so ranking (sorted by ai_spend desc) matches a
+    # predictable Person000..Person0NN ordering. Zero-padded numeric
+    # suffix (not "Person N") because _ask_name_tokens only matches tokens
+    # of length >= 3 -- a bare "7" would never be a usable search token.
+    now = datetime.utcnow()
+    for i in range(n):
+        db.add(TokenTransaction(
+            department=f"{workspace_id}:Sales", workspace_id=workspace_id,
+            actor_external_id=f"USER-{i}", actor_name=f"Person{i:03d}",
+            model_tier="Scout", input_tokens=10, output_tokens=5,
+            cost_usd=float(n - i), timestamp=now,
+        ))
+    db.commit()
 
 
 def _with_fake_reporting(fn, fake):
@@ -62,33 +90,30 @@ def _report(n=8):
 
 
 def test_default_limit_returns_five_rows():
-    result = _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-        ),
-        lambda **kwargs: _report(20),
+    db = _usage_session()
+    _seed_people(db, 20)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
     )
     assert len(result["top_people"]) == 5
 
 
 def test_explicit_limit_of_ten_returns_ten_rows():
-    result = _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-            limit=10,
-        ),
-        lambda **kwargs: _report(20),
+    db = _usage_session()
+    _seed_people(db, 20)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        limit=10,
     )
     assert len(result["top_people"]) == 10
 
 
 def test_limit_is_clamped_to_fifty():
-    result = _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-            limit=9999,
-        ),
-        lambda **kwargs: _report(80),
+    db = _usage_session()
+    _seed_people(db, 80)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        limit=9999,
     )
     assert len(result["top_people"]) == 50
 
@@ -97,23 +122,21 @@ def test_zero_limit_falls_back_to_default_of_five():
     # `limit or 5` treats a falsy 0 the same as "not set" -- the model
     # asking for literally zero rows isn't a real question, so this
     # defaults rather than returning an empty list.
-    result = _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-            limit=0,
-        ),
-        lambda **kwargs: _report(20),
+    db = _usage_session()
+    _seed_people(db, 20)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        limit=0,
     )
     assert len(result["top_people"]) == 5
 
 
 def test_negative_limit_is_clamped_to_at_least_one():
-    result = _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-            limit=-3,
-        ),
-        lambda **kwargs: _report(20),
+    db = _usage_session()
+    _seed_people(db, 20)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        limit=-3,
     )
     assert len(result["top_people"]) == 1
 
@@ -176,35 +199,24 @@ def test_budget_status_alerts_only_excludes_departments_under_eighty_percent():
 
 
 def test_named_entity_match_is_included_when_entity_name_given():
-    report = _report(20)
-
-    def fake_named_entity(name, rep):
-        assert name == "Person 7"
-        return {"entity": "people", "row": rep["people_breakdown"][7]}
-
-    from api import routes_efficiency
-    original = routes_efficiency._ask_named_entity
-    routes_efficiency._ask_named_entity = fake_named_entity
-    try:
-        result = _with_fake_reporting(
-            lambda: tools.run_get_usage_report(
-                db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-                entity_name="Person 7",
-            ),
-            lambda **kwargs: report,
-        )
-    finally:
-        routes_efficiency._ask_named_entity = original
-    assert result["named_entity_match"]["label"] == "Person 7"
+    # Person019 has the lowest spend (n - i = 20 - 19 = 1) -- outside the
+    # default top-5, so this also confirms matching searches the full
+    # (up-to-100-row) breakdown, not just the truncated top_people list.
+    db = _usage_session()
+    _seed_people(db, 20)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        entity_name="Person019",
+    )
+    assert result["named_entity_match"]["label"] == "Person019"
 
 
 def test_named_entity_match_is_none_when_entity_name_blank():
-    result = _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-            entity_name="   ",
-        ),
-        lambda **kwargs: _report(5),
+    db = _usage_session()
+    _seed_people(db, 5)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        entity_name="   ",
     )
     assert "named_entity_match" not in result
 
@@ -240,70 +252,73 @@ def test_change_drivers_uses_separate_current_and_prior_reports():
     assert result["top_contributor"]["label"] == "Sales"
 
 
+def _seed_providers(db, workspace_id="ws1"):
+    now = datetime.utcnow()
+    db.add(TokenTransaction(
+        department=f"{workspace_id}:Sales", workspace_id=workspace_id,
+        model_name="claude-sonnet-4-6", model_tier="Advisor",
+        input_tokens=10, output_tokens=5, cost_usd=10.0, timestamp=now,
+    ))
+    db.add(TokenTransaction(
+        department=f"{workspace_id}:Sales", workspace_id=workspace_id,
+        model_name="gpt-4.1-mini", model_tier="Analyst",
+        input_tokens=10, output_tokens=5, cost_usd=5.0, timestamp=now,
+    ))
+    db.commit()
+
+
 def test_provider_override_is_applied_to_reporting_filters():
-    captured = {}
-
-    def fake_reporting(**kwargs):
-        captured.update(kwargs)
-        return _report(3)
-
-    _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-            provider="Anthropic",
-        ),
-        fake_reporting,
+    db = _usage_session()
+    _seed_providers(db)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        provider="Anthropic",
     )
-    assert captured.get("provider") == "Anthropic"
+    assert result["summary"]["spend_usd"] == 10.0
 
 
 def test_department_and_provider_overrides_combine():
-    captured = {}
+    db = _usage_session()
+    now = datetime.utcnow()
+    db.add(TokenTransaction(
+        department="ws1:Sales", workspace_id="ws1", model_name="gpt-4.1-mini",
+        model_tier="Analyst", input_tokens=10, output_tokens=5, cost_usd=7.0, timestamp=now,
+    ))
+    db.add(TokenTransaction(
+        department="ws1:Support", workspace_id="ws1", model_name="gpt-4.1-mini",
+        model_tier="Analyst", input_tokens=10, output_tokens=5, cost_usd=3.0, timestamp=now,
+    ))
+    db.add(TokenTransaction(
+        department="ws1:Sales", workspace_id="ws1", model_name="claude-sonnet-4-6",
+        model_tier="Advisor", input_tokens=10, output_tokens=5, cost_usd=11.0, timestamp=now,
+    ))
+    db.commit()
 
-    def fake_reporting(**kwargs):
-        captured.update(kwargs)
-        return _report(3)
-
-    _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-            department="Sales", provider="OpenAI",
-        ),
-        fake_reporting,
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
+        department="Sales", provider="OpenAI",
     )
-    assert captured.get("charged_unit") == "Sales"
-    assert captured.get("provider") == "OpenAI"
+    # Only the Sales + OpenAI row (7.0) should count -- not Support's
+    # OpenAI spend or Sales's Anthropic spend.
+    assert result["summary"]["spend_usd"] == 7.0
 
 
 def test_no_provider_override_leaves_reporting_filters_unchanged():
-    captured = {}
-
-    def fake_reporting(**kwargs):
-        captured.update(kwargs)
-        return _report(3)
-
-    _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={"business_purpose": "support"},
-            days=30, period_key="none",
-        ),
-        fake_reporting,
+    db = _usage_session()
+    _seed_providers(db)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={"business_purpose": "support"},
+        days=30, period_key="none",
     )
-    assert "provider" not in captured
-    assert captured.get("business_purpose") == "support"
+    # No provider filter applied -- both rows count.
+    assert result["summary"]["spend_usd"] == 15.0
 
 
-def test_get_usage_report_result_includes_top_providers(monkeypatch):
-    report = _report(3)
-    report["provider_breakdown"] = [
-        {"id": "Anthropic", "label": "Anthropic", "spend_usd": 10.0},
-        {"id": "OpenAI", "label": "OpenAI", "spend_usd": 5.0},
-    ]
-    result = _with_fake_reporting(
-        lambda: tools.run_get_usage_report(
-            db=None, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
-        ),
-        lambda **kwargs: report,
+def test_get_usage_report_result_includes_top_providers():
+    db = _usage_session()
+    _seed_providers(db)
+    result = tools.run_get_usage_report(
+        db=db, workspace_id="ws1", reporting_filters={}, days=30, period_key="none",
     )
     assert result["top_providers"][0]["label"] == "Anthropic"
 

@@ -527,58 +527,174 @@ def _with_department_override(
     return {**reporting_filters, **overrides} if overrides else reporting_filters
 
 
+# Every metric run_get_usage_report needs, in one request per dimension --
+# run_metrics_query cross-tabs a COMBINED dimension set rather than
+# producing independent breakdowns, so 7 separate breakdowns (person,
+# agent, account, department, platform, model, provider) require 7 calls,
+# not one with dimensions=[...7 keys...].
+_USAGE_REPORT_METRICS = [
+    "ai_spend", "ai_requests", "input_tokens", "output_tokens", "total_tokens",
+    "tokens_saved_count", "simulation_count", "live_count",
+]
+_USAGE_REPORT_SUMMARY_METRICS = _USAGE_REPORT_METRICS + ["people_touched", "active_agents", "work_items_touched"]
+
+# (result key, registry dimension key, ordinal id source in dim_key)
+_USAGE_REPORT_DIMENSIONS = (
+    ("top_people", "person"),
+    ("top_agents", "agent"),
+    ("top_accounts", "account"),
+    ("top_departments", "department"),
+    ("top_platforms", "platform"),
+    ("top_models", "model"),
+    ("top_providers", "provider"),
+)
+
+
+def _shape_usage_row(row: dict, dim_key: str) -> dict:
+    """Reshapes one run_metrics_query row into project_activity_reporting()'s
+    per-bucket shape (id/label/request_count/... ) so downstream callers
+    (Ask CostPilot's model-facing payload, _ask_named_entity) don't need to
+    know which code path produced the row."""
+    dims = row.get("dimensions") or {}
+    label = dims.get(dim_key)
+    request_count = int(row.get("ai_requests") or 0)
+    simulation_count = int(row.get("simulation_count") or 0)
+    return {
+        "id": label,
+        "label": label if label is not None else "Unknown",
+        "request_count": request_count,
+        "input_tokens": int(row.get("input_tokens") or 0),
+        "output_tokens": int(row.get("output_tokens") or 0),
+        "tokens_saved": int(row.get("tokens_saved_count") or 0),
+        "spend_usd": round(float(row.get("ai_spend") or 0.0), 6),
+        "simulation_count": simulation_count,
+        "total_tokens": int(row.get("total_tokens") or 0),
+        "live_count": int(row.get("live_count") if "live_count" in row else request_count - simulation_count),
+    }
+
+
+def _usage_report_filters(reporting_filters: dict) -> dict:
+    """
+    Maps project_activity_reporting()'s kwarg names onto run_metrics_query's
+    filters dict -- both take the same values, just under different keys
+    for the ones that differ (charged_unit is already the shared name).
+    """
+    key_map = {
+        "user_external_id": None,  # not needed: person filtering isn't used by any get_usage_report call site today
+        "agent_id": "agent_id",
+        "source_platform": "platform",
+        "model_tier": "model",
+        "charged_unit": "charged_unit",
+        "provider": "provider",
+        "record_type": None,  # no registry equivalent; not used by any get_usage_report call site today
+        "business_purpose": None,  # no registry equivalent; not used by any get_usage_report call site today
+    }
+    filters = {}
+    for src_key, dst_key in key_map.items():
+        value = reporting_filters.get(src_key)
+        if value and dst_key:
+            filters[dst_key] = value
+    return filters
+
+
 def run_get_usage_report(
     db, workspace_id: Optional[str], reporting_filters: dict, days: int, period_key: str,
     entity_name: Optional[str] = None, limit: Optional[int] = None,
     department: Optional[str] = None, provider: Optional[str] = None,
 ) -> dict:
     from api.routes_efficiency import _ask_named_entity
-    from api.routes_work_items import project_activity_reporting
+    from core.metrics_query import run_metrics_query
 
     # Clamp rather than trust the model's number outright: too low silently
     # drops requested rows, too high blows up the tool-result payload sent
     # back into the model's context for no benefit past a top-50 answer.
     row_limit = max(1, min(int(limit or 5), 50))
     reporting_filters = _with_department_override(reporting_filters, department, provider)
+    filters = _usage_report_filters(reporting_filters)
 
     date_from, date_to = _period_bounds(days, period_key)
-    report = project_activity_reporting(
-        workspace_id=workspace_id,
-        date_from=date_from,
-        date_to=date_to,
-        days=days,
-        **reporting_filters,
-        activity_limit=500,
-        exclude_prune_only_rows=True,
-        db=db,
+    # Matches project_activity_reporting()'s own fallback exactly: a rolling
+    # `days`-day window ending now, even when date_from/date_to are None
+    # (period_key == "none") -- NOT "no time filter at all". An earlier
+    # version of this migration left timeframe={} here, which run_metrics_
+    # query treats as "unbounded", silently pulling all-time data instead
+    # of the intended rolling window; caught by comparing against
+    # production output before deploy (SIM-HISTORICAL-2Y: 3,263 requests/
+    # 30 days vs. 11,945 with the bug pulling all 2 years).
+    period_end = date_to or datetime.utcnow()
+    period_start = date_from or (period_end - timedelta(days=days))
+    timeframe = {"start": period_start.isoformat(), "end": period_end.isoformat()}
+
+    summary_result = run_metrics_query(
+        db, workspace_id, metrics=_USAGE_REPORT_SUMMARY_METRICS, filters=filters, timeframe=timeframe, limit=1,
     )
-    summary = report.get("summary") or {}
+    summary_row = summary_result.rows[0] if summary_result.rows else {}
+    request_count = int(summary_row.get("ai_requests") or 0)
+    simulation_count = int(summary_row.get("simulation_count") or 0)
+    summary = {
+        "request_count": request_count,
+        "input_tokens": int(summary_row.get("input_tokens") or 0),
+        "output_tokens": int(summary_row.get("output_tokens") or 0),
+        "total_tokens": int(summary_row.get("total_tokens") or 0),
+        "tokens_saved": int(summary_row.get("tokens_saved_count") or 0),
+        "spend_usd": round(float(summary_row.get("ai_spend") or 0.0), 6),
+        "people_count": int(summary_row.get("people_touched") or 0),
+        "agent_count": int(summary_row.get("active_agents") or 0),
+        "project_count": int(summary_row.get("work_items_touched") or 0),
+        "simulation_count": simulation_count,
+        "live_count": request_count - simulation_count,
+    }
+
+    breakdowns: dict = {}
     result = {
-        "period": report.get("period"),
+        "period": {
+            "date_from": period_start.isoformat(), "date_to": period_end.isoformat(),
+            "days": max(1, (period_end - period_start).days),
+        },
         "summary": summary,
-        "top_people": (report.get("people_breakdown") or [])[:row_limit],
-        "top_agents": (report.get("agent_breakdown") or [])[:row_limit],
-        # "Account" = the business/customer entity (e.g. a company record
-        # in Salesforce) — distinct from "top_people" (individual human
-        # users). Keep these separate; don't let the model substitute one
-        # for the other.
-        "top_accounts": (report.get("account_breakdown") or [])[:row_limit],
-        "top_departments": (report.get("organizational_unit_breakdown") or [])[:row_limit],
-        "top_platforms": (report.get("source_platform_breakdown") or [])[:row_limit],
-        "top_models": (report.get("model_breakdown") or [])[:row_limit],
-        # "Provider" = the AI vendor (Anthropic/OpenAI/...) derived from
-        # the recorded model name -- distinct from "top_platforms" (the
-        # source system, e.g. Salesforce, a request came from).
-        "top_providers": (report.get("provider_breakdown") or [])[:row_limit],
         "data_scope": scope_from_summary(summary),
     }
+    for result_key, dim_key in _USAGE_REPORT_DIMENSIONS:
+        # "provider" is the AI vendor (Anthropic/OpenAI/...) derived from
+        # the recorded model name -- distinct from "platform"/top_platforms
+        # (the source system, e.g. Salesforce, a request came from).
+        # "account" = the business/customer entity, distinct from
+        # top_people (individual human users) -- keep separate.
+        # run_metrics_query caps at 100 rows regardless of what's passed --
+        # ask for the max when matching a named entity so it's found
+        # anywhere in that cap, not just the requested top N.
+        dim_result = run_metrics_query(
+            db, workspace_id, metrics=_USAGE_REPORT_METRICS, dimensions=[dim_key],
+            filters=filters, timeframe=timeframe, sort="ai_spend", limit=100 if entity_name else row_limit,
+        )
+        rows = [_shape_usage_row(r, dim_key) for r in dim_result.rows]
+        breakdowns[dim_key] = rows
+        result[result_key] = rows[:row_limit]
+
     # A named person/account/department/etc. is often outside the top 5 by
     # spend — without this, the model had no way to answer "how much did X
     # use" except by guessing from the truncated top lists or falling back
     # to the overall total. Match against the FULL (untruncated) breakdowns
     # so any named entity is found regardless of rank.
+    #
+    # No "project"/context breakdown is included here -- the metrics
+    # registry has no dimension for WorkItem-level context entities today
+    # (only project_activity_reporting()'s richer report has one), so a
+    # named lookup that would have matched a project/WorkItem by name
+    # specifically won't resolve through this tool. Documented gap, not a
+    # silent one: get_usage_report never exposed project_breakdown to the
+    # model as a top_* field anyway, so this only affects entity_name
+    # matching against that one entity type.
     if entity_name and entity_name.strip():
-        match = _ask_named_entity(entity_name.strip(), report)
+        pseudo_report = {
+            "people_breakdown": breakdowns.get("person"),
+            "agent_breakdown": breakdowns.get("agent"),
+            "account_breakdown": breakdowns.get("account"),
+            "organizational_unit_breakdown": breakdowns.get("department"),
+            "source_platform_breakdown": breakdowns.get("platform"),
+            "model_breakdown": breakdowns.get("model"),
+        }
+        match = _ask_named_entity(entity_name.strip(), pseudo_report)
         result["named_entity_match"] = (
             {
                 "entity_type": match["entity"],

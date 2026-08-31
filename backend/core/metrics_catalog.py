@@ -102,6 +102,44 @@ METRICS: dict[str, MetricDef] = {
         definition="Count of distinct RegisteredAgent ids with at least one matched AI call in the timeframe.",
         provenance="COUNT(DISTINCT TokenTransaction.agent_id)",
     ),
+    "people_touched": MetricDef(
+        key="people_touched", label="People", source="transaction", unit="count",
+        definition=(
+            "Count of distinct identities from the 'person' dimension "
+            "(WorkUser, else actor fields), excluding rows with no "
+            "identity at all. Matches project_activity_reporting()'s "
+            "summary.people_count (real_person_count), modulo that "
+            "function's separate '__simulator__' bucket, which the "
+            "'person' dimension doesn't have -- same documented "
+            "simplification as that dimension already carries."
+        ),
+        provenance="COUNT(DISTINCT person dimension key), excluding '__unknown__'",
+    ),
+    "tokens_saved_count": MetricDef(
+        key="tokens_saved_count", label="Tokens Saved", source="transaction", unit="tokens",
+        definition=(
+            "Sum of TokenTransaction.tokens_saved (raw token count, not a "
+            "dollar value -- see 'savings' for that). Matches "
+            "project_activity_reporting()'s per-row tokens_saved field."
+        ),
+        provenance="TokenTransaction.tokens_saved",
+    ),
+    "simulation_count": MetricDef(
+        key="simulation_count", label="Simulated Requests", source="transaction", unit="count",
+        definition=(
+            "Count of matched calls flagged as simulator traffic: "
+            "TokenTransaction.is_simulation = true, OR (no WorkItem/"
+            "WorkUser/actor identity at all but a RegisteredAgent is set) "
+            "-- the same is_simulator_traffic fallback heuristic "
+            "project_activity_reporting() uses."
+        ),
+        provenance="TokenTransaction.is_simulation, with identity-based fallback",
+    ),
+    "live_count": MetricDef(
+        key="live_count", label="Live Requests", source="transaction", unit="count",
+        definition="ai_requests minus simulation_count for the same matched rows.",
+        provenance="COUNT(TokenTransaction.id) - simulation_count",
+    ),
     "won_count": MetricDef(
         key="won_count", label="Opportunities Won", source="outcome", unit="count",
         definition=(
@@ -212,11 +250,12 @@ DIMENSIONS: dict[str, DimensionDef] = {
     "department": DimensionDef(
         key="department", label="Department", sources=("transaction",),
         definition=(
-            "TokenTransaction.department, workspace-prefix stripped for "
-            "display via core.agentlake.display_department(). Simpler "
-            "than project_activity_reporting()'s organizational_unit_"
-            "breakdown, which also falls back to charged_org_unit_name -- "
-            "reconciling that is a Milestone 4 follow-up."
+            "TokenTransaction.charged_org_unit_name when set (non-blank), "
+            "else TokenTransaction.department with its workspace prefix "
+            "stripped (segment after the last ':') -- matches "
+            "project_activity_reporting()'s organizational_unit_breakdown "
+            "fallback exactly, including its merge of prefixed and "
+            "unprefixed rows for the same department name."
         ),
     ),
     "agent": DimensionDef(

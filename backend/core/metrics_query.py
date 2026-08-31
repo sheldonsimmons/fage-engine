@@ -68,6 +68,23 @@ MAX_GROUPS = 500
 # "not pruned", which is what every caller actually wants.
 IS_AI_CALL = or_(TokenTransaction.routing_reason.is_(None), TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE")
 
+# Matches project_activity_reporting()'s is_sim_condition exactly: an
+# explicit is_simulation flag, OR a RegisteredAgent-attributed call with no
+# real identity at all (no WorkItem, no WorkUser, no actor_external_id, no
+# origin_record_id) -- the fallback heuristic for older simulated traffic
+# that predates the is_simulation column. Requires WorkItem/RegisteredAgent/
+# WorkUser already outer-joined by the caller (_run_activity_query).
+_IS_SIMULATOR_TRAFFIC = or_(
+    TokenTransaction.is_simulation.is_(True),
+    and_(
+        RegisteredAgent.id.isnot(None),
+        WorkItem.id.is_(None),
+        WorkUser.id.is_(None),
+        TokenTransaction.actor_external_id.is_(None),
+        TokenTransaction.origin_record_id.is_(None),
+    ),
+)
+
 
 @dataclass
 class MetricsResult:
@@ -135,7 +152,25 @@ def _dimension_expr(dim_key: str):
             func.coalesce(WorkAccount.name, "Unassigned account"),
         )
     if dim_key == "department":
-        expr = func.coalesce(TokenTransaction.department, "Unassigned")
+        # Matches project_activity_reporting()'s organizational_unit_breakdown:
+        # prefer charged_org_unit_name when a non-blank value was recorded
+        # (e.g. certain ServiceNow-sourced traffic), falling back to
+        # department otherwise. Confirmed via production data that this
+        # affects ~1% of TokenTransaction rows -- not blank-safe to skip.
+        # NOTE: this raw form does NOT strip a workspace prefix from the
+        # department-fallback branch (see _department_breakdown_rows for
+        # that split); it's used as-is only when "department" is combined
+        # with another dimension in one query (no current caller does
+        # this -- _run_activity_query special-cases the sole-department
+        # case to the split-aware path).
+        charged = func.nullif(func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")), "")
+        expr = func.coalesce(charged, TokenTransaction.department, "Unassigned")
+        return expr, expr
+    if dim_key == "_charged_org_unit_raw":
+        expr = TokenTransaction.charged_org_unit_name
+        return expr, expr
+    if dim_key == "_department_col_raw":
+        expr = TokenTransaction.department
         return expr, expr
     if dim_key == "agent":
         return (
@@ -188,8 +223,19 @@ def _activity_metric_expr(metric_key: str):
         return func.count(func.distinct(WorkItem.account_id))
     if metric_key == "active_agents":
         return func.count(func.distinct(TokenTransaction.agent_id))
+    if metric_key == "people_touched":
+        person_key, _ = _dimension_expr("person")
+        return func.count(func.distinct(case((person_key != "__unknown__", person_key), else_=None)))
     if metric_key in ("savings", "pruning_savings", "downgrade_savings"):
         return _savings_expr(metric_key)
+    if metric_key == "tokens_saved_count":
+        return func.coalesce(func.sum(TokenTransaction.tokens_saved), 0)
+    if metric_key == "simulation_count":
+        return func.coalesce(func.sum(case((_IS_SIMULATOR_TRAFFIC, 1), else_=0)), 0)
+    if metric_key == "live_count":
+        return func.count(TokenTransaction.id) - func.coalesce(
+            func.sum(case((_IS_SIMULATOR_TRAFFIC, 1), else_=0)), 0
+        )
     raise ValueError(f"unknown activity metric: {metric_key}")
 
 
@@ -281,6 +327,39 @@ def _outcome_metric_expr(metric_key: str):
     raise ValueError(f"unknown outcome metric: {metric_key}")
 
 
+def _department_breakdown_rows(
+    db: Session, workspace_id: Optional[str], metric_keys: list,
+    filters: dict, start: Optional[datetime], end: Optional[datetime], account,
+) -> list:
+    """
+    Exactly replicates project_activity_reporting()'s label derivation:
+    `charged_org_unit_name.strip() or department.split(":")[-1].strip() or
+    "Unassigned"`. Critically, the colon-split applies ONLY to the
+    department-fallback branch -- a charged_org_unit_name value is used
+    verbatim even if it happens to contain a colon (confirmed via a real
+    production row whose charged_org_unit_name was itself workspace-
+    prefixed and must NOT be split). Since that decision depends on which
+    of the two raw columns a given row's label actually came from, this
+    groups by the (charged_org_unit_name, department) RAW PAIR in SQL
+    first (so provenance survives aggregation), derives each bucket's
+    final label in Python using the same precedence, then merges buckets
+    that land on the same final label (e.g. "WS-1:Support" and "Support").
+    """
+    raw_rows = _run_activity_query(
+        db, workspace_id, metric_keys, ["_charged_org_unit_raw", "_department_col_raw"],
+        filters, start, end, account,
+    )
+    grouped: dict[str, dict] = {}
+    for row in raw_rows:
+        charged_raw, department_raw = (row["dim_labels"] + [None, None])[:2]
+        charged = (charged_raw or "").strip()
+        label = charged or (department_raw or "").split(":")[-1].strip() or "Unassigned"
+        bucket = grouped.setdefault(label, {"dim_key": (label,), "dim_labels": [label], "values": {}})
+        for metric_key, value in row["values"].items():
+            bucket["values"][metric_key] = bucket["values"].get(metric_key, 0) + (value or 0)
+    return list(grouped.values())
+
+
 def _provider_breakdown_rows(
     db: Session, workspace_id: Optional[str], metric_keys: list,
     filters: dict, start: Optional[datetime], end: Optional[datetime], account,
@@ -316,6 +395,8 @@ def _run_activity_query(
 ) -> list:
     if dim_keys == ["provider"]:
         return _provider_breakdown_rows(db, workspace_id, metric_keys, filters, start, end, account)
+    if dim_keys == ["department"]:
+        return _department_breakdown_rows(db, workspace_id, metric_keys, filters, start, end, account)
     q = (
         db.query(TokenTransaction.id)
         .outerjoin(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
@@ -337,6 +418,40 @@ def _run_activity_query(
         q = q.filter(WorkItem.account_id == account.id)
     if filters.get("department"):
         q = q.filter(_department_clause(filters["department"]))
+    if filters.get("charged_unit"):
+        # Exact match against the same fallback chain the "department"
+        # dimension groups by (charged_org_unit_name, else department) --
+        # matches project_activity_reporting()'s charged_unit filter,
+        # including its documented multi-colon department-string caveat
+        # (see that function's own comment for why an exact single SQL
+        # expression can't safely reproduce every edge of the Python
+        # original; real data never has more than one colon in
+        # `department`, so this is the same accepted tradeoff).
+        charged_unit = filters["charged_unit"]
+        q = q.filter(or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == charged_unit,
+            TokenTransaction.department == charged_unit,
+            TokenTransaction.department.like(f"%:{charged_unit}"),
+        ))
+    if filters.get("provider"):
+        # Not a stored column -- resolve to the set of model names that
+        # map to this provider (same core.model_provider registry the
+        # "provider" dimension re-aggregates through), then filter on
+        # model_name membership. Small, cached-per-call lookup, not one
+        # resolve_provider() call per transaction.
+        from core.model_provider import load_provider_registry, resolve_provider
+
+        registry = load_provider_registry(db)
+        target = filters["provider"].strip().lower()
+        distinct_models = [
+            m for (m,) in db.query(TokenTransaction.model_name).filter(
+                TokenTransaction.model_name.isnot(None)
+            ).distinct()
+        ]
+        matching_models = [
+            m for m in distinct_models if resolve_provider(m, registry=registry).lower() == target
+        ]
+        q = q.filter(TokenTransaction.model_name.in_(matching_models)) if matching_models else q.filter(False)
     if filters.get("agent"):
         q = q.filter(RegisteredAgent.name.ilike(f"%{filters['agent']}%"))
     if filters.get("agent_id") is not None:
