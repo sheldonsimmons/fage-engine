@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Person Intelligence Profile</title>
+  <link rel="icon" type="image/svg+xml" href="/cockpit/favicon.svg" />
+  <link rel="stylesheet" href="css/styles.css?v=20260821-dark-theme" />
+  <link rel="stylesheet" href="css/tokens.css?v=20260821-dark-theme" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
+  <style>
+    /* Same token/convention reuse as agent-profile.html and
+       work-item-profile.html -- no new palette, this is the person-level
+       equivalent drill-down (AI Activity Explorer, Phase 1). */
+    body { margin: 0; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); }
+    .pp-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 28px 40px; }
+    .pp-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .pp-back { color: var(--text-muted); font-size: 13px; text-decoration: none; }
+    .pp-back:hover { color: var(--text-primary); }
+    .pp-header { margin: 14px 0 22px; }
+    .pp-header h1 { font-size: 25px; font-weight: 650; margin: 4px 0 6px; letter-spacing: -0.01em; }
+    .pp-meta { font-size: 13px; color: var(--text-muted); }
+
+    .pp-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+    .pp-kpi-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .pp-kpi-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .pp-kpi-value { font-size: 21px; font-weight: 650; }
+    .pp-kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    .pp-section { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+    .pp-section h2 { font-size: 14px; font-weight: 650; margin: 0 0 12px; }
+    .pp-section-hint { font-size: 12px; color: var(--text-muted); margin: -8px 0 12px; }
+
+    .pp-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .pp-table th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    .pp-table td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .pp-table tr:last-child td { border-bottom: none; }
+    .pp-table tr[data-href] { cursor: pointer; }
+    .pp-table tr[data-href]:hover { background: rgba(88,166,255,0.05); }
+
+    .pp-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 10px; padding: 10px 12px; background: var(--bg-base); border-radius: 8px; border: 1px solid var(--border); }
+    .pp-evidence-tag { display: inline-block; font-size: 10.5px; font-weight: 650; padding: 2px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.03em; background: rgba(88,166,255,0.14); color: #58a6ff; margin-left: 8px; }
+    .pp-evidence-tag.early_signal { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+    .pp-evidence-tag.executive_eligible { background: rgba(63,185,80,0.12); color: var(--accent-green); }
+
+    .pp-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    .pp-toggle-btn {
+      margin-top: 10px; background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .pp-toggle-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="pp-wrap">
+    <a class="pp-back" href="/reports.html?tab=contexts">← Back to AI Activity Explorer</a>
+
+    <div id="ppEmptyState" class="pp-empty" style="display:none"></div>
+
+    <div id="ppContent" style="display:none">
+      <div class="pp-header">
+        <h1 id="ppName">—</h1>
+        <div class="pp-meta" id="ppMeta"></div>
+      </div>
+
+      <div class="pp-kpi-row">
+        <div class="pp-kpi-card">
+          <div class="pp-kpi-label">AI Investment</div>
+          <div class="pp-kpi-value pp-num" id="ppKpiInvestment">—</div>
+          <div class="pp-kpi-sub" id="ppKpiRequests"></div>
+        </div>
+        <div class="pp-kpi-card">
+          <div class="pp-kpi-label">Realized Savings</div>
+          <div class="pp-kpi-value pp-num" id="ppKpiSavings">—</div>
+        </div>
+        <div class="pp-kpi-card">
+          <div class="pp-kpi-label">Associated Business Value</div>
+          <div class="pp-kpi-value pp-num" id="ppKpiValue">—</div>
+        </div>
+        <div class="pp-kpi-card">
+          <div class="pp-kpi-label">Cost per Successful Outcome</div>
+          <div class="pp-kpi-value pp-num" id="ppKpiCostPerOutcome">—</div>
+          <div class="pp-kpi-sub" id="ppKpiEvidence"></div>
+        </div>
+      </div>
+
+      <div class="pp-section">
+        <h2>Business Impact</h2>
+        <div id="ppImpactBody"></div>
+      </div>
+
+      <div class="pp-section">
+        <h2>Agents Used</h2>
+        <table class="pp-table">
+          <thead><tr><th>Agent</th><th>Requests</th><th>AI Spend</th></tr></thead>
+          <tbody id="ppAgentsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="pp-section">
+        <h2>Accounts</h2>
+        <table class="pp-table">
+          <thead><tr><th>Account</th><th>Requests</th><th>AI Spend</th></tr></thead>
+          <tbody id="ppAccountsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="pp-section">
+        <h2>Work Items</h2>
+        <p class="pp-section-hint">WorkItems this person's activity touched, ranked by their spend on each.</p>
+        <table class="pp-table">
+          <thead><tr><th>WorkItem</th><th>Type</th><th>Outcome</th><th>Requests</th><th>AI Spend</th></tr></thead>
+          <tbody id="ppWorkItemsBody"></tbody>
+        </table>
+        <button type="button" class="pp-toggle-btn" id="ppWorkItemsToggle" style="display:none"></button>
+      </div>
+
+      <div class="pp-section">
+        <h2>Model Usage</h2>
+        <table class="pp-table">
+          <thead><tr><th>Model</th><th>Requests</th><th>AI Spend</th></tr></thead>
+          <tbody id="ppModelsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="pp-section">
+        <h2>Recent Activity</h2>
+        <table class="pp-table">
+          <thead><tr><th>Time</th><th>Model</th><th>WorkItem</th><th>Cost</th></tr></thead>
+          <tbody id="ppTimelineBody"></tbody>
+        </table>
+        <button type="button" class="pp-toggle-btn" id="ppTimelineToggle" style="display:none"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Person Intelligence Profile -- backed entirely by:
+    //   GET /api/people/{external_id}/profile
+    // Read-only, no governance/edit form: a person isn't a governed
+    // entity CostPilot owns configuration for, only an identity its
+    // ledger attributes activity to. Strictly factual/attribution-only
+    // per the approved AI Activity Explorer plan -- no productivity
+    // score, no performance judgment, no employee ranking anywhere on
+    // this page; every section renders only what the endpoint returns.
+    const ppParams = new URLSearchParams(location.search);
+    const ppExternalId = ppParams.get("id") || "";
+    const ppWorkspaceId = ppParams.get("workspace_id") || localStorage.getItem("cp_workspace_id") || "";
+
+    function ppFmtUsd(value, decimals = 2) {
+      if (value === null || value === undefined) return "—";
+      const n = Number(value);
+      if (Math.abs(n) > 0 && Math.abs(n) < 0.01) return `$${n.toFixed(6)}`;
+      return `$${n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+    }
+    function ppFmtNum(value) {
+      return Number(value || 0).toLocaleString();
+    }
+    function ppEsc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function ppParseUtc(iso) {
+      // See work-item-profile.html's identical helper: naive UTC
+      // timestamps with no "Z" parse as local time in JS otherwise.
+      return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`);
+    }
+    function ppFmtDate(iso) {
+      if (!iso) return "—";
+      return ppParseUtc(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+
+    const PP_COLLAPSE_LIMIT = 10;
+
+    function ppRenderCollapsible(tbodyId, toggleId, rows, colspan, emptyMessage, rowHtml) {
+      const tbody = document.getElementById(tbodyId);
+      const toggle = document.getElementById(toggleId);
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="pp-section-hint">${emptyMessage}</td></tr>`;
+        toggle.style.display = "none";
+        return;
+      }
+      let expanded = false;
+      const render = () => {
+        const shown = expanded ? rows : rows.slice(0, PP_COLLAPSE_LIMIT);
+        tbody.innerHTML = shown.map(rowHtml).join("");
+        toggle.textContent = expanded ? "Show fewer" : `Show all (${rows.length})`;
+      };
+      toggle.style.display = rows.length > PP_COLLAPSE_LIMIT ? "inline-block" : "none";
+      toggle.onclick = () => { expanded = !expanded; render(); };
+      render();
+    }
+
+    function ppShowEmpty(message) {
+      document.getElementById("ppEmptyState").style.display = "block";
+      document.getElementById("ppEmptyState").textContent = message;
+      document.getElementById("ppContent").style.display = "none";
+    }
+
+    async function ppLoad() {
+      if (!ppExternalId) {
+        ppShowEmpty("No person specified. Open this page from the AI Activity Explorer.");
+        return;
+      }
+      try {
+        const qs = ppWorkspaceId ? `?workspace_id=${encodeURIComponent(ppWorkspaceId)}` : "";
+        const data = await apiGet(`/api/people/${encodeURIComponent(ppExternalId)}/profile${qs}`);
+        document.getElementById("ppEmptyState").style.display = "none";
+        document.getElementById("ppContent").style.display = "block";
+        ppRender(data);
+      } catch (err) {
+        ppShowEmpty(`Could not load this person: ${(err.message || "").replace(/</g, "&lt;")}`);
+      }
+    }
+
+    function ppRender(data) {
+      const person = data.person;
+      const econ = data.economics;
+
+      document.getElementById("ppName").textContent = person.name || "Unknown person";
+      document.title = `CostPilot — ${person.name || "Person Intelligence Profile"}`;
+
+      const metaParts = [];
+      if (person.email) metaParts.push(person.email);
+      if (person.source_platform) metaParts.push(person.source_platform);
+      metaParts.push(person.identity_kind === "actor_only" ? "Legacy/unsynced identity" : "Synced identity");
+      document.getElementById("ppMeta").textContent = metaParts.join(" · ");
+
+      // KPIs -- all reused, trusted calculations (see core/person_intelligence.py)
+      document.getElementById("ppKpiInvestment").textContent = ppFmtUsd(econ.ai_investment_usd, 4);
+      document.getElementById("ppKpiRequests").textContent = `${ppFmtNum(econ.ai_requests)} requests · ${ppFmtNum(econ.total_tokens)} tokens`;
+      document.getElementById("ppKpiSavings").textContent = ppFmtUsd(econ.realized_savings_usd, 4);
+      document.getElementById("ppKpiValue").textContent = ppFmtUsd(econ.associated_business_value_usd, 0);
+      document.getElementById("ppKpiCostPerOutcome").textContent = econ.cost_per_successful_outcome_usd != null
+        ? ppFmtUsd(econ.cost_per_successful_outcome_usd, 4)
+        : "—";
+      const evidenceEl = document.getElementById("ppKpiEvidence");
+      evidenceEl.innerHTML = `<span class="pp-evidence-tag ${ppEsc(econ.cost_per_outcome_evidence || "")}">${ppEsc((econ.cost_per_outcome_evidence || "").replace(/_/g, " "))}</span>`;
+
+      document.getElementById("ppImpactBody").innerHTML = `
+        <table class="pp-table">
+          <tbody>
+            <tr><td>Potential Savings</td><td class="pp-num">${ppFmtUsd(econ.potential_savings_usd, 4)}
+              <span class="pp-evidence-tag ${ppEsc(econ.potential_savings_evidence || "")}">${ppEsc((econ.potential_savings_evidence || "").replace(/_/g, " "))}</span>
+            </td></tr>
+            <tr><td>Outcome Coverage</td><td class="pp-num">${econ.outcome_coverage_pct != null ? econ.outcome_coverage_pct + "%" : "—"} (${ppFmtNum(econ.outcomes_with_known_data)} of ${ppFmtNum(econ.work_items_touched)} WorkItems)</td></tr>
+            <tr><td>Successful Outcomes</td><td class="pp-num">${ppFmtNum(econ.successful_outcomes)}</td></tr>
+          </tbody>
+        </table>
+        <div class="pp-note">${ppEsc(econ.association_note)}</div>`;
+
+      document.getElementById("ppAgentsBody").innerHTML = (data.agents_used || []).length
+        ? data.agents_used.map((a) => `
+            <tr data-href="/agent-profile.html?id=${encodeURIComponent(a.agent_id)}" onclick="location.href=this.dataset.href">
+              <td>${ppEsc(a.agent_name)}</td>
+              <td class="pp-num">${ppFmtNum(a.request_count)}</td>
+              <td class="pp-num">${ppFmtUsd(a.ai_spend_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="3" class="pp-section-hint">No agent usage recorded.</td></tr>`;
+
+      document.getElementById("ppAccountsBody").innerHTML = (data.accounts || []).length
+        ? data.accounts.map((a) => `
+            <tr data-href="/business-profile.html?account=${encodeURIComponent(a.account_external_id)}&workspace_id=${encodeURIComponent(ppWorkspaceId)}" onclick="location.href=this.dataset.href">
+              <td>${ppEsc(a.account_name)}</td>
+              <td class="pp-num">${ppFmtNum(a.request_count)}</td>
+              <td class="pp-num">${ppFmtUsd(a.ai_spend_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="3" class="pp-section-hint">No account activity recorded.</td></tr>`;
+
+      ppRenderCollapsible(
+        "ppWorkItemsBody", "ppWorkItemsToggle", data.work_items || [], 5,
+        "No WorkItems touched yet.",
+        (w) => `
+          <tr data-href="/work-item-profile.html?id=${encodeURIComponent(w.work_item_id)}" onclick="location.href=this.dataset.href">
+            <td>${ppEsc(w.name || "Unnamed")}</td>
+            <td>${ppEsc((w.context_type || "—").replace(/_/g, " "))}</td>
+            <td>${ppEsc(w.outcome_status || "—")}${w.outcome_success === true ? " (won)" : w.outcome_success === false ? " (lost)" : ""}</td>
+            <td class="pp-num">${ppFmtNum(w.call_count)}</td>
+            <td class="pp-num">${ppFmtUsd(w.ai_spend_usd, 4)}</td>
+          </tr>`
+      );
+
+      document.getElementById("ppModelsBody").innerHTML = (data.model_usage || []).length
+        ? data.model_usage.map((m) => `
+            <tr>
+              <td>${ppEsc(m.model)}</td>
+              <td class="pp-num">${ppFmtNum(m.call_count)}</td>
+              <td class="pp-num">${ppFmtUsd(m.spend_usd, 4)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="3" class="pp-section-hint">No model usage recorded.</td></tr>`;
+
+      ppRenderCollapsible(
+        "ppTimelineBody", "ppTimelineToggle", data.activity_timeline || [], 4,
+        "No tracked AI activity yet.",
+        (row) => `
+          <tr>
+            <td>${ppFmtDate(row.timestamp)}</td>
+            <td>${ppEsc(row.model || "—")}</td>
+            <td>${ppEsc(row.work_item_name || "—")}</td>
+            <td class="pp-num">${ppFmtUsd(row.cost_usd, 4)}</td>
+          </tr>`
+      );
+    }
+
+    ppLoad();
+  </script>
+</body>
+</html>
