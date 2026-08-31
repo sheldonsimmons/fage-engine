@@ -238,7 +238,10 @@ function renderAdminAgentTable(agents, tbody) {
     return `<tr id="agent-row-${agent.id}" class="admin-agent-row${_adminSelectedAgentId === agent.id ? " selected" : ""}"
         onclick="openAdminAgentDrawer(${agent.id})">
       <td>
-        <strong>${displayAgentName(agent)}</strong>
+        <a href="/agent-profile.html?id=${agent.id}" onclick="event.stopPropagation()"
+          title="Open Agent Intelligence Profile" style="color:var(--text-primary);text-decoration:none">
+          <strong>${displayAgentName(agent)}</strong>
+        </a>
         <span class="admin-agent-secondary">${agent.target_table || "No target configured"}</span>
       </td>
       <td>${displayAgentDept(agent)}</td>
@@ -305,6 +308,9 @@ function renderAdminAgentDrawer(agent) {
         <p>${displayAgentDept(agent)} · ${agent.source_platform || "Custom"}</p>
       </div>
       <span class="badge ${status === "active" ? "badge-active" : status === "idle" ? "badge-idle" : "badge-locked"}">${status.toUpperCase()}</span>
+    </div>
+    <div class="admin-drawer-section">
+      <a href="/agent-profile.html?id=${agent.id}" class="admin-secondary-btn" style="display:inline-block;text-decoration:none;text-align:center">View Agent Intelligence Profile →</a>
     </div>
     <div class="admin-drawer-section">
       <h3>Connection</h3>
