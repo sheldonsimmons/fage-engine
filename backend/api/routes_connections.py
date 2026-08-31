@@ -464,7 +464,19 @@ def _public_connection(item: IntegrationConnection, db: Optional[Session] = None
         "created_at": item.created_at,
         "updated_at": item.updated_at,
         "work_item_count": work_item_count,
+        # Live activity status (last_event_at/agents_observed/request_count/
+        # activity_status) -- generic, computed the same way for every
+        # connection (Universal or native), added here so it's a free
+        # byproduct for existing Salesforce/ServiceNow connections too, not
+        # just Universal Connections. See core/connection_status.py.
+        "connection_key": item.connection_key,
+        **(_connection_activity_status(db, item) if db is not None else {}),
     }
+
+
+def _connection_activity_status(db: Session, item: IntegrationConnection) -> dict:
+    from core.connection_status import compute_connection_status
+    return compute_connection_status(db, item)
 
 
 def _get_connection(db: Session, connection_id: int) -> IntegrationConnection:

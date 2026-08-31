@@ -87,13 +87,46 @@ def get_api_key(workspace_id: str, db: Session = Depends(get_db)):
     }
 
 
+def check_admin_access(request_user=None) -> None:
+    """
+    Swappable seam for restricting credential reveal/regenerate to
+    authorized admins -- a no-op today because no user/role/auth model
+    exists anywhere in this codebase (confirmed while building the
+    Universal Connection feature). Real enforcement can be dropped in
+    here later without touching any call site that already imports this.
+    """
+    return None
+
+
+@router.get("/{workspace_id}/api-key/reveal")
+def reveal_api_key(workspace_id: str, db: Session = Depends(get_db)):
+    """
+    Returns the CURRENT full key value without rotating it -- distinct
+    from regenerate below, which always issues a new one. Generates a key
+    if the workspace doesn't have one yet (first-time reveal during
+    Universal Connection setup shouldn't require a separate "create a key"
+    step). Gated by the same admin-access seam as regenerate.
+    """
+    check_admin_access()
+    workspace = _require_workspace(db, workspace_id)
+    if not workspace.api_key:
+        workspace.api_key = _new_api_key()
+        db.commit()
+    return {"workspace_id": workspace.workspace_id, "api_key": workspace.api_key}
+
+
 @router.post("/{workspace_id}/api-key/regenerate")
 def regenerate_api_key(workspace_id: str, db: Session = Depends(get_db)):
     """
     Issues a new key, invalidating any previous one immediately -- there is
     no "list of valid keys," just the single current value on the row, so
-    regenerating is also how a leaked key gets revoked.
+    regenerating is also how a leaked key gets revoked. Every existing
+    integration using the old key (any Universal Connection, and the
+    packaged Salesforce connector) stops authenticating the moment this
+    runs -- the frontend must warn about that before calling this, not
+    just before showing a confirm dialog for its own sake.
     """
+    check_admin_access()
     workspace = _require_workspace(db, workspace_id)
     workspace.api_key = _new_api_key()
     db.commit()

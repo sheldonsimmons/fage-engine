@@ -49,7 +49,17 @@ def metrics_query(body: MetricsQueryRequest, db: Session = Depends(get_db)):
         period = resolve_primary_period(period_key="none", days=max(1, min(int(body.days or 30), 365)))
     else:
         period = resolve_primary_period(period_key=body.period_key, days=max(1, min(int(body.days or 30), 365)))
-    timeframe = {"start": period.start.isoformat(), "end": period.end.isoformat()}
+    # Real datetime objects, not .isoformat() strings -- run_metrics_query
+    # passes these straight into a SQLAlchemy timestamp filter, and an ISO
+    # string compared against SQLite's own datetime text format (space
+    # separator, not "T") silently matches nothing despite being
+    # lexicographically close. Postgres happens to parse the "T" format
+    # correctly via its own implicit text->timestamp cast (why this never
+    # showed up against production), but it's fragile and breaks under
+    # SQLite -- found while building the Universal Connection feature's
+    # verification endpoint, which hit the same pattern and failed its own
+    # test suite immediately.
+    timeframe = {"start": period.start, "end": period.end}
 
     # Strip empty-string filter values -- the frontend's <select> "All X"
     # option sends "" for "not filtering," which must mean None here, not

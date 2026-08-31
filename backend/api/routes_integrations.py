@@ -172,6 +172,12 @@ def get_connector_contract():
                 "work",
                 "usage.cost_usd",
                 "usage.occurred_at",
+                # Stable identity for a Universal Connection (see
+                # IntegrationConnection.connection_key) -- omit entirely
+                # for the smallest possible payload; a caller that
+                # includes it gets unambiguous per-connection attribution
+                # instead of a display-name string match.
+                "connection_key",
             ],
             "example": {
                 "contract_version": CONTRACT_VERSION,

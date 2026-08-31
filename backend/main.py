@@ -247,6 +247,13 @@ app.include_router(routes_integrations.router, prefix="/api/integrations", tags=
 from api import routes_connections
 app.include_router(routes_connections.router, prefix="/api/integrations/connections", tags=["Connections"])
 
+# Universal Connection -- connect any platform (including fully custom/
+# unlisted systems) via the existing canonical event contract, as a real
+# saved connection. Deliberately a separate router from routes_connections
+# above -- never touches its SUPPORTED_PLATFORMS gate or OAuth flows.
+from api import routes_connections_universal
+app.include_router(routes_connections_universal.router, prefix="/api/integrations/connections", tags=["Universal Connection"])
+
 # Work Attribution — projects, matters, engagements, cases, and claims
 from api import routes_work_items
 app.include_router(routes_work_items.router, prefix="/api/work-items", tags=["Work Attribution"])
