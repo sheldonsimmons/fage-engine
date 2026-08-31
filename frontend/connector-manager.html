@@ -294,10 +294,10 @@
     // business context. Backed by POST/GET /api/integrations/connections/
     // universal and GET .../verify-test-event (api/routes_connections_
     // universal.py). Never touches the Salesforce/ServiceNow OAuth flows.
-    let ucState = { step: 1, connection: null, apiKey: null, verifyPoll: null };
+    let ucState = { step: 1, connection: null, apiKey: null, keyRevealed: false, verifyPoll: null };
 
     function ucOpen() {
-      ucState = { step: 1, connection: null, apiKey: null, verifyPoll: null };
+      ucState = { step: 1, connection: null, apiKey: null, keyRevealed: false, verifyPoll: null };
       document.getElementById("ucOverlay").hidden = false;
       ucRenderStep();
     }
@@ -373,7 +373,12 @@
       return {
         mode: "observe",
         connection_key: ucState.connection.connection_key,
-        source: { platform: ucState.connection.platform, workspace_id: ucState.connection.workspace_id },
+        // source.agent_name is technically optional in the contract, but
+        // included here even in the "minimal" example because the
+        // verification checklist's "Agent recognized" step needs a real
+        // identity to check -- an event with none can never pass that
+        // step, which a live browser pass against production caught.
+        source: { platform: ucState.connection.platform, workspace_id: ucState.connection.workspace_id, agent_name: `${ucState.connection.platform} Agent` },
         usage: { model_name: "gpt-4o-mini", input_tokens: 120, output_tokens: 40, cost_usd: 0.0008 },
       };
     }
@@ -395,13 +400,17 @@
     }
 
     function ucStep2Html() {
-      const keyPreview = `${ucState.apiKey.slice(0, 12)}…${ucState.apiKey.slice(-4)}`;
+      // Respects ucState.keyRevealed across re-renders (e.g. switching
+      // snippet tabs calls ucRenderStep() too) -- previously always
+      // rendered the masked preview, silently re-hiding a key the user
+      // had already revealed. Found via a live browser pass.
+      const displayValue = ucState.keyRevealed ? ucState.apiKey : `${ucState.apiKey.slice(0, 12)}…${ucState.apiKey.slice(-4)}`;
       return `
         <div class="uc-field">
           <label>Workspace Credential</label>
           <div class="uc-key-row">
-            <code id="ucKeyDisplay">${ucEsc(keyPreview)}</code>
-            <button type="button" class="uc-mini-btn" onclick="ucRevealKey()">Reveal</button>
+            <code id="ucKeyDisplay">${ucEsc(displayValue)}</code>
+            ${ucState.keyRevealed ? "" : `<button type="button" class="uc-mini-btn" onclick="ucRevealKey()">Reveal</button>`}
             <button type="button" class="uc-mini-btn" onclick="ucCopyKey()">Copy</button>
           </div>
           <div class="uc-warn">Keep this credential secret — it authenticates any system reporting to this workspace.</div>
@@ -428,8 +437,8 @@
       try {
         const result = await apiGet(`/api/workspaces/${encodeURIComponent(ucState.connection.workspace_id)}/api-key/reveal`);
         ucState.apiKey = result.api_key;
-        document.getElementById("ucKeyDisplay").textContent = result.api_key;
-        document.getElementById("ucSnippetCode").textContent = ucSnippet(ucActiveSnippetTab);
+        ucState.keyRevealed = true;
+        ucRenderStep();
       } catch (err) {
         alert(`Could not reveal key: ${err.message}`);
       }
