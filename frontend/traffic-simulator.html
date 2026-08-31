@@ -492,8 +492,12 @@
     }
   </style>
   <link rel="stylesheet" href="/css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="/css/left-nav.css?v=20260831-consolidation" />
 </head>
-<body>
+<body class="cp-uses-left-nav">
+<div class="cp-app-shell">
+<aside id="cpLeftNavMount"></aside>
+<div class="cp-app-main">
   <header class="header">
     <div class="header-brand">
       <img src="/assets/costpilot-logo-transparent.svg" alt="CostPilot" class="brand-logo-img" width="320" />
@@ -699,5 +703,8 @@
   <script src="js/traffic_simulator.js?v=20260807-related-records"></script>
   <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
   <script src="/js/global-nav.js?v=20260821-dark-theme"></script>
+  <script src="/js/left-nav.js?v=20260831-consolidation"></script>
+</div>
+</div>
 </body>
 </html>
