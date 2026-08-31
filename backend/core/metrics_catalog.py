@@ -35,6 +35,37 @@ class MetricDef:
     unit: str  # "usd" | "count" | "tokens"
     definition: str
     provenance: str
+    # -- Ask CostPilot architecture audit Recommendation #3: generalizing
+    # the sample-size-awareness that used to live only inside
+    # compute_cost_per_outcome() as one hand-rolled special case, so ANY
+    # sample-size-sensitive metric can get the same "don't state this as
+    # confident fact off 2 data points" treatment, not just that one. --
+    #
+    # sample_size_metric: the key of the paired COUNT metric that measures
+    # how many underlying records this metric was computed over -- e.g.
+    # won_value's reliability depends on won_count (a $500K "average" won
+    # deal size off 1 closed deal isn't a stable number). None for metrics
+    # that are already their own sample (a count) or aren't an average/
+    # sum-over-a-small-population type (ai_spend is real regardless of how
+    # many calls made it up -- there's no "small sample" failure mode for
+    # a plain total).
+    sample_size_metric: Optional[str] = None
+    # min_meaningful_sample / min_executive_sample: per-metric overrides
+    # for the evidence thresholds core.metrics_query.MIN_MEANINGFUL_SAMPLE/
+    # MIN_EXECUTIVE_SAMPLE apply by default -- None means "use the module
+    # default," not "no threshold." No metric needs an override today;
+    # the field exists so one can be added without changing the contract
+    # shape again.
+    min_meaningful_sample: Optional[int] = None
+    min_executive_sample: Optional[int] = None
+    # comparable: whether a period-over-period comparison (run_metrics_
+    # query's compare_to) is meaningful for this metric as reported. True
+    # for every metric today (all are sums/counts, where a delta is a real
+    # answer); reserved for a future ratio/average metric (e.g. a
+    # registry-level cost_per_outcome) where a raw before/after difference
+    # would need its own sample-aware treatment rather than a plain
+    # subtraction.
+    comparable: bool = True
 
 
 @dataclass(frozen=True)
@@ -163,11 +194,13 @@ METRICS: dict[str, MetricDef] = {
         key="won_value", label="Closed Won Value", source="outcome", unit="usd",
         definition="Sum of WorkItemOutcome.outcome_value for won opportunity WorkItems.",
         provenance="WorkItemOutcome.outcome_value where outcome_success = true",
+        sample_size_metric="won_count",
     ),
     "pipeline_value": MetricDef(
         key="pipeline_value", label="Pipeline Value", source="outcome", unit="usd",
         definition="Sum of WorkItemOutcome.outcome_value for open opportunity WorkItems.",
         provenance="WorkItemOutcome.outcome_value where is_closed = false",
+        sample_size_metric="open_count",
     ),
     "support_cases_total": MetricDef(
         key="support_cases_total", label="Support Cases", source="outcome", unit="count",
@@ -204,6 +237,7 @@ METRICS: dict[str, MetricDef] = {
         key="successful_outcome_value", label="Successful Outcome Value", source="outcome", unit="usd",
         definition="Sum of WorkItemOutcome.outcome_value for successful WorkItems, for ANY context_type. The generic form of won_value.",
         provenance="WorkItemOutcome.outcome_value where outcome_success = true, any WorkItem.context_type",
+        sample_size_metric="successful_outcomes",
     ),
     "outcomes_with_data": MetricDef(
         key="outcomes_with_data", label="Work Items With Known Outcome", source="outcome", unit="count",

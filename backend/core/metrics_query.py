@@ -86,6 +86,53 @@ _IS_SIMULATOR_TRAFFIC = or_(
 )
 
 
+# Sample-size thresholds settled for the ROI/Business Impact investigation
+# (see the approved plan): below MIN_MEANINGFUL_SAMPLE, a comparison is
+# labeled "Early Signal / Insufficient Sample" rather than presented as a
+# meaningful result; below MIN_EXECUTIVE_SAMPLE, it should not feed an
+# executive-level claim even if shown descriptively. Configuration values,
+# not permanent constants -- Phase F's Baseline model is where these become
+# overridable per workspace/context_type instead of a shared default.
+MIN_MEANINGFUL_SAMPLE = 30
+MIN_EXECUTIVE_SAMPLE = 50
+
+
+def evidence_for_sample(
+    sample_size: int, min_meaningful: int = MIN_MEANINGFUL_SAMPLE, min_executive: int = MIN_EXECUTIVE_SAMPLE,
+    noun: str = "",
+) -> dict:
+    """
+    The evidence-label/note pair compute_cost_per_outcome() originally
+    hand-rolled inline for one metric -- pulled out so
+    core.metrics_catalog.MetricDef.sample_size_metric can apply the same
+    "don't state this as confident fact off a handful of data points"
+    treatment to any sample-size-sensitive metric in run_metrics_query(),
+    not just that one (Ask CostPilot architecture audit Recommendation
+    #3). Same three labels, same thresholds -- refactor, not a behavior
+    change for the existing caller (`noun`, e.g. "successful outcomes",
+    reproduces that caller's exact original wording; defaults to the
+    generic "data points" for every other metric).
+    """
+    noun = noun or "data points"
+    if sample_size >= min_executive:
+        evidence_label = "executive_eligible"
+    elif sample_size >= min_meaningful:
+        evidence_label = "meaningful"
+    else:
+        evidence_label = "early_signal"
+    return {
+        "sample_size": sample_size,
+        "evidence_label": evidence_label,
+        "evidence_note": (
+            f"Early Signal / Insufficient Sample: fewer than {min_meaningful} {noun} -- descriptive only."
+            if evidence_label == "early_signal" else
+            f"Meaningful sample ({min_meaningful}+), but below the {min_executive}+ preferred for executive-level claims."
+            if evidence_label == "meaningful" else
+            f"Sample size supports an executive-level claim ({min_executive}+ {noun})."
+        ),
+    }
+
+
 @dataclass
 class MetricsResult:
     rows: list
@@ -680,8 +727,20 @@ def run_metrics_query(
                 errors=errors, unsupported_metrics=unsupported,
             )
 
-    activity_metrics = [m for m in valid_metrics if METRICS[m].source == "transaction"]
-    outcome_metrics = [m for m in valid_metrics if METRICS[m].source == "outcome"]
+    # Sample-size-sensitive metrics (MetricDef.sample_size_metric, e.g.
+    # won_value -> won_count) need their paired count metric fetched in
+    # the SAME query even if the caller didn't ask for it, so an evidence
+    # label can be attached per row below -- silently adding a metric to
+    # the underlying query, not to `metrics`/valid_metrics (what the
+    # caller actually asked for stays what's reported as requested).
+    sample_metrics_needed = {
+        METRICS[m].sample_size_metric for m in valid_metrics
+        if METRICS[m].sample_size_metric and METRICS[m].sample_size_metric not in valid_metrics
+    }
+    query_metrics = valid_metrics + [m for m in sample_metrics_needed if m in METRICS]
+
+    activity_metrics = [m for m in query_metrics if METRICS[m].source == "transaction"]
+    outcome_metrics = [m for m in query_metrics if METRICS[m].source == "outcome"]
 
     # Both source queries must GROUP BY the exact same dimension set for
     # the Python merge's dim_key tuples to line up -- a dimension that
@@ -763,7 +822,24 @@ def run_metrics_query(
     rows = []
     for key, bucket in primary.items():
         row = {"dimensions": dict(zip(dims_for_merge, bucket["labels"]))}
-        row.update(bucket["values"])
+        # Only the metrics actually requested become top-level row values --
+        # a silently-added sample_size_metric (see query_metrics above)
+        # feeds the "evidence" block below, not the row directly, so the
+        # contract stays "you get back what you asked for."
+        row.update({m: bucket["values"].get(m, 0) for m in valid_metrics})
+        evidence = {}
+        for m in valid_metrics:
+            sample_metric = METRICS[m].sample_size_metric
+            if sample_metric:
+                sample_size = int(bucket["values"].get(sample_metric, 0) or 0)
+                evidence[m] = evidence_for_sample(
+                    sample_size,
+                    min_meaningful=METRICS[m].min_meaningful_sample or MIN_MEANINGFUL_SAMPLE,
+                    min_executive=METRICS[m].min_executive_sample or MIN_EXECUTIVE_SAMPLE,
+                    noun=METRICS[sample_metric].label.lower(),
+                )
+        if evidence:
+            row["evidence"] = evidence
         rows.append(row)
 
     if sort_metric:
@@ -785,17 +861,6 @@ def run_metrics_query(
         unsupported_metrics=unsupported,
         freshness=freshness,
     )
-
-
-# Sample-size thresholds settled for the ROI/Business Impact investigation
-# (see the approved plan): below MIN_MEANINGFUL_SAMPLE, a comparison is
-# labeled "Early Signal / Insufficient Sample" rather than presented as a
-# meaningful result; below MIN_EXECUTIVE_SAMPLE, it should not feed an
-# executive-level claim even if shown descriptively. Configuration values,
-# not permanent constants -- Phase F's Baseline model is where these become
-# overridable per workspace/context_type instead of a shared default.
-MIN_MEANINGFUL_SAMPLE = 30
-MIN_EXECUTIVE_SAMPLE = 50
 
 
 def compute_cost_per_outcome(
@@ -875,12 +940,7 @@ def compute_cost_per_outcome(
     # this session.
     cost_per_outcome = round(ai_spend / successful_outcomes, 6) if successful_outcomes else None
 
-    if successful_outcomes >= MIN_EXECUTIVE_SAMPLE:
-        evidence_label = "executive_eligible"
-    elif successful_outcomes >= MIN_MEANINGFUL_SAMPLE:
-        evidence_label = "meaningful"
-    else:
-        evidence_label = "early_signal"
+    evidence = evidence_for_sample(successful_outcomes, noun="successful outcomes")
 
     return {
         "context_type": context_type,
@@ -890,15 +950,9 @@ def compute_cost_per_outcome(
         "successful_outcomes": successful_outcomes,
         "outcomes_with_known_data": outcomes_with_data,
         "cost_per_successful_outcome_usd": cost_per_outcome,
-        "sample_size": successful_outcomes,
-        "evidence_label": evidence_label,
-        "evidence_note": (
-            "Early Signal / Insufficient Sample: fewer than 30 successful outcomes -- descriptive only."
-            if evidence_label == "early_signal" else
-            "Meaningful sample (30+), but below the 50+ preferred for executive-level claims."
-            if evidence_label == "meaningful" else
-            "Sample size supports an executive-level claim (50+ successful outcomes)."
-        ),
+        "sample_size": evidence["sample_size"],
+        "evidence_label": evidence["evidence_label"],
+        "evidence_note": evidence["evidence_note"],
         "association_note": (
             "This is AI activity associated with successful outcomes, not evidence AI caused them."
         ),
