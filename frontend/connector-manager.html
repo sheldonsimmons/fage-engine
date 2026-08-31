@@ -52,6 +52,52 @@
     .cm-trust ul { margin: 8px 0 0; padding-left: 18px; }
 
     .cm-empty { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+
+    .cm-add-btn { font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 7px; border: 1px solid var(--accent-green); background: var(--accent-green); color: #06210f; cursor: pointer; white-space: nowrap; }
+    .cm-add-btn:hover { opacity: .9; }
+    .cm-status-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; font-size: 11.5px; color: var(--text-muted); }
+    .cm-status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 10px; font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .03em; }
+    .cm-status-badge.receiving { background: rgba(63,185,80,0.12); color: var(--accent-green); }
+    .cm-status-badge.stale { background: rgba(210,153,34,0.14); color: var(--accent-yellow, #d29922); }
+    .cm-status-badge.no_events_yet { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+
+    /* Universal Connection modal */
+    .uc-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; z-index: 200; overflow-y: auto; }
+    .uc-overlay[hidden] { display: none; }
+    .uc-modal { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; max-width: 640px; width: 100%; padding: 24px 26px 26px; }
+    .uc-modal-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
+    .uc-modal-head h2 { font-size: 18px; margin: 0; }
+    .uc-close-btn { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px; }
+    .uc-close-btn:hover { color: var(--text-primary); }
+    .uc-subtitle { font-size: 12.5px; color: var(--text-muted); margin: 0 0 18px; }
+    .uc-steps { display: flex; gap: 6px; margin-bottom: 18px; }
+    .uc-step-dot { flex: 1; height: 3px; border-radius: 2px; background: var(--border); }
+    .uc-step-dot.done { background: var(--accent-green); }
+    .uc-step-dot.active { background: var(--accent); }
+    .uc-field { margin-bottom: 14px; }
+    .uc-field label { display: block; font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 6px; }
+    .uc-field input[type="text"] { width: 100%; box-sizing: border-box; background: var(--bg-base); border: 1px solid var(--border); border-radius: 7px; color: var(--text-primary); padding: 9px 11px; font-size: 13.5px; font-family: inherit; }
+    .uc-key-row { display: flex; align-items: center; gap: 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px; font-family: var(--font-mono); font-size: 12.5px; }
+    .uc-key-row code { flex: 1; overflow-x: auto; white-space: nowrap; }
+    .uc-mini-btn { font-size: 11px; padding: 4px 9px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-primary); cursor: pointer; white-space: nowrap; }
+    .uc-mini-btn:hover { border-color: var(--accent); }
+    .uc-warn { font-size: 11.5px; color: var(--accent-yellow, #d29922); margin-top: 6px; }
+    .uc-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+    .uc-tab { font-size: 11.5px; padding: 5px 11px; border-radius: 6px 6px 0 0; border: 1px solid var(--border); border-bottom: none; background: var(--bg-base); color: var(--text-muted); cursor: pointer; }
+    .uc-tab.active { color: var(--text-primary); background: var(--bg-panel); }
+    .uc-code { background: var(--bg-base); border: 1px solid var(--border); border-radius: 0 7px 7px 7px; padding: 12px 14px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55; overflow-x: auto; white-space: pre; margin: 0; }
+    .uc-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
+    .uc-primary-btn { font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 7px; border: 1px solid var(--accent-green); background: var(--accent-green); color: #06210f; cursor: pointer; }
+    .uc-primary-btn:disabled { opacity: .5; cursor: default; }
+    .uc-secondary-btn { font-size: 13px; padding: 9px 16px; border-radius: 7px; border: 1px solid var(--border); background: transparent; color: var(--text-primary); cursor: pointer; }
+    .uc-checklist { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; }
+    .uc-checklist li { display: flex; align-items: center; gap: 9px; font-size: 12.5px; padding: 7px 10px; border-radius: 7px; background: var(--bg-base); border: 1px solid var(--border); }
+    .uc-check-icon { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; }
+    .uc-check-icon.pending { background: var(--border); color: var(--text-muted); }
+    .uc-check-icon.pass { background: var(--accent-green); color: #06210f; }
+    .uc-check-icon.fail { background: #d9534f; color: #fff; }
+    .uc-verified-banner { text-align: center; padding: 14px; border-radius: 8px; background: rgba(63,185,80,0.1); border: 1px solid var(--accent-green); color: var(--accent-green); font-weight: 650; font-size: 13.5px; margin-bottom: 14px; }
+    .uc-error-banner { padding: 10px 12px; border-radius: 7px; background: rgba(217,83,79,0.1); border: 1px solid #d9534f; color: #d9534f; font-size: 12.5px; margin-bottom: 14px; }
   </style>
 </head>
 <body>
@@ -64,6 +110,7 @@
             <h1>Connector Manager</h1>
             <p>Every system connected to this workspace, its sync status, what it's tracking, and what CostPilot can see.</p>
           </div>
+          <button type="button" class="cm-add-btn" onclick="ucOpen()">+ Connect Any System</button>
         </div>
 
         <div class="cm-health-panel" id="cmHealthPanel">
@@ -77,6 +124,27 @@
 
         <div id="cmConnections"><div class="cm-empty">Loading connections…</div></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Universal Connection -- connect any platform, including a fully
+       custom/unlisted system, as a real saved connection. Backed by
+       POST/GET /api/integrations/connections/universal and
+       GET .../verify-test-event. -->
+  <div class="uc-overlay" id="ucOverlay" hidden>
+    <div class="uc-modal">
+      <div class="uc-modal-head">
+        <h2>Connect Any System</h2>
+        <button type="button" class="uc-close-btn" onclick="ucClose()" aria-label="Close">×</button>
+      </div>
+      <p class="uc-subtitle">Any AI system — custom code, an SDK, a webhook, a log forwarder — can report usage to CostPilot through one canonical event contract. No provider API key needed; you authenticate with a CostPilot-issued workspace credential.</p>
+      <div class="uc-steps">
+        <div class="uc-step-dot" id="ucDot1"></div>
+        <div class="uc-step-dot" id="ucDot2"></div>
+        <div class="uc-step-dot" id="ucDot3"></div>
+        <div class="uc-step-dot" id="ucDot4"></div>
+      </div>
+      <div id="ucStepBody"></div>
     </div>
   </div>
 
@@ -153,12 +221,22 @@
 
       const mappingFields = c.mapping ? Object.keys(c.mapping).filter(k => k !== "children") : [];
 
+      // Live activity status -- additive for every connection (Universal
+      // or native), computed the same way by core/connection_status.py.
+      const activityRow = c.activity_status ? `<div class="cm-status-row">
+          <span class="cm-status-badge ${c.activity_status}">${(c.activity_status || "").replace(/_/g, " ")}</span>
+          <span>${c.request_count || 0} events</span>
+          <span>${c.agents_observed || 0} agent${c.agents_observed === 1 ? "" : "s"} observed</span>
+          <span>${c.last_event_at ? `Last event ${cmTimeAgo(c.last_event_at)}` : "No events yet"}</span>
+        </div>` : "";
+
       return `<div class="cm-conn-card" data-id="${c.id}">
         <div class="cm-conn-top">
           <div>
             <div class="cm-conn-name"><span class="cm-dot ${dotClass}"></span>${c.platform.charAt(0).toUpperCase() + c.platform.slice(1)} — ${c.display_name}</div>
             <div class="cm-conn-meta">${statusText}${c.last_error ? ` · <span style="color:var(--accent-yellow);">${c.last_error}</span>` : ""}</div>
             ${syncBlock}
+            ${activityRow}
           </div>
           <div class="cm-conn-actions">
             ${c.supports_outcome_sync && c.last_success_at ? `<button class="cm-btn" onclick="cmSyncNow(${c.id}, this)">Sync Now</button>` : ""}
@@ -207,6 +285,271 @@
         buttonEl.disabled = false;
         setTimeout(() => { buttonEl.textContent = original; }, 3000);
       }
+    }
+
+    // ── Universal Connection: "+ Connect Any System" ─────────────────────
+    //
+    // 4-step flow: name it -> minimal contract + generated snippets ->
+    // send a real test event from the browser + verify -> optional
+    // business context. Backed by POST/GET /api/integrations/connections/
+    // universal and GET .../verify-test-event (api/routes_connections_
+    // universal.py). Never touches the Salesforce/ServiceNow OAuth flows.
+    let ucState = { step: 1, connection: null, apiKey: null, verifyPoll: null };
+
+    function ucOpen() {
+      ucState = { step: 1, connection: null, apiKey: null, verifyPoll: null };
+      document.getElementById("ucOverlay").hidden = false;
+      ucRenderStep();
+    }
+
+    function ucClose() {
+      if (ucState.verifyPoll) clearInterval(ucState.verifyPoll);
+      document.getElementById("ucOverlay").hidden = true;
+      // A connection may have been created even if the modal is closed
+      // before finishing verification -- refresh the card list so it's
+      // never silently missing from the page.
+      cmLoadConnections();
+    }
+
+    function ucUpdateDots() {
+      for (let i = 1; i <= 4; i++) {
+        const dot = document.getElementById(`ucDot${i}`);
+        dot.className = "uc-step-dot" + (i < ucState.step ? " done" : i === ucState.step ? " active" : "");
+      }
+    }
+
+    function ucEsc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function ucRenderStep() {
+      ucUpdateDots();
+      const body = document.getElementById("ucStepBody");
+      if (ucState.step === 1) body.innerHTML = ucStep1Html();
+      if (ucState.step === 2) body.innerHTML = ucStep2Html();
+      if (ucState.step === 3) body.innerHTML = ucStep3Html();
+      if (ucState.step === 4) body.innerHTML = ucStep4Html();
+    }
+
+    // -- Step 1: name it --------------------------------------------------
+    function ucStep1Html() {
+      return `
+        <div class="uc-field">
+          <label>Platform / App Name</label>
+          <input type="text" id="ucPlatformInput" placeholder="e.g. Internal Support Copilot" autofocus />
+        </div>
+        <div id="ucStep1Error"></div>
+        <div class="uc-actions">
+          <span></span>
+          <button type="button" class="uc-primary-btn" onclick="ucCreateConnection()">Continue</button>
+        </div>`;
+    }
+
+    async function ucCreateConnection() {
+      const platform = (document.getElementById("ucPlatformInput").value || "").trim();
+      const errorEl = document.getElementById("ucStep1Error");
+      if (!platform) {
+        errorEl.innerHTML = `<div class="uc-error-banner">Enter a name for this system first.</div>`;
+        return;
+      }
+      try {
+        const result = await apiPost("/api/integrations/connections/universal", {
+          workspace_id: cmWorkspaceId() || "default",
+          platform,
+        });
+        ucState.connection = result.connection;
+        ucState.apiKey = result.api_key;
+        ucState.step = 2;
+        ucRenderStep();
+      } catch (err) {
+        errorEl.innerHTML = `<div class="uc-error-banner">${ucEsc(err.message)}</div>`;
+      }
+    }
+
+    // -- Step 2: minimal contract + generated snippets ---------------------
+    let ucActiveSnippetTab = "curl";
+
+    function ucContractPayload() {
+      return {
+        mode: "observe",
+        connection_key: ucState.connection.connection_key,
+        source: { platform: ucState.connection.platform, workspace_id: ucState.connection.workspace_id },
+        usage: { model_name: "gpt-4o-mini", input_tokens: 120, output_tokens: 40, cost_usd: 0.0008 },
+      };
+    }
+
+    function ucSnippet(lang) {
+      const payload = ucContractPayload();
+      const json = JSON.stringify(payload, null, 2);
+      const url = `${location.origin}/api/route`;
+      if (lang === "curl") {
+        return `curl -X POST ${url} \\\n  -H "Content-Type: application/json" \\\n  -H "X-CostPilot-Key: ${ucState.apiKey}" \\\n  -d '${JSON.stringify(payload)}'`;
+      }
+      if (lang === "python") {
+        return `import requests\n\nrequests.post(\n    "${url}",\n    headers={"X-CostPilot-Key": "${ucState.apiKey}"},\n    json=${json.replace(/\n/g, "\n    ")},\n)`;
+      }
+      if (lang === "node") {
+        return `await fetch("${url}", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-CostPilot-Key": "${ucState.apiKey}",\n  },\n  body: JSON.stringify(${json.replace(/\n/g, "\n  ")}),\n});`;
+      }
+      return json;
+    }
+
+    function ucStep2Html() {
+      const keyPreview = `${ucState.apiKey.slice(0, 12)}…${ucState.apiKey.slice(-4)}`;
+      return `
+        <div class="uc-field">
+          <label>Workspace Credential</label>
+          <div class="uc-key-row">
+            <code id="ucKeyDisplay">${ucEsc(keyPreview)}</code>
+            <button type="button" class="uc-mini-btn" onclick="ucRevealKey()">Reveal</button>
+            <button type="button" class="uc-mini-btn" onclick="ucCopyKey()">Copy</button>
+          </div>
+          <div class="uc-warn">Keep this credential secret — it authenticates any system reporting to this workspace.</div>
+        </div>
+        <div class="uc-field">
+          <label>Minimal Event Contract</label>
+          <div class="uc-tabs">
+            ${["curl", "python", "node"].map(lang => `<button type="button" class="uc-tab ${ucActiveSnippetTab === lang ? "active" : ""}" onclick="ucSwitchSnippetTab('${lang}')">${lang === "curl" ? "cURL" : lang === "python" ? "Python" : "Node.js"}</button>`).join("")}
+          </div>
+          <pre class="uc-code" id="ucSnippetCode">${ucEsc(ucSnippet(ucActiveSnippetTab))}</pre>
+        </div>
+        <div class="uc-actions">
+          <button type="button" class="uc-secondary-btn" onclick="ucState.step = 1; ucRenderStep();">Back</button>
+          <button type="button" class="uc-primary-btn" onclick="ucState.step = 3; ucRenderStep();">Continue</button>
+        </div>`;
+    }
+
+    function ucSwitchSnippetTab(lang) {
+      ucActiveSnippetTab = lang;
+      ucRenderStep();
+    }
+
+    async function ucRevealKey() {
+      try {
+        const result = await apiGet(`/api/workspaces/${encodeURIComponent(ucState.connection.workspace_id)}/api-key/reveal`);
+        ucState.apiKey = result.api_key;
+        document.getElementById("ucKeyDisplay").textContent = result.api_key;
+        document.getElementById("ucSnippetCode").textContent = ucSnippet(ucActiveSnippetTab);
+      } catch (err) {
+        alert(`Could not reveal key: ${err.message}`);
+      }
+    }
+
+    function ucCopyKey() {
+      navigator.clipboard?.writeText(ucState.apiKey);
+    }
+
+    // -- Step 3: send test event + verify ----------------------------------
+    function ucStep3Html() {
+      return `
+        <p class="uc-subtitle" style="margin-top:0;">Send a real test event using the contract above, then verify it end-to-end.</p>
+        <div class="uc-actions" style="margin-top:0;">
+          <span></span>
+          <button type="button" class="uc-primary-btn" id="ucSendTestBtn" onclick="ucSendTestEvent()">Send Test Event</button>
+        </div>
+        <div id="ucVerifyResult" style="margin-top:16px;"></div>
+        <div class="uc-actions">
+          <button type="button" class="uc-secondary-btn" onclick="ucState.step = 2; ucRenderStep();">Back</button>
+          <button type="button" class="uc-primary-btn" id="ucStep3Continue" onclick="ucState.step = 4; ucRenderStep();" disabled>Continue</button>
+        </div>`;
+    }
+
+    const UC_STEP_LABELS = {
+      authentication: "Authentication",
+      workspace_isolation: "Workspace isolation",
+      persistence: "Persistence",
+      connection_association: "Connection matched",
+      agent_recognition: "Agent recognized",
+      reporting_visibility: "Visible in reporting",
+    };
+
+    function ucChecklistHtml(steps) {
+      const items = (steps || Object.keys(UC_STEP_LABELS).map(key => ({ key, label: UC_STEP_LABELS[key], passed: null, detail: "" })))
+        .map(s => {
+          const iconClass = s.passed === true ? "pass" : s.passed === false ? "fail" : "pending";
+          const icon = s.passed === true ? "✓" : s.passed === false ? "✕" : "…";
+          return `<li><span class="uc-check-icon ${iconClass}">${icon}</span><span>${ucEsc(s.label)}${s.detail ? ` — <span style="color:var(--text-muted)">${ucEsc(s.detail)}</span>` : ""}</span></li>`;
+        }).join("");
+      return `<ul class="uc-checklist">${items}</ul>`;
+    }
+
+    async function ucSendTestEvent() {
+      const btn = document.getElementById("ucSendTestBtn");
+      const resultEl = document.getElementById("ucVerifyResult");
+      btn.disabled = true;
+      btn.textContent = "Sending…";
+      resultEl.innerHTML = ucChecklistHtml(null);
+
+      try {
+        // Fires the exact same real contract shown in Step 2, from the
+        // browser itself -- not a backend-simulated shortcut. Marked
+        // synthetic_simulation so it never inflates real reporting.
+        const payload = { ...ucContractPayload(), synthetic_simulation: true };
+        const response = await fetch("/api/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CostPilot-Key": ucState.apiKey },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.detail || `Request failed (${response.status})`);
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Send Test Event";
+        resultEl.innerHTML = `<div class="uc-error-banner">${ucEsc(err.message)}</div>`;
+        return;
+      }
+
+      btn.textContent = "Verifying…";
+      ucPollVerification();
+    }
+
+    function ucPollVerification() {
+      let attempts = 0;
+      const poll = async () => {
+        attempts += 1;
+        try {
+          const result = await apiGet(`/api/integrations/connections/universal/${ucState.connection.id}/verify-test-event`);
+          const resultEl = document.getElementById("ucVerifyResult");
+          const btn = document.getElementById("ucSendTestBtn");
+          if (result.fully_verified) {
+            clearInterval(ucState.verifyPoll);
+            resultEl.innerHTML = `<div class="uc-verified-banner">✓ Fully Verified</div>${ucChecklistHtml(result.steps)}`;
+            btn.disabled = false;
+            btn.textContent = "Send Another Test Event";
+            document.getElementById("ucStep3Continue").disabled = false;
+          } else if (attempts >= 8) {
+            clearInterval(ucState.verifyPoll);
+            resultEl.innerHTML = ucChecklistHtml(result.steps);
+            btn.disabled = false;
+            btn.textContent = "Send Test Event";
+          } else {
+            resultEl.innerHTML = ucChecklistHtml(result.steps);
+          }
+        } catch (err) {
+          clearInterval(ucState.verifyPoll);
+        }
+      };
+      if (ucState.verifyPoll) clearInterval(ucState.verifyPoll);
+      ucState.verifyPoll = setInterval(poll, 1500);
+      poll();
+    }
+
+    // -- Step 4: optional business context ---------------------------------
+    function ucStep4Html() {
+      const example = JSON.stringify({
+        ...ucContractPayload(),
+        actor: { external_id: "user-123", name: "Jamie Lee", email: "jamie@example.com" },
+        work: { external_id: "TICKET-8842", type: "ticket", name: "Refund request escalation" },
+      }, null, 2);
+      return `
+        <p class="uc-subtitle" style="margin-top:0;">Optional — add these fields to any future event to connect AI activity to real business work. Skip this and add it later; nothing here blocks what you've already set up.</p>
+        <pre class="uc-code">${ucEsc(example)}</pre>
+        <div class="uc-actions">
+          <button type="button" class="uc-secondary-btn" onclick="ucState.step = 3; ucRenderStep();">Back</button>
+          <button type="button" class="uc-primary-btn" onclick="ucClose()">Done</button>
+        </div>`;
     }
 
     cmLoadHealth();
