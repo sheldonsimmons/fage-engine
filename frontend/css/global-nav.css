@@ -1,3 +1,35 @@
+/* Hide the legacy static header nav by default, before global-nav.js
+   even runs -- previously this only happened via a JS-added
+   ".cp-global-nav-source" class inside buildNavigation() (below), which
+   runs on DOMContentLoaded, well after the old nav has already painted.
+   Confirmed live: the old "Work Attribution / Connect & Setup / Policy &
+   Rules / Admin / Tools" header was visible for a real, catchable window
+   on every page sharing this markup before JS swapped it out. Every page
+   that loads this stylesheet AND has this legacy markup also loads
+   global-nav.js (verified: the only pages loading this CSS without the
+   JS -- agent-profile.html, business-profile.html, connector-manager.html,
+   work-item-profile.html -- use a plain back-link header with none of
+   these classes at all), so hiding them unconditionally here is safe.
+   The ".cp-global-nav-unavailable" fallback below is a safety net for the
+   rare case the JS can't find a header to attach to. */
+header.header .header-nav-link,
+.exec-header .header-nav-link,
+.wa-header .header-nav-link,
+header.header .header-status,
+.exec-header .header-status,
+.wa-header .header-status,
+header.header .header-sub,
+.exec-header .header-sub,
+.wa-header .header-sub {
+  display: none;
+}
+
+.cp-global-nav-unavailable .header-nav-link,
+.cp-global-nav-unavailable .header-status,
+.cp-global-nav-unavailable .header-sub {
+  display: revert !important;
+}
+
 .cp-global-nav {
   align-items: center;
   display: flex;

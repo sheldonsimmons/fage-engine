@@ -132,7 +132,14 @@
 
   function buildNavigation() {
     const header = findHeader();
-    if (!header || header.querySelector(".cp-global-nav")) return;
+    if (!header) {
+      // Safety net for global-nav.css's default-hide rule: if this page's
+      // header markup doesn't match any known selector, the legacy nav
+      // would otherwise stay hidden forever with nothing to replace it.
+      document.body.classList.add("cp-global-nav-unavailable");
+      return;
+    }
+    if (header.querySelector(".cp-global-nav")) return;
 
     const existingNavigation = findExistingNavigation(header);
     if (existingNavigation) existingNavigation.classList.add("cp-global-nav-source");
@@ -658,8 +665,18 @@
   }
 
   function initialize() {
-    installAskCostPilot();
-    buildNavigation();
+    // The legacy header nav is hidden by default via CSS now (see
+    // global-nav.css), not just once this JS replaces it -- so if
+    // anything in here throws before buildNavigation() runs (or
+    // buildNavigation itself can't find a header), the fallback class
+    // must still get applied, or the page is left with no visible nav
+    // at all instead of just the old FOUC flash this was meant to fix.
+    try {
+      installAskCostPilot();
+      buildNavigation();
+    } catch (_error) {
+      document.body.classList.add("cp-global-nav-unavailable");
+    }
   }
 
   if (document.readyState === "loading") {
