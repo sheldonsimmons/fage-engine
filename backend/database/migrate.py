@@ -43,7 +43,7 @@ def run_migrations():
         try:
             ensure_column(conn, "workspaces", "api_key", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             conn.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_workspaces_api_key "
@@ -51,35 +51,35 @@ def run_migrations():
             ))
             conn.commit()
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "registered_agents", "archived", "BOOLEAN DEFAULT FALSE")
         except Exception:
-            pass  # Column already exists or DB doesn't support IF NOT EXISTS
+            conn.rollback()  # Column already exists or DB doesn't support IF NOT EXISTS
         try:
             ensure_column(conn, "registered_agents", "pruning_enabled", "BOOLEAN DEFAULT TRUE")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "routing_configs", "tier_names_json", "TEXT")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "model_registry", "department", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "department_budgets", "throttle_tier", "INTEGER DEFAULT 1")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "registered_agents", "min_tier", "INTEGER DEFAULT 1")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "registered_agents", "max_tier", "INTEGER DEFAULT 4")
         except Exception:
-            pass
+            conn.rollback()
         try:
             # Nullable/unbackfilled here (unlike department_budgets.workspace_id
             # below, which backfills unprefixed rows to "default") -- a real
@@ -88,33 +88,33 @@ def run_migrations():
             # "workspace_id:Dept"-prefixed rows; see models.py's comment.
             ensure_column(conn, "registered_agents", "workspace_id", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             # Governance/lifecycle metadata, fully separate from the
             # runtime `status` column above -- see models.py's comment.
             ensure_column(conn, "registered_agents", "business_purpose", "TEXT")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "registered_agents", "owner", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "registered_agents", "approval_status", "VARCHAR DEFAULT 'unreviewed'")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "department_budgets", "raw_payload_logging_enabled", "BOOLEAN DEFAULT FALSE")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "department_budgets", "raw_retention_days", "INTEGER DEFAULT 30")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "department_budgets", "archived", "BOOLEAN DEFAULT FALSE")
         except Exception:
-            pass
+            conn.rollback()
         try:
             # department_budgets never got a real workspace_id column when
             # token_transactions/audit_events did — it's the reason budget
@@ -123,23 +123,23 @@ def run_migrations():
             # here; backfill_workspaces.py populates it once from that prefix.
             ensure_column(conn, "department_budgets", "workspace_id", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "audit_events", "raw_payload", "TEXT")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "audit_events", "raw_logged_at", "TIMESTAMP")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "audit_events", "matched_keywords_json", "TEXT")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "token_transactions", "usage_source", "VARCHAR DEFAULT 'estimated'")
         except Exception:
-            pass
+            conn.rollback()
         for column, definition in (
             ("model_name", "VARCHAR"),
             ("resolved_model_tier", "VARCHAR"),
@@ -150,7 +150,7 @@ def run_migrations():
             try:
                 ensure_column(conn, "token_transactions", column, definition)
             except Exception:
-                pass
+                conn.rollback()
         for table in ("token_transactions", "audit_events"):
             try:
                 conn.execute(text(
@@ -159,11 +159,11 @@ def run_migrations():
                 ))
                 conn.commit()
             except Exception:
-                pass
+                conn.rollback()
         try:
             ensure_column(conn, "token_transactions", "event_id", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             # Superseded by the workspace-scoped index below -- an earlier
             # deploy created this globally-unique-on-event_id-alone index,
@@ -172,7 +172,7 @@ def run_migrations():
             conn.execute(text("DROP INDEX IF EXISTS uq_token_transactions_event_id"))
             conn.commit()
         except Exception:
-            pass
+            conn.rollback()
         try:
             # Client-supplied idempotency key -- a real unique constraint,
             # not just an index, since it's what route_payload() relies on
@@ -186,23 +186,23 @@ def run_migrations():
             ))
             conn.commit()
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "token_transactions", "work_item_id", "INTEGER REFERENCES work_items(id)")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "audit_events", "work_item_id", "INTEGER REFERENCES work_items(id)")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "audit_events", "is_simulation", "BOOLEAN DEFAULT FALSE NOT NULL")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "audit_events", "cost_usd", "FLOAT")
         except Exception:
-            pass
+            conn.rollback()
         for table in ("token_transactions", "audit_events"):
             for column, definition in (
                 ("work_user_id", "INTEGER REFERENCES work_users(id)"),
@@ -217,7 +217,7 @@ def run_migrations():
                 try:
                     ensure_column(conn, table, column, definition)
                 except Exception:
-                    pass
+                    conn.rollback()
         for table in ("token_transactions", "audit_events"):
             for column, definition in (
                 ("governed_request_id", "VARCHAR"),
@@ -229,14 +229,14 @@ def run_migrations():
                 try:
                     ensure_column(conn, table, column, definition)
                 except Exception:
-                    pass
+                    conn.rollback()
         for column, definition in (
             ("provider_status_code", "INTEGER"),
         ):
             try:
                 ensure_column(conn, "token_transactions", column, definition)
             except Exception:
-                pass
+                conn.rollback()
         for column, definition in (
             ("selected_model_name", "VARCHAR"),
             ("selected_model_tier", "VARCHAR"),
@@ -245,7 +245,7 @@ def run_migrations():
             try:
                 ensure_column(conn, "audit_events", column, definition)
             except Exception:
-                pass
+                conn.rollback()
         for table, column, definition in (
             ("registered_agents", "owner_org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
             ("work_items", "org_unit_id", "INTEGER REFERENCES organizational_units(id)"),
@@ -254,7 +254,7 @@ def run_migrations():
             try:
                 ensure_column(conn, table, column, definition)
             except Exception:
-                pass
+                conn.rollback()
         for table in ("token_transactions", "audit_events"):
             for column, definition in (
                 ("workspace_id", "VARCHAR"),
@@ -272,14 +272,14 @@ def run_migrations():
                 try:
                     ensure_column(conn, table, column, definition)
                 except Exception:
-                    pass
+                    conn.rollback()
         try:
             # Lets reporting GROUP BY business_purpose in SQL instead of
             # reclassifying every row in Python on every request -- see
             # models.py's TokenTransaction.business_purpose comment.
             ensure_column(conn, "token_transactions", "business_purpose", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         for column, definition in (
             ("context_type", "VARCHAR DEFAULT 'project' NOT NULL"),
             ("context_template", "VARCHAR"),
@@ -292,35 +292,35 @@ def run_migrations():
             try:
                 ensure_column(conn, "work_items", column, definition)
             except Exception:
-                pass
+                conn.rollback()
         try:
             ensure_column(conn, "sensitive_terms", "enabled", "BOOLEAN DEFAULT TRUE")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "sensitive_terms", "is_recommended", "BOOLEAN DEFAULT FALSE")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "sensitive_terms", "deleted_at", "TIMESTAMP")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "work_accounts", "merged_into_work_account_id", "INTEGER REFERENCES work_accounts(id)")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "integration_connections", "last_outcome_sync_at", "TIMESTAMP")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "integration_connections", "tracked_objects_json", "TEXT")
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "registered_agents", "discovery_source", "TEXT")
         except Exception:
-            pass
+            conn.rollback()
         try:
             mode_column_just_created = ensure_column(conn, "registered_agents", "mode", "VARCHAR DEFAULT 'observe'")
             if mode_column_just_created:
@@ -345,13 +345,13 @@ def run_migrations():
                 """))
                 conn.commit()
         except Exception:
-            pass
+            conn.rollback()
         # trial_accounts — create + add new columns
         try:
             from database.models import TrialAccount
             TrialAccount.__table__.create(bind=engine, checkfirst=True)
         except Exception:
-            pass
+            conn.rollback()
         for col, defn in [
             ("secret_key",     "VARCHAR"),
             ("platform",       "VARCHAR"),
@@ -366,12 +366,12 @@ def run_migrations():
                 conn.execute(text(f"ALTER TABLE trial_accounts ADD COLUMN {col} {defn}"))
                 conn.commit()
             except Exception:
-                pass
+                conn.rollback()
 
         try:
             ensure_column(conn, "integration_connections", "connection_key", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             conn.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_connections_connection_key "
@@ -379,11 +379,11 @@ def run_migrations():
             ))
             conn.commit()
         except Exception:
-            pass
+            conn.rollback()
         try:
             ensure_column(conn, "token_transactions", "connection_key", "VARCHAR")
         except Exception:
-            pass
+            conn.rollback()
         try:
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_token_transactions_connection_key "
@@ -391,7 +391,7 @@ def run_migrations():
             ))
             conn.commit()
         except Exception:
-            pass
+            conn.rollback()
 
         # reporting_activity — read-only flat view for future third-party BI
         # tool access (Tableau/PowerBI/Metabase connecting directly to
@@ -466,4 +466,4 @@ def run_migrations():
                     """))
                     view_conn.commit()
             except Exception:
-                pass
+                conn.rollback()
