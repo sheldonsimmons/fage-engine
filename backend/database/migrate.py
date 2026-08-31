@@ -368,6 +368,31 @@ def run_migrations():
             except Exception:
                 pass
 
+        try:
+            ensure_column(conn, "integration_connections", "connection_key", "VARCHAR")
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_connections_connection_key "
+                "ON integration_connections (connection_key) WHERE connection_key IS NOT NULL"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            ensure_column(conn, "token_transactions", "connection_key", "VARCHAR")
+        except Exception:
+            pass
+        try:
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_token_transactions_connection_key "
+                "ON token_transactions (connection_key)"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+
         # reporting_activity — read-only flat view for future third-party BI
         # tool access (Tableau/PowerBI/Metabase connecting directly to
         # Postgres). Postgres-only: CREATE OR REPLACE VIEW isn't valid SQLite

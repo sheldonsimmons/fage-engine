@@ -106,6 +106,12 @@ class RouteRequest(BaseModel):
     agent_id:               Optional[int] = None
     agent_name:             Optional[str] = None   # If provided and agent_id not found, auto-registers the agent
     source_platform:        Optional[str] = None   # e.g. "Salesforce" — inferred from agent name if omitted
+    # Optional, stable identity for a Universal Connection (see
+    # IntegrationConnection.connection_key) -- lets an event be attributed
+    # to exactly one connection even if its display name/platform string
+    # is later renamed. Omitting this keeps the minimal observe-mode
+    # payload exactly as minimal as before; most callers never send one.
+    connection_key:         Optional[str] = None
     voice_guard_processed:  bool = False           # True = Voice Guard already redacted PII numbers, skip PII keyword block
     min_tokens:             int  = 3               # Skip routing if pruned payload is below this token count (catches truly empty Salesforce on-create fires)
     is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
@@ -614,6 +620,7 @@ def _record_observed_usage(
             event_id=req.event_id,
             department=department,
             source_platform=agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
+            connection_key=req.connection_key,
             agent_id=agent.id if agent else req.agent_id,
             work_item_id=work_item.id if work_item else None,
             work_user_id=work_user.id if work_user else None,
@@ -1080,6 +1087,7 @@ def route_payload(
             event_id        = req.event_id,
             department      = department,
             source_platform = agent.source_platform if agent else infer_platform(req.agent_name or "", req.source_platform),
+            connection_key  = req.connection_key,
             agent_id        = agent.id if agent else req.agent_id,
             work_item_id    = work_item.id if work_item else None,
             work_user_id    = work_user.id if work_user else None,

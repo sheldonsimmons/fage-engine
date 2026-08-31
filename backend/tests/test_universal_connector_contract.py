@@ -254,6 +254,38 @@ def test_observe_mode_records_a_token_transaction_with_reported_cost():
     assert tx.department == "Customer Support"
 
 
+def test_observe_mode_persists_optional_connection_key():
+    """
+    Universal Connection feature: connection_key is an optional, additive
+    field on the observe-mode payload -- omitting it (every case above)
+    leaves the resulting TokenTransaction.connection_key NULL, exactly as
+    before; including it threads straight through to the row, so a
+    connection's status can later be computed by an exact match instead
+    of relying only on the editable source_platform string.
+    """
+    from database.models import TokenTransaction
+
+    db = _session()
+    payload = _observe_payload("Acme Support Tool", "acme-prod")
+    payload["connection_key"] = "conn_deadbeefcafefeed"
+    req = RouteRequest(**payload)
+    route_payload(req, db=db)
+
+    tx = db.query(TokenTransaction).one()
+    assert tx.connection_key == "conn_deadbeefcafefeed"
+
+
+def test_observe_mode_leaves_connection_key_null_when_omitted():
+    from database.models import TokenTransaction
+
+    db = _session()
+    req = RouteRequest(**_observe_payload("Acme Support Tool", "acme-prod"))
+    route_payload(req, db=db)
+
+    tx = db.query(TokenTransaction).one()
+    assert tx.connection_key is None
+
+
 def test_observe_mode_falls_back_to_registry_pricing_when_cost_omitted():
     from database.models import ModelRegistry, TokenTransaction
 

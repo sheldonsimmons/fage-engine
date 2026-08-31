@@ -168,6 +168,14 @@ class IntegrationConnection(Base):
     platform              = Column(String, nullable=False, index=True)
     display_name          = Column(String, nullable=False)
     status                = Column(String, nullable=False, default="draft")
+    # Immutable identity for this connection, independent of the editable
+    # `platform`/`display_name` strings -- generated once at creation
+    # (Universal Connection feature) so an incoming event can be
+    # attributed to exactly this connection even if its display name is
+    # later renamed. Nullable/unique: existing (Salesforce/ServiceNow)
+    # connections predate this and are never backfilled with one --
+    # status computation falls back to platform-string matching for them.
+    connection_key        = Column(String, nullable=True, unique=True, index=True)
     auth_base_url         = Column(String, nullable=True)
     instance_url          = Column(String, nullable=True)
     external_tenant_id    = Column(String, nullable=True)
@@ -444,6 +452,14 @@ class TokenTransaction(Base):
     event_id        = Column(String, nullable=True, index=True)
     department      = Column(String,   nullable=False)
     source_platform = Column(String,   nullable=True)    # Salesforce | ServiceNow | HubSpot | Custom | etc.
+    # Optional stable link to the IntegrationConnection.connection_key that
+    # reported this event (Universal Connection feature) -- lets a
+    # connection's status be computed by an unambiguous match instead of
+    # relying solely on the editable source_platform string. Never
+    # required: RouteRequest's minimal payload doesn't need it, and most
+    # existing rows (predating this feature, or from native connectors
+    # that don't send one) will always be NULL here.
+    connection_key  = Column(String,   nullable=True, index=True)
     agent_id        = Column(Integer,  ForeignKey("registered_agents.id"), nullable=True)
     work_item_id    = Column(Integer,  ForeignKey("work_items.id"), nullable=True, index=True)
     work_user_id    = Column(Integer,  ForeignKey("work_users.id"), nullable=True, index=True)
