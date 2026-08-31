@@ -231,6 +231,30 @@ DIMENSIONS: dict[str, DimensionDef] = {
         key="model", label="Model", sources=("transaction",),
         definition="TokenTransaction.model_name, falling back to model_tier when model_name is unset.",
     ),
+    "person": DimensionDef(
+        key="person", label="Person", sources=("transaction",),
+        definition=(
+            "WorkUser.external_id/.name (via TokenTransaction.work_user_id), "
+            "falling back to TokenTransaction.actor_external_id/.actor_name "
+            "when there's no linked WorkUser row. Simpler than "
+            "project_activity_reporting()'s people_breakdown, which also "
+            "has a simulator-traffic fallback bucket -- reconciling that "
+            "is a Milestone 4 follow-up, same precedent as the "
+            "'department' dimension above."
+        ),
+    ),
+    "provider": DimensionDef(
+        key="provider", label="Provider", sources=("transaction",),
+        definition=(
+            "The AI vendor (Anthropic/OpenAI/Google/...) resolved from "
+            "TokenTransaction.model_name via core.model_provider -- not a "
+            "stored column, so this is computed by first grouping by the "
+            "'model' dimension, then re-aggregating those buckets by "
+            "provider (core.metrics_query._provider_breakdown_rows). Only "
+            "supported as the sole requested dimension for a query, same "
+            "as project_activity_reporting()'s provider_breakdown."
+        ),
+    ),
     "outcome_status": DimensionDef(
         key="outcome_status", label="Outcome Status", sources=("outcome",),
         definition="Derived: 'won' | 'lost' | 'open' from WorkItemOutcome.outcome_success/is_closed.",

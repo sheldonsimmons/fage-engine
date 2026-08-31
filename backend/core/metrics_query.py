@@ -50,7 +50,7 @@ from sqlalchemy.orm import Session
 from core.analytics_periods import AnalyticalPeriod, comparison_plan, resolve_primary_period
 from core.metrics_catalog import DIMENSIONS, METRICS, NOT_YET_COMPUTABLE
 from core.workspace_scope import workspace_filter
-from database.models import RegisteredAgent, TokenTransaction, WorkAccount, WorkItem, WorkItemOutcome
+from database.models import RegisteredAgent, TokenTransaction, WorkAccount, WorkItem, WorkItemOutcome, WorkUser
 
 MAX_GROUPS = 500
 
@@ -148,6 +148,18 @@ def _dimension_expr(dim_key: str):
     if dim_key == "model":
         expr = func.coalesce(TokenTransaction.model_name, TokenTransaction.model_tier, "Unknown model")
         return expr, expr
+    if dim_key == "person":
+        # Simpler than project_activity_reporting()'s people_breakdown,
+        # which also has a "__simulator__"/"Simulator User" fallback
+        # bucket for simulated traffic with no real user identity --
+        # omitted here (same documented-simplification precedent as the
+        # "department" dimension above); reconciling that is a Milestone
+        # 4 follow-up, not a blocker for the metrics this dimension
+        # already supports correctly.
+        return (
+            func.coalesce(WorkUser.external_id, TokenTransaction.actor_external_id, "__unknown__"),
+            func.coalesce(WorkUser.name, TokenTransaction.actor_name, "Unknown user"),
+        )
     if dim_key == "outcome_status":
         expr = case(
             (WorkItemOutcome.outcome_success.is_(True), "won"),
@@ -269,15 +281,47 @@ def _outcome_metric_expr(metric_key: str):
     raise ValueError(f"unknown outcome metric: {metric_key}")
 
 
+def _provider_breakdown_rows(
+    db: Session, workspace_id: Optional[str], metric_keys: list,
+    filters: dict, start: Optional[datetime], end: Optional[datetime], account,
+) -> list:
+    """
+    "provider" (Anthropic/OpenAI/...) isn't a stored column -- only
+    model_name is -- so it can't be a SQL GROUP BY key the way the other
+    dimensions are. Same approach project_activity_reporting() already
+    uses: resolve each DISTINCT model name to a provider once (via
+    core.model_provider, a handful of calls, not one per transaction),
+    then re-sum the already-aggregated per-model buckets by provider.
+    Kept as a dedicated pre-aggregation step rather than forcing
+    _dimension_expr() into a fake SQL expression for a value that isn't
+    actually a column.
+    """
+    from core.model_provider import load_provider_registry, resolve_provider
+
+    model_rows = _run_activity_query(db, workspace_id, metric_keys, ["model"], filters, start, end, account)
+    registry = load_provider_registry(db)
+    grouped: dict[str, dict] = {}
+    for row in model_rows:
+        model_name = row["dim_labels"][0] if row["dim_labels"] else None
+        provider_name = resolve_provider(model_name, registry=registry)
+        bucket = grouped.setdefault(provider_name, {"dim_key": (provider_name,), "dim_labels": [provider_name], "values": {}})
+        for metric_key, value in row["values"].items():
+            bucket["values"][metric_key] = bucket["values"].get(metric_key, 0) + (value or 0)
+    return list(grouped.values())
+
+
 def _run_activity_query(
     db: Session, workspace_id: Optional[str], metric_keys: list, dim_keys: list,
     filters: dict, start: Optional[datetime], end: Optional[datetime], account,
 ) -> list:
+    if dim_keys == ["provider"]:
+        return _provider_breakdown_rows(db, workspace_id, metric_keys, filters, start, end, account)
     q = (
         db.query(TokenTransaction.id)
         .outerjoin(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
         .outerjoin(WorkAccount, WorkItem.account_id == WorkAccount.id)
         .outerjoin(RegisteredAgent, TokenTransaction.agent_id == RegisteredAgent.id)
+        .outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
         .filter(IS_AI_CALL)
     )
     if start is not None:
