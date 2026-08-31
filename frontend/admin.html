@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="css/styles.css?v=20260821-dark-theme" />
   <link rel="stylesheet" href="css/demo.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260831-consolidation" />
   <style>
     body { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg-base); }
 
@@ -186,7 +187,10 @@
     }
   </style>
 </head>
-<body class="admin-page">
+<body class="admin-page cp-uses-left-nav">
+<div class="cp-app-shell">
+<aside id="cpLeftNavMount"></aside>
+<div class="cp-app-main">
 
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <header class="header">
@@ -874,5 +878,8 @@ loadTierNameInputs();
 <script src="/js/mobile-guard.js"></script>
 <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
 <script src="/js/global-nav.js?v=20260821-dark-theme"></script>
+<script src="/js/left-nav.js?v=20260831-consolidation"></script>
+</div>
+</div>
 </body>
 </html>

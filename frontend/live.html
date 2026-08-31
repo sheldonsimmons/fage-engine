@@ -7,6 +7,7 @@
   <title>CostPilot — Day-in-the-Life Demo</title>
   <link rel="stylesheet" href="css/styles.css?v=20260821-dark-theme" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260831-consolidation" />
   <style>
     body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
@@ -166,7 +167,10 @@
     }
   </style>
 </head>
-<body>
+<body class="cp-uses-left-nav">
+<div class="cp-app-shell">
+<aside id="cpLeftNavMount"></aside>
+<div class="cp-app-main">
 
 <div class="flash-overlay" id="flashOverlay"></div>
 <div class="pruning-ticker" id="pruningTicker"></div>
@@ -1744,6 +1748,7 @@ if (_lBudgetPanelHead) {
 </script>
 <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
 <script src="/js/global-nav.js?v=20260821-dark-theme"></script>
+<script src="/js/left-nav.js?v=20260831-consolidation"></script>
 <script src="js/help.js"></script>
 <script>
 window.PAGE_TOUR_STEPS = [
@@ -1760,5 +1765,7 @@ window.PAGE_TOUR_STEPS = [
 ];
 </script>
 <script src="/js/mobile-guard.js"></script>
+</div>
+</div>
 </body>
 </html>

@@ -187,8 +187,12 @@
     }
   </style>
   <link rel="stylesheet" href="/css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="/css/left-nav.css?v=20260831-consolidation" />
 </head>
-<body>
+<body class="cp-uses-left-nav">
+<div class="cp-app-shell">
+<aside id="cpLeftNavMount"></aside>
+<div class="cp-app-main">
 
 <!-- Trial banner -->
 <div class="trial-bar">
@@ -818,5 +822,8 @@ document.getElementById("workspaceTestAgent")?.addEventListener("input", e => { 
 </script>
   <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
   <script src="/js/global-nav.js?v=20260821-dark-theme"></script>
+  <script src="/js/left-nav.js?v=20260831-consolidation"></script>
+</div>
+</div>
 </body>
 </html>

@@ -7,6 +7,7 @@
   <title>CostPilot — Policy &amp; Rules</title>
   <link rel="stylesheet" href="css/styles.css?v=20260821-dark-theme" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260803-workspaces" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260831-consolidation" />
   <style>
     .header-nav-link { text-decoration: none; font-size: 12px; color: var(--text-muted);
       border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
@@ -189,7 +190,10 @@
     }
   </style>
 </head>
-<body>
+<body class="cp-uses-left-nav">
+<div class="cp-app-shell">
+<aside id="cpLeftNavMount"></aside>
+<div class="cp-app-main">
 
 <!-- ── Header ─────────────────────────────────────────────────────────────── -->
 <header class="header">
@@ -854,5 +858,8 @@ window.PAGE_TOUR_STEPS = [
 <script src="/js/mobile-guard.js"></script>
 <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
 <script src="/js/global-nav.js?v=20260821-dark-theme"></script>
+<script src="/js/left-nav.js?v=20260831-consolidation"></script>
+</div>
+</div>
 </body>
 </html>
