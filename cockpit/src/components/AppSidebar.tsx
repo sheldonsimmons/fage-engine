@@ -7,6 +7,8 @@ import {
   FileBarChart,
   Plug,
   LayoutGrid,
+  Layers,
+  Target,
   Settings,
 } from "lucide-react"
 
@@ -28,6 +30,8 @@ const primaryNav = [
   { label: "Reports", icon: FileBarChart, href: "/reports.html" },
   { label: "Integrations", icon: Plug, href: "/onboarding.html" },
   { label: "Connectors", icon: LayoutGrid, href: "/connector-manager.html" },
+  { label: "Models", icon: Layers, href: "/models.html" },
+  { label: "Policy", icon: Target, href: "/policy.html" },
 ]
 
 function NavItem({ item }: { item: (typeof primaryNav)[number] }) {
