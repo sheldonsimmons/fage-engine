@@ -279,6 +279,12 @@ app.include_router(routes_agent_profile.router, prefix="/api/agents", tags=["Age
 from api import routes_person_profile
 app.include_router(routes_person_profile.router, prefix="/api/people", tags=["Person Intelligence"])
 
+# Public HTTP surface for the metrics registry (run_metrics_query) -- the
+# AI Activity Explorer's View By / Break Down By pivot is the first
+# frontend caller.
+from api import routes_metrics_query
+app.include_router(routes_metrics_query.router, prefix="/api/metrics", tags=["Metrics Registry"])
+
 # Step 6 — AI Decision Auditor
 from api import routes_auditor
 app.include_router(routes_auditor.router, prefix="/api/audit", tags=["Auditor"])
