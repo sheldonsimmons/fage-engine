@@ -1594,6 +1594,27 @@
   font-size: 11px;
   padding: 7px 8px;
 }
+.project-attribution-ledger-controls {
+  margin: 10px 0;
+}
+.project-attribution-ledger-controls .act-filter-input {
+  max-width: 320px;
+}
+.project-attribution-ledger-pager {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.project-attribution-ledger-pager span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.project-attribution-ledger-pager button:disabled {
+  cursor: not-allowed;
+  opacity: .4;
+}
 .explorer-row {
   cursor: pointer;
 }

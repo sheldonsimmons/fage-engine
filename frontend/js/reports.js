@@ -830,28 +830,10 @@ async function loadBusinessContexts() {
 
     renderContextBreakdowns(data);
 
-    const activityBody = document.getElementById("ctx-activity-rows");
-    const activities = data.activities || [];
-    activityBody.innerHTML = activities.length
-      ? activities.map(row => `<tr>
-          <td class="ctx-mono">${escapeHtml(formatReportTimestamp(row.timestamp))}</td>
-          <td>${contextDrillButton("ctxOrgFilter", row.charged_unit, row.charged_unit || "Unassigned", row.attribution_source || "")}</td>
-          <td>${contextDrillButton("ctxPersonFilter", row.user_external_id, row.user_name || "Unknown user", row.user_source_platform || "")}</td>
-          <td>${contextDrillButton("ctxAgentFilter", row.agent_id, row.agent_name || "Unknown agent", row.agent_platform || "")}</td>
-          <td>${contextDrillButton("ctxAccountFilter", row.account_external_id, row.account_name || "Unassigned account")}</td>
-          <td>${contextDrillButton("ctxProjectFilter", row.project_external_id, row.project_name || "Unattributed")}</td>
-          <td>${contextDrillButton("ctxRecordTypeFilter", row.source_record_type, row.source_record_name || row.source_record_id || "Not recorded", row.source_record_type || row.source_platform || "")}</td>
-          <td>${contextDrillButton("ctxPurposeFilter", row.business_purpose, row.business_purpose || "Unclassified")}</td>
-          <td><div>${escapeHtml(row.model_name || row.model_tier || "—")}</div><div class="ctx-meta">${escapeHtml(row.model_tier || "")}${row.is_simulation ? ' · <span class="rpt-badge badge-event">SIMULATION</span>' : ""}</div></td>
-          <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
-          <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
-          <td class="ctx-mono">${fmtUsd(Number(row.cost_usd || 0))}</td>
-        </tr>`).join("")
-      : '<tr><td colspan="12">No AI activity matches these filters.</td></tr>';
-    document.getElementById("ctx-activity-count").textContent =
-      `${fmtNum(data.activity_count || 0)} ${Number(data.activity_count || 0) === 1 ? "activity" : "activities"} · ` +
-      `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation · ` +
-      `${reportTimeZoneLabel()}`;
+    _ctxActivityRaw = data.activities || [];
+    _ctxActivityPage = 0;
+    _ctxActivitySummary = summary;
+    renderActivityLedger();
 
     // AI Activity Explorer's View By / Break Down By pivot lives in the
     // same tab, keyed off the same Department/Team filter -- refreshed
@@ -863,6 +845,78 @@ async function loadBusinessContexts() {
       `<tr><td colspan="12">Could not load AI usage attribution: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
+
+// ── AI Activity Ledger — client-side search + pagination ───────────────────
+//
+// The backend already fetches up to activity_limit (1000) rows in one call
+// (loadBusinessContexts' params above); this paces how much renders into
+// the DOM at once and lets the user search within what's already fetched,
+// same client-side pattern the existing Risk Events table search already
+// uses (renderRiskEventTable) -- not a new mechanism, not a backend
+// pagination/offset change to project_activity_reporting().
+let _ctxActivityRaw = [];
+let _ctxActivityPage = 0;
+let _ctxActivitySummary = {};
+const CTX_ACTIVITY_PAGE_SIZE = 50;
+
+function renderActivityLedger() {
+  const body = document.getElementById("ctx-activity-rows");
+  if (!body) return;
+  const search = (document.getElementById("ctxActivitySearch")?.value || "").trim().toLowerCase();
+
+  const filtered = search
+    ? _ctxActivityRaw.filter(row => [
+        row.charged_unit, row.user_name, row.agent_name, row.account_name,
+        row.project_name, row.source_record_name, row.business_purpose,
+        row.model_name, row.model_tier,
+      ].join(" ").toLowerCase().includes(search))
+    : _ctxActivityRaw;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CTX_ACTIVITY_PAGE_SIZE));
+  _ctxActivityPage = Math.min(_ctxActivityPage, totalPages - 1);
+  const pageRows = filtered.slice(
+    _ctxActivityPage * CTX_ACTIVITY_PAGE_SIZE, (_ctxActivityPage + 1) * CTX_ACTIVITY_PAGE_SIZE
+  );
+
+  body.innerHTML = pageRows.length
+    ? pageRows.map(row => `<tr>
+        <td class="ctx-mono">${escapeHtml(formatReportTimestamp(row.timestamp))}</td>
+        <td>${contextDrillButton("ctxOrgFilter", row.charged_unit, row.charged_unit || "Unassigned", row.attribution_source || "")}</td>
+        <td>${contextDrillButton("ctxPersonFilter", row.user_external_id, row.user_name || "Unknown user", row.user_source_platform || "")}</td>
+        <td>${contextDrillButton("ctxAgentFilter", row.agent_id, row.agent_name || "Unknown agent", row.agent_platform || "")}</td>
+        <td>${contextDrillButton("ctxAccountFilter", row.account_external_id, row.account_name || "Unassigned account")}</td>
+        <td>${contextDrillButton("ctxProjectFilter", row.project_external_id, row.project_name || "Unattributed")}</td>
+        <td>${contextDrillButton("ctxRecordTypeFilter", row.source_record_type, row.source_record_name || row.source_record_id || "Not recorded", row.source_record_type || row.source_platform || "")}</td>
+        <td>${contextDrillButton("ctxPurposeFilter", row.business_purpose, row.business_purpose || "Unclassified")}</td>
+        <td><div>${escapeHtml(row.model_name || row.model_tier || "—")}</div><div class="ctx-meta">${escapeHtml(row.model_tier || "")}${row.is_simulation ? ' · <span class="rpt-badge badge-event">SIMULATION</span>' : ""}</div></td>
+        <td class="ctx-mono">${fmtNum(row.total_tokens || 0)}</td>
+        <td class="ctx-mono">${fmtNum(row.tokens_saved || 0)}</td>
+        <td class="ctx-mono">${fmtUsd(Number(row.cost_usd || 0))}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="12">${search ? "No AI activity matches this search." : "No AI activity matches these filters."}</td></tr>`;
+
+  const summary = _ctxActivitySummary || {};
+  document.getElementById("ctx-activity-count").textContent =
+    `${fmtNum(filtered.length)} ${filtered.length === 1 ? "activity" : "activities"}` +
+    `${search ? ` (of ${fmtNum(_ctxActivityRaw.length)})` : ""} · ` +
+    `${fmtNum(summary.live_count || 0)} live · ${fmtNum(summary.simulation_count || 0)} simulation · ` +
+    `${reportTimeZoneLabel()}`;
+
+  const pager = document.getElementById("ctxActivityPager");
+  if (pager) {
+    pager.hidden = filtered.length <= CTX_ACTIVITY_PAGE_SIZE;
+    document.getElementById("ctxActivityPageLabel").textContent = `Page ${_ctxActivityPage + 1} of ${totalPages}`;
+    document.getElementById("ctxActivityPrev").disabled = _ctxActivityPage === 0;
+    document.getElementById("ctxActivityNext").disabled = _ctxActivityPage >= totalPages - 1;
+  }
+}
+
+function ctxActivityPageChange(delta) {
+  _ctxActivityPage = Math.max(0, _ctxActivityPage + delta);
+  renderActivityLedger();
+}
+
+// ── end AI Activity Ledger pagination ───────────────────────────────────
 
 function exportContextCsv() {
   const data = _rptContextData;

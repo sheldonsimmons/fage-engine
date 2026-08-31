@@ -546,11 +546,20 @@
           </div>
           <span id="ctx-activity-count">— activities</span>
         </div>
+        <div class="project-attribution-ledger-controls">
+          <input id="ctxActivitySearch" class="act-filter-input" type="search"
+            placeholder="Search person, agent, account, model…" oninput="renderActivityLedger()" />
+        </div>
         <div class="project-attribution-table-wrap">
           <table class="rpt-context-table">
             <thead><tr><th>Date</th><th>Department / Team</th><th>Person</th><th>Agent</th><th>Account</th><th>Business Record</th><th>Source Record</th><th>Purpose</th><th>Model</th><th>Tokens</th><th>Pruned</th><th>Cost</th></tr></thead>
             <tbody id="ctx-activity-rows"><tr><td colspan="12">Loading AI activity…</td></tr></tbody>
           </table>
+        </div>
+        <div class="project-attribution-ledger-pager" id="ctxActivityPager" hidden>
+          <button type="button" class="context-view-toggle" id="ctxActivityPrev" onclick="ctxActivityPageChange(-1)">← Prev</button>
+          <span id="ctxActivityPageLabel"></span>
+          <button type="button" class="context-view-toggle" id="ctxActivityNext" onclick="ctxActivityPageChange(1)">Next →</button>
         </div>
         <div class="project-attribution-note">CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.</div>
       </div>
