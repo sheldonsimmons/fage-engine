@@ -539,6 +539,13 @@ def _run_activity_query(
             TokenTransaction.model_name.ilike(filters["model"]),
             TokenTransaction.model_tier.ilike(filters["model"]),
         ))
+    if filters.get("work_item"):
+        # Exact match on WorkItem.external_id -- the same value the
+        # "work_item" dimension's key exposes via a row's dimension_ids,
+        # so drilling from a work_item breakdown row into its own rows
+        # filters correctly (unlike a name-based match, external_id is
+        # actually unique).
+        q = q.filter(WorkItem.external_id == filters["work_item"])
     # Legacy values (won/lost/open) keep the opportunity-only gate for
     # backward compatibility with existing callers; the generic values
     # (successful/unsuccessful/any) apply to whatever WorkItem the caller's
@@ -850,7 +857,20 @@ def run_metrics_query(
 
     rows = []
     for key, bucket in primary.items():
-        row = {"dimensions": dict(zip(dims_for_merge, bucket["labels"]))}
+        # `key` is the raw dim_key tuple every source query and the Python
+        # merge already use internally (see _run_activity_query/_run_
+        # outcome_query) -- exposing it as "dimension_ids" (distinct from
+        # the human-readable "dimensions" labels) lets a caller filter or
+        # link into an entity by its real identity (e.g. a person's
+        # external_id, an agent's id) instead of matching on display text,
+        # which breaks for duplicate labels and is flatly wrong for
+        # "person" specifically (the person filter matches external_id,
+        # never the display name). Was previously computed and then
+        # discarded before reaching the caller.
+        row = {
+            "dimensions": dict(zip(dims_for_merge, bucket["labels"])),
+            "dimension_ids": dict(zip(dims_for_merge, key)),
+        }
         # Only the metrics actually requested become top-level row values --
         # a silently-added sample_size_metric (see query_metrics above)
         # feeds the "evidence" block below, not the row directly, so the

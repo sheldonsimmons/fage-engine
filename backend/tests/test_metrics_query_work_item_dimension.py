@@ -83,3 +83,47 @@ def test_work_item_dimension_respects_filters_and_timeframe():
         filters={"department": "Sales"}, timeframe={},
     )
     assert result_no_match.rows == []
+
+
+def test_rows_expose_dimension_ids_alongside_labels():
+    db = _session()
+    account = WorkAccount(workspace_id="WS-1", name="Acme", external_id="ACC-1")
+    db.add(account); db.flush()
+    item = WorkItem(
+        workspace_id="WS-1", account_id=account.id, context_type="opportunity",
+        external_id="OPP-1", name="Acme Expansion",
+    )
+    db.add(item); db.flush()
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=item.id,
+        model_tier="Scout", input_tokens=100, output_tokens=50, cost_usd=3.0, timestamp=datetime.utcnow(),
+    ))
+    db.commit()
+
+    result = run_metrics_query(db, "WS-1", metrics=["ai_spend"], dimensions=["work_item"], timeframe={})
+    row = result.rows[0]
+    assert row["dimensions"]["work_item"] == "Acme Expansion"
+    assert row["dimension_ids"]["work_item"] == "OPP-1"
+
+
+def test_work_item_filter_matches_exact_external_id():
+    db = _session()
+    account = WorkAccount(workspace_id="WS-1", name="Acme", external_id="ACC-1")
+    db.add(account); db.flush()
+    item_a = WorkItem(workspace_id="WS-1", account_id=account.id, context_type="opportunity", external_id="OPP-1", name="Deal A")
+    item_b = WorkItem(workspace_id="WS-1", account_id=account.id, context_type="opportunity", external_id="OPP-2", name="Deal B")
+    db.add_all([item_a, item_b]); db.flush()
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=item_a.id,
+        model_tier="Scout", input_tokens=100, output_tokens=50, cost_usd=4.0, timestamp=datetime.utcnow(),
+    ))
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", work_item_id=item_b.id,
+        model_tier="Scout", input_tokens=100, output_tokens=50, cost_usd=9.0, timestamp=datetime.utcnow(),
+    ))
+    db.commit()
+
+    result = run_metrics_query(db, "WS-1", metrics=["ai_spend"], filters={"work_item": "OPP-1"}, timeframe={})
+    assert not result.errors
+    assert len(result.rows) == 1
+    assert result.rows[0]["ai_spend"] == 4.0
