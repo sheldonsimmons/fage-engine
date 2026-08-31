@@ -71,6 +71,12 @@
     .ap-save-btn:hover { opacity: 0.85; }
     .ap-save-status { font-size: 12px; color: var(--text-muted); margin-left: 10px; }
 
+    .ap-toggle-btn {
+      margin-top: 10px; background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .ap-toggle-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
     .ap-config-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 12.5px; }
     .ap-config-item { color: var(--text-muted); }
     .ap-config-item strong { color: var(--text-primary); display: block; font-size: 14px; }
@@ -165,6 +171,7 @@
           <thead><tr><th>WorkItem</th><th>Type</th><th>Outcome</th><th>Requests</th><th>Spend</th></tr></thead>
           <tbody id="apWorkItemsBody"></tbody>
         </table>
+        <button type="button" class="ap-toggle-btn" id="apWorkItemsToggle" style="display:none"></button>
       </div>
 
       <div class="ap-section">
@@ -173,6 +180,7 @@
           <thead><tr><th>Time</th><th>Model</th><th>WorkItem</th><th>Cost</th></tr></thead>
           <tbody id="apTimelineBody"></tbody>
         </table>
+        <button type="button" class="ap-toggle-btn" id="apTimelineToggle" style="display:none"></button>
       </div>
     </div>
   </div>
@@ -207,6 +215,33 @@
     function apFmtDate(iso) {
       if (!iso) return "—";
       return apParseUtc(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+
+    const AP_COLLAPSE_LIMIT = 10;
+
+    // Renders `rows` into `tbodyId` via `rowHtml`, showing only the first
+    // AP_COLLAPSE_LIMIT by default with a "Show all (N)" toggle -- these
+    // tables can run 25-50+ rows for an active agent, which was an
+    // unscannable wall of text before this. Client-side only; the
+    // backend already caps total rows returned (25 WorkItems, 50 recent
+    // activity), this just paces how much renders at once.
+    function apRenderCollapsible(tbodyId, toggleId, rows, colspan, emptyMessage, rowHtml) {
+      const tbody = document.getElementById(tbodyId);
+      const toggle = document.getElementById(toggleId);
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="ap-section-hint">${emptyMessage}</td></tr>`;
+        toggle.style.display = "none";
+        return;
+      }
+      let expanded = false;
+      const render = () => {
+        const shown = expanded ? rows : rows.slice(0, AP_COLLAPSE_LIMIT);
+        tbody.innerHTML = shown.map(rowHtml).join("");
+        toggle.textContent = expanded ? "Show fewer" : `Show all (${rows.length})`;
+      };
+      toggle.style.display = rows.length > AP_COLLAPSE_LIMIT ? "inline-block" : "none";
+      toggle.onclick = () => { expanded = !expanded; render(); };
+      render();
     }
 
     function apShowEmpty(message) {
@@ -322,30 +357,34 @@
             </tr>`).join("")
         : `<tr><td colspan="3" class="ap-section-hint">No model usage recorded.</td></tr>`;
 
-      // WorkItem attribution
-      const wiBody = document.getElementById("apWorkItemsBody");
-      wiBody.innerHTML = (data.work_item_attribution || []).length
-        ? data.work_item_attribution.map((w) => `
-            <tr>
-              <td>${apEsc(w.name || "Unnamed")}</td>
-              <td>${apEsc((w.context_type || "—").replace(/_/g, " "))}</td>
-              <td>${apEsc(w.outcome_status || "—")}${w.outcome_success === true ? " (won)" : w.outcome_success === false ? " (lost)" : ""}</td>
-              <td class="ap-num">${apFmtNum(w.call_count)}</td>
-              <td class="ap-num">${apFmtUsd(w.ai_spend_usd, 4)}</td>
-            </tr>`).join("")
-        : `<tr><td colspan="5" class="ap-section-hint">No WorkItems touched yet.</td></tr>`;
+      // WorkItem attribution -- collapsed to the top 10 by default (see
+      // apRenderCollapsible); this list can run 25+ rows for an active
+      // agent, which was an unscannable wall of text before.
+      apRenderCollapsible(
+        "apWorkItemsBody", "apWorkItemsToggle", data.work_item_attribution || [], 5,
+        "No WorkItems touched yet.",
+        (w) => `
+          <tr>
+            <td>${apEsc(w.name || "Unnamed")}</td>
+            <td>${apEsc((w.context_type || "—").replace(/_/g, " "))}</td>
+            <td>${apEsc(w.outcome_status || "—")}${w.outcome_success === true ? " (won)" : w.outcome_success === false ? " (lost)" : ""}</td>
+            <td class="ap-num">${apFmtNum(w.call_count)}</td>
+            <td class="ap-num">${apFmtUsd(w.ai_spend_usd, 4)}</td>
+          </tr>`
+      );
 
-      // Recent activity
-      const timelineBody = document.getElementById("apTimelineBody");
-      timelineBody.innerHTML = (data.activity_timeline || []).length
-        ? data.activity_timeline.map((row) => `
-            <tr>
-              <td>${apFmtDate(row.timestamp)}</td>
-              <td>${apEsc(row.model || "—")}</td>
-              <td>${apEsc(row.work_item_name || "—")}</td>
-              <td class="ap-num">${apFmtUsd(row.cost_usd, 4)}</td>
-            </tr>`).join("")
-        : `<tr><td colspan="4" class="ap-section-hint">No tracked AI activity yet.</td></tr>`;
+      // Recent activity -- same collapse treatment, can run 50+ rows.
+      apRenderCollapsible(
+        "apTimelineBody", "apTimelineToggle", data.activity_timeline || [], 4,
+        "No tracked AI activity yet.",
+        (row) => `
+          <tr>
+            <td>${apFmtDate(row.timestamp)}</td>
+            <td>${apEsc(row.model || "—")}</td>
+            <td>${apEsc(row.work_item_name || "—")}</td>
+            <td class="ap-num">${apFmtUsd(row.cost_usd, 4)}</td>
+          </tr>`
+      );
     }
 
     document.getElementById("apSaveBtn").addEventListener("click", async () => {
