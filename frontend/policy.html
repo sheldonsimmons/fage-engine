@@ -384,7 +384,7 @@
     </div>
     <div class="policy-library-toolbar">
       <input id="policyTermSearch" class="agent-filter-search" type="search" placeholder="Search sensitive terms..." oninput="renderKeywordTable()" />
-      <select id="policyCategoryFilter" class="agent-filter-select" onchange="renderKeywordTable()"><option value="">All Categories</option><option value="legal">Legal</option><option value="hipaa">HIPAA / Health</option><option value="financial">Financial</option><option value="hr">HR</option><option value="custom">Custom</option></select>
+      <select id="policyCategoryFilter" class="agent-filter-select" onchange="renderKeywordTable()"><option value="">All Categories</option><option value="legal">Legal</option><option value="hipaa">HIPAA / Health</option><option value="financial">Financial</option><option value="hr">HR</option><option value="pii">PII</option><option value="code">Code</option><option value="custom">Custom</option></select>
       <select id="policyActionFilter" class="agent-filter-select" onchange="renderKeywordTable()"><option value="">All Actions</option><option value="flag">Flag</option><option value="escalate">Escalate</option><option value="block">Block</option></select>
       <button class="btn-secondary" onclick="clearPolicyTermFilters()">Clear</button>
     </div>
@@ -442,7 +442,7 @@
   <p>Choose the enforcement action carefully. Blocking prevents the request from reaching any AI provider.</p>
   <div class="kw-add-form"><div class="kw-add-row">
     <div class="kw-field"><label class="field-label">Term or Phrase</label><input type="text" id="kwTerm" class="reg-input" placeholder="e.g. acquisition, GDPR, PII" /></div>
-    <div class="kw-field"><label class="field-label">Category</label><select id="kwCategory" class="reg-input"><option value="legal">Legal</option><option value="hipaa">HIPAA / Health</option><option value="financial">Financial</option><option value="hr">HR</option><option value="custom" selected>Custom</option></select></div>
+    <div class="kw-field"><label class="field-label">Category</label><select id="kwCategory" class="reg-input"><option value="legal">Legal</option><option value="hipaa">HIPAA / Health</option><option value="financial">Financial</option><option value="hr">HR</option><option value="pii">PII</option><option value="code">Code</option><option value="custom" selected>Custom</option></select></div>
     <div class="kw-field"><label class="field-label">Action</label><select id="kwAction" class="reg-input"><option value="flag">Flag — allow and mark high-risk</option><option value="escalate" selected>Escalate — force Tier 4</option><option value="block">Block — reject before any AI provider</option></select></div>
     <div class="kw-field kw-field-btn"><button class="btn-primary" onclick="addKeyword()">+ Add Term</button></div>
     <div id="kwStatus" class="register-status"></div>
