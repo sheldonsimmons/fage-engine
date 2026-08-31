@@ -558,6 +558,20 @@ def _run_activity_query(
         # filters correctly (unlike a name-based match, external_id is
         # actually unique).
         q = q.filter(WorkItem.external_id == filters["work_item"])
+    if filters.get("connection_key"):
+        # Exact match on TokenTransaction.connection_key -- the
+        # authoritative identity for a Universal Connection (see
+        # IntegrationConnection.connection_key), unlike "platform" above
+        # which matches the mutable source_platform string. A row's
+        # source_platform can silently diverge from its connection's
+        # current platform name (e.g. an agent registered under an
+        # earlier platform name keeps reporting that name for every
+        # later event, by design -- an agent belongs to one platform
+        # consistently), so any caller that already knows a specific
+        # connection's key should filter by it directly rather than by
+        # platform string. Found via the Universal Connection
+        # verification endpoint's own end-to-end production test.
+        q = q.filter(TokenTransaction.connection_key == filters["connection_key"])
     # Legacy values (won/lost/open) keep the opportunity-only gate for
     # backward compatibility with existing callers; the generic values
     # (successful/unsuccessful/any) apply to whatever WorkItem the caller's

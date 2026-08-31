@@ -196,9 +196,21 @@ def verify_test_event(connection_id: int, db: Session = Depends(get_db)):
     # SQLite and Postgres. Caught by this endpoint's own test suite.
     window_start = test_row.timestamp - timedelta(minutes=1)
     window_end = datetime.utcnow() + timedelta(minutes=1)
+    # connection_key, not platform, is the authoritative filter here -- a
+    # row's source_platform can legitimately diverge from this
+    # connection's current platform name (an agent registered under an
+    # earlier platform name keeps reporting that name for every later
+    # event by design), which platform-string filtering would silently
+    # miss. Falls back to platform only for connections with no
+    # connection_key at all. Found via this endpoint's own end-to-end
+    # production test.
+    visibility_filters = (
+        {"connection_key": connection.connection_key} if connection.connection_key
+        else {"platform": connection.platform}
+    )
     result = run_metrics_query(
         db, connection.workspace_id, metrics=["ai_requests"],
-        filters={"platform": connection.platform},
+        filters=visibility_filters,
         timeframe={"start": window_start, "end": window_end},
     )
     visible_count = int(result.rows[0].get("ai_requests", 0)) if result.rows else 0

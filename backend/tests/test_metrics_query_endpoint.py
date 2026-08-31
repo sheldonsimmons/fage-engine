@@ -135,3 +135,30 @@ def test_account_filter_resolves_by_exact_external_id_over_fuzzy_name():
     body = resp.json()
     assert not body["errors"]
     assert body["rows"][0]["ai_spend"] == 4.0
+
+
+def test_connection_key_filter_isolates_from_platform_string_collision():
+    """
+    Two connections can share a platform string (e.g. an agent registered
+    under an earlier connection's name keeps reporting that name), but
+    connection_key filtering must isolate them correctly regardless.
+    """
+    client, db = _client()
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", source_platform="Shared Name",
+        connection_key="conn_a", model_tier="Scout", input_tokens=100, output_tokens=50,
+        cost_usd=1.0, timestamp=datetime.utcnow(),
+    ))
+    db.add(TokenTransaction(
+        department="WS-1:Sales", workspace_id="WS-1", source_platform="Shared Name",
+        connection_key="conn_b", model_tier="Scout", input_tokens=100, output_tokens=50,
+        cost_usd=9.0, timestamp=datetime.utcnow(),
+    ))
+    db.commit()
+
+    resp = client.post("/api/metrics/query", json={
+        "workspace_id": "WS-1", "metrics": ["ai_spend"], "filters": {"connection_key": "conn_a"},
+    })
+    body = resp.json()
+    assert not body["errors"]
+    assert body["rows"][0]["ai_spend"] == 1.0
