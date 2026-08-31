@@ -643,7 +643,14 @@ def _record_observed_usage(
             resolved_model_tier="",
             model_source="observed",
             routing_cascaded=False,
-            is_simulation=False,
+            # Previously hardcoded False regardless of what the caller
+            # sent -- req.synthetic_simulation already exists and is
+            # already honored the same way in the control-mode
+            # construction below; observe-mode silently ignored it. Found
+            # via the Universal Connection "Send Test Event" flow, which
+            # needs a real request to be markable as non-real activity so
+            # it doesn't inflate real reporting.
+            is_simulation=bool(req.synthetic_simulation),
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             # Distinct from "estimated" (a CostPilot-side guess): this

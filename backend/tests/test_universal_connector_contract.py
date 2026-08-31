@@ -343,3 +343,34 @@ def test_connector_manifests_report_observe_as_available():
     catalog = list_connector_manifests()
     assert all(item["modes"]["observe"] == "available" for item in catalog["connectors"])
     assert all("reports" in item for item in catalog["connectors"])
+
+
+def test_observe_mode_honors_synthetic_simulation_flag():
+    """
+    Previously hardcoded is_simulation=False for observe-mode regardless
+    of what the caller sent -- control-mode already honored
+    synthetic_simulation the same way. Needed so a Universal Connection's
+    "Send Test Event" can mark its own test call as non-real activity
+    without it inflating real reporting.
+    """
+    from database.models import TokenTransaction
+
+    db = _session()
+    payload = _observe_payload("Acme Support Tool", "acme-prod")
+    payload["synthetic_simulation"] = True
+    req = RouteRequest(**payload)
+    route_payload(req, db=db)
+
+    tx = db.query(TokenTransaction).one()
+    assert tx.is_simulation is True
+
+
+def test_observe_mode_defaults_to_not_simulation():
+    from database.models import TokenTransaction
+
+    db = _session()
+    req = RouteRequest(**_observe_payload("Acme Support Tool", "acme-prod"))
+    route_payload(req, db=db)
+
+    tx = db.query(TokenTransaction).one()
+    assert tx.is_simulation is False

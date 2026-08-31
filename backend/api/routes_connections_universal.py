@@ -26,9 +26,14 @@ from core.connection_status import compute_connection_status, connection_scope
 
 router = APIRouter()
 
-# Marks a test event so it never pollutes real reporting -- the
-# verification endpoint below specifically looks for this marker.
-TEST_EVENT_BUSINESS_PURPOSE = "costpilot_connection_test"
+# A test event is identified by connection scope + recency alone, not a
+# business_purpose marker -- observe-mode's RouteRequest has no caller-
+# settable business_purpose field at all (it's always server-derived via
+# classify_business_purpose_fields), confirmed by sending a real event
+# against this endpoint before trusting the design. A brand-new
+# connection has zero real traffic until the customer wires up their
+# actual system, so "the most recent event in this connection's scope,
+# within the lookback window" is unambiguously the test event.
 TEST_EVENT_LOOKBACK = timedelta(minutes=15)
 
 
@@ -131,7 +136,6 @@ def verify_test_event(connection_id: int, db: Session = Depends(get_db)):
         db.query(TokenTransaction)
         .filter(
             scope,
-            TokenTransaction.business_purpose == TEST_EVENT_BUSINESS_PURPOSE,
             TokenTransaction.timestamp >= datetime.utcnow() - TEST_EVENT_LOOKBACK,
         )
         .order_by(TokenTransaction.timestamp.desc())
