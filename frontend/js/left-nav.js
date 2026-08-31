@@ -3,21 +3,29 @@
 
   // Vertical left-nav sidebar -- first page on this pattern is
   // business-profile.html (see global-nav.js for the horizontal top-nav
-  // pattern still used everywhere else). Deliberately smaller in scope
-  // than global-nav.js: no Manage/Tools dropdowns, no mobile drawer yet --
-  // just the items that map to a real page in this app. "Alerts" is
-  // omitted rather than pointed at something that isn't actually an
-  // alerts feature -- there's no alerting page in this app yet. There is
-  // also no separate "Dashboards" item: workspace.html looked like a fit
-  // at first but is actually a trial-onboarding-only page (its own
-  // workspace-stats call 404s for any non-trial workspace) -- Overview
-  // and Operate already cover general/live dashboards, so nothing was
-  // dropped by removing it.
-  const items = [
+  // pattern still used on the pages not yet migrated). Deliberately
+  // smaller in scope than global-nav.js: no Manage/Tools dropdowns, no
+  // mobile drawer yet -- just the items that map to a real page in this
+  // app. "Alerts" is omitted rather than pointed at something that isn't
+  // actually an alerts feature -- there's no alerting page in this app
+  // yet. There is also no separate "Dashboards" item: workspace.html
+  // looked like a fit at first but is actually a trial-onboarding-only
+  // page (its own workspace-stats call 404s for any non-trial workspace)
+  // -- Overview and Operate already cover general/live dashboards, so
+  // nothing was dropped by removing it.
+  //
+  // The item list itself now lives in /nav-items.json, fetched at
+  // runtime -- cockpit/src/components/AppSidebar.tsx fetches the same
+  // file. Previously each maintained its own hand-copied array, which is
+  // exactly how "Projects" and later "Models"/"Policy" ended up in one
+  // list and not the other. FALLBACK_ITEMS below is used only if that
+  // fetch fails, so this sidebar still renders something reasonable
+  // rather than nothing.
+  const FALLBACK_ITEMS = [
     { label: "Home", href: "/index.html", icon: "home" },
     { label: "Executive Dashboard", href: "/cockpit/", icon: "dashboard" },
     { label: "AI Activity", href: "/operate.html", icon: "pulse" },
-    { label: "Ask CostPilot", href: "#", icon: "ask", id: "cpLeftNavAsk" },
+    { label: "Ask CostPilot", href: "#", icon: "ask" },
     { label: "Business Profiles", href: "/business-profile.html", icon: "building" },
     { label: "Reports", href: "/reports.html", icon: "doc" },
     { label: "Integrations", href: "/onboarding.html", icon: "plug" },
@@ -26,6 +34,17 @@
     { label: "Policy", href: "/policy.html", icon: "target" },
     { label: "Settings", href: "/admin.html", icon: "gear" },
   ];
+
+  async function fetchNavItems() {
+    try {
+      const response = await fetch("/nav-items.json");
+      if (!response.ok) return FALLBACK_ITEMS;
+      const data = await response.json();
+      return Array.isArray(data.items) && data.items.length ? data.items : FALLBACK_ITEMS;
+    } catch (_err) {
+      return FALLBACK_ITEMS;
+    }
+  }
 
   // All stroke-based (fill="none") for a consistent line-icon look.
   const icons = {
@@ -52,7 +71,13 @@
 
   function linkMarkup(item) {
     const active = item.href === currentPath;
-    return `<a href="${item.href}" ${item.id ? `id="${item.id}"` : ""} class="cp-left-nav__link${active ? " active" : ""}"${active ? ' aria-current="page"' : ""}>
+    // "Ask CostPilot" needs a stable id to wire its click handler below --
+    // derived from the label match rather than stored in nav-items.json,
+    // since that id is a DOM-wiring detail specific to this renderer, not
+    // shared nav data (AppSidebar.tsx wires its own Ask CostPilot behavior
+    // independently, see that file).
+    const idAttr = item.label === "Ask CostPilot" ? ' id="cpLeftNavAsk"' : "";
+    return `<a href="${item.href}"${idAttr} class="cp-left-nav__link${active ? " active" : ""}"${active ? ' aria-current="page"' : ""}>
       ${svgIcon(item.icon)}<span>${item.label}</span>
     </a>`;
   }
@@ -110,9 +135,10 @@
     });
   }
 
-  function build() {
+  async function build() {
     const mount = document.getElementById("cpLeftNavMount");
     if (!mount) return;
+    const items = await fetchNavItems();
     mount.innerHTML = `
       <div class="cp-left-nav__brand">
         <img src="/assets/costpilot-logo-transparent.svg" alt="CostPilot" />

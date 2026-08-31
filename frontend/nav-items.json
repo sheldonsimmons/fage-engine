@@ -1,0 +1,15 @@
+{
+  "items": [
+    { "label": "Home", "href": "/index.html", "icon": "home" },
+    { "label": "Executive Dashboard", "href": "/cockpit/", "icon": "dashboard" },
+    { "label": "AI Activity", "href": "/operate.html", "icon": "pulse" },
+    { "label": "Ask CostPilot", "href": "#", "icon": "ask" },
+    { "label": "Business Profiles", "href": "/business-profile.html", "icon": "building" },
+    { "label": "Reports", "href": "/reports.html", "icon": "doc" },
+    { "label": "Integrations", "href": "/onboarding.html", "icon": "plug" },
+    { "label": "Connectors", "href": "/connector-manager.html", "icon": "grid" },
+    { "label": "Models", "href": "/models.html", "icon": "layers" },
+    { "label": "Policy", "href": "/policy.html", "icon": "target" },
+    { "label": "Settings", "href": "/admin.html", "icon": "gear" }
+  ]
+}
