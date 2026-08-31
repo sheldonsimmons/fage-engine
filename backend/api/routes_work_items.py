@@ -1813,9 +1813,34 @@ def project_activity_reporting(
     business_purpose: Optional[str] = None,
     provider: Optional[str] = None,
     activity_limit: int = Query(500, ge=1, le=2000),
+    exclude_prune_only_rows: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Factual user → agent → account/project → token-cost attribution."""
+    """
+    Factual user → agent → account/project → token-cost attribution.
+
+    exclude_prune_only_rows -- opt-in, default False (every existing
+    caller's behavior is unchanged unless it explicitly asks for this).
+    When True, applies the same core.metrics_query.IS_AI_CALL filter the
+    metrics registry (core/metrics_catalog.py's ai_spend/ai_requests/
+    token metrics) already uses, excluding VOICE_GUARD_PRUNE rows --
+    prune-only log entries, not real AI calls, always cost_usd=0.0 (see
+    api/routes_voice.py's insert site) but NOT excluded from this
+    function's request_count/token sums today, unlike the registry's.
+    That's a live, self-acknowledged inconsistency (see this file's
+    ai_spend MetricDef definition text) between Ask CostPilot's two
+    reporting paths: query_metrics (registry, excludes them) vs.
+    get_usage_report/get_change_drivers/get_agent_adoption (this
+    function, didn't). Spend totals were never actually affected (prune
+    rows are always $0), but request counts and token sums were --
+    meaning the same question, answered by a different Ask CostPilot
+    tool, could report a different call count for identical activity.
+    Deliberately opt-in rather than changing the default: this function
+    is also relied on by core/budget.py's live spend recompute, trial
+    reporting, and insights -- none of which asked for this and
+    shouldn't have their behavior silently changed as a side effect of
+    fixing Ask CostPilot's internal consistency.
+    """
     # Direct internal/test calls do not receive FastAPI's dependency coercion.
     if not isinstance(model_tier, (str, type(None))):
         model_tier = None
@@ -1847,6 +1872,9 @@ def project_activity_reporting(
             TokenTransaction.timestamp < period_end,
         )
     )
+    if exclude_prune_only_rows:
+        from core.metrics_query import IS_AI_CALL
+        query = query.filter(IS_AI_CALL)
     if workspace_id:
         query = query.filter(or_(
             TokenTransaction.workspace_id == workspace_id,

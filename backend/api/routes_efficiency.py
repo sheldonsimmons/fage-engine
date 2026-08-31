@@ -3609,6 +3609,7 @@ def _ask_costpilot_answer(
         days=parsed["days"],
         **reporting_filters,
         activity_limit=2000,
+        exclude_prune_only_rows=True,
         db=db,
     )
     summary = report.get("summary") or {}
@@ -3713,6 +3714,7 @@ def _ask_costpilot_answer(
             days=parsed["days"],
             **reporting_filters,
             activity_limit=1,
+            exclude_prune_only_rows=True,
             db=db,
         )
         prior_summary = prior_report.get("summary") or {}
@@ -3851,6 +3853,7 @@ def _ask_costpilot_answer(
                 days=parsed["days"],
                 **reporting_filters,
                 activity_limit=1,
+                exclude_prune_only_rows=True,
                 db=db,
             )
             prior_summary = prior_report.get("summary") or {}
@@ -3928,6 +3931,7 @@ def _ask_costpilot_answer(
                 days=parsed["days"],
                 **scoped_filters,
                 activity_limit=max(25, result_limit),
+                exclude_prune_only_rows=True,
                 db=db,
             )
         activity_rows = scoped_report.get("activities") or []

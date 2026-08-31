@@ -549,6 +549,7 @@ def run_get_usage_report(
         days=days,
         **reporting_filters,
         activity_limit=500,
+        exclude_prune_only_rows=True,
         db=db,
     )
     summary = report.get("summary") or {}
@@ -604,11 +605,11 @@ def run_get_change_drivers(
     plan = comparison_plan(primary_period, comparison_key or "previous_period")
     current_report = project_activity_reporting(
         workspace_id=workspace_id, date_from=plan.primary.start, date_to=plan.primary.end,
-        days=days, **reporting_filters, activity_limit=500, db=db,
+        days=days, **reporting_filters, activity_limit=500, exclude_prune_only_rows=True, db=db,
     )
     prior_report = project_activity_reporting(
         workspace_id=workspace_id, date_from=plan.comparison.start, date_to=plan.comparison.end,
-        days=days, **reporting_filters, activity_limit=500, db=db,
+        days=days, **reporting_filters, activity_limit=500, exclude_prune_only_rows=True, db=db,
     )
     current_summary = current_report.get("summary") or {}
     prior_summary = prior_report.get("summary") or {}
@@ -708,7 +709,7 @@ def run_get_agent_adoption(
         workspace_id=workspace_id, date_from=date_from, date_to=date_to, days=days,
         project_id=None, user_external_id=None, agent_id=None, account_id=None,
         source_platform=None, record_type=None, model_tier=None, charged_unit=None,
-        business_purpose=None, activity_limit=2000, db=db,
+        business_purpose=None, activity_limit=2000, exclude_prune_only_rows=True, db=db,
     )
     current_by_agent = {
         str(row.get("id")): int(row.get("request_count") or 0)

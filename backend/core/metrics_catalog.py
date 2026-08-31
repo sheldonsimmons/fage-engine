@@ -55,10 +55,15 @@ METRICS: dict[str, MetricDef] = {
             "VOICE_GUARD_PRUNE rows (calls pruned before they became a "
             "real AI request). Matches api/routes_dashboard.py's "
             "IS_AI_CALL convention (get_dashboard_changes, get_top_models, "
-            "get_business_impact) -- NOT project_activity_reporting()'s "
-            "older, unfiltered SUM, which still includes those rows. "
-            "Reconciling that inconsistency is a Milestone 4 follow-up, "
-            "not fixed here."
+            "get_business_impact). project_activity_reporting()'s SUM is "
+            "still unfiltered by default (unchanged for its other callers "
+            "-- core/budget.py's live spend recompute, trial reporting, "
+            "insights), but every Ask CostPilot call site now opts in via "
+            "its exclude_prune_only_rows=True parameter, so the two "
+            "reporting paths agree for Ask CostPilot specifically. VOICE_"
+            "GUARD_PRUNE rows are always cost_usd=0.0 (routes_voice.py), "
+            "so this was never a spend-dollar discrepancy in practice --"
+            "request counts and token sums were the actual mismatch."
         ),
         provenance="TokenTransaction.cost_usd",
     ),
