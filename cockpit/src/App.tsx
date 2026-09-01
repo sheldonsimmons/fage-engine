@@ -125,6 +125,14 @@ function App() {
               />
               <KpiRow dashboard={data.dashboard} savings={data.savings} health={data.health} budget={data.budget} businessImpact={data.businessImpact} />
 
+              {/* Ask CostPilot sits right after the glance-value Brief/KPIs
+                  (not above them -- those are shaped by direct executive
+                  feedback, see KpiRow's own ordering comment) and above the
+                  charts/recommendations below, per user decision. */}
+              <div id="ask-costpilot">
+                <AskCostPilot workspaceId={workspaceId} />
+              </div>
+
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
                 <SpendOverTime timeline={data.savings.timeline} />
                 <SpendByDepartment budget={data.budget} workspaceId={workspaceId} />
@@ -135,10 +143,6 @@ function App() {
                 <WhatChanged periodDays={data.changes.period_days} changes={data.changes.changes} />
                 <BusinessImpact data={data.businessImpact} />
                 <Recommendations recommendations={data.recommendations} />
-              </div>
-
-              <div id="ask-costpilot">
-                <AskCostPilot workspaceId={workspaceId} />
               </div>
             </>
           )}
