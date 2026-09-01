@@ -141,7 +141,7 @@
     const items = await fetchNavItems();
     mount.innerHTML = `
       <div class="cp-left-nav__brand">
-        <img src="/assets/costpilot-logo-transparent.svg" alt="CostPilot" />
+        <img src="/assets/costpilot-logo.png" alt="CostPilot" />
       </div>
       <nav class="cp-left-nav__links" aria-label="Primary navigation">
         ${items.map(linkMarkup).join("")}

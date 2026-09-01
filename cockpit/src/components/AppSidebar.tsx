@@ -112,13 +112,14 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
-      <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <LayoutDashboard className="h-4 w-4" />
-        </div>
-        <span className="text-sm font-semibold tracking-wide">
-          COST<span className="text-emerald-400">PILOT</span>
-        </span>
+      <div className="flex items-center px-5 py-5">
+        {/* Same brand asset used across every legacy page header and the
+            favicon (frontend/assets/costpilot-logo.png) -- one image, not
+            a bespoke icon+text JSX rendering, so the mark is identical
+            wherever it appears. Root-relative path resolves correctly
+            from a /cockpit/-mounted page since both are served by the
+            same app. */}
+        <img src="/assets/costpilot-logo.png" alt="CostPilot" className="h-8 w-auto object-contain" />
       </div>
 
       <nav className="flex-1 space-y-1 px-3">
