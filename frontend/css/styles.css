@@ -515,7 +515,17 @@ body {
   font-size: 11px;
   font-weight: 750;
   gap: 10px;
-  grid-template-columns: minmax(120px, 1fr) auto auto auto;
+  /* Leading "auto" column is for the ::before chevron below -- a
+     generated-content box on a grid container becomes a real grid item
+     (placed before all DOM children), so without its own column here it
+     silently consumed column 1 (the wide 1fr track meant for the
+     department name), pushing the name into a cramped "auto" column and
+     wrapping the 4th real stat span onto an implicit second row that
+     landed back in that same wide left column -- the exact "name and
+     stats crammed right, chevron + one stat stranded left" bug reported
+     live. Confirmed via computed grid-template-rows (two rows) and
+     child bounding rects on a real page before this fix. */
+  grid-template-columns: auto minmax(120px, 1fr) auto auto auto;
   list-style: none;
   padding: 11px 13px;
 }
@@ -524,7 +534,6 @@ body {
   color: var(--text-muted);
   content: "›";
   font-size: 17px;
-  margin-right: 7px;
 }
 .agentlake-dept-group[open] summary::before { transform: rotate(90deg); }
 .agentlake-dept-name { display: flex; align-items: center; }
@@ -817,7 +826,10 @@ body {
   .agentlake-summary-metrics,
   .agentlake-overview-grid,
   .agentlake-dept-agents { grid-template-columns: 1fr; }
-  .agentlake-dept-group summary { grid-template-columns: 1fr auto; }
+  /* Same "chevron ::before is a real grid item" fix as the base rule
+     above -- 3 visible items at this width (chevron, name, first stat)
+     need 3 columns, not 2, or the same wraparound bug reappears here. */
+  .agentlake-dept-group summary { grid-template-columns: auto 1fr auto; }
   .agentlake-dept-stat:nth-last-child(-n+2) { display: none; }
   .agentlake-project-filterbar { align-items: stretch; flex-direction: column; }
   .agentlake-project-filterbar > div { align-items: stretch; flex-direction: column; }
