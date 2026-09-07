@@ -333,6 +333,15 @@ function renderAdminAgentDrawer(agent) {
       </button>
     </div>
     <div class="admin-drawer-section">
+      <h3>Provider policy</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px">Restrict which AI providers this agent's routing may use — e.g. "Anthropic" but not "OpenAI." Leave blank for no restriction. Comma-separated.</p>
+      <div class="admin-routing-controls">
+        <label style="flex:1">Allowed providers
+          <input type="text" id="allowed-providers-${agent.id}" value="${(agent.allowed_providers || []).join(', ')}" placeholder="e.g. Anthropic, OpenAI" style="width:100%" onblur="saveAllowedProviders(${agent.id})" />
+        </label>
+      </div>
+    </div>
+    <div class="admin-drawer-section">
       <h3>Context pruning</h3>
       <div class="admin-pruning-row">
         <div><strong>${pruningOn ? "Enabled" : "Disabled"}</strong><span>${pruningOn ? "CostPilot removes unnecessary context before routing." : "Requests are sent without context pruning."}</span></div>
@@ -375,6 +384,23 @@ async function saveTierBounds(agentId) {
     }
   } catch (err) {
     alert("Failed to save tier bounds: " + err.message);
+  }
+}
+
+/** Save the provider allow-list for an agent — called when the field loses focus */
+async function saveAllowedProviders(agentId) {
+  const input = document.getElementById(`allowed-providers-${agentId}`);
+  if (!input) return;
+  const allowedProviders = input.value.split(",").map(p => p.trim()).filter(Boolean);
+  try {
+    await apiPatch(`/api/agents/${agentId}/allowed-providers`, { allowed_providers: allowedProviders });
+    const row = document.getElementById(`agent-row-${agentId}`);
+    if (row) {
+      row.style.outline = "1px solid var(--tier-scout)";
+      setTimeout(() => { row.style.outline = ""; }, 800);
+    }
+  } catch (err) {
+    alert("Failed to save provider policy: " + err.message);
   }
 }
 

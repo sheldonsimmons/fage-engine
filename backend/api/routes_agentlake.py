@@ -51,11 +51,20 @@ class AgentStatus(BaseModel):
     business_purpose: Optional[str]  = None
     owner:            Optional[str]  = None
     approval_status:  Optional[str]  = "unreviewed"
+    allowed_providers: Optional[list] = None  # empty/None = unrestricted
 
 
 class TierBoundsRequest(BaseModel):
     min_tier: int  # 1–4
     max_tier: int  # 1–4
+
+
+class AllowedProvidersRequest(BaseModel):
+    # Empty list = explicitly restrict to nothing (blocks all routing at
+    # this agent, same as any other misconfiguration); None/omit clears
+    # the restriction entirely -- use PATCH with [] vs. not calling this
+    # endpoint at all to tell the two apart.
+    allowed_providers: list = []
 
 
 class DepartmentTierBoundsRequest(TierBoundsRequest):
@@ -277,6 +286,27 @@ def set_tier_bounds(agent_id: int, req: TierBoundsRequest, db: Session = Depends
     db.commit()
     db.refresh(agent)
     return agent
+
+
+@router.patch("/{agent_id}/allowed-providers")
+def set_allowed_providers(agent_id: int, req: AllowedProvidersRequest, db: Session = Depends(get_db)):
+    """
+    Restrict which ModelRegistry.provider values this agent's routing may
+    use (Routing 2.0, Phase 2 -- policy-aware routing). An empty list
+    restricts the agent to no providers at all -- routing then proceeds on
+    whatever the tier lookup picked anyway, with a note in the audit trail,
+    since a real request is never hard-blocked by a policy misconfiguration
+    (see core/router.py's _apply_provider_policy()).
+    """
+    from database.models import RegisteredAgent
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    cleaned = [p.strip() for p in (req.allowed_providers or []) if p and p.strip()]
+    agent.allowed_providers = cleaned
+    db.commit()
+    db.refresh(agent)
+    return {"id": agent.id, "allowed_providers": agent.allowed_providers}
 
 
 @router.patch("/{agent_id}/pruning")

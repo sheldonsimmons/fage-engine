@@ -16,7 +16,7 @@ from typing import Optional
 from database.db import get_db
 from core.routing_config import (
     get_routing_config, set_threshold, add_keyword, remove_keyword,
-    PROTECTED_KEYWORDS,
+    set_budget_pressure_threshold, PROTECTED_KEYWORDS,
 )
 
 router = APIRouter()
@@ -27,10 +27,15 @@ class RoutingConfigOut(BaseModel):
     complexity_keywords:        list
     protected_keywords:         list
     tier_names:                 dict   # {"1":"Scout","2":"Analyst","3":"Advisor","4":"Strategist"}
+    budget_pressure_threshold_pct: Optional[float] = None  # null = disabled
 
 
 class ThresholdRequest(BaseModel):
     threshold: int
+
+
+class BudgetPressureThresholdRequest(BaseModel):
+    threshold_pct: Optional[float] = None  # null disables budget-pressure downgrades
 
 
 class KeywordRequest(BaseModel):
@@ -50,6 +55,7 @@ def _out(cfg) -> RoutingConfigOut:
         complexity_keywords=cfg.complexity_keywords,
         protected_keywords=sorted(PROTECTED_KEYWORDS),
         tier_names=cfg.tier_names,
+        budget_pressure_threshold_pct=cfg.budget_pressure_threshold_pct,
     )
 
 
@@ -62,6 +68,20 @@ def get_config(db: Session = Depends(get_db)):
 def update_threshold(body: ThresholdRequest, db: Session = Depends(get_db)):
     try:
         return _out(set_threshold(db, body.threshold))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/budget-pressure-threshold")
+def update_budget_pressure_threshold(body: BudgetPressureThresholdRequest, db: Session = Depends(get_db)):
+    """
+    Set the department-budget-utilization % at which low-complexity requests
+    get downgraded to Scout as a precaution (Routing 2.0, Phase 1). Null
+    disables the behavior entirely -- only the existing hard 100%+ throttle
+    still applies.
+    """
+    try:
+        return _out(set_budget_pressure_threshold(db, body.threshold_pct))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

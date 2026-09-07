@@ -383,4 +383,6 @@ def _serialize(a: RegisteredAgent) -> dict:
         "business_purpose": a.business_purpose,
         "owner":            a.owner,
         "approval_status":  a.approval_status or "unreviewed",
+        # Policy-aware routing (Routing 2.0, Phase 2) -- empty = unrestricted
+        "allowed_providers": a.allowed_providers,
     }

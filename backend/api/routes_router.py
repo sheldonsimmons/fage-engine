@@ -957,6 +957,7 @@ def route_payload(
             model_tier       = "none",
             agent_id         = agent.id if agent else req.agent_id,
             matched_keywords = [m["term"] for m in term_result["matches"]],
+            matched_term_ids = [m["id"] for m in term_result["matches"]],
             cost_usd         = 0.0,
             decision_outcome = "Request blocked by sensitive term policy",
             work_item        = work_item,
@@ -1067,6 +1068,21 @@ def route_payload(
     # Capture raw text before routing (for raw payload logging)
     _raw_text_for_logging = req.text
 
+    # Wiring-only for now (Routing 2.0 assessment) -- route() accepts these
+    # but doesn't act on them yet. work_item is already resolved above
+    # (_resolve_work_item(), before routing runs); budget_context is the
+    # same dict already computed a few lines up via effective_budget_context().
+    _work_item_context = None
+    if work_item:
+        _work_item_context = {
+            "external_id":       work_item.external_id,
+            "name":              work_item.name,
+            "context_type":      work_item.context_type,
+            "department":        work_item.department,
+            "status":            work_item.status,
+            "monthly_ai_budget": work_item.monthly_ai_budget,
+        }
+
     # Run the routing pipeline
     result = route(
         req.text,
@@ -1079,6 +1095,9 @@ def route_payload(
         agent_min_tier=agent.min_tier if agent else None,
         agent_max_tier=agent.max_tier if agent else None,
         force_simulated_model=req.synthetic_simulation,
+        budget_context=budget_context,
+        work_item_context=_work_item_context,
+        agent_allowed_providers=agent.allowed_providers if agent else None,
     )
 
     if not req.is_test:
@@ -1166,6 +1185,7 @@ def route_payload(
         # past the keyword filter, we have the full payload and can prove
         # exactly what was sent to the model, when, and by which agent.
         all_matched = result["matched_keywords"] + [m["term"] for m in term_result.get("matches", [])]
+        all_matched_term_ids = [m["id"] for m in term_result.get("matches", [])]
 
         # Determine if raw payload should be stored for this department
         _pruning_fired   = result.get("tokens_saved_by_pruning", 0) > 0
@@ -1194,6 +1214,7 @@ def route_payload(
                 model_tier       = result["model_tier"],
                 agent_id         = agent.id if agent else req.agent_id,
                 matched_keywords = all_matched,
+                matched_term_ids = all_matched_term_ids,
                 cost_usd         = result["cost_usd"],
                 decision_outcome = f"{result['model_tier']} model used — ${result['cost_usd']:.6f}",
                 tokens_saved     = result.get("tokens_saved_by_pruning", 0),

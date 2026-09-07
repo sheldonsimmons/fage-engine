@@ -65,6 +65,18 @@ def run_migrations():
         except Exception:
             conn.rollback()
         try:
+            ensure_column(conn, "routing_configs", "budget_pressure_threshold_pct", "FLOAT DEFAULT 80.0")
+        except Exception:
+            conn.rollback()
+        try:
+            ensure_column(conn, "registered_agents", "allowed_providers_json", "TEXT")
+        except Exception:
+            conn.rollback()
+        try:
+            ensure_column(conn, "audit_events", "matched_term_ids_json", "TEXT")
+        except Exception:
+            conn.rollback()
+        try:
             ensure_column(conn, "model_registry", "department", "VARCHAR")
         except Exception:
             conn.rollback()

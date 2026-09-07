@@ -358,6 +358,21 @@
         </div>
       </div>
       <div class="rr-section">
+        <div class="rr-section-label">Budget Pressure Threshold</div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">When a department's monthly AI budget reaches this level of use, CostPilot routes eligible low-complexity requests to the cheapest tier as a precaution — before the department is fully throttled. Genuinely complex requests are never downgraded for budget reasons alone.</p>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
+          <input type="range" id="rrBudgetPressureSlider" min="50" max="100" step="5" value="80" style="flex:1;accent-color:var(--accent-blue)" />
+          <span id="rrBudgetPressureValue" style="font-size:20px;font-weight:700;color:var(--accent-blue);min-width:44px;text-align:right;font-family:var(--font-mono)">80%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:14px"><span>50% — earlier precaution</span><span>100% — off (only hard throttle applies)</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="rrBudgetPressureEnabled" checked />
+          <label for="rrBudgetPressureEnabled" style="font-size:12px;color:var(--text-muted)">Enable budget-pressure downgrades</label>
+        </div>
+        <button class="btn-primary" onclick="saveBudgetPressureThreshold()">Save Budget Pressure Threshold</button>
+        <span id="rrBudgetPressureStatus" style="font-size:12px;margin-left:8px"></span>
+      </div>
+      <div class="rr-section">
         <div class="rr-section-label">Complexity Keywords</div>
         <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.6">Keywords use whole-term matching. For example, “NDA” does not match “Monday.” CostPilot provides starter recommendations, and administrators can remove any keyword.</p>
         <div id="rrKeywordList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>

@@ -27,6 +27,19 @@ function _rrRenderSlider(cfg) {
   if (!slider || !valueEl) return;
   slider.value        = cfg.complexity_token_threshold;
   valueEl.textContent = cfg.complexity_token_threshold;
+  _rrRenderBudgetPressure(cfg);
+}
+
+function _rrRenderBudgetPressure(cfg) {
+  const slider  = document.getElementById("rrBudgetPressureSlider");
+  const valueEl = document.getElementById("rrBudgetPressureValue");
+  const enabled = document.getElementById("rrBudgetPressureEnabled");
+  if (!slider || !valueEl || !enabled) return;
+  const pct = cfg.budget_pressure_threshold_pct;
+  enabled.checked = pct !== null && pct !== undefined;
+  slider.value        = pct !== null && pct !== undefined ? pct : 80;
+  valueEl.textContent = `${slider.value}%`;
+  slider.disabled = !enabled.checked;
 }
 
 function _rrRenderKeywords(cfg) {
@@ -62,6 +75,29 @@ async function saveThreshold() {
     status.textContent = `✓ Saved — payloads over ${val} tokens will escalate (with a keyword match)`;
     status.style.color = "var(--accent-green)";
     if (typeof updatePolicyOverview === "function") updatePolicyOverview();
+    setTimeout(() => status.textContent = "", 4000);
+  } catch (e) {
+    status.textContent = "Error: " + e.message;
+    status.style.color = "var(--accent-red)";
+  }
+}
+
+// ── Budget pressure threshold ────────────────────────────────────────────────
+
+async function saveBudgetPressureThreshold() {
+  const slider  = document.getElementById("rrBudgetPressureSlider");
+  const enabled = document.getElementById("rrBudgetPressureEnabled");
+  const status  = document.getElementById("rrBudgetPressureStatus");
+  const thresholdPct = enabled.checked ? parseFloat(slider.value) : null;
+  status.textContent = "Saving...";
+  status.style.color = "var(--text-muted)";
+  try {
+    const cfg = await apiPatch("/api/routing-config/budget-pressure-threshold", { threshold_pct: thresholdPct });
+    window.POLICY_ROUTING_CONFIG = cfg;
+    status.textContent = thresholdPct !== null
+      ? `✓ Saved — low-complexity requests downgrade to Scout at ${thresholdPct}% budget use`
+      : "✓ Saved — budget-pressure downgrades disabled";
+    status.style.color = "var(--accent-green)";
     setTimeout(() => status.textContent = "", 4000);
   } catch (e) {
     status.textContent = "Error: " + e.message;
@@ -122,6 +158,18 @@ document.addEventListener("DOMContentLoaded", () => {
   if (slider) {
     slider.addEventListener("input", () => {
       document.getElementById("rrThresholdValue").textContent = slider.value;
+    });
+  }
+  const bpSlider = document.getElementById("rrBudgetPressureSlider");
+  if (bpSlider) {
+    bpSlider.addEventListener("input", () => {
+      document.getElementById("rrBudgetPressureValue").textContent = `${bpSlider.value}%`;
+    });
+  }
+  const bpEnabled = document.getElementById("rrBudgetPressureEnabled");
+  if (bpEnabled) {
+    bpEnabled.addEventListener("change", () => {
+      if (bpSlider) bpSlider.disabled = !bpEnabled.checked;
     });
   }
   const kwInput = document.getElementById("rrNewKeyword");

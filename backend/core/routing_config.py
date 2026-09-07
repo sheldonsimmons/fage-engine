@@ -45,6 +45,23 @@ def set_threshold(db: Session, threshold: int) -> RoutingConfig:
     return cfg
 
 
+def set_budget_pressure_threshold(db: Session, threshold_pct) -> RoutingConfig:
+    """
+    Update the budget-pressure downgrade threshold (Routing 2.0, Phase 1).
+    threshold_pct=None disables the behavior entirely. Valid range: 0–100.
+    """
+    cfg = get_routing_config(db)
+    if threshold_pct is not None:
+        threshold_pct = float(threshold_pct)
+        if not (0 <= threshold_pct <= 100):
+            raise ValueError("Budget pressure threshold must be between 0 and 100.")
+    cfg.budget_pressure_threshold_pct = threshold_pct
+    cfg.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(cfg)
+    return cfg
+
+
 def add_keyword(db: Session, keyword: str) -> RoutingConfig:
     """Add a keyword to the complexity list. No duplicates."""
     kw = keyword.strip().lower()

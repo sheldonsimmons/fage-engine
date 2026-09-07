@@ -97,6 +97,12 @@ class RegisteredAgent(Base):
     archived         = Column(Boolean,  nullable=True, default=False)  # soft-delete: hides from live grid, keeps history
     min_tier         = Column(Integer,  nullable=True, default=1)      # floor tier: routing never goes below this (1=Scout)
     max_tier         = Column(Integer,  nullable=True, default=4)      # ceiling tier: routing never goes above this (4=Strategist)
+    # Policy-aware routing (Routing 2.0, Phase 2): JSON list of allowed
+    # ModelRegistry.provider values, e.g. '["anthropic"]' -- "approved for
+    # Sonnet but not Opus" is expressed as a provider allow-list today, not
+    # a model-family allow-list (ModelRegistry has no family concept yet).
+    # Null/empty = unrestricted, same as every other agent today.
+    allowed_providers_json = Column(Text, nullable=True)
     pruning_enabled  = Column(Boolean,  nullable=True, default=True)   # False = skip context pruner entirely for this agent
     discovery_source = Column(String,   nullable=True, default="manual")  # manual | event -- "event" means this row was auto-created on first traffic, not registered ahead of time
     mode             = Column(String,   nullable=True, default="observe")  # observe | control -- see docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md; "optimize" is not a stored value, it's observe + recommendations
@@ -114,6 +120,21 @@ class RegisteredAgent(Base):
     token_transactions = relationship("TokenTransaction", back_populates="agent")
     audit_events       = relationship("AuditEvent",       back_populates="agent")
     project_assignments = relationship("WorkItemAgent", back_populates="agent", cascade="all, delete-orphan")
+
+    @property
+    def allowed_providers(self) -> list:
+        import json
+        if not self.allowed_providers_json:
+            return []
+        try:
+            return json.loads(self.allowed_providers_json)
+        except Exception:
+            return []
+
+    @allowed_providers.setter
+    def allowed_providers(self, value: list):
+        import json
+        self.allowed_providers_json = json.dumps(value) if value else None
 
 
 class DepartmentBudget(Base):
@@ -558,6 +579,11 @@ class AuditEvent(Base):
     raw_payload           = Column(Text,     nullable=True)    # The original text before pruning
     raw_logged_at         = Column(DateTime, nullable=True)    # When raw payload was captured
     matched_keywords_json = Column(Text,     nullable=True)    # JSON array e.g. '["urgent","legal"]'
+    # Routing 2.0 Phase 2 audit-trail fix: matched_keywords_json above only
+    # ever kept the matched SensitiveTerm's text, not its row id, so "every
+    # event where rule #17 fired" was never a queryable question -- only a
+    # JSON-text search. This is the same matches list, but the ids.
+    matched_term_ids_json = Column(Text,     nullable=True)    # JSON array of SensitiveTerm.id, e.g. '[17,42]'
     rationale        = Column(Text,     nullable=True)    # Plain-English justification
     decision_outcome = Column(String,   nullable=True)
     cost_usd          = Column(Float,    nullable=True)
@@ -676,6 +702,13 @@ class RoutingConfig(Base):
     complexity_token_threshold = Column(Integer,  nullable=False, default=500)
     complexity_keywords_json   = Column(Text,     nullable=False, default="[]")
     tier_names_json            = Column(Text,     nullable=True)   # JSON: {"1":"Scout","2":"Analyst",...} — null = use defaults
+    # Budget-aware routing (Routing 2.0, Phase 1): when a department's spend
+    # utilization reaches this %, eligible low-complexity requests (would-be
+    # Scout/Analyst) get routed straight to Scout as a soft precaution —
+    # distinct from DepartmentBudget.throttled, which is the existing hard
+    # 100%+ cap. Global for now, same single-row pattern as the token
+    # threshold above; null/unset disables the behavior entirely.
+    budget_pressure_threshold_pct = Column(Float, nullable=True, default=80.0)
     updated_at                 = Column(DateTime, default=datetime.utcnow)
 
     @property
