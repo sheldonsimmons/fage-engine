@@ -383,18 +383,31 @@
       };
     }
 
+    function ucDisplayKey() {
+      // Same masking rule as ucStep2Html's standalone credential display --
+      // the code snippets below it must never show more of the real key
+      // than the user has explicitly chosen to reveal. Previously this
+      // function always used the full ucState.apiKey regardless of
+      // ucState.keyRevealed, so the snippets leaked the real, live
+      // workspace credential in plain text even before "Reveal" was ever
+      // clicked -- a real exposure risk in a screen share, screenshot, or
+      // recorded demo. Found via a live browser verification pass.
+      return ucState.keyRevealed ? ucState.apiKey : `${ucState.apiKey.slice(0, 12)}…${ucState.apiKey.slice(-4)}`;
+    }
+
     function ucSnippet(lang) {
       const payload = ucContractPayload();
       const json = JSON.stringify(payload, null, 2);
       const url = `${location.origin}/api/route`;
+      const key = ucDisplayKey();
       if (lang === "curl") {
-        return `curl -X POST ${url} \\\n  -H "Content-Type: application/json" \\\n  -H "X-CostPilot-Key: ${ucState.apiKey}" \\\n  -d '${JSON.stringify(payload)}'`;
+        return `curl -X POST ${url} \\\n  -H "Content-Type: application/json" \\\n  -H "X-CostPilot-Key: ${key}" \\\n  -d '${JSON.stringify(payload)}'`;
       }
       if (lang === "python") {
-        return `import requests\n\nrequests.post(\n    "${url}",\n    headers={"X-CostPilot-Key": "${ucState.apiKey}"},\n    json=${json.replace(/\n/g, "\n    ")},\n)`;
+        return `import requests\n\nrequests.post(\n    "${url}",\n    headers={"X-CostPilot-Key": "${key}"},\n    json=${json.replace(/\n/g, "\n    ")},\n)`;
       }
       if (lang === "node") {
-        return `await fetch("${url}", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-CostPilot-Key": "${ucState.apiKey}",\n  },\n  body: JSON.stringify(${json.replace(/\n/g, "\n  ")}),\n});`;
+        return `await fetch("${url}", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-CostPilot-Key": "${key}",\n  },\n  body: JSON.stringify(${json.replace(/\n/g, "\n  ")}),\n});`;
       }
       return json;
     }
@@ -404,7 +417,7 @@
       // snippet tabs calls ucRenderStep() too) -- previously always
       // rendered the masked preview, silently re-hiding a key the user
       // had already revealed. Found via a live browser pass.
-      const displayValue = ucState.keyRevealed ? ucState.apiKey : `${ucState.apiKey.slice(0, 12)}…${ucState.apiKey.slice(-4)}`;
+      const displayValue = ucDisplayKey();
       return `
         <div class="uc-field">
           <label>Workspace Credential</label>
