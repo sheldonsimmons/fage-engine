@@ -24,6 +24,7 @@ from database.models import (
     AuditEvent, WorkItem, WorkItemOutcome,
 )
 from core.workspace_scope import workspace_filter as _workspace_filter
+from core.metrics_query import run_metrics_query
 
 router = APIRouter()
 
@@ -72,15 +73,26 @@ def get_dashboard(
     def _filters(*items):
         return [x for x in items if x is not None]
 
-    spend_today = db.query(func.sum(TokenTransaction.cost_usd)).filter(
-        *_filters(tx_scope),
-        TokenTransaction.timestamp >= today_start
-    ).scalar() or 0.0
+    # Routed through the canonical metrics registry (core/metrics_query.py)
+    # instead of an independent func.sum() -- this was the headline-KPI
+    # instance of "AI spend" computed a separate way from get_dashboard_
+    # changes/get_top_models/get_business_impact in this same file, which
+    # already use run_metrics_query(). Same ai_spend metric definition,
+    # same workspace_filter() semantics (workspace_id=None -> no filter,
+    # identical to the old tx_scope behavior), real datetime objects in
+    # timeframe (not .isoformat() strings -- see this metric's own
+    # SQLite-vs-Postgres timeframe bug fixed earlier this session).
+    def _ai_spend_for(start: datetime, end: datetime) -> float:
+        result = run_metrics_query(
+            db, workspace_id, metrics=["ai_spend"],
+            timeframe={"start": start, "end": end},
+        )
+        if result.rows:
+            return result.rows[0].get("ai_spend") or 0.0
+        return 0.0
 
-    spend_month = db.query(func.sum(TokenTransaction.cost_usd)).filter(
-        *_filters(tx_scope),
-        TokenTransaction.timestamp >= month_start
-    ).scalar() or 0.0
+    spend_today = _ai_spend_for(today_start, now)
+    spend_month = _ai_spend_for(month_start, now)
 
     # ── Token savings from pruning ─────────────────────────────────────────────
     tokens_saved_today = db.query(func.sum(TokenTransaction.tokens_saved)).filter(
