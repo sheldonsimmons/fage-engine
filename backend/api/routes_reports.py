@@ -17,15 +17,21 @@ from database.db import get_db
 from database.models import TokenTransaction, AuditEvent, DepartmentBudget, SensitiveTerm
 from core.agentlake import display_department
 from core.workspace_scope import workspace_filter
+# The rate table and economy-tier set here used to be a second, independently
+# maintained copy of core/metrics_query.py's -- same numbers, but nothing
+# stopped them from silently drifting apart. Now sourced from one place;
+# this file still loops over raw rows itself (savings_report()/
+# dept_scorecard() both build a per-day timeline, which metrics_query.py
+# has no time-bucketing support for yet), so the query path isn't unified,
+# only the formula inputs are.
+from core.metrics_query import (
+    MICRO_INPUT_COST, MICRO_OUTPUT_COST,
+    FLAGSHIP_INPUT_COST, FLAGSHIP_OUTPUT_COST,
+    ECONOMY_TIERS,
+)
 
 router = APIRouter()
 
-MICRO_INPUT_COST     = 0.80  / 1_000_000   # Haiku 4.5 input
-MICRO_OUTPUT_COST    = 4.00  / 1_000_000   # Haiku 4.5 output
-FLAGSHIP_INPUT_COST  = 3.00  / 1_000_000   # Sonnet 4.6 (Advisor) input
-FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000   # Sonnet 4.6 (Advisor) output
-
-ECONOMY_TIERS = {"Scout", "Analyst", "micro"}
 PREMIUM_TIERS = {"Advisor", "Strategist", "flagship"}
 
 def _tier_bucket(tier: str) -> str:

@@ -322,15 +322,24 @@ def _activity_metric_expr(metric_key: str):
 
 # Same per-token rates api/routes_reports.py's savings_report() already
 # uses (Haiku 4.5 for micro/economy tiers, Sonnet 4.6 for flagship) --
-# duplicated here rather than imported because routes_reports.py's
-# constants aren't currently in a shared module; if that endpoint is ever
-# migrated onto this metric (see catalog docstring), these become the one
-# copy instead of two.
-_MICRO_INPUT_COST = 0.80 / 1_000_000
-_MICRO_OUTPUT_COST = 4.00 / 1_000_000
-_FLAGSHIP_INPUT_COST = 3.00 / 1_000_000
-_FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000
-_ECONOMY_TIERS = ("Scout", "Analyst", "micro")
+# The one canonical copy -- api/routes_reports.py's savings_report()/
+# dept_scorecard() import these instead of keeping their own copy, so the
+# rate table can't silently drift between the two independent formula
+# implementations that still both exist (this module can't answer a
+# per-day timeline query -- no time-bucketing dimension exists yet -- so
+# those two endpoints still loop over raw rows themselves; only the
+# numbers, not the query path, are unified).
+MICRO_INPUT_COST = 0.80 / 1_000_000
+MICRO_OUTPUT_COST = 4.00 / 1_000_000
+FLAGSHIP_INPUT_COST = 3.00 / 1_000_000
+FLAGSHIP_OUTPUT_COST = 15.00 / 1_000_000
+ECONOMY_TIERS = ("Scout", "Analyst", "micro")
+# Backward-compatible aliases for this module's own pre-existing internal use
+_MICRO_INPUT_COST = MICRO_INPUT_COST
+_MICRO_OUTPUT_COST = MICRO_OUTPUT_COST
+_FLAGSHIP_INPUT_COST = FLAGSHIP_INPUT_COST
+_FLAGSHIP_OUTPUT_COST = FLAGSHIP_OUTPUT_COST
+_ECONOMY_TIERS = ECONOMY_TIERS
 
 
 def _savings_expr(metric_key: str):
