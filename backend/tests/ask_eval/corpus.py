@@ -78,7 +78,6 @@ CASES: list[AskEvalCase] = [
         expected_intent="total", expected_entity="overview", expected_metric="spend_usd",
         expected_period_key="this_month", expected_days=31,
         expected_result_path="this_month.total_spend_usd",
-        known_gap="_ask_correct_typos doesn't correct 'spned'->'spend' (confirmed: intent falls back to 'overview' instead of 'total'), so the total-intent keyword match never fires. A real, natural-typo failure mode, not a corpus error.",
     ),
     AskEvalCase(
         id="spend-003", category="Spend", kind="rephrased",
@@ -109,8 +108,8 @@ CASES: list[AskEvalCase] = [
     AskEvalCase(
         id="budget-002", category="Budget", kind="rephrased",
         question="Are any departments close to their spending cap?",
-        expected_intent="budget", expected_entity="department", expected_budget_scope="near_cap",
-        known_gap="_ask_intent's budget trigger is a literal `'budget' in text` substring check -- 'spending cap' alone (no literal word 'budget') never matches, confirmed: falls back to intent='overview'. A real, natural-phrasing gap.",
+        expected_intent="budget", expected_entity="department", expected_budget_scope="alerts",
+        notes="expected_budget_scope was 'near_cap' in the original v1 corpus -- that value has never existed anywhere in the code (the real proximity/at-risk bucket is called 'alerts'); a corpus-authoring error, not a parser gap. Fixed alongside this session's intent-detection fix for this exact phrase.",
     ),
     AskEvalCase(
         id="budget-003", category="Budget", question="Is the Sales department over budget?",
@@ -171,7 +170,6 @@ CASES: list[AskEvalCase] = [
         id="departments-001", category="Departments", question="Rank departments by AI spend",
         expected_intent="ranking", expected_entity="department", expected_metric="spend_usd",
         expected_direction="desc",
-        known_gap="_ask_intent's ranking_terms vocabulary (highest/most/top/largest/lowest/least/fewest/smallest/bottom) does not include the verb 'rank' itself -- confirmed: a literal 'Rank X by Y' command falls back to intent='overview'. A real gap given this is about as direct a ranking request as exists.",
     ),
     AskEvalCase(
         id="departments-002", category="Departments",
@@ -191,7 +189,6 @@ CASES: list[AskEvalCase] = [
         id="outcomes-002", category="Outcomes", question="Which opportunities have we lost?",
         expected_intent="ranking", expected_entity="context", expected_outcome_filter="lost",
         expected_result_path="outcomes.lost_count",
-        known_gap="'Which opportunities...' has no ranking_terms match (no highest/most/top/etc.) -- confirmed: falls back to intent='overview' despite outcome_filter='lost' being correctly detected. A real gap: 'which X have we Y'-shaped questions aren't recognized as implicitly asking for a list/ranking.",
     ),
     AskEvalCase(
         id="outcomes-003", category="Outcomes", kind="rephrased",
@@ -218,7 +215,6 @@ CASES: list[AskEvalCase] = [
         id="roi-002", category="ROI", question="How much AI investment went into deals we lost?",
         expected_intent="total", expected_entity="context", expected_outcome_filter="lost",
         expected_result_path="outcomes.ai_spend_on_lost_usd",
-        known_gap="outcome_filter detection requires the literal substring 'opportunit' in the text (see routes_efficiency.py's outcome_filter block) -- 'deals' is not recognized as a synonym, confirmed: entity falls back to 'overview' and outcome_filter stays None. A real gap for a very natural rephrasing.",
     ),
     AskEvalCase(
         id="roi-003", category="ROI", kind="should_reject",
@@ -249,7 +245,6 @@ CASES: list[AskEvalCase] = [
     AskEvalCase(
         id="governance-002", category="Governance", question="Show me risk events from the last 7 days",
         expected_intent="risk_events", expected_entity="overview", expected_days=7,
-        known_gap="risk_events trigger requires the exact phrase 'show risk events' (or 'show the risk events'/'latest risk'/'recent risk'/...) -- 'show ME risk events' breaks that literal substring match, confirmed: falls back to intent='overview'. A real gap for a very natural phrasing with one extra word.",
     ),
     AskEvalCase(
         id="governance-003", category="Governance", kind="follow_up",
@@ -265,7 +260,6 @@ CASES: list[AskEvalCase] = [
         expected_intent="comparison", expected_entity="overview", expected_metric="spend_usd",
         expected_comparison_key="previous_month",
         expected_result_path="month_over_month.sales_spend_pct_change",
-        known_gap="comparison_key='previous_month' requires an exact phrase ('month over month'/'this month vs last month'/'this month versus last month') -- 'compare...to last month' doesn't match any of them, confirmed: falls back to the generic comparison_key='previous_period'. Same rolling-30-day window in practice for this fixture, but the label/intent shown to the user would be less precise. A real, natural-phrasing gap.",
     ),
     AskEvalCase(
         id="comparisons-002", category="Comparisons", kind="rephrased",
@@ -285,13 +279,11 @@ CASES: list[AskEvalCase] = [
     AskEvalCase(
         id="trends-001", category="Trends", question="Is our AI spend trending up or down?",
         expected_intent="comparison", expected_entity="overview", expected_metric="spend_usd",
-        known_gap="No 'compare'/period-vs-period phrase or change_drivers trigger word present -- 'trending up or down' alone isn't recognized, confirmed: falls back to intent='overview'. A real gap for a common way to ask about trend direction.",
     ),
     AskEvalCase(
         id="trends-002", category="Trends", question="What changed in our AI usage this month vs last month?",
         expected_intent="change_drivers", expected_entity="overview",
         expected_comparison_key="previous_month",
-        known_gap="change_drivers requires 'why'/'what drove'/'what caused'/'contributed to' -- 'what changed' is not in that list, confirmed: falls back to intent='comparison' (itself a reasonable answer, just not the driver-decomposition one asked for). A real gap: 'what changed' is about as canonical a change-drivers question as exists.",
     ),
 
     # ── WorkItems ────────────────────────────────────────────────────────
@@ -479,13 +471,14 @@ CASES: list[AskEvalCase] = [
     ),
     AskEvalCase(
         id="budget-011", category="Budget", question='Which department is closest to its cap?',
-        expected_intent='overview', expected_entity='department', expected_metric='spend_usd',
-        expected_direction='desc', expected_days=30,
+        expected_intent='budget', expected_entity='department', expected_metric='spend_usd',
+        expected_direction='desc', expected_period_key='this_month', expected_days=31,
+        expected_budget_scope='alerts',
+        notes="Was 'overview' before the budget-trigger phrase fix (this session) added 'closest to its cap' -- now correctly resolves as a budget question.",
     ),
     AskEvalCase(
         id="budget-012", category="Budget", question='what departments are near their limit',
-        expected_intent='budget', expected_entity='department',
-        known_gap="Same class of gap as budget-002 -- 'near their limit' has no literal 'budget' substring, confirmed: falls back to intent='overview' instead of the correct 'budget' intent asserted here.",
+        expected_intent='budget', expected_entity='department', expected_budget_scope='alerts',
     ),
     AskEvalCase(
         id="budget-013", category="Budget", question='Is anyone over budget right now?',
@@ -502,7 +495,6 @@ CASES: list[AskEvalCase] = [
     AskEvalCase(
         id="budget-015", category="Budget", question="What's Sales' monthly cap?",
         expected_intent='budget', expected_entity='department',
-        known_gap="No literal 'budget' substring present -- _ask_intent's budget trigger is a literal keyword check, confirmed: falls back to intent='overview' instead of the correct 'budget' intent asserted here, for a clearly budget-scoped question about a named department's cap.",
     ),
 
     # -- Agents (batch 2: corpus expansion) --
@@ -644,8 +636,9 @@ CASES: list[AskEvalCase] = [
     # -- Outcomes (batch 2: corpus expansion) --
     AskEvalCase(
         id="outcomes-005", category="Outcomes", question='How many deals are currently open?',
-        expected_intent='total', expected_entity='overview', expected_metric='spend_usd',
+        expected_intent='total', expected_entity='context', expected_metric='spend_usd',
         expected_direction='desc', expected_days=30,
+        notes="entity was 'overview' before this session's 'deal'/'deals' opportunity-synonym fix -- now correctly resolves as a context/opportunity question, same as 'opportunities'.",
     ),
     AskEvalCase(
         id="outcomes-006", category="Outcomes", question='What is our total pipeline value?',
@@ -675,17 +668,18 @@ CASES: list[AskEvalCase] = [
     AskEvalCase(
         id="outcomes-011", category="Outcomes", question='total won deals value',
         expected_intent='total', expected_entity='context', expected_outcome_filter='won',
-        known_gap="'deals' is not recognized as an opportunity synonym (same known gap as roi-002) and 'won' doesn't set outcome_filter without the word 'opportunit' present -- confirmed falls back to intent='overview', outcome_filter=None instead of the correct values asserted here.",
+        known_gap="Narrowed by this session's 'deal'/'deals' synonym fix: entity now correctly resolves to 'context' and outcome_filter to 'won'. intent alone remains wrong (stays 'overview') -- this terse, keyword-style phrasing (not a full question) doesn't contain any of the 'how much'/'how many'/'what's our' trigger phrases the total-intent branch requires, and it names no ranking_terms word either, so the base classification's 'overview' default wins. A real, narrower remaining gap: terse noun-phrase queries aren't recognized as implicitly asking for a total.",
     ),
     AskEvalCase(
         id="outcomes-012", category="Outcomes", question='support case resolution count',
         expected_intent='total', expected_entity='overview',
-        known_gap="Parsed to entity='account' unexpectedly for a generic support-case question with no account name present -- confirmed via direct call, a real interpretation quirk; 'overview' is the correct entity for an unscoped aggregate question like this one.",
+        known_gap="entity now correctly resolves to 'overview' (was 'account' -- a typo-correction bug where 'count' fuzzy-matched the vocabulary word 'account', fixed this session via _ASK_TYPO_PROTECTED_WORDS). intent alone remains wrong (stays 'overview' not 'total'): this terse, keyword-style phrasing has none of the 'how much'/'how many'/\"what's our\" trigger phrases the total-intent branch requires. Same narrower remaining gap as outcomes-011.",
     ),
     AskEvalCase(
         id="outcomes-013", category="Outcomes", question="What's our win rate on AI-touched deals?",
-        expected_intent='total', expected_entity='overview', expected_metric='spend_usd',
+        expected_intent='total', expected_entity='context', expected_metric='spend_usd',
         expected_direction='desc', expected_days=30,
+        notes="entity was 'overview' before this session's 'deal'/'deals' opportunity-synonym fix.",
     ),
 
     # -- ROI (batch 2: corpus expansion) --
@@ -836,7 +830,6 @@ CASES: list[AskEvalCase] = [
     AskEvalCase(
         id="trends-006", category="Trends", question='request count trend',
         expected_intent='overview', expected_entity='overview', expected_metric='request_count',
-        known_gap="Parsed to entity='account' unexpectedly for a question naming no account -- same quirk as outcomes-012; 'overview' is the correct entity for an unscoped trend question like this one.",
     ),
     AskEvalCase(
         id="trends-007", category="Trends", question='what caused the spend spike',

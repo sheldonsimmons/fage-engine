@@ -255,6 +255,13 @@ _ASK_TYPO_VOCABULARY = (
 # becoming "...users tokens..." and misclassifying the whole question).
 _ASK_TYPO_PROTECTED_WORDS = {
     "uses", "used", "using", "costing", "modelling", "modeling",
+    # "count"/"counts" sit at a 0.83 ratio to the vocabulary word
+    # "account" -- above the 0.78 cutoff -- so "request count trend" and
+    # "resolution count" were silently corrupted into "...account
+    # trend"/"...resolution account", corrupting the entity resolved
+    # downstream from a real question. Found via a live corpus-expansion
+    # pass; same failure class this set already exists to prevent.
+    "count", "counts",
 }
 
 
@@ -380,7 +387,11 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # matched the plural, since "opportunities" doesn't contain it as
         # a substring ("opportunit-y" vs "opportunit-ies").
         "project", "matter", "opportunit", "business context", "work item"
-    )):
+    )) or re.search(r"\bdeals?\b", text):
+        # "deal"/"deals" is a very common synonym for "opportunity" in
+        # sales-speak, confirmed missing before (fell back to entity=
+        # "overview"). Word-boundary regex, not a substring check --
+        # "deal" is a substring of "ideal", which must NOT match.
         entity = "context"
     elif any(term in text for term in (
         "provider", "anthropic", "openai", "vendor",
@@ -415,10 +426,18 @@ def _ask_intent(question: str, default_days: int) -> dict:
     ))
     ranking_terms = (
         "highest", "most", "top", "largest", "lowest", "least", "fewest",
-        "smallest", "bottom",
+        "smallest", "bottom", "rank",
     )
-    intent = "ranking" if entity != "overview" and any(
-        term in text for term in ranking_terms
+    # "Which opportunities have we lost?" names no ranking_terms word at
+    # all, but "which X have we Y" is itself an implicit request for a
+    # list, not a single aggregate -- confirmed falling back to overview
+    # otherwise despite outcome_filter already being correctly detected.
+    # Scoped to "have we" specifically (not bare "which") so this doesn't
+    # relabel genuinely unscoped "which X are on platform Y"-style
+    # overview questions as rankings.
+    implies_ranking = "which" in text and "have we" in text
+    intent = "ranking" if entity != "overview" and (
+        any(term in text for term in ranking_terms) or implies_ranking
     ) else "overview"
     if asks_for_help:
         intent = "help"
@@ -437,7 +456,8 @@ def _ask_intent(question: str, default_days: int) -> dict:
         metric = "request_count"
         entity = "overview"
     elif any(term in text for term in (
-        "show risk events", "show the risk events", "latest risk",
+        "show risk events", "show the risk events", "show me risk events",
+        "show me the risk events", "latest risk",
         "recent risk", "latest governance event", "recent governance event",
     )):
         intent = "risk_events"
@@ -484,7 +504,16 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "cost-saving opportunit"
     )):
         intent = "optimization"
-    elif "budget" in text:
+    elif "budget" in text or any(term in text for term in (
+        # A department budget cap is very often asked about without the
+        # literal word "budget" -- "spending cap"/"monthly cap" name the
+        # concept CostPilot calls a budget by a different, equally natural
+        # noun; "near their limit"/"close to their cap" name the alert
+        # state instead of the concept. All confirmed falling back to
+        # intent="overview" without this.
+        "spending cap", "monthly cap", "budget cap", "near their limit",
+        "close to their cap", "closest to its cap", "over their cap",
+    )):
         intent = "budget"
         entity = "department"
         metric = "spend_usd"
@@ -495,11 +524,25 @@ def _ask_intent(question: str, default_days: int) -> dict:
         intent = "tier_usage"
         entity = "model"
     elif (
-        any(term in text for term in ("why ", "what drove", "what caused", "contributed to"))
+        any(term in text for term in (
+            "why ", "what drove", "what caused", "contributed to", "what changed",
+        ))
         and any(term in text for term in (
             "change", "changed", "increase", "increased", "decrease", "decreased",
             "spike", "spiked", "drop", "dropped", "grew", "fell",
             "jump", "jumped", "surge", "surged", "spiral", "explod", "balloon",
+        ))
+        and not any(term in text for term in (
+            # "What changed quarter over quarter?" names no specific driver
+            # to decompose -- just a period-over-period phrase reusing the
+            # word "changed" -- so it should resolve as the plain period
+            # comparison the "X over X" branch below already handles
+            # correctly, not the driver-decomposition intent. "what
+            # changed in our usage this month VS last month" (a real
+            # change_drivers question) doesn't use this "X over X" idiom,
+            # so it's unaffected.
+            "month over month", "month-over-month", "quarter over quarter",
+            "quarter-over-quarter", "year over year", "year-over-year",
         ))
     ):
         # A metric word (spend/cost/token/...) is common but not required —
@@ -512,7 +555,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         entity = "overview"
     elif (
         any(term in text for term in (
-            "compare ", " compared ", " versus ", " vs. ", " vs "
+            "compare ", " compared ", " versus ", " vs. ", " vs ", "trending",
         )) or any(term in text for term in (
             "same period last year", "this time last year", "around this time last year",
             "year over year", "year-over-year", "month over month", "month-over-month",
@@ -528,7 +571,9 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # date window shifted to that historical period below.
         intent = "comparison"
     elif (
-        any(term in text for term in ("how much", "how many", "what is our", "what's our"))
+        any(term in text for term in (
+            "how much", "how many", "what is our", "what's our", "whats our",
+        ))
         and not any(term in text for term in ranking_terms)
     ):
         intent = "total"
@@ -641,7 +686,9 @@ def _ask_intent(question: str, default_days: int) -> dict:
             budget_scope = "variance"
         elif any(term in text for term in (
             "near budget", "close to budget", "budget limit", "over budget",
-            "budget warning", "budget alert", "at risk",
+            "budget warning", "budget alert", "at risk", "spending cap",
+            "close to their cap", "closest to its cap", "near their limit",
+            "over their cap",
         )):
             budget_scope = "alerts"
         else:
@@ -662,11 +709,15 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # "won?", "won.", "won," etc. the same as "won ".
         if any(term in text for term in (
             "closed won", "won opportunit", "we won", "opportunities we won",
-        )) or (re.search(r"\bwon\b", text) and "opportunit" in text):
+        )) or (re.search(r"\bwon\b", text) and (
+            "opportunit" in text or re.search(r"\bdeals?\b", text)
+        )):
             outcome_filter = "won"
         elif any(term in text for term in (
             "closed lost", "lost opportunit", "we lost", "opportunities we lost",
-        )) or (re.search(r"\blost\b", text) and "opportunit" in text):
+        )) or (re.search(r"\blost\b", text) and (
+            "opportunit" in text or re.search(r"\bdeals?\b", text)
+        )):
             outcome_filter = "lost"
 
     comparison_key = None
@@ -679,7 +730,13 @@ def _ask_intent(question: str, default_days: int) -> dict:
         elif any(term in text for term in (
             "month over month", "month-over-month", "this month vs last month",
             "this month versus last month",
-        )):
+        )) or ("compar" in text and "last month" in text):
+            # "compar" stem (not "compare "/"compared "/etc.) catches
+            # "compare", "compares", "comparing", "comparison" -- "How does
+            # this month's spend compare to last month?" doesn't match any
+            # of the exact phrases above, confirmed falling back to the
+            # generic "previous_period" instead of the more precise
+            # "previous_month" a human would expect from this phrasing.
             comparison_key = "previous_month"
         elif any(term in text for term in (
             "quarter over quarter", "quarter-over-quarter", "this quarter vs last quarter",
