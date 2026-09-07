@@ -651,6 +651,49 @@ class VoiceEvent(Base):
     detection_details   = Column(Text,     nullable=True)       # JSON: [{pii_type, trigger_phrase, confidence, detection_method}]
 
 
+class AskInteraction(Base):
+    """
+    One row per Ask CostPilot question -- Phase 1 of the governed
+    continuous-learning plan (see the session's Ask CostPilot assessment):
+    turns "zero visibility into real usage" into a real, queryable table.
+    Purely observational -- nothing reads this table to change behavior
+    yet; later phases (rephrase detection, intent-candidate mining) build
+    on top of it, but this table by itself changes nothing about how
+    Ask CostPilot answers a question.
+
+    Written from the single outer ask_costpilot() wrapper so every intent
+    branch (help/product/decision/agent-loop/deterministic fallback) is
+    covered by one insertion point, not one per branch. Several fields
+    are necessarily best-effort in this v1: the branches return different
+    response shapes, and not every branch's internal state (e.g. the
+    agent loop's tool_call_log/contract_issues) is threaded up to the
+    outer wrapper today -- see routes_efficiency.py's _ask_log_interaction
+    for exactly what's derived vs. directly captured.
+    """
+    __tablename__ = "ask_interactions"
+
+    id                  = Column(Integer,  primary_key=True, index=True)
+    workspace_id        = Column(String,   nullable=True, index=True)
+    session_id          = Column(String,   nullable=True, index=True)  # unpopulated until Phase 3 (rephrase detection)
+    governed_request_id = Column(String,   nullable=True, index=True)
+    timestamp           = Column(DateTime, default=datetime.utcnow, index=True)
+    question_text       = Column(Text,     nullable=True)  # see Phase 1 rollout note: consider an opt-in/retention policy before enabling broadly, same pattern as DepartmentBudget.raw_payload_logging_enabled
+    intent              = Column(String,   nullable=True)
+    entity              = Column(String,   nullable=True)
+    metric              = Column(String,   nullable=True)
+    filters_json        = Column(Text,     nullable=True)
+    period_key          = Column(String,   nullable=True)
+    assistant_mode      = Column(String,   nullable=True)  # agent_tool_loop | contract_guardrail | deterministic_period_contract | etc. -- the actual response-path label already used elsewhere in this codebase
+    tools_called_json   = Column(Text,     nullable=True)  # best-effort: derived from the agent loop's query_plan when present, not a direct tool_call_log capture
+    validation_passed   = Column(Boolean,  nullable=True)  # best-effort: True unless a contract_guardrail response is what came back (an agent-loop validation failure never reaches this point at all -- it silently falls back to the deterministic path first)
+    contract_issues_json = Column(Text,    nullable=True)
+    fallback_used       = Column(Boolean,  nullable=True)  # best-effort approximation -- see _ask_log_interaction's comment for exactly how this is derived
+    unsupported         = Column(Boolean,  nullable=True)
+    latency_ms          = Column(Integer,  nullable=True)
+    error_type          = Column(String,   nullable=True)
+    evidence_label      = Column(String,   nullable=True)
+
+
 class SensitiveTerm(Base):
     """
     A company-configured sensitive word or phrase.

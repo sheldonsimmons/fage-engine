@@ -27,6 +27,7 @@ from sqlalchemy import func, or_
 
 from database.db import get_db
 from database.models import (
+    AskInteraction,
     AuditEvent,
     DepartmentBudget,
     RegisteredAgent,
@@ -3558,6 +3559,90 @@ def _ask_budget_flag(db: Session, workspace_id: Optional[str]) -> dict:
     }
 
 
+def _ask_log_interaction(
+    request: "AskCostPilotRequest",
+    result,
+    latency_ms: int,
+    error_type: Optional[str],
+    db: Session,
+) -> None:
+    """
+    Phase 1 of the governed continuous-learning plan: log one AskInteraction
+    row per question, purely observational -- nothing reads this table to
+    change behavior yet. Called from the single outer ask_costpilot()
+    wrapper so every intent branch is covered by one insertion point.
+
+    Field extraction is necessarily best-effort in this v1, since the
+    different intent branches (help/product/decision/agent-loop/
+    deterministic) return different response shapes and not all of their
+    internal state is threaded up to this outer wrapper today:
+      - assistant_mode/interpreted_intent/contract_issues are read directly
+        off `result` when the branch that ran happens to include them
+        (several already do, e.g. the contract-guardrail response).
+      - tools_called is derived from the agent loop's query_plan (already
+        built from tool_call_log for the response itself), not a direct
+        tool_call_log capture.
+      - validation_passed is inferred as True unless the response we got
+        back IS a contract-guardrail response -- an agent-loop validation
+        failure never surfaces as a result at all; it silently falls back
+        to the deterministic path before ask_costpilot() ever sees it, so
+        there is no way to distinguish "validation passed" from "the
+        agent loop wasn't used for this question" purely from `result`
+        alone yet.
+    Wrapped in try/except and never re-raised -- a logging failure must
+    never break a real answer. Several tests exercise the deterministic
+    path with db=None (no real session) -- silently no-op rather than
+    erroring, same as the rest of this function's fail-safe behavior.
+    """
+    if db is None:
+        return
+    try:
+        parsed = result.get("interpreted_intent") if isinstance(result, dict) else None
+        parsed = parsed if isinstance(parsed, dict) else {}
+        assistant_mode = result.get("assistant_mode") if isinstance(result, dict) else None
+        intent = (result.get("intent") if isinstance(result, dict) else None) or parsed.get("intent")
+        contract_issues = result.get("contract_issues") if isinstance(result, dict) else None
+        query_plan = result.get("query_plan") if isinstance(result, dict) else None
+        evidence = result.get("evidence") if isinstance(result, dict) else None
+        evidence_label = None
+        if isinstance(evidence, list) and evidence:
+            first = evidence[0]
+            if isinstance(first, dict):
+                evidence_label = first.get("evidence") or first.get("evidence_label")
+
+        db.add(AskInteraction(
+            workspace_id=request.workspace_id,
+            governed_request_id=result.get("governed_request_id") if isinstance(result, dict) else None,
+            question_text=(request.question or "")[:2000],
+            intent=intent,
+            entity=parsed.get("entity"),
+            metric=parsed.get("metric"),
+            filters_json=json.dumps({k: v for k, v in parsed.items() if k not in ("intent", "entity", "metric")}) if parsed else None,
+            period_key=parsed.get("period_key"),
+            assistant_mode=assistant_mode,
+            tools_called_json=json.dumps(query_plan) if query_plan else None,
+            validation_passed=False if assistant_mode == "contract_guardrail" else True,
+            contract_issues_json=json.dumps(contract_issues) if contract_issues else None,
+            fallback_used=bool(assistant_mode and assistant_mode != "agent_tool_loop" and intent not in ("help", "product", "decision")),
+            unsupported=intent in ("help", "decision") if intent else None,
+            latency_ms=latency_ms,
+            error_type=error_type,
+            evidence_label=evidence_label,
+        ))
+        db.commit()
+    except Exception:
+        # Several tests exercise the deterministic path against minimal DB
+        # stubs (e.g. _BudgetDbStub) that only implement .query() -- no
+        # .add()/.commit()/.rollback() at all. A logging failure must never
+        # break a real answer, so this needs to survive not just the
+        # primary attempt failing, but the rollback call itself failing on
+        # an unusual db object.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 @router.post("/ask")
 def ask_costpilot(
     request: AskCostPilotRequest,
@@ -3566,8 +3651,20 @@ def ask_costpilot(
     """Thin wrapper: guarantees the deterministic budget_flag badge and the
     active workspace's real name are attached to every answer no matter
     which internal path (agent loop or the deterministic intent classifier,
-    and any of their early-return branches) produced it."""
-    result = _ask_costpilot_answer(request, db)
+    and any of their early-return branches) produced it. Also logs one
+    AskInteraction row per question (Phase 1 of the governed continuous-
+    learning plan) -- purely observational, never affects the response."""
+    start = time.monotonic()
+    error_type = None
+    result = None
+    try:
+        result = _ask_costpilot_answer(request, db)
+    except Exception as exc:
+        error_type = type(exc).__name__
+        raise
+    finally:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        _ask_log_interaction(request, result, latency_ms, error_type, db)
     if isinstance(result, dict):
         result["budget_flag"] = _ask_budget_flag(db, request.workspace_id)
         result["workspace_name"] = _ask_workspace_name(db, request.workspace_id)
