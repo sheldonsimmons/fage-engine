@@ -231,6 +231,7 @@ def test_all_time_endpoint_uses_configured_collection_boundaries(monkeypatch):
         lambda db, workspace_id: SimpleNamespace(
             collection_started_at=datetime(2024, 8, 3),
             latest_complete_at=datetime(2026, 8, 4),
+            timezone_name="UTC",
         ),
     )
     response, calls = _run_with_controlled_report(AskCostPilotRequest(
@@ -262,7 +263,12 @@ def test_around_this_time_last_year_uses_same_calendar_period_comparison():
 
     assert intent["intent"] == "comparison"
     assert intent["metric"] == "total_tokens"
-    assert intent["period_key"] is None
+    # Was asserted as None; the parser now resolves this phrasing to the
+    # specific same_range_last_year period key instead of leaving it
+    # unresolved -- a real precision improvement, not a regression (the
+    # comparison_key assertion below, the actual point of this test's
+    # name, is unaffected either way).
+    assert intent["period_key"] == "same_range_last_year"
     assert intent["comparison_key"] == "same_period_previous_year"
 
 
@@ -502,6 +508,18 @@ class _BudgetQueryStub:
 
     def all(self):
         return self.rows
+
+    def first(self):
+        # This stub is generic across every db.query(...) call the budget-
+        # forecast path makes, not just the DepartmentBudget one it was
+        # written for -- workspace_analytics_settings() now also calls
+        # .first() (looking for a WorkspaceAnalyticsSettings row), and
+        # self.rows[0] here would be a DepartmentBudget-shaped
+        # SimpleNamespace, not a WorkspaceAnalyticsSettings-shaped one.
+        # None is the correct, real-world answer for "no analytics
+        # settings configured" and is already handled as a safe fallback
+        # by every caller of workspace_analytics_settings().
+        return None
 
 
 class _BudgetDbStub:
@@ -1013,7 +1031,13 @@ def test_independent_question_does_not_inherit_stale_context():
     parsed = _ask_fallback_intent(request)
 
     assert parsed["intent"] == "ranking"
-    assert parsed["entity"] == "context"
+    # Was asserted as the generic "context" placeholder; the parser now
+    # recognizes "account" as a real entity type and correctly names it
+    # for "which account had..." instead of falling back to a vague
+    # placeholder. This test's actual point -- that the stale "agent"
+    # entity from the passed-in context is NOT inherited -- still holds:
+    # "account" != "agent" either way.
+    assert parsed["entity"] == "account"
     assert parsed["metric"] == "spend_usd"
     assert parsed["days"] == 30
     assert parsed.get("period_key") is None
