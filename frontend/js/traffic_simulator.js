@@ -876,7 +876,12 @@
     setStatus("Running", `Sending ${state.size} synthetic AI activity records in small waves.`);
 
     const plan = buildPlan();
-    const waveSize = 5;
+    // Agent Lake only counts an agent "Active" within a 5s window of its
+    // last call (see agentlake.js's AGENT_ACTIVE_WINDOW_MS) -- a wave size
+    // of 5 meant "Active Now" could never show more than 5 agents at once,
+    // since that's the most that were ever in flight simultaneously.
+    // Raised so a fuller run demonstrates more concurrent activity.
+    const waveSize = 12;
 
     for (let start = 0; start < plan.length; start += waveSize) {
       if (state.stopRequested) break;
