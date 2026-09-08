@@ -3690,6 +3690,28 @@ def _ask_workspace_name(db: Session, workspace_id: Optional[str]) -> str:
     return workspace_id or "Default"
 
 
+def _ask_is_demo_workspace(db: Session, workspace_id: Optional[str]) -> bool:
+    """
+    True only for a workspace structurally flagged workspace_type="demo"
+    (e.g. the historical demo dataset) -- not for a real customer
+    workspace whose data simply happens to look synthetic. Used to exempt
+    demo workspaces from the change_drivers/comparison traffic-scope-
+    mismatch refusal (core/analytics_coverage.py's comparison_data_
+    coverage) without loosening that check for anyone else. A demo
+    workspace's activity is deliberately, honestly is_simulation=True end
+    to end (see database/seed_historical_demo.py) specifically so it's
+    never mistaken for real customer traffic elsewhere in the product --
+    this is the one, narrow place that fact should stop it from being
+    treated as untrustworthy instead.
+    """
+    from database.models import Workspace
+
+    if db is None or not workspace_id:
+        return False
+    row = db.query(Workspace).filter(Workspace.workspace_id == workspace_id).first()
+    return bool(row and row.workspace_type == "demo")
+
+
 def _ask_costpilot_answer(
     request: AskCostPilotRequest,
     db: Session,
@@ -3935,6 +3957,7 @@ def _ask_costpilot_answer(
                 summary,
                 prior_summary,
                 workspace_collection_profile(db, request.workspace_id),
+                is_demo_workspace=_ask_is_demo_workspace(db, request.workspace_id),
             )
         else:
             comparison_coverage_result = comparison_coverage(summary, prior_summary)
@@ -4074,6 +4097,7 @@ def _ask_costpilot_answer(
                     summary,
                     prior_summary,
                     workspace_collection_profile(db, request.workspace_id),
+                    is_demo_workspace=_ask_is_demo_workspace(db, request.workspace_id),
                 )
             else:
                 comparison_coverage_result = comparison_coverage(summary, prior_summary)

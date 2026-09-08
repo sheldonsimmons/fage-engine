@@ -173,8 +173,28 @@ def period_coverage(period, request_count: int, profile: dict) -> dict:
     }
 
 
-def comparison_data_coverage(plan, primary_summary: dict, comparison_summary: dict, profile: dict) -> dict:
-    """Combine period coverage and traffic-scope compatibility."""
+def comparison_data_coverage(
+    plan, primary_summary: dict, comparison_summary: dict, profile: dict,
+    is_demo_workspace: bool = False,
+) -> dict:
+    """Combine period coverage and traffic-scope compatibility.
+
+    is_demo_workspace: when True, skips the traffic-scope-mismatch check
+    below (mixed/simulator vs. live) -- built for Workspace.workspace_type
+    == "demo" workspaces like the historical demo dataset, whose activity
+    is deliberately, honestly is_simulation=True end to end (see database/
+    seed_historical_demo.py), which otherwise made this exact check refuse
+    to answer "why did spend change" on the one workspace built specifically
+    to demo the product. This does NOT touch the check for any real
+    customer workspace, including one whose data happens to have some
+    genuine test/simulator traffic mixed in with real traffic -- that
+    refusal is still exactly as strict as before. Only a workspace that is
+    *structurally* a demo (not just data that looks synthetic) is exempted.
+    The collection-window checks below (unavailable_before_collection etc.)
+    are untouched either way -- those catch a different, still-real problem
+    (not enough history collected yet) that a demo workspace's seeded
+    history doesn't have.
+    """
     from core.analytics_periods import comparison_coverage
 
     result = comparison_coverage(primary_summary, comparison_summary)
@@ -203,7 +223,7 @@ def comparison_data_coverage(plan, primary_summary: dict, comparison_summary: di
         else:
             result["status"] = "collection_coverage_incomplete"
             result["limitation"] = primary["limitation"] or comparison["limitation"]
-    elif result.get("primary_traffic_scope") != result.get("comparison_traffic_scope"):
+    elif not is_demo_workspace and result.get("primary_traffic_scope") != result.get("comparison_traffic_scope"):
         result["comparable"] = False
     else:
         result["comparable"] = True
