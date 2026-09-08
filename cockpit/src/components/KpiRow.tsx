@@ -199,6 +199,13 @@ export function KpiRow({
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-semibold tabular-nums">{usdCompact(businessImpact.closed_won_value_usd)}</div>
+                {/* Always-visible caption, not just the badge's hover
+                    tooltip -- someone new to CostPilot has no reason to
+                    know this badge is hoverable, and the card is
+                    otherwise just a dollar figure with no stated meaning.
+                    Matches Cost per Successful Outcome's sibling caption
+                    below. */}
+                <p className="mt-1 text-xs text-muted-foreground">Won-deal value tied to AI-touched work</p>
                 <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
                   <EvidenceBadge
                     evidence={businessImpact.evidence_label}
