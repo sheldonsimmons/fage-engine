@@ -618,6 +618,9 @@ function resetProjectAttributionFilters() {
     const select = document.getElementById(id);
     if (select) select.value = "";
   });
+  _explorerSearchTerm = "";
+  const explorerSearchInput = document.getElementById("explorerSearch");
+  if (explorerSearchInput) explorerSearchInput.value = "";
   clearAskDrillQuery();
   loadBusinessContexts();
 }
@@ -1009,14 +1012,15 @@ function exportContextCsv() {
 // action next to the row.
 
 const EXPLORER_DIMENSIONS = [
-  { key: "department", label: "Department / Team" },
-  { key: "person",     label: "Person" },
-  { key: "agent",      label: "Agent" },
-  { key: "account",    label: "Account / Customer" },
-  { key: "work_item",  label: "Work Item" },
-  { key: "model",      label: "Model" },
-  { key: "provider",   label: "Provider" },
-  { key: "platform",   label: "Platform" },
+  { key: "department",    label: "Department / Team" },
+  { key: "person",        label: "Person" },
+  { key: "agent",         label: "Agent" },
+  { key: "account",       label: "Account / Customer" },
+  { key: "work_item",     label: "Work Item" },
+  { key: "context_type",  label: "Kind of Work" },
+  { key: "model",         label: "Model" },
+  { key: "provider",      label: "Provider" },
+  { key: "platform",      label: "Platform" },
 ];
 
 // Maps a dimension to (a) the run_metrics_query filter key it drills by,
@@ -1031,6 +1035,7 @@ const EXPLORER_DIMENSION_CONFIG = {
   agent:      { filterKey: "agent_id",   byId: true, numeric: true, profile: (id) => `/agent-profile.html?id=${encodeURIComponent(id)}` },
   account:    { filterKey: "account",    byId: true, profile: (id, ws) => `/business-profile.html?account=${encodeURIComponent(id)}&workspace_id=${encodeURIComponent(ws || "")}` },
   work_item:  { filterKey: "work_item",  byId: true, profile: (id) => `/work-item-profile.html?id=${encodeURIComponent(id)}` },
+  context_type: { filterKey: "context_type", byId: false },
   model:      { filterKey: "model",      byId: false },
   provider:   { filterKey: "provider",   byId: false },
   platform:   { filterKey: "platform",   byId: false },
@@ -1062,9 +1067,34 @@ function rebuildExplorerBreakDownOptions() {
 function explorerViewByChanged() {
   _explorerViewBy = document.getElementById("explorerViewBy").value;
   _explorerScope = []; // changing the primary dimension starts a fresh drill
+  // A search term meaningful for the old dimension (e.g. "acme" while
+  // viewing by Account) is very unlikely to mean anything for the new
+  // one (e.g. Model) -- clearing avoids a silently-empty table that
+  // looks like "no data" instead of "stale search."
+  _explorerSearchTerm = "";
+  const searchInput = document.getElementById("explorerSearch");
+  if (searchInput) searchInput.value = "";
   rebuildExplorerBreakDownOptions();
   document.getElementById("explorerSecondaryWrap").hidden = true;
   loadExplorerPivot();
+}
+
+let _explorerSearchTerm = "";
+let _explorerSearchTimer = null;
+
+function explorerSearchChanged() {
+  const input = document.getElementById("explorerSearch");
+  const value = input ? input.value : "";
+  // Debounced, not per-keystroke -- this hits /api/metrics/query on
+  // every call (server-side search, not a client-side filter of already-
+  // fetched rows, so a search term can find a match outside the current
+  // top-50-by-spend page too).
+  if (_explorerSearchTimer) clearTimeout(_explorerSearchTimer);
+  _explorerSearchTimer = setTimeout(() => {
+    _explorerSearchTerm = value.trim();
+    loadExplorerPivot();
+    if (_explorerBreakDownBy) loadExplorerSecondary();
+  }, 300);
 }
 
 function explorerBreakDownByChanged() {
@@ -1090,6 +1120,13 @@ function explorerScopeFilters() {
     const cfg = EXPLORER_DIMENSION_CONFIG[level.dim];
     filters[cfg.filterKey] = cfg.numeric ? Number(level.value) : level.value;
   });
+  // Applies to whichever single dimension the caller is currently
+  // grouping by (primary "View By" or secondary "Break Down By" -- each
+  // is its own call into this function with its own dimension already
+  // baked into _explorerScope/loadExplorerSecondary's own request). A
+  // term meaningful for one (e.g. "acme" under Account) may just show no
+  // matches for the other (e.g. under Model) -- expected, not a bug.
+  if (_explorerSearchTerm) filters.search = _explorerSearchTerm;
   return filters;
 }
 

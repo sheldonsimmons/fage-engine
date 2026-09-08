@@ -487,6 +487,9 @@
           <label>Break Down By
             <select id="explorerBreakDownBy" onchange="explorerBreakDownByChanged()"></select>
           </label>
+          <label class="explorer-search-label">Search
+            <input type="search" id="explorerSearch" placeholder="Find a name in this view…" oninput="explorerSearchChanged()" />
+          </label>
         </div>
         <nav class="project-attribution-drill-path" id="explorerBreadcrumb" aria-label="Explorer drill-down">
           <strong>Company</strong>
@@ -1062,7 +1065,7 @@
 </div>
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/reports.js?v=20260908-usd-thousand-separators"></script>
+  <script src="js/reports.js?v=20260908-explorer-search-kind-of-work"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
     const ROI_RATES = {

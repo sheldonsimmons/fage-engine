@@ -277,6 +277,15 @@ NOT_YET_COMPUTABLE: dict[str, str] = {
 }
 
 DIMENSIONS: dict[str, DimensionDef] = {
+    "context_type": DimensionDef(
+        key="context_type", label="Kind of Work", sources=("transaction", "outcome"),
+        definition=(
+            "WorkItem.context_type (opportunity, case, claim, ticket, project, "
+            "custom, ...), coalesced to 'Unassigned' when the transaction has "
+            "no linked WorkItem. Lets AI activity be broken down by the kind "
+            "of business record it touched, not just who/what/where."
+        ),
+    ),
     "account": DimensionDef(
         key="account", label="Account", sources=("transaction", "outcome"),
         definition="WorkAccount.name (via WorkItem.account_id), coalesced to 'Unassigned account' when absent.",

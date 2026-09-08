@@ -1574,7 +1574,7 @@
 .explorer-pivot-controls {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(2, minmax(180px, 260px));
+  grid-template-columns: repeat(3, minmax(180px, 260px));
   margin: 12px 0;
 }
 .explorer-pivot-controls label {
@@ -1586,13 +1586,19 @@
   letter-spacing: .06em;
   text-transform: uppercase;
 }
-.explorer-pivot-controls select {
+.explorer-pivot-controls select,
+.explorer-pivot-controls input[type="search"] {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 11px;
   padding: 7px 8px;
+}
+.explorer-pivot-controls input[type="search"] {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
 }
 .project-attribution-ledger-controls {
   margin: 10px 0;

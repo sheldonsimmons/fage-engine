@@ -284,6 +284,12 @@ def _dimension_expr(dim_key: str):
             func.coalesce(WorkItem.external_id, "__unassigned__"),
             func.coalesce(WorkItem.name, "Unassigned work item"),
         )
+    if dim_key == "context_type":
+        # Same key and label -- context_type is already a short, stable
+        # slug (opportunity/case/claim/...), not an internal id needing a
+        # separate friendly name the way account/agent/work_item do.
+        expr = func.coalesce(WorkItem.context_type, "Unassigned")
+        return expr, expr
     raise ValueError(f"unknown dimension: {dim_key}")
 
 
@@ -601,6 +607,19 @@ def _run_activity_query(
     dim_exprs = [_dimension_expr(d) for d in dim_keys]
     key_exprs = [e[0] for e in dim_exprs]
     label_exprs = [e[1] for e in dim_exprs]
+
+    if filters.get("search") and len(label_exprs) == 1:
+        # Matches against the SAME coalesced/friendly label the pivot
+        # actually groups and displays by (e.g. WorkAccount.name for
+        # "account", not the raw account_id) -- a raw-column search would
+        # silently miss rows whose on-screen label differs from the
+        # underlying column, and searches wouldn't match what's on
+        # screen. Only meaningful for a single-dimension pivot (the
+        # Activity Explorer's actual shape, dimensions always length 1);
+        # a no-op for any multi-dimension caller rather than an
+        # arbitrarily-chosen first-dimension match.
+        q = q.filter(label_exprs[0].ilike(f"%{filters['search']}%"))
+
     metric_exprs = [_activity_metric_expr(m) for m in metric_keys]
 
     select_cols = key_exprs + label_exprs + metric_exprs
