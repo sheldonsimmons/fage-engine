@@ -38,11 +38,30 @@ def _client():
     return TestClient(app), TestingSessionLocal()
 
 
+def _today_start():
+    return datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def _tx(db, *, hours_ago=None, days_ago=None, cost_usd, workspace_id="WS1"):
-    delta = timedelta(hours=hours_ago) if hours_ago is not None else timedelta(days=days_ago)
+    # `hours_ago` is clamped to today_start, not a raw utcnow()-minus-offset
+    # -- a plain offset from "now" can silently cross midnight into
+    # yesterday depending on what time the suite happens to run (confirmed
+    # live: this test flaked for real at 00:03 UTC, since "1 hour ago" from
+    # just after midnight is actually yesterday, and get_dashboard() itself
+    # correctly excludes it from "today"). Clamping to max(today_start,
+    # now - hours_ago) instead guarantees the timestamp is always within
+    # [today_start, now] -- always "today," and never in the future
+    # relative to the real clock (get_dashboard()'s upper bound is "now",
+    # not end-of-day, so a naive today_start + hours_ago has the opposite
+    # failure mode: it can land in the future just after midnight).
+    if hours_ago is not None:
+        now = datetime.utcnow()
+        timestamp = max(_today_start(), now - timedelta(hours=hours_ago))
+    else:
+        timestamp = _today_start() - timedelta(days=days_ago)
     db.add(TokenTransaction(
         department="Sales", model_tier="Scout", input_tokens=10, output_tokens=10,
-        cost_usd=cost_usd, timestamp=datetime.utcnow() - delta,
+        cost_usd=cost_usd, timestamp=timestamp,
         workspace_id=workspace_id, is_simulation=False, usage_source="estimated",
         routing_reason="ROUTINE",
     ))

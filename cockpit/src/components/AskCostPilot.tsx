@@ -22,11 +22,21 @@ const markdownComponents = {
   code: (props: React.ComponentProps<"code">) => <code className="rounded bg-muted px-1 py-0.5 text-xs" {...props} />,
 }
 
+// Every suggestion here is verified against the real deterministic
+// parser (_ask_intent() in api/routes_efficiency.py) to resolve to a
+// specific, useful intent -- not a generic overview fallback. Three of
+// the original five didn't ("Where are we wasting money?", "Are our AI
+// economics improving?", "Which agents need attention?" all fell back
+// to intent="overview" despite reading like real, answerable
+// questions) -- the worst place for that gap to live, since these are
+// the exact questions meant to show a new user what the product can
+// actually do. Re-verify with _ask_intent() before changing any of
+// these again.
 const SUGGESTIONS = [
   "Why did AI spend increase?",
-  "Where are we wasting money?",
-  "Are our AI economics improving?",
-  "Which agents need attention?",
+  "How can we save money on AI?",
+  "Is our AI spend trending up or down?",
+  "Which agents are inactive or underused?",
   "What should I review first?",
 ]
 
