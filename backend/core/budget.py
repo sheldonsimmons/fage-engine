@@ -10,11 +10,26 @@ Responsibilities:
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from database.models import DepartmentBudget, RegisteredAgent
 from config import DEFAULT_BUDGET_CAPS, THROTTLE_TRIGGER_PERCENT, WARN_TRIGGER_PERCENT
+
+# recomputed_department_spend()'s live (date_from=None, date_to=None) case
+# scans the full transaction ledger via project_activity_reporting() -- an
+# expensive multi-join aggregation. Under concurrent routing traffic
+# (several /api/route requests landing in the same second for the same
+# workspace, e.g. the traffic simulator's waves), each one independently
+# re-ran that same scan, saturating the small Postgres tier and turning a
+# ~2-5s single request into 13-20s under a 12-wide concurrent wave.
+# Short-TTL cache so concurrent callers within the same window share one
+# scan. Only applied to the live "now" case (both dates omitted) -- an
+# explicit historical date range is never cached, so report-page and
+# Ask CostPilot callers asking about a specific past window are unaffected.
+_RECOMPUTE_CACHE_TTL_SECONDS = 3
+_recompute_cache: dict[str, tuple[float, dict]] = {}
 
 
 def clean_budget_department_name(department: str) -> str:
@@ -115,6 +130,7 @@ def recomputed_department_spend(
     date_from=None,
     date_to=None,
     report: dict | None = None,
+    force_fresh: bool = False,
 ) -> dict[str, float]:
     """
     Spend per department, recomputed from the actual transaction ledger for
@@ -143,9 +159,34 @@ def recomputed_department_spend(
     callers were consolidated: the Ask CostPilot budget answer used to
     reuse its own already-fetched report inline, and briefly started
     fetching a second one here instead.
+
+    force_fresh=True skips reading the short-TTL cache above (still
+    populates it with the result, so later callers benefit) without
+    disabling caching altogether. Needed by sync_one_budget_from_ledger()/
+    sync_current_spend_from_ledger(): both are called right after a
+    request's own transaction commits, specifically to pick up that
+    transaction's own fresh spend -- if they read a cached value computed
+    moments earlier (pre-commit, in the same request), the response would
+    silently miss the cost of the very request that produced it.
     """
     from datetime import datetime as _datetime
     from api.routes_work_items import project_activity_reporting
+
+    is_live_default_window = date_from is None and date_to is None and report is None
+    # Keyed on the engine identity, not just workspace_id -- a single
+    # persistent engine backs the whole process in production (so
+    # concurrent requests naturally share one cache), but every test
+    # spins up its own separate in-memory engine, which must NOT share
+    # cache entries with an unrelated test using the same workspace_id.
+    # get_bind() is a real Session method but several tests pass minimal
+    # DB stubs that don't implement it -- cleanly skip caching for those
+    # instead of erroring.
+    _bind = getattr(db, "get_bind", None)
+    cache_key = (id(_bind()), workspace_id or "default") if is_live_default_window and _bind else None
+    if cache_key is not None and not force_fresh:
+        cached = _recompute_cache.get(cache_key)
+        if cached is not None and (time.monotonic() - cached[0]) < _RECOMPUTE_CACHE_TTL_SECONDS:
+            return dict(cached[1])
 
     if date_from is None:
         date_from = _datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -169,6 +210,8 @@ def recomputed_department_spend(
         key = raw_department.casefold()
         if key:
             spend_by_department[key] = spend_by_department.get(key, 0.0) + float(row.get("spend_usd") or 0)
+    if cache_key is not None:
+        _recompute_cache[cache_key] = (time.monotonic(), dict(spend_by_department))
     return spend_by_department
 
 
@@ -207,7 +250,7 @@ def sync_current_spend_from_ledger(db: Session, workspace_id: str | None, *, com
     ).all()
     if not budgets:
         return
-    spend_by_department = recomputed_department_spend(db, workspace_id)
+    spend_by_department = recomputed_department_spend(db, workspace_id, force_fresh=True)
     for b in budgets:
         key = (b.department or "").split(":")[-1].casefold()
         b.current_spend_usd = round(spend_by_department.get(key, 0.0), 6)
@@ -239,7 +282,7 @@ def sync_one_budget_from_ledger(db: Session, budget: DepartmentBudget, workspace
     supposed to update. Operating on the row the caller already resolved
     sidesteps that column entirely.
     """
-    spend_by_department = recomputed_department_spend(db, workspace_id)
+    spend_by_department = recomputed_department_spend(db, workspace_id, force_fresh=True)
     raw_label = str(budget.department or "").strip()
     if workspace_id and raw_label.startswith(f"{workspace_id}:"):
         raw_label = raw_label[len(workspace_id) + 1:]

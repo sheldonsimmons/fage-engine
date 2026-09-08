@@ -96,3 +96,45 @@ def test_only_one_full_budget_ledger_recompute_per_request():
     assert spy.call_count <= 2, (
         f"expected at most 2 full ledger recomputes per control-mode request, got {spy.call_count}"
     )
+
+
+def test_concurrent_live_recomputes_for_same_workspace_share_one_scan():
+    # The remaining 2 recomputes per request are each an expensive
+    # project_activity_reporting() scan. Under concurrent traffic for the
+    # same workspace (e.g. the traffic simulator's waves), each request's
+    # PRE-commit effective_budget_context() call used to independently
+    # re-run that scan even though nothing changed between them within the
+    # same few seconds -- confirmed live: 12 concurrent /api/route calls
+    # went from ~2-5s each (baseline) to 13-20s each. A short-TTL cache on
+    # the live "now" recompute lets concurrent pre-commit reads for the
+    # same workspace share one scan instead of each re-running it.
+    db = _session()
+    db.add(DepartmentBudget(department="Support", monthly_cap_usd=10.0, current_spend_usd=0.0, workspace_id="default"))
+    db.commit()
+
+    from api.routes_work_items import project_activity_reporting as real_report
+
+    with patch("api.routes_work_items.project_activity_reporting", wraps=real_report) as spy:
+        first = budget_module.recomputed_department_spend(db, "default")
+        second = budget_module.recomputed_department_spend(db, "default")
+
+    assert spy.call_count == 1, (
+        f"expected the second call within the TTL window to hit the cache, got {spy.call_count} scans"
+    )
+    assert first == second
+
+
+def test_force_fresh_bypasses_the_cache_for_post_commit_reads():
+    db = _session()
+    db.add(DepartmentBudget(department="Support", monthly_cap_usd=10.0, current_spend_usd=0.0, workspace_id="default"))
+    db.commit()
+
+    from api.routes_work_items import project_activity_reporting as real_report
+
+    with patch("api.routes_work_items.project_activity_reporting", wraps=real_report) as spy:
+        budget_module.recomputed_department_spend(db, "default")
+        budget_module.recomputed_department_spend(db, "default", force_fresh=True)
+
+    assert spy.call_count == 2, (
+        f"expected force_fresh=True to skip the cache and re-scan, got {spy.call_count} scans"
+    )
