@@ -97,6 +97,7 @@
         <button id="rptTabSavings"  class="rpt-tab active" data-tab="savings">Performance</button>
         <button id="rptTabContexts" class="rpt-tab" data-tab="contexts">Usage &amp; Attribution</button>
         <button id="rptTabRisk"     class="rpt-tab" data-tab="risk">Governance &amp; Risk</button>
+        <button id="rptTabImpact"   class="rpt-tab" data-tab="impact">Business Impact</button>
       </div>
       <div class="rpt-utilities" aria-label="Reporting tools">
         <button id="rptTabEfficiency" type="button" data-report-utility="efficiency" onclick="openReportView('efficiency')">Ask CostPilot</button>
@@ -342,6 +343,87 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 4: BUSINESS IMPACT
+         Real WorkItemOutcome data (won/lost/pipeline/resolved cases, cost
+         per successful outcome, coverage) -- pull-synced (Salesforce/
+         ServiceNow) or push-ingested via Universal Outcome Ingestion, any
+         platform. Reads the existing GET /api/dashboard/business-impact
+         endpoint (core/metrics_query.py's compute_cost_per_outcome/
+         compute_outcome_coverage under the hood) -- no new backend query,
+         this was simply never wired to any page before.
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-pane" id="tab-impact">
+      <style>
+        .bi-evidence-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+        .bi-evidence-tag.early_signal { background: rgba(210,153,34,0.14); color: #d29922; }
+        .bi-evidence-tag.meaningful { background: rgba(210,153,34,0.14); color: #d29922; }
+        .bi-evidence-tag.executive_eligible { background: rgba(63,185,80,0.14); color: var(--accent-green); }
+        .bi-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 14px; padding: 12px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; }
+        .bi-trend.up { color: var(--accent-green); }
+        .bi-trend.down { color: var(--accent-red); }
+      </style>
+      <div id="biNoDataBanner" class="rpt-scope-banner" hidden>
+        No outcome data yet — connect a system that reports business outcomes (Salesforce/ServiceNow sync, or any
+        custom platform via Universal Connection's <code>mode="outcome"</code>) to see this tab populate.
+      </div>
+      <div id="biContent">
+        <div class="rpt-chart-title" style="display:flex;align-items:center;gap:10px">
+          <span>Outcomes tied to AI-touched work</span>
+          <span class="bi-evidence-tag" id="biEvidenceTag"></span>
+        </div>
+        <div class="rpt-kpi-row">
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Won</div>
+            <div class="rpt-kpi-value green" id="bi-won">—</div>
+            <div class="rpt-kpi-sub" id="bi-won-value">—</div>
+          </div>
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Lost</div>
+            <div class="rpt-kpi-value" id="bi-lost">—</div>
+            <div class="rpt-kpi-sub" id="bi-lost-value">—</div>
+          </div>
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Open</div>
+            <div class="rpt-kpi-value" id="bi-open">—</div>
+            <div class="rpt-kpi-sub" id="bi-pipeline-value">—</div>
+          </div>
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Support Cases Resolved</div>
+            <div class="rpt-kpi-value" id="bi-support-resolved">—</div>
+            <div class="rpt-kpi-sub" id="bi-support-total">—</div>
+          </div>
+        </div>
+        <div class="rpt-kpi-row" style="margin-top:16px">
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Cost per Successful Outcome</div>
+            <div class="rpt-kpi-value" id="bi-cost-per-outcome">—</div>
+            <div class="rpt-kpi-sub" id="bi-cost-per-outcome-trend">—</div>
+          </div>
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Cost per Won Opportunity</div>
+            <div class="rpt-kpi-value" id="bi-cost-per-won">—</div>
+            <div class="rpt-kpi-sub" id="bi-cost-per-won-trend">—</div>
+          </div>
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Support Cost per Resolution</div>
+            <div class="rpt-kpi-value" id="bi-cost-per-resolution">—</div>
+            <div class="rpt-kpi-sub" id="bi-cost-per-resolution-trend">—</div>
+          </div>
+          <div class="rpt-kpi">
+            <div class="rpt-kpi-label">Outcome Coverage</div>
+            <div class="rpt-kpi-value" id="bi-coverage">—</div>
+            <div class="rpt-kpi-sub">of AI-touched work with a known outcome</div>
+          </div>
+        </div>
+        <div class="bi-note">
+          <strong>Associated, not caused:</strong> these figures show AI activity that occurred on work which
+          later reached a known outcome — not evidence the AI activity caused that outcome. Trend arrows compare
+          the trailing 30 days against the prior 30.
+        </div>
+      </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
@@ -980,7 +1062,7 @@
 </div>
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/reports.js?v=20260826-default-tab-load"></script>
+  <script src="js/reports.js?v=20260908-business-impact-tab"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
     const ROI_RATES = {

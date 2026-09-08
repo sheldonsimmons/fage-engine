@@ -806,10 +806,13 @@ def get_business_impact(
     instead of one account's. Nothing new computed here; this widens an
     already-proven query's WHERE clause.
 
-    Real data only for workspaces with an outcome-sync-connected platform
-    (Salesforce today) -- has_outcome_data distinguishes "genuinely zero"
-    from "no outcome data exists yet" so the frontend doesn't have to
-    guess which one a set of zeros means.
+    Real data for any workspace with outcome rows in WorkItemOutcome,
+    regardless of source -- pull-synced (Salesforce/ServiceNow, via
+    core/outcome_adapters/*.py) or push-ingested via Universal Outcome
+    Ingestion (core/outcome_ingestion.py, any custom platform). This query
+    has no source_system filter and never has; has_outcome_data
+    distinguishes "genuinely zero" from "no outcome data exists yet" so
+    the frontend doesn't have to guess which one a set of zeros means.
     """
     from core.metrics_query import run_metrics_query
 

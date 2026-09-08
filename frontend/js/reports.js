@@ -394,6 +394,7 @@ const REPORT_PARENT_TABS = {
   contexts: "contexts",
   activity: "contexts",
   risk: "risk",
+  impact: "impact",
 };
 
 function openReportView(tab, options = {}) {
@@ -529,11 +530,60 @@ function loadActiveTab() {
   if (activeTab === "contexts")    { initExplorerControls(); loadBusinessContexts(); }
   if (activeTab === "departments") loadDepartments();
   if (activeTab === "activity")    loadAgentActivity();
+  if (activeTab === "impact")      loadBusinessImpact();
   if (activeTab === "efficiency") {
     restoreEfficiencyReviewForSelectedDays();
     refreshAskCostPilotExperience();
   }
   // efficiency tab remains on-demand. Restore cached reviews, but do not rerun analysis automatically.
+}
+
+const BI_EVIDENCE_LABELS = {
+  early_signal: "Early Signal",
+  meaningful: "Meaningful",
+  executive_eligible: "Executive-Eligible",
+};
+
+function biTrendText(pct) {
+  if (pct === null || pct === undefined) return "—";
+  const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "—";
+  const cls = pct > 0 ? "down" : pct < 0 ? "up" : ""; // higher cost-per-outcome is worse, not better
+  return `<span class="bi-trend ${cls}">${arrow} ${Math.abs(pct)}% vs prior 30 days</span>`;
+}
+
+async function loadBusinessImpact() {
+  const data = await apiGet(reportScopedPath("/api/dashboard/business-impact"));
+
+  document.getElementById("biNoDataBanner").hidden = !!data.has_outcome_data;
+  document.getElementById("biContent").style.display = data.has_outcome_data ? "" : "none";
+  if (!data.has_outcome_data) return;
+
+  const evidenceTag = document.getElementById("biEvidenceTag");
+  evidenceTag.className = `bi-evidence-tag ${data.evidence_label}`;
+  evidenceTag.textContent = BI_EVIDENCE_LABELS[data.evidence_label] || data.evidence_label;
+
+  setKpi("bi-won", fmtNum(data.opportunities_won));
+  document.getElementById("bi-won-value").textContent = `${fmtUsd(data.closed_won_value_usd)} closed-won value`;
+  setKpi("bi-lost", fmtNum(data.opportunities_lost));
+  document.getElementById("bi-lost-value").textContent =
+    data.ai_investment_on_lost_opportunities_usd != null
+      ? `${fmtUsd(data.ai_investment_on_lost_opportunities_usd)} AI investment`
+      : "—";
+  setKpi("bi-open", fmtNum(data.opportunities_open));
+  document.getElementById("bi-pipeline-value").textContent = `${fmtUsd(data.pipeline_value_usd)} pipeline value`;
+  setKpi("bi-support-resolved", fmtNum(data.support_cases_resolved));
+  document.getElementById("bi-support-total").textContent = `of ${fmtNum(data.support_cases_total)} total`;
+
+  setKpi("bi-cost-per-outcome", fmtUsd(data.cost_per_successful_outcome_usd));
+  document.getElementById("bi-cost-per-outcome-trend").innerHTML =
+    biTrendText(data.trend_pct_change?.cost_per_won_opportunity_usd);
+  setKpi("bi-cost-per-won", fmtUsd(data.cost_per_won_opportunity_usd));
+  document.getElementById("bi-cost-per-won-trend").innerHTML =
+    biTrendText(data.trend_pct_change?.avg_ai_investment_per_opportunity_usd);
+  setKpi("bi-cost-per-resolution", fmtUsd(data.support_cost_per_resolution_usd));
+  document.getElementById("bi-cost-per-resolution-trend").innerHTML =
+    biTrendText(data.trend_pct_change?.support_cost_per_resolution_usd);
+  setKpi("bi-coverage", data.outcome_coverage_pct != null ? `${data.outcome_coverage_pct}%` : "—");
 }
 
 function projectAttributionSelect(id, defaultLabel, options) {

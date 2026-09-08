@@ -698,8 +698,19 @@ def _ask_intent(question: str, default_days: int) -> dict:
     # "which won opportunities had the highest AI spend" / "AI spend on
     # opportunities we lost" -- narrows project_breakdown rows by
     # WorkItemOutcome.outcome_success without needing a new intent, the
-    # same shape as usage_status above. Only meaningful for entity=="context"
-    # (opportunities/projects are the only rows with outcome data today).
+    # same shape as usage_status above. entity=="context" is already the
+    # generic "this question is about a WorkItem" bucket (triggered by
+    # "project"/"matter"/"work item"/"business context"/"deal(s)", not a
+    # Salesforce-specific word), and outcome data is no longer
+    # opportunity-only since Universal Outcome Ingestion -- but the
+    # won/lost TRIGGER WORDS below are still genuinely Sales-Opportunity
+    # vocabulary; a claims/case/ticket question wouldn't naturally use
+    # "won"/"lost" and isn't handled here. Broadening this to generic
+    # success/failure language (approved/denied, resolved/reopened, etc.)
+    # for non-Sales outcome types is real, separate follow-on work, not
+    # done here -- see the "won"/"lost"-specific response labels a few
+    # lines below and at ~4485/4993/5072, which would need the same
+    # generalization to stay accurate for a non-opportunity answer.
     outcome_filter = None
     if entity == "context":
         # \bwon\b / \blost\b, not " won " / " lost " substring checks --
