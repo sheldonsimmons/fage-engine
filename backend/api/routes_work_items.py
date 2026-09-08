@@ -1,7 +1,9 @@
 """Work Attribution API — accounts and projects/matters/engagements."""
 
+import copy
 import json
 import re
+import time
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -38,6 +40,12 @@ from core.business_context import (
 
 
 router = APIRouter()
+
+# project_activity_reporting()'s short-TTL cache -- see its docstring.
+# Module-level and process-wide (matches core/budget.py's identical
+# pattern for recomputed_department_spend, which wraps this function).
+_ACTIVITY_REPORT_CACHE_TTL_SECONDS = 2
+_activity_report_cache: dict[tuple, tuple[float, dict]] = {}
 
 VALID_STATUSES = {"active", "on_hold", "completed", "cancelled", "archived"}
 VALID_COST_TREATMENTS = {
@@ -1840,10 +1848,48 @@ def project_activity_reporting(
     reporting, and insights -- none of which asked for this and
     shouldn't have their behavior silently changed as a side effect of
     fixing Ask CostPilot's internal consistency.
+
+    Short-TTL cache: this is the single most expensive call in the app --
+    a full multi-join, multi-dimension aggregation scan (confirmed live:
+    Ask CostPilot deterministic answers took 6-22s each, dominated by 1-3
+    calls into this function per question). Ask CostPilot fires it at
+    least once per question and comparison/change_drivers intents fire it
+    twice (once per period) -- genuinely different data, not caught by
+    this cache. What IS caught: near-simultaneous calls for the same
+    workspace/period/filters, e.g. two people asking related questions
+    seconds apart, or concurrent traffic during a demo. date_from/date_to
+    are rounded to a coarse bucket so callers who each resolve "now" to a
+    slightly different microsecond still collide into the same cache
+    entry.
     """
     # Direct internal/test calls do not receive FastAPI's dependency coercion.
     if not isinstance(model_tier, (str, type(None))):
         model_tier = None
+
+    _bind = getattr(db, "get_bind", None)
+    _cache_key = None
+    if _bind:
+        def _bucket(dt):
+            if dt is None:
+                return None
+            return int(dt.timestamp() // _ACTIVITY_REPORT_CACHE_TTL_SECONDS)
+        _cache_key = (
+            id(_bind()), workspace_id, _bucket(date_from), _bucket(date_to), days,
+            project_id, user_external_id, agent_id, account_id, source_platform,
+            record_type, model_tier, charged_unit, business_purpose, provider,
+            activity_limit, exclude_prune_only_rows,
+        )
+        _cached = _activity_report_cache.get(_cache_key)
+        if _cached is not None and (time.monotonic() - _cached[0]) < _ACTIVITY_REPORT_CACHE_TTL_SECONDS:
+            return copy.deepcopy(_cached[1])
+        if len(_activity_report_cache) > 200:
+            _stale = [
+                k for k, v in _activity_report_cache.items()
+                if (time.monotonic() - v[0]) >= _ACTIVITY_REPORT_CACHE_TTL_SECONDS
+            ]
+            for k in _stale:
+                _activity_report_cache.pop(k, None)
+
     period_end = date_to or datetime.utcnow()
     period_start = date_from or (period_end - timedelta(days=days))
     if period_start >= period_end:
@@ -2543,7 +2589,7 @@ def project_activity_reporting(
         p for (p,) in query.with_entities(TokenTransaction.origin_record_type).filter(TokenTransaction.origin_record_type.isnot(None)).distinct().all()
     })
 
-    return {
+    _result = {
         "period": {
             "date_from": period_start.isoformat(),
             "date_to": period_end.isoformat(),
@@ -2608,6 +2654,9 @@ def project_activity_reporting(
             "productivity or infer business outcomes."
         ),
     }
+    if _cache_key is not None:
+        _activity_report_cache[_cache_key] = (time.monotonic(), copy.deepcopy(_result))
+    return _result
 
 
 @router.get("/organizational-usage")
