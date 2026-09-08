@@ -2340,6 +2340,149 @@ function _obCodeSection(label, hint, code) {
     </div>`;
 }
 
+// Second, optional code sample shown after the main activity-reporting
+// snippet -- Universal Outcome Ingestion (mode="outcome") is a SEPARATE
+// call, sent later/elsewhere in the customer's own code whenever a
+// record's real-world status changes (approved, closed, resolved --
+// not on every AI request), not part of the request/response flow above.
+// Only wired into the generic/custom-language generators
+// (python/nodejs/java/ruby/rest) -- Salesforce/ServiceNow already get
+// outcome data pulled automatically via core/outcome_adapters/*.py, no
+// code needed on the customer's side for those.
+function _obOutcomeSection(lang, obj) {
+  const workspaceId = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "default";
+  const hint = "Optional · call this separately, whenever the record's real status changes — not on every AI request";
+  return _obCodeSection("Report the outcome later (optional)", hint, _genOutcomeSnippet(lang, obj, workspaceId));
+}
+
+function _genOutcomeSnippet(lang, obj, workspaceId) {
+  const objStr = _codeStr(obj);
+  if (lang === "python") {
+    return `import os
+import requests
+
+def report_outcome_to_costpilot(record_id: str, status: str, success: bool, value: float = None, event_id: str = None) -> dict:
+    """
+    Call this whenever this ${objStr}'s real-world status changes --
+    approved/denied, resolved, closed won/lost -- not on every AI
+    request. event_id must be unique per outcome update (e.g. an
+    idempotency key from your own system) so a retried call never
+    double-counts the same outcome -- it is REQUIRED for mode="outcome".
+    """
+    resp = requests.post("${CostPilot_URL}/api/route",
+        headers={"X-CostPilot-Key": os.environ["COSTPILOT_API_KEY"]},
+        json={
+            "mode": "outcome",
+            "event_id": event_id or f"{record_id}-{status}",
+            "source": {"platform": "Python", "workspace_id": "${workspaceId}"},
+            "work": {
+                "external_id": record_id,
+                "type": "${objStr}",
+                "sync_if_missing": True,
+            },
+            "outcome": {
+                "status": status,
+                "success": success,
+                "value": value,
+                "is_closed": True,
+            },
+        }, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+# report_outcome_to_costpilot("REPLACE_WITH_RECORD_ID", status="approved", success=True, value=5000)`;
+  }
+  if (lang === "nodejs") {
+    return `// Call this whenever this ${objStr}'s real-world status changes --
+// approved/denied, resolved, closed won/lost -- not on every AI request.
+// eventId must be unique per outcome update so a retried call never
+// double-counts the same outcome -- it is REQUIRED for mode: 'outcome'.
+async function reportOutcomeToCostPilot({ recordId, status, success, value, eventId }) {
+  const res = await fetch('${CostPilot_URL}/api/route', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CostPilot-Key': process.env.COSTPILOT_API_KEY },
+    body: JSON.stringify({
+      mode: 'outcome',
+      event_id: eventId || \`\${recordId}-\${status}\`,
+      source: { platform: 'Node.js', workspace_id: '${workspaceId}' },
+      work: { external_id: recordId, type: '${objStr}', sync_if_missing: true },
+      outcome: { status, success, value, is_closed: true },
+    }),
+  });
+  if (!res.ok) throw new Error(\`CostPilot outcome report failed: \${res.status}\`);
+  return res.json();
+}
+
+// reportOutcomeToCostPilot({ recordId: 'REPLACE_WITH_RECORD_ID', status: 'approved', success: true, value: 5000 });`;
+  }
+  if (lang === "java") {
+    return `// Call this whenever this ${objStr}'s real-world status changes --
+// approved/denied, resolved, closed won/lost -- not on every AI request.
+// eventId must be unique per outcome update so a retried call never
+// double-counts the same outcome -- it is REQUIRED for mode="outcome".
+public String reportOutcomeToCostPilot(String recordId, String status, boolean success, Double value, String eventId) throws IOException, InterruptedException {
+    String body = String.format("""
+        {
+          "mode": "outcome",
+          "event_id": "%s",
+          "source": {"platform": "Java", "workspace_id": "${workspaceId}"},
+          "work": {"external_id": "%s", "type": "${objStr}", "sync_if_missing": true},
+          "outcome": {"status": "%s", "success": %s, "value": %s, "is_closed": true}
+        }""", eventId != null ? eventId : recordId + "-" + status, recordId, status, success, value);
+
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create("${CostPilot_URL}/api/route"))
+        .header("Content-Type", "application/json")
+        .header("X-CostPilot-Key", System.getenv("COSTPILOT_API_KEY"))
+        .POST(HttpRequest.BodyPublishers.ofString(body))
+        .build();
+    HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+    return response.body();
+}`;
+  }
+  if (lang === "ruby") {
+    return `# Call this whenever this ${objStr}'s real-world status changes --
+# approved/denied, resolved, closed won/lost -- not on every AI request.
+# event_id must be unique per outcome update so a retried call never
+# double-counts the same outcome -- it is REQUIRED for mode: "outcome".
+require 'net/http'
+require 'json'
+require 'uri'
+
+def report_outcome_to_costpilot(record_id:, status:, success:, value: nil, event_id: nil)
+  uri = URI("${CostPilot_URL}/api/route")
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = uri.scheme == "https"
+  req = Net::HTTP::Post.new(uri, "Content-Type" => "application/json", "X-CostPilot-Key" => ENV["COSTPILOT_API_KEY"])
+  req.body = {
+    mode: "outcome",
+    event_id: event_id || "#{record_id}-#{status}",
+    source: { platform: "Ruby", workspace_id: "${workspaceId}" },
+    work: { external_id: record_id, type: "${objStr}", sync_if_missing: true },
+    outcome: { status: status, success: success, value: value, is_closed: true },
+  }.to_json
+  JSON.parse(http.request(req).body)
+end
+
+# report_outcome_to_costpilot(record_id: "REPLACE_WITH_RECORD_ID", status: "approved", success: true, value: 5000)`;
+  }
+  // rest / curl (default)
+  return `# Call this whenever this ${objStr}'s real-world status changes --
+# approved/denied, resolved, closed won/lost -- not on every AI request.
+# event_id must be unique per outcome update so a retried call never
+# double-counts the same outcome -- it is REQUIRED for mode="outcome".
+curl -X POST "${CostPilot_URL}/api/route" \\
+  -H "Content-Type: application/json" \\
+  -H "X-CostPilot-Key: $COSTPILOT_API_KEY" \\
+  -d '{
+    "mode": "outcome",
+    "event_id": "REPLACE_WITH_RECORD_ID-approved",
+    "source": {"platform": "REST", "workspace_id": "${workspaceId}"},
+    "work": {"external_id": "REPLACE_WITH_RECORD_ID", "type": "${objStr}", "sync_if_missing": true},
+    "outcome": {"status": "approved", "success": true, "value": 5000, "is_closed": true}
+  }'`;
+}
+
 function _platformMappingHtml(platform, obj, fields, returnFields = [], extraRows = "") {
   const cfg = OB_PLATFORMS[platform] || {};
   const copy = OB_PLATFORM_COPY[platform] || (cfg.kind === "code" ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
@@ -3778,6 +3921,7 @@ ${returnMap}`;
   return _platformMappingHtml("python", obj, fields, returnFields)
     + _obUniversalContractNote()
     + _obCodeSection("Python", "pip install requests · call this function from your app or workflow", python)
+    + _obOutcomeSection("python", obj)
     + _obBanner("python", obj, dept, agent) + _obActions();
 }
 
@@ -3891,6 +4035,7 @@ ${returnMap}`;
   return _platformMappingHtml("nodejs", obj, fields, returnFields)
     + _obUniversalContractNote()
     + _obCodeSection("Node.js", "Uses built-in fetch in Node 18+", code)
+    + _obOutcomeSection("nodejs", obj)
     + _obBanner("nodejs", obj, dept, agent) + _obActions();
 }
 
@@ -4030,6 +4175,7 @@ public class CostPilotClient {
     + _obUniversalContractNote()
     + _obCodeSection("Java", "Java 11+ HttpClient", code)
     + _obCodeSection("Java Return Mapping", "Parse these response keys if you want write-back in your app", returnNote)
+    + _obOutcomeSection("java", obj)
     + _obBanner("java", obj, dept, agent) + _obActions();
 }
 
@@ -4149,6 +4295,7 @@ ${returnFields.length ? returnFields.map(f => `# ${_safeVar(f.name)} = ${_routeR
   return _platformMappingHtml("ruby", obj, fields, returnFields)
     + _obUniversalContractNote()
     + _obCodeSection("Ruby", "Uses Net::HTTP from the Ruby standard library", code)
+    + _obOutcomeSection("ruby", obj)
     + _obBanner("ruby", obj, dept, agent) + _obActions();
 }
 
@@ -4238,6 +4385,7 @@ curl -X POST ${CostPilot_URL}/api/route \\
     + _obUniversalContractNote()
     + _obCodeSection("REST / cURL", "Replace ${...} placeholders with values from your app or shell", curl)
     + _obCodeSection("Return Mapping", "Read these response keys if you want write-back in your app", returnNote)
+    + _obOutcomeSection("rest", obj)
     + _obBanner("rest", obj, dept, agent) + _obActions();
 }
 
