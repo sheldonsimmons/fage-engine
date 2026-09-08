@@ -283,6 +283,37 @@ header.header .header-sub,
   transform: translateX(0);
 }
 
+.cp-ask-drawer.cp-ask-resizing {
+  transition: none;
+}
+
+.cp-ask-resize-handle {
+  cursor: col-resize;
+  height: 100%;
+  left: -5px;
+  position: absolute;
+  top: 0;
+  touch-action: none;
+  width: 10px;
+  z-index: 1;
+}
+
+.cp-ask-resize-handle::before {
+  background: var(--border, #334155);
+  content: "";
+  height: 100%;
+  left: 4px;
+  position: absolute;
+  top: 0;
+  transition: background .15s ease;
+  width: 2px;
+}
+
+.cp-ask-resize-handle:hover::before,
+.cp-ask-drawer.cp-ask-resizing .cp-ask-resize-handle::before {
+  background: var(--accent, #6366f1);
+}
+
 .cp-ask-header {
   align-items: flex-start;
   border-bottom: 1px solid var(--border, #334155);

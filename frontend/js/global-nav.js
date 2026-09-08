@@ -270,6 +270,7 @@
     root.innerHTML = `
       <div class="cp-ask-backdrop" id="cpAskBackdrop" hidden></div>
       <aside class="cp-ask-drawer" id="cpAskDrawer" aria-hidden="true" aria-labelledby="cpAskTitle">
+        <div class="cp-ask-resize-handle" id="cpAskResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize Ask CostPilot panel"></div>
         <header class="cp-ask-header">
           <div>
             <span class="cp-ask-kicker">Workspace intelligence</span>
@@ -341,7 +342,64 @@
         openAskCostPilot();
       }
     });
+    installAskCostPilotResize();
     restoreGlobalAskConversation();
+  }
+
+  const ASK_DRAWER_MIN_WIDTH = 360;
+  const ASK_DRAWER_MAX_WIDTH = 960;
+
+  function installAskCostPilotResize() {
+    const drawer = document.getElementById("cpAskDrawer");
+    const handle = document.getElementById("cpAskResizeHandle");
+    if (!drawer || !handle) return;
+
+    const savedWidth = Number(readAskStorage("panel_width", 0));
+    if (savedWidth) {
+      drawer.style.width = `${Math.min(ASK_DRAWER_MAX_WIDTH, Math.max(ASK_DRAWER_MIN_WIDTH, savedWidth))}px`;
+    }
+
+    let dragging = false;
+
+    function pointerX(event) {
+      return event.touches && event.touches.length ? event.touches[0].clientX : event.clientX;
+    }
+
+    function onMove(event) {
+      if (!dragging) return;
+      const newWidth = Math.min(
+        ASK_DRAWER_MAX_WIDTH,
+        Math.max(ASK_DRAWER_MIN_WIDTH, window.innerWidth - pointerX(event)),
+      );
+      drawer.style.width = `${newWidth}px`;
+      event.preventDefault();
+    }
+
+    function onEnd() {
+      if (!dragging) return;
+      dragging = false;
+      drawer.classList.remove("cp-ask-resizing");
+      document.body.style.userSelect = "";
+      writeAskStorage("panel_width", Math.round(drawer.getBoundingClientRect().width));
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+    }
+
+    function onStart(event) {
+      dragging = true;
+      drawer.classList.add("cp-ask-resizing");
+      document.body.style.userSelect = "none";
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onEnd);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onEnd);
+      event.preventDefault();
+    }
+
+    handle.addEventListener("mousedown", onStart);
+    handle.addEventListener("touchstart", onStart, { passive: false });
   }
 
   function openAskCostPilot() {
