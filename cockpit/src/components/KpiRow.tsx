@@ -187,11 +187,14 @@ export function KpiRow({
           (has_outcome_data), same "omit rather than show a misleading
           zero" rule those pages already follow -- a workspace with no
           CRM outcome sync shouldn't see a $0 Business Value card. Each
-          links through to Business Profile (drill-down, not a dead
-          end). */}
+          links through to Reports > Business Impact (drill-down, not a
+          dead end) -- previously linked to Business Profile, but that
+          page shows nothing without an ?account= param, and these cards
+          summarize the whole workspace, not one account; a plain link
+          with no account chosen just landed on an empty page. */}
       {businessImpact.has_outcome_data && (
         <>
-          <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
+          <a href="/reports.html?tab=impact" className="block min-w-0 transition-opacity hover:opacity-80">
             <Card className="h-full">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Associated Business Value</CardTitle>
@@ -218,7 +221,7 @@ export function KpiRow({
           </a>
 
           {businessImpact.cost_per_successful_outcome_usd !== null && (
-            <a href="/business-profile.html" className="block min-w-0 transition-opacity hover:opacity-80">
+            <a href="/reports.html?tab=impact" className="block min-w-0 transition-opacity hover:opacity-80">
               <Card className="h-full">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Cost per Successful Outcome</CardTitle>
