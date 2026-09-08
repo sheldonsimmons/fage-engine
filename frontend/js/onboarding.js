@@ -1992,8 +1992,16 @@ function selectObPlatform(platform) {
   const deptSel = document.getElementById("obPlatDept");
   const userDepts = departments.filter(d => d.name.trim());
   if (userDepts.length > 0) {
-    deptSel.innerHTML = userDepts.map(d => `<option value="${d.name}">${d.name}</option>`).join("");
+    // "Custom..." lets a customer whose real department isn't one of the
+    // already-configured defaults (Sales/Support/Engineering/Marketing/
+    // Operations) still set up their integration correctly instead of
+    // being forced to pick the closest wrong fit -- there's no other way
+    // to add a department from this screen; the wizard step that used to
+    // do that was removed. See obToggleCustomDept()/obPlatDeptValue().
+    deptSel.innerHTML = userDepts.map(d => `<option value="${d.name}">${d.name}</option>`).join("")
+      + `<option value="__custom__">Custom...</option>`;
   }
+  obToggleCustomDept();
   const agentEl = document.getElementById("obPlatAgent");
   if (agentEl) agentEl.placeholder = copy.agentPlaceholder;
   if (!agentEl.value || Object.values(OB_PLATFORMS).some(c => c.agentDefault === agentEl.value)) {
@@ -2007,6 +2015,29 @@ function selectObPlatform(platform) {
   _initObFields(platform);
   _initObReturnFields(platform);
   configureObBusinessContext(platform);
+}
+
+// Shows/hides the free-text department input alongside the "Custom..."
+// option in obPlatDept -- see selectObPlatform()'s dropdown population.
+function obToggleCustomDept() {
+  const sel = document.getElementById("obPlatDept");
+  const customInput = document.getElementById("obPlatDeptCustom");
+  if (!sel || !customInput) return;
+  const isCustom = sel.value === "__custom__";
+  customInput.hidden = !isCustom;
+  if (isCustom) customInput.focus();
+}
+
+// Single source of truth for "what department did the user actually
+// choose" -- the free-text value when "Custom..." is selected, otherwise
+// the dropdown's own value. Every call site that used to read
+// obPlatDept.value directly should call this instead.
+function obPlatDeptValue() {
+  const sel = document.getElementById("obPlatDept");
+  if (sel && sel.value === "__custom__") {
+    return (document.getElementById("obPlatDeptCustom")?.value || "").trim();
+  }
+  return sel ? sel.value : "";
 }
 
 // ── Field entry management ────────────────────────────────────────────────────
@@ -2523,11 +2554,12 @@ async function generateObCode() {
   const cfg = OB_PLATFORMS[obSelectedPlatform];
   const copy = OB_PLATFORM_COPY[obSelectedPlatform] || (cfg.kind === "code" ? OB_PLATFORM_COPY.code : OB_PLATFORM_COPY.code);
   const obj    = document.getElementById("obPlatObject").value.trim();
-  const dept   = document.getElementById("obPlatDept").value;
+  const dept   = obPlatDeptValue();
   const agent  = document.getElementById("obPlatAgent").value.trim() || cfg.agentDefault;
   const fields = getObFields();
   const returnFields = getObReturnFields();
   if (!obj) { err.textContent = copy.emptyObjectError; return; }
+  if (!dept) { err.textContent = "Enter your department name."; return; }
   if (!fields.length) { err.textContent = copy.emptyFieldsError; return; }
   if (obSelectedPlatform === "salesforce") {
     const badObject = !_isSalesforceApiName(obj);
@@ -2705,7 +2737,7 @@ async function runUniversalSetupTest() {
           platform: obSelectedPlatform,
           workspace_id: "onboarding-verification",
           agent_name: document.getElementById("obPlatAgent").value || "CostPilot Setup Test",
-          department: document.getElementById("obPlatDept").value || "Operations",
+          department: obPlatDeptValue() || "Operations",
         },
         request: {
           task: "Verify CostPilot connection",
@@ -2769,7 +2801,7 @@ async function activateUniversalConnection() {
     platform: obSelectedPlatform,
     platform_label: OB_PLATFORMS[obSelectedPlatform]?.label || obSelectedPlatform,
     object: document.getElementById("obPlatObject").value.trim(),
-    department: document.getElementById("obPlatDept").value,
+    department: obPlatDeptValue(),
     agent_name: document.getElementById("obPlatAgent").value.trim(),
     mode: obSelectedPlatform === "salesforce" ? "control" : obSelectedGenMode,
     has_return_fields: returnFields.length > 0,

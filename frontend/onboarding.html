@@ -258,7 +258,8 @@
           <div class="ob-sf-row">
             <div class="ob-field">
               <label class="ob-label">Department</label>
-              <select id="obPlatDept" class="ob-input"></select>
+              <select id="obPlatDept" class="ob-input" onchange="obToggleCustomDept()"></select>
+              <input type="text" id="obPlatDeptCustom" class="ob-input" style="margin-top:6px" placeholder="Enter your department name" hidden />
             </div>
             <div class="ob-field">
               <label class="ob-label" id="obAgentLabel">Agent Name</label>
@@ -328,7 +329,7 @@
 
   <script src="js/api.js?v=20260606"></script>
   <script src="js/tier-utils.js?v=20260606"></script>
-  <script src="js/onboarding.js?v=20260821-fix-selectprovider-crash"></script>
+  <script src="js/onboarding.js?v=20260908-custom-department"></script>
   <script src="/js/mobile-guard.js?v=20260606"></script>
   <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
   <script src="/js/global-nav.js?v=20260907-resizable-panel"></script>
