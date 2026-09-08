@@ -79,3 +79,18 @@ def test_omitted_date_is_accepted():
     request.outcome_context.date = None
     response = route_payload(request, db)
     assert response.outcome_recorded is True
+
+
+def test_timezone_aware_date_is_accepted_not_a_500():
+    # Real, live-reproducing bug found via Playwright verification of the
+    # "Also send a test outcome" button: browsers send
+    # `new Date().toISOString()`, a "Z"-suffixed (timezone-aware) string.
+    # Pydantic parses that into an aware datetime, which raised
+    # "TypeError: can't compare offset-naive and offset-aware datetimes"
+    # against this codebase's naive-UTC datetimes -- a 500 on every real
+    # caller using an offset-qualified timestamp, not an edge case.
+    db = _session()
+    aware_date = (datetime.utcnow() - timedelta(hours=1)).isoformat() + "Z"
+    request = _outcome_request(date=aware_date)
+    response = route_payload(request, db)
+    assert response.outcome_recorded is True

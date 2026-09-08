@@ -43,7 +43,7 @@ from for the full reasoning):
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException
@@ -54,6 +54,28 @@ from database.models import WorkItemOutcome, WorkItemOutcomeEvent
 
 MIN_OUTCOME_DATE = datetime(2000, 1, 1)
 MAX_FUTURE_SKEW = timedelta(days=1)
+
+
+def _to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Normalize outcome.date to a naive UTC datetime, matching this
+    codebase's convention everywhere else (datetime.utcnow(), no tzinfo).
+    Real, live-reproducing bug found via Playwright verification of
+    connector-manager.html's "Also send a test outcome" button: the
+    browser's `new Date().toISOString()` produces a "Z"-suffixed string,
+    which pydantic parses into a TIMEZONE-AWARE datetime -- comparing that
+    against the naive datetimes used everywhere below (MIN_OUTCOME_DATE,
+    datetime.utcnow(), a stored outcome_date) raised
+    "TypeError: can't compare offset-naive and offset-aware datetimes",
+    a 500 on every real caller whose client library timestamps in ISO
+    8601 with an explicit offset (the norm, not the exception). Normalized
+    once, immediately on entry, rather than special-cased at each
+    comparison site -- the same discipline this module's own docstring
+    already asks for around outcome.date semantics.
+    """
+    if dt is None or dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _validate_payload(req) -> None:
@@ -107,6 +129,11 @@ def ingest_outcome(db: Session, req) -> dict:
                 "reporting -- an unprotected retry would double-count real outcomes."
             ),
         )
+
+    # Normalize BEFORE validation -- _validate_payload() and every ordering
+    # comparison below assume a naive UTC datetime. See _to_naive_utc()'s
+    # docstring for the real bug this closes.
+    req.outcome_context.date = _to_naive_utc(req.outcome_context.date)
 
     _validate_payload(req)
 
