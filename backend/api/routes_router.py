@@ -1189,7 +1189,16 @@ def route_payload(
 
         # Determine if raw payload should be stored for this department
         _pruning_fired   = result.get("tokens_saved_by_pruning", 0) > 0
-        _effective_budget_context = effective_budget_context(db, department, workspace_id=req.actor_workspace_id or "default") or budget_context or {}
+        # Reuses budget_context (already computed pre-commit, above) instead
+        # of a second full effective_budget_context() ledger recompute --
+        # raw_payload_logging_enabled/raw_retention_days are department
+        # CONFIG, not spend, so they're identical before and after this
+        # request's own transaction commits. One of 3 redundant recomputes
+        # per control-mode request found via a real, measured live-latency
+        # investigation this session (a synthetic-mode request took 4-8s+
+        # with the real model call skipped) -- see routes_router.py's other
+        # two effective_budget_context() call sites for the rest of the fix.
+        _effective_budget_context = budget_context or {}
         _raw_logging_on  = _effective_budget_context.get("raw_payload_logging_enabled", getattr(budget, "raw_payload_logging_enabled", False) if budget else False) or False
         _retention_days  = _effective_budget_context.get("raw_retention_days", getattr(budget, "raw_retention_days", 30) if budget else 30) or 30
         _raw_to_store    = _raw_text_for_logging[:5000] if (_pruning_fired and _raw_logging_on) else None
@@ -1250,7 +1259,30 @@ def route_payload(
             db.commit()
 
     # ── Budget stats for the response ──────────────────────────────────────────
-    response_budget_context = effective_budget_context(db, department, workspace_id=req.actor_workspace_id or "default")
+    # Built directly from `budget` (the exact DepartmentBudget row this
+    # function already resolved and, in the real-write path, already
+    # re-synced via sync_one_budget_from_ledger() a few lines up) instead
+    # of a third effective_budget_context() ledger recompute -- 2nd of 2
+    # remaining redundant recomputes closed this session (see the raw-
+    # payload-logging block above for the first, and its comment for the
+    # measured latency finding that motivated both). `budget` is always
+    # the current, correct state here: freshly synced after a real write,
+    # or untouched (correctly) in the sandbox/is_test branch where nothing
+    # was written. Only replicates the 3 fields this call site actually
+    # reads (budget_cap_usd/budget_used_pct/budget_spent_usd) -- not
+    # effective_budget_context()'s full shape, which callers elsewhere
+    # still get from the real function unchanged.
+    if budget:
+        response_budget_context = {
+            "budget_cap_usd": budget.monthly_cap_usd or 0.0,
+            "budget_spent_usd": budget.current_spend_usd or 0.0,
+            "budget_used_pct": (
+                round((budget.current_spend_usd or 0.0) / budget.monthly_cap_usd * 100, 1)
+                if budget.monthly_cap_usd else 0.0
+            ),
+        }
+    else:
+        response_budget_context = None
     if work_item and work_item.monthly_ai_budget is not None and work_item.monthly_ai_budget > 0:
         project_spend_after = project_spend_month + (0.0 if req.is_test else float(result["cost_usd"]))
         budget_used_pct = round(
