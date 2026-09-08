@@ -82,6 +82,25 @@ class UniversalRequestContext(BaseModel):
     auto_prune: bool = True
 
 
+class UniversalOutcomeContext(BaseModel):
+    """
+    mode="outcome" payload: what happened to the business work a system
+    previously linked AI activity to (e.g. a Salesforce Opportunity's
+    StageName, a support ticket's resolution, a claim's approval) --
+    mirrors database.models.WorkItemOutcome's canonical columns exactly,
+    matching core/outcome_contract.py's field names. See
+    core/outcome_ingestion.py for how this gets written.
+    """
+    status: Optional[str] = None
+    value: Optional[float] = None
+    date: Optional[datetime] = None
+    success: Optional[bool] = None
+    is_closed: Optional[bool] = None
+    owner: Optional[str] = None
+    source_object: Optional[str] = None
+    external_id: Optional[str] = None
+
+
 class UniversalObservedUsageContext(BaseModel):
     """
     mode="observe" payload: a system reporting an AI call it already made
@@ -146,6 +165,7 @@ class RouteRequest(BaseModel):
     work_context:           Optional[UniversalWorkContext] = Field(default=None, alias="work")
     request_context:        Optional[UniversalRequestContext] = Field(default=None, alias="request")
     usage_context:          Optional[UniversalObservedUsageContext] = Field(default=None, alias="usage")
+    outcome_context:        Optional[UniversalOutcomeContext] = Field(default=None, alias="outcome")
 
     class Config:
         populate_by_name = True
@@ -153,16 +173,27 @@ class RouteRequest(BaseModel):
 
 def _normalize_universal_request(req: RouteRequest) -> RouteRequest:
     """Translate the universal envelope into the existing flat routing inputs."""
-    if req.mode not in ("control", "observe"):
+    if req.mode not in ("control", "observe", "outcome"):
         raise HTTPException(
             status_code=400,
-            detail="POST /api/route supports mode='control' or mode='observe'.",
+            detail="POST /api/route supports mode='control', mode='observe', or mode='outcome'.",
         )
     if req.mode == "observe" and not req.usage_context:
         raise HTTPException(
             status_code=422,
             detail="mode='observe' requires a usage context (model_name, input_tokens, output_tokens).",
         )
+    if req.mode == "outcome":
+        if not req.work_context:
+            raise HTTPException(
+                status_code=422,
+                detail="mode='outcome' requires a work object identifying which business record this outcome belongs to.",
+            )
+        if not req.outcome_context:
+            raise HTTPException(
+                status_code=422,
+                detail="mode='outcome' requires an outcome object (status, value, date, success, is_closed).",
+            )
     if req.source_context:
         req.source_platform = req.source_context.platform
         req.actor_workspace_id = req.source_context.workspace_id
@@ -337,6 +368,9 @@ class RouteResponse(BaseModel):
     work_item_name:             Optional[str] = None
     provider:                   Optional[str] = None
     model_mode:                 str = "simulated"
+    # mode="outcome"-only fields -- neutral/None for control and observe.
+    outcome_recorded:           Optional[bool] = None
+    current_state_updated:      Optional[bool] = None
 
 
 def _resolve_department(db: Session, req: RouteRequest) -> str:
@@ -796,6 +830,35 @@ def route_payload(
     """
     req = _normalize_universal_request(req)
     _check_workspace_api_key(db, (req.actor_workspace_id or "").strip() or "default", x_costpilot_key)
+
+    if req.mode == "outcome":
+        # Thin dispatcher, deliberately -- the actual resolution/
+        # idempotency/write/conflict logic lives in core/outcome_ingestion.py
+        # so it stays callable from anywhere this grows to (a future direct
+        # endpoint, an SDK's track_outcome()) without duplicating it here.
+        # See that module's docstring for the full design reasoning.
+        from core.outcome_ingestion import ingest_outcome
+        result = ingest_outcome(db, req)
+        return RouteResponse(
+            governed_request_id=result["governed_request_id"],
+            department=result["department"],
+            complexity="OUTCOME",
+            routing_decision="OUTCOME",
+            routing_reason=(
+                "Duplicate event_id; original outcome unchanged."
+                if result["duplicate"] else
+                "Reported via mode='outcome'; no routing decision was made by CostPilot."
+            ),
+            model_name="",
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            budget_used_pct=0.0,
+            budget_remaining_usd=0.0,
+            work_item_id=result["work_item_id"],
+            outcome_recorded=result["outcome_recorded"],
+            current_state_updated=result["current_state_updated"],
+        )
 
     if req.event_id:
         # Idempotency: a resubmission of the same event_id (a retry, a

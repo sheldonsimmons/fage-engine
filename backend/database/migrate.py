@@ -426,6 +426,44 @@ def run_migrations():
         # yet -- that's provisioned per customer when there's a real request,
         # not built speculatively here.
         #
+        # Universal Outcome Ingestion (core/outcome_ingestion.py) columns.
+        # event_id + the composite unique index below is the same
+        # workspace-scoped idempotency pattern as
+        # uq_token_transactions_workspace_event_id above, applied to
+        # outcome events instead of transactions -- and, unlike that
+        # column, mandatory at the API layer (see ingest_outcome()) rather
+        # than optional, since outcome writes drive business-value
+        # reporting and duplicate delivery would double-count it.
+        try:
+            ensure_column(conn, "work_item_outcome_events", "event_id", "VARCHAR")
+        except Exception:
+            conn.rollback()
+        try:
+            ensure_column(conn, "work_item_outcome_events", "is_simulation", "BOOLEAN DEFAULT FALSE")
+        except Exception:
+            conn.rollback()
+        try:
+            # WorkItemOutcome already has source_system; WorkItemOutcomeEvent
+            # never did, because until Universal Outcome Ingestion every
+            # event for one WorkItem came from the same adapter/platform.
+            # Needed now so two disagreeing sources both get their own
+            # history row without losing which one said what.
+            ensure_column(conn, "work_item_outcome_events", "source_system", "VARCHAR")
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_work_item_outcome_events_workspace_event_id "
+                "ON work_item_outcome_events (workspace_id, event_id) WHERE event_id IS NOT NULL"
+            ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            ensure_column(conn, "work_item_outcomes", "is_simulation", "BOOLEAN DEFAULT FALSE")
+        except Exception:
+            conn.rollback()
+
         # Uses its OWN connection, deliberately not the shared `conn` above.
         # The trial_accounts loop just above issues raw ALTER TABLE ADD
         # COLUMN statements without IF NOT EXISTS, which fail (columns

@@ -638,6 +638,14 @@ def _run_outcome_query(
     scope = workspace_filter(WorkItem, workspace_id)
     if scope is not None:
         q = q.filter(scope)
+    # Synthetic/test outcome events (Universal Connection's "Send Test
+    # Event" flow, core/outcome_ingestion.py) must never inflate real
+    # business-impact reporting -- same guarantee TokenTransaction.
+    # is_simulation already gives the activity side. NULL-safe: rows
+    # written before this column existed have is_simulation=False by
+    # column default (see database/migrate.py), not NULL, so `.isnot(True)`
+    # is exact here, not a defensive NULL-handling choice.
+    q = q.filter(WorkItemOutcome.is_simulation.isnot(True))
     if account is not None:
         q = q.filter(WorkItem.account_id == account.id)
     if filters.get("outcome_status"):
@@ -1117,7 +1125,15 @@ def compute_outcome_coverage(
     work_items_touched = len(touched_ids)
     outcomes_with_data = (
         db.query(func.count(WorkItemOutcome.id))
-        .filter(WorkItemOutcome.work_item_id.in_(touched_ids))
+        .filter(
+            WorkItemOutcome.work_item_id.in_(touched_ids),
+            # Same synthetic-test-event exclusion as _run_outcome_query() --
+            # this is a separate raw query (see this function's docstring
+            # for why: coverage needs one intersecting query, not a merge
+            # of two independent ones), so it needs its own copy of the
+            # filter rather than inheriting it.
+            WorkItemOutcome.is_simulation.isnot(True),
+        )
         .scalar()
         if touched_ids else 0
     )

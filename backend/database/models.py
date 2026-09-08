@@ -328,7 +328,12 @@ class WorkItemOutcome(Base):
     external_id       = Column(String, nullable=False, index=True)
     source_modified_at = Column(DateTime, nullable=True)  # source system's own LastModifiedDate
     last_synced_at    = Column(DateTime, nullable=False, default=datetime.utcnow)
-    retrieval_method  = Column(String, nullable=False, default="sync")  # webhook | sync | on_demand
+    retrieval_method  = Column(String, nullable=False, default="sync")  # webhook | sync | on_demand | import | push
+    # True for synthetic/test traffic (Universal Connection's "Send Test
+    # Event" flow, core/outcome_ingestion.py) -- excluded from real
+    # business-impact reporting the same way TokenTransaction.is_simulation
+    # already excludes synthetic AI activity.
+    is_simulation     = Column(Boolean, nullable=False, default=False)
     created_at        = Column(DateTime, default=datetime.utcnow)
     updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -352,6 +357,23 @@ class WorkItemOutcomeEvent(Base):
     outcome_success = Column(Boolean, nullable=True)
     is_closed       = Column(Boolean, nullable=True)
     retrieval_method = Column(String, nullable=False, default="sync")
+    # Which platform reported THIS specific history row -- absent until
+    # Universal Outcome Ingestion, since every event for one WorkItem used
+    # to come from a single adapter/platform. Lets two disagreeing sources
+    # (core/outcome_ingestion.py's "two systems disagree" rule) each keep
+    # their own attributed row instead of one overwriting the other's
+    # provenance.
+    source_system   = Column(String, nullable=True)
+    # Client-supplied idempotency key (mandatory for Universal Outcome
+    # Ingestion calls, see core/outcome_ingestion.py) -- same
+    # (workspace_id, event_id)-scoped uniqueness pattern as
+    # TokenTransaction.event_id, so two different customers can safely
+    # reuse the same event_id string. Nullable because pre-existing
+    # pull-sync-written rows (core/outcome_adapters/*.py) never had one and
+    # still don't need one -- CostPilot is the caller on that path, not an
+    # external system replaying a webhook.
+    event_id        = Column(String, nullable=True, index=True)
+    is_simulation   = Column(Boolean, nullable=False, default=False)
     recorded_at     = Column(DateTime, default=datetime.utcnow)
 
     work_item = relationship("WorkItem")
