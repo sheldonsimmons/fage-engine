@@ -117,6 +117,12 @@ def get_connector_contract():
                 "provider key. No prompt is sent or pruned; you're telling CostPilot what happened, "
                 "not asking it to happen."
             ),
+            "outcome": (
+                "Report what happened to the business work an earlier control/observe call was "
+                "linked to -- approved, closed won, resolved, whatever your system's own outcome "
+                "language is. CostPilot doesn't need to know your platform's schema; you translate "
+                "it into this one standard shape."
+            ),
         },
         "control": {
             "required": ["source.platform", "source.workspace_id", "request.content"],
@@ -198,6 +204,46 @@ def get_connector_contract():
                     "input_tokens": 1200,
                     "output_tokens": 340,
                     "cost_usd": 0.0021,
+                },
+            },
+        },
+        "outcome": {
+            "required": ["source.platform", "source.workspace_id", "work", "outcome", "event_id"],
+            "optional": [
+                "outcome.value",
+                "outcome.success",
+                "outcome.is_closed",
+                "outcome.owner",
+                "outcome.source_object",
+                "outcome.external_id",
+                "connection_key",
+            ],
+            "notes": (
+                "event_id is REQUIRED for mode=\"outcome\" (optional for control/observe) -- outcome "
+                "data drives business-value reporting, and a resubmitted event_id replays the "
+                "original result instead of double-counting it. work identifies the SAME record an "
+                "earlier control/observe call reported activity for (same work.external_id + "
+                "source_platform); set work.sync_if_missing=true if this is the first call CostPilot "
+                "has seen for that record. A stale or out-of-order outcome.date is still recorded in "
+                "full history but never overwrites more-recent current state."
+            ),
+            "example": {
+                "contract_version": CONTRACT_VERSION,
+                "mode": "outcome",
+                "event_id": "claim-84721-approved-2026-09-08",
+                "source": {"platform": "Custom Claims App", "workspace_id": "acme-prod"},
+                "work": {
+                    "external_id": "CLAIM-84721",
+                    "type": "claim",
+                    "source_platform": "Custom Claims App",
+                    "sync_if_missing": True,
+                },
+                "outcome": {
+                    "status": "approved",
+                    "value": 12500,
+                    "success": True,
+                    "is_closed": True,
+                    "date": "2026-09-08T15:00:00Z",
                 },
             },
         },

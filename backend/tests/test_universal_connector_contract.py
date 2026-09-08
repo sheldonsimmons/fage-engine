@@ -339,6 +339,16 @@ def test_connector_contract_documents_observe_mode_with_its_own_example():
     assert contract["observe"]["example"]["usage"]["model_name"]
 
 
+def test_connector_contract_documents_outcome_mode_with_its_own_example():
+    contract = get_connector_contract()
+    assert "event_id" in contract["outcome"]["required"], "event_id is mandatory for mode=\"outcome\""
+    assert "work" in contract["outcome"]["required"]
+    assert "outcome" in contract["outcome"]["required"]
+    assert contract["outcome"]["example"]["mode"] == "outcome"
+    assert contract["outcome"]["example"]["event_id"]
+    assert contract["outcome"]["example"]["outcome"]["status"]
+
+
 def test_connector_manifests_report_observe_as_available():
     catalog = list_connector_manifests()
     assert all(item["modes"]["observe"] == "available" for item in catalog["connectors"])

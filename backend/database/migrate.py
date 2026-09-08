@@ -452,6 +452,13 @@ def run_migrations():
         except Exception:
             conn.rollback()
         try:
+            # Mirrors TokenTransaction.connection_key -- lets Universal
+            # Connection verification scope an outcome event to exactly one
+            # connection instead of a looser workspace+platform match.
+            ensure_column(conn, "work_item_outcome_events", "connection_key", "VARCHAR")
+        except Exception:
+            conn.rollback()
+        try:
             conn.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_work_item_outcome_events_workspace_event_id "
                 "ON work_item_outcome_events (workspace_id, event_id) WHERE event_id IS NOT NULL"

@@ -21,7 +21,7 @@ from typing import Optional
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from database.models import IntegrationConnection, TokenTransaction
+from database.models import IntegrationConnection, TokenTransaction, WorkItemOutcomeEvent
 
 STALE_AFTER = timedelta(hours=24)
 
@@ -39,6 +39,30 @@ def connection_scope(connection: IntegrationConnection):
         (TokenTransaction.workspace_id == connection.workspace_id)
         & (func.lower(TokenTransaction.source_platform) == connection.platform.lower())
         & (TokenTransaction.connection_key.is_(None))
+    )
+    if keyed is not None:
+        return or_(keyed, platform_fallback)
+    return platform_fallback
+
+
+def outcome_connection_scope(connection: IntegrationConnection):
+    """
+    connection_scope()'s sibling for WorkItemOutcomeEvent (Universal
+    Outcome Ingestion, core/outcome_ingestion.py) -- same exact-key-or-
+    workspace+platform-fallback shape, just against source_system instead
+    of TokenTransaction's source_platform (WorkItemOutcomeEvent has no
+    source_platform column; source_system is its equivalent, matching
+    WorkItemOutcome's existing column of the same name). A separate
+    function rather than parameterizing connection_scope() itself -- the
+    two tables don't share a column name for "which platform reported
+    this," so a single generic implementation would need per-model special
+    casing anyway.
+    """
+    keyed = WorkItemOutcomeEvent.connection_key == connection.connection_key if connection.connection_key else None
+    platform_fallback = (
+        (WorkItemOutcomeEvent.workspace_id == connection.workspace_id)
+        & (func.lower(WorkItemOutcomeEvent.source_system) == connection.platform.lower())
+        & (WorkItemOutcomeEvent.connection_key.is_(None))
     )
     if keyed is not None:
         return or_(keyed, platform_fallback)

@@ -374,6 +374,11 @@ class WorkItemOutcomeEvent(Base):
     # external system replaying a webhook.
     event_id        = Column(String, nullable=True, index=True)
     is_simulation   = Column(Boolean, nullable=False, default=False)
+    # Mirrors TokenTransaction.connection_key -- lets Universal Connection
+    # verification (core/connection_status.py) scope an outcome event to
+    # exactly one connection, the same way it already scopes activity
+    # events, instead of falling back to a looser workspace+platform match.
+    connection_key  = Column(String, nullable=True, index=True)
     recorded_at     = Column(DateTime, default=datetime.utcnow)
 
     work_item = relationship("WorkItem")

@@ -193,6 +193,7 @@ def ingest_outcome(db: Session, req) -> dict:
         is_closed=outcome.is_closed,
         retrieval_method=RETRIEVAL_METHOD_PUSH,
         source_system=source_system,
+        connection_key=req.connection_key,
         event_id=req.event_id,
         is_simulation=bool(req.synthetic_simulation),
         recorded_at=datetime.utcnow(),

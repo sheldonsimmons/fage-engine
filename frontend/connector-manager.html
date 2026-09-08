@@ -294,10 +294,10 @@
     // business context. Backed by POST/GET /api/integrations/connections/
     // universal and GET .../verify-test-event (api/routes_connections_
     // universal.py). Never touches the Salesforce/ServiceNow OAuth flows.
-    let ucState = { step: 1, connection: null, apiKey: null, keyRevealed: false, verifyPoll: null };
+    let ucState = { step: 1, connection: null, apiKey: null, keyRevealed: false, verifyPoll: null, testEventSent: false };
 
     function ucOpen() {
-      ucState = { step: 1, connection: null, apiKey: null, keyRevealed: false, verifyPoll: null };
+      ucState = { step: 1, connection: null, apiKey: null, keyRevealed: false, verifyPoll: null, testEventSent: false };
       document.getElementById("ucOverlay").hidden = false;
       ucRenderStep();
     }
@@ -380,6 +380,30 @@
         // step, which a live browser pass against production caught.
         source: { platform: ucState.connection.platform, workspace_id: ucState.connection.workspace_id, agent_name: `${ucState.connection.platform} Agent` },
         usage: { model_name: "gpt-4o-mini", input_tokens: 120, output_tokens: 40, cost_usd: 0.0008 },
+        // A stable, connection-scoped identity -- not shown as "required"
+        // in Step 2's minimal snippet (work is optional for mode=observe),
+        // but included on the actual test event so the optional Step 3
+        // "Also send a test outcome" button has a real work item to
+        // resolve to, the SAME one the outcome test event references. See
+        // ucOutcomePayload().
+        work: {
+          external_id: `TEST-VERIFICATION-${ucState.connection.id}`,
+          type: "test", source_platform: ucState.connection.platform, sync_if_missing: true,
+        },
+      };
+    }
+
+    function ucOutcomePayload() {
+      return {
+        mode: "outcome",
+        connection_key: ucState.connection.connection_key,
+        event_id: `test-outcome-${ucState.connection.id}-${Date.now()}`,
+        source: { platform: ucState.connection.platform, workspace_id: ucState.connection.workspace_id },
+        work: {
+          external_id: `TEST-VERIFICATION-${ucState.connection.id}`,
+          type: "test", source_platform: ucState.connection.platform, sync_if_missing: true,
+        },
+        outcome: { status: "approved", value: 100, success: true, is_closed: true, date: new Date().toISOString() },
       };
     }
 
@@ -470,6 +494,10 @@
           <button type="button" class="uc-primary-btn" id="ucSendTestBtn" onclick="ucSendTestEvent()">Send Test Event</button>
         </div>
         <div id="ucVerifyResult" style="margin-top:16px;"></div>
+        <div class="uc-outcome-row" style="margin-top:12px;${ucState.testEventSent ? "" : " display:none;"}" id="ucOutcomeRow">
+          <p class="uc-subtitle" style="margin:0 0 8px;">Optional — also report what happened to that same test record, using the same <code>work.external_id</code>.</p>
+          <button type="button" class="uc-secondary-btn" id="ucSendOutcomeBtn" onclick="ucSendTestOutcome()">Also send a test outcome</button>
+        </div>
         <div class="uc-actions">
           <button type="button" class="uc-secondary-btn" onclick="ucState.step = 2; ucRenderStep();">Back</button>
           <button type="button" class="uc-primary-btn" id="ucStep3Continue" onclick="ucState.step = 4; ucRenderStep();" disabled>Continue</button>
@@ -483,6 +511,7 @@
       connection_association: "Connection matched",
       agent_recognition: "Agent recognized",
       reporting_visibility: "Visible in reporting",
+      outcome_reporting: "Outcome recorded",
     };
 
     function ucChecklistHtml(steps) {
@@ -523,8 +552,40 @@
         return;
       }
 
+      ucState.testEventSent = true;
+      const outcomeRow = document.getElementById("ucOutcomeRow");
+      if (outcomeRow) outcomeRow.style.display = "";
+
       btn.textContent = "Verifying…";
       ucPollVerification();
+    }
+
+    async function ucSendTestOutcome() {
+      const btn = document.getElementById("ucSendOutcomeBtn");
+      btn.disabled = true;
+      btn.textContent = "Sending…";
+      try {
+        // References the SAME work.external_id as the activity test event
+        // (ucContractPayload()/ucOutcomePayload() share it) so the
+        // verification checklist's "Outcome recorded" step can confirm
+        // both resolved to the same work item.
+        const payload = { ...ucOutcomePayload(), synthetic_simulation: true };
+        const response = await fetch("/api/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CostPilot-Key": ucState.apiKey },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.detail || `Request failed (${response.status})`);
+        }
+        btn.textContent = "Test outcome sent — re-checking…";
+        ucPollVerification();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Also send a test outcome";
+        alert(`Could not send test outcome: ${err.message}`);
+      }
     }
 
     function ucPollVerification() {
@@ -535,17 +596,20 @@
           const result = await apiGet(`/api/integrations/connections/universal/${ucState.connection.id}/verify-test-event`);
           const resultEl = document.getElementById("ucVerifyResult");
           const btn = document.getElementById("ucSendTestBtn");
+          const outcomeBtn = document.getElementById("ucSendOutcomeBtn");
           if (result.fully_verified) {
             clearInterval(ucState.verifyPoll);
             resultEl.innerHTML = `<div class="uc-verified-banner">✓ Fully Verified</div>${ucChecklistHtml(result.steps)}`;
             btn.disabled = false;
             btn.textContent = "Send Another Test Event";
+            if (outcomeBtn) { outcomeBtn.disabled = false; outcomeBtn.textContent = "Also send a test outcome"; }
             document.getElementById("ucStep3Continue").disabled = false;
           } else if (attempts >= 8) {
             clearInterval(ucState.verifyPoll);
             resultEl.innerHTML = ucChecklistHtml(result.steps);
             btn.disabled = false;
             btn.textContent = "Send Test Event";
+            if (outcomeBtn) { outcomeBtn.disabled = false; outcomeBtn.textContent = "Also send a test outcome"; }
           } else {
             resultEl.innerHTML = ucChecklistHtml(result.steps);
           }

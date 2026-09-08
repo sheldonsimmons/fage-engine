@@ -118,6 +118,13 @@ def test_verify_test_event_passes_every_step_for_a_real_keyed_event():
     resp = client.get(f"/api/integrations/connections/universal/{connection['id']}/verify-test-event")
     body = resp.json()
     for step in body["steps"]:
+        # outcome_reporting is optional -- no mode="outcome" test event was
+        # sent in this activity-only test, so it's correctly not_attempted
+        # (passed=None) rather than failed, and must not block
+        # fully_verified. Every required step still must be exactly True.
+        if step["key"] == "outcome_reporting":
+            assert step["passed"] is None, f"outcome_reporting: {step['detail']}"
+            continue
         assert step["passed"] is True, f"{step['key']} failed: {step['detail']}"
     assert body["fully_verified"] is True
 
@@ -162,3 +169,81 @@ def test_verify_test_event_ignores_events_outside_lookback_window():
     resp = client.get(f"/api/integrations/connections/universal/{connection['id']}/verify-test-event")
     assert resp.json()["fully_verified"] is False
     assert resp.json()["steps"][0]["passed"] is False
+
+
+def test_verify_test_event_outcome_step_passes_when_outcome_test_event_matches_the_activity_one():
+    client, db = _client()
+    _seed_workspace(db)
+    create = client.post("/api/integrations/connections/universal", json={
+        "workspace_id": "WS-1", "platform": "Custom Claims App",
+    }).json()
+    connection = create["connection"]
+    connection_key = connection["connection_key"]
+
+    activity = client.post("/api/route", json={
+        "mode": "observe",
+        "connection_key": connection_key,
+        "source": {"platform": "Custom Claims App", "workspace_id": "WS-1", "agent_name": "Claims Assistant"},
+        "work": {
+            "external_id": "CLAIM-TEST-1", "type": "claim",
+            "source_platform": "Custom Claims App", "sync_if_missing": True,
+        },
+        "usage": {"model_name": "gpt-4.1-mini", "input_tokens": 100, "output_tokens": 50},
+    })
+    assert activity.status_code == 200
+
+    outcome = client.post("/api/route", json={
+        "mode": "outcome",
+        "connection_key": connection_key,
+        "event_id": "verify-outcome-evt-1",
+        "source": {"platform": "Custom Claims App", "workspace_id": "WS-1"},
+        "work": {
+            "external_id": "CLAIM-TEST-1", "type": "claim",
+            "source_platform": "Custom Claims App", "sync_if_missing": True,
+        },
+        "outcome": {"status": "approved", "value": 500.0, "success": True, "date": datetime.utcnow().isoformat()},
+    })
+    assert outcome.status_code == 200
+    assert outcome.json()["outcome_recorded"] is True
+
+    resp = client.get(f"/api/integrations/connections/universal/{connection['id']}/verify-test-event")
+    body = resp.json()
+    steps_by_key = {s["key"]: s for s in body["steps"]}
+    assert steps_by_key["outcome_reporting"]["passed"] is True, steps_by_key["outcome_reporting"]["detail"]
+    assert body["fully_verified"] is True
+
+
+def test_verify_test_event_outcome_step_fails_when_outcome_targets_a_different_workitem():
+    client, db = _client()
+    _seed_workspace(db)
+    create = client.post("/api/integrations/connections/universal", json={
+        "workspace_id": "WS-1", "platform": "Custom Claims App",
+    }).json()
+    connection = create["connection"]
+    connection_key = connection["connection_key"]
+
+    client.post("/api/route", json={
+        "mode": "observe",
+        "connection_key": connection_key,
+        "source": {"platform": "Custom Claims App", "workspace_id": "WS-1", "agent_name": "Claims Assistant"},
+        "work": {
+            "external_id": "CLAIM-A", "type": "claim",
+            "source_platform": "Custom Claims App", "sync_if_missing": True,
+        },
+        "usage": {"model_name": "gpt-4.1-mini", "input_tokens": 100, "output_tokens": 50},
+    })
+    client.post("/api/route", json={
+        "mode": "outcome",
+        "connection_key": connection_key,
+        "event_id": "verify-outcome-evt-2",
+        "source": {"platform": "Custom Claims App", "workspace_id": "WS-1"},
+        "work": {
+            "external_id": "CLAIM-B", "type": "claim",
+            "source_platform": "Custom Claims App", "sync_if_missing": True,
+        },
+        "outcome": {"status": "approved", "date": datetime.utcnow().isoformat()},
+    })
+
+    resp = client.get(f"/api/integrations/connections/universal/{connection['id']}/verify-test-event")
+    steps_by_key = {s["key"]: s for s in resp.json()["steps"]}
+    assert steps_by_key["outcome_reporting"]["passed"] is False

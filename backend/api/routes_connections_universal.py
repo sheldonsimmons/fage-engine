@@ -128,8 +128,8 @@ def verify_test_event(connection_id: int, db: Session = Depends(get_db)):
 
     steps = []
 
-    def step(key: str, label: str, passed: Optional[bool], detail: str):
-        steps.append({"key": key, "label": label, "passed": passed, "detail": detail})
+    def step(key: str, label: str, passed: Optional[bool], detail: str, optional: bool = False):
+        steps.append({"key": key, "label": label, "passed": passed, "detail": detail, "optional": optional})
 
     scope = connection_scope(connection)
     test_row = (
@@ -154,6 +154,8 @@ def verify_test_event(connection_id: int, db: Session = Depends(get_db)):
             ("reporting_visibility", "Visible in reporting"),
         ]:
             step(key, label, None, "Not attempted — no test event to check yet.")
+        step("outcome_reporting", "Outcome recorded", None,
+             "Not attempted — no test event to check yet.", optional=True)
         return {"connection_id": connection_id, "fully_verified": False, "steps": steps}
 
     step("authentication", "Authentication", True, "A test event was accepted and recorded.")
@@ -220,7 +222,55 @@ def verify_test_event(connection_id: int, db: Session = Depends(get_db)):
          if visible else
          "The event was not found through the trusted reporting layer's query path.")
 
-    fully_verified = all(s["passed"] is True for s in steps)
+    # Optional 7th step -- not every integration sends an outcome as part
+    # of its test event (Universal Outcome Ingestion is a separate call,
+    # mode="outcome", from the activity test event checked above), so this
+    # never blocks the connection from reaching status="connected" on its
+    # own. See outcome_connection_scope()'s docstring for why this can't
+    # just reuse connection_scope().
+    from core.connection_status import outcome_connection_scope
+    from database.models import WorkItemOutcome, WorkItemOutcomeEvent
+
+    outcome_event = (
+        db.query(WorkItemOutcomeEvent)
+        .filter(
+            outcome_connection_scope(connection),
+            WorkItemOutcomeEvent.recorded_at >= datetime.utcnow() - TEST_EVENT_LOOKBACK,
+        )
+        .order_by(WorkItemOutcomeEvent.recorded_at.desc())
+        .first()
+    )
+    if not outcome_event:
+        step("outcome_reporting", "Outcome recorded", None,
+             "Not tested — optional. Send a mode=\"outcome\" test event for the same work.external_id "
+             "to also verify outcome reporting.", optional=True)
+    else:
+        matches_activity = outcome_event.work_item_id == test_row.work_item_id
+        current = db.query(WorkItemOutcome).filter_by(work_item_id=outcome_event.work_item_id).first()
+        outcome_visible = current is not None and current.outcome_status == outcome_event.outcome_status
+        outcome_passed = bool(matches_activity and outcome_visible)
+        if not matches_activity:
+            outcome_detail = (
+                "An outcome event was received, but it resolved to a different work item than the "
+                "test activity event above."
+            )
+        elif not outcome_visible:
+            outcome_detail = "An outcome event was received but is not yet reflected in current-state reporting."
+        else:
+            outcome_detail = (
+                "The outcome event matched the same work item as the test activity event and is "
+                "visible in current-state reporting."
+            )
+        step("outcome_reporting", "Outcome recorded", outcome_passed, outcome_detail, optional=True)
+
+    # Optional steps that were never attempted (passed is None) don't block
+    # "fully_verified" -- only an optional step that WAS attempted and
+    # failed does. Every required step still must be exactly True.
+    fully_verified = all(
+        s["passed"] is True
+        for s in steps
+        if not (s["optional"] and s["passed"] is None)
+    )
     if fully_verified and connection.status != "connected":
         connection.status = "connected"
         connection.last_success_at = datetime.utcnow()
