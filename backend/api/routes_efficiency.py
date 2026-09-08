@@ -4220,24 +4220,36 @@ def _ask_costpilot_answer(
             RegisteredAgent.archived.isnot(True)
         )
         agents = agent_query.all()
-        lifetime_query = db.query(
-            AuditEvent.agent_id,
-            func.count(AuditEvent.id),
-            func.max(AuditEvent.timestamp),
-        ).filter(AuditEvent.agent_id.isnot(None))
-        if request.workspace_id:
-            lifetime_query = lifetime_query.filter(
-                AuditEvent.workspace_id == request.workspace_id
-            )
-        lifetime_rows = {
-            str(agent_id): {
-                "request_count": int(request_count or 0),
-                "last_used_at": last_used_at,
+        # Lifetime usage is read from TokenTransaction -- the same ledger
+        # current_rows/current_by_id above already use for the in-period
+        # counts -- not AuditEvent. Reproduced live: 8 agents in the
+        # historical demo workspace each showed hundreds of in-period
+        # requests (from current_by_id/TokenTransaction) right next to
+        # "Never used / 0 lifetime requests" (from AuditEvent), because
+        # that workspace's bulk-seeded historical TokenTransaction rows
+        # were never matched 1:1 by AuditEvent rows for the same agent
+        # ids -- AuditEvent is a decision/audit log, not a complete
+        # activity ledger, and was never a safe proxy for "has this agent
+        # ever been used." Scoped to just this workspace's resolved agent
+        # ids rather than a separate workspace_id filter, since agent_id
+        # already implies the workspace via the RegisteredAgent query above.
+        agent_ids = [agent.id for agent in agents]
+        lifetime_rows = {}
+        if agent_ids:
+            lifetime_query = db.query(
+                TokenTransaction.agent_id,
+                func.count(TokenTransaction.id),
+                func.max(TokenTransaction.timestamp),
+            ).filter(TokenTransaction.agent_id.in_(agent_ids))
+            lifetime_rows = {
+                str(agent_id): {
+                    "request_count": int(request_count or 0),
+                    "last_used_at": last_used_at,
+                }
+                for agent_id, request_count, last_used_at in lifetime_query.group_by(
+                    TokenTransaction.agent_id
+                ).all()
             }
-            for agent_id, request_count, last_used_at in lifetime_query.group_by(
-                AuditEvent.agent_id
-            ).all()
-        }
         threshold = max(1, int(parsed.get("usage_threshold") or 10))
         requested_status = parsed.get("usage_status") or (
             "unused" if intent == "inactive" else "all"

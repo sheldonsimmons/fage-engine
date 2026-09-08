@@ -238,7 +238,14 @@ def ask_interpretation_label(parsed: dict) -> str:
     intent = str(parsed.get("intent") or "overview").replace("_", " ")
     entity = str(parsed.get("entity") or "overview").replace("_", " ")
     metric = str(parsed.get("metric") or "activity").replace("_", " ")
-    return f"{entity.title()} {intent} using {metric}"
+    # e.g. entity="agent", intent="agent adoption" would otherwise read
+    # "Agent agent adoption using request count" -- drop the entity prefix
+    # when the intent phrase already opens with the same word.
+    if intent.split()[0] == entity:
+        subject = intent[:1].upper() + intent[1:]
+    else:
+        subject = f"{entity.title()} {intent}"
+    return f"{subject} using {metric}"
 
 
 def validate_ask_answer_contract(parsed: dict, payload: dict) -> list[str]:
