@@ -109,7 +109,13 @@ function fmtUsd(v) {
   if (v < 0.0001) return "$" + v.toFixed(6);
   if (v < 0.01)   return "$" + v.toFixed(4);
   if (v < 1)      return "$" + v.toFixed(4);
-  return "$" + v.toFixed(2);
+  // Thousand separators for anything $1+ -- a real $7,700,287.00 (a
+  // closed-won/pipeline total, not a per-call cost) rendered as
+  // "$7700287.00" with no way to tell at a glance whether that's seven
+  // million or seven hundred thousand. toFixed(2) alone never added
+  // them; toLocaleString does, without changing the 2-decimal precision
+  // every existing caller of this function already expects.
+  return "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtNum(v) {
