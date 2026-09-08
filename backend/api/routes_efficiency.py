@@ -298,6 +298,21 @@ def _ask_correct_typos(text: str) -> str:
     return " ".join(corrected)
 
 
+# Generic, non-Sales outcome-decision vocabulary -- claims approved/
+# denied, cases declined, tickets closed unsuccessful. Shared between the
+# entity=="context" detector (a claim/ticket/incident question only
+# counts as "about a WorkItem" when it's actually asking about an outcome
+# decision, not a plain volume question -- "how many incidents..." stays
+# entity="overview") and the outcome_filter detector just below it, so
+# the two "does this question care about an outcome" checks can't
+# silently drift apart. Deliberately excludes "resolved"/"completed"/
+# "delivered" alone -- too common in unrelated project-status phrasing
+# having nothing to do with outcome success/failure.
+_ASK_OUTCOME_DECISION_WORDS_RE = re.compile(
+    r"\b(?:won|lost|approved|denied|rejected|declined|unsuccessful)\b"
+)
+
+
 def _ask_intent(question: str, default_days: int) -> dict:
     """Translate common executive questions into a bounded reporting intent."""
     text = " ".join((question or "").lower().split())
@@ -388,7 +403,23 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # matched the plural, since "opportunities" doesn't contain it as
         # a substring ("opportunit-y" vs "opportunit-ies").
         "project", "matter", "opportunit", "business context", "work item"
-    )) or re.search(r"\bdeals?\b", text):
+    )) or re.search(r"\bdeals?\b", text) or (
+        # claim(s)/ticket(s)/incident(s): the same generic-noun gap for
+        # non-Sales domains Universal Outcome Ingestion opened up (a
+        # custom claims/support system pushing its own outcome data).
+        # Deliberately NOT unconditional the way deal(s) is -- "incident"/
+        # "ticket" are also extremely common in plain VOLUME questions
+        # ("how many incidents have AI activity on them?", already covered
+        # by entity="overview" and confirmed live by this file's own eval
+        # corpus), so only counts as entity="context" when outcome-
+        # decision language is ALSO present in the same question, e.g.
+        # "which approved claims..." -- see _ASK_OUTCOME_DECISION_WORDS_RE
+        # just below, shared with the outcome_filter block a few lines
+        # down so the two "does this question care about an outcome"
+        # checks can't silently drift apart.
+        re.search(r"\b(?:claims?|tickets?|incidents?)\b", text)
+        and _ASK_OUTCOME_DECISION_WORDS_RE.search(text)
+    ):
         # "deal"/"deals" is a very common synonym for "opportunity" in
         # sales-speak, confirmed missing before (fell back to entity=
         # "overview"). Word-boundary regex, not a substring check --
@@ -700,18 +731,25 @@ def _ask_intent(question: str, default_days: int) -> dict:
     # WorkItemOutcome.outcome_success without needing a new intent, the
     # same shape as usage_status above. entity=="context" is already the
     # generic "this question is about a WorkItem" bucket (triggered by
-    # "project"/"matter"/"work item"/"business context"/"deal(s)", not a
-    # Salesforce-specific word), and outcome data is no longer
-    # opportunity-only since Universal Outcome Ingestion -- but the
-    # won/lost TRIGGER WORDS below are still genuinely Sales-Opportunity
-    # vocabulary; a claims/case/ticket question wouldn't naturally use
-    # "won"/"lost" and isn't handled here. Broadening this to generic
-    # success/failure language (approved/denied, resolved/reopened, etc.)
-    # for non-Sales outcome types is real, separate follow-on work, not
-    # done here -- see the "won"/"lost"-specific response labels a few
-    # lines below and at ~4485/4993/5072, which would need the same
-    # generalization to stay accurate for a non-opportunity answer.
+    # "project"/"matter"/"work item"/"business context"/"deal(s)"/
+    # "claim(s)"/"ticket(s)"/"incident(s)", not a Salesforce-specific
+    # word), and outcome data is no longer opportunity-only since
+    # Universal Outcome Ingestion.
+    #
+    # outcome_filter is internally always "won" (outcome_success=True) or
+    # "lost" (outcome_success=False) -- that mapping is unchanged and
+    # still what every downstream filter compares against. What's new is
+    # outcome_filter_label, a SEPARATE display word: "won"/"lost" stays
+    # for genuinely Sales-Opportunity-phrased questions (unchanged
+    # behavior, existing tests), but a generic success/failure phrasing
+    # ("approved claims", "resolved cases", "which tickets failed") sets
+    # outcome_filter_label to "successful"/"unsuccessful" instead, so the
+    # response doesn't say "won" about a claim or ticket. Response text
+    # sites use outcome_filter_label together with the workspace's own
+    # context_label_plural (e.g. "Claims") instead of a hardcoded
+    # "opportunities" noun -- see _ask_costpilot_answer's context_plural.
     outcome_filter = None
+    outcome_filter_label = None
     if entity == "context":
         # \bwon\b / \blost\b, not " won " / " lost " substring checks --
         # the substring form required a literal trailing space after the
@@ -725,12 +763,31 @@ def _ask_intent(question: str, default_days: int) -> dict:
             "opportunit" in text or re.search(r"\bdeals?\b", text)
         )):
             outcome_filter = "won"
+            outcome_filter_label = "won"
         elif any(term in text for term in (
             "closed lost", "lost opportunit", "we lost", "opportunities we lost",
         )) or (re.search(r"\blost\b", text) and (
             "opportunit" in text or re.search(r"\bdeals?\b", text)
         )):
             outcome_filter = "lost"
+            outcome_filter_label = "lost"
+        # Generic, non-Sales success/failure vocabulary -- claims
+        # approved/denied, tickets resolved/failed, cases completed/
+        # rejected. Deliberately excludes "resolved" alone as a positive
+        # signal (a "reopened" case was also, at some point, "resolved"
+        # once already -- too ambiguous without more context) and excludes
+        # "completed"/"delivered" alone too (common in unrelated project-
+        # status phrasing having nothing to do with outcome success).
+        # Kept to words that are rarely used except to describe an actual
+        # outcome decision.
+        elif any(term in text for term in ("approved", "successful outcome", "successfully closed")):
+            outcome_filter = "won"
+            outcome_filter_label = "successful"
+        elif any(term in text for term in (
+            "denied", "rejected", "declined", "unsuccessful", "failed outcome",
+        )):
+            outcome_filter = "lost"
+            outcome_filter_label = "unsuccessful"
 
     comparison_key = None
     if intent in {"comparison", "change_drivers"}:
@@ -774,6 +831,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "usage_threshold": usage_threshold,
         "budget_scope": budget_scope,
         "outcome_filter": outcome_filter,
+        "outcome_filter_label": outcome_filter_label,
     }
     canonical = canonical_ask_intent(question)
     if canonical:
@@ -3866,6 +3924,12 @@ def _ask_costpilot_answer(
     direction = parsed["direction"]
     result_limit = parsed["result_limit"]
     outcome_filter = parsed.get("outcome_filter")
+    # Display word for outcome_filter -- "won"/"lost" for genuinely
+    # Sales-Opportunity-phrased questions, "successful"/"unsuccessful" for
+    # generic (claims/tickets/cases) phrasing. Falls back to "won"/"lost"
+    # for any caller that set outcome_filter directly without a label
+    # (e.g. a canonical-intent contract match), preserving old behavior.
+    outcome_filter_label = parsed.get("outcome_filter_label") or outcome_filter
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -4493,11 +4557,12 @@ def _ask_costpilot_answer(
             metric, sum(_ask_row_metric(row, metric) for row in outcome_rows)
         )
         request_total = sum(int(row.get("request_count") or 0) for row in outcome_rows)
-        outcome_label = "won" if outcome_filter == "won" else "lost"
-        title = f"Total {metric_label} on {outcome_label} opportunities"
+        outcome_label = outcome_filter_label or ("won" if outcome_filter == "won" else "lost")
+        context_noun = context_plural.lower()
+        title = f"Total {metric_label} on {outcome_label} {context_noun}"
         answer = (
             f"CostPilot recorded {value} in tracked {metric_label} across "
-            f"{len(outcome_rows)} {outcome_label} opportunities for {period_label} "
+            f"{len(outcome_rows)} {outcome_label} {context_noun} for {period_label} "
             f"({request_total:,} governed requests). This is AI activity tracked "
             f"alongside those outcomes, not evidence that the AI activity caused them."
         )
@@ -5001,7 +5066,8 @@ def _ask_costpilot_answer(
                 row for row in ranking_rows
                 if row.get("outcome_success") == (outcome_filter == "won")
             ]
-            entity_label = f"{'Won' if outcome_filter == 'won' else 'Lost'} {entity_label.lower()}"
+            outcome_adjective = outcome_filter_label or ("won" if outcome_filter == "won" else "lost")
+            entity_label = f"{outcome_adjective.capitalize()} {entity_label.lower()}"
         if metric == "risk_event_count":
             risk_request = request.model_copy(update={
                 key: value for key, value in reporting_filters.items()
@@ -5080,14 +5146,15 @@ def _ask_costpilot_answer(
                 row for row in context_rows
                 if row.get("outcome_success") == (outcome_filter == "won")
             ]
-            outcome_label = "won" if outcome_filter == "won" else "lost"
+            outcome_label = outcome_filter_label or ("won" if outcome_filter == "won" else "lost")
+            context_noun = context_plural.lower()
             outcome_spend = sum(float(row.get("spend_usd") or 0) for row in context_rows)
             outcome_requests = sum(int(row.get("request_count") or 0) for row in context_rows)
-            title = f"AI spend on {outcome_label} opportunities"
+            title = f"AI spend on {outcome_label} {context_noun}"
             answer = (
                 f"For {period_label}, CostPilot tracked ${outcome_spend:,.4f} of AI spend "
                 f"across {outcome_requests:,} requests on {len(context_rows)} {outcome_label} "
-                f"opportunities. This is AI activity tracked alongside those outcomes, not "
+                f"{context_noun}. This is AI activity tracked alongside those outcomes, not "
                 f"evidence that the AI activity caused them."
             )
         else:
