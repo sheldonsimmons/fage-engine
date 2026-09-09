@@ -357,67 +357,134 @@
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-pane" id="tab-impact">
       <style>
-        .bi-evidence-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+        .bi-evidence-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+        .bi-evidence-tag.measured { background: rgba(63,185,80,0.14); color: var(--accent-green); }
+        .bi-evidence-tag.associated { background: rgba(88,166,255,0.14); color: #58a6ff; }
+        .bi-evidence-tag.estimated { background: rgba(88,166,255,0.14); color: #58a6ff; }
         .bi-evidence-tag.early_signal { background: rgba(210,153,34,0.14); color: #d29922; }
         .bi-evidence-tag.meaningful { background: rgba(210,153,34,0.14); color: #d29922; }
         .bi-evidence-tag.executive_eligible { background: rgba(63,185,80,0.14); color: var(--accent-green); }
         .bi-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 14px; padding: 12px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; }
         .bi-trend.up { color: var(--accent-green); }
         .bi-trend.down { color: var(--accent-red); }
+        .bi-summary { font-size: 14px; line-height: 1.6; color: var(--text-primary); background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; }
+        .bi-kpi-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .bi-section { margin-top: 28px; }
+        .bi-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+        .bi-section-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+        .bi-section-sub { font-size: 11.5px; color: var(--text-muted); }
+        .bi-rank { color: var(--text-muted); font-variant-numeric: tabular-nums; width: 22px; display: inline-block; }
+        .bi-rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+        .bi-rec-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+        .bi-rec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+        .bi-rec-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+        .bi-rec-priority { font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+        .bi-rec-priority.high { background: rgba(248,81,73,0.14); color: var(--accent-red); }
+        .bi-rec-priority.medium { background: rgba(210,153,34,0.14); color: #d29922; }
+        .bi-rec-priority.low { background: rgba(139,148,158,0.14); color: var(--text-muted); }
+        .bi-rec-body { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 8px; }
+        .bi-rec-action { font-size: 12px; color: var(--text-primary); font-weight: 600; }
+        .bi-rec-impact { font-size: 11px; color: var(--accent-green); margin-top: 4px; }
       </style>
       <div id="biNoDataBanner" class="rpt-scope-banner" hidden>
         No outcome data yet — connect a system that reports business outcomes (Salesforce/ServiceNow sync, or any
         custom platform via Universal Connection's <code>mode="outcome"</code>) to see this tab populate.
       </div>
       <div id="biContent">
-        <div class="rpt-chart-title" style="display:flex;align-items:center;gap:10px">
-          <span>Outcomes tied to AI-touched work</span>
-          <span class="bi-evidence-tag" id="biEvidenceTag"></span>
-        </div>
+        <p class="bi-summary" id="biSummary">Loading…</p>
+
+        <div class="rpt-chart-title">Executive KPIs</div>
         <div class="rpt-kpi-row">
           <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Won</div>
-            <div class="rpt-kpi-value green" id="bi-won">—</div>
-            <div class="rpt-kpi-sub" id="bi-won-value">—</div>
+            <div class="bi-kpi-label-row"><span class="rpt-kpi-label">Associated Business Value</span></div>
+            <div class="rpt-kpi-value green" id="bi-assoc-value">—</div>
+            <div class="rpt-kpi-sub" id="bi-assoc-value-sub">—</div>
           </div>
           <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Lost</div>
-            <div class="rpt-kpi-value" id="bi-lost">—</div>
-            <div class="rpt-kpi-sub" id="bi-lost-value">—</div>
+            <div class="bi-kpi-label-row"><span class="rpt-kpi-label">Successful Outcomes</span><span class="bi-evidence-tag" id="bi-evidence-successful"></span></div>
+            <div class="rpt-kpi-value" id="bi-successful-outcomes">—</div>
+            <div class="rpt-kpi-sub">won opportunities + resolved support work</div>
           </div>
           <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Open</div>
-            <div class="rpt-kpi-value" id="bi-open">—</div>
-            <div class="rpt-kpi-sub" id="bi-pipeline-value">—</div>
+            <div class="bi-kpi-label-row"><span class="rpt-kpi-label">AI Investment — Successful</span></div>
+            <div class="rpt-kpi-value" id="bi-investment-successful">—</div>
+            <div class="rpt-kpi-sub">won + resolved</div>
           </div>
           <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Support Cases Resolved</div>
-            <div class="rpt-kpi-value" id="bi-support-resolved">—</div>
-            <div class="rpt-kpi-sub" id="bi-support-total">—</div>
+            <div class="bi-kpi-label-row"><span class="rpt-kpi-label">AI Investment — Unsuccessful</span></div>
+            <div class="rpt-kpi-value" id="bi-investment-unsuccessful">—</div>
+            <div class="rpt-kpi-sub">lost + unresolved</div>
           </div>
-        </div>
-        <div class="rpt-kpi-row" style="margin-top:16px">
           <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Cost per Successful Outcome</div>
+            <div class="bi-kpi-label-row"><span class="rpt-kpi-label">Cost per Successful Outcome</span><span class="bi-evidence-tag" id="bi-evidence-cost-per-outcome"></span></div>
             <div class="rpt-kpi-value" id="bi-cost-per-outcome">—</div>
             <div class="rpt-kpi-sub" id="bi-cost-per-outcome-trend">—</div>
           </div>
           <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Cost per Won Opportunity</div>
-            <div class="rpt-kpi-value" id="bi-cost-per-won">—</div>
-            <div class="rpt-kpi-sub" id="bi-cost-per-won-trend">—</div>
-          </div>
-          <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Support Cost per Resolution</div>
-            <div class="rpt-kpi-value" id="bi-cost-per-resolution">—</div>
-            <div class="rpt-kpi-sub" id="bi-cost-per-resolution-trend">—</div>
-          </div>
-          <div class="rpt-kpi">
-            <div class="rpt-kpi-label">Outcome Coverage</div>
+            <div class="bi-kpi-label-row"><span class="rpt-kpi-label">Outcome Coverage</span><span class="bi-evidence-tag" id="bi-evidence-coverage"></span></div>
             <div class="rpt-kpi-value" id="bi-coverage">—</div>
             <div class="rpt-kpi-sub">of AI-touched work with a known outcome</div>
           </div>
         </div>
+
+        <div class="bi-section">
+          <div class="bi-section-head">
+            <span class="bi-section-title">Sales Impact — Won vs. Lost</span>
+            <span class="bi-section-sub">Opportunities only</span>
+          </div>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table" id="biWonLostTable">
+              <thead><tr><th></th><th>Won</th><th>Lost</th><th>Open</th></tr></thead>
+              <tbody id="biWonLostBody"><tr><td colspan="4">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bi-section">
+          <div class="bi-section-head">
+            <span class="bi-section-title">Support Impact — Resolved vs. Unresolved</span>
+            <span class="bi-section-sub">Cases, tickets, and incidents</span>
+          </div>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table" id="biSupportTable">
+              <thead><tr><th></th><th>Resolved</th><th>Unresolved</th></tr></thead>
+              <tbody id="biSupportBody"><tr><td colspan="3">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="bi-note" style="margin-top:10px">
+            <strong>Cost per Resolution</strong> <span id="bi-cost-per-resolution">—</span>
+            <span id="bi-cost-per-resolution-trend" style="margin-left:6px"></span>
+            <span class="bi-evidence-tag" id="bi-evidence-resolution" style="margin-left:6px"></span>
+          </div>
+        </div>
+
+        <div class="bi-section">
+          <div class="bi-section-head">
+            <span class="bi-section-title">Top WorkItems by AI Investment</span>
+            <span class="bi-section-sub">
+              <select id="biTopWorkItemsFilter" onchange="loadBusinessImpactTopWorkItems()" style="background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:11px;padding:4px 6px">
+                <option value="">All outcomes</option>
+                <option value="successful">Successful only</option>
+                <option value="unsuccessful">Unsuccessful only</option>
+                <option value="open">Open only</option>
+              </select>
+            </span>
+          </div>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table">
+              <thead><tr><th></th><th>WorkItem</th><th>AI Investment</th><th>Requests</th><th></th></tr></thead>
+              <tbody id="biTopWorkItemsBody"><tr><td colspan="5">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bi-section">
+          <div class="bi-section-head">
+            <span class="bi-section-title">Recommendations</span>
+          </div>
+          <div class="bi-rec-grid" id="biRecommendations">Loading…</div>
+        </div>
+
         <div class="bi-note">
           <strong>Associated, not caused:</strong> these figures show AI activity that occurred on work which
           later reached a known outcome — not evidence the AI activity caused that outcome. Trend arrows compare
@@ -1065,7 +1132,7 @@
 </div>
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/reports.js?v=20260908-explorer-search-kind-of-work"></script>
+  <script src="js/reports.js?v=20260908-business-impact-redesign-p1"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
     const ROI_RATES = {

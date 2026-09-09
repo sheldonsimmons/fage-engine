@@ -544,17 +544,55 @@ function loadActiveTab() {
   // efficiency tab remains on-demand. Restore cached reviews, but do not rerun analysis automatically.
 }
 
+// 5-label set, matching business-profile.html's BP_EVIDENCE_LABELS/
+// .bp-evidence-tag precedent (the correct per-metric pattern) rather
+// than the 3-label subset this tab shipped with originally.
 const BI_EVIDENCE_LABELS = {
+  measured: "Measured",
+  associated: "Associated",
+  estimated: "Estimated",
   early_signal: "Early Signal",
   meaningful: "Meaningful",
   executive_eligible: "Executive-Eligible",
 };
+
+function biEvidenceTag(elementId, evidenceLabel) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  if (!evidenceLabel) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = `bi-evidence-tag ${evidenceLabel}`;
+  el.textContent = BI_EVIDENCE_LABELS[evidenceLabel] || evidenceLabel;
+}
 
 function biTrendText(pct) {
   if (pct === null || pct === undefined) return "—";
   const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "—";
   const cls = pct > 0 ? "down" : pct < 0 ? "up" : ""; // higher cost-per-outcome is worse, not better
   return `<span class="bi-trend ${cls}">${arrow} ${Math.abs(pct)}% vs prior 30 days</span>`;
+}
+
+// Deterministic sentence built from the same fields the KPI cards
+// already render -- not free-form LLM math, so every number in it is
+// already trusted by the time this template runs.
+function biNarrativeSummary(data) {
+  const parts = [];
+  if (data.opportunities_won > 0) {
+    parts.push(
+      `AI activity was associated with ${fmtUsd(data.closed_won_value_usd)} in closed-won value across `
+      + `${fmtNum(data.opportunities_won)} won opportunit${data.opportunities_won === 1 ? "y" : "ies"} in the trailing 30 days.`
+    );
+  }
+  if (data.support_cases_total > 0) {
+    parts.push(
+      `Support resolved ${fmtNum(data.support_cases_resolved)} of ${fmtNum(data.support_cases_total)} AI-touched support items.`
+    );
+  }
+  if (data.outcome_coverage_pct != null) {
+    parts.push(`Outcome coverage is ${data.outcome_coverage_pct}%.`);
+  }
+  if (!parts.length) return "Not enough outcome data yet to summarize.";
+  return parts.join(" ");
 }
 
 async function loadBusinessImpact() {
@@ -564,32 +602,101 @@ async function loadBusinessImpact() {
   document.getElementById("biContent").style.display = data.has_outcome_data ? "" : "none";
   if (!data.has_outcome_data) return;
 
-  const evidenceTag = document.getElementById("biEvidenceTag");
-  evidenceTag.className = `bi-evidence-tag ${data.evidence_label}`;
-  evidenceTag.textContent = BI_EVIDENCE_LABELS[data.evidence_label] || data.evidence_label;
+  document.getElementById("biSummary").textContent = biNarrativeSummary(data);
 
-  setKpi("bi-won", fmtNum(data.opportunities_won));
-  document.getElementById("bi-won-value").textContent = `${fmtUsd(data.closed_won_value_usd)} closed-won value`;
-  setKpi("bi-lost", fmtNum(data.opportunities_lost));
-  document.getElementById("bi-lost-value").textContent =
-    data.ai_investment_on_lost_opportunities_usd != null
-      ? `${fmtUsd(data.ai_investment_on_lost_opportunities_usd)} AI investment`
-      : "—";
-  setKpi("bi-open", fmtNum(data.opportunities_open));
-  document.getElementById("bi-pipeline-value").textContent = `${fmtUsd(data.pipeline_value_usd)} pipeline value`;
-  setKpi("bi-support-resolved", fmtNum(data.support_cases_resolved));
-  document.getElementById("bi-support-total").textContent = `of ${fmtNum(data.support_cases_total)} total`;
+  const evidenceByKpi = data.evidence_by_kpi || {};
 
+  // Executive KPI row
+  setKpi("bi-assoc-value", fmtUsd(data.closed_won_value_usd));
+  document.getElementById("bi-assoc-value-sub").textContent = "closed-won + resolved support value";
+  biEvidenceTag("bi-evidence-successful", evidenceByKpi.cost_per_won_opportunity_usd);
+  setKpi("bi-successful-outcomes", fmtNum((data.opportunities_won || 0) + (data.support_cases_resolved || 0)));
+  setKpi("bi-investment-successful", fmtUsd((data.won_ai_investment_usd || 0) + (data.support_resolved_ai_investment_usd || 0)));
+  setKpi("bi-investment-unsuccessful", fmtUsd((data.lost_ai_investment_usd || 0) + (data.support_unresolved_ai_investment_usd || 0)));
+
+  biEvidenceTag("bi-evidence-cost-per-outcome", evidenceByKpi.cost_per_successful_outcome_usd);
   setKpi("bi-cost-per-outcome", fmtUsd(data.cost_per_successful_outcome_usd));
   document.getElementById("bi-cost-per-outcome-trend").innerHTML =
-    biTrendText(data.trend_pct_change?.cost_per_won_opportunity_usd);
-  setKpi("bi-cost-per-won", fmtUsd(data.cost_per_won_opportunity_usd));
-  document.getElementById("bi-cost-per-won-trend").innerHTML =
-    biTrendText(data.trend_pct_change?.avg_ai_investment_per_opportunity_usd);
-  setKpi("bi-cost-per-resolution", fmtUsd(data.support_cost_per_resolution_usd));
+    biTrendText(data.trend_pct_change?.cost_per_successful_outcome_usd);
+
+  biEvidenceTag("bi-evidence-coverage", evidenceByKpi.outcome_coverage_pct);
+  setKpi("bi-coverage", data.outcome_coverage_pct != null ? `${data.outcome_coverage_pct}%` : "—");
+
+  // Sales Impact -- Won vs Lost vs Open
+  document.getElementById("biWonLostBody").innerHTML = `
+    <tr><td>Count</td><td>${fmtNum(data.opportunities_won)}</td><td>${fmtNum(data.opportunities_lost)}</td><td>${fmtNum(data.opportunities_open)}</td></tr>
+    <tr><td>AI Investment</td><td>${fmtUsd(data.won_ai_investment_usd)}</td><td>${fmtUsd(data.lost_ai_investment_usd)}</td><td>—</td></tr>
+    <tr><td>Associated Value</td><td>${fmtUsd(data.closed_won_value_usd)}</td><td>—</td><td>${fmtUsd(data.pipeline_value_usd)} pipeline</td></tr>
+    <tr><td>Cost per Opportunity</td><td>${fmtUsd(data.cost_per_won_opportunity_usd)}</td><td colspan="2">${fmtUsd(data.avg_ai_investment_per_opportunity_usd)} avg across all</td></tr>
+  `;
+
+  // Support Impact -- Resolved vs Unresolved
+  document.getElementById("biSupportBody").innerHTML = `
+    <tr><td>Count</td><td>${fmtNum(data.support_cases_resolved)}</td><td>${fmtNum(data.support_cases_unresolved)}</td></tr>
+    <tr><td>AI Investment</td><td>${fmtUsd(data.support_resolved_ai_investment_usd)}</td><td>${fmtUsd(data.support_unresolved_ai_investment_usd)}</td></tr>
+  `;
+  document.getElementById("bi-cost-per-resolution").textContent = fmtUsd(data.support_cost_per_resolution_usd);
   document.getElementById("bi-cost-per-resolution-trend").innerHTML =
     biTrendText(data.trend_pct_change?.support_cost_per_resolution_usd);
-  setKpi("bi-coverage", data.outcome_coverage_pct != null ? `${data.outcome_coverage_pct}%` : "—");
+  biEvidenceTag("bi-evidence-resolution", evidenceByKpi.support_cost_per_resolution_usd);
+
+  loadBusinessImpactTopWorkItems();
+  loadBusinessImpactRecommendations();
+}
+
+async function loadBusinessImpactTopWorkItems() {
+  const body = document.getElementById("biTopWorkItemsBody");
+  if (!body) return;
+  const outcomeStatus = document.getElementById("biTopWorkItemsFilter")?.value || "";
+  body.innerHTML = `<tr><td colspan="5">Loading…</td></tr>`;
+  try {
+    const params = new URLSearchParams({ limit: "10" });
+    if (outcomeStatus) params.set("outcome_status", outcomeStatus);
+    const path = reportScopedPath(`/api/dashboard/business-impact/top-work-items`);
+    const url = `${path}${path.includes("?") ? "&" : "?"}${params.toString()}`;
+    const data = await apiGet(url);
+    const rows = data.rows || [];
+    body.innerHTML = rows.length
+      ? rows.map((row, i) => {
+          const href = EXPLORER_DIMENSION_CONFIG.work_item.profile(row.work_item_id);
+          return `<tr>
+            <td class="bi-rank">${i + 1}</td>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${fmtUsd(row.ai_spend_usd)}</td>
+            <td>${fmtNum(row.ai_requests)}</td>
+            <td><a href="${href}" class="context-view-toggle">View Profile →</a></td>
+          </tr>`;
+        }).join("")
+      : `<tr><td colspan="5">No matching AI activity.</td></tr>`;
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="5">Could not load: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function loadBusinessImpactRecommendations() {
+  const wrap = document.getElementById("biRecommendations");
+  if (!wrap) return;
+  wrap.innerHTML = "Loading…";
+  try {
+    const data = await apiGet(reportScopedPath("/api/dashboard/recommendations"));
+    const recs = data.recommendations || [];
+    wrap.innerHTML = recs.length
+      ? recs.slice(0, 6).map(rec => `
+        <div class="bi-rec-card">
+          <div class="bi-rec-head">
+            <span class="bi-rec-title">${escapeHtml(rec.title)}</span>
+            <span class="bi-rec-priority ${escapeHtml(rec.priority || "low")}">${escapeHtml(rec.priority || "low")}</span>
+          </div>
+          <div class="bi-rec-body">${escapeHtml(rec.why_it_matters || rec.current_state || "")}</div>
+          <div class="bi-rec-action">→ ${escapeHtml(rec.recommended_action || "")}</div>
+          ${rec.impact_type === "savings_usd" && rec.estimated_impact != null
+            ? `<div class="bi-rec-impact">Potential savings: ${fmtUsd(rec.estimated_impact)}/mo</div>` : ""}
+        </div>
+      `).join("")
+      : `<div class="bi-note">No recommendations right now.</div>`;
+  } catch (err) {
+    wrap.innerHTML = `<div class="bi-note">Could not load recommendations: ${escapeHtml(err.message)}</div>`;
+  }
 }
 
 function projectAttributionSelect(id, defaultLabel, options) {

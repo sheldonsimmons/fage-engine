@@ -793,6 +793,15 @@ def get_top_models(
     }
 
 
+# Same "which context_types count as support work" scope
+# support_cases_total/resolved already use (core/metrics_query.py:383) --
+# support_cost_per_resolution_usd used to be silently narrower ("case"
+# only), which meant it and support_cases_resolved were measuring
+# different populations despite being shown side by side. Fixed here so
+# every support-scoped figure in this endpoint agrees.
+_SUPPORT_CONTEXT_TYPES = ("case", "ticket", "incident")
+
+
 @router.get("/business-impact")
 def get_business_impact(
     workspace_id: str | None = Query(None),
@@ -813,8 +822,18 @@ def get_business_impact(
     has no source_system filter and never has; has_outcome_data
     distinguishes "genuinely zero" from "no outcome data exists yet" so
     the frontend doesn't have to guess which one a set of zeros means.
+
+    Every ratio KPI now carries its OWN evidence label (sized off that
+    KPI's actual sample count), not one workspace-wide label sized off
+    won_count alone applied to everything -- found live: this endpoint's
+    single evidence_label was being shown next to
+    support_cost_per_resolution_usd, a completely different sample size
+    than the won-opportunity count that label was actually measuring.
     """
-    from core.metrics_query import run_metrics_query
+    from core.metrics_query import (
+        run_metrics_query, compute_outcome_coverage, compute_cost_per_outcome,
+        compute_potential_savings, evidence_for_sample,
+    )
 
     work_item_scope = _workspace_filter(WorkItem, workspace_id)
 
@@ -837,6 +856,7 @@ def get_business_impact(
     won_count, lost_count, open_count = int(o["won_count"]), int(o["lost_count"]), int(o["open_count"])
     pipeline_value, closed_won_value = float(o["pipeline_value"]), float(o["won_value"])
     support_total, support_resolved = int(o["support_cases_total"]), int(o["support_cases_resolved"])
+    support_unresolved = max(support_total - support_resolved, 0)
     has_outcome_data = bool(won_count + lost_count + open_count + support_resolved)
 
     # AI investment specifically tied to the work items that have real
@@ -856,27 +876,18 @@ def get_business_impact(
         .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
     ).first()
 
-    # Outcome Coverage + evidence label -- reuses the exact functions
+    # Outcome Coverage + cost-per-outcome -- reuses the exact functions
     # built for the account-level Business Impact summary
     # (routes_work_items.py's account_profile()), widened to the whole
     # workspace via workspace_id alone (no account_name filter), which
     # sidesteps the name-collision bug already found once this session in
     # an account_name-based lookup (two WorkAccount rows sharing one
-    # name) -- there's no equivalent risk at workspace scope.
-    from core.metrics_query import (
-        compute_outcome_coverage, compute_cost_per_outcome, compute_potential_savings,
-        MIN_MEANINGFUL_SAMPLE, MIN_EXECUTIVE_SAMPLE,
-    )
-
+    # name) -- there's no equivalent risk at workspace scope. Both already
+    # carry their own real sample-size-based evidence label -- reused
+    # directly below instead of recomputed.
     coverage = compute_outcome_coverage(db, workspace_id)
     cost_per_outcome = compute_cost_per_outcome(db, workspace_id)
     potential_savings = compute_potential_savings(db, workspace_id)
-    if won_count >= MIN_EXECUTIVE_SAMPLE:
-        evidence_label = "executive_eligible"
-    elif won_count >= MIN_MEANINGFUL_SAMPLE:
-        evidence_label = "meaningful"
-    else:
-        evidence_label = "early_signal"
 
     # Business Impact's deeper economics layer -- same TokenTransaction ->
     # WorkItem -> WorkItemOutcome join the ai_spend query above already
@@ -908,24 +919,37 @@ def get_business_impact(
     ai_investment_on_lost_opportunities_usd = round(opp_lost_spend, 6) if lost_count else None
     avg_ai_investment_per_opportunity_usd = round(opp_total_spend / opp_count, 6) if opp_count else None
 
-    # Support Cost per Resolution -- same shape, Case-scoped, divided by
-    # the resolved-case count already computed above.
-    support_resolved_spend = _scoped(
-        db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+    # Support Cost per Resolution -- same shape as the opportunity split
+    # above, scoped to every support context_type (case/ticket/incident),
+    # divided by the resolved count already computed above. Also exposes
+    # resolved/unresolved spend as raw numbers (not just the ratio) for
+    # the Support Impact comparison section.
+    support_resolved_spend, support_total_spend = _scoped(
+        db.query(
+            func.coalesce(func.sum(case((WorkItemOutcome.is_closed.is_(True), TokenTransaction.cost_usd), else_=0.0)), 0.0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        )
         .select_from(TokenTransaction)
         .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
         .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
-        .filter(WorkItem.context_type == "case", WorkItemOutcome.is_closed.is_(True))
-    ).scalar()
+        .filter(WorkItem.context_type.in_(_SUPPORT_CONTEXT_TYPES))
+    ).first()
+    support_resolved_spend = float(support_resolved_spend or 0.0)
+    support_total_spend = float(support_total_spend or 0.0)
+    support_unresolved_spend = round(max(support_total_spend - support_resolved_spend, 0.0), 6)
     support_cost_per_resolution_usd = (
-        round(float(support_resolved_spend or 0.0) / support_resolved, 6) if support_resolved else None
+        round(support_resolved_spend / support_resolved, 6) if support_resolved else None
     )
 
-    # Period-over-period trend for the four cost-per-outcome ratios above.
-    # These ratios are all-time by design (a small workspace needs its
-    # full history to clear MIN_SAMPLE-style noise floors), so there's no
-    # natural "prior period" for the ratio itself -- this instead recomputes
-    # the same ratio restricted to two adjacent 30-day windows (by
+    # Period-over-period trend for the cost-per-outcome ratios above, PLUS
+    # the workspace-wide cost_per_successful_outcome_usd KPI, which used
+    # to have NO trend computed for it at all -- the frontend was reading
+    # cost_per_won_opportunity_usd's trend for both cards, showing
+    # identical numbers under two different KPIs. These ratios are
+    # all-time by design (a small workspace needs its full history to
+    # clear MIN_SAMPLE-style noise floors), so there's no natural "prior
+    # period" for the ratio itself -- this instead recomputes the same
+    # ratio restricted to two adjacent 30-day windows (by
     # WorkItemOutcome.outcome_date for the count side, TokenTransaction.
     # timestamp for the spend side, same join shape as above) and diffs
     # those. Reuses the same current-vs-prior-period-of-equal-length shape
@@ -950,7 +974,14 @@ def get_business_impact(
         resolved_n = _scoped(
             db.query(func.count(WorkItemOutcome.id))
             .select_from(WorkItemOutcome).join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
-            .filter(WorkItem.context_type == "case", WorkItemOutcome.is_closed.is_(True), *base_outcome_filter)
+            .filter(WorkItem.context_type.in_(_SUPPORT_CONTEXT_TYPES), WorkItemOutcome.is_closed.is_(True), *base_outcome_filter)
+        ).scalar() or 0
+        # Any context_type -- matches compute_cost_per_outcome()'s own
+        # "successful_outcomes" definition, not scoped to opportunities.
+        succ_n = _scoped(
+            db.query(func.count(WorkItemOutcome.id))
+            .select_from(WorkItemOutcome).join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+            .filter(is_won, *base_outcome_filter)
         ).scalar() or 0
 
         tx_filter = [TokenTransaction.timestamp >= period_start, TokenTransaction.timestamp < period_end]
@@ -970,7 +1001,14 @@ def get_business_impact(
             .select_from(TokenTransaction)
             .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
             .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
-            .filter(WorkItem.context_type == "case", WorkItemOutcome.is_closed.is_(True), *tx_filter)
+            .filter(WorkItem.context_type.in_(_SUPPORT_CONTEXT_TYPES), WorkItemOutcome.is_closed.is_(True), *tx_filter)
+        ).scalar() or 0.0
+        succ_spend = _scoped(
+            db.query(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+            .select_from(TokenTransaction)
+            .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+            .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+            .filter(is_won, *tx_filter)
         ).scalar() or 0.0
         # Closed opportunities only (won + lost) -- unlike the all-time
         # avg_ai_investment_per_opportunity_usd figure above, this window
@@ -984,6 +1022,7 @@ def get_business_impact(
             "ai_investment_on_lost_opportunities_usd": float(lost_spend) if lost_n else None,
             "avg_ai_investment_per_opportunity_usd": (float(opp_spend) / closed_n) if closed_n else None,
             "support_cost_per_resolution_usd": (float(support_spend) / resolved_n) if resolved_n else None,
+            "cost_per_successful_outcome_usd": (float(succ_spend) / succ_n) if succ_n else None,
         }
 
     def _trend_pct(curr: float | None, prev: float | None) -> float | None:
@@ -1007,24 +1046,89 @@ def get_business_impact(
         "opportunities_open": open_count,
         "pipeline_value_usd": round(float(pipeline_value or 0.0), 2),
         "closed_won_value_usd": round(float(closed_won_value or 0.0), 2),
+        "won_ai_investment_usd": round(opp_won_spend, 6),
+        "lost_ai_investment_usd": round(opp_lost_spend, 6),
         "support_cases_total": int(support_total or 0),
         "support_cases_resolved": support_resolved,
+        "support_cases_unresolved": support_unresolved,
+        "support_resolved_ai_investment_usd": round(support_resolved_spend, 6),
+        "support_unresolved_ai_investment_usd": support_unresolved_spend,
         "ai_spend_usd": round(float(ai_spend or 0.0), 6),
         "ai_tokens_total": int(ai_tokens or 0),
         "outcome_coverage_pct": coverage["outcome_coverage_pct"],
         "successful_outcomes": won_count,
-        "evidence_label": evidence_label,
+        # Deprecated: use the per-KPI evidence_by_kpi block below. Kept
+        # (won_count-based, unchanged value) so any existing caller reading
+        # this top-level field doesn't silently break.
+        "evidence_label": evidence_for_sample(won_count, noun="won opportunities")["evidence_label"],
         "cost_per_successful_outcome_usd": cost_per_outcome["cost_per_successful_outcome_usd"],
         "cost_per_won_opportunity_usd": cost_per_won_opportunity_usd,
         "ai_investment_on_lost_opportunities_usd": ai_investment_on_lost_opportunities_usd,
         "avg_ai_investment_per_opportunity_usd": avg_ai_investment_per_opportunity_usd,
         "support_cost_per_resolution_usd": support_cost_per_resolution_usd,
+        # Per-KPI evidence -- each sized off the sample this SPECIFIC
+        # ratio's denominator actually is, not one label borrowed from a
+        # different metric's sample size.
+        "evidence_by_kpi": {
+            "cost_per_successful_outcome_usd": cost_per_outcome["evidence_label"],
+            "cost_per_won_opportunity_usd": evidence_for_sample(won_count, noun="won opportunities")["evidence_label"],
+            "ai_investment_on_lost_opportunities_usd": evidence_for_sample(lost_count, noun="lost opportunities")["evidence_label"],
+            "avg_ai_investment_per_opportunity_usd": evidence_for_sample(opp_count, noun="tracked opportunities")["evidence_label"],
+            "support_cost_per_resolution_usd": evidence_for_sample(support_resolved, noun="resolved support items")["evidence_label"],
+            "outcome_coverage_pct": evidence_for_sample(coverage["work_items_touched"], noun="AI-touched work items")["evidence_label"],
+        },
         "trend_pct_change": trend_pct_change,
         "potential_savings_usd": potential_savings["potential_savings_usd"],
         "potential_savings_evidence": potential_savings["evidence"],
         "potential_savings_candidate_count": potential_savings["candidate_request_count"],
         "potential_savings_top_agents": potential_savings["top_agents"],
         "potential_savings_note": potential_savings["note"],
+    }
+
+
+@router.get("/business-impact/top-work-items")
+def get_business_impact_top_work_items(
+    workspace_id: str | None = Query(None),
+    outcome_status: str | None = Query(None, description="won|lost|successful|unsuccessful|open|None"),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """
+    Top WorkItems by AI investment, optionally narrowed to one outcome
+    bucket -- "highest AI investment on unsuccessful work," "highest
+    spend on won opportunities," etc. Zero new aggregation: this is
+    run_metrics_query()'s existing "work_item" dimension + the existing
+    outcome_status filter (core/metrics_query.py's _outcome_status_clause,
+    already used elsewhere for exactly this filter shape), just not
+    previously exposed as its own endpoint. Each row already carries the
+    real WorkItem external_id (dimension_ids), so the frontend can link
+    straight to work-item-profile.html the same way the AI Activity
+    Explorer's "View Profile ->" links already do.
+    """
+    from core.metrics_query import run_metrics_query
+
+    filters = {"outcome_status": outcome_status} if outcome_status else {}
+    result = run_metrics_query(
+        db, workspace_id,
+        metrics=["ai_spend", "ai_requests"],
+        dimensions=["work_item"],
+        filters=filters,
+        sort="ai_spend",
+        limit=limit,
+    )
+    return {
+        "workspace_id": workspace_id,
+        "outcome_status": outcome_status,
+        "rows": [
+            {
+                "work_item_id": row["dimension_ids"]["work_item"],
+                "label": row["dimensions"]["work_item"],
+                "ai_spend_usd": round(float(row.get("ai_spend") or 0.0), 6),
+                "ai_requests": int(row.get("ai_requests") or 0),
+            }
+            for row in result.rows
+        ],
+        "errors": result.errors,
     }
 
 
