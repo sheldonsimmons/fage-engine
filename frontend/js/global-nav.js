@@ -739,6 +739,7 @@
   let _wakeStopRequested = false;
   let _wakeTriggerInFlight = false;
   let _wakeVisibilityBound = false;
+  let _wakeAutoStopArmed = false;
 
   function wakeWordSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -810,10 +811,66 @@
     }
     if (!/hey\s*,?\s*cost\s*-?\s*pilot/i.test(transcript)) return;
     _wakeTriggerInFlight = true;
+    _wakeAutoStopArmed = true;
     pauseWakeWordListener();
     openAskCostPilot();
     askVoiceStatus("Heard “Hey CostPilot” — listening for your question…", "listening");
     toggleAskVoiceRecording().finally(() => { _wakeTriggerInFlight = false; });
+  }
+
+  // Push-to-talk (manual mic click) intentionally requires a second click
+  // to stop -- that's an existing, documented UX choice. A wake-triggered
+  // capture has no second click coming, so it needs its own end-of-speech
+  // signal: a lightweight volume-based silence detector on the same
+  // stream, armed only for wake-triggered captures via _wakeAutoStopArmed.
+  function armWakeSilenceAutoStop(stream) {
+    let audioCtx;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (_error) {
+      return;
+    }
+    const SPEECH_RMS_THRESHOLD = 12;
+    const SILENCE_MS_TO_STOP = 1400;
+    const MAX_CAPTURE_MS = 12000;
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    const source = audioCtx.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const startedAt = Date.now();
+    let heardSpeech = false;
+    let silenceStartedAt = null;
+    const cleanup = () => {
+      clearInterval(timer);
+      try { source.disconnect(); } catch (_error) {}
+      try { audioCtx.close(); } catch (_error) {}
+    };
+    const timer = setInterval(() => {
+      if (!_askRecording) { cleanup(); return; }
+      analyser.getByteTimeDomainData(data);
+      let sumSquares = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sumSquares += v * v;
+      }
+      const rms = Math.sqrt(sumSquares / data.length) * 100;
+      if (rms > SPEECH_RMS_THRESHOLD) {
+        heardSpeech = true;
+        silenceStartedAt = null;
+      } else if (heardSpeech) {
+        if (silenceStartedAt === null) silenceStartedAt = Date.now();
+        if (Date.now() - silenceStartedAt > SILENCE_MS_TO_STOP) {
+          cleanup();
+          _askMediaRecorder?.stop();
+          return;
+        }
+      }
+      if (Date.now() - startedAt > MAX_CAPTURE_MS) {
+        cleanup();
+        _askMediaRecorder?.stop();
+      }
+    }, 200);
   }
 
   function handleWakeError(event) {
@@ -864,6 +921,7 @@
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      _wakeAutoStopArmed = false;
       askVoiceStatus("Voice isn't supported in this browser — try typing instead.", "error");
       resumeWakeWordListenerIfEnabled();
       return;
@@ -882,8 +940,15 @@
       _askMediaRecorder.start();
       _askRecording = true;
       document.getElementById("cpAskMic")?.classList.add("recording");
-      askVoiceStatus("Listening… click the mic again to stop.", "listening");
+      if (_wakeAutoStopArmed) {
+        _wakeAutoStopArmed = false;
+        armWakeSilenceAutoStop(stream);
+        askVoiceStatus("Listening for your question…", "listening");
+      } else {
+        askVoiceStatus("Listening… click the mic again to stop.", "listening");
+      }
     } catch (err) {
+      _wakeAutoStopArmed = false;
       askVoiceStatus("Couldn't access your microphone — check your browser permissions.", "error");
       resumeWakeWordListenerIfEnabled();
     }
