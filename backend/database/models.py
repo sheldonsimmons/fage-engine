@@ -667,6 +667,7 @@ class VoiceEvent(Base):
     call_id             = Column(String,   nullable=True)       # ID from upstream platform
     platform            = Column(String,   nullable=True)       # Genesys | AWS Connect | Salesforce Voice | etc.
     department          = Column(String,   nullable=True)
+    workspace_id        = Column(String,   nullable=True, index=True)  # nullable: legacy rows predate this column
     raw_transcript      = Column(Text,     nullable=True)       # Original (stored only if no PII found)
     clean_transcript    = Column(Text,     nullable=True)       # Redacted version
     redactions_count    = Column(Integer,  default=0)

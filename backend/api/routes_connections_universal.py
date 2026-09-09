@@ -15,13 +15,13 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import IntegrationConnection, TokenTransaction
-from api.routes_workspaces import _new_api_key, _require_workspace, check_admin_access
+from api.routes_workspaces import _new_api_key, _require_workspace, check_admin_access, _log_sensitive_access
 from core.connection_status import compute_connection_status, connection_scope
 
 router = APIRouter()
@@ -62,7 +62,7 @@ class UniversalConnectionCreateRequest(BaseModel):
 
 
 @router.post("/universal")
-def create_universal_connection(body: UniversalConnectionCreateRequest, db: Session = Depends(get_db)):
+def create_universal_connection(body: UniversalConnectionCreateRequest, request: Request, db: Session = Depends(get_db)):
     check_admin_access()
     platform = (body.platform or "").strip()
     if not platform:
@@ -71,7 +71,12 @@ def create_universal_connection(body: UniversalConnectionCreateRequest, db: Sess
 
     workspace = _require_workspace(db, body.workspace_id)
     if not workspace.api_key:
+        # A caller who reaches this branch mints and receives that
+        # workspace's very first live API key -- same exposure class as
+        # the reveal/regenerate endpoints (security audit Finding 1), so
+        # logged the same way.
         workspace.api_key = _new_api_key()
+        _log_sensitive_access("api_key_issued_via_universal_connection", body.workspace_id, request)
 
     existing = db.query(IntegrationConnection).filter_by(
         workspace_id=body.workspace_id, platform=platform, display_name=display_name,

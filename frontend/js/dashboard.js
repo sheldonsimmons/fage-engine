@@ -677,8 +677,8 @@ async function executeDataReset() {
 
     // Voice events are measured governance activity, but not simulator
     // identities. Clear them only for usage and full workspace resets.
-    if (scope === "usage" || scope === "workspace") {
-      try { await fetch("/api/voice/events", { method: "DELETE" }); } catch (_) {}
+    if ((scope === "usage" || scope === "workspace") && workspaceId) {
+      try { await fetch(`/api/voice/events?workspace_id=${encodeURIComponent(workspaceId)}`, { method: "DELETE" }); } catch (_) {}
     }
 
     closeResetDataDialog();

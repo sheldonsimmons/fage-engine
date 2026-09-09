@@ -12,7 +12,8 @@ let _vgExampleIdx = 0;
 
 async function loadVoiceStats() {
   try {
-    const data = await fetch("/api/voice/stats").then(r => r.json());
+    const ws = localStorage.getItem("cp_workspace_id") || "";
+    const data = await fetch(`/api/voice/stats${ws ? "?workspace_id=" + encodeURIComponent(ws) : ""}`).then(r => r.json());
 
     document.getElementById("vg-calls-today").textContent     = (data.calls_today || 0).toLocaleString();
     document.getElementById("vg-calls-month").textContent     = (data.calls_month || 0).toLocaleString() + " this month";
@@ -92,6 +93,7 @@ async function testVoiceGuard() {
         transcript: input,
         platform: "Dashboard Test",
         department: "Test",
+        workspace_id: localStorage.getItem("cp_workspace_id") || null,
       }),
     });
 
@@ -207,7 +209,8 @@ async function testVoiceGuard() {
 async function clearVoiceGuardData() {
   if (!confirm("Clear all Voice Guard data? This cannot be undone.")) return;
   try {
-    const res = await fetch("/api/voice/events", { method: "DELETE" });
+    const ws = localStorage.getItem("cp_workspace_id") || "default";
+    const res = await fetch(`/api/voice/events?workspace_id=${encodeURIComponent(ws)}`, { method: "DELETE" });
     const data = await res.json();
     if (data.status === "ok") {
       document.getElementById("vgResult").style.display = "none";
@@ -246,7 +249,8 @@ async function loadVoiceAuditLog() {
   if (!_vgAuditOpen) return;
 
   try {
-    const events = await fetch("/api/voice/events?limit=50").then(r => r.json());
+    const ws = localStorage.getItem("cp_workspace_id") || "default";
+    const events = await fetch(`/api/voice/events?workspace_id=${encodeURIComponent(ws)}&limit=50`).then(r => r.json());
     _vgAuditEvents = events;
 
     if (!events.length) {

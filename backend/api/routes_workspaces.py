@@ -9,10 +9,11 @@ GET /api/workspaces
   unreachable through the UI the moment a user touched the switcher.
 """
 
+import logging
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import nullslast
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from database.db import get_db
 from database.models import Workspace
 
 router = APIRouter()
+logger = logging.getLogger("costpilot.security")
 
 
 def _new_api_key() -> str:
@@ -94,12 +96,39 @@ def check_admin_access(request_user=None) -> None:
     exists anywhere in this codebase (confirmed while building the
     Universal Connection feature). Real enforcement can be dropped in
     here later without touching any call site that already imports this.
+
+    SECURITY AUDIT NOTE (see the security architecture assessment,
+    Finding 1): this is the highest-severity confirmed cross-tenant
+    vulnerability in the codebase -- anyone who knows a workspace_id can
+    retrieve or rotate that workspace's live credential. It cannot be
+    hard-gated yet without a real login/session system, because both
+    call sites below are live, unauthenticated calls from the real
+    product UI today (connector-manager.html, policy.html) -- adding a
+    hard check here with no way for the frontend to satisfy it would
+    just break those pages. _log_sensitive_access() below is the
+    detection stopgap until real per-user auth exists (see the
+    assessment's Phase 1+ recommendation).
     """
     return None
 
 
+def _log_sensitive_access(action: str, workspace_id: str, request: Request) -> None:
+    """
+    Detection-only stopgap for the two credential endpoints below, since
+    they can't be safely hard-gated without breaking live product usage
+    (see check_admin_access()'s docstring). Not a security control by
+    itself -- logs are not alerts -- but it turns "we have no idea this
+    happened" into "we can find out it happened," which is strictly
+    better than the status quo and requires no schema change.
+    """
+    logger.warning(
+        "SECURITY: %s for workspace_id=%s from client=%s",
+        action, workspace_id, request.client.host if request.client else "unknown",
+    )
+
+
 @router.get("/{workspace_id}/api-key/reveal")
-def reveal_api_key(workspace_id: str, db: Session = Depends(get_db)):
+def reveal_api_key(workspace_id: str, request: Request, db: Session = Depends(get_db)):
     """
     Returns the CURRENT full key value without rotating it -- distinct
     from regenerate below, which always issues a new one. Generates a key
@@ -109,6 +138,7 @@ def reveal_api_key(workspace_id: str, db: Session = Depends(get_db)):
     """
     check_admin_access()
     workspace = _require_workspace(db, workspace_id)
+    _log_sensitive_access("api_key_reveal", workspace_id, request)
     if not workspace.api_key:
         workspace.api_key = _new_api_key()
         db.commit()
@@ -116,7 +146,7 @@ def reveal_api_key(workspace_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{workspace_id}/api-key/regenerate")
-def regenerate_api_key(workspace_id: str, db: Session = Depends(get_db)):
+def regenerate_api_key(workspace_id: str, request: Request, db: Session = Depends(get_db)):
     """
     Issues a new key, invalidating any previous one immediately -- there is
     no "list of valid keys," just the single current value on the row, so
@@ -128,6 +158,7 @@ def regenerate_api_key(workspace_id: str, db: Session = Depends(get_db)):
     """
     check_admin_access()
     workspace = _require_workspace(db, workspace_id)
+    _log_sensitive_access("api_key_regenerate", workspace_id, request)
     workspace.api_key = _new_api_key()
     db.commit()
     return {

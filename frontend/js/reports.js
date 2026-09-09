@@ -1837,7 +1837,7 @@ async function loadRiskEventDetail(eventId) {
   const cell = document.getElementById(`riskEventDetail-${eventId}`);
   if (!cell) return;
   try {
-    const detail = await apiGet(`/api/audit/${eventId}`);
+    const detail = await apiGet(reportScopedPath(`/api/audit/${eventId}`));
     const usageSource = detail.usage_source === "provider_reported"
       ? "Provider reported"
       : (detail.usage_source === "estimated" ? "Estimated" : "Not recorded");

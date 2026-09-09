@@ -309,7 +309,7 @@ async function toggleStreamEvent(eventId) {
 
   // Fetch full detail
   try {
-    const e = await apiGet(`/api/audit/${eventId}`);
+    const e = await apiGet(workspaceScopedApiPath(`/api/audit/${eventId}`));
     let snapshot = {};
     try { snapshot = JSON.parse(e.context_snapshot || "{}"); } catch {}
 
@@ -365,7 +365,7 @@ async function toggleStreamEvent(eventId) {
       <div class="gov-detail-mono" style="white-space:pre-wrap">${(e.prompt_payload || "").slice(0, 400)}${(e.prompt_payload || "").length > 400 ? "..." : ""}</div>
 
       <div style="margin-top:10px">
-        <a class="export-link" href="/api/audit/export" download="fage_audit.jsonl" onclick="event.stopPropagation()">
+        <a class="export-link" href="${workspaceScopedApiPath('/api/audit/export')}" download="fage_audit.jsonl" onclick="event.stopPropagation()">
           ↓ Download full JSONL audit file
         </a>
       </div>`;

@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from database.db import get_db
 from database.models import VoiceEvent, TokenTransaction
 from core.voice_guard import process_transcript, presidio_available
 from core.pruner import prune
+from core.workspace_scope import workspace_filter
 
 router = APIRouter()
 
@@ -31,6 +32,7 @@ class TranscriptRequest(BaseModel):
     call_id:    Optional[str] = None
     platform:   Optional[str] = None      # Genesys | AWS Connect | Salesforce Voice | etc.
     department: Optional[str] = None
+    workspace_id: Optional[str] = None
 
 
 class TranscriptResponse(BaseModel):
@@ -103,6 +105,7 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
         call_id=req.call_id,
         platform=req.platform or "unknown",
         department=req.department or "unknown",
+        workspace_id=req.workspace_id,
         # Only store raw transcript if no PII was found (never store PII)
         raw_transcript=req.transcript if not result.redactions else None,
         clean_transcript=result.clean_transcript,
@@ -135,39 +138,54 @@ def process_voice_transcript(req: TranscriptRequest, db: Session = Depends(get_d
 # ── GET /api/voice/stats ──────────────────────────────────────────────────────
 
 @router.get("/stats")
-def get_voice_stats(db: Session = Depends(get_db)):
-    """Dashboard KPI data for the Voice Guard panel."""
+def get_voice_stats(workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Dashboard KPI data for the Voice Guard panel.
+
+    workspace_id is optional here (unlike /events and DELETE /events)
+    specifically to avoid breaking the one existing frontend caller
+    (voice_guard.js) that doesn't send it yet -- this endpoint returns
+    only aggregate counts, not individual transcript content, so the
+    blast radius of the missing scope is materially smaller than the two
+    endpoints below. Pass workspace_id once the frontend is updated to
+    send it and this becomes a hard requirement.
+    """
+    scope = workspace_filter(VoiceEvent, workspace_id) if workspace_id else None
+
+    def _scoped(query):
+        return query.filter(scope) if scope is not None else query
+
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    calls_today = db.query(func.count(VoiceEvent.id)).filter(
+    calls_today = _scoped(db.query(func.count(VoiceEvent.id)).filter(
         VoiceEvent.timestamp >= today_start
-    ).scalar() or 0
+    )).scalar() or 0
 
-    calls_month = db.query(func.count(VoiceEvent.id)).filter(
+    calls_month = _scoped(db.query(func.count(VoiceEvent.id)).filter(
         VoiceEvent.timestamp >= month_start
-    ).scalar() or 0
+    )).scalar() or 0
 
-    calls_total = db.query(func.count(VoiceEvent.id)).scalar() or 0
+    calls_total = _scoped(db.query(func.count(VoiceEvent.id))).scalar() or 0
 
-    redactions_today = db.query(func.sum(VoiceEvent.redactions_count)).filter(
+    redactions_today = _scoped(db.query(func.sum(VoiceEvent.redactions_count)).filter(
         VoiceEvent.timestamp >= today_start
-    ).scalar() or 0
+    )).scalar() or 0
 
-    redactions_total = db.query(func.sum(VoiceEvent.redactions_count)).scalar() or 0
+    redactions_total = _scoped(db.query(func.sum(VoiceEvent.redactions_count))).scalar() or 0
 
-    flagged_total = db.query(func.count(VoiceEvent.id)).filter(
+    flagged_total = _scoped(db.query(func.count(VoiceEvent.id)).filter(
         VoiceEvent.flagged_for_review == True
-    ).scalar() or 0
+    )).scalar() or 0
 
-    avg_confidence = db.query(func.avg(VoiceEvent.confidence_score)).filter(
+    avg_confidence = _scoped(db.query(func.avg(VoiceEvent.confidence_score)).filter(
         VoiceEvent.redactions_count > 0
-    ).scalar() or 0.0
+    )).scalar() or 0.0
 
     # PII type breakdown (parse JSON strings — capped to last 500 to avoid full-table scan)
-    all_events_with_pii = db.query(VoiceEvent.pii_types_found).filter(
+    all_events_with_pii = _scoped(db.query(VoiceEvent.pii_types_found).filter(
         VoiceEvent.redactions_count > 0
-    ).limit(500).all()
+    )).limit(500).all()
     pii_breakdown: dict = {}
     for row in all_events_with_pii:
         if row[0]:
@@ -179,9 +197,9 @@ def get_voice_stats(db: Session = Depends(get_db)):
                 pass
 
     # Platform breakdown
-    platform_rows = db.query(
+    platform_rows = _scoped(db.query(
         VoiceEvent.platform, func.count(VoiceEvent.id)
-    ).group_by(VoiceEvent.platform).all()
+    )).group_by(VoiceEvent.platform).all()
     platform_breakdown = {p: c for p, c in platform_rows}
 
     return {
@@ -201,9 +219,16 @@ def get_voice_stats(db: Session = Depends(get_db)):
 # ── DELETE /api/voice/events ─────────────────────────────────────────────────
 
 @router.delete("/events")
-def clear_voice_events(db: Session = Depends(get_db)):
-    """Clear all Voice Guard event data (dashboard reset)."""
-    deleted = db.query(VoiceEvent).delete()
+def clear_voice_events(workspace_id: str, db: Session = Depends(get_db)):
+    """
+    Clear this workspace's Voice Guard event data (dashboard reset).
+
+    workspace_id is required, not optional: this used to delete every
+    workspace's Voice Guard history in one call with no scoping at all
+    (security audit finding). A caller that truly needs to wipe
+    everything must now do so per-workspace, deliberately.
+    """
+    deleted = db.query(VoiceEvent).filter(workspace_filter(VoiceEvent, workspace_id)).delete()
     db.commit()
     return {"deleted": deleted, "status": "ok"}
 
@@ -211,9 +236,15 @@ def clear_voice_events(db: Session = Depends(get_db)):
 # ── GET /api/voice/events ─────────────────────────────────────────────────────
 
 @router.get("/events")
-def get_voice_events(limit: int = 20, db: Session = Depends(get_db)):
-    """Recent Voice Guard redaction events for the audit log."""
-    events = db.query(VoiceEvent).order_by(
+def get_voice_events(workspace_id: str, limit: int = 20, db: Session = Depends(get_db)):
+    """
+    Recent Voice Guard redaction events for the audit log.
+
+    workspace_id is required, not optional: this used to return every
+    workspace's redacted call transcripts mixed together with no scoping
+    at all (security audit finding).
+    """
+    events = db.query(VoiceEvent).filter(workspace_filter(VoiceEvent, workspace_id)).order_by(
         VoiceEvent.timestamp.desc()
     ).limit(limit).all()
 

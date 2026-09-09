@@ -470,6 +470,16 @@ def run_migrations():
             ensure_column(conn, "work_item_outcomes", "is_simulation", "BOOLEAN DEFAULT FALSE")
         except Exception:
             conn.rollback()
+        try:
+            # Security audit finding: voice_events had no tenant-scoping
+            # column at all -- GET/DELETE /api/voice/events read or wiped
+            # every workspace's Voice Guard data at once. Nullable since
+            # legacy rows predate this column and have no signal to
+            # backfill from; those rows remain unscoped/orphaned by design
+            # rather than guessed at.
+            ensure_column(conn, "voice_events", "workspace_id", "VARCHAR")
+        except Exception:
+            conn.rollback()
 
         # Uses its OWN connection, deliberately not the shared `conn` above.
         # The trial_accounts loop just above issues raw ALTER TABLE ADD

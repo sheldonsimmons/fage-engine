@@ -8,10 +8,11 @@ GET  /api/audit/review-status — blocked-event acknowledgement status
 POST /api/audit/acknowledge-blocked — mark blocked events reviewed
 """
 
+import json
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -157,23 +158,74 @@ def list_audit_events(
     return get_audit_events(db, limit=limit, workspace_id=workspace_id)
 
 
+def _line_matches_workspace(record: dict, workspace_id: str) -> bool:
+    """
+    Same "workspace-prefixed department, else recorded attribution"
+    precedence workspace_filter() uses for the DB-backed query path —
+    applied here to the raw JSONL file, which has no SQL to filter with.
+    A line with neither signal is treated as NOT matching (excluded, not
+    included-by-default) since export is the highest-blast-radius finding
+    in the security audit and should fail closed.
+    """
+    department = (record.get("department") or "")
+    if department.startswith(f"{workspace_id}:"):
+        return True
+    attribution = (record.get("context_snapshot") or {}).get("organizational_attribution") or {}
+    return attribution.get("workspace_id") == workspace_id
+
+
 @router.get("/export")
-def export_audit_log():
-    """Download the full append-only JSONL audit file."""
+def export_audit_log(workspace_id: str, db: Session = Depends(get_db)):
+    """
+    Download this workspace's slice of the append-only JSONL audit file.
+
+    workspace_id is required, not optional: this used to stream every
+    workspace's complete audit log -- including raw pre-redaction prompt
+    payloads -- to any caller with no parameters at all (security audit
+    finding). The underlying file has no per-line index, so this reads
+    and filters it line by line rather than a single indexed query; for
+    the file sizes an audit log realistically reaches, that's an
+    acceptable cost for closing a full unscoped data-export path.
+    """
     path = export_jsonl_path()
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="No audit log file found yet. Run some routing operations first.")
-    return FileResponse(
-        path=path,
+    lines = []
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except Exception:
+                continue
+            if _line_matches_workspace(record, workspace_id):
+                lines.append(line)
+    body = "\n".join(lines) + ("\n" if lines else "")
+    return Response(
+        content=body,
         media_type="application/x-ndjson",
-        filename="fage_audit.jsonl",
+        headers={"Content-Disposition": f'attachment; filename="fage_audit_{workspace_id}.jsonl"'},
     )
 
 
 @router.get("/{event_id}", response_model=AuditEventDetail)
-def get_event_detail(event_id: int, db: Session = Depends(get_db)):
-    """Return full detail for a single audit event including rationale and context snapshot."""
-    result = get_audit_event(db, event_id)
-    if not result:
+def get_event_detail(event_id: int, workspace_id: str, db: Session = Depends(get_db)):
+    """
+    Return full detail for a single audit event including rationale and
+    context snapshot.
+
+    workspace_id is required, not optional: event_id is a bare sequential
+    integer PK, previously readable by anyone regardless of which
+    workspace it belonged to (security audit finding). Scoped the same
+    way every other AuditEvent query in this file already is.
+    """
+    event = db.query(AuditEvent).filter(
+        AuditEvent.id == event_id,
+        workspace_filter(AuditEvent, workspace_id),
+    ).first()
+    if not event:
         raise HTTPException(status_code=404, detail=f"Audit event {event_id} not found.")
+    result = get_audit_event(db, event_id)
     return result

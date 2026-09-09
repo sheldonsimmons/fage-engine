@@ -225,7 +225,7 @@ async function fetchRationaleContent(eventId) {
   if (!content) return;
 
   try {
-    const detail = await apiGet(`/api/audit/${eventId}`);
+    const detail = await apiGet(workspaceScopedApiPath(`/api/audit/${eventId}`));
     let snapshot = {};
     try { snapshot = JSON.parse(detail.context_snapshot || "{}"); } catch {}
     const hasBudgetContext = snapshot.budget_cap_usd != null || snapshot.budget_spent_usd != null;
@@ -290,7 +290,7 @@ async function fetchRationaleContent(eventId) {
         </div>
       </div>
       <div style="margin-top:8px">
-        <a class="export-link" href="/api/audit/export" download="fage_audit.jsonl">
+        <a class="export-link" href="${workspaceScopedApiPath('/api/audit/export')}" download="fage_audit.jsonl">
           &#8595; Download full JSONL audit file
         </a>
       </div>
@@ -473,7 +473,7 @@ async function showRawPayloadModal(eventId) {
   let detail = _auditDetailCache[eventId];
   if (!detail) {
     try {
-      detail = await apiGet(`/api/audit/${eventId}`);
+      detail = await apiGet(workspaceScopedApiPath(`/api/audit/${eventId}`));
       _auditDetailCache[eventId] = detail;
     } catch (err) {
       alert(`Could not load raw payload: ${err.message}`);
