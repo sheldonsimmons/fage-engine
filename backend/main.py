@@ -192,6 +192,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; "
             "connect-src 'self'; "
+            "media-src 'self' blob:; "
             "font-src 'self' data: https://cdn.jsdelivr.net;"
         )
         # Prevent HTML files from being cached so updates are picked up immediately
