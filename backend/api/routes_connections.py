@@ -479,8 +479,28 @@ def _connection_activity_status(db: Session, item: IntegrationConnection) -> dic
     return compute_connection_status(db, item)
 
 
-def _get_connection(db: Session, connection_id: int) -> IntegrationConnection:
-    item = db.query(IntegrationConnection).filter(IntegrationConnection.id == connection_id).first()
+def _get_connection(db: Session, connection_id: int, workspace_id: Optional[str] = None) -> IntegrationConnection:
+    """
+    Security architecture assessment, Finding 6: this resolver backs ~19
+    routes and used to take a bare integer id with no workspace check at
+    all -- a caller who knew/guessed another tenant's connection_id could
+    read its config or trigger discover/sync-outcomes/import-work-items
+    against that tenant's real, live connected system using ITS stored
+    OAuth token. workspace_id is OPTIONAL, matching the same reasoning as
+    _agent_scoped_or_404 in routes_agentlake.py (Finding 5): it defaults
+    to None so this deploy changes nothing for any caller that doesn't
+    supply one yet (onboarding.js's ~15 call sites all thread it through
+    now -- see that file's diff -- but any caller that doesn't is
+    unaffected, not broken). When workspace_id IS supplied, a mismatch
+    404s exactly like an unknown id, never leaking which id belongs to a
+    different tenant. IntegrationConnection.workspace_id is NOT NULL
+    (unlike RegisteredAgent's), so this is a plain equality check, not
+    workspace_filter()'s department-prefix-fallback dance.
+    """
+    query = db.query(IntegrationConnection).filter(IntegrationConnection.id == connection_id)
+    if workspace_id:
+        query = query.filter(IntegrationConnection.workspace_id == workspace_id)
+    item = query.first()
     if not item:
         raise HTTPException(status_code=404, detail="Connection was not found")
     return item
@@ -994,9 +1014,9 @@ def create_connection(body: ConnectionCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/{connection_id}/salesforce-package-install")
-async def install_salesforce_package(connection_id: int, db: Session = Depends(get_db)):
+async def install_salesforce_package(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
     """Install CostPilot without compiling unrelated subscriber Apex."""
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     instance_url, access_token = _require_connected_salesforce(item)
     mapping = _json_object(item.mapping_json)
     install = mapping.get("salesforce_package_install")
@@ -1053,8 +1073,8 @@ async def install_salesforce_package(connection_id: int, db: Session = Depends(g
 
 
 @router.get("/{connection_id}/salesforce-package-install")
-async def get_salesforce_package_install(connection_id: int, db: Session = Depends(get_db)):
-    item = _get_connection(db, connection_id)
+async def get_salesforce_package_install(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id, workspace_id)
     instance_url, access_token = _require_connected_salesforce(item)
     mapping = _json_object(item.mapping_json)
     install = mapping.get("salesforce_package_install")
@@ -1101,13 +1121,13 @@ async def get_salesforce_package_install(connection_id: int, db: Session = Depen
 
 
 @router.get("/{connection_id}")
-def get_connection(connection_id: int, db: Session = Depends(get_db)):
-    return _public_connection(_get_connection(db, connection_id), db)
+def get_connection(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    return _public_connection(_get_connection(db, connection_id, workspace_id), db)
 
 
 @router.post("/{connection_id}/authorize")
-def begin_authorization(connection_id: int, db: Session = Depends(get_db)):
-    item = _get_connection(db, connection_id)
+def begin_authorization(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform == "servicenow":
         client_id = os.getenv("SERVICENOW_CLIENT_ID")
         redirect_uri = os.getenv(
@@ -1586,10 +1606,11 @@ async def _servicenow_query_all(
 @router.get("/{connection_id}/ai-entry-points")
 async def discover_salesforce_ai_entry_points(
     connection_id: int,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Discover existing Agentforce agents and Salesforce Flows for guided activation."""
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="AI entry-point discovery currently supports Salesforce")
 
@@ -1685,10 +1706,11 @@ async def discover_salesforce_ai_entry_points(
 def save_salesforce_ai_entry_points(
     connection_id: int,
     payload: AiEntryPointSelectionUpdate,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Persist the Agentforce agents and Flows approved during package setup."""
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="AI entry-point selection currently supports Salesforce")
     mapping = json.loads(item.mapping_json or "{}")
@@ -1813,10 +1835,11 @@ def _salesforce_package_setup(item: IntegrationConnection) -> dict:
 @router.get("/{connection_id}/package-setup")
 def get_salesforce_package_setup(
     connection_id: int,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Return the durable state used by the packaged five-step Salesforce wizard."""
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
     return _salesforce_package_setup(item)
@@ -1826,10 +1849,11 @@ def get_salesforce_package_setup(
 def approve_salesforce_package_relationships(
     connection_id: int,
     payload: PackageRelationshipApproval,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Approve the parent and related records that share one business context."""
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
     mapping = _json_object(item.mapping_json)
@@ -1858,10 +1882,11 @@ def approve_salesforce_package_relationships(
 @router.post("/{connection_id}/package-setup/verify")
 def verify_salesforce_package_request(
     connection_id: int,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Confirm that a real Salesforce request reached the governed audit pipeline."""
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
     mapping = _json_object(item.mapping_json)
@@ -1947,10 +1972,11 @@ def verify_salesforce_package_request(
 @router.post("/{connection_id}/package-setup/activate")
 def activate_salesforce_package_connection(
     connection_id: int,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Mark setup live only after selection, relationship approval, and verification."""
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform != "salesforce":
         raise HTTPException(status_code=400, detail="Package setup currently supports Salesforce")
     mapping = _json_object(item.mapping_json)
@@ -2108,8 +2134,8 @@ async def _servicenow_table_get(
 
 
 @router.get("/{connection_id}/objects")
-async def discover_objects(connection_id: int, db: Session = Depends(get_db)):
-    item = _get_connection(db, connection_id)
+async def discover_objects(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform not in DEEP_INTEGRATION_PLATFORMS:
         raise HTTPException(status_code=501, detail=f"{item.platform.title()} metadata discovery is not available yet")
     try:
@@ -2155,9 +2181,10 @@ async def discover_objects(connection_id: int, db: Session = Depends(get_db)):
 async def discover_object_fields(
     connection_id: int,
     body: ObjectDiscoveryRequest,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform not in DEEP_INTEGRATION_PLATFORMS:
         raise HTTPException(status_code=501, detail=f"{item.platform.title()} metadata discovery is not available yet")
     if item.platform == "salesforce":
@@ -2266,7 +2293,7 @@ async def discover_object_fields(
 
 
 @router.put("/{connection_id}/tracked-objects")
-def set_tracked_objects(connection_id: int, body: TrackedObjectsUpdate, db: Session = Depends(get_db)):
+def set_tracked_objects(connection_id: int, body: TrackedObjectsUpdate, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Records which additional objects (beyond the single primary
     `selected_object` that import actually runs against today) the admin
@@ -2276,7 +2303,7 @@ def set_tracked_objects(connection_id: int, body: TrackedObjectsUpdate, db: Sess
     that intent survives until the import loop catches up, rather than
     forcing a UI to pretend only one object can ever matter.
     """
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     cleaned = sorted({name.strip() for name in body.objects if name.strip()})
     item.tracked_objects_json = json.dumps(cleaned)
     item.updated_at = datetime.utcnow()
@@ -2285,8 +2312,8 @@ def set_tracked_objects(connection_id: int, body: TrackedObjectsUpdate, db: Sess
 
 
 @router.get("/{connection_id}/context-discovery")
-def get_context_discovery(connection_id: int, db: Session = Depends(get_db)):
-    item = _get_connection(db, connection_id)
+def get_context_discovery(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id, workspace_id)
     discovery = _json_object(item.discovery_json)
     monitor = discovery.get("context_monitor") or {}
     return {
@@ -2303,8 +2330,8 @@ def get_context_discovery(connection_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{connection_id}/context-discovery/scan")
-async def scan_context_changes(connection_id: int, db: Session = Depends(get_db)):
-    item = _get_connection(db, connection_id)
+async def scan_context_changes(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id, workspace_id)
     if item.platform != "salesforce":
         raise HTTPException(status_code=501, detail="Continuous context discovery currently supports Salesforce")
     mapping = _json_object(item.mapping_json)
@@ -2357,9 +2384,10 @@ def decide_context_change(
     connection_id: int,
     change_id: str,
     body: ContextChangeDecision,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     discovery = _json_object(item.discovery_json)
     monitor = discovery.get("context_monitor") if isinstance(discovery.get("context_monitor"), dict) else {}
     changes = monitor.get("pending_changes") if isinstance(monitor.get("pending_changes"), list) else []
@@ -2403,8 +2431,8 @@ def decide_context_change(
 
 
 @router.put("/{connection_id}/mapping")
-def approve_mapping(connection_id: int, body: MappingUpdate, db: Session = Depends(get_db)):
-    item = _get_connection(db, connection_id)
+def approve_mapping(connection_id: int, body: MappingUpdate, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    item = _get_connection(db, connection_id, workspace_id)
     mapping = dict(body.mapping)
     children = mapping.get("children") or []
     if not isinstance(children, list) or len(children) > 100:
@@ -2757,7 +2785,7 @@ async def _sync_connection_outcomes(db: Session, item: IntegrationConnection) ->
 
 
 @router.post("/{connection_id}/sync-outcomes")
-async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
+async def sync_outcomes(connection_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Pull current status/value/close-date for every WorkItem this workspace
     has already linked to a Salesforce Opportunity/Case or ServiceNow
@@ -2767,7 +2795,7 @@ async def sync_outcomes(connection_id: int, db: Session = Depends(get_db)):
     The connected system remains the system of record -- this only ever
     reads.
     """
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     _require_connected(item)
     return await _sync_connection_outcomes(db, item)
 
@@ -3000,6 +3028,7 @@ async def import_work_items(
     connection_id: int,
     object_type: str = Query(..., description="Opportunity, Case, incident, or sn_customerservice_case"),
     dry_run: bool = False,
+    workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -3009,7 +3038,7 @@ async def import_work_items(
     updates existing WorkItems by source link rather than duplicating
     them). Pass dry_run=true to preview counts before committing.
     """
-    item = _get_connection(db, connection_id)
+    item = _get_connection(db, connection_id, workspace_id)
     _require_connected(item)
 
     if item.platform == "salesforce" and object_type == "Opportunity":

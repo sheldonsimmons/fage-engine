@@ -828,7 +828,7 @@ async function ensureSalesforcePackageInstalled() {
   status.innerHTML = `<div class="ob-discovery-status">Checking CostPilot for Salesforce…</div>`;
   try {
     let response = await fetch(
-      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/salesforce-package-install`,
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/salesforce-package-install?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`,
       { method: "POST" },
     );
     let result = await response.json();
@@ -837,7 +837,7 @@ async function ensureSalesforcePackageInstalled() {
       status.innerHTML = `<div class="ob-discovery-status">${_obEsc(result.message || "Salesforce is installing CostPilot…")}</div>`;
       await new Promise(resolve => setTimeout(resolve, 2000));
       response = await fetch(
-        `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/salesforce-package-install`,
+        `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/salesforce-package-install?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`,
       );
       result = await response.json();
       if (!response.ok) throw new Error(result.detail || "Installation progress is temporarily unavailable.");
@@ -878,7 +878,7 @@ async function restoreServerOnboardingProgress() {
       }
     }
     const response = await fetch(
-      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup`
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`
     );
     if (!response.ok) return;
     const setup = await response.json();
@@ -954,8 +954,8 @@ async function loadDiscoverAndPreview() {
   let flows = [];
   try {
     const [objectsRes, entryRes] = await Promise.all([
-      fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/objects`),
-      fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points`),
+      fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/objects?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`),
+      fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`),
     ]);
     if (objectsRes.ok) objects = (await objectsRes.json()).objects || [];
     if (entryRes.ok) {
@@ -1018,7 +1018,7 @@ async function loadDiscoveryObjects() {
   const label = OB_PLATFORMS[obDiscoveryPlatform]?.label || "platform";
   status.innerHTML = `<div class="ob-discovery-status">Connected. Reading accessible ${_obEsc(label)} metadata…</div>`;
   try {
-    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/objects`);
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/objects?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "Object discovery failed.");
     const preferred = payload.objects.filter(obj => obj.recommended || obj.custom ||
@@ -1050,7 +1050,7 @@ async function discoverPlatformFields() {
   const status = document.getElementById("obDiscoveryStatus");
   status.innerHTML = `<div class="ob-discovery-status">Finding objects related to ${_obEsc(objectName)}…</div>`;
   try {
-    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/discover`, {
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/discover?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ object_name: objectName }),
@@ -1186,7 +1186,7 @@ async function approveDiscoveredMapping() {
     }));
     mapping.unmapped_behavior = document.getElementById("obUnmappedBehavior")?.value || "separate";
     mapping.preserve_origin_record = true;
-    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/mapping`, {
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/mapping?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ selected_object: selectedObject, mapping }),
@@ -1202,7 +1202,7 @@ async function approveDiscoveredMapping() {
       throw new Error(payload.detail || `Could not save mapping (${response.status}).`);
     }
     if (obDiscoveryPlatform === "salesforce") {
-      const packageResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/relationships`, {
+      const packageResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/relationships?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1359,7 +1359,8 @@ async function _obRunImportForAllTypes(dryRun) {
     for (const objectType of objectTypes) {
       const response = await fetch(
         `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/import-work-items` +
-        `?object_type=${encodeURIComponent(objectType)}&dry_run=${dryRun}`,
+        `?object_type=${encodeURIComponent(objectType)}&dry_run=${dryRun}` +
+        `&workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`,
         { method: "POST" }
       );
       const payload = await response.json().catch(() => ({}));
@@ -1405,8 +1406,9 @@ async function loadContextDiscoveryMonitor(scan = false) {
   host.innerHTML = `<div class="ob-discovery-status">${scan ? "Scanning Salesforce metadata…" : "Loading context discovery…"}</div>`;
   try {
     const suffix = scan ? "/scan" : "";
+    const ws = TRIAL_WS || localStorage.getItem("cp_workspace_id") || "";
     const response = await fetch(
-      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/context-discovery${suffix}`,
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/context-discovery${suffix}?workspace_id=${encodeURIComponent(ws)}`,
       { method: scan ? "POST" : "GET" }
     );
     const payload = await response.json();
@@ -1460,7 +1462,7 @@ async function reviewContextChange(changeId, decision, behavior) {
   const host = ensureContextDiscoveryMonitorHost();
   try {
     const response = await fetch(
-      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/context-discovery/changes/${changeId}`,
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/context-discovery/changes/${changeId}?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1482,7 +1484,7 @@ async function loadSalesforceAiEntryPoints() {
   section.innerHTML = `<div class="ob-discovery-status">Finding existing Agentforce agents and Salesforce Flows…</div>`;
   try {
     const response = await fetch(
-      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points`
+      `${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`
     );
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "AI entry-point discovery failed.");
@@ -1616,7 +1618,7 @@ async function saveSalesforceEntryPointSelection() {
   if (count) count.textContent = `${deduplicated.length} selected`;
   if (!obDiscoveryConnectionId) return;
   try {
-    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points/selection`, {
+    const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/ai-entry-points/selection?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2835,7 +2837,7 @@ async function runUniversalSetupTest() {
 
     if (obSelectedPlatform === "salesforce") {
       if (!obDiscoveryConnectionId) throw new Error("Reconnect Salesforce so CostPilot can verify the correct org and workspace.");
-      const verifyResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/verify`, {
+      const verifyResponse = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/verify?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`, {
         method: "POST",
       });
       const setup = await verifyResponse.json().catch(() => ({}));
@@ -2927,7 +2929,7 @@ async function activateUniversalConnection() {
     button.disabled = true;
     button.textContent = "Activating…";
     try {
-      const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/activate`, {
+      const response = await fetch(`${CostPilot_URL}/api/integrations/connections/${obDiscoveryConnectionId}/package-setup/activate?workspace_id=${encodeURIComponent(TRIAL_WS || localStorage.getItem("cp_workspace_id") || "")}`, {
         method: "POST",
       });
       const payload = await response.json().catch(() => ({}));
