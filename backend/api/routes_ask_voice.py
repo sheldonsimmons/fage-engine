@@ -37,24 +37,48 @@ logger = logging.getLogger("costpilot.ask_voice")
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25MB -- matches OpenAI's Whisper API limit
 MAX_SPEECH_CHARS = 4000
 
-_MONEY_RE = re.compile(r"\$(\d[\d,]*\.\d{3,})")
+_MONEY_RE = re.compile(r"\$(\d[\d,]*)(?:\.(\d+))?")
 _PERCENT_RE = re.compile(r"(\d+\.\d{2,})%")
+_MONTHS = {
+    "Jan": "January", "Feb": "February", "Mar": "March", "Apr": "April",
+    "Jun": "June", "Jul": "July", "Aug": "August", "Sept": "September",
+    "Sep": "September", "Oct": "October", "Nov": "November", "Dec": "December",
+}
+# Longest-first so "Sept" matches before the "Sep" prefix would.
+_MONTH_RE = re.compile(
+    r"\b(" + "|".join(sorted(_MONTHS, key=len, reverse=True)) + r")\b\.?(?=\s*\d)"
+)
+
+
+def _money_to_words(match: re.Match) -> str:
+    dollars = int(match.group(1).replace(",", ""))
+    cents = round(float("0." + match.group(2)) * 100) if match.group(2) else 0
+    if dollars == 0 and cents:
+        return f"{cents} cent" + ("" if cents == 1 else "s")
+    dollar_part = f"{dollars} dollar" + ("" if dollars == 1 else "s")
+    if not cents:
+        return dollar_part
+    cent_part = f"{cents} cent" + ("" if cents == 1 else "s")
+    return f"{dollar_part} and {cent_part}"
 
 
 def _speech_friendly(text: str) -> str:
     """
-    Round money/percentages to a natural spoken precision before TTS.
-    Whisper's own numbers -- and every answer-construction call site in
-    routes_efficiency.py -- carry full float precision (e.g. "$3.0243"),
-    which is exactly right for the on-screen answer's numeric-fidelity
-    guardrail but reads aloud as "three point zero two four three
-    dollars" instead of "three dollars and two cents". This only reshapes
-    punctuation for pronunciation -- it never changes a figure's value --
-    so it doesn't touch the guardrail-validated text itself, only the
-    audio narrated from it.
+    Reshape money, percentages, and month abbreviations into what TTS
+    actually pronounces naturally. Whisper's own numbers -- and every
+    answer-construction call site in routes_efficiency.py -- carry full
+    float precision and calendar-standard abbreviations (e.g. "$3.0243",
+    "Aug 9"), which is exactly right for the on-screen answer's numeric-
+    fidelity guardrail, but read aloud as "three point zero two four
+    three dollars" and "Aug" (as a mangled short word) instead of "three
+    dollars and two cents" and "August". This only reshapes punctuation
+    and abbreviations for pronunciation -- it never changes a figure's
+    value or a date's meaning -- so it doesn't touch the guardrail-
+    validated text itself, only the audio narrated from it.
     """
-    text = _MONEY_RE.sub(lambda m: f"${float(m.group(1).replace(',', '')):,.2f}", text)
+    text = _MONEY_RE.sub(_money_to_words, text)
     text = _PERCENT_RE.sub(lambda m: f"{float(m.group(1)):.1f}%", text)
+    text = _MONTH_RE.sub(lambda m: _MONTHS[m.group(1)], text)
     return text
 
 
