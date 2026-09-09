@@ -460,6 +460,19 @@
 
         <div class="bi-section">
           <div class="bi-section-head">
+            <span class="bi-section-title">Business Impact by Department</span>
+            <span class="bi-section-sub">Ranked by AI investment</span>
+          </div>
+          <div class="context-breakdown-table-wrap">
+            <table class="rpt-context-table">
+              <thead><tr><th></th><th>Department</th><th>AI Investment</th><th>Won</th><th>Lost</th><th>Open</th><th>Closed-Won Value</th><th>Cost / Won Opp</th></tr></thead>
+              <tbody id="biDepartmentBody"><tr><td colspan="8">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bi-section">
+          <div class="bi-section-head">
             <span class="bi-section-title">Top WorkItems by AI Investment</span>
             <span class="bi-section-sub">
               <select id="biTopWorkItemsFilter" onchange="loadBusinessImpactTopWorkItems()" style="background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:11px;padding:4px 6px">
@@ -1132,7 +1145,7 @@
 </div>
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/reports.js?v=20260908-business-impact-redesign-p1"></script>
+  <script src="js/reports.js?v=20260908-business-impact-by-department"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
     const ROI_RATES = {

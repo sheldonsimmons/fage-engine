@@ -640,8 +640,34 @@ async function loadBusinessImpact() {
     biTrendText(data.trend_pct_change?.support_cost_per_resolution_usd);
   biEvidenceTag("bi-evidence-resolution", evidenceByKpi.support_cost_per_resolution_usd);
 
+  loadBusinessImpactByDepartment();
   loadBusinessImpactTopWorkItems();
   loadBusinessImpactRecommendations();
+}
+
+async function loadBusinessImpactByDepartment() {
+  const body = document.getElementById("biDepartmentBody");
+  if (!body) return;
+  body.innerHTML = `<tr><td colspan="8">Loading…</td></tr>`;
+  try {
+    const data = await apiGet(reportScopedPath("/api/dashboard/business-impact/by-department"));
+    const rows = data.rows || [];
+    body.innerHTML = rows.length
+      ? rows.map((row, i) => `
+        <tr>
+          <td class="bi-rank">${i + 1}</td>
+          <td>${escapeHtml(row.department)}</td>
+          <td>${fmtUsd(row.ai_investment_usd)}</td>
+          <td>${fmtNum(row.opportunities_won)}</td>
+          <td>${fmtNum(row.opportunities_lost)}</td>
+          <td>${fmtNum(row.opportunities_open)}</td>
+          <td>${fmtUsd(row.closed_won_value_usd)}</td>
+          <td>${fmtUsd(row.cost_per_won_opportunity_usd)}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="8">No department-level outcome data yet.</td></tr>`;
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="8">Could not load: ${escapeHtml(err.message)}</td></tr>`;
+  }
 }
 
 async function loadBusinessImpactTopWorkItems() {

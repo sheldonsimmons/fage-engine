@@ -1132,6 +1132,31 @@ def get_business_impact_top_work_items(
     }
 
 
+@router.get("/business-impact/by-department")
+def get_business_impact_by_department(
+    workspace_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Business Impact ranked by department -- won/lost/open opportunity
+    counts, closed-won value, AI investment, and cost per won opportunity,
+    one row per department, ranked by AI investment.
+
+    See core.metrics_query.department_outcome_breakdown()'s docstring for
+    why this is a standalone query rather than a new mixable dimension on
+    the shared metrics registry: WorkItemOutcome-rooted queries have no
+    TokenTransaction join to read the authoritative
+    charged_org_unit_name-based department label from, so this uses
+    WorkItem.department (the closest available per-WorkItem hint) and
+    merges outcome + spend queries in Python -- deliberately not touching
+    the registry path every other metric/dimension combination depends on.
+    """
+    from core.metrics_query import department_outcome_breakdown
+
+    rows = department_outcome_breakdown(db, workspace_id)
+    return {"workspace_id": workspace_id, "rows": rows}
+
+
 @router.get("/recommendations")
 def get_recommendations(
     workspace_id: str | None = Query(None),

@@ -1177,6 +1177,116 @@ def compute_outcome_coverage(
     }
 
 
+def department_outcome_breakdown(db: Session, workspace_id: Optional[str]) -> list[dict]:
+    """
+    Per-department outcome summary (won/lost/open counts, closed-won
+    value, AI investment, cost per won opportunity) -- the metric this
+    codebase's own design assessment flagged as the biggest gap in the
+    Business Impact redesign: DIMENSIONS["department"] is
+    TokenTransaction.charged_org_unit_name-based (the authoritative
+    "who was this AI call charged to" source, correctly used for every
+    activity-only breakdown), but WorkItemOutcome-rooted queries
+    (_run_outcome_query) never join TokenTransaction at all, so that
+    expression has no column to read there.
+
+    Deliberately NOT added to the DIMENSIONS registry as a mixable
+    "department" source, and NOT routed through run_metrics_query()'s
+    activity+outcome merge machinery -- widening that shared path (used
+    by every other metric/dimension combination in the app) was assessed
+    as the higher-risk option. This is a standalone, additive query:
+    outcome counts/value grouped by WorkItem.department (the closest
+    available per-WorkItem department hint), AI investment for the same
+    department buckets queried separately and merged by label in Python
+    -- the same "merge, don't fabricate" pattern get_business_impact()
+    itself already uses to combine several independent queries into one
+    response.
+
+    department label: WorkItem.department with its workspace prefix
+    stripped (segment after the last ':'), coalesced to "Unassigned" --
+    a lighter version of _department_breakdown_rows()'s label derivation
+    (that one also considers charged_org_unit_name, which has no
+    equivalent on WorkItem).
+    """
+    work_item_scope = workspace_filter(WorkItem, workspace_id)
+
+    def _scoped(query):
+        return query.filter(work_item_scope) if work_item_scope is not None else query
+
+    def _label(raw: str | None) -> str:
+        # Same precedence as _department_breakdown_rows()'s department-
+        # fallback branch: strip a workspace prefix (segment after the
+        # last ':'), coalesce blank/absent to "Unassigned". Split in
+        # Python, not SQL -- SQL substring/replace tricks for "text after
+        # the last colon" are fragile and dialect-dependent (SQLite vs.
+        # Postgres); this codebase's existing precedent for this exact
+        # label shape already does the split in Python for that reason.
+        return ((raw or "").split(":")[-1]).strip() or "Unassigned"
+
+    is_won = WorkItemOutcome.outcome_success.is_(True)
+    is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+    is_open = WorkItemOutcome.is_closed.is_(False)
+
+    outcome_rows = _scoped(
+        db.query(
+            WorkItem.department,
+            func.count(case((and_(WorkItem.context_type == "opportunity", is_won), 1))),
+            func.count(case((and_(WorkItem.context_type == "opportunity", is_lost), 1))),
+            func.count(case((and_(WorkItem.context_type == "opportunity", is_open), 1))),
+            func.coalesce(func.sum(case((and_(WorkItem.context_type == "opportunity", is_won), WorkItemOutcome.outcome_value), else_=0.0)), 0.0),
+        )
+        .select_from(WorkItemOutcome)
+        .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+        .group_by(WorkItem.department)
+    ).all()
+
+    spend_rows = _scoped(
+        db.query(
+            WorkItem.department,
+            func.coalesce(func.sum(case((and_(WorkItem.context_type == "opportunity", is_won), TokenTransaction.cost_usd), else_=0.0)), 0.0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        )
+        .select_from(TokenTransaction)
+        .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
+        .group_by(WorkItem.department)
+    ).all()
+
+    spend_by_dept: dict[str, dict] = {}
+    for raw_dept, won_spend, total_spend in spend_rows:
+        label = _label(raw_dept)
+        bucket = spend_by_dept.setdefault(label, {"won_spend": 0.0, "total_spend": 0.0})
+        bucket["won_spend"] += float(won_spend or 0.0)
+        bucket["total_spend"] += float(total_spend or 0.0)
+
+    merged: dict[str, dict] = {}
+    for raw_dept, won_n, lost_n, open_n, won_value in outcome_rows:
+        label = _label(raw_dept)
+        bucket = merged.setdefault(label, {
+            "opportunities_won": 0, "opportunities_lost": 0, "opportunities_open": 0,
+            "closed_won_value_usd": 0.0,
+        })
+        bucket["opportunities_won"] += int(won_n or 0)
+        bucket["opportunities_lost"] += int(lost_n or 0)
+        bucket["opportunities_open"] += int(open_n or 0)
+        bucket["closed_won_value_usd"] += float(won_value or 0.0)
+
+    results = []
+    for label, bucket in merged.items():
+        spend = spend_by_dept.get(label, {"won_spend": 0.0, "total_spend": 0.0})
+        won_n = bucket["opportunities_won"]
+        results.append({
+            "department": label,
+            "opportunities_won": won_n,
+            "opportunities_lost": bucket["opportunities_lost"],
+            "opportunities_open": bucket["opportunities_open"],
+            "closed_won_value_usd": round(bucket["closed_won_value_usd"], 2),
+            "ai_investment_usd": round(spend["total_spend"], 6),
+            "cost_per_won_opportunity_usd": round(spend["won_spend"] / won_n, 6) if won_n else None,
+        })
+    results.sort(key=lambda r: r["ai_investment_usd"], reverse=True)
+    return results
+
+
 # Legacy two-tier labels ("micro"/"flagship", pre-dating the four-tier
 # Scout/Analyst/Advisor/Strategist naming used by KnownModel/core.budget/
 # core.router) alongside the newer names -- both are live in the real
