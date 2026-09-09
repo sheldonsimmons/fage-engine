@@ -15,10 +15,11 @@ reach back to project_activity_reporting().
 """
 
 from typing import Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core.auth import check_membership
 from database.db import get_db
 from core.analytics_periods import resolve_primary_period
 from core.metrics_query import run_metrics_query
@@ -39,7 +40,21 @@ class MetricsQueryRequest(BaseModel):
 
 
 @router.post("/query")
-def metrics_query(body: MetricsQueryRequest, db: Session = Depends(get_db)):
+def metrics_query(
+    body: MetricsQueryRequest, db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    # Security architecture assessment, Finding 9: same soft-mode-gated
+    # membership check as routes_dashboard.py's _check_reporting_access --
+    # a no-op today, real once AUTH_ENFORCEMENT_ENABLED is on, and only
+    # when body.workspace_id is actually supplied (this endpoint's
+    # workspace_id lives on the request body, not a query/path param, so
+    # this calls check_membership() directly rather than the
+    # require_membership() dependency -- same reasoning as
+    # create_universal_connection in routes_connections_universal.py).
+    if body.workspace_id:
+        check_membership(db, authorization, body.workspace_id, "view_reports")
+
     # Same period resolution ask_costpilot_tools.py's run_query_metrics
     # already uses -- period_key wins when given; otherwise a rolling
     # `days`-day window ending now (never "no time filter at all", the

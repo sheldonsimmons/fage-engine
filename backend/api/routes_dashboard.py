@@ -14,10 +14,12 @@ GET /api/dashboard
 
 import json
 from datetime import datetime, date, timedelta
+from typing import Optional
 from sqlalchemy import and_, case, func, or_
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
+from core.auth import check_membership
 from database.db import get_db
 from database.models import (
     TokenTransaction, RegisteredAgent,
@@ -53,12 +55,40 @@ def _keyword_stats(db: Session, days: int = 30, top_n: int = 10, workspace_id: s
     return [{"kw": kw, "count": cnt} for kw, cnt in sorted_kws]
 
 
+def _check_reporting_access(db: Session, authorization: Optional[str], workspace_id: Optional[str]) -> None:
+    """
+    Security architecture assessment, Finding 9: this reporting surface
+    (and ~dozens of others across the app) always correctly scopes its
+    query WHEN GIVEN a workspace_id -- the gap is that workspace_id is
+    optional everywhere, and every one of these endpoints silently
+    aggregates across every workspace when it's omitted. Unlike Findings
+    5/6/8 (a single shared resolver each), there's no one seam to patch
+    here -- it's the same one-line gap repeated across every reporting
+    endpoint in the app.
+
+    This closes the highest-sensitivity slice first (Business Impact's
+    real financial figures, the Executive Dashboard) rather than
+    attempting a full sweep in one pass: soft-mode-gated (see
+    core/auth.py's AUTH_ENFORCEMENT_ENABLED docstring) -- a no-op today,
+    and even once enforcement is turned on, this only rejects a request
+    that DID supply a workspace_id the caller has no membership in; it
+    does not make workspace_id required (that would break every
+    legitimate "all workspaces" admin view still relied on elsewhere in
+    the app, same reasoning as _agent_scoped_or_404 in
+    routes_agentlake.py).
+    """
+    if workspace_id:
+        check_membership(db, authorization, workspace_id, "view_reports")
+
+
 @router.get("")
 def get_dashboard(
     workspace_id: str | None = Query(None),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Single endpoint that powers the entire executive dashboard."""
+    _check_reporting_access(db, authorization, workspace_id)
 
     now         = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -806,7 +836,9 @@ _SUPPORT_CONTEXT_TYPES = ("case", "ticket", "incident")
 def get_business_impact(
     workspace_id: str | None = Query(None),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
+    _check_reporting_access(db, authorization, workspace_id)
     """
     Workspace-wide version of api/routes_work_items.py's account_profile()
     outcome totals -- same real WorkItemOutcome aggregation (opportunity
@@ -1093,7 +1125,9 @@ def get_business_impact_top_work_items(
     rank_by: str = Query("spend", description="spend|cost_ratio"),
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
+    _check_reporting_access(db, authorization, workspace_id)
     """
     Top WorkItems by AI investment, optionally narrowed to one outcome
     bucket -- "highest AI investment on unsuccessful work," "highest
@@ -1153,7 +1187,9 @@ def get_business_impact_top_work_items(
 def get_business_impact_by_department(
     workspace_id: str | None = Query(None),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
+    _check_reporting_access(db, authorization, workspace_id)
     """
     Business Impact ranked by department -- won/lost/open opportunity
     counts, closed-won value, AI investment, and cost per won opportunity,
