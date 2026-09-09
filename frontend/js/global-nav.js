@@ -1004,7 +1004,7 @@
     }
   }
 
-  async function speakAskAnswer(text, triggerButton) {
+  async function speakAskAnswer(text, triggerButton, { continueConversation = false } = {}) {
     if (!text) return;
     if (window.location.search.includes("wakeDebug")) {
       console.debug("[speak] text sent to TTS:", JSON.stringify(text));
@@ -1028,9 +1028,21 @@
       const url = URL.createObjectURL(blob);
       _askCurrentAudio = new Audio(url);
       _askCurrentAudio.onended = () => {
-        askVoiceStatus("");
         renderAskStopSpeakingControl(false);
-        resumeWakeWordListenerIfEnabled();
+        // CostPilot ended its own answer with a question ("Would you
+        // like me to drill into...?") -- that's it waiting on a reply,
+        // same as a real conversation's turn-taking. Skip the wake
+        // phrase and go straight into listening for the answer, instead
+        // of just re-arming the wake engine.
+        if (continueConversation && !_askRecording) {
+          _wakeAutoStopArmed = true;
+          _wakeAutoSubmitArmed = true;
+          askVoiceStatus("Your turn — listening…", "listening");
+          toggleAskVoiceRecording();
+        } else {
+          askVoiceStatus("");
+          resumeWakeWordListenerIfEnabled();
+        }
       };
       askVoiceStatus("Speaking…", "listening");
       renderAskStopSpeakingControl(true);
@@ -1113,7 +1125,12 @@
       // Voice feasibility assessment's UI requirement); a spoken one does,
       // since the user was talking to CostPilot, not reading it.
       if (voiceMeta && voiceMeta.modality === "voice" && data.answer) {
-        speakAskAnswer(data.answer, pending.querySelector("[data-ask-speak]"));
+        // A trailing "?" is CostPilot waiting on a reply (a clarification,
+        // or an offer like "Want me to drill into X?") -- not a perfect
+        // signal, but a good enough one to keep listening instead of
+        // requiring the wake phrase again for an answer it's expecting.
+        const continueConversation = /\?\s*$/.test(data.answer.trim());
+        speakAskAnswer(data.answer, pending.querySelector("[data-ask-speak]"), { continueConversation });
       }
     } catch (error) {
       const statusMessage = /503/.test(error.message || "")
