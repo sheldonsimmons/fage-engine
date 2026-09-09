@@ -15,13 +15,15 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from database.db import get_db
 from database.models import IntegrationConnection, TokenTransaction
 from api.routes_workspaces import _new_api_key, _require_workspace, check_admin_access, _log_sensitive_access
+from core.auth import check_membership
 from core.connection_status import compute_connection_status, connection_scope
 
 router = APIRouter()
@@ -62,8 +64,16 @@ class UniversalConnectionCreateRequest(BaseModel):
 
 
 @router.post("/universal")
-def create_universal_connection(body: UniversalConnectionCreateRequest, request: Request, db: Session = Depends(get_db)):
+def create_universal_connection(
+    body: UniversalConnectionCreateRequest, request: Request, db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
     check_admin_access()
+    # workspace_id lives on the body, not the path/query, so this calls
+    # check_membership() directly rather than depending on
+    # require_membership() (see that dependency's docstring). Same
+    # AUTH_ENFORCEMENT_ENABLED soft-grace gating as everywhere else.
+    check_membership(db, authorization, body.workspace_id, "manage_integrations")
     platform = (body.platform or "").strip()
     if not platform:
         raise HTTPException(status_code=422, detail="platform is required")

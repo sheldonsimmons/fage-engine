@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import nullslast
 from sqlalchemy.orm import Session
 
+from core.auth import TenantContext, require_membership
 from database.db import get_db
 from database.models import Workspace
 
@@ -91,23 +92,14 @@ def get_api_key(workspace_id: str, db: Session = Depends(get_db)):
 
 def check_admin_access(request_user=None) -> None:
     """
-    Swappable seam for restricting credential reveal/regenerate to
-    authorized admins -- a no-op today because no user/role/auth model
-    exists anywhere in this codebase (confirmed while building the
-    Universal Connection feature). Real enforcement can be dropped in
-    here later without touching any call site that already imports this.
-
-    SECURITY AUDIT NOTE (see the security architecture assessment,
-    Finding 1): this is the highest-severity confirmed cross-tenant
-    vulnerability in the codebase -- anyone who knows a workspace_id can
-    retrieve or rotate that workspace's live credential. It cannot be
-    hard-gated yet without a real login/session system, because both
-    call sites below are live, unauthenticated calls from the real
-    product UI today (connector-manager.html, policy.html) -- adding a
-    hard check here with no way for the frontend to satisfy it would
-    just break those pages. _log_sensitive_access() below is the
-    detection stopgap until real per-user auth exists (see the
-    assessment's Phase 1+ recommendation).
+    Historical no-op, kept only so nothing importing this name breaks.
+    Real enforcement is now require_membership("manage_users") on the two
+    routes below (Phase 2 of the security architecture assessment,
+    closing Finding 1) -- gated by AUTH_ENFORCEMENT_ENABLED (see
+    core/auth.py's module docstring): off by default, so this remains a
+    no-op in production until every real workspace has an actual admin
+    membership and the flag is deliberately flipped on. Until then,
+    _log_sensitive_access() below is still the only real detection layer.
     """
     return None
 
@@ -128,13 +120,18 @@ def _log_sensitive_access(action: str, workspace_id: str, request: Request) -> N
 
 
 @router.get("/{workspace_id}/api-key/reveal")
-def reveal_api_key(workspace_id: str, request: Request, db: Session = Depends(get_db)):
+def reveal_api_key(
+    workspace_id: str, request: Request, db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(require_membership("manage_users")),
+):
     """
     Returns the CURRENT full key value without rotating it -- distinct
     from regenerate below, which always issues a new one. Generates a key
     if the workspace doesn't have one yet (first-time reveal during
     Universal Connection setup shouldn't require a separate "create a key"
-    step). Gated by the same admin-access seam as regenerate.
+    step). Gated by require_membership("manage_users") -- workspace_admin
+    is the only built-in role with that permission (see core/rbac.py) --
+    enforced only once AUTH_ENFORCEMENT_ENABLED is turned on.
     """
     check_admin_access()
     workspace = _require_workspace(db, workspace_id)
@@ -146,7 +143,10 @@ def reveal_api_key(workspace_id: str, request: Request, db: Session = Depends(ge
 
 
 @router.post("/{workspace_id}/api-key/regenerate")
-def regenerate_api_key(workspace_id: str, request: Request, db: Session = Depends(get_db)):
+def regenerate_api_key(
+    workspace_id: str, request: Request, db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(require_membership("manage_users")),
+):
     """
     Issues a new key, invalidating any previous one immediately -- there is
     no "list of valid keys," just the single current value on the row, so
@@ -154,7 +154,8 @@ def regenerate_api_key(workspace_id: str, request: Request, db: Session = Depend
     integration using the old key (any Universal Connection, and the
     packaged Salesforce connector) stops authenticating the moment this
     runs -- the frontend must warn about that before calling this, not
-    just before showing a confirm dialog for its own sake.
+    just before showing a confirm dialog for its own sake. Gated by
+    require_membership("manage_users"), same as reveal above.
     """
     check_admin_access()
     workspace = _require_workspace(db, workspace_id)
