@@ -845,7 +845,7 @@
       return;
     }
     const SPEECH_RMS_THRESHOLD = 12;
-    const SILENCE_MS_TO_STOP = 1000;
+    const SILENCE_MS_TO_STOP = 1500;
     const MAX_CAPTURE_MS = 12000;
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 512;
