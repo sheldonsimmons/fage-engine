@@ -740,6 +740,7 @@
   let _wakeTriggerInFlight = false;
   let _wakeVisibilityBound = false;
   let _wakeAutoStopArmed = false;
+  let _wakeAutoSubmitArmed = false;
 
   function wakeWordSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -812,6 +813,7 @@
     if (!/hey\s*,?\s*cost\s*-?\s*pilot/i.test(transcript)) return;
     _wakeTriggerInFlight = true;
     _wakeAutoStopArmed = true;
+    _wakeAutoSubmitArmed = true;
     pauseWakeWordListener();
     openAskCostPilot();
     askVoiceStatus("Heard “Hey CostPilot” — listening for your question…", "listening");
@@ -831,7 +833,7 @@
       return;
     }
     const SPEECH_RMS_THRESHOLD = 12;
-    const SILENCE_MS_TO_STOP = 1400;
+    const SILENCE_MS_TO_STOP = 1000;
     const MAX_CAPTURE_MS = 12000;
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 512;
@@ -922,6 +924,7 @@
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       _wakeAutoStopArmed = false;
+      _wakeAutoSubmitArmed = false;
       askVoiceStatus("Voice isn't supported in this browser — try typing instead.", "error");
       resumeWakeWordListenerIfEnabled();
       return;
@@ -949,6 +952,7 @@
       }
     } catch (err) {
       _wakeAutoStopArmed = false;
+      _wakeAutoSubmitArmed = false;
       askVoiceStatus("Couldn't access your microphone — check your browser permissions.", "error");
       resumeWakeWordListenerIfEnabled();
     }
@@ -969,13 +973,20 @@
       const confidence = typeof data.confidence === "number" ? data.confidence : null;
       _askPendingVoiceMeta = { modality: "voice", confidence };
       const lowConfidence = confidence !== null && confidence < 0.5;
-      askVoiceStatus(
-        lowConfidence
-          ? "Not fully sure I caught that — check the text below before sending."
-          : "Review your question, then hit Ask.",
-        lowConfidence ? "warn" : "ok",
-      );
+      const autoSubmit = _wakeAutoSubmitArmed && !lowConfidence && input?.value.trim();
+      _wakeAutoSubmitArmed = false;
+      if (autoSubmit) {
+        submitGlobalAsk();
+      } else {
+        askVoiceStatus(
+          lowConfidence
+            ? "Not fully sure I caught that — check the text below before sending."
+            : "Review your question, then hit Ask.",
+          lowConfidence ? "warn" : "ok",
+        );
+      }
     } catch (err) {
+      _wakeAutoSubmitArmed = false;
       _askPendingVoiceMeta = null;
       askVoiceStatus(err.message || "Could not transcribe that clip. Try typing instead.", "error");
     }
