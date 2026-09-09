@@ -1090,21 +1090,37 @@ def get_business_impact(
 def get_business_impact_top_work_items(
     workspace_id: str | None = Query(None),
     outcome_status: str | None = Query(None, description="won|lost|successful|unsuccessful|open|None"),
+    rank_by: str = Query("spend", description="spend|cost_ratio"),
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
     """
     Top WorkItems by AI investment, optionally narrowed to one outcome
     bucket -- "highest AI investment on unsuccessful work," "highest
-    spend on won opportunities," etc. Zero new aggregation: this is
+    spend on won opportunities," etc.
+
+    rank_by="spend" (default): raw AI spend. Zero new aggregation --
     run_metrics_query()'s existing "work_item" dimension + the existing
-    outcome_status filter (core/metrics_query.py's _outcome_status_clause,
-    already used elsewhere for exactly this filter shape), just not
-    previously exposed as its own endpoint. Each row already carries the
-    real WorkItem external_id (dimension_ids), so the frontend can link
-    straight to work-item-profile.html the same way the AI Activity
+    outcome_status filter (core/metrics_query.py's _outcome_status_clause).
+
+    rank_by="cost_ratio": AI spend as a fraction of the outcome's own
+    value (spend / outcome_value) -- surfaces WorkItems where investment
+    looks disproportionate to what came of it, not just where investment
+    was largest. "work_item" is a transaction-only dimension so this
+    can't run through run_metrics_query() in one call (same constraint
+    documented on core.metrics_query.department_outcome_breakdown);
+    backed by the standalone core.metrics_query.work_items_by_cost_ratio().
+
+    Each row carries the real WorkItem external_id, so the frontend can
+    link straight to work-item-profile.html the same way the AI Activity
     Explorer's "View Profile ->" links already do.
     """
+    if rank_by == "cost_ratio":
+        from core.metrics_query import work_items_by_cost_ratio
+
+        rows = work_items_by_cost_ratio(db, workspace_id, outcome_status, limit)
+        return {"workspace_id": workspace_id, "outcome_status": outcome_status, "rank_by": rank_by, "rows": rows, "errors": []}
+
     from core.metrics_query import run_metrics_query
 
     filters = {"outcome_status": outcome_status} if outcome_status else {}
@@ -1119,6 +1135,7 @@ def get_business_impact_top_work_items(
     return {
         "workspace_id": workspace_id,
         "outcome_status": outcome_status,
+        "rank_by": rank_by,
         "rows": [
             {
                 "work_item_id": row["dimension_ids"]["work_item"],

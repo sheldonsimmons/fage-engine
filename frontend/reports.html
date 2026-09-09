@@ -475,6 +475,10 @@
           <div class="bi-section-head">
             <span class="bi-section-title">Top WorkItems by AI Investment</span>
             <span class="bi-section-sub">
+              <select id="biTopWorkItemsRankBy" onchange="loadBusinessImpactTopWorkItems()" style="background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:11px;padding:4px 6px;margin-right:6px">
+                <option value="spend">Rank by AI spend</option>
+                <option value="cost_ratio">Rank by cost vs. outcome value</option>
+              </select>
               <select id="biTopWorkItemsFilter" onchange="loadBusinessImpactTopWorkItems()" style="background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:11px;padding:4px 6px">
                 <option value="">All outcomes</option>
                 <option value="successful">Successful only</option>
@@ -485,7 +489,7 @@
           </div>
           <div class="context-breakdown-table-wrap">
             <table class="rpt-context-table">
-              <thead><tr><th></th><th>WorkItem</th><th>AI Investment</th><th>Requests</th><th></th></tr></thead>
+              <thead id="biTopWorkItemsHead"><tr><th></th><th>WorkItem</th><th>AI Investment</th><th>Requests</th><th></th></tr></thead>
               <tbody id="biTopWorkItemsBody"><tr><td colspan="5">Loading…</td></tr></tbody>
             </table>
           </div>
@@ -1145,7 +1149,7 @@
 </div>
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/reports.js?v=20260908-business-impact-by-department"></script>
+  <script src="js/reports.js?v=20260908-cost-ratio-ranking"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
     const ROI_RATES = {

@@ -672,11 +672,20 @@ async function loadBusinessImpactByDepartment() {
 
 async function loadBusinessImpactTopWorkItems() {
   const body = document.getElementById("biTopWorkItemsBody");
+  const head = document.getElementById("biTopWorkItemsHead");
   if (!body) return;
   const outcomeStatus = document.getElementById("biTopWorkItemsFilter")?.value || "";
-  body.innerHTML = `<tr><td colspan="5">Loading…</td></tr>`;
+  const rankBy = document.getElementById("biTopWorkItemsRankBy")?.value || "spend";
+  const byRatio = rankBy === "cost_ratio";
+  if (head) {
+    head.innerHTML = byRatio
+      ? `<tr><th></th><th>WorkItem</th><th>AI Investment</th><th>Outcome Value</th><th>Cost / Value</th><th></th></tr>`
+      : `<tr><th></th><th>WorkItem</th><th>AI Investment</th><th>Requests</th><th></th></tr>`;
+  }
+  const colspan = byRatio ? 6 : 5;
+  body.innerHTML = `<tr><td colspan="${colspan}">Loading…</td></tr>`;
   try {
-    const params = new URLSearchParams({ limit: "10" });
+    const params = new URLSearchParams({ limit: "10", rank_by: rankBy });
     if (outcomeStatus) params.set("outcome_status", outcomeStatus);
     const path = reportScopedPath(`/api/dashboard/business-impact/top-work-items`);
     const url = `${path}${path.includes("?") ? "&" : "?"}${params.toString()}`;
@@ -685,17 +694,19 @@ async function loadBusinessImpactTopWorkItems() {
     body.innerHTML = rows.length
       ? rows.map((row, i) => {
           const href = EXPLORER_DIMENSION_CONFIG.work_item.profile(row.work_item_id);
+          const middleCells = byRatio
+            ? `<td>${fmtUsd(row.ai_spend_usd)}</td><td>${fmtUsd(row.outcome_value_usd)}</td><td>${(row.cost_ratio * 100).toFixed(2)}%</td>`
+            : `<td>${fmtUsd(row.ai_spend_usd)}</td><td>${fmtNum(row.ai_requests)}</td>`;
           return `<tr>
             <td class="bi-rank">${i + 1}</td>
             <td>${escapeHtml(row.label)}</td>
-            <td>${fmtUsd(row.ai_spend_usd)}</td>
-            <td>${fmtNum(row.ai_requests)}</td>
+            ${middleCells}
             <td><a href="${href}" class="context-view-toggle">View Profile →</a></td>
           </tr>`;
         }).join("")
-      : `<tr><td colspan="5">No matching AI activity.</td></tr>`;
+      : `<tr><td colspan="${colspan}">No matching AI activity.</td></tr>`;
   } catch (err) {
-    body.innerHTML = `<tr><td colspan="5">Could not load: ${escapeHtml(err.message)}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="${colspan}">Could not load: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 

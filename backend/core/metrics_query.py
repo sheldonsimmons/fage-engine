@@ -1330,6 +1330,73 @@ def department_outcome_breakdown(db: Session, workspace_id: Optional[str]) -> li
     return results
 
 
+def work_items_by_cost_ratio(
+    db: Session, workspace_id: Optional[str], outcome_status: Optional[str], limit: int,
+) -> list[dict]:
+    """
+    Ranks WorkItems by a computed ratio -- AI spend as a fraction of the
+    outcome's own value (cost_ratio = ai_spend_usd / outcome_value_usd) --
+    instead of raw spend. The design assessment flagged this as a real
+    gap: run_metrics_query()'s "work_item" dimension is transaction-
+    sourced only (sources=("transaction",)), so it can't be combined with
+    an outcome-sourced metric like won_value in one call the way
+    "account" can. Standalone, Python-merged, same pattern as
+    department_outcome_breakdown() -- not added to the shared registry.
+
+    Only WorkItems with a positive outcome_value are included (a ratio
+    against $0 or unknown value is meaningless, not "free" -- omitted
+    rather than shown as 0 or infinite). Sorted with the WORST ratio
+    (highest cost relative to value) first by default -- that's the
+    actionable direction: "where is AI investment least efficient,"
+    not "where is it already working well."
+    """
+    work_item_scope = workspace_filter(WorkItem, workspace_id)
+
+    def _scoped(query):
+        return query.filter(work_item_scope) if work_item_scope is not None else query
+
+    status_clause = _outcome_status_clause(outcome_status) if outcome_status else None
+
+    outcome_q = (
+        db.query(
+            WorkItem.id, WorkItem.external_id, WorkItem.name,
+            WorkItemOutcome.outcome_value,
+        )
+        .select_from(WorkItemOutcome)
+        .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
+        .filter(WorkItemOutcome.outcome_value.isnot(None))
+        .filter(WorkItemOutcome.outcome_value > 0)
+    )
+    if status_clause is not None:
+        outcome_q = outcome_q.filter(status_clause)
+    outcome_rows = _scoped(outcome_q).all()
+    if not outcome_rows:
+        return []
+
+    work_item_ids = [row[0] for row in outcome_rows]
+    spend_rows = (
+        db.query(TokenTransaction.work_item_id, func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+        .filter(TokenTransaction.work_item_id.in_(work_item_ids))
+        .group_by(TokenTransaction.work_item_id)
+        .all()
+    )
+    spend_by_work_item = {work_item_id: float(spend or 0.0) for work_item_id, spend in spend_rows}
+
+    results = []
+    for work_item_id, external_id, name, outcome_value in outcome_rows:
+        spend = spend_by_work_item.get(work_item_id, 0.0)
+        value = float(outcome_value)
+        results.append({
+            "work_item_id": external_id,
+            "label": name or "Unassigned work item",
+            "ai_spend_usd": round(spend, 6),
+            "outcome_value_usd": round(value, 2),
+            "cost_ratio": round(spend / value, 6),
+        })
+    results.sort(key=lambda r: r["cost_ratio"], reverse=True)
+    return results[:limit]
+
+
 # Legacy two-tier labels ("micro"/"flagship", pre-dating the four-tier
 # Scout/Analyst/Advisor/Strategist naming used by KnownModel/core.budget/
 # core.router) alongside the newer names -- both are live in the real
