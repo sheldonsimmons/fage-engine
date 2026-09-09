@@ -875,3 +875,108 @@ class Workspace(Base):
     created_at         = Column(DateTime, default=datetime.utcnow)
     archived_at        = Column(DateTime, nullable=True)
     notes              = Column(Text, nullable=True)
+
+
+# ── Auth / RBAC — Phase 1 of the security architecture assessment ──────────
+#
+# Foundation only: these tables exist and are usable via api/routes_auth.py
+# (register/login/logout/me), but nothing else in the app checks them yet.
+# No existing route has been retrofitted to require a session -- that's
+# Phase 2 (a centralized get_current_membership() dependency applied route
+# by route), deliberately kept separate so this addition is purely
+# additive and carries no regression risk to any page that works today.
+
+class User(Base):
+    """
+    A logged-in human, independent of any workspace -- workspace access
+    is entirely UserWorkspaceMembership's job, not this table's. No
+    "global superadmin" flag here on purpose: any cross-workspace admin
+    capability, if ever needed, belongs on the membership/role layer, not
+    baked into the user record itself.
+    """
+    __tablename__ = "users"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    email         = Column(String, unique=True, nullable=False, index=True)
+    display_name  = Column(String, nullable=True)
+    status        = Column(String, nullable=False, default="active")  # active | disabled
+    auth_provider = Column(String, nullable=False, default="email")   # email | google | microsoft (future)
+    password_hash = Column(String, nullable=True)  # null if a future non-password provider is used
+    created_at    = Column(DateTime, default=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)
+
+
+class Role(Base):
+    """
+    A fixed catalog of four roles for v1 (workspace_admin,
+    governance_manager, department_manager, viewer) -- deliberately no
+    custom-role editor yet; that's an explicitly deferred future-enterprise
+    feature, not an oversight. is_builtin exists so a later custom-role
+    feature can distinguish the four seeded rows from anything an admin
+    creates themselves, without a schema change.
+    """
+    __tablename__ = "roles"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    key        = Column(String, unique=True, nullable=False)  # workspace_admin | governance_manager | department_manager | viewer
+    label      = Column(String, nullable=False)
+    is_builtin = Column(Boolean, default=True)
+
+
+class RolePermission(Base):
+    """
+    What each role can do -- a real table (so route handlers eventually
+    check has_permission(user, workspace, "manage_budgets") rather than
+    role == "governance_manager" directly) even though v1 has no UI to
+    edit it; the four roles' bundles are seeded once at migration time.
+    """
+    __tablename__ = "role_permissions"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    role_id    = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    permission = Column(String, nullable=False)
+
+    __table_args__ = (UniqueConstraint("role_id", "permission", name="uq_role_permission"),)
+
+
+class UserWorkspaceMembership(Base):
+    """
+    Which users can access which workspaces, with what role and
+    (optionally) department restriction. workspace_id here is a REAL
+    foreign key to workspaces.id (the surrogate integer PK) -- a
+    deliberate departure from the loose "workspace_id as an unindexed
+    string" convention every other table in this codebase uses, because
+    that loose-string pattern is exactly what caused real bugs elsewhere
+    (see workspace_scope.py's docstring) and Workspace itself was already
+    built to be the canonical, FK-able registry. A new table is the right
+    place to finally do it the strict way.
+    """
+    __tablename__ = "user_workspace_memberships"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    user_id             = Column(Integer, ForeignKey("users.id"), nullable=False)
+    workspace_id        = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
+    role_id             = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    department_scope    = Column(String, nullable=True)  # null = whole-workspace access
+    status              = Column(String, nullable=False, default="active")  # invited | active | disabled
+    invited_by_user_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at          = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "workspace_id", name="uq_user_workspace"),)
+
+
+class UserSession(Base):
+    """
+    A logged-in session, identified by a bearer token. Only the SHA-256
+    hash of the token is stored (mirrors how workspace/trial credentials
+    are already never returned after creation in this codebase) -- a
+    database leak alone does not hand out working session tokens.
+    """
+    __tablename__ = "user_sessions"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token_hash  = Column(String, unique=True, nullable=False, index=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    expires_at  = Column(DateTime, nullable=False)
+    revoked_at  = Column(DateTime, nullable=True)

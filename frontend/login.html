@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/assets/costpilot-favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Sign In</title>
+  <link rel="stylesheet" href="css/styles.css?v=20260821-dark-theme" />
+  <style>
+    body { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg-base); font-family:var(--font-sans); }
+    .auth-card { width:100%; max-width:380px; padding:32px; background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; }
+    .auth-brand { font-weight:700; font-size:18px; color:var(--text-primary); margin-bottom:4px; }
+    .auth-sub { font-size:13px; color:var(--text-muted); margin-bottom:24px; }
+    .auth-tabs { display:flex; gap:4px; margin-bottom:20px; background:var(--bg-input); border:1px solid var(--border); border-radius:8px; padding:3px; }
+    .auth-tab { flex:1; text-align:center; padding:7px 0; border-radius:6px; font-size:13px; color:var(--text-muted); cursor:pointer; user-select:none; }
+    .auth-tab.active { background:var(--bg-panel); color:var(--text-primary); font-weight:600; }
+    label { display:block; font-size:12px; color:var(--text-muted); margin:14px 0 5px; }
+    input { width:100%; box-sizing:border-box; padding:9px 11px; background:var(--bg-input); border:1px solid var(--border); border-radius:7px; color:var(--text-primary); font-size:14px; }
+    input:focus { outline:none; border-color:var(--accent); }
+    .auth-hint { font-size:11.5px; color:var(--text-muted); margin-top:4px; }
+    button.auth-submit { width:100%; margin-top:22px; padding:10px 0; background:var(--accent); border:none; border-radius:7px; color:#04101f; font-weight:700; font-size:14px; cursor:pointer; }
+    button.auth-submit:disabled { opacity:0.6; cursor:default; }
+    .auth-error { margin-top:14px; padding:9px 11px; background:rgba(248,81,73,0.12); border:1px solid rgba(248,81,73,0.3); border-radius:7px; color:var(--accent-red); font-size:12.5px; display:none; }
+    .auth-field-workspace { display:none; }
+    .auth-field-workspace.show { display:block; }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <div class="auth-brand">CostPilot</div>
+    <div class="auth-sub" id="authSub">Sign in to your workspace</div>
+
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="tabLogin" onclick="setAuthMode('login')">Sign In</div>
+      <div class="auth-tab" id="tabRegister" onclick="setAuthMode('register')">Create Account</div>
+    </div>
+
+    <form id="authForm" onsubmit="return submitAuth(event)">
+      <label for="authEmail">Email</label>
+      <input id="authEmail" type="email" autocomplete="email" required />
+
+      <div id="authDisplayNameField" class="auth-field-workspace">
+        <label for="authDisplayName">Name (optional)</label>
+        <input id="authDisplayName" type="text" autocomplete="name" />
+      </div>
+
+      <label for="authPassword">Password</label>
+      <input id="authPassword" type="password" autocomplete="current-password" required minlength="8" />
+      <div class="auth-hint" id="authPasswordHint" style="display:none">At least 8 characters.</div>
+
+      <div id="authWorkspaceField" class="auth-field-workspace">
+        <label for="authWorkspaceId">Workspace ID</label>
+        <input id="authWorkspaceId" type="text" placeholder="e.g. the ID shown in your CostPilot URL" />
+        <div class="auth-hint">If this workspace has no members yet, you'll become its admin.</div>
+      </div>
+
+      <button class="auth-submit" id="authSubmitBtn" type="submit">Sign In</button>
+      <div class="auth-error" id="authError"></div>
+    </form>
+  </div>
+
+  <script>
+    let _authMode = "login";
+
+    function setAuthMode(mode) {
+      _authMode = mode;
+      document.getElementById("tabLogin").classList.toggle("active", mode === "login");
+      document.getElementById("tabRegister").classList.toggle("active", mode === "register");
+      document.getElementById("authSub").textContent =
+        mode === "login" ? "Sign in to your workspace" : "Create your CostPilot account";
+      document.getElementById("authSubmitBtn").textContent = mode === "login" ? "Sign In" : "Create Account";
+      document.getElementById("authPassword").autocomplete = mode === "login" ? "current-password" : "new-password";
+      document.getElementById("authPasswordHint").style.display = mode === "register" ? "block" : "none";
+      document.getElementById("authDisplayNameField").classList.toggle("show", mode === "register");
+      document.getElementById("authWorkspaceField").classList.toggle("show", mode === "register");
+      document.getElementById("authError").style.display = "none";
+    }
+
+    async function submitAuth(evt) {
+      evt.preventDefault();
+      const btn = document.getElementById("authSubmitBtn");
+      const errorEl = document.getElementById("authError");
+      errorEl.style.display = "none";
+      btn.disabled = true;
+      btn.textContent = _authMode === "login" ? "Signing in…" : "Creating account…";
+
+      const email = document.getElementById("authEmail").value.trim();
+      const password = document.getElementById("authPassword").value;
+
+      try {
+        const path = _authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+        const body = _authMode === "login"
+          ? { email, password }
+          : {
+              email, password,
+              display_name: document.getElementById("authDisplayName").value.trim() || null,
+              workspace_id: document.getElementById("authWorkspaceId").value.trim() || null,
+            };
+
+        const res = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Something went wrong.");
+
+        localStorage.setItem("cp_auth_token", data.token);
+        localStorage.setItem("cp_user_email", data.user.email);
+        if (data.user.display_name) localStorage.setItem("cp_user_display_name", data.user.display_name);
+
+        // If the signed-in user has exactly one workspace membership, make
+        // it the active workspace immediately -- no reason to make them
+        // pick from the switcher when there's only one real choice.
+        if (data.user.memberships && data.user.memberships.length === 1) {
+          localStorage.setItem("cp_workspace_id", data.user.memberships[0].workspace_id);
+          localStorage.setItem("cp_workspace_name", data.user.memberships[0].workspace_name);
+        }
+
+        window.location.href = "/index.html";
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = _authMode === "login" ? "Sign In" : "Create Account";
+      }
+    }
+
+    // Prefill workspace id from whatever's already selected, if any --
+    // convenient when a first admin is registering right after landing
+    // on a workspace via the trial/onboarding flow.
+    (function () {
+      const ws = localStorage.getItem("cp_workspace_id");
+      if (ws) document.getElementById("authWorkspaceId").value = ws;
+    })();
+  </script>
+</body>
+</html>

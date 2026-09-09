@@ -9,12 +9,24 @@
 const CostPilot_API = "";
 
 /**
+ * Attaches the logged-in session token, if one exists, to every outgoing
+ * request -- no existing backend route checks this yet (Phase 1 of the
+ * security architecture assessment is additive-only: auth exists, but
+ * nothing is required to require it yet), so this is forward-compatible
+ * and harmless until Phase 2 retrofits routes to actually need it.
+ */
+function _authHeaders() {
+  const token = localStorage.getItem("cp_auth_token");
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+}
+
+/**
  * GET a JSON endpoint from the CostPilot backend.
  * @param {string} path - e.g. "/health" or "/api/budget"
  * @returns {Promise<any>} parsed JSON response
  */
 async function apiGet(path) {
-  const response = await fetch(`${CostPilot_API}${path}`);
+  const response = await fetch(`${CostPilot_API}${path}`, { headers: _authHeaders() });
   if (!response.ok) throw new Error(`GET ${path} failed: ${response.status}`);
   return response.json();
 }
@@ -28,7 +40,7 @@ async function apiGet(path) {
 async function apiPost(path, body) {
   const response = await fetch(`${CostPilot_API}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ..._authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -47,7 +59,7 @@ async function apiPost(path, body) {
 async function apiPut(path, body) {
   const response = await fetch(`${CostPilot_API}${path}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ..._authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`PUT ${path} failed: ${response.status}`);
@@ -60,7 +72,7 @@ async function apiPut(path, body) {
 async function apiPatch(path, body) {
   const response = await fetch(`${CostPilot_API}${path}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ..._authHeaders() },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) {
@@ -77,7 +89,7 @@ async function apiPatch(path, body) {
  * @returns {Promise<any>} parsed JSON response
  */
 async function apiDelete(path) {
-  const response = await fetch(`${CostPilot_API}${path}`, { method: "DELETE" });
+  const response = await fetch(`${CostPilot_API}${path}`, { method: "DELETE", headers: _authHeaders() });
   if (!response.ok) {
     let detail = `DELETE ${path} failed: ${response.status}`;
     try { const payload = await response.json(); detail = payload.detail || payload.message || detail; } catch (_) {}

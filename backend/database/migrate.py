@@ -481,6 +481,45 @@ def run_migrations():
         except Exception:
             conn.rollback()
 
+        # Security architecture assessment, Phase 1 (Foundation) — auth/RBAC
+        # tables. Purely additive: create-if-missing, same TrialAccount
+        # precedent above, no existing table altered. Seeds the 4 builtin
+        # roles + their permission bundles from core/rbac.py exactly once
+        # (idempotent — checks for existing rows first).
+        try:
+            from database.models import User, Role, RolePermission, UserWorkspaceMembership, UserSession
+            User.__table__.create(bind=engine, checkfirst=True)
+            Role.__table__.create(bind=engine, checkfirst=True)
+            RolePermission.__table__.create(bind=engine, checkfirst=True)
+            UserWorkspaceMembership.__table__.create(bind=engine, checkfirst=True)
+            UserSession.__table__.create(bind=engine, checkfirst=True)
+        except Exception:
+            conn.rollback()
+        try:
+            from core.rbac import BUILTIN_ROLES
+            from database.db import SessionLocal
+            seed_db = SessionLocal()
+            try:
+                for key, spec in BUILTIN_ROLES.items():
+                    role = seed_db.query(Role).filter_by(key=key).first()
+                    if not role:
+                        role = Role(key=key, label=spec["label"], is_builtin=True)
+                        seed_db.add(role)
+                        seed_db.commit()
+                        seed_db.refresh(role)
+                    existing_perms = {
+                        p.permission for p in
+                        seed_db.query(RolePermission).filter_by(role_id=role.id).all()
+                    }
+                    for permission in spec["permissions"]:
+                        if permission not in existing_perms:
+                            seed_db.add(RolePermission(role_id=role.id, permission=permission))
+                seed_db.commit()
+            finally:
+                seed_db.close()
+        except Exception:
+            conn.rollback()
+
         # Uses its OWN connection, deliberately not the shared `conn` above.
         # The trial_accounts loop just above issues raw ALTER TABLE ADD
         # COLUMN statements without IF NOT EXISTS, which fail (columns

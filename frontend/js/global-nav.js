@@ -81,6 +81,35 @@
       </label>`;
   }
 
+  function accountMarkup() {
+    // Security architecture assessment, Phase 1: a real login now exists
+    // (login.html), but no route requires a session yet -- this is a
+    // visibility/entry-point affordance only, not an access-control UI.
+    const token = localStorage.getItem("cp_auth_token");
+    const email = localStorage.getItem("cp_user_email");
+    if (token && email) {
+      return `
+        <span class="cp-global-nav__account" id="cpAccountEmail" title="Signed in as ${escapeHtml(email)}">${escapeHtml(email)}</span>
+        <button class="cp-global-nav__help" id="cpSignOut" type="button" title="Sign out">Sign out</button>`;
+    }
+    return `<a class="cp-global-nav__help" href="/login.html" title="Sign in">Sign in</a>`;
+  }
+
+  function bindAccountControls(nav) {
+    const signOut = nav.querySelector("#cpSignOut");
+    if (!signOut) return;
+    signOut.addEventListener("click", async () => {
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${localStorage.getItem("cp_auth_token") || ""}` },
+        });
+      } catch (_err) { /* revoke best-effort -- clear local state regardless */ }
+      localStorage.removeItem("cp_auth_token");
+      location.assign("/login.html");
+    });
+  }
+
   async function refreshWorkspaceOptions() {
     try {
       const response = await fetch("/api/workspaces");
@@ -174,6 +203,7 @@
           <span class="cp-global-nav__status-dot" aria-hidden="true"></span>
           <span class="cp-global-nav__status-label">Checking</span>
         </a>
+        ${accountMarkup()}
         <button class="cp-global-nav__help" id="cpGlobalHelp" type="button" aria-label="Open page guide" title="Help and page guide">?</button>
       </div>`;
     header.appendChild(nav);
@@ -209,6 +239,7 @@
     nav.querySelector("#cpWorkspaceSwitcher").addEventListener("change", (event) => {
       switchWorkspace(event.target.value);
     });
+    bindAccountControls(nav);
     refreshWorkspaceOptions();
 
     document.addEventListener("click", () => closeMenus(nav));

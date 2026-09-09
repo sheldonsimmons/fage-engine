@@ -309,6 +309,11 @@ app.include_router(routes_insights.router, prefix="/api/insights", tags=["Insigh
 from api import routes_workspaces
 app.include_router(routes_workspaces.router, prefix="/api/workspaces", tags=["Workspaces"])
 
+# Security architecture assessment, Phase 1 — user auth (register/login/logout/me).
+# Additive only: no existing route requires a session yet (that's Phase 2).
+from api import routes_auth
+app.include_router(routes_auth.router, prefix="/api/auth", tags=["Auth"])
+
 # Step 9 — Sensitive Term Library
 from api import routes_keywords
 app.include_router(routes_keywords.router, prefix="/api/keywords", tags=["Keywords"])
