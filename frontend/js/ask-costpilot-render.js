@@ -177,6 +177,14 @@ function askDrillUrl(scope) {
 }
 
 function renderAskEvidence(item, data) {
+  const isClarification = data.intent === "clarification" || data.data_provenance?.scope === "clarification_required";
+  if (isClarification) {
+    const choice = item.label || item.value || "";
+    return `<button type="button" class="cp-ask-evidence" data-ask-question="${askRenderEscapeHtml(choice)}">
+      <div><strong>${askRenderEscapeHtml(item.label || "Unknown")}</strong><span>${askRenderEscapeHtml(item.detail || "")}</span></div>
+      <div><strong>${askRenderEscapeHtml(item.value || "—")}</strong><span>${askRenderEscapeHtml(item.metric_label || "")}</span></div>
+    </button>`;
+  }
   const scope = askDrillScope(data, item);
   const drill = item.filter_name && item.filter_value !== null && item.filter_value !== undefined
     ? `<button type="button" data-ask-scope="${askRenderEscapeHtml(encodeURIComponent(JSON.stringify(scope)))}">View activity →</button>`

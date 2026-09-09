@@ -605,6 +605,20 @@ header.header .header-sub,
 }
 
 .cp-ask-evidence > div:last-child { align-items: flex-end; }
+
+button.cp-ask-evidence {
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+button.cp-ask-evidence:hover,
+button.cp-ask-evidence:focus-visible {
+  border-color: var(--accent, #60a5fa);
+  background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent);
+}
 .cp-ask-evidence button {
   background: transparent;
   border: 0;
