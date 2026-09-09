@@ -22,6 +22,7 @@ import io
 import logging
 import math
 import os
+import re
 from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -35,6 +36,26 @@ logger = logging.getLogger("costpilot.ask_voice")
 
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25MB -- matches OpenAI's Whisper API limit
 MAX_SPEECH_CHARS = 4000
+
+_MONEY_RE = re.compile(r"\$(\d[\d,]*\.\d{3,})")
+_PERCENT_RE = re.compile(r"(\d+\.\d{2,})%")
+
+
+def _speech_friendly(text: str) -> str:
+    """
+    Round money/percentages to a natural spoken precision before TTS.
+    Whisper's own numbers -- and every answer-construction call site in
+    routes_efficiency.py -- carry full float precision (e.g. "$3.0243"),
+    which is exactly right for the on-screen answer's numeric-fidelity
+    guardrail but reads aloud as "three point zero two four three
+    dollars" instead of "three dollars and two cents". This only reshapes
+    punctuation for pronunciation -- it never changes a figure's value --
+    so it doesn't touch the guardrail-validated text itself, only the
+    audio narrated from it.
+    """
+    text = _MONEY_RE.sub(lambda m: f"${float(m.group(1).replace(',', '')):,.2f}", text)
+    text = _PERCENT_RE.sub(lambda m: f"{float(m.group(1)):.1f}%", text)
+    return text
 
 
 class TranscribeResponse(BaseModel):
@@ -139,7 +160,7 @@ def speak(body: SpeakRequest):
     text = (body.text or "").strip()
     if not text:
         raise HTTPException(status_code=422, detail="No text to speak.")
-    text = text[:MAX_SPEECH_CHARS]
+    text = _speech_friendly(text)[:MAX_SPEECH_CHARS]
 
     client = _openai_client(timeout=15.0)
     try:
