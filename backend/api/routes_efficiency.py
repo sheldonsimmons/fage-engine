@@ -149,6 +149,13 @@ class AskCostPilotRequest(BaseModel):
     conversation: list[AskCostPilotMessage] = Field(default_factory=list)
     context: Optional[AskCostPilotContext] = None
     screen_context: Optional[AskCostPilotScreenContext] = None
+    # CostPilot Voice (Phase 1): which surface the question came from.
+    # Purely observational (see AskInteraction.modality) -- nothing in
+    # the answer pipeline branches on this. "voice" means the question
+    # text was produced by /api/voice/ask/transcribe; the question is
+    # otherwise answered through this exact same endpoint, unchanged.
+    modality: Optional[str] = "text"
+    transcription_confidence: Optional[float] = None
 
 
 class WorkspaceAnalyticsSettingsRequest(BaseModel):
@@ -3697,6 +3704,9 @@ def _ask_log_interaction(
             latency_ms=latency_ms,
             error_type=error_type,
             evidence_label=evidence_label,
+            modality=request.modality or "text",
+            transcription_confidence=request.transcription_confidence,
+            clarification_requested=(intent == "clarification_required"),
         ))
         db.commit()
     except Exception:

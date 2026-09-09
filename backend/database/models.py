@@ -720,6 +720,16 @@ class AskInteraction(Base):
     latency_ms          = Column(Integer,  nullable=True)
     error_type          = Column(String,   nullable=True)
     evidence_label      = Column(String,   nullable=True)
+    # CostPilot Voice (Phase 1) -- extends this table rather than adding a
+    # new one, per the Voice feasibility assessment's own recommendation:
+    # a voice question is the same event type as a typed one (one row per
+    # Ask CostPilot question), just with a different modality and two
+    # voice-specific fields. Nothing about the answer pipeline branches on
+    # modality -- these columns are observational only, same as every
+    # other field on this table.
+    modality             = Column(String,   nullable=True)  # "text" | "voice" -- nullable/defaults to text for pre-Voice rows
+    transcription_confidence = Column(Float, nullable=True)  # 0.0-1.0, from the STT provider; null for typed questions
+    clarification_requested  = Column(Boolean, nullable=True)  # True when an ambiguous entity (e.g. two "Acme" accounts) forced a clarifying question instead of an answer
 
 
 class SensitiveTerm(Base):

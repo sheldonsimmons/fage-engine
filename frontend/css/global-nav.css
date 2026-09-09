@@ -670,7 +670,7 @@ header.header .header-sub,
   border-top: 1px solid var(--border, #334155);
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   padding: 14px 20px 8px;
 }
 
@@ -704,6 +704,74 @@ header.header .header-sub,
 }
 
 .cp-ask-composer button:disabled { cursor: wait; opacity: .68; }
+
+/* CostPilot Voice (Phase 1) -- mic button, listening/status row, and the
+   speak/stop-speaking controls on an answer. Distinct namespace from any
+   Voice Guard styling (unrelated feature) elsewhere in this app. */
+.cp-ask-mic {
+  background: var(--bg-main, #0b1220);
+  border: 1px solid var(--border, #334155);
+  border-radius: 50%;
+  color: inherit;
+  cursor: pointer;
+  font-size: 16px;
+  height: 38px;
+  line-height: 1;
+  min-width: 0;
+  padding: 0;
+  width: 38px;
+}
+
+.cp-ask-mic:hover { border-color: var(--accent, #60a5fa); }
+
+.cp-ask-mic.recording {
+  animation: cp-ask-mic-pulse 1.4s ease-in-out infinite;
+  background: color-mix(in srgb, #ef4444 18%, var(--bg-main, #0b1220));
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+@keyframes cp-ask-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #ef4444 40%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, #ef4444 0%, transparent); }
+}
+
+.cp-ask-voice-status {
+  color: var(--text-muted, #9aa7b8);
+  font-size: 11.5px;
+  padding: 0 20px 6px;
+}
+
+.cp-ask-voice-status--listening { color: var(--accent, #60a5fa); }
+.cp-ask-voice-status--warn { color: #f0b429; }
+.cp-ask-voice-status--error { color: #ef4444; }
+.cp-ask-voice-status--ok { color: var(--text-muted, #9aa7b8); }
+
+.cp-ask-stop-speaking {
+  background: transparent;
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+  margin: 0 20px 6px;
+  padding: 3px 9px;
+}
+
+.cp-ask-stop-speaking:hover { border-color: var(--accent, #60a5fa); }
+
+.cp-ask-speak-btn {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 13px;
+  margin-left: 6px;
+  opacity: .75;
+  padding: 2px 4px;
+}
+
+.cp-ask-speak-btn:hover { opacity: 1; }
+.cp-ask-speak-btn:disabled { cursor: wait; opacity: .4; }
 
 .cp-ask-footer {
   align-items: center;

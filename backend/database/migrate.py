@@ -480,6 +480,20 @@ def run_migrations():
             ensure_column(conn, "voice_events", "workspace_id", "VARCHAR")
         except Exception:
             conn.rollback()
+        for col, defn in [
+            ("modality", "VARCHAR"),
+            ("transcription_confidence", "FLOAT"),
+            ("clarification_requested", "BOOLEAN"),
+        ]:
+            try:
+                # CostPilot Voice (Phase 1) -- ask_interactions extended
+                # with voice-specific fields rather than a new table (see
+                # AskInteraction's own docstring). Existing rows are
+                # implicitly modality="text" until the frontend starts
+                # tagging voice questions explicitly.
+                ensure_column(conn, "ask_interactions", col, defn)
+            except Exception:
+                conn.rollback()
 
         # Security architecture assessment, Phase 1 (Foundation) — auth/RBAC
         # tables. Purely additive: create-if-missing, same TrialAccount

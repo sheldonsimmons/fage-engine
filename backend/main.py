@@ -337,6 +337,13 @@ app.include_router(routes_agent_activity.router, prefix="/api/reports/agent-acti
 from api import routes_voice
 app.include_router(routes_voice.router, prefix="/api/voice", tags=["Voice Guard"])
 
+# CostPilot Voice (Phase 1) -- speech-to-text/text-to-speech for Ask
+# CostPilot. Deliberately a distinct prefix/tag from Voice Guard above
+# (a different feature entirely -- see routes_ask_voice.py's own
+# docstring) so the two are never confused in the API surface either.
+from api import routes_ask_voice
+app.include_router(routes_ask_voice.router, prefix="/api/ask-voice", tags=["Ask CostPilot Voice"])
+
 # Routing Rules — user-configurable token threshold + complexity keywords
 from api import routes_routing_config
 app.include_router(routes_routing_config.router, prefix="/api/routing-config", tags=["Routing Config"])

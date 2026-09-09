@@ -331,10 +331,12 @@
             <span>Ask how CostPilot works, what this page means, or about people, agents, models, spend, pruning, and risk.</span>
           </div>
         </div>
+        <div class="cp-ask-voice-status" id="cpAskVoiceStatus" hidden></div>
         <form class="cp-ask-composer" id="cpAskForm">
           <label class="cp-sr-only" for="cpAskInput">Ask CostPilot a question</label>
           <textarea id="cpAskInput" rows="2" maxlength="500"
             placeholder="Ask about AI spend, usage, pruning, people, agents, or accounts…"></textarea>
+          <button type="button" class="cp-ask-mic" id="cpAskMic" aria-label="Ask by voice" title="Ask by voice">🎤</button>
           <button type="submit" id="cpAskSend">Ask</button>
         </form>
         <footer class="cp-ask-footer">
@@ -362,10 +364,15 @@
     });
     document.getElementById("cpAskMessages").addEventListener("click", (event) => {
       const followUp = event.target.closest("[data-ask-question]");
-      if (!followUp) return;
-      document.getElementById("cpAskInput").value = followUp.dataset.askQuestion;
-      submitGlobalAsk();
+      if (followUp) {
+        document.getElementById("cpAskInput").value = followUp.dataset.askQuestion;
+        submitGlobalAsk();
+        return;
+      }
+      const speakBtn = event.target.closest("[data-ask-speak]");
+      if (speakBtn) speakAskAnswer(speakBtn.dataset.askSpeak, speakBtn);
     });
+    document.getElementById("cpAskMic").addEventListener("click", toggleAskVoiceRecording);
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeAskCostPilot();
       if ((event.metaKey || event.ctrlKey) && event.key === "/") {
@@ -506,6 +513,9 @@
     drawer.setAttribute("aria-hidden", "true");
     backdrop.hidden = true;
     document.body.classList.remove("cp-ask-open");
+    // Never leave a mic hot or audio playing behind a closed drawer.
+    if (typeof _askRecording !== "undefined" && _askRecording) _askMediaRecorder?.stop();
+    if (typeof stopAskSpeaking === "function") stopAskSpeaking();
   }
 
   function askScope() {
@@ -550,7 +560,7 @@
     };
   }
 
-  function normalizedAskPayload(question, history, context, includeConversation = true) {
+  function normalizedAskPayload(question, history, context, includeConversation = true, voiceMeta = null) {
     const scope = askScope() || {};
     const daysValue = Number(scope.days);
     const payload = {
@@ -559,6 +569,15 @@
       timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       screen_context: currentAskScreenContext(),
     };
+    // CostPilot Voice (Phase 1): purely observational tagging -- Ask
+    // CostPilot's answer pipeline is identical either way (see
+    // backend/api/routes_ask_voice.py's docstring). modality defaults to
+    // "text" server-side when omitted, so a typed question sends nothing
+    // extra here.
+    if (voiceMeta && voiceMeta.modality === "voice") {
+      payload.modality = "voice";
+      if (typeof voiceMeta.confidence === "number") payload.transcription_confidence = voiceMeta.confidence;
+    }
     [
       "workspace_id", "project_id", "user_external_id", "account_id",
       "source_platform", "record_type", "model_tier", "charged_unit", "business_purpose",
@@ -664,12 +683,151 @@
     </div>`;
   }
 
+  // ── CostPilot Voice (Phase 1) ──────────────────────────────────────────
+  // Speech-to-text/text-to-speech for Ask CostPilot -- NOT Voice Guard (a
+  // completely different, PII-redaction feature; see
+  // backend/api/routes_ask_voice.py's own docstring on why the two names
+  // are easy to conflate). A voice question is sent through this exact
+  // same submitGlobalAsk()/postGlobalAsk() path as a typed one, tagged
+  // modality="voice" -- Ask CostPilot itself never knows or cares how the
+  // question arrived. Phase 1 is push-to-talk (click to start, click to
+  // stop), not continuous listening, per the feasibility assessment's
+  // privacy recommendation.
+
+  let _askMediaRecorder = null;
+  let _askAudioChunks = [];
+  let _askRecording = false;
+  let _askPendingVoiceMeta = null; // {modality:"voice", confidence} for the next submit only
+  let _askCurrentAudio = null;
+
+  function askVoiceStatus(text, tone) {
+    const el = document.getElementById("cpAskVoiceStatus");
+    if (!el) return;
+    if (!text) { el.hidden = true; el.textContent = ""; return; }
+    el.hidden = false;
+    el.textContent = text;
+    el.className = `cp-ask-voice-status${tone ? " cp-ask-voice-status--" + tone : ""}`;
+  }
+
+  async function toggleAskVoiceRecording() {
+    if (_askRecording) {
+      _askMediaRecorder?.stop();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      askVoiceStatus("Voice isn't supported in this browser — try typing instead.", "error");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      _askAudioChunks = [];
+      _askMediaRecorder = new MediaRecorder(stream);
+      _askMediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) _askAudioChunks.push(e.data); };
+      _askMediaRecorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        _askRecording = false;
+        document.getElementById("cpAskMic")?.classList.remove("recording");
+        transcribeAskRecording();
+      };
+      _askMediaRecorder.start();
+      _askRecording = true;
+      document.getElementById("cpAskMic")?.classList.add("recording");
+      askVoiceStatus("Listening… click the mic again to stop.", "listening");
+    } catch (err) {
+      askVoiceStatus("Couldn't access your microphone — check your browser permissions.", "error");
+    }
+  }
+
+  async function transcribeAskRecording() {
+    if (!_askAudioChunks.length) { askVoiceStatus(""); return; }
+    askVoiceStatus("Transcribing…", "listening");
+    const blob = new Blob(_askAudioChunks, { type: _askMediaRecorder?.mimeType || "audio/webm" });
+    const form = new FormData();
+    form.append("audio", blob, "question.webm");
+    try {
+      const res = await fetch("/api/ask-voice/transcribe", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Could not transcribe that clip.");
+      const input = document.getElementById("cpAskInput");
+      if (input) { input.value = data.transcript || ""; input.focus(); }
+      const confidence = typeof data.confidence === "number" ? data.confidence : null;
+      _askPendingVoiceMeta = { modality: "voice", confidence };
+      const lowConfidence = confidence !== null && confidence < 0.5;
+      askVoiceStatus(
+        lowConfidence
+          ? "Not fully sure I caught that — check the text below before sending."
+          : "Review your question, then hit Ask.",
+        lowConfidence ? "warn" : "ok",
+      );
+    } catch (err) {
+      _askPendingVoiceMeta = null;
+      askVoiceStatus(err.message || "Could not transcribe that clip. Try typing instead.", "error");
+    }
+  }
+
+  async function speakAskAnswer(text, triggerButton) {
+    if (!text) return;
+    stopAskSpeaking();
+    if (triggerButton) { triggerButton.disabled = true; triggerButton.textContent = "…"; }
+    try {
+      const res = await fetch("/api/ask-voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error("Speech unavailable");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      _askCurrentAudio = new Audio(url);
+      _askCurrentAudio.onended = () => { askVoiceStatus(""); renderAskStopSpeakingControl(false); };
+      askVoiceStatus("Speaking…", "listening");
+      renderAskStopSpeakingControl(true);
+      await _askCurrentAudio.play();
+    } catch (err) {
+      askVoiceStatus("Couldn't play that answer aloud.", "error");
+    } finally {
+      if (triggerButton) { triggerButton.disabled = false; triggerButton.textContent = "🔊"; }
+    }
+  }
+
+  function stopAskSpeaking() {
+    if (_askCurrentAudio) {
+      _askCurrentAudio.pause();
+      _askCurrentAudio = null;
+    }
+    askVoiceStatus("");
+    renderAskStopSpeakingControl(false);
+  }
+
+  function renderAskStopSpeakingControl(show) {
+    let btn = document.getElementById("cpAskStopSpeaking");
+    if (show) {
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.id = "cpAskStopSpeaking";
+        btn.className = "cp-ask-stop-speaking";
+        btn.textContent = "⏹ Stop Speaking";
+        btn.addEventListener("click", stopAskSpeaking);
+        document.getElementById("cpAskVoiceStatus")?.after(btn);
+      }
+      btn.hidden = false;
+    } else if (btn) {
+      btn.hidden = true;
+    }
+  }
+
   async function submitGlobalAsk(event) {
     event?.preventDefault();
     const input = document.getElementById("cpAskInput");
     const send = document.getElementById("cpAskSend");
     const question = input?.value.trim();
     if (!question || send?.disabled) return;
+    // Captured once per submit, then cleared -- a voice-originated
+    // question only stays "voice" for the send that follows recording;
+    // any later edit/re-ask from the same textarea is typed again.
+    const voiceMeta = _askPendingVoiceMeta;
+    _askPendingVoiceMeta = null;
     addAskMessage("user", `<p>${escapeHtml(question)}</p>`);
     input.value = "";
     send.disabled = true;
@@ -678,24 +836,32 @@
     const history = readAskStorage("history", []);
     const context = readAskStorage("context", null);
     try {
-      let response = await postGlobalAsk(normalizedAskPayload(question, history, context));
+      let response = await postGlobalAsk(normalizedAskPayload(question, history, context, true, voiceMeta));
       // Old browser sessions can contain conversation state from a previous
       // response contract. A valid question must not fail because that optional
       // context is stale, so retry once with the clean reporting scope only.
       if (response.status === 422) {
         clearAskStorage();
-        response = await postGlobalAsk(normalizedAskPayload(question, [], null, false));
+        response = await postGlobalAsk(normalizedAskPayload(question, [], null, false, voiceMeta));
       }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const data = await response.json();
       pending.innerHTML = renderAskAnswerCard(data);
       bindGlobalAskDrills(pending);
+      appendAskSpeakControl(pending, data.answer || "");
       history.push(
         { role: "user", content: question },
         { role: "assistant", content: data.answer || "", data },
       );
       writeAskStorage("history", history.slice(-12));
       writeAskStorage("context", data.conversation_context || context);
+      // Voice in, voice back out -- a typed question never auto-plays
+      // audio (the written answer stays the primary surface per the
+      // Voice feasibility assessment's UI requirement); a spoken one does,
+      // since the user was talking to CostPilot, not reading it.
+      if (voiceMeta && voiceMeta.modality === "voice" && data.answer) {
+        speakAskAnswer(data.answer, pending.querySelector("[data-ask-speak]"));
+      }
     } catch (error) {
       const statusMessage = /503/.test(error.message || "")
         ? "The analytics service is temporarily unavailable. No answer was generated."
@@ -706,6 +872,17 @@
       send.textContent = "Ask";
       input.focus();
     }
+  }
+
+  function appendAskSpeakControl(messageNode, answerText) {
+    if (!answerText || !messageNode) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cp-ask-speak-btn";
+    btn.textContent = "🔊";
+    btn.title = "Hear this answer";
+    btn.setAttribute("data-ask-speak", answerText);
+    messageNode.appendChild(btn);
   }
 
   function openAskDrill(scopeOrName, filterValue) {
