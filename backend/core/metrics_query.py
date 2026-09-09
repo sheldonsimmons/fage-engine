@@ -1201,11 +1201,17 @@ def department_outcome_breakdown(db: Session, workspace_id: Optional[str]) -> li
     itself already uses to combine several independent queries into one
     response.
 
-    department label: WorkItem.department with its workspace prefix
-    stripped (segment after the last ':'), coalesced to "Unassigned" --
-    a lighter version of _department_breakdown_rows()'s label derivation
-    (that one also considers charged_org_unit_name, which has no
-    equivalent on WorkItem).
+    department label: derived PER WORK ITEM from that work item's own
+    TokenTransaction rows (charged_org_unit_name preferred, else
+    TokenTransaction.department, workspace prefix stripped) -- the same
+    precedence _department_breakdown_rows() uses for the transaction-side
+    breakdown -- falling back to WorkItem.department only when a work
+    item has no transactions at all. WorkItem.department alone was tried
+    first and rejected: a live-data check against the historical demo
+    workspace found it populated on only 45/771 work items (5.8%), while
+    every one of those work items' TokenTransaction rows carries a real
+    department value -- WorkItem.department is not a reliable source in
+    practice, TokenTransaction is.
     """
     work_item_scope = workspace_filter(WorkItem, workspace_id)
 
@@ -1222,12 +1228,46 @@ def department_outcome_breakdown(db: Session, workspace_id: Optional[str]) -> li
         # label shape already does the split in Python for that reason.
         return ((raw or "").split(":")[-1]).strip() or "Unassigned"
 
+    def _tx_label(charged: str | None, dept: str | None) -> str | None:
+        charged = (charged or "").strip()
+        if charged:
+            return charged
+        return _label(dept) if dept else None
+
+    # Per-work-item department, derived from that item's own transactions
+    # (most frequent (charged_org_unit_name, department) pair wins ties
+    # broken by insertion order -- in practice a work item's transactions
+    # essentially always agree on department).
+    tx_dept_rows = _scoped(
+        db.query(
+            TokenTransaction.work_item_id,
+            TokenTransaction.charged_org_unit_name,
+            TokenTransaction.department,
+            func.count(),
+        )
+        .select_from(TokenTransaction)
+        .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        .filter(TokenTransaction.work_item_id.isnot(None))
+        .group_by(TokenTransaction.work_item_id, TokenTransaction.charged_org_unit_name, TokenTransaction.department)
+    ).all()
+
+    dept_by_work_item: dict[int, str] = {}
+    best_count: dict[int, int] = {}
+    for work_item_id, charged, dept, n in tx_dept_rows:
+        label = _tx_label(charged, dept)
+        if label is None:
+            continue
+        if n > best_count.get(work_item_id, 0):
+            best_count[work_item_id] = n
+            dept_by_work_item[work_item_id] = label
+
     is_won = WorkItemOutcome.outcome_success.is_(True)
     is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
     is_open = WorkItemOutcome.is_closed.is_(False)
 
     outcome_rows = _scoped(
         db.query(
+            WorkItem.id,
             WorkItem.department,
             func.count(case((and_(WorkItem.context_type == "opportunity", is_won), 1))),
             func.count(case((and_(WorkItem.context_type == "opportunity", is_lost), 1))),
@@ -1236,31 +1276,34 @@ def department_outcome_breakdown(db: Session, workspace_id: Optional[str]) -> li
         )
         .select_from(WorkItemOutcome)
         .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
-        .group_by(WorkItem.department)
+        .group_by(WorkItem.id, WorkItem.department)
     ).all()
 
     spend_rows = _scoped(
         db.query(
-            WorkItem.department,
+            TokenTransaction.work_item_id,
             func.coalesce(func.sum(case((and_(WorkItem.context_type == "opportunity", is_won), TokenTransaction.cost_usd), else_=0.0)), 0.0),
             func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
         )
         .select_from(TokenTransaction)
         .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
         .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
-        .group_by(WorkItem.department)
+        .group_by(TokenTransaction.work_item_id)
     ).all()
 
+    def _label_for(work_item_id: int, wi_department: str | None) -> str:
+        return dept_by_work_item.get(work_item_id) or _label(wi_department)
+
     spend_by_dept: dict[str, dict] = {}
-    for raw_dept, won_spend, total_spend in spend_rows:
-        label = _label(raw_dept)
+    for work_item_id, won_spend, total_spend in spend_rows:
+        label = _label_for(work_item_id, None)
         bucket = spend_by_dept.setdefault(label, {"won_spend": 0.0, "total_spend": 0.0})
         bucket["won_spend"] += float(won_spend or 0.0)
         bucket["total_spend"] += float(total_spend or 0.0)
 
     merged: dict[str, dict] = {}
-    for raw_dept, won_n, lost_n, open_n, won_value in outcome_rows:
-        label = _label(raw_dept)
+    for work_item_id, wi_department, won_n, lost_n, open_n, won_value in outcome_rows:
+        label = _label_for(work_item_id, wi_department)
         bucket = merged.setdefault(label, {
             "opportunities_won": 0, "opportunities_lost": 0, "opportunities_open": 0,
             "closed_won_value_usd": 0.0,
