@@ -806,8 +806,13 @@
 
   function handleWakeResult(event) {
     if (_askRecording || _wakeTriggerInFlight) return;
+    // Scan every result accumulated so far this listening session, not
+    // just the delta since the last event (event.resultIndex onward) --
+    // Chrome often finalizes "Hey" and "CostPilot" as two separate result
+    // chunks, so the phrase only ever appears whole across the full
+    // transcript, never in a single new chunk on its own.
     let transcript = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
+    for (let i = 0; i < event.results.length; i++) {
       transcript += event.results[i][0].transcript;
     }
     if (!/hey\s*,?\s*cost\s*-?\s*pilot/i.test(transcript)) return;
