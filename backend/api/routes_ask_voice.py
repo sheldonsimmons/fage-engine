@@ -50,6 +50,54 @@ _MONTH_RE = re.compile(
 )
 
 
+_TABLE_SEP_RE = re.compile(r"^\|?[\s:|-]+\|?\s*$")
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_BULLET_RE = re.compile(r"^[ \t]*[-*]\s+", re.MULTILINE)
+
+
+def _markdown_table_to_speech(text: str) -> str:
+    """
+    A markdown table renders fine on screen (the frontend's markdown
+    renderer turns it into a real <table>), but /speak receives the same
+    raw "| Engineering | $3.02 | 60.5% | $1.98 |" text -- TTS reads the
+    cell values but the pipe/dash-heavy header and separator rows read as
+    noise, so a listener hears numbers with no idea which column each one
+    is. Converts each data row into "Engineering: Cap $5.00, Spent
+    $3.02, ..." using the header row as labels, before any further
+    speech normalization runs.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if (
+            line.strip().startswith("|")
+            and i + 1 < len(lines)
+            and _TABLE_SEP_RE.match(lines[i + 1].strip())
+        ):
+            headers = [c.strip() for c in line.strip().strip("|").split("|")]
+            i += 2
+            row_sentences = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                if cells and cells[0]:
+                    parts = [
+                        f"{headers[j]} {cells[j]}"
+                        for j in range(1, min(len(cells), len(headers)))
+                        if cells[j]
+                    ]
+                    row_sentences.append(
+                        f"{cells[0]}: {', '.join(parts)}." if parts else f"{cells[0]}."
+                    )
+                i += 1
+            out.append(" ".join(row_sentences))
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
 def _money_to_words(match: re.Match) -> str:
     dollars = int(match.group(1).replace(",", ""))
     cents = round(float("0." + match.group(2)) * 100) if match.group(2) else 0
@@ -76,6 +124,9 @@ def _speech_friendly(text: str) -> str:
     value or a date's meaning -- so it doesn't touch the guardrail-
     validated text itself, only the audio narrated from it.
     """
+    text = _markdown_table_to_speech(text)
+    text = _BOLD_RE.sub(r"\1", text)
+    text = _BULLET_RE.sub("", text)
     text = _MONEY_RE.sub(_money_to_words, text)
     text = _PERCENT_RE.sub(lambda m: f"{float(m.group(1)):.1f}%", text)
     text = _MONTH_RE.sub(lambda m: _MONTHS[m.group(1)], text)

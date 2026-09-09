@@ -1006,6 +1006,9 @@
 
   async function speakAskAnswer(text, triggerButton) {
     if (!text) return;
+    if (window.location.search.includes("wakeDebug")) {
+      console.debug("[speak] text sent to TTS:", JSON.stringify(text));
+    }
     // The wake engine must not be armed while CostPilot's own voice is
     // playing -- the answer can contain "CostPilot" and misfire itself.
     // Paused before stopAskSpeaking() (which resumes it) so the net
