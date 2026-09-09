@@ -75,6 +75,10 @@ class PruningToggleRequest(BaseModel):
     enabled: bool
 
 
+class ModeRequest(BaseModel):
+    mode: str  # "observe" | "control" -- see docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md
+
+
 class RenameAgentRequest(BaseModel):
     name: str
 
@@ -165,6 +169,7 @@ def agent_spend_summary(db: Session = Depends(get_db)):
             "display_department": display_department(agent.department),
             "source_platform": agent.source_platform,
             "status":          agent.status,
+            "mode":            agent.mode or "observe",
             "active_recently": agent_active_recently(agent),
             "last_used_at":    agent.last_used_at.isoformat() if agent.last_used_at else None,
             "call_count":      call_count,
@@ -317,6 +322,27 @@ def toggle_pruning(agent_id: int, req: PruningToggleRequest, db: Session = Depen
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
     agent.pruning_enabled = req.enabled
+    db.commit()
+    db.refresh(agent)
+    from core.agentlake import _serialize
+    return _serialize(agent)
+
+
+@router.patch("/{agent_id}/mode")
+def set_agent_mode(agent_id: int, req: ModeRequest, db: Session = Depends(get_db)):
+    """
+    Set an agent's Observe/Control mode. This should only ever be called from
+    an explicit admin action -- moving an agent into "control" must never
+    happen silently. See docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md step 9.
+    """
+    from database.models import RegisteredAgent
+    normalized = (req.mode or "").strip().lower()
+    if normalized not in ("observe", "control"):
+        raise HTTPException(status_code=422, detail="mode must be 'observe' or 'control'.")
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent.mode = normalized
     db.commit()
     db.refresh(agent)
     from core.agentlake import _serialize
