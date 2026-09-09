@@ -197,7 +197,8 @@
         return;
       }
       try {
-        const data = await apiGet(`/api/work-items/${encodeURIComponent(wiIdentifier)}/business-impact`);
+        const wiWorkspaceId = localStorage.getItem("cp_workspace_id") || "";
+        const data = await apiGet(`/api/work-items/${encodeURIComponent(wiIdentifier)}/business-impact${wiWorkspaceId ? `?workspace_id=${encodeURIComponent(wiWorkspaceId)}` : ""}`);
         document.getElementById("wiEmptyState").style.display = "none";
         document.getElementById("wiContent").style.display = "block";
         wiRender(data);

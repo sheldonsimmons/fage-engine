@@ -702,25 +702,58 @@ def _project_user_rows(item: WorkItem, db: Session) -> list[dict]:
     return rows
 
 
-def resolve_work_item(db: Session, identifier: str) -> Optional[WorkItem]:
-    """Resolve either the public external ID or the internal integer ID."""
+def resolve_work_item(db: Session, identifier: str, workspace_id: Optional[str] = None) -> Optional[WorkItem]:
+    """
+    Resolve either the public external ID or the internal integer ID.
+
+    Security architecture assessment, Finding 8: this is the shared
+    resolver behind ~15 routes (read, update, archive, merge, and
+    agent/user assignment) -- it used to take a bare identifier with no
+    workspace check at all, so a caller who knew/guessed another
+    tenant's work_item_id or external_id could read its full financial
+    profile, edit it, reassign its agents/users, or archive it.
+    workspace_id is OPTIONAL, matching Findings 5/6's pattern: defaults
+    to None so nothing already calling this without it breaks; when
+    supplied, a cross-tenant match is treated as not-found (returns None,
+    same as an unknown identifier) rather than resolving and leaking
+    which identifier belongs to a different tenant. WorkItem.workspace_id
+    is nullable (legacy rows), so this uses workspace_filter()'s
+    department-prefix-fallback-aware matching rather than a bare equality
+    check.
+    """
     value = str(identifier or "").strip()
     if not value:
         return None
-    item = db.query(WorkItem).filter(WorkItem.external_id == value).first()
+    query = db.query(WorkItem).filter(WorkItem.external_id == value)
+    if workspace_id:
+        query = query.filter(workspace_filter(WorkItem, workspace_id))
+    item = query.first()
     if not item and value.isdigit():
-        item = db.query(WorkItem).filter(WorkItem.id == int(value)).first()
+        query = db.query(WorkItem).filter(WorkItem.id == int(value))
+        if workspace_id:
+            query = query.filter(workspace_filter(WorkItem, workspace_id))
+        item = query.first()
     return item
 
 
-def resolve_work_account(db: Session, identifier: str) -> Optional[WorkAccount]:
-    """Resolve either the public external ID or the internal integer ID."""
+def resolve_work_account(db: Session, identifier: str, workspace_id: Optional[str] = None) -> Optional[WorkAccount]:
+    """
+    Resolve either the public external ID or the internal integer ID.
+    Same Finding 8 workspace-scoping fix as resolve_work_item() above,
+    same optional-parameter reasoning.
+    """
     value = str(identifier or "").strip()
     if not value:
         return None
-    account = db.query(WorkAccount).filter(WorkAccount.external_id == value).first()
+    query = db.query(WorkAccount).filter(WorkAccount.external_id == value)
+    if workspace_id:
+        query = query.filter(workspace_filter(WorkAccount, workspace_id))
+    account = query.first()
     if not account and value.isdigit():
-        account = db.query(WorkAccount).filter(WorkAccount.id == int(value)).first()
+        query = db.query(WorkAccount).filter(WorkAccount.id == int(value))
+        if workspace_id:
+            query = query.filter(workspace_filter(WorkAccount, workspace_id))
+        account = query.first()
     return account
 
 
@@ -761,9 +794,10 @@ def merge_work_accounts(
     identifier: str,
     body: MergeAccountsIn,
     db: Session = Depends(get_db),
+    workspace_id: Optional[str] = None,
 ):
-    source = resolve_work_account(db, identifier)
-    target = resolve_work_account(db, body.target_identifier)
+    source = resolve_work_account(db, identifier, workspace_id)
+    target = resolve_work_account(db, body.target_identifier, workspace_id)
     if not source or not target:
         raise HTTPException(status_code=404, detail="Source or destination account was not found")
     if source.id == target.id:
@@ -797,8 +831,8 @@ def merge_work_accounts(
 
 
 @router.post("/accounts/{identifier}/restore-merge")
-def restore_merged_work_account(identifier: str, db: Session = Depends(get_db)):
-    account = resolve_work_account(db, identifier)
+def restore_merged_work_account(identifier: str, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    account = resolve_work_account(db, identifier, workspace_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     if account.status != "merged" and account.merged_into_work_account_id is None:
@@ -2820,8 +2854,8 @@ def create_work_item(body: WorkItemIn, db: Session = Depends(get_db)):
 
 
 @router.get("/{identifier}")
-def get_work_item(identifier: str, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def get_work_item(identifier: str, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     return _work_item_json(item, db)
@@ -2832,6 +2866,7 @@ def get_work_item_business_impact(
     identifier: str,
     limit: int = Query(200, ge=1, le=1000),
     db: Session = Depends(get_db),
+    workspace_id: Optional[str] = None,
 ):
     """
     Single-WorkItem drill-down: the same real data _work_item_json() already
@@ -2848,7 +2883,7 @@ def get_work_item_business_impact(
     core/stage_attribution.py's account-level stage funnel, just applied to
     one item's own transactions instead of an account's aggregate buckets.
     """
-    item = resolve_work_item(db, identifier)
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
 
@@ -2970,8 +3005,8 @@ def get_work_item_business_impact(
 
 
 @router.patch("/{identifier}")
-def update_work_item(identifier: str, body: WorkItemUpdate, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def update_work_item(identifier: str, body: WorkItemUpdate, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     changes = body.model_dump(exclude_unset=True)
@@ -3015,8 +3050,9 @@ def link_source_record(
     identifier: str,
     body: SourceLinkIn,
     db: Session = Depends(get_db),
+    workspace_id: Optional[str] = None,
 ):
-    item = resolve_work_item(db, identifier)
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     workspace_id = (body.workspace_id or item.workspace_id or "default").strip() or "default"
@@ -3059,9 +3095,10 @@ def merge_work_items(
     identifier: str,
     body: MergeWorkItemsIn,
     db: Session = Depends(get_db),
+    workspace_id: Optional[str] = None,
 ):
-    source = resolve_work_item(db, identifier)
-    target = resolve_work_item(db, body.target_identifier)
+    source = resolve_work_item(db, identifier, workspace_id)
+    target = resolve_work_item(db, body.target_identifier, workspace_id)
     if not source or not target:
         raise HTTPException(status_code=404, detail="Source or destination project was not found")
     if source.id == target.id:
@@ -3133,8 +3170,8 @@ def merge_work_items(
 
 
 @router.post("/{identifier}/restore-merge")
-def restore_merged_work_item(identifier: str, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def restore_merged_work_item(identifier: str, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     if item.status != "archived" and item.merged_into_work_item_id is None:
@@ -3148,8 +3185,8 @@ def restore_merged_work_item(identifier: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{identifier}/archive")
-def archive_work_item(identifier: str, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def archive_work_item(identifier: str, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     item.status = "archived"
@@ -3160,8 +3197,8 @@ def archive_work_item(identifier: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{identifier}/agents")
-def list_project_agents(identifier: str, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def list_project_agents(identifier: str, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     return _project_agent_rows(item, db)
@@ -3172,8 +3209,9 @@ def assign_project_agents(
     identifier: str,
     body: AgentAssignmentsIn,
     db: Session = Depends(get_db),
+    workspace_id: Optional[str] = None,
 ):
-    item = resolve_work_item(db, identifier)
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     requested_ids = [assignment.agent_id for assignment in body.assignments]
@@ -3214,8 +3252,9 @@ def create_project_agent(
     identifier: str,
     body: ProjectAgentCreateIn,
     db: Session = Depends(get_db),
+    workspace_id: Optional[str] = None,
 ):
-    item = resolve_work_item(db, identifier)
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     if body.collision_policy not in {"lock", "queue", "skip"}:
@@ -3247,8 +3286,8 @@ def create_project_agent(
 
 
 @router.delete("/{identifier}/agents/{agent_id}")
-def unassign_project_agent(identifier: str, agent_id: int, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def unassign_project_agent(identifier: str, agent_id: int, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     assignment = (
@@ -3264,8 +3303,8 @@ def unassign_project_agent(identifier: str, agent_id: int, db: Session = Depends
 
 
 @router.get("/{identifier}/users")
-def list_project_users(identifier: str, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def list_project_users(identifier: str, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     return _project_user_rows(item, db)
@@ -3276,8 +3315,9 @@ def upsert_project_user(
     identifier: str,
     body: ProjectUserUpsertIn,
     db: Session = Depends(get_db),
+    workspace_id: Optional[str] = None,
 ):
-    item = resolve_work_item(db, identifier)
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     status = body.status.strip().lower()
@@ -3337,8 +3377,8 @@ def upsert_project_user(
 
 
 @router.delete("/{identifier}/users/{user_id}")
-def unassign_project_user(identifier: str, user_id: int, db: Session = Depends(get_db)):
-    item = resolve_work_item(db, identifier)
+def unassign_project_user(identifier: str, user_id: int, db: Session = Depends(get_db), workspace_id: Optional[str] = None):
+    item = resolve_work_item(db, identifier, workspace_id)
     if not item:
         raise HTTPException(status_code=404, detail="Work item not found")
     membership = (
