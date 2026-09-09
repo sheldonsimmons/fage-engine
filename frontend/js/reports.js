@@ -670,6 +670,16 @@ async function loadBusinessImpactByDepartment() {
   }
 }
 
+function fmtCostRatioPct(ratio) {
+  const pct = ratio * 100;
+  if (pct === 0) return "0%";
+  // Demo/low-spend data can produce ratios well under 0.01% -- fixed
+  // 2-decimal formatting would print "0.00%" for every row and hide the
+  // ranking entirely, so scale precision to the magnitude instead.
+  if (pct < 0.01) return `${pct.toPrecision(2)}%`;
+  return `${pct.toFixed(2)}%`;
+}
+
 async function loadBusinessImpactTopWorkItems() {
   const body = document.getElementById("biTopWorkItemsBody");
   const head = document.getElementById("biTopWorkItemsHead");
@@ -695,7 +705,7 @@ async function loadBusinessImpactTopWorkItems() {
       ? rows.map((row, i) => {
           const href = EXPLORER_DIMENSION_CONFIG.work_item.profile(row.work_item_id);
           const middleCells = byRatio
-            ? `<td>${fmtUsd(row.ai_spend_usd)}</td><td>${fmtUsd(row.outcome_value_usd)}</td><td>${(row.cost_ratio * 100).toFixed(2)}%</td>`
+            ? `<td>${fmtUsd(row.ai_spend_usd)}</td><td>${fmtUsd(row.outcome_value_usd)}</td><td>${fmtCostRatioPct(row.cost_ratio)}</td>`
             : `<td>${fmtUsd(row.ai_spend_usd)}</td><td>${fmtNum(row.ai_requests)}</td>`;
           return `<tr>
             <td class="bi-rank">${i + 1}</td>
