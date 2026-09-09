@@ -815,7 +815,14 @@
     for (let i = 0; i < event.results.length; i++) {
       transcript += event.results[i][0].transcript;
     }
-    if (!/hey\s*,?\s*cost\s*-?\s*pilot/i.test(transcript)) return;
+    if (window.location.search.includes("wakeDebug")) {
+      console.debug("[wake]", JSON.stringify(transcript));
+    }
+    // Deliberately tolerant: Chrome's speech recognizer doesn't have
+    // "CostPilot" as a known word and often mishears or mis-segments it
+    // (e.g. "cost pilot", "cost-pilot", a stray filler word after "hey").
+    // A tight exact-phrase match was missing real, audible attempts.
+    if (!/\bhey\b[\s,]{0,15}cost[\s-]{0,3}pilot\b/i.test(transcript)) return;
     _wakeTriggerInFlight = true;
     _wakeAutoStopArmed = true;
     _wakeAutoSubmitArmed = true;
