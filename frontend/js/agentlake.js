@@ -372,7 +372,7 @@ async function saveTierBounds(agentId) {
   }
 
   try {
-    await apiPatch(`/api/agents/${agentId}/tier-bounds`, {
+    await apiPatch(`/api/agents/${agentId}/tier-bounds?workspace_id=${encodeURIComponent(agentlakeWorkspaceId())}`, {
       min_tier: parseInt(minEl.value, 10),
       max_tier: parseInt(maxEl.value, 10),
     });
@@ -393,7 +393,7 @@ async function saveAllowedProviders(agentId) {
   if (!input) return;
   const allowedProviders = input.value.split(",").map(p => p.trim()).filter(Boolean);
   try {
-    await apiPatch(`/api/agents/${agentId}/allowed-providers`, { allowed_providers: allowedProviders });
+    await apiPatch(`/api/agents/${agentId}/allowed-providers?workspace_id=${encodeURIComponent(agentlakeWorkspaceId())}`, { allowed_providers: allowedProviders });
     const row = document.getElementById(`agent-row-${agentId}`);
     if (row) {
       row.style.outline = "1px solid var(--tier-scout)";
@@ -424,6 +424,7 @@ async function applyTierBoundsToDepartment(agentId, department, departmentLabel)
       department,
       min_tier: minTier,
       max_tier: maxTier,
+      workspace_id: agentlakeWorkspaceId() || null,
     });
     await loadAgents();
     alert(`Updated ${result.updated || 0} visible ${departmentLabel || department} agent(s).`);
@@ -440,7 +441,7 @@ function updateKpiAgents(agents) {
 /** Release a locked or active agent back to idle */
 async function releaseAgent(agentId) {
   try {
-    await apiPost(`/api/agents/${agentId}/release`, {});
+    await apiPost(`/api/agents/${agentId}/release?workspace_id=${encodeURIComponent(agentlakeWorkspaceId())}`, {});
     document.getElementById("collisionAlert").style.display = "none";
     await loadAgents();
   } catch (err) {
@@ -489,7 +490,7 @@ async function registerAgent() {
 async function toggleAgentPruning(agentId, currentlyOn) {
   const newState = !currentlyOn;
   try {
-    await apiPatch(`/api/agents/${agentId}/pruning`, { enabled: newState });
+    await apiPatch(`/api/agents/${agentId}/pruning?workspace_id=${encodeURIComponent(agentlakeWorkspaceId())}`, { enabled: newState });
     const btn = document.getElementById(`prune-btn-${agentId}`);
     if (btn) {
       btn.textContent = newState ? "PRUNE ON" : "PRUNE OFF";
@@ -524,7 +525,7 @@ async function renameAgent(agentId, currentName) {
     return;
   }
   try {
-    await apiPatch(`/api/agents/${agentId}/name`, { name: clean });
+    await apiPatch(`/api/agents/${agentId}/name?workspace_id=${encodeURIComponent(agentlakeWorkspaceId())}`, { name: clean });
     await loadAgents();
   } catch (err) {
     alert("Failed to rename agent: " + err.message);
@@ -535,7 +536,7 @@ async function renameAgent(agentId, currentName) {
 async function archiveAgent(agentId, agentName) {
   if (!confirm(`Archive "${agentName}"?\n\nThe agent will be removed from the live registry but all audit history and cost data will be preserved in reports.`)) return;
   try {
-    await apiPost(`/api/agents/${agentId}/archive`, {});
+    await apiPost(`/api/agents/${agentId}/archive?workspace_id=${encodeURIComponent(agentlakeWorkspaceId())}`, {});
     await loadAgents();
   } catch (err) {
     alert("Failed to archive agent: " + err.message);
@@ -545,7 +546,7 @@ async function archiveAgent(agentId, agentName) {
 /** Restore an archived agent back to the live registry */
 async function unarchiveAgent(agentId, agentName) {
   try {
-    await apiPost(`/api/agents/${agentId}/unarchive`, {});
+    await apiPost(`/api/agents/${agentId}/unarchive?workspace_id=${encodeURIComponent(agentlakeWorkspaceId())}`, {});
     await loadAgents();
   } catch (err) {
     alert("Failed to restore agent: " + err.message);

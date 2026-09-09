@@ -9,13 +9,13 @@ POST /api/agents/{id}/release       — supervisor releases a locked agent
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.db import get_db
-from database.models import TokenTransaction
+from database.models import RegisteredAgent, TokenTransaction
 from core.agentlake import (
     list_agents, get_agent, claim_record,
     release_lock, simulate_collision,
@@ -23,8 +23,46 @@ from core.agentlake import (
     archive_agent, unarchive_agent,
     display_agent_name, display_department, agent_active_recently,
 )
+from core.auth import check_membership
+from core.workspace_scope import workspace_filter
 
 router = APIRouter()
+
+
+def _agent_scoped_or_404(db: Session, agent_id: int, workspace_id: Optional[str]) -> RegisteredAgent:
+    """
+    Security architecture assessment, Finding 5: every by-ID route in this
+    file used to resolve an agent by bare integer id with no workspace
+    check at all -- any caller who knew/guessed another tenant's agent_id
+    could read or mutate its full governance config. workspace_id is
+    OPTIONAL here (unlike the Phase 0 audit/voice endpoints, which made it
+    required) specifically to preserve this page's legitimate "all
+    workspaces" operator view (operate.html's agentlakeWorkspaceId() can
+    deliberately be empty) -- when a workspace_id IS supplied, the match
+    is enforced and a mismatch 404s exactly like an unknown id, rather
+    than leaking which id belongs to a different tenant.
+    """
+    query = db.query(RegisteredAgent).filter(RegisteredAgent.id == agent_id)
+    if workspace_id:
+        query = query.filter(workspace_filter(RegisteredAgent, workspace_id))
+    agent = query.first()
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    return agent
+
+
+def _check_agent_permission(
+    db: Session, authorization: Optional[str], workspace_id: Optional[str], permission: str = "manage_agents",
+) -> None:
+    """
+    Soft-mode-gated permission check (see core/auth.py's module docstring
+    on AUTH_ENFORCEMENT_ENABLED) -- a no-op today, real once turned on.
+    Skipped entirely when workspace_id is empty (the deliberate "all
+    workspaces" operator view has no single workspace to check membership
+    against, same reasoning as _agent_scoped_or_404 above).
+    """
+    if workspace_id:
+        check_membership(db, authorization, workspace_id, permission)
 
 
 class AgentStatus(BaseModel):
@@ -69,6 +107,7 @@ class AllowedProvidersRequest(BaseModel):
 
 class DepartmentTierBoundsRequest(TierBoundsRequest):
     department: str
+    workspace_id: Optional[str] = None
 
 
 class PruningToggleRequest(BaseModel):
@@ -117,8 +156,13 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.delete("/{agent_id}")
-def deregister(agent_id: int, db: Session = Depends(get_db)):
+def deregister(
+    agent_id: int, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """Remove an agent from the registry."""
+    _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     try:
         return deregister_agent(db, agent_id)
     except ValueError as e:
@@ -196,22 +240,39 @@ def get_agents(
 
 
 @router.patch("/department-tier-bounds")
-def set_department_tier_bounds(req: DepartmentTierBoundsRequest, db: Session = Depends(get_db)):
-    """Apply min/max tier bounds to every non-archived agent in a department."""
+def set_department_tier_bounds(
+    req: DepartmentTierBoundsRequest,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
+    """
+    Apply min/max tier bounds to every non-archived agent in a department.
+
+    Filtered by bare department string, not workspace_id, on purpose:
+    department is frequently unprefixed (see RegisteredAgent's own
+    docstring on backfill limits), so a caller without workspace_id could
+    otherwise bulk-mutate every workspace's same-named department at
+    once. req.workspace_id narrows the match to workspace_filter()'s
+    scoped rows when supplied; omitted, this keeps today's behavior
+    (matches by department string alone) rather than silently changing
+    what an existing caller's bulk update touches.
+    """
     if not (1 <= req.min_tier <= 4) or not (1 <= req.max_tier <= 4):
         raise HTTPException(status_code=422, detail="Tier values must be between 1 and 4.")
     if req.min_tier > req.max_tier:
         raise HTTPException(status_code=422, detail="min_tier cannot exceed max_tier.")
 
-    from database.models import RegisteredAgent
     department = (req.department or "").strip()
     if not department:
         raise HTTPException(status_code=422, detail="Department is required.")
+    _check_agent_permission(db, authorization, req.workspace_id)
 
     agents = db.query(RegisteredAgent).filter(
         RegisteredAgent.department == department,
         (RegisteredAgent.archived == False) | (RegisteredAgent.archived == None),
-    ).all()
+    )
+    if req.workspace_id:
+        agents = agents.filter(workspace_filter(RegisteredAgent, req.workspace_id))
+    agents = agents.all()
     if not agents:
         raise HTTPException(status_code=404, detail=f"No visible agents found for department '{department}'.")
 
@@ -229,7 +290,8 @@ def set_department_tier_bounds(req: DepartmentTierBoundsRequest, db: Session = D
 
 
 @router.get("/{agent_id}", response_model=AgentStatus)
-def get_single_agent(agent_id: int, db: Session = Depends(get_db)):
+def get_single_agent(agent_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
+    _agent_scoped_or_404(db, agent_id, workspace_id)  # raises 404 on cross-tenant mismatch
     result = get_agent(db, agent_id)
     if not result:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
@@ -267,8 +329,13 @@ def run_collision_simulation(
 
 
 @router.post("/{agent_id}/release")
-def release_agent(agent_id: int, db: Session = Depends(get_db)):
+def release_agent(
+    agent_id: int, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """Supervisor action: release a locked agent back to idle."""
+    _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     try:
         return release_lock(db, agent_id)
     except ValueError as e:
@@ -276,16 +343,17 @@ def release_agent(agent_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{agent_id}/tier-bounds")
-def set_tier_bounds(agent_id: int, req: TierBoundsRequest, db: Session = Depends(get_db)):
+def set_tier_bounds(
+    agent_id: int, req: TierBoundsRequest, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """Set the min/max routing tier for an agent. Clamps future routing decisions."""
     if not (1 <= req.min_tier <= 4) or not (1 <= req.max_tier <= 4):
         raise HTTPException(status_code=422, detail="Tier values must be between 1 and 4.")
     if req.min_tier > req.max_tier:
         raise HTTPException(status_code=422, detail="min_tier cannot exceed max_tier.")
-    from database.models import RegisteredAgent
-    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     agent.min_tier = req.min_tier
     agent.max_tier = req.max_tier
     db.commit()
@@ -294,7 +362,10 @@ def set_tier_bounds(agent_id: int, req: TierBoundsRequest, db: Session = Depends
 
 
 @router.patch("/{agent_id}/allowed-providers")
-def set_allowed_providers(agent_id: int, req: AllowedProvidersRequest, db: Session = Depends(get_db)):
+def set_allowed_providers(
+    agent_id: int, req: AllowedProvidersRequest, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """
     Restrict which ModelRegistry.provider values this agent's routing may
     use (Routing 2.0, Phase 2 -- policy-aware routing). An empty list
@@ -303,10 +374,8 @@ def set_allowed_providers(agent_id: int, req: AllowedProvidersRequest, db: Sessi
     since a real request is never hard-blocked by a policy misconfiguration
     (see core/router.py's _apply_provider_policy()).
     """
-    from database.models import RegisteredAgent
-    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     cleaned = [p.strip() for p in (req.allowed_providers or []) if p and p.strip()]
     agent.allowed_providers = cleaned
     db.commit()
@@ -315,12 +384,13 @@ def set_allowed_providers(agent_id: int, req: AllowedProvidersRequest, db: Sessi
 
 
 @router.patch("/{agent_id}/pruning")
-def toggle_pruning(agent_id: int, req: PruningToggleRequest, db: Session = Depends(get_db)):
+def toggle_pruning(
+    agent_id: int, req: PruningToggleRequest, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """Enable or disable context pruning for a specific agent."""
-    from database.models import RegisteredAgent
-    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     agent.pruning_enabled = req.enabled
     db.commit()
     db.refresh(agent)
@@ -329,19 +399,20 @@ def toggle_pruning(agent_id: int, req: PruningToggleRequest, db: Session = Depen
 
 
 @router.patch("/{agent_id}/mode")
-def set_agent_mode(agent_id: int, req: ModeRequest, db: Session = Depends(get_db)):
+def set_agent_mode(
+    agent_id: int, req: ModeRequest, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """
     Set an agent's Observe/Control mode. This should only ever be called from
     an explicit admin action -- moving an agent into "control" must never
     happen silently. See docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md step 9.
     """
-    from database.models import RegisteredAgent
     normalized = (req.mode or "").strip().lower()
     if normalized not in ("observe", "control"):
         raise HTTPException(status_code=422, detail="mode must be 'observe' or 'control'.")
-    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id, "enable_agent_control")
     agent.mode = normalized
     db.commit()
     db.refresh(agent)
@@ -350,16 +421,17 @@ def set_agent_mode(agent_id: int, req: ModeRequest, db: Session = Depends(get_db
 
 
 @router.patch("/{agent_id}/name", response_model=AgentStatus)
-def rename_agent(agent_id: int, req: RenameAgentRequest, db: Session = Depends(get_db)):
+def rename_agent(
+    agent_id: int, req: RenameAgentRequest, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """Rename an agent's display/source name without changing its history."""
     clean = (req.name or "").strip()
     if not clean:
         raise HTTPException(status_code=422, detail="Agent name cannot be blank.")
-    from database.models import RegisteredAgent
     from core.agentlake import _serialize
-    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
+    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     agent.name = clean
     db.commit()
     db.refresh(agent)
@@ -367,8 +439,13 @@ def rename_agent(agent_id: int, req: RenameAgentRequest, db: Session = Depends(g
 
 
 @router.post("/{agent_id}/archive")
-def archive(agent_id: int, db: Session = Depends(get_db)):
+def archive(
+    agent_id: int, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """Soft-delete: hide agent from live grid, preserve all history in reports and audit log."""
+    _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     try:
         return archive_agent(db, agent_id)
     except ValueError as e:
@@ -376,8 +453,13 @@ def archive(agent_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{agent_id}/unarchive", response_model=AgentStatus)
-def unarchive(agent_id: int, db: Session = Depends(get_db)):
+def unarchive(
+    agent_id: int, workspace_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
+):
     """Restore an archived agent back to the live registry."""
+    _agent_scoped_or_404(db, agent_id, workspace_id)
+    _check_agent_permission(db, authorization, workspace_id)
     try:
         return unarchive_agent(db, agent_id)
     except ValueError as e:
