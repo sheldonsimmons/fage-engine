@@ -332,6 +332,15 @@
           </div>
         </div>
         <div class="cp-ask-voice-status" id="cpAskVoiceStatus" hidden></div>
+        <label class="cp-ask-wake-toggle" id="cpAskWakeToggleLabel" title="Chrome only">
+          <input type="checkbox" id="cpWakeToggle">
+          <span>"Hey CostPilot" voice trigger</span>
+        </label>
+        <p class="cp-ask-wake-disclosure" id="cpAskWakeDisclosure">
+          When on, your browser continuously listens for "hey CostPilot." While listening, audio is sent to your
+          browser's built-in speech recognition service (e.g. Google, in Chrome) — not to CostPilot — until you turn
+          this off. Works best in Chrome.
+        </p>
         <form class="cp-ask-composer" id="cpAskForm">
           <label class="cp-sr-only" for="cpAskInput">Ask CostPilot a question</label>
           <textarea id="cpAskInput" rows="2" maxlength="500"
@@ -373,6 +382,15 @@
       if (speakBtn) speakAskAnswer(speakBtn.dataset.askSpeak, speakBtn);
     });
     document.getElementById("cpAskMic").addEventListener("click", toggleAskVoiceRecording);
+    const wakeToggle = document.getElementById("cpWakeToggle");
+    if (!wakeWordSupported()) {
+      wakeToggle.disabled = true;
+      document.getElementById("cpAskWakeToggleLabel").classList.add("cp-ask-wake-toggle--unsupported");
+      document.getElementById("cpAskWakeDisclosure").textContent = "Voice wake word isn't supported in this browser — try Chrome.";
+    } else {
+      wakeToggle.checked = readAskStorage("wake_enabled", false);
+      wakeToggle.addEventListener("change", () => setWakeWordEnabled(wakeToggle.checked));
+    }
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeAskCostPilot();
       if ((event.metaKey || event.ctrlKey) && event.key === "/") {
@@ -514,8 +532,13 @@
     backdrop.hidden = true;
     document.body.classList.remove("cp-ask-open");
     // Never leave a mic hot or audio playing behind a closed drawer.
+    // Deliberately does NOT stop wake-word listening -- the whole point
+    // of the wake word is re-engaging Ask CostPilot hands-free, so it
+    // stays armed across drawer open/close and only stops via its own
+    // toggle or the tab being backgrounded.
     if (typeof _askRecording !== "undefined" && _askRecording) _askMediaRecorder?.stop();
     if (typeof stopAskSpeaking === "function") stopAskSpeaking();
+    resumeWakeWordListenerIfEnabled();
   }
 
   function askScope() {
@@ -692,13 +715,138 @@
   // modality="voice" -- Ask CostPilot itself never knows or cares how the
   // question arrived. Phase 1 is push-to-talk (click to start, click to
   // stop), not continuous listening, per the feasibility assessment's
-  // privacy recommendation.
+  // privacy recommendation. Phase 2 (below) adds an opt-in, off-by-default
+  // "Hey CostPilot" wake word -- the one continuous-listening exception,
+  // gated entirely behind the user explicitly turning it on.
 
   let _askMediaRecorder = null;
   let _askAudioChunks = [];
   let _askRecording = false;
   let _askPendingVoiceMeta = null; // {modality:"voice", confidence} for the next submit only
   let _askCurrentAudio = null;
+
+  // "Hey CostPilot" wake word (opt-in, off by default) -- automates
+  // starting the exact same push-to-talk capture above; it never bypasses
+  // Whisper transcription, PII redaction, confidence gating, or the
+  // manual "Ask" confirm step. Uses the browser's own SpeechRecognition
+  // purely to detect the trigger phrase locally in the tab; in Chrome
+  // that API streams audio to Google's speech servers while armed (never
+  // to CostPilot) -- disclosed to the user in the drawer's toggle copy.
+  let _wakeRecognition = null;
+  let _wakeEnabled = false;
+  let _wakeListening = false;
+  let _wakeSuspended = false;
+  let _wakeStopRequested = false;
+  let _wakeTriggerInFlight = false;
+  let _wakeVisibilityBound = false;
+
+  function wakeWordSupported() {
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  }
+
+  function getWakeRecognition() {
+    if (_wakeRecognition) return _wakeRecognition;
+    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new Ctor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = handleWakeResult;
+    recognition.onerror = handleWakeError;
+    recognition.onend = handleWakeEnd;
+    _wakeRecognition = recognition;
+    return recognition;
+  }
+
+  function startWakeWordListener() {
+    if (!_wakeEnabled || _wakeListening || _askRecording || _wakeSuspended || document.hidden || !wakeWordSupported()) return;
+    _wakeStopRequested = false;
+    try {
+      getWakeRecognition().start();
+      _wakeListening = true;
+      document.getElementById("cpAskMic")?.classList.add("wake-armed");
+    } catch (_error) {
+      // start() throws if already started -- state flags above make this rare.
+    }
+  }
+
+  function stopWakeWordListener() {
+    if (!_wakeListening) return;
+    _wakeStopRequested = true;
+    try { _wakeRecognition?.stop(); } catch (_error) {}
+    _wakeListening = false;
+    document.getElementById("cpAskMic")?.classList.remove("wake-armed");
+  }
+
+  function pauseWakeWordListener() {
+    _wakeSuspended = true;
+    stopWakeWordListener();
+  }
+
+  function resumeWakeWordListenerIfEnabled() {
+    _wakeSuspended = false;
+    startWakeWordListener();
+  }
+
+  function setWakeWordEnabled(enabled) {
+    _wakeEnabled = enabled;
+    writeAskStorage("wake_enabled", enabled);
+    const toggle = document.getElementById("cpWakeToggle");
+    if (toggle) toggle.checked = enabled;
+    if (enabled) {
+      startWakeWordListener();
+      askVoiceStatus("Wake-word listening is on.", "ok");
+    } else {
+      stopWakeWordListener();
+      askVoiceStatus("Wake-word listening is off.", "ok");
+    }
+  }
+
+  function handleWakeResult(event) {
+    if (_askRecording || _wakeTriggerInFlight) return;
+    let transcript = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    if (!/hey\s*,?\s*cost\s*-?\s*pilot/i.test(transcript)) return;
+    _wakeTriggerInFlight = true;
+    pauseWakeWordListener();
+    openAskCostPilot();
+    askVoiceStatus("Heard “Hey CostPilot” — listening for your question…", "listening");
+    toggleAskVoiceRecording().finally(() => { _wakeTriggerInFlight = false; });
+  }
+
+  function handleWakeError(event) {
+    switch (event.error) {
+      case "not-allowed":
+      case "permission-denied":
+        askVoiceStatus("Mic access is blocked — allow microphone access in your browser to use the wake word.", "error");
+        setWakeWordEnabled(false);
+        break;
+      case "audio-capture":
+        askVoiceStatus("No microphone was found — the wake word can't listen without one.", "error");
+        setWakeWordEnabled(false);
+        break;
+      case "network":
+        askVoiceStatus("Wake-word listening lost its connection and stopped — turn it back on to retry.", "warn");
+        setWakeWordEnabled(false);
+        break;
+      default:
+        // "no-speech" and "aborted" fire routinely during idle listening
+        // and intentional stop() calls -- no user-facing message needed.
+        break;
+    }
+  }
+
+  function handleWakeEnd() {
+    _wakeListening = false;
+    document.getElementById("cpAskMic")?.classList.remove("wake-armed");
+    if (_wakeEnabled && !_wakeSuspended && !document.hidden && !_wakeStopRequested) {
+      // Chrome periodically stops a "continuous" recognizer after
+      // silence -- restart it so listening stays effectively continuous.
+      setTimeout(startWakeWordListener, 250);
+    }
+  }
 
   function askVoiceStatus(text, tone) {
     const el = document.getElementById("cpAskVoiceStatus");
@@ -710,12 +858,14 @@
   }
 
   async function toggleAskVoiceRecording() {
+    pauseWakeWordListener();
     if (_askRecording) {
       _askMediaRecorder?.stop();
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       askVoiceStatus("Voice isn't supported in this browser — try typing instead.", "error");
+      resumeWakeWordListenerIfEnabled();
       return;
     }
     try {
@@ -727,7 +877,7 @@
         stream.getTracks().forEach((track) => track.stop());
         _askRecording = false;
         document.getElementById("cpAskMic")?.classList.remove("recording");
-        transcribeAskRecording();
+        transcribeAskRecording().finally(resumeWakeWordListenerIfEnabled);
       };
       _askMediaRecorder.start();
       _askRecording = true;
@@ -735,6 +885,7 @@
       askVoiceStatus("Listening… click the mic again to stop.", "listening");
     } catch (err) {
       askVoiceStatus("Couldn't access your microphone — check your browser permissions.", "error");
+      resumeWakeWordListenerIfEnabled();
     }
   }
 
@@ -767,6 +918,12 @@
 
   async function speakAskAnswer(text, triggerButton) {
     if (!text) return;
+    // The wake engine must not be armed while CostPilot's own voice is
+    // playing -- the answer can contain "CostPilot" and misfire itself.
+    // Paused before stopAskSpeaking() (which resumes it) so the net
+    // effect of replacing an in-progress answer is "stay paused," not a
+    // spurious resume-then-immediately-pause.
+    pauseWakeWordListener();
     stopAskSpeaking();
     if (triggerButton) { triggerButton.disabled = true; triggerButton.textContent = "…"; }
     try {
@@ -779,12 +936,17 @@
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       _askCurrentAudio = new Audio(url);
-      _askCurrentAudio.onended = () => { askVoiceStatus(""); renderAskStopSpeakingControl(false); };
+      _askCurrentAudio.onended = () => {
+        askVoiceStatus("");
+        renderAskStopSpeakingControl(false);
+        resumeWakeWordListenerIfEnabled();
+      };
       askVoiceStatus("Speaking…", "listening");
       renderAskStopSpeakingControl(true);
       await _askCurrentAudio.play();
     } catch (err) {
       askVoiceStatus("Couldn't play that answer aloud.", "error");
+      resumeWakeWordListenerIfEnabled();
     } finally {
       if (triggerButton) { triggerButton.disabled = false; triggerButton.textContent = "🔊"; }
     }
@@ -808,7 +970,7 @@
         btn.id = "cpAskStopSpeaking";
         btn.className = "cp-ask-stop-speaking";
         btn.textContent = "⏹ Stop Speaking";
-        btn.addEventListener("click", stopAskSpeaking);
+        btn.addEventListener("click", () => { stopAskSpeaking(); resumeWakeWordListenerIfEnabled(); });
         document.getElementById("cpAskVoiceStatus")?.after(btn);
       }
       btn.hidden = false;
@@ -939,6 +1101,17 @@
     try {
       installAskCostPilot();
       buildNavigation();
+      if (wakeWordSupported()) {
+        _wakeEnabled = readAskStorage("wake_enabled", false);
+        if (_wakeEnabled) startWakeWordListener();
+        if (!_wakeVisibilityBound) {
+          _wakeVisibilityBound = true;
+          document.addEventListener("visibilitychange", () => {
+            if (document.hidden) stopWakeWordListener();
+            else resumeWakeWordListenerIfEnabled();
+          });
+        }
+      }
     } catch (_error) {
       document.body.classList.add("cp-global-nav-unavailable");
     }
