@@ -2194,17 +2194,29 @@ const ASK_STARTER_QUESTIONS = [
 
 let askCostPilotAvailability = null;
 
-function askCostPilotQuestion(question) {
+// Set only when a disambiguation choice was just clicked -- carries the
+// exact resolved row directly through to askCostPilotPayload, since
+// re-asking text alone can't disambiguate two candidates that share a
+// root word (e.g. "Support" the department vs. "Support Agent" the
+// agent). Consumed and cleared on the next payload build, mirroring
+// global-nav.js's identical _askPendingVoiceMeta pattern.
+let _askPendingPinnedFilter = null;
+
+function askCostPilotQuestion(question, pinnedFilter = null) {
   const input = document.getElementById("askCostPilotInput");
   if (!input || !question) return;
   input.value = question;
   input.focus();
+  _askPendingPinnedFilter = pinnedFilter;
   submitAskCostPilot();
 }
 
 function askCostPilotSuggestion(button) {
   if (!button) return;
-  askCostPilotQuestion(button.dataset.question || button.textContent.trim());
+  const pinnedFilter = button.dataset.filterName
+    ? { name: button.dataset.filterName, value: button.dataset.filterValue }
+    : null;
+  askCostPilotQuestion(button.dataset.question || button.textContent.trim(), pinnedFilter);
 }
 
 function askCostPilotDateLabel(range = getActiveDateRange()) {
@@ -2305,7 +2317,7 @@ function askCostPilotPayload(question) {
   const range = getActiveDateRange();
   const workspaceId = reportWorkspaceId() || null;
   const agentValue = askCostPilotFilterValue("ctxAgentFilter");
-  return {
+  const payload = {
     question,
     days: Math.min(365, range.days || 30),
     timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -2330,6 +2342,18 @@ function askCostPilotPayload(question) {
     conversation: askCostPilotHistory.slice(-12).map(({ role, content }) => ({ role, content })),
     context: askCostPilotContext,
   };
+  // A disambiguation choice the user just clicked -- set after every
+  // filter field above so it can't be silently overridden by a stale page
+  // filter of the same name. pinned_filter_name tells the backend to keep
+  // this one field even though the re-asked question necessarily
+  // re-mentions the chosen name.
+  const pinnedFilter = _askPendingPinnedFilter;
+  _askPendingPinnedFilter = null;
+  if (pinnedFilter && pinnedFilter.name && pinnedFilter.value !== null && pinnedFilter.value !== undefined) {
+    payload[pinnedFilter.name] = pinnedFilter.name === "agent_id" ? Number(pinnedFilter.value) : pinnedFilter.value;
+    payload.pinned_filter_name = pinnedFilter.name;
+  }
+  return payload;
 }
 
 function askCostPilotComposerKeydown(event) {
@@ -2465,8 +2489,17 @@ function askEvidenceButton(item, data) {
     // bare label alone lost all context and got misclassified as a
     // product/help question instead of continuing the drill-down.
     const choice = item.question || item.label || item.value || "";
+    // filter_name/filter_value carry the exact resolved row (the same
+    // convention drill-through buttons use) -- re-asking text alone can't
+    // disambiguate two candidates that share a root word (e.g. "Support"
+    // the department vs. "Support Agent" the agent both reduce to the
+    // same name tokens), so the click pins the filter directly instead of
+    // asking the matcher to guess a second time.
+    const filterAttrs = item.filter_name && item.filter_value !== null && item.filter_value !== undefined
+      ? ` data-filter-name="${escapeHtml(item.filter_name)}" data-filter-value="${escapeHtml(String(item.filter_value))}"`
+      : "";
     return `<button type="button" class="ask-evidence-row ask-evidence-choice"
-        data-question="${escapeHtml(choice)}" onclick="askCostPilotSuggestion(this)">
+        data-question="${escapeHtml(choice)}"${filterAttrs} onclick="askCostPilotSuggestion(this)">
       <div>
         <strong>${escapeHtml(item.label || "Unknown")}</strong>
         <span>${escapeHtml(item.detail || "")}</span>

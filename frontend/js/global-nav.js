@@ -375,7 +375,7 @@
       const followUp = event.target.closest("[data-ask-question]");
       if (followUp) {
         document.getElementById("cpAskInput").value = followUp.dataset.askQuestion;
-        submitGlobalAsk();
+        submitGlobalAsk(null, followUp.dataset.askFilterName || null, followUp.dataset.askFilterValue ?? null);
         return;
       }
       const speakBtn = event.target.closest("[data-ask-speak]");
@@ -593,7 +593,7 @@
     };
   }
 
-  function normalizedAskPayload(question, history, context, includeConversation = true, voiceMeta = null) {
+  function normalizedAskPayload(question, history, context, includeConversation = true, voiceMeta = null, pinnedFilter = null) {
     const scope = askScope() || {};
     const daysValue = Number(scope.days);
     const payload = {
@@ -627,6 +627,16 @@
     const dateTo = cleanAskDate(scope.date_to);
     if (dateFrom) payload.date_from = dateFrom;
     if (dateTo) payload.date_to = dateTo;
+
+    // A disambiguation choice the user just clicked -- carries the exact
+    // resolved row directly, set after every scope-derived field above so
+    // it can't be silently overridden by a stale page filter of the same
+    // name. pinned_filter_name tells the backend to keep this one field
+    // even though the re-asked question necessarily re-mentions the name.
+    if (pinnedFilter && pinnedFilter.name && pinnedFilter.value !== null && pinnedFilter.value !== undefined) {
+      payload[pinnedFilter.name] = pinnedFilter.name === "agent_id" ? Number(pinnedFilter.value) : pinnedFilter.value;
+      payload.pinned_filter_name = pinnedFilter.name;
+    }
 
     if (!includeConversation) return payload;
     payload.conversation = (Array.isArray(history) ? history : [])
@@ -1147,7 +1157,7 @@
     }
   }
 
-  async function submitGlobalAsk(event) {
+  async function submitGlobalAsk(event, pinnedFilterName = null, pinnedFilterValue = null) {
     event?.preventDefault();
     const input = document.getElementById("cpAskInput");
     const send = document.getElementById("cpAskSend");
@@ -1158,6 +1168,9 @@
     // any later edit/re-ask from the same textarea is typed again.
     const voiceMeta = _askPendingVoiceMeta;
     _askPendingVoiceMeta = null;
+    // Set only when a disambiguation choice was just clicked -- see
+    // normalizedAskPayload's pinnedFilter handling.
+    const pinnedFilter = pinnedFilterName ? { name: pinnedFilterName, value: pinnedFilterValue } : null;
     addAskMessage("user", `<p>${escapeHtml(question)}</p>`);
     input.value = "";
     send.disabled = true;
@@ -1166,13 +1179,13 @@
     const history = readAskStorage("history", []);
     const context = readAskStorage("context", null);
     try {
-      let response = await postGlobalAsk(normalizedAskPayload(question, history, context, true, voiceMeta));
+      let response = await postGlobalAsk(normalizedAskPayload(question, history, context, true, voiceMeta, pinnedFilter));
       // Old browser sessions can contain conversation state from a previous
       // response contract. A valid question must not fail because that optional
       // context is stale, so retry once with the clean reporting scope only.
       if (response.status === 422) {
         clearAskStorage();
-        response = await postGlobalAsk(normalizedAskPayload(question, [], null, false, voiceMeta));
+        response = await postGlobalAsk(normalizedAskPayload(question, [], null, false, voiceMeta, pinnedFilter));
       }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const data = await response.json();

@@ -140,6 +140,15 @@ class AskCostPilotRequest(BaseModel):
     # previous question. Pinned scope survives _ask_reporting_filters'
     # explicit-named-subject clearing below; unpinned scope does not.
     account_id_pinned: bool = False
+    # Generalizes account_id_pinned above to user_external_id/agent_id/
+    # charged_unit: which of those fields (if any) is a deliberately
+    # resolved choice -- e.g. a disambiguation button the user just
+    # clicked -- rather than a stale filter left over from an earlier,
+    # unrelated question. Set to the exact field name being pinned (e.g.
+    # "charged_unit"); that one field survives _ask_reporting_filters'
+    # explicit-named-subject clearing below even though the re-asked
+    # question necessarily re-mentions the chosen name.
+    pinned_filter_name: Optional[str] = None
     source_platform: Optional[str] = None
     record_type: Optional[str] = None
     model_tier: Optional[str] = None
@@ -1232,18 +1241,26 @@ def _ask_reporting_filters(request: AskCostPilotRequest, parsed: dict) -> dict:
         # A named subject must be discovered across the filtered workspace.
         # Keep cross-cutting scope (date, platform, model, record type), but do
         # not let an old person/agent/context/department selection hide it.
-        # account_id is the one exception: a pinned account (the whole page
+        # account_id is one exception: a pinned account (the whole page
         # IS this account, e.g. Business Profile) isn't a stale leftover
         # filter the way a chat widget's account_id might be, so a question
         # like "top agent for Acme Corp" on Acme's own profile page should
         # stay scoped to Acme, not search the entire workspace for whichever
-        # account "Acme Corp" happens to name.
+        # account "Acme Corp" happens to name. pinned_filter_name generalizes
+        # this to person/agent/department: clicking a "which one did you
+        # mean?" choice re-asks a question that necessarily re-mentions the
+        # chosen name (tripping this same clearing logic), but that name was
+        # just deliberately resolved to one exact row, not a stale filter --
+        # see the _ask_named_entity_ambiguity consumer below.
         filters["project_id"] = None
         if not request.account_id_pinned:
             filters["account_id"] = None
-        filters["user_external_id"] = None
-        filters["agent_id"] = None
-        filters["charged_unit"] = None
+        if request.pinned_filter_name != "user_external_id":
+            filters["user_external_id"] = None
+        if request.pinned_filter_name != "agent_id":
+            filters["agent_id"] = None
+        if request.pinned_filter_name != "charged_unit":
+            filters["charged_unit"] = None
         return filters
     if parsed.get("intent") != "ranking":
         return filters
@@ -4092,7 +4109,15 @@ def _ask_costpilot_answer(
     driver_analysis = None
     budget_coverage = None
     named_entity = _ask_named_entity(question, report)
-    if named_entity is None and intent in {"total", "overview", "ranking"}:
+    # request.pinned_filter_name means the user already resolved this exact
+    # ambiguity by clicking a specific disambiguation choice -- re-running
+    # the same name-token match on the reconstructed follow-up question
+    # would just tie again (e.g. "Support" the department and "Support
+    # Agent" the agent both reduce to the same name tokens once generic
+    # suffix words are stripped), looping back into the same prompt
+    # instead of answering. The pinned reporting_filters value from
+    # _ask_reporting_filters is what actually scopes this answer now.
+    if named_entity is None and not request.pinned_filter_name and intent in {"total", "overview", "ranking"}:
         # Without this, an ambiguous name ("How much did Chris spend?" with
         # two Chrises) silently fell through to an unfiltered, company-wide
         # total presented as if it had answered the question about one
@@ -4112,8 +4137,18 @@ def _ask_costpilot_answer(
             # since a lone noun out of context looks like a product
             # question to the OpenAI planner). Naming the entity type
             # (already known here) makes the re-ask classify correctly.
-            entity_label_by_name = {
-                str(match["row"].get("label") or "Unknown"): match["entity_label"]
+            #
+            # The re-ask text alone can't disambiguate two candidates that
+            # share a root word once generic suffix words are stripped for
+            # matching (confirmed live: "Support" the department and
+            # "Support Agent" the agent both reduce to the same name-token
+            # set, so any rephrasing ties again). filter_name/filter_value
+            # carry the exact already-resolved row directly -- the same
+            # convention _ask_evidence()'s drill-through buttons already
+            # use -- so the frontend can pin it via pinned_filter_name
+            # instead of asking the matcher to guess a second time.
+            match_by_name = {
+                str(match["row"].get("label") or "Unknown"): match
                 for match in ambiguous_matches
             }
             return {
@@ -4127,7 +4162,9 @@ def _ask_costpilot_answer(
                 "evidence": [
                     {
                         "label": label, "value": None, "metric_label": None,
-                        "question": f"Tell me about the {label} {entity_label_by_name.get(label, '')}".strip(),
+                        "question": f"Tell me about the {label} {match_by_name[label]['entity_label']}".strip(),
+                        "filter_name": match_by_name[label]["filter_name"],
+                        "filter_value": match_by_name[label]["row"].get("id"),
                     }
                     for label in labels
                 ],

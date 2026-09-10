@@ -184,7 +184,16 @@ function renderAskEvidence(item, data) {
     // bare label alone lost all context and got misclassified as a
     // product/help question instead of continuing the drill-down.
     const choice = item.question || item.label || item.value || "";
-    return `<button type="button" class="cp-ask-evidence" data-ask-question="${askRenderEscapeHtml(choice)}">
+    // filter_name/filter_value carry the exact resolved row (the same
+    // convention drill-through buttons use) -- re-asking text alone can't
+    // disambiguate two candidates that share a root word (e.g. "Support"
+    // the department vs. "Support Agent" the agent both reduce to the
+    // same name tokens), so the click pins the filter directly instead of
+    // asking the matcher to guess a second time.
+    const filterAttrs = item.filter_name && item.filter_value !== null && item.filter_value !== undefined
+      ? ` data-ask-filter-name="${askRenderEscapeHtml(item.filter_name)}" data-ask-filter-value="${askRenderEscapeHtml(String(item.filter_value))}"`
+      : "";
+    return `<button type="button" class="cp-ask-evidence" data-ask-question="${askRenderEscapeHtml(choice)}"${filterAttrs}>
       <div><strong>${askRenderEscapeHtml(item.label || "Unknown")}</strong><span>${askRenderEscapeHtml(item.detail || "")}</span></div>
       <div><strong>${askRenderEscapeHtml(item.value || "—")}</strong><span>${askRenderEscapeHtml(item.metric_label || "")}</span></div>
     </button>`;
