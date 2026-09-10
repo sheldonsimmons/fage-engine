@@ -745,7 +745,9 @@ def run_get_change_drivers(
     }
 
 
-def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) -> dict:
+def run_get_budget_status(
+    db, workspace_id: Optional[str], alerts_only: bool, department_scope: Optional[str] = None,
+) -> dict:
     # Delegates spend/cap computation entirely to core.budget.get_all_budgets
     # — the same function Admin > Budgets uses — instead of re-deriving the
     # production-vs-recomputed branch here. Three independent copies of this
@@ -759,13 +761,20 @@ def run_get_budget_status(db, workspace_id: Optional[str], alerts_only: bool) ->
         cap = float(budget["monthly_cap_usd"] or 0)
         if cap <= 0 or budget.get("archived"):
             continue
+        label = (budget["department"] or "Unassigned").split(":")[-1]
+        # Phase 2 slice 3: get_all_budgets() itself stays unscoped -- it's
+        # shared with the Admin > Budgets page -- so a department-scoped
+        # user's own department is filtered here instead, at this tool's
+        # own row-building step.
+        if department_scope and label != department_scope:
+            continue
         spend = float(budget["current_spend_usd"] or 0)
         pct = float(budget["used_pct"] or 0)
         if alerts_only and pct < 80:
             continue
         rows.append({
             "id": budget["department"],
-            "label": (budget["department"] or "Unassigned").split(":")[-1],
+            "label": label,
             "monthly_cap_usd": cap,
             "current_spend_usd": round(spend, 6),
             "remaining_usd": budget["remaining_usd"],
@@ -788,7 +797,7 @@ def run_get_product_help(topic: str) -> dict:
 
 def run_get_agent_adoption(
     db, workspace_id: Optional[str], status: str, usage_threshold: int,
-    days: int = 30, period_key: str = "none",
+    days: int = 30, period_key: str = "none", department_scope: Optional[str] = None,
 ) -> dict:
     """
     Classify every registered agent by usage status. Mirrors the
@@ -806,7 +815,11 @@ def run_get_agent_adoption(
     from api.routes_work_items import project_activity_reporting
 
     agent_query = db.query(RegisteredAgent).filter(RegisteredAgent.archived.isnot(True))
-    if workspace_id:
+    if workspace_id and department_scope:
+        # Phase 2 slice 3: exact match on the one department, instead of
+        # the wildcard "every department in the workspace" match below.
+        agent_query = agent_query.filter(RegisteredAgent.department == f"{workspace_id}:{department_scope}")
+    elif workspace_id:
         agent_query = agent_query.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
     agents = agent_query.all()
 
@@ -824,7 +837,7 @@ def run_get_agent_adoption(
     report = project_activity_reporting(
         workspace_id=workspace_id, date_from=date_from, date_to=date_to, days=days,
         project_id=None, user_external_id=None, agent_id=None, account_id=None,
-        source_platform=None, record_type=None, model_tier=None, charged_unit=None,
+        source_platform=None, record_type=None, model_tier=None, charged_unit=department_scope,
         business_purpose=None, activity_limit=2000, exclude_prune_only_rows=True, db=db,
     )
     current_by_agent = {
@@ -1105,7 +1118,9 @@ def run_query_metrics(
     return out
 
 
-def run_get_priority_signals(db, workspace_id: Optional[str], days: int = 7) -> dict:
+def run_get_priority_signals(
+    db, workspace_id: Optional[str], days: int = 7, department_scope: Optional[str] = None,
+) -> dict:
     """
     Combines the same two real sources the Cockpit's own Recommendations
     panel already combines client-side (core.budget.get_all_budgets for
@@ -1125,6 +1140,9 @@ def run_get_priority_signals(db, workspace_id: Optional[str], days: int = 7) -> 
         if pct < 80:
             continue
         dept = str(budget.get("department") or "Unassigned").split(":")[-1]
+        # Phase 2 slice 3: same row-level filter as run_get_budget_status.
+        if department_scope and dept != department_scope:
+            continue
         cap = float(budget.get("monthly_cap_usd") or 0)
         severity = "critical" if (budget.get("throttled") or pct >= 100) else "warning"
         signals.append({
@@ -1139,6 +1157,7 @@ def run_get_priority_signals(db, workspace_id: Optional[str], days: int = 7) -> 
     now = datetime.utcnow()
     result = run_metrics_query(
         db, workspace_id, metrics=["ai_spend"], dimensions=["department"],
+        filters={"charged_unit": department_scope} if department_scope else None,
         timeframe={"start": now - timedelta(days=window_days), "end": now},
         compare_to="previous_period", limit=5,
     )

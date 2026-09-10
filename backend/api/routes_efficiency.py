@@ -2891,7 +2891,7 @@ def _ask_run_agent_tool(
             department_scope or (args.get("department") or None), args.get("provider") or None,
         )
     if name == "get_budget_status":
-        return executor(db, request.workspace_id, bool(args.get("alerts_only")))
+        return executor(db, request.workspace_id, bool(args.get("alerts_only")), department_scope=department_scope)
     if name == "get_product_help":
         return executor(args.get("topic") or request.question)
     if name == "get_agent_adoption":
@@ -2899,6 +2899,7 @@ def _ask_run_agent_tool(
             db, request.workspace_id,
             args.get("status") or "all", int(args.get("usage_threshold") or 10),
             int(args.get("days") or 30), args.get("period_key") or "none",
+            department_scope=department_scope,
         )
     if name == "get_account_outcomes":
         return executor(db, request.workspace_id, args.get("entity_name") or None)
@@ -2925,7 +2926,7 @@ def _ask_run_agent_tool(
             limit=int(args.get("limit") or 20),
         )
     if name == "get_priority_signals":
-        return executor(db, request.workspace_id, days=int(args.get("days") or 7))
+        return executor(db, request.workspace_id, days=int(args.get("days") or 7), department_scope=department_scope)
     return {"error": f"unhandled tool: {name}"}
 
 
