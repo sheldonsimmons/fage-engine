@@ -2859,7 +2859,16 @@ def _ask_agent_reporting_filters(request: "AskCostPilotRequest") -> dict:
 
 def _ask_run_agent_tool(
     name: str, args: dict, db: Session, request: "AskCostPilotRequest", reporting_filters: dict,
+    department_scope: Optional[str] = None,
 ) -> dict:
+    """
+    department_scope (Phase 2 slice 1): when present, forced onto the 3
+    tools below that support a department filter today -- it always wins
+    over whatever the model itself chose to filter by, so a department-
+    scoped user can't ask their way into another department's numbers by
+    naming it explicitly. The other 5 tools are not scoped yet (see
+    ask_costpilot's docstring for the full list).
+    """
     from api.ask_costpilot_tools import EXECUTORS
 
     executor = EXECUTORS.get(name)
@@ -2870,7 +2879,7 @@ def _ask_run_agent_tool(
             db, request.workspace_id, reporting_filters,
             int(args.get("days") or 30), args.get("period_key") or "none",
             args.get("entity_name") or None, int(args.get("limit") or 5),
-            args.get("department") or None, args.get("provider") or None,
+            department_scope or (args.get("department") or None), args.get("provider") or None,
         )
     if name == "get_change_drivers":
         return executor(
@@ -2879,7 +2888,7 @@ def _ask_run_agent_tool(
             args.get("comparison_key") or "previous_period",
             args.get("metric") or "spend_usd",
             args.get("dimension") or "organizational_unit_breakdown",
-            args.get("department") or None, args.get("provider") or None,
+            department_scope or (args.get("department") or None), args.get("provider") or None,
         )
     if name == "get_budget_status":
         return executor(db, request.workspace_id, bool(args.get("alerts_only")))
@@ -2901,11 +2910,14 @@ def _ask_run_agent_tool(
     if name == "get_data_coverage":
         return executor(db, request.workspace_id)
     if name == "query_metrics":
+        query_filters = dict(args.get("filters") or {})
+        if department_scope:
+            query_filters["charged_unit"] = department_scope
         return executor(
             db, request.workspace_id,
             metrics=args.get("metrics") or [],
             dimensions=args.get("dimensions") or [],
-            filters=args.get("filters") or {},
+            filters=query_filters,
             days=int(args.get("days") or 30),
             period_key=args.get("period_key") or "none",
             compare_to=args.get("compare_to") or None,
@@ -3368,13 +3380,19 @@ def _ask_record_agent_fallback(workspace_id: Optional[str], reason: str, detail:
     )
 
 
-def _ask_costpilot_agent(request: "AskCostPilotRequest", db: Session) -> Optional[dict]:
+def _ask_costpilot_agent(
+    request: "AskCostPilotRequest", db: Session, department_scope: Optional[str] = None,
+) -> Optional[dict]:
     """
     Bounded tool-calling loop: the model chooses which deterministic lookups
     to run (max 4), then must call final_answer using only facts those
     lookups returned. Any failure/timeout/malformed turn returns None so
     ask_costpilot() falls straight back to the existing deterministic
     18-intent path — this path is purely additive.
+
+    department_scope (Phase 2 slice 1): forwarded to _ask_run_agent_tool,
+    which forces it onto the 3 tools that support department filtering
+    today, overriding whatever department the model itself chose.
     """
     global _ASK_AGENT_DISABLED_UNTIL
     breaker_key = request.workspace_id or "default"
@@ -3575,7 +3593,7 @@ depend on that exact range mattering."""
                     _ask_record_agent_fallback(request.workspace_id, "max_tool_calls", f"turn={_turn}")
                     return None
                 call_args = dict(call.input or {})
-                result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters)
+                result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters, department_scope=department_scope)
                 tool_call_log.append((call.name, call_args, result))
                 _ask_debug_log(request, "tool_call", {
                     "turn": _turn, "tool": call.name, "args": call_args, "result": result,
@@ -3746,14 +3764,23 @@ def ask_costpilot(
     never raises since AUTH_ENFORCEMENT_ENABLED stays off. This does not
     change who can ask a question or what they're answered; it only
     means a question asked while logged in gets attributed to a real
-    user_id in the audit trail instead of staying anonymous."""
+    user_id in the audit trail instead of staying anonymous.
+
+    Phase 2 slice 1: department_scope from that same TenantContext is
+    threaded into the answer path so a department-scoped user's question
+    is forcibly narrowed to their own department -- see
+    _ask_run_agent_tool for where that's actually enforced. Only 3 of the
+    8 agent-loop tools honor it today (get_usage_report, get_change_drivers,
+    query_metrics); the rest, and the deterministic fallback path, are
+    not scoped yet -- a documented gap, not an oversight."""
     ask_ctx = check_membership(db, authorization, request.workspace_id) if request.workspace_id else None
     ask_user_id = ask_ctx.user.id if ask_ctx else None
+    ask_department_scope = ask_ctx.department_scope if ask_ctx else None
     start = time.monotonic()
     error_type = None
     result = None
     try:
-        result = _ask_costpilot_answer(request, db)
+        result = _ask_costpilot_answer(request, db, department_scope=ask_department_scope)
     except Exception as exc:
         error_type = type(exc).__name__
         raise
@@ -3810,6 +3837,7 @@ def _ask_is_demo_workspace(db: Session, workspace_id: Optional[str]) -> bool:
 def _ask_costpilot_answer(
     request: AskCostPilotRequest,
     db: Session,
+    department_scope: Optional[str] = None,
 ):
     """
     Answer executive questions using CostPilot-calculated facts.
@@ -3817,6 +3845,10 @@ def _ask_costpilot_answer(
     The natural-language layer selects a bounded reporting intent; totals,
     rankings, and evidence always come from the deterministic attribution
     report. This endpoint is read-only and cannot change routing or policy.
+
+    department_scope (Phase 2 slice 1): forwarded to the agent loop only
+    -- the deterministic path below does not honor it yet (see
+    ask_costpilot's docstring for the full list of what's covered).
     """
     from api.routes_work_items import project_activity_reporting
 
@@ -3831,7 +3863,7 @@ def _ask_costpilot_answer(
         }
 
     if _ask_agent_mode_enabled():
-        agent_result = _ask_costpilot_agent(request, db)
+        agent_result = _ask_costpilot_agent(request, db, department_scope=department_scope)
         if agent_result is not None:
             return agent_result
         # Falls through to the deterministic path below unchanged.
