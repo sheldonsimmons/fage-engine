@@ -1127,6 +1127,15 @@ def _ask_is_follow_up(question: str) -> bool:
     if any(term in text for term in (
         "supporting activity", "supporting evidence", "break it down",
         "change threshold", "set threshold", "usage threshold",
+        # "I meant the reed spin for Marcus" -- a correction re-stating a
+        # prior, misheard/unrecognized term has no pronoun of its own to
+        # match the patterns above, yet it depends entirely on the previous
+        # turn to be interpretable at all. Confirmed live: without this,
+        # the conversation transcript sent to the OpenAI planner was just
+        # the bare new sentence with no history, and the planner picked an
+        # unrelated intent (agent_adoption) for what was actually a spend
+        # question, having no context that "reed spin" was ever raised.
+        "i meant", "i mean the", "meant to say", "meant to ask",
     )):
         return True
     # A bare result-count command has no subject of its own and therefore
@@ -1559,6 +1568,22 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
                     # overrode it to "help", producing the generic capability
                     # menu instead of a real answer.
                     return fallback, "deterministic_fallback_help_override"
+                if (
+                    validated.get("intent") == "agent_adoption"
+                    and fallback.get("intent") != "agent_adoption"
+                ):
+                    # Adoption-status phrasing is exact and deterministic
+                    # (see the fallback branch above) -- the regex classifier
+                    # reliably catches every real adoption question. So if
+                    # fallback's own intent is something else entirely, an
+                    # OpenAI "agent_adoption" guess here isn't a legitimate
+                    # second opinion, it's a fabrication, exactly like the
+                    # help/product case above. Confirmed live: "I meant the
+                    # reed spin for Marcus" (a garbled voice correction with
+                    # no adoption language at all) fell back to a workspace-
+                    # wide agent adoption overview, discarding both the
+                    # spend question and the named person "Marcus" entirely.
+                    return fallback, "deterministic_fallback_adoption_override"
                 return (
                     validated,
                     "openai_tool_planner",
