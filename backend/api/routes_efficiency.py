@@ -3737,7 +3737,15 @@ depend on that exact range mattering."""
         # comfortably under 30s, so this code chooses to fall back on its
         # own terms rather than being cut off mid-request.
         timeout_seconds = _ask_env_seconds(
-            "ASK_COSTPILOT_AGENT_TIMEOUT_SECONDS", 10.0, 5.0, 45.0
+            # Raised from 10.0: reproduced live, 3/3 runs, that a turn
+            # calling 2 tools (get_change_drivers + get_budget_status) has
+            # its *second* model call -- the one synthesizing a longer
+            # final answer from both tool results, not just picking a tool
+            # -- consistently exceed a 10s per-call timeout and get killed
+            # outright, separate from (and not fixed by) the total-budget
+            # preflight change above. 15.0 still leaves headroom under the
+            # 25.0 total budget for a turn that already took a few seconds.
+            "ASK_COSTPILOT_AGENT_TIMEOUT_SECONDS", 15.0, 5.0, 45.0
         )
         total_budget_seconds = _ask_env_seconds(
             # Raised from 15.0: the preflight check below (elapsed +
