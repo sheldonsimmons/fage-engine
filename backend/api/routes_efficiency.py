@@ -3878,6 +3878,13 @@ def _ask_costpilot_answer(
         return _ask_decision_response(request, parsed, db, assistant_mode)
 
     reporting_filters = _ask_reporting_filters(request, parsed)
+    if department_scope:
+        # Phase 2 slice 2: forced before the subject-filter and named-
+        # department detection logic below, both of which only act when
+        # charged_unit isn't already set -- so this one line also
+        # correctly suppresses "the question named a different
+        # department" from ever overriding a real department_scope.
+        reporting_filters["charged_unit"] = department_scope
     subject_filter_name = parsed.get("subject_filter_name")
     subject_filter_value = parsed.get("subject_filter_value")
     if (
