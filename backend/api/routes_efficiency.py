@@ -4105,6 +4105,17 @@ def _ask_costpilot_answer(
             labels = sorted({
                 str(match["row"].get("label") or "Unknown") for match in ambiguous_matches
             })
+            # Picking a label re-asks a brand new question with none of
+            # this turn's context -- re-asking the bare label alone lost
+            # that context and got misclassified (confirmed live: "Support"
+            # alone resolves to intent="help", not a department lookup,
+            # since a lone noun out of context looks like a product
+            # question to the OpenAI planner). Naming the entity type
+            # (already known here) makes the re-ask classify correctly.
+            entity_label_by_name = {
+                str(match["row"].get("label") or "Unknown"): match["entity_label"]
+                for match in ambiguous_matches
+            }
             return {
                 "title": "Which one did you mean?",
                 "answer": (
@@ -4114,7 +4125,10 @@ def _ask_costpilot_answer(
                 "intent": "clarification_required",
                 "confidence": "CLARIFICATION_REQUIRED",
                 "evidence": [
-                    {"label": label, "value": None, "metric_label": None}
+                    {
+                        "label": label, "value": None, "metric_label": None,
+                        "question": f"Tell me about the {label} {entity_label_by_name.get(label, '')}".strip(),
+                    }
                     for label in labels
                 ],
                 "recommendations": [],

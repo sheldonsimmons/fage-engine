@@ -177,9 +177,13 @@ function askDrillUrl(scope) {
 }
 
 function renderAskEvidence(item, data) {
-  const isClarification = data.intent === "clarification" || data.data_provenance?.scope === "clarification_required";
+  const isClarification = data.intent === "clarification" || data.intent === "clarification_required" || data.data_provenance?.scope === "clarification_required";
   if (isClarification) {
-    const choice = item.label || item.value || "";
+    // item.question is a reconstructed, context-preserving follow-up
+    // (e.g. "Tell me about the Support department") -- re-asking the
+    // bare label alone lost all context and got misclassified as a
+    // product/help question instead of continuing the drill-down.
+    const choice = item.question || item.label || item.value || "";
     return `<button type="button" class="cp-ask-evidence" data-ask-question="${askRenderEscapeHtml(choice)}">
       <div><strong>${askRenderEscapeHtml(item.label || "Unknown")}</strong><span>${askRenderEscapeHtml(item.detail || "")}</span></div>
       <div><strong>${askRenderEscapeHtml(item.value || "—")}</strong><span>${askRenderEscapeHtml(item.metric_label || "")}</span></div>
@@ -199,7 +203,7 @@ function askFollowUps(data) {
   if (Array.isArray(data.suggested_questions) && data.suggested_questions.length) {
     return data.suggested_questions.slice(0, 2).map(String);
   }
-  if (data.intent === "clarification") return [];
+  if (data.intent === "clarification" || data.intent === "clarification_required") return [];
   if (data.intent === "comparison" || data.intent === "drivers") {
     return ["Which department contributed most to the change?", "Was the change within budget?"];
   }
@@ -271,7 +275,7 @@ function renderAskAnswerCard(data) {
     product_knowledge: "CostPilot product knowledge",
     clarification_required: "Answer withheld for verification",
   }[provenance.scope] || "Governed activity";
-  const clarification = provenance.scope === "clarification_required" || data.intent === "clarification";
+  const clarification = provenance.scope === "clarification_required" || data.intent === "clarification" || data.intent === "clarification_required";
   const evidence = (data.evidence || []).map((item) => renderAskEvidence(item, data)).join("");
   const activeFilters = Object.entries(provenance.active_filters || {})
     .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")

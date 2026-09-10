@@ -2458,6 +2458,21 @@ function clearAskDrillQuery() {
 }
 
 function askEvidenceButton(item, data) {
+  const isClarification = data.intent === "clarification" || data.intent === "clarification_required" || data.data_provenance?.scope === "clarification_required";
+  if (isClarification) {
+    // item.question is a reconstructed, context-preserving follow-up
+    // (e.g. "Tell me about the Support department") -- re-asking the
+    // bare label alone lost all context and got misclassified as a
+    // product/help question instead of continuing the drill-down.
+    const choice = item.question || item.label || item.value || "";
+    return `<button type="button" class="ask-evidence-row ask-evidence-choice"
+        data-question="${escapeHtml(choice)}" onclick="askCostPilotSuggestion(this)">
+      <div>
+        <strong>${escapeHtml(item.label || "Unknown")}</strong>
+        <span>${escapeHtml(item.detail || "")}</span>
+      </div>
+    </button>`;
+  }
   const canDrill = item.filter_name && item.filter_value !== null && item.filter_value !== undefined;
   const encodedScope = encodeURIComponent(JSON.stringify(askDrillScopeForEvidence(data, item)));
   const drill = canDrill
@@ -2482,7 +2497,7 @@ function askEvidenceButton(item, data) {
 
 function renderAskCostPilotAnswer(data) {
   const provenance = data.data_provenance || {};
-  const clarification = provenance.scope === "clarification_required" || data.intent === "clarification";
+  const clarification = provenance.scope === "clarification_required" || data.intent === "clarification" || data.intent === "clarification_required";
   const evidence = (data.evidence || []).length
     ? `<div class="ask-answer-section">
         <h4>Evidence</h4>
@@ -2579,7 +2594,7 @@ function askCostPilotFollowUps(data) {
   if (Array.isArray(data.suggested_questions) && data.suggested_questions.length) {
     return data.suggested_questions.slice(0, 6).map(String);
   }
-  if (data.intent === "clarification") return [];
+  if (data.intent === "clarification" || data.intent === "clarification_required") return [];
   if (data.intent === "budget") {
     return [
       "How much AI budget is left this month?",
