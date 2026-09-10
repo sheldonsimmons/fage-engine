@@ -530,10 +530,20 @@ FINAL_ANSWER_TOOL = {
     "parameters": {
         "type": "object",
         "properties": {
-            "title": {"type": "string", "description": "A short (<=80 char) headline for the answer."},
+            "title": {
+                "type": "string",
+                "description": (
+                    "A short (<=80 char) headline for the answer. Use the resolved entity's "
+                    "real name/label from tool results, not the user's literal wording -- a "
+                    "voice question may contain a misheard word that a tool result corrects."
+                ),
+            },
             "answer": {
                 "type": "string",
-                "description": "The full answer in plain English, grounded only in retrieved tool results.",
+                "description": (
+                    "The full answer in plain English, grounded only in retrieved tool results. "
+                    "Use the resolved entity's real name/label, not a misheard word from the question."
+                ),
             },
             "evidence_ids": {
                 "type": "array",

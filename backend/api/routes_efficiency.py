@@ -3775,7 +3775,12 @@ their screen (e.g. a dashboard date picker). If the question does not name its o
 of guessing a period of your own — do not assume "this month" or any other arbitrary window
 when the caller already told you what range they're looking at. Only widen or change the
 window if the caller's default window comes back with no activity and the question doesn't
-depend on that exact range mattering."""
+depend on that exact range mattering.
+The question may come from voice transcription and can contain misheard words (e.g. a person's
+surname transcribed as an unrelated common word). Once a tool result resolves the actual entity
+you matched (its real name/label as returned by the tool), always use that resolved name in your
+title and answer -- never echo the user's literal misheard wording back at them just because it
+appeared in their question."""
 
     try:
         import anthropic
