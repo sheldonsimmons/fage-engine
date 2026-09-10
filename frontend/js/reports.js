@@ -20,7 +20,18 @@ const ASK_DRILL_FILTER_IDS = {
   charged_unit: "ctxOrgFilter",
   business_purpose: "ctxPurposeFilter",
 };
-const ASK_DRILL_KEYS = ["date_from", "date_to", ...Object.keys(ASK_DRILL_FILTER_IDS)];
+// audit_event_id has no corresponding Contexts-tab select (it identifies a
+// single governed request, not a filterable dimension), so it must NOT go
+// into ASK_DRILL_FILTER_IDS -- but it still needs to survive
+// normalizeAskDrillScope's allowlist or it's silently stripped out before
+// drillFromAskCostPilot ever sees it. Confirmed live: every "View activity"
+// button on a per-request evidence row (built from filter_name:
+// "audit_event_id" in the Supporting AI activity branch) carried this field
+// all the way to askDrillScopeForEvidence's *first* normalizeAskDrillScope
+// call, which dropped it immediately since it wasn't an allowed key --
+// silently switching to the Contexts tab with no scope applied instead of
+// jumping to the actual request.
+const ASK_DRILL_KEYS = ["date_from", "date_to", "audit_event_id", ...Object.keys(ASK_DRILL_FILTER_IDS)];
 
 // Cached API data for export
 let _rptRiskEvents  = [];
@@ -2736,6 +2747,14 @@ async function submitAskCostPilot(event) {
 
 async function drillFromAskCostPilot(scopeOrName, filterValue) {
   const scope = normalizeAskDrillScope(scopeOrName, filterValue);
+  // A single governed request has no Contexts-tab filter of its own --
+  // route it to the audit log entry itself, same as the global Ask drawer's
+  // openAskDrill (global-nav.js) already does for this exact scope shape.
+  if (scope.audit_event_id) {
+    try { sessionStorage.setItem("cp_audit_pending_event", JSON.stringify(scope.audit_event_id)); } catch (_error) {}
+    location.href = "/operate.html#audit";
+    return;
+  }
   const tab = document.querySelector('.rpt-tab[data-tab="contexts"]');
   if (!Object.keys(scope).length || !tab) return;
 
