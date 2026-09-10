@@ -844,6 +844,37 @@ def _ask_intent(question: str, default_days: int) -> dict:
         or re.search(r"\bwhat\s+(?:should|do)\s+i\s+(?:know|watch)\s+(?:about|for)\b", text)
     )
 
+    # "Why are we using Sonnet for the Sales agent?" / "who approved this
+    # budget change?" -- a governance-rationale question, distinct from
+    # change_drivers' own "why did a measured value change" gate above
+    # (which requires an explicit increase/decrease word this doesn't
+    # have) and from optimization's "what could move to a cheaper tier"
+    # recommendation framing (explicitly excluded below so this doesn't
+    # collide with that existing intent). Without this, "why are we using
+    # X" had no deterministic route to run_get_decision_history at all,
+    # and fell through to a plain model/agent spend ranking -- a
+    # governance question silently answered with a cost breakdown.
+    decision_history_question = bool(
+        intent not in ("change_drivers", "optimization")
+        and (
+            (re.search(r"\bwhy\b", text) and re.search(r"\b(?:are we using|is .+ using|we're using|we are using)\b", text))
+            or re.search(r"\bwho approved\b", text)
+        )
+    )
+
+    # "Show AI activity across Salesforce, HubSpot, and ServiceNow" / "is
+    # Salesforce connected?" -- entity=="platform" above only fires on
+    # literal words like "platform"/"source system", never a named system,
+    # so this had no deterministic route to run_get_data_coverage at all.
+    # Without it, a question naming specific platforms silently answered
+    # with whatever data happened to be connected, presented as if it
+    # covered everything asked about -- the exact failure the tool's own
+    # instructions exist to prevent.
+    data_coverage_question = bool(
+        any(p in text for p in _ASK_NAMED_PLATFORMS)
+        and re.search(r"\b(?:across|connected|coverage)\b", text)
+    )
+
     comparison_key = None
     if intent in {"comparison", "change_drivers"}:
         if any(term in text for term in (
@@ -889,6 +920,8 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "outcome_filter_label": outcome_filter_label,
         "general_outcome_question": general_outcome_question,
         "attention_question": attention_question,
+        "decision_history_question": decision_history_question,
+        "data_coverage_question": data_coverage_question,
     }
     canonical = canonical_ask_intent(question)
     if canonical:
@@ -906,6 +939,13 @@ _ASK_INTENTS = {
     "agent_adoption",
     "tier_usage", "optimization", "change_drivers", "help", "product", "decision",
 }
+# Shared by _ask_intent()'s data_coverage_question detection and
+# _ask_costpilot_answer()'s data-coverage branch -- one list so the two
+# can't silently drift apart.
+_ASK_NAMED_PLATFORMS = (
+    "salesforce", "servicenow", "hubspot", "slack", "zendesk",
+    "sap", "netsuite", "microsoft teams", "shopify",
+)
 _ASK_ENTITIES = {
     "person", "agent", "department", "context", "platform", "model", "provider", "overview", "request"
 }
@@ -1336,6 +1376,18 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     # whenever the agent loop has a transient failure and falls back here.
     if fallback.get("attention_question"):
         return fallback, "deterministic_priority_signals"
+    # "Why are we using Sonnet for the Sales agent?" -- bypassing the
+    # OpenAI planner is what lets _ask_costpilot_answer's dedicated
+    # decision-history branch run instead of a plain spend ranking
+    # whenever the agent loop falls back here.
+    if fallback.get("decision_history_question"):
+        return fallback, "deterministic_decision_history"
+    # "Show AI activity across Salesforce, HubSpot, and ServiceNow" --
+    # bypassing the OpenAI planner is what lets _ask_costpilot_answer's
+    # dedicated data-coverage branch run instead of silently answering
+    # with only whatever's connected, presented as complete.
+    if fallback.get("data_coverage_question"):
+        return fallback, "deterministic_data_coverage"
     # Exact calendar and lifetime phrases are reporting contracts. A language
     # model must not widen one day to a year or shrink all history to 30 days.
     if fallback.get("period_key") in {
@@ -3489,6 +3541,29 @@ def _ask_build_query_plan(tool_call_log: list) -> list[dict]:
     ]
 
 
+_ASK_AGENT_LOOP_STATS = {"success": 0, "fallback": 0}
+
+
+def _ask_record_agent_outcome(success: bool) -> None:
+    """
+    Lightweight in-memory success/fallback counter for the agent loop --
+    resets on dyno restart, not persisted anywhere. Cheap enough to be
+    always-on; exists so a future reliability regression (e.g. the
+    guaranteed-fallback timeout math this counter was added alongside a
+    fix for) shows up as a ratio in the existing logs, instead of only
+    being discoverable by grepping every ask_costpilot_fallback line by
+    hand after a user notices bad answers.
+    """
+    _ASK_AGENT_LOOP_STATS["success" if success else "fallback"] += 1
+    total = _ASK_AGENT_LOOP_STATS["success"] + _ASK_AGENT_LOOP_STATS["fallback"]
+    if total % 20 == 0:
+        rate = _ASK_AGENT_LOOP_STATS["success"] / total * 100
+        logger.warning(
+            "ask_costpilot_agent_loop_stats success=%d fallback=%d success_rate=%.1f%%",
+            _ASK_AGENT_LOOP_STATS["success"], _ASK_AGENT_LOOP_STATS["fallback"], rate,
+        )
+
+
 def _ask_record_agent_fallback(workspace_id: Optional[str], reason: str, detail: str = "") -> None:
     """
     Always-on record of why the agent tool loop was skipped in favor of the
@@ -3499,6 +3574,7 @@ def _ask_record_agent_fallback(workspace_id: Optional[str], reason: str, detail:
     provider today, so if a second provider is ever added to this path, the
     log records already carry the field needed to filter by it.
     """
+    _ask_record_agent_outcome(False)
     logger.warning(
         "ask_costpilot_fallback workspace=%s provider=anthropic reason=%s%s",
         workspace_id or "default", reason, f" detail={detail}" if detail else "",
@@ -3664,7 +3740,18 @@ depend on that exact range mattering."""
             "ASK_COSTPILOT_AGENT_TIMEOUT_SECONDS", 10.0, 5.0, 45.0
         )
         total_budget_seconds = _ask_env_seconds(
-            "ASK_COSTPILOT_AGENT_TOTAL_BUDGET_SECONDS", 15.0, 5.0, 25.0
+            # Raised from 15.0: the preflight check below (elapsed +
+            # timeout_seconds > total_budget_seconds) meant any turn taking
+            # 5+ seconds already guaranteed fallback on the very next turn --
+            # a single Sonnet tool-selection call commonly takes close to
+            # that on its own, so any question needing 2+ tool calls was
+            # essentially guaranteed to fall back (confirmed live via
+            # repeated budget_preflight fallbacks). 25.0 is the clamp's own
+            # pre-existing, already-vetted maximum -- the comment above
+            # already explains it was chosen to stay comfortably under
+            # Heroku's 30s router limit, so this is a default change inside
+            # an already-shipped safety margin, not a new risk.
+            "ASK_COSTPILOT_AGENT_TOTAL_BUDGET_SECONDS", 25.0, 5.0, 25.0
         )
         loop_start = time.monotonic()
         client = anthropic.Anthropic(api_key=api_key, timeout=timeout_seconds, max_retries=0)
@@ -3725,6 +3812,8 @@ depend on that exact range mattering."""
                 _ask_debug_log(request, "response", {"payload": payload})
                 if payload is None:
                     _ask_record_agent_fallback(request.workspace_id, "validation_failed", f"turn={_turn}")
+                else:
+                    _ask_record_agent_outcome(True)
                 return payload
 
             tool_results = []
@@ -4143,6 +4232,8 @@ def _ask_costpilot_answer(
     outcome_filter_label = parsed.get("outcome_filter_label") or outcome_filter
     general_outcome_question = bool(parsed.get("general_outcome_question"))
     attention_question = bool(parsed.get("attention_question"))
+    decision_history_question = bool(parsed.get("decision_history_question"))
+    data_coverage_question = bool(parsed.get("data_coverage_question"))
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -4857,6 +4948,79 @@ def _ask_costpilot_answer(
             "Departments at or over 80% of their monthly AI budget cap, plus "
             "departments whose spend changed by 15% or more vs. the prior 7 days"
         )
+    elif decision_history_question:
+        # "Why are we using Sonnet for the Sales agent?" -- reuses the
+        # exact same trusted rationale lookup the agent loop's
+        # get_decision_history tool already uses, instead of falling
+        # through to a plain spend ranking that never touches
+        # AuditEvent.rationale at all.
+        from api.ask_costpilot_tools import run_get_decision_history
+
+        agent_name = None
+        model_name = None
+        if named_entity and named_entity["entity"] == "agent":
+            agent_name = named_entity["row"].get("label")
+        elif named_entity and named_entity["entity"] == "model":
+            model_name = named_entity["row"].get("label")
+        history = run_get_decision_history(
+            db, request.workspace_id, agent_name=agent_name, model_name=model_name,
+            department_scope=department_scope,
+        )
+        decisions = history.get("decisions") or []
+        subject = agent_name or model_name
+        title = f"Why {subject}" if subject else "Recent governance decisions"
+        if not decisions:
+            answer = (
+                f"No recorded decisions matched {subject}." if subject
+                else "No recorded governance decisions were found."
+            )
+        else:
+            top = decisions[0]
+            answer = top.get("rationale") or "No rationale was recorded for this decision."
+            if len(decisions) > 1:
+                answer += f" ({len(decisions)} related decisions found; showing the most recent.)"
+        evidence = [
+            {
+                "label": d.get("event_type") or "Decision",
+                "value": d.get("timestamp"),
+                "metric_label": d.get("department"),
+                "detail": d.get("rationale"),
+                "filter_name": None,
+                "filter_value": None,
+            }
+            for d in decisions[:5]
+        ]
+        calculation_row_count = len(decisions)
+        calculation_formula = "AuditEvent rows matching the named agent/model, ordered by timestamp desc"
+    elif data_coverage_question:
+        # "Show AI activity across Salesforce, HubSpot, and ServiceNow" --
+        # states connection status per named platform before answering,
+        # instead of silently presenting whichever platforms happen to be
+        # connected as if they covered everything asked about.
+        from api.ask_costpilot_tools import run_get_data_coverage
+
+        coverage = run_get_data_coverage(db, request.workspace_id)
+        connected = {p.lower() for p in (coverage.get("connected_platforms") or [])}
+        not_connected = {p.lower() for p in (coverage.get("not_connected_platforms") or [])}
+        question_lower = (request.question or "").lower()
+        named = [p for p in _ASK_NAMED_PLATFORMS if p in question_lower]
+        named_connected = [p for p in named if p in connected]
+        named_not_connected = [p for p in named if p in not_connected or p not in connected]
+        title = "Data coverage"
+        if named_not_connected:
+            answer = (
+                (f"I can answer this for {', '.join(p.title() for p in named_connected)}. " if named_connected else "")
+                + f"{', '.join(p.title() for p in named_not_connected)} "
+                + ("are" if len(named_not_connected) > 1 else "is")
+                + " not currently connected, so activity for "
+                + ("them" if len(named_not_connected) > 1 else "it")
+                + " isn't included."
+            )
+        else:
+            answer = f"{', '.join(p.title() for p in named)} {'are' if len(named) > 1 else 'is'} connected."
+        evidence = []
+        calculation_row_count = None
+        calculation_formula = "Connected-platform status from the workspace's registered integrations"
     elif named_entity and intent not in {
         "budget", "savings", "optimization", "pruning", "blocked", "risk_events", "ranking"
     }:
