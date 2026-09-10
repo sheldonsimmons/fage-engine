@@ -3276,6 +3276,12 @@ def _ask_run_agent_tool(
             new_cap_usd=float(args.get("new_cap_usd") or 0),
             department_scope=department_scope,
         )
+    if name == "measure_budget_cap_outcome":
+        return executor(
+            db, request.workspace_id,
+            department=args.get("department") or "",
+            department_scope=department_scope,
+        )
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -3898,6 +3904,12 @@ idea. Its result includes a real simulation of projected impact (same numbers
 simulate_budget_cap_change would return) -- state those in your answer alongside the fact that
 this is only a proposal awaiting confirmation; never say the change has been made, since it has
 not; a human must confirm it before anything changes.
+Call measure_budget_cap_outcome for "did that budget change work", "how has spend been since we
+raised/lowered X's cap", or "was that a good decision" questions -- it compares real spend since
+an already-executed change to what was projected before it. Narrate its exact numbers and its
+trend label (accelerated/slowed/about the same); if it says too_soon, tell the user plainly that
+it is too early to measure rather than offering a verdict anyway. If it reports no executed change
+found, say so rather than guessing at one.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call

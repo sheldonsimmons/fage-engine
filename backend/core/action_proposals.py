@@ -101,3 +101,84 @@ def _execute_budget_cap_set(db: Session, proposal: ActionProposal) -> dict:
 EXECUTORS = {
     "BUDGET_CAP_SET": _execute_budget_cap_set,
 }
+
+
+def measure_budget_cap_outcome(db: Session, workspace_id: Optional[str], department: str) -> dict:
+    """
+    Measure phase: did an already-executed budget-cap change actually work?
+    Compares real spend since the change to the daily rate Simulation
+    projected at propose time (ActionProposal.simulation_result) -- the
+    first proposal-history query anywhere in this module; every prior use
+    of ActionProposal was either create or a single-row lookup by id.
+
+    department must be the exact workspace-prefixed value stored on the
+    row (e.g. "WORKSPACE-1:Support") -- callers doing flexible name
+    matching (api/ask_costpilot_tools.py's run_measure_budget_cap_outcome)
+    resolve that first via core.budget.get_all_budgets, same as the
+    propose/simulate tools already do.
+    """
+    from core.budget import recomputed_department_spend
+
+    proposal = (
+        db.query(ActionProposal)
+        .filter(
+            ActionProposal.workspace_id == workspace_id,
+            ActionProposal.department == department,
+            ActionProposal.status == "executed",
+            ActionProposal.action_type == "BUDGET_CAP_SET",
+        )
+        .order_by(ActionProposal.resolved_at.desc())
+        .first()
+    )
+    if proposal is None:
+        return {
+            "found": False,
+            "message": f"No executed budget-cap change found for '{department.split(':')[-1]}'.",
+        }
+
+    days_since_change = max((datetime.utcnow() - proposal.resolved_at).days, 0)
+    result = {
+        "found": True,
+        "department": department.split(":")[-1],
+        "reason": proposal.reason or "",
+        "current_value": json.loads(proposal.current_value) if proposal.current_value else None,
+        "proposed_value": json.loads(proposal.proposed_value),
+        "resolved_at": proposal.resolved_at.isoformat(),
+        "days_since_change": days_since_change,
+    }
+    if days_since_change < 1:
+        result["too_soon"] = True
+        result["message"] = "This change was made less than a day ago -- too soon to measure a meaningful spend trend."
+        return result
+    result["too_soon"] = False
+
+    spend_by_department = recomputed_department_spend(db, workspace_id, date_from=proposal.resolved_at)
+    actual_spend_since_change = spend_by_department.get(department.split(":")[-1].casefold(), 0.0)
+    actual_daily_rate_usd = round(actual_spend_since_change / days_since_change, 4)
+    result["actual_spend_since_change_usd"] = round(actual_spend_since_change, 2)
+    result["actual_daily_rate_usd"] = actual_daily_rate_usd
+
+    simulation = json.loads(proposal.simulation_result) if proposal.simulation_result else None
+    if simulation and "daily_rate_usd" in simulation:
+        projected_daily_rate_usd = float(simulation["daily_rate_usd"])
+        result["projected_daily_rate_usd"] = projected_daily_rate_usd
+        if projected_daily_rate_usd > 0:
+            rate_change_pct = round(
+                (actual_daily_rate_usd - projected_daily_rate_usd) / projected_daily_rate_usd * 100, 1
+            )
+        else:
+            rate_change_pct = None
+        result["rate_change_usd"] = round(actual_daily_rate_usd - projected_daily_rate_usd, 4)
+        result["rate_change_pct"] = rate_change_pct
+        # A +/-10% dead zone -- daily spend is naturally noisy day to day,
+        # and calling a 3% wobble "accelerated" or "slowed" would read as a
+        # confident verdict the data doesn't actually support.
+        if rate_change_pct is None:
+            result["trend"] = "unknown"
+        elif rate_change_pct > 10:
+            result["trend"] = "accelerated"
+        elif rate_change_pct < -10:
+            result["trend"] = "slowed"
+        else:
+            result["trend"] = "about the same"
+    return result

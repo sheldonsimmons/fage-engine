@@ -1,10 +1,12 @@
 """
 tests/test_action_proposals.py — first coverage for the Action Proposals
-module (core/action_proposals.py, api/routes_action_proposals.py) and the
-Simulation slice added on top of it (core.budget.project_department_spend,
-the simulate_budget_cap_change tool, and simulation_result on a proposal).
+module (core/action_proposals.py, api/routes_action_proposals.py), the
+Simulation slice (core.budget.project_department_spend,
+simulate_budget_cap_change, simulation_result on a proposal), and the
+Measurement slice (core.action_proposals.measure_budget_cap_outcome,
+measure_budget_cap_outcome tool) added on top of it.
 
-Neither module had any test coverage before this file.
+None of this module had any test coverage before this file.
 """
 
 from datetime import datetime, timedelta
@@ -14,11 +16,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database.db import Base
-from database.models import DepartmentBudget, TokenTransaction
+from database.models import ActionProposal, DepartmentBudget, TokenTransaction
 
 from core.budget import project_department_spend
-from core.action_proposals import create_proposal, serialize_proposal
-from api.ask_costpilot_tools import run_propose_budget_cap_change, run_simulate_budget_cap_change
+from core.action_proposals import create_proposal, measure_budget_cap_outcome, serialize_proposal
+from api.ask_costpilot_tools import (
+    run_measure_budget_cap_outcome,
+    run_propose_budget_cap_change,
+    run_simulate_budget_cap_change,
+)
 from api.routes_action_proposals import confirm_action, reject_action
 
 
@@ -234,3 +240,119 @@ def test_reject_flow_still_works_with_simulation_result_present():
     from database.models import DepartmentBudget
     budget = db.query(DepartmentBudget).filter_by(department="WS-1:Support").first()
     assert budget.monthly_cap_usd == 1000.0  # unchanged -- rejection never executes
+
+
+# ── measure_budget_cap_outcome: post-action measurement ──────────────────
+
+def _make_executed_proposal(db, department, workspace_id, resolved_days_ago, simulation_result=None,
+                             current_cap=1000.0, new_cap=500.0):
+    """
+    Builds a real ActionProposal via create_proposal (so serialization/JSON
+    handling is exercised the same as production), then directly overrides
+    status/resolved_at -- confirm_action() always stamps resolved_at as
+    "now", with no way to backdate it through the route, and backdating is
+    exactly what these tests need to simulate "N days have passed since
+    the change."
+    """
+    proposal = create_proposal(
+        db, workspace_id=workspace_id, department=f"{workspace_id}:{department}",
+        action_type="BUDGET_CAP_SET", target_type="budget_department",
+        target_id=f"{workspace_id}:{department}",
+        current_value={"monthly_cap_usd": current_cap}, proposed_value={"new_cap_usd": new_cap},
+        reason="test change", estimated_impact=None, simulation_result=simulation_result,
+        risk_level="low", required_permission="manage_budgets", user_id=None,
+    )
+    proposal.status = "executed"
+    proposal.resolved_at = datetime.utcnow() - timedelta(days=resolved_days_ago)
+    db.commit()
+    return proposal
+
+
+def test_measure_budget_cap_outcome_no_executed_proposal():
+    db = _session()
+    _seed_department(db, "Support", "WS-1", cap_usd=1000.0, spend_usd=0.0, days_of_spend=0)
+    result = measure_budget_cap_outcome(db, "WS-1", "WS-1:Support")
+    assert result["found"] is False
+
+
+def test_measure_budget_cap_outcome_too_soon():
+    db = _session()
+    _seed_department(db, "Support", "WS-1", cap_usd=1000.0, spend_usd=0.0, days_of_spend=0)
+    proposal = _make_executed_proposal(db, "Support", "WS-1", resolved_days_ago=0)
+    proposal.resolved_at = datetime.utcnow() - timedelta(hours=2)
+    db.commit()
+
+    result = measure_budget_cap_outcome(db, "WS-1", "WS-1:Support")
+    assert result["found"] is True
+    assert result["too_soon"] is True
+
+
+def test_measure_budget_cap_outcome_computes_actual_vs_projected_and_slowed_trend():
+    db = _session()
+    db.add(DepartmentBudget(
+        department="WS-1:Support", monthly_cap_usd=1000.0, current_spend_usd=0.0,
+        period_start=datetime.utcnow().replace(day=1), workspace_id="WS-1",
+    ))
+    # Spend from BEFORE the change (15-20 days ago) -- must be excluded from
+    # the measurement window even though it's real ledger data, or the
+    # date_from filtering in recomputed_department_spend isn't actually
+    # being exercised by this test.
+    for i in range(15, 20):
+        db.add(TokenTransaction(
+            department="WS-1:Support", model_tier="Analyst", input_tokens=100, output_tokens=50,
+            cost_usd=100.0, timestamp=datetime.utcnow() - timedelta(days=i),
+            workspace_id="WS-1", is_simulation=False, usage_source="estimated", routing_reason="ROUTINE",
+        ))
+    # Spend from AFTER the change (the last 10 days) -- $50 total over 10
+    # days = $5/day actual, versus a $10/day projected rate -> a 50% slowdown.
+    for i in range(10):
+        db.add(TokenTransaction(
+            department="WS-1:Support", model_tier="Analyst", input_tokens=100, output_tokens=50,
+            cost_usd=5.0, timestamp=datetime.utcnow() - timedelta(days=i),
+            workspace_id="WS-1", is_simulation=False, usage_source="estimated", routing_reason="ROUTINE",
+        ))
+    db.commit()
+
+    _make_executed_proposal(
+        db, "Support", "WS-1", resolved_days_ago=10,
+        simulation_result={"daily_rate_usd": 10.0}, current_cap=1000.0, new_cap=500.0,
+    )
+
+    result = measure_budget_cap_outcome(db, "WS-1", "WS-1:Support")
+    assert result["found"] is True
+    assert result["too_soon"] is False
+    assert result["actual_spend_since_change_usd"] == 50.0
+    assert result["actual_daily_rate_usd"] == 5.0
+    assert result["projected_daily_rate_usd"] == 10.0
+    assert result["rate_change_pct"] == -50.0
+    assert result["trend"] == "slowed"
+
+
+def test_measure_budget_cap_outcome_without_simulation_result_still_returns_actuals():
+    db = _session()
+    _seed_department(db, "Support", "WS-1", cap_usd=1000.0, spend_usd=30.0, days_of_spend=5)
+    _make_executed_proposal(db, "Support", "WS-1", resolved_days_ago=5, simulation_result=None)
+
+    result = measure_budget_cap_outcome(db, "WS-1", "WS-1:Support")
+    assert result["found"] is True
+    assert result["too_soon"] is False
+    assert "actual_daily_rate_usd" in result
+    assert "projected_daily_rate_usd" not in result
+    assert "trend" not in result
+
+
+def test_run_measure_budget_cap_outcome_resolves_department_by_flexible_name():
+    db = _session()
+    _seed_department(db, "Support", "WS-1", cap_usd=1000.0, spend_usd=0.0, days_of_spend=0)
+    _make_executed_proposal(
+        db, "Support", "WS-1", resolved_days_ago=5, simulation_result={"daily_rate_usd": 1.0},
+    )
+    result = run_measure_budget_cap_outcome(db, "WS-1", "Support")
+    assert result["found"] is True
+    assert result["department"] == "Support"
+
+
+def test_run_measure_budget_cap_outcome_department_not_found():
+    db = _session()
+    result = run_measure_budget_cap_outcome(db, "WS-1", "Nonexistent")
+    assert result["found"] is False

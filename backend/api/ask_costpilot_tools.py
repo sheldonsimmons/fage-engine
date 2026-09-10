@@ -547,6 +547,31 @@ TOOL_SCHEMAS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "measure_budget_cap_outcome",
+        "description": (
+            "Measure whether an already-executed budget-cap change actually worked -- "
+            "compares real spend since the change to what was projected before it. "
+            "Use for 'did that budget change work', 'how has spend been since we "
+            "raised/lowered X's cap', or 'was that a good decision' questions. "
+            "Read-only, changes nothing. If no executed change exists for the "
+            "department, or the change was too recent to measure, says so plainly "
+            "instead of guessing."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "department": {
+                    "type": "string",
+                    "description": "The exact department name the user named, e.g. 'Finance' or 'Support'.",
+                },
+            },
+            "required": ["department"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 FINAL_ANSWER_TOOL = {
@@ -1503,6 +1528,35 @@ def run_simulate_budget_cap_change(
     }
 
 
+def run_measure_budget_cap_outcome(
+    db, workspace_id: Optional[str], department: str, department_scope: Optional[str] = None,
+) -> dict:
+    """
+    Measure phase: resolves the department name the same flexible way the
+    propose/simulate tools do, then defers to core.action_proposals for the
+    actual proposal-history lookup and actual-vs-projected computation.
+    """
+    from core.budget import get_all_budgets
+    from core.action_proposals import measure_budget_cap_outcome
+
+    requested = (department or "").strip()
+    if department_scope and requested != department_scope:
+        requested = department_scope
+
+    budgets = get_all_budgets(db, workspace_id)
+    match = next(
+        (b for b in budgets if str(b.get("department") or "").split(":")[-1].lower() == requested.lower()),
+        None,
+    )
+    if match is None:
+        return {
+            "found": False,
+            "message": f"No budget found for department '{requested}'.",
+        }
+
+    return measure_budget_cap_outcome(db, workspace_id, match["department"])
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
@@ -1517,4 +1571,5 @@ EXECUTORS = {
     "get_decision_history": run_get_decision_history,
     "propose_budget_cap_change": run_propose_budget_cap_change,
     "simulate_budget_cap_change": run_simulate_budget_cap_change,
+    "measure_budget_cap_outcome": run_measure_budget_cap_outcome,
 }
