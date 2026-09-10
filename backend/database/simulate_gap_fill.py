@@ -57,8 +57,8 @@ TIER_WEIGHTS = [("Scout", .50), ("Analyst", .32), ("Advisor", .14), ("Strategist
 # smooth pre-burst period this fix is restoring continuity with) --
 # deliberately a range, not a fixed number, so consecutive days still
 # look like organic day-to-day variation rather than a repeating constant.
-DEFAULT_DAILY_VOLUME_RANGE = (35, 75)
 MIN_GAP_TO_FILL = timedelta(hours=6)
+TRAILING_LOOKBACK_DAYS = 14
 
 
 def _weighted_choice(rng, choices):
@@ -69,6 +69,25 @@ def _weighted_choice(rng, choices):
         if roll <= running:
             return value
     return choices[-1][0]
+
+
+def _trailing_daily_volume(db, workspace_id, before, lookback_days=TRAILING_LOOKBACK_DAYS):
+    """
+    Average daily request count in the lookback_days immediately before
+    `before` (the last real timestamp). Anchoring the fill to this instead
+    of a fixed guess is what actually fixes the burst problem at its root
+    -- confirmed live: a fixed (35, 75) range would have made Aug 20
+    onward drop straight from the real ~90/day it was actually running at
+    down to a much lower fixed range, itself a visible, unexplained cliff
+    of the same kind the whole fix exists to remove, just smaller.
+    """
+    window_start = before - timedelta(days=lookback_days)
+    count = db.query(func.count(TokenTransaction.id)).filter(
+        TokenTransaction.workspace_id == workspace_id,
+        TokenTransaction.timestamp >= window_start,
+        TokenTransaction.timestamp < before,
+    ).scalar() or 0
+    return max(count / lookback_days, 5.0)
 
 
 def _load_entities(db, workspace_id):
@@ -83,8 +102,7 @@ def _load_entities(db, workspace_id):
 
 
 def simulate_gap_fill(
-    db, workspace_id, now=None,
-    daily_volume_range=DEFAULT_DAILY_VOLUME_RANGE, dry_run=False,
+    db, workspace_id, now=None, dry_run=False,
 ):
     """
     Inserts TokenTransaction rows spread across [last_timestamp, now] at a
@@ -115,11 +133,17 @@ def simulate_gap_fill(
     transaction_batch = []
     inserted = 0
 
+    baseline = _trailing_daily_volume(db, workspace_id, last_timestamp)
+
     for day_offset in range(gap_days):
         day = last_timestamp.date() + timedelta(days=day_offset + 1)
         if day > now.date():
             break
-        count = rng.randint(*daily_volume_range)
+        # +/-20% day-to-day jitter around the measured trailing baseline --
+        # organic daily variation, not a robotic constant, while staying
+        # anchored to whatever this workspace was actually running at
+        # rather than an arbitrary fixed guess.
+        count = max(1, round(baseline * rng.uniform(0.8, 1.2)))
         for index in range(count):
             timestamp = datetime.combine(day, datetime.min.time()) + timedelta(
                 hours=8 + index % 11, minutes=(index * 17) % 60, seconds=rng.randint(0, 59),
