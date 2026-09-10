@@ -2137,6 +2137,23 @@ def _ask_named_entity_candidates(question: str, report: dict, context_hint: str 
                             cue in context_hint_lower
                             for cue in _ASK_ENTITY_CONTEXT_CUES.get(entity, ())
                         ) else 0,
+                        # Last-resort default when a bare name carries no
+                        # qualifier or context at all (e.g. "How much did
+                        # Finance spend?", with neither "agent" nor
+                        # "department" said anywhere). Confirmed live: this
+                        # exact "{Department} Agent" naming convention makes
+                        # a fully bare mention genuinely tied for 7 of 8
+                        # departments in the real workspace data, and it is
+                        # the single most natural way to ask this question.
+                        # A department name is an ordinary business noun
+                        # people say constantly; someone who means the
+                        # agent will very rarely omit the word "agent"
+                        # entirely, so defaulting to department here is
+                        # right far more often than it's wrong -- and it
+                        # only ever applies once every stronger, more
+                        # specific signal above has already failed to
+                        # settle the tie.
+                        1 if entity == "department" else 0,
                     ),
                 }
             else:
