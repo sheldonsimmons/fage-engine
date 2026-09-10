@@ -741,6 +741,7 @@
   let _wakeVisibilityBound = false;
   let _wakeAutoStopArmed = false;
   let _wakeAutoSubmitArmed = false;
+  const WAKE_GREETINGS = ["What's up?", "How can I help?", "Yes?", "I'm listening.", "Go ahead."];
 
   function wakeWordSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -787,6 +788,12 @@
 
   function resumeWakeWordListenerIfEnabled() {
     _wakeSuspended = false;
+    // The natural "this trigger cycle is fully done" signal, regardless
+    // of which path got here (manual push-to-talk finishing, a plain
+    // answer's TTS ending, or a full wake-greeting -> capture ->
+    // transcribe cycle) -- always safe to clear, a no-op if it was
+    // already false.
+    _wakeTriggerInFlight = false;
     startWakeWordListener();
   }
 
@@ -824,12 +831,15 @@
     // A tight exact-phrase match was missing real, audible attempts.
     if (!/\bhey\b[\s,]{0,15}cost[\s-]{0,3}pilot\b/i.test(transcript)) return;
     _wakeTriggerInFlight = true;
-    _wakeAutoStopArmed = true;
-    _wakeAutoSubmitArmed = true;
     pauseWakeWordListener();
     openAskCostPilot();
-    askVoiceStatus("Heard “Hey CostPilot” — listening for your question…", "listening");
-    toggleAskVoiceRecording().finally(() => { _wakeTriggerInFlight = false; });
+    // A real conversational acknowledgment, not a silent jump straight to
+    // recording -- reuses the exact same "answer ended with a question,
+    // keep listening" mechanism built for follow-up turns (continueConversation),
+    // since a greeting is itself just a very short question awaiting a reply.
+    const greeting = WAKE_GREETINGS[Math.floor(Math.random() * WAKE_GREETINGS.length)];
+    addAskMessage("assistant", `<p>${escapeHtml(greeting)}</p>`);
+    speakAskAnswer(greeting, null, { continueConversation: true });
   }
 
   // Push-to-talk (manual mic click) intentionally requires a second click
