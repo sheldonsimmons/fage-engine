@@ -1136,6 +1136,15 @@ def _ask_is_follow_up(question: str) -> bool:
         # unrelated intent (agent_adoption) for what was actually a spend
         # question, having no context that "reed spin" was ever raised.
         "i meant", "i mean the", "meant to say", "meant to ask",
+        # "Yes, drill into support." -- answering the assistant's own
+        # "would you like me to drill into X" question. The anchored
+        # drill\s+down pattern above only matches text starting with that
+        # phrase; a natural "yes, drill into/down on ..." reply doesn't,
+        # and without conversation history this exact case still reproduced
+        # the "Support vs Support Agent" ambiguity every time even after
+        # the context-hint tie-break was added, since the OpenAI planner
+        # never saw the prior turn either.
+        "drill into", "drill down on",
     )):
         return True
     # A bare result-count command has no subject of its own and therefore
@@ -1972,7 +1981,35 @@ def _ask_named_department(question: str, workspace_id: Optional[str], db: Sessio
     return None
 
 
-def _ask_named_entity_candidates(question: str, report: dict) -> list:
+_ASK_ENTITY_CONTEXT_CUES = {
+    "department": ("department", "departments", "org unit", "organizational unit"),
+    "agent": ("agent", "agents"),
+    "person": ("person", "people", "employee", "employees"),
+    "account": ("account", "accounts", "customer", "customers", "client", "clients"),
+    "platform": ("platform", "platforms", "connected", "source system"),
+    "model": ("model", "models", "tier"),
+}
+
+
+def _ask_recent_context_hint(request: "AskCostPilotRequest") -> str:
+    """
+    Text of the most recent assistant turn, used only to break a genuine
+    name-token tie between two entity types sharing a name (e.g. a
+    "Support" department and a "Support Agent"). Confirmed live: an
+    assistant turn that explicitly called out "the Support spike" in a
+    department-budget answer, followed by the user saying "Yes, drill into
+    support", re-triggered the exact same "Support vs Support Agent"
+    ambiguity every time -- the tie-break had no way to know the
+    conversation had already established this as a department, not an
+    agent, one turn earlier.
+    """
+    for message in reversed(request.conversation[-4:]):
+        if message.role == "assistant" and message.content:
+            return message.content
+    return ""
+
+
+def _ask_named_entity_candidates(question: str, report: dict, context_hint: str = "") -> list:
     """
     Every candidate row (across people/agents/accounts/departments/
     context/platforms/models) whose label shares a name token with the
@@ -1980,10 +2017,15 @@ def _ask_named_entity_candidates(question: str, report: dict) -> list:
     picks the unique winner or abstains) and _ask_named_entity_ambiguity
     (which needs the full tied group to build a clarification message) so
     the two can never define "candidate" or "match score" differently.
+
+    context_hint (optional, usually the prior assistant turn) only ever
+    breaks an otherwise-exact tie -- see _ask_recent_context_hint. It can
+    never turn a real match into a non-match or change a unique winner.
     """
     question_tokens = _ask_name_tokens(question)
     if not question_tokens:
         return []
+    context_hint_lower = (context_hint or "").lower()
 
     candidates = []
     configs = (
@@ -2069,6 +2111,13 @@ def _ask_named_entity_candidates(question: str, report: dict) -> list:
                         len(overlap),
                         1 if label_tokens and label_tokens.issubset(question_tokens) else 0,
                         len(" ".join(overlap)),
+                        # Last component -- only ever compared when every
+                        # prior one is already tied, so this can bias a
+                        # genuine tie but never beat a stronger name match.
+                        1 if any(
+                            cue in context_hint_lower
+                            for cue in _ASK_ENTITY_CONTEXT_CUES.get(entity, ())
+                        ) else 0,
                     ),
                 }
             else:
@@ -2081,7 +2130,7 @@ def _ask_named_entity_candidates(question: str, report: dict) -> list:
     return candidates
 
 
-def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
+def _ask_named_entity(question: str, report: dict, context_hint: str = "") -> Optional[dict]:
     """
     Resolve an explicitly named person, agent, department, or work item.
 
@@ -2089,7 +2138,7 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
     deterministic attribution report. A single first/last-name token can
     identify a row only when it is unique across every candidate.
     """
-    candidates = _ask_named_entity_candidates(question, report)
+    candidates = _ask_named_entity_candidates(question, report, context_hint)
     if not candidates:
         return None
     if len(candidates) > 1 and candidates[0]["score"] == candidates[1]["score"]:
@@ -2097,7 +2146,7 @@ def _ask_named_entity(question: str, report: dict) -> Optional[dict]:
     return candidates[0]
 
 
-def _ask_named_entity_ambiguity(question: str, report: dict) -> list:
+def _ask_named_entity_ambiguity(question: str, report: dict, context_hint: str = "") -> list:
     """
     Return the tied top-scoring candidates when a named subject can't be
     resolved because two or more equally-good matches exist (e.g. two
@@ -2107,7 +2156,7 @@ def _ask_named_entity_ambiguity(question: str, report: dict) -> list:
     was happening before this existed: silently answering with an
     unfiltered, company-wide number as if it had resolved the name.
     """
-    candidates = _ask_named_entity_candidates(question, report)
+    candidates = _ask_named_entity_candidates(question, report, context_hint)
     if len(candidates) < 2 or candidates[0]["score"] != candidates[1]["score"]:
         return []
     top_score = candidates[0]["score"]
@@ -4344,7 +4393,8 @@ def _ask_costpilot_answer(
     calculation_row_count = None
     driver_analysis = None
     budget_coverage = None
-    named_entity = _ask_named_entity(question, report)
+    context_hint = _ask_recent_context_hint(request)
+    named_entity = _ask_named_entity(question, report, context_hint)
     # request.pinned_filter_name means the user already resolved this exact
     # ambiguity by clicking a specific disambiguation choice -- re-running
     # the same name-token match on the reconstructed follow-up question
@@ -4361,7 +4411,7 @@ def _ask_costpilot_answer(
         # mode this whole feature exists to avoid. Only intercedes when a
         # real tie exists; a name that matches nothing at all still falls
         # through to the normal (correctly labeled) company-wide answer.
-        ambiguous_matches = _ask_named_entity_ambiguity(question, report)
+        ambiguous_matches = _ask_named_entity_ambiguity(question, report, context_hint)
         if ambiguous_matches:
             labels = sorted({
                 str(match["row"].get("label") or "Unknown") for match in ambiguous_matches
