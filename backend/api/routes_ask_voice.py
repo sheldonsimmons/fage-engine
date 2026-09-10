@@ -98,12 +98,68 @@ def _markdown_table_to_speech(text: str) -> str:
     return "\n".join(out)
 
 
+_ONES = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+    "sixteen", "seventeen", "eighteen", "nineteen",
+)
+_TENS = (
+    "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy",
+    "eighty", "ninety",
+)
+_SCALES = ("", "thousand", "million", "billion", "trillion")
+
+
+def _three_digits_to_words(n: int) -> str:
+    words = []
+    if n >= 100:
+        words.append(f"{_ONES[n // 100]} hundred")
+        n %= 100
+    if n >= 20:
+        tens_word = _TENS[n // 10]
+        n %= 10
+        words.append(f"{tens_word}-{_ONES[n]}" if n else tens_word)
+    elif n > 0:
+        words.append(_ONES[n])
+    return " ".join(words)
+
+
+def _int_to_words(n: int) -> str:
+    """
+    Spell out an integer for TTS. A long run of digits (e.g. "14202000") is
+    exactly what a numeric-fidelity guardrail needs on screen, but is what
+    most TTS voices read back digit-by-digit or in mangled pairs instead of
+    as a number -- reproduced live: "$14,202,000.00" and "$22,847,000.00"
+    were both heard as disconnected digit fragments, not "fourteen million
+    two hundred two thousand" / "twenty-two million eight hundred forty-
+    seven thousand". Self-contained rather than a new dependency -- bounded
+    problem, and every other TTS reshaping in this module is already
+    hand-rolled the same way (see _MONTHS, _money_to_words itself).
+    """
+    if n == 0:
+        return "zero"
+    groups = []
+    working = n
+    while working > 0:
+        groups.append(working % 1000)
+        working //= 1000
+    parts = []
+    for index in range(len(groups) - 1, -1, -1):
+        group = groups[index]
+        if group == 0:
+            continue
+        scale = _SCALES[index]
+        group_words = _three_digits_to_words(group)
+        parts.append(f"{group_words} {scale}".strip())
+    return " ".join(parts)
+
+
 def _money_to_words(match: re.Match) -> str:
     dollars = int(match.group(1).replace(",", ""))
     cents = round(float("0." + match.group(2)) * 100) if match.group(2) else 0
     if dollars == 0 and cents:
         return f"{cents} cent" + ("" if cents == 1 else "s")
-    dollar_part = f"{dollars} dollar" + ("" if dollars == 1 else "s")
+    dollar_part = f"{_int_to_words(dollars)} dollar" + ("" if dollars == 1 else "s")
     if not cents:
         return dollar_part
     cent_part = f"{cents} cent" + ("" if cents == 1 else "s")
