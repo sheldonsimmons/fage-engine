@@ -135,6 +135,13 @@ class RouteRequest(BaseModel):
     min_tokens:             int  = 3               # Skip routing if pruned payload is below this token count (catches truly empty Salesforce on-create fires)
     is_test:                bool = False           # True = Sandbox mode — run pipeline but skip all DB writes (no transaction, no budget impact, no audit)
     synthetic_simulation:   bool = False           # Traffic simulator only: persist governed activity without waiting on a live provider response
+    # Traffic simulator only -- lets a synthetic batch land on a historical
+    # timestamp instead of "now", so an infrequently-clicked batch can fill
+    # the real gap since the last one instead of bursting entirely onto
+    # today (see routes_router.py's control-mode persist below, which only
+    # honors this when synthetic_simulation is also true). A real customer
+    # request can never backdate its own record this way.
+    occurred_at:            Optional[datetime] = None
     payload_type:           str  = "text"          # "text" = full pruning pipeline | "code" = skip pruner, secrets detection only | "transcript" = voice guard path
     work_item_id:           Optional[str] = None    # Public project/matter/engagement ID; optional for backward compatibility
     origin_record_id:       Optional[str] = None    # Exact source record where this AI request originated
@@ -813,6 +820,21 @@ def _check_workspace_api_key(db: Session, workspace_id: str, provided_key: str) 
     raise HTTPException(status_code=401, detail="Invalid or missing X-CostPilot-Key for this workspace.")
 
 
+@router.get("/last-activity")
+def last_activity(workspace_id: str, db: Session = Depends(get_db)):
+    """
+    Traffic simulator only: the most recent TokenTransaction timestamp for
+    a workspace, so the frontend can spread a new synthetic batch across
+    the real gap since the last one (see RouteRequest.occurred_at) instead
+    of bursting the whole batch onto "now" regardless of how long it's
+    been since the simulator was last run.
+    """
+    last_timestamp = db.query(func.max(TokenTransaction.timestamp)).filter(
+        TokenTransaction.workspace_id == workspace_id,
+    ).scalar()
+    return {"last_timestamp": last_timestamp.isoformat() if last_timestamp else None}
+
+
 @router.post("", response_model=RouteResponse)
 def route_payload(
     req: RouteRequest,
@@ -1204,7 +1226,10 @@ def route_payload(
             output_tokens  = result["output_tokens"],
             usage_source   = result.get("usage_source", "estimated"),
             cost_usd       = result["cost_usd"],
-            timestamp      = datetime.utcnow(),
+            # occurred_at is only ever honored for synthetic traffic --
+            # see RouteRequest.occurred_at's docstring for why a real
+            # request can never backdate itself this way.
+            timestamp      = req.occurred_at if (req.synthetic_simulation and req.occurred_at) else datetime.utcnow(),
             routing_reason = result["routing_decision"],
             routing_policy_version = ROUTING_POLICY_VERSION,
             execution_status = result.get("execution_status", "succeeded"),

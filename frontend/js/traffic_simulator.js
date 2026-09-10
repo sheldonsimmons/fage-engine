@@ -716,6 +716,11 @@
         voice_guard_processed: false,
         is_test: false,
         synthetic_simulation: true,
+        // Only ever honored by the backend when synthetic_simulation is
+        // true (see RouteRequest.occurred_at) -- lets this batch land on
+        // a historical timestamp spread across the gap since the last
+        // simulated activity instead of bursting entirely onto "now".
+        occurred_at: item.occurredAt || null,
       }),
     });
 
@@ -865,6 +870,50 @@
     });
   }
 
+  async function fetchLastActivity() {
+    try {
+      const response = await fetch("/api/route/last-activity?workspace_id=SIM-HISTORICAL-2Y");
+      if (!response.ok) return null;
+      const body = await response.json();
+      return body.last_timestamp ? new Date(body.last_timestamp) : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  // Spreads plan[].occurredAt across the real gap since the last simulated
+  // activity, instead of every record landing on "now" regardless of how
+  // long it's been since this was last run. Without this, an infrequently-
+  // clicked batch produced silent gaps followed by an oversized spike on
+  // whatever day it happened to be clicked -- confirmed live: this exact
+  // pattern (bursts of 100-700 requests on isolated days, with several
+  // fully empty days between) is what made the "What Changed" widget show
+  // implausible 700%+ swings. Mirrors seed_historical_demo.py's own
+  // business-hours-ish per-day jitter ("8 + index % 11" hour,
+  // "(index * 17) % 60" minute) so a resumed run reads as organic activity
+  // continuing the same story, not a robotic even spacing.
+  function assignOccurredAt(plan, lastActivity) {
+    const now = new Date();
+    const gapMs = lastActivity ? now.getTime() - lastActivity.getTime() : 0;
+    // No prior activity at all, or the gap is small enough that spreading
+    // it out would look artificial (you just ran a batch minutes ago) --
+    // keep today's exact behavior: every record timestamps as "now".
+    const MIN_GAP_MS = 6 * 60 * 60 * 1000; // 6 hours
+    if (!lastActivity || gapMs < MIN_GAP_MS) {
+      plan.forEach(item => { item.occurredAt = null; });
+      return;
+    }
+    const startMs = lastActivity.getTime();
+    plan.forEach((item, index) => {
+      const frac = plan.length > 1 ? index / (plan.length - 1) : 0;
+      const target = new Date(startMs + frac * gapMs);
+      target.setHours(8 + (index % 11), (index * 17) % 60, Math.floor(Math.random() * 60), 0);
+      // Jitter can push a late-batch item's clock time past "now" on its
+      // target day -- never let a synthetic record claim to be from the future.
+      item.occurredAt = (target.getTime() > now.getTime() ? now : target).toISOString();
+    });
+  }
+
   async function runSimulation() {
     if (state.running) return;
 
@@ -876,6 +925,7 @@
     setStatus("Running", `Sending ${state.size} synthetic AI activity records in small waves.`);
 
     const plan = buildPlan();
+    assignOccurredAt(plan, await fetchLastActivity());
     // Agent Lake only counts an agent "Active" within a 5s window of its
     // last call (see agentlake.js's AGENT_ACTIVE_WINDOW_MS) -- a wave size
     // of 5 meant "Active Now" could never show more than 5 agents at once,
