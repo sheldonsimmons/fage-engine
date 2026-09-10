@@ -86,6 +86,7 @@ def _trailing_daily_volume(db, workspace_id, before, lookback_days=TRAILING_LOOK
         TokenTransaction.workspace_id == workspace_id,
         TokenTransaction.timestamp >= window_start,
         TokenTransaction.timestamp < before,
+        TokenTransaction.is_simulation.is_(True),
     ).scalar() or 0
     return max(count / lookback_days, 5.0)
 
@@ -112,8 +113,16 @@ def simulate_gap_fill(
     session, or run again the same day it already ran.
     """
     now = now or datetime.utcnow()
+    # is_simulation=True only -- a handful of real, non-simulation rows can
+    # exist in the same window (this workspace does have live traffic mixed
+    # in) and must never anchor this fill. Confirmed live: without this
+    # filter, a handful of real rows scattered inside an otherwise-deleted
+    # burst window made this think the gap was only 2 days when the actual
+    # synthetic timeline's last point was 22 days earlier, so the fill
+    # silently covered only a sliver of the real gap.
     last_timestamp = db.query(func.max(TokenTransaction.timestamp)).filter(
         TokenTransaction.workspace_id == workspace_id,
+        TokenTransaction.is_simulation.is_(True),
     ).scalar()
     if not last_timestamp or (now - last_timestamp) < MIN_GAP_TO_FILL:
         return {
