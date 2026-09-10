@@ -1038,6 +1038,11 @@ class ActionProposal(Base):
     proposed_value        = Column(Text, nullable=False)   # JSON string
     reason                = Column(Text, nullable=True)
     estimated_impact      = Column(Text, nullable=True)    # JSON string -- always "Estimated", never measured
+    # JSON string -- a real run-rate projection from core.budget.project_department_spend
+    # (Simulation phase), a different epistemic category from estimated_impact above:
+    # a genuine computed forecast, not a bare cap-delta placeholder. Populated only for
+    # action types whose executor computes one (BUDGET_CAP_SET today); null otherwise.
+    simulation_result     = Column(Text, nullable=True)
     risk_level            = Column(String, default="low")  # low | medium | high | critical
     required_permission   = Column(String, nullable=False)
     status                = Column(String, nullable=False, default="awaiting_confirmation")

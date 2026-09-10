@@ -249,6 +249,20 @@ function askFormatEstimatedImpact(impact) {
   return `${label} — ${parts.join(", ")}${note}`;
 }
 
+function askFormatSimulation(simulation, department) {
+  if (!simulation || typeof simulation !== "object") return "";
+  const fmt = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const who = department ? `${department} is` : "This department is";
+  const projected = `${who} projected to spend ${fmt(simulation.projected_period_end_spend_usd)} this period (currently ${fmt(simulation.current_period_spend_usd)}, ${fmt(simulation.daily_rate_usd)}/day).`;
+  if (simulation.proposed_cap_usd === undefined) return `Projected: ${projected}`;
+  const capLabel = fmt(simulation.proposed_cap_usd);
+  if (simulation.will_exceed_cap) {
+    const when = simulation.projected_exceed_date ? ` around ${simulation.projected_exceed_date}` : "";
+    return `Projected: ${projected} The ${capLabel} cap would likely be exceeded${when}.`;
+  }
+  return `Projected: ${projected} The ${capLabel} cap would not be exceeded (${fmt(simulation.headroom_usd)} of headroom).`;
+}
+
 function renderAskProposalCard(proposal) {
   if (!proposal) return "";
   const isPending = proposal.status === "awaiting_confirmation";
@@ -259,11 +273,13 @@ function renderAskProposalCard(proposal) {
     expired: "Expired — ask again to create a new proposal",
   }[proposal.status] || proposal.status;
   const impact = askFormatEstimatedImpact(proposal.estimated_impact);
+  const simulation = askFormatSimulation(proposal.simulation_result, proposal.department);
   return `<section><h4>Proposed action</h4><div class="cp-ask-proposal">
     <div><strong>${askRenderEscapeHtml(proposal.target_id || proposal.target_type || "Proposed change")}</strong>
       <span>${askRenderEscapeHtml(askFormatProposalValue(proposal.current_value))} → ${askRenderEscapeHtml(askFormatProposalValue(proposal.proposed_value))}</span></div>
     ${proposal.reason ? `<div><span>${askRenderEscapeHtml(proposal.reason)}</span></div>` : ""}
     ${impact ? `<div><span>${askRenderEscapeHtml(impact)}</span></div>` : ""}
+    ${simulation ? `<div><span>${askRenderEscapeHtml(simulation)}</span></div>` : ""}
     <div><span>Risk: ${askRenderEscapeHtml(proposal.risk_level || "low")} · Status: ${askRenderEscapeHtml(statusLabel)}</span></div>
     ${isPending ? `<div class="cp-ask-proposal-actions">
       <button type="button" class="cp-ask-supporting" data-ask-confirm-id="${askRenderEscapeHtml(String(proposal.id))}">Confirm</button>

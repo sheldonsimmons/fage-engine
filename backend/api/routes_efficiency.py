@@ -3269,6 +3269,13 @@ def _ask_run_agent_tool(
             department_scope=department_scope,
             user_id=user_id,
         )
+    if name == "simulate_budget_cap_change":
+        return executor(
+            db, request.workspace_id,
+            department=args.get("department") or "",
+            new_cap_usd=float(args.get("new_cap_usd") or 0),
+            department_scope=department_scope,
+        )
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -3878,14 +3885,19 @@ against the decision rationale text), and/or event_type; leave any of those empt
 on it. Narrate directly from the rationale field of each returned decision -- never invent a
 justification it didn't actually state, and never claim a specific named human approved a
 decision unless the rationale itself says so.
+Call simulate_budget_cap_change for any "what if we raised/lowered X's cap to $Y", "would $Y be
+enough", or "should we raise the cap" question -- it is read-only, creates nothing, and answers
+the question directly with the department's real current-period spend, its run-rate projection to
+month end, and whether the hypothetical cap would be exceeded and around when. Narrate those exact
+numbers; never invent a projection of your own.
 Call propose_budget_cap_change ONLY when the user has clearly asked to change a department's
 budget cap, or has just explicitly accepted a recommendation you made to do so (e.g. they say
 "do it" or "yes" right after you proposed a specific number). Never call it for a "what if"
-question -- that is asking you to imagine, not to act, and this tool creates a real proposal
-that a human will be asked to confirm. Never call it speculatively to illustrate an idea. After
-calling it, your final answer must clearly state this is only a proposal awaiting confirmation --
-never say the change has been made, since it has not; a human must confirm it before anything
-changes.
+question -- call simulate_budget_cap_change instead. Never call it speculatively to illustrate an
+idea. Its result includes a real simulation of projected impact (same numbers
+simulate_budget_cap_change would return) -- state those in your answer alongside the fact that
+this is only a proposal awaiting confirmation; never say the change has been made, since it has
+not; a human must confirm it before anything changes.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call

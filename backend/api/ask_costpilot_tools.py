@@ -491,9 +491,10 @@ TOOL_SCHEMAS = [
             "explicitly confirm before it takes effect. Only call this when the "
             "user has clearly asked to change a budget cap, or has explicitly "
             "accepted a recommendation you just made to do so -- never "
-            "speculatively, and never for a 'what if' question (that is a "
-            "simulation, not a real proposal -- do not call this tool for "
-            "hypothetical questions)."
+            "speculatively, and never for a 'what if' question. Call "
+            "simulate_budget_cap_change instead for any hypothetical question "
+            "('what if we raised X to $Y', 'would $Y be enough') -- it answers "
+            "the same question without creating anything a human has to act on."
         ),
         "strict": True,
         "parameters": {
@@ -513,6 +514,36 @@ TOOL_SCHEMAS = [
                 },
             },
             "required": ["department", "new_cap_usd", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "simulate_budget_cap_change",
+        "description": (
+            "Answer a hypothetical 'what if we changed department X's budget cap "
+            "to $Y' question -- read-only, creates nothing, never requires "
+            "confirmation. Returns the department's real current-period spend, "
+            "its run-rate projection to month end, and whether the proposed cap "
+            "would be exceeded and around when. Use this for any 'what if', "
+            "'would $Y be enough', or 'should we raise the cap' question; use "
+            "propose_budget_cap_change instead only once the user actually wants "
+            "to make the change."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "department": {
+                    "type": "string",
+                    "description": "The exact department name the user named, e.g. 'Finance' or 'Support'.",
+                },
+                "new_cap_usd": {
+                    "type": "number",
+                    "description": "The hypothetical monthly cap in US dollars to test.",
+                },
+            },
+            "required": ["department", "new_cap_usd"],
             "additionalProperties": False,
         },
     },
@@ -1394,6 +1425,7 @@ def run_propose_budget_cap_change(
 
     current_cap = float(match["monthly_cap_usd"] or 0)
     delta = round(float(new_cap_usd) - current_cap, 2)
+    simulation_result = _simulate_cap_change(match, float(new_cap_usd))
     proposal = create_proposal(
         db,
         workspace_id=workspace_id, department=match["department"],
@@ -1406,11 +1438,69 @@ def run_propose_budget_cap_change(
             "monthly_cap_delta_usd": delta,
             "note": "This is a cap change, not a guaranteed change in actual spend.",
         },
+        simulation_result=simulation_result,
         risk_level="medium" if abs(delta) >= current_cap * 0.25 else "low",
         required_permission="manage_budgets",
         user_id=user_id,
     )
-    return {"found": True, "proposal": serialize_proposal(proposal)}
+    return {"found": True, "proposal": serialize_proposal(proposal), "simulation": simulation_result}
+
+
+def _simulate_cap_change(budget_row: dict, new_cap_usd: float) -> dict:
+    """
+    Shared by run_simulate_budget_cap_change (read-only what-if) and
+    run_propose_budget_cap_change (a real proposal's genuine projected
+    impact, replacing the old cap-delta-only "estimated_impact"). budget_row
+    is one row from core.budget.get_all_budgets() -- current_spend_usd there
+    is already reconciled against the real ledger (sync_current_spend_from_ledger),
+    unlike the raw DepartmentBudget column, so it's correct even for
+    backfilled/simulated workspaces where the raw column reads $0 forever.
+    """
+    from core.budget import project_department_spend
+
+    period_start = datetime.fromisoformat(budget_row["period_start"]) if budget_row.get("period_start") else datetime.utcnow()
+    return project_department_spend(
+        current_spend_usd=float(budget_row.get("current_spend_usd") or 0),
+        period_start=period_start,
+        new_cap_usd=new_cap_usd,
+    )
+
+
+def run_simulate_budget_cap_change(
+    db, workspace_id: Optional[str], department: str, new_cap_usd: float,
+    department_scope: Optional[str] = None,
+) -> dict:
+    """
+    Read-only "what if" projection -- never creates an ActionProposal, never
+    requires confirmation. Shares its projection math with
+    run_propose_budget_cap_change via _simulate_cap_change so a real
+    proposal's numbers and a hypothetical's numbers can never disagree for
+    the same department/cap pair.
+    """
+    from core.budget import get_all_budgets
+
+    requested = (department or "").strip()
+    if department_scope and requested != department_scope:
+        requested = department_scope
+
+    budgets = get_all_budgets(db, workspace_id)
+    match = next(
+        (b for b in budgets if str(b.get("department") or "").split(":")[-1].lower() == requested.lower()),
+        None,
+    )
+    if match is None:
+        return {
+            "found": False,
+            "message": f"No budget found for department '{requested}'.",
+        }
+
+    simulation = _simulate_cap_change(match, float(new_cap_usd))
+    return {
+        "found": True,
+        "department": str(match["department"]).split(":")[-1],
+        "current_cap_usd": float(match["monthly_cap_usd"] or 0),
+        **simulation,
+    }
 
 
 EXECUTORS = {
@@ -1426,4 +1516,5 @@ EXECUTORS = {
     "get_priority_signals": run_get_priority_signals,
     "get_decision_history": run_get_decision_history,
     "propose_budget_cap_change": run_propose_budget_cap_change,
+    "simulate_budget_cap_change": run_simulate_budget_cap_change,
 }

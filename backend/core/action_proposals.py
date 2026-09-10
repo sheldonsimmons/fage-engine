@@ -37,6 +37,7 @@ def create_proposal(
     risk_level: str,
     required_permission: str,
     user_id: Optional[int],
+    simulation_result: Optional[dict] = None,
 ) -> ActionProposal:
     proposal = ActionProposal(
         workspace_id=workspace_id,
@@ -49,6 +50,7 @@ def create_proposal(
         proposed_value=json.dumps(proposed_value or {}),
         reason=reason,
         estimated_impact=json.dumps(estimated_impact) if estimated_impact else None,
+        simulation_result=json.dumps(simulation_result) if simulation_result else None,
         risk_level=risk_level,
         required_permission=required_permission,
         status="awaiting_confirmation",
@@ -80,6 +82,7 @@ def serialize_proposal(proposal: ActionProposal) -> dict:
         "proposed_value": json.loads(proposal.proposed_value),
         "reason": proposal.reason,
         "estimated_impact": json.loads(proposal.estimated_impact) if proposal.estimated_impact else None,
+        "simulation_result": json.loads(proposal.simulation_result) if proposal.simulation_result else None,
         "risk_level": proposal.risk_level,
         "required_permission": proposal.required_permission,
         "status": proposal.status,

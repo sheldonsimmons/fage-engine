@@ -558,6 +558,14 @@ def run_migrations():
             ensure_column(conn, "audit_events", "proposal_id", "INTEGER REFERENCES action_proposals(id)")
         except Exception:
             conn.rollback()
+        try:
+            # Simulation phase: a genuine run-rate projection, added after
+            # action_proposals already shipped -- ensure_column, not part of
+            # the table's initial create above, so existing rows/deployments
+            # pick it up as nullable rather than needing a backfill.
+            ensure_column(conn, "action_proposals", "simulation_result", "TEXT")
+        except Exception:
+            conn.rollback()
 
         # Uses its OWN connection, deliberately not the shared `conn` above.
         # The trial_accounts loop just above issues raw ALTER TABLE ADD

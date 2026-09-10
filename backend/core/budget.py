@@ -366,6 +366,66 @@ def set_cap(db: Session, department: str, new_cap: float) -> dict:
     return _enrich(b)
 
 
+def project_department_spend(
+    current_spend_usd: float,
+    period_start: datetime,
+    new_cap_usd: float | None = None,
+    now: datetime | None = None,
+) -> dict:
+    """
+    Run-rate projection for "what if" budget questions and Action Proposal
+    simulations -- pure math, no DB access, so callers supply the real
+    current-period spend themselves (get_all_budgets()'s current_spend_usd,
+    already reconciled against the ledger via sync_current_spend_from_ledger
+    -- see that function's docstring for why it, not current_spend_usd read
+    directly off a stale row, is the number to pass in).
+
+    Projects forward at today's average daily rate to the end of the
+    calendar month period_start falls in (periods are always calendar
+    months -- see recomputed_department_spend's docstring, there is no
+    explicit period_end field). When new_cap_usd is given, also reports
+    whether that projected total would exceed it and, if so, the
+    approximate date it would first be crossed.
+    """
+    now = now or datetime.utcnow()
+    days_elapsed = max((now.date() - period_start.date()).days, 1)
+    if now.month == 12:
+        next_period_start = now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        next_period_start = now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    days_remaining = max((next_period_start.date() - now.date()).days, 0)
+
+    daily_rate_usd = round(current_spend_usd / days_elapsed, 4)
+    projected_period_end_spend_usd = round(current_spend_usd + daily_rate_usd * days_remaining, 2)
+
+    result = {
+        "current_period_spend_usd": round(current_spend_usd, 2),
+        "days_elapsed": days_elapsed,
+        "daily_rate_usd": daily_rate_usd,
+        "days_remaining_in_period": days_remaining,
+        "projected_period_end_spend_usd": projected_period_end_spend_usd,
+    }
+    if new_cap_usd is not None:
+        new_cap_usd = float(new_cap_usd)
+        headroom_usd = round(new_cap_usd - projected_period_end_spend_usd, 2)
+        will_exceed = headroom_usd < 0
+        exceed_date = None
+        if will_exceed:
+            if current_spend_usd >= new_cap_usd:
+                exceed_date = now.date()
+            elif daily_rate_usd > 0:
+                days_until_exceed = (new_cap_usd - current_spend_usd) / daily_rate_usd
+                from datetime import timedelta
+                exceed_date = (now + timedelta(days=days_until_exceed)).date()
+        result.update({
+            "proposed_cap_usd": round(new_cap_usd, 2),
+            "will_exceed_cap": will_exceed,
+            "headroom_usd": headroom_usd,
+            "projected_exceed_date": exceed_date.isoformat() if exceed_date else None,
+        })
+    return result
+
+
 def grant_override(db: Session, department: str) -> dict:
     """
     Grant a supervisor override — clears the throttle flag and marks override_granted.
