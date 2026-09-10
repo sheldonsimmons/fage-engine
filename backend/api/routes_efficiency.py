@@ -827,6 +827,23 @@ def _ask_intent(question: str, default_days: int) -> dict:
         and re.search(r"\b(?:deals?|sales|revenue|business|win(?:s|ning)?|closing)\b", text)
     )
 
+    # "What should I be paying attention to?" -- an open-ended request for
+    # a pre-ranked list of what deserves attention (budget risk, biggest
+    # spend swings), matching the exact phrasing the agent loop's own
+    # get_priority_signals tool is already documented to answer. Without
+    # this, the question had no deterministic route to that same trusted
+    # computation, so a transient agent-loop failure (confirmed live: a
+    # budget_preflight abort, not just a timeout) fell back to a generic
+    # company overview -- or, before the help/product override fix above,
+    # the unhelpful capability menu.
+    attention_question = bool(
+        re.search(r"\bpay(?:ing)?\s+attention\s+to\b", text)
+        or re.search(r"\b(?:needs?|deserves?)\s+(?:my\s+)?attention\b", text)
+        or re.search(r"\bis\s+anything\s+unusual\b", text)
+        or re.search(r"\bwhat(?:'s| is)\s+important\s+right\s+now\b", text)
+        or re.search(r"\bwhat\s+(?:should|do)\s+i\s+(?:know|watch)\s+(?:about|for)\b", text)
+    )
+
     comparison_key = None
     if intent in {"comparison", "change_drivers"}:
         if any(term in text for term in (
@@ -871,6 +888,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "outcome_filter": outcome_filter,
         "outcome_filter_label": outcome_filter_label,
         "general_outcome_question": general_outcome_question,
+        "attention_question": attention_question,
     }
     canonical = canonical_ask_intent(question)
     if canonical:
@@ -1311,6 +1329,13 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     # type) has a transient failure and falls back to this path.
     if fallback.get("general_outcome_question"):
         return fallback, "deterministic_business_outcomes"
+    # "What should I be paying attention to?"-style questions -- confident,
+    # narrow phrasing match; bypassing the OpenAI planner here is what lets
+    # _ask_costpilot_answer's dedicated priority-signals branch run instead
+    # of a generic overview (or, before the fix above, the help menu)
+    # whenever the agent loop has a transient failure and falls back here.
+    if fallback.get("attention_question"):
+        return fallback, "deterministic_priority_signals"
     # Exact calendar and lifetime phrases are reporting contracts. A language
     # model must not widen one day to a year or shrink all history to 30 days.
     if fallback.get("period_key") in {
@@ -1466,8 +1491,24 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
             item_name = getattr(item, "name", None)
             if item_type == "function_call" and item_name == tool["name"]:
                 arguments = getattr(item, "arguments", "{}")
+                validated = _validated_ask_intent(json.loads(arguments), fallback)
+                if validated.get("intent") in ("help", "product"):
+                    # fallback already ruled out help/product before OpenAI
+                    # was ever called -- both intents short-circuit and
+                    # return above (lines ~1275-1278) without reaching this
+                    # code at all when the deterministic classifier itself
+                    # says help/product. So getting here means fallback's
+                    # own intent is something else already -- if OpenAI
+                    # nonetheless says help/product, it is by construction
+                    # contradicting an already-settled correct answer, never
+                    # a legitimate second opinion. Confirmed live: "What
+                    # should I be paying attention to?" -- fallback
+                    # correctly resolved to "overview", OpenAI incorrectly
+                    # overrode it to "help", producing the generic capability
+                    # menu instead of a real answer.
+                    return fallback, "deterministic_fallback_help_override"
                 return (
-                    _validated_ask_intent(json.loads(arguments), fallback),
+                    validated,
                     "openai_tool_planner",
                 )
     except Exception as exc:
@@ -4101,6 +4142,7 @@ def _ask_costpilot_answer(
     # (e.g. a canonical-intent contract match), preserving old behavior.
     outcome_filter_label = parsed.get("outcome_filter_label") or outcome_filter
     general_outcome_question = bool(parsed.get("general_outcome_question"))
+    attention_question = bool(parsed.get("attention_question"))
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -4775,6 +4817,45 @@ def _ask_costpilot_answer(
         calculation_formula = (
             "Count of WorkItemOutcome rows across all tracked Opportunities, "
             "grouped by outcome_success/is_closed"
+        )
+    elif attention_question:
+        # "What should I be paying attention to?" -- reuses the exact same
+        # trusted, pre-ranked signal computation the agent loop's
+        # get_priority_signals tool already uses (budget risk first, then
+        # biggest spend swings), instead of falling through to a generic
+        # company overview (or, before the help/product override fix, the
+        # unhelpful capability menu) whenever the agent loop has a
+        # transient failure and this deterministic path answers instead.
+        from api.ask_costpilot_tools import run_get_priority_signals
+
+        priority = run_get_priority_signals(
+            db, request.workspace_id, days=7, department_scope=department_scope,
+        )
+        signals = priority.get("signals") or []
+        title = "What needs your attention"
+        if not signals:
+            answer = "Nothing needs attention right now -- no department is over or near budget, and no spend has swung unusually in the last 7 days."
+        else:
+            lines = [
+                f"{i + 1}. {s.get('detail') or s.get('label')}"
+                for i, s in enumerate(signals)
+            ]
+            answer = "Here's what deserves attention right now:\n" + "\n".join(lines)
+        evidence = [
+            {
+                "label": s.get("label") or "Signal",
+                "value": (s.get("severity") or "").title(),
+                "metric_label": s.get("type"),
+                "detail": s.get("detail"),
+                "filter_name": None,
+                "filter_value": None,
+            }
+            for s in signals
+        ]
+        calculation_row_count = len(signals)
+        calculation_formula = (
+            "Departments at or over 80% of their monthly AI budget cap, plus "
+            "departments whose spend changed by 15% or more vs. the prior 7 days"
         )
     elif named_entity and intent not in {
         "budget", "savings", "optimization", "pruning", "blocked", "risk_events", "ranking"
