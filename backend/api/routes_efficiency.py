@@ -2876,6 +2876,29 @@ _ASK_CAUSAL_CLAIM_PATTERN = re.compile(
 )
 
 
+# A clause boundary the negation check below must not cross: without this,
+# an unrelated earlier hedge ("We're not sure why costs dropped, but AI
+# generated $50,000 independently") would wrongly suppress a real, unhedged
+# claim in a later clause joined by a reversal word.
+_ASK_CAUSAL_CLAUSE_BOUNDARY_RE = re.compile(
+    r"[.?!;]|\b(?:but|however|although|yet|whereas|though)\b", re.IGNORECASE
+)
+# The system prompts governing both narration paths explicitly instruct the
+# model to write exactly this kind of hedge ("never say AI caused/generated/
+# produced/drove a dollar amount") -- so a well-instructed model routinely
+# produces sentences like "this does not mean AI generated the $600,000" or
+# "I won't claim AI caused the $50,000 outcome". Confirmed live: the naive
+# subject+verb+number proximity match above flags these exactly like a real,
+# unhedged claim, discarding a correct, appropriately-cautious answer. "n't"
+# catches every contraction (won't/doesn't/isn't/wasn't/shouldn't/...) in one
+# check rather than enumerating each.
+_ASK_CAUSAL_NEGATION_TERMS = (
+    "not ", "n't", "never ", "no evidence", "not to say", "not saying",
+    "not claiming", "incorrect to say", "should not", "would not",
+    "cannot conclude", "can't conclude", "wrong to say", "misleading to say",
+)
+
+
 def _ask_narration_causal_claims(narrated_answer: str) -> list[str]:
     """
     Return any sentence fragment where the narration credits AI itself with
@@ -2884,8 +2907,22 @@ def _ask_narration_causal_claims(narrated_answer: str) -> list[str]:
     activity and a business outcome co-occurred; it cannot claim the AI
     activity caused the outcome -- see "measure contribution before
     attribution" in the CostPilot Universal design notes.
+
+    Skips a match whose own clause (since the last sentence end or reversal
+    word like "but"/"however") contains a negation -- the model correctly
+    denying causation ("this does not mean AI generated the $600,000") must
+    not be treated the same as actually asserting it.
     """
-    return [match.group(0) for match in _ASK_CAUSAL_CLAIM_PATTERN.finditer(narrated_answer)]
+    claims = []
+    for match in _ASK_CAUSAL_CLAIM_PATTERN.finditer(narrated_answer):
+        preceding = narrated_answer[:match.start()]
+        boundaries = list(_ASK_CAUSAL_CLAUSE_BOUNDARY_RE.finditer(preceding))
+        clause_start = boundaries[-1].end() if boundaries else 0
+        clause = narrated_answer[clause_start:match.start()].lower()
+        if any(term in clause for term in _ASK_CAUSAL_NEGATION_TERMS):
+            continue
+        claims.append(match.group(0))
+    return claims
 
 
 def _ask_grounded_narrative(
