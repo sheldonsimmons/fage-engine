@@ -892,7 +892,10 @@ def run_get_agent_adoption(
     }
 
 
-def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optional[str] = None) -> dict:
+def run_get_account_outcomes(
+    db, workspace_id: Optional[str], entity_name: Optional[str] = None,
+    department_scope: Optional[str] = None,
+) -> dict:
     """
     Business outcomes (Opportunity won/lost/open, pipeline value, closed-won
     value, resolved support cases) plus the AI spend/tokens tied to those
@@ -975,9 +978,14 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
         "successful_outcomes", "unsuccessful_outcomes", "open_outcomes",
         "successful_outcome_value", "outcomes_with_data",
     ]
+    outcome_filters = {}
+    if account is not None:
+        outcome_filters["account"] = account.name
+    if department_scope:
+        outcome_filters["charged_unit"] = department_scope
     outcome_result = run_metrics_query(
         db, workspace_id, metrics=outcome_metrics,
-        filters={"account": account.name} if account is not None else None,
+        filters=outcome_filters or None,
     )
     o = outcome_result.rows[0] if outcome_result.rows else {m: 0 for m in outcome_metrics}
 
@@ -993,7 +1001,7 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
     # AI spend/tokens split by won vs lost, tied only to work items that
     # actually have a synced outcome -- answers "compare AI activity on won
     # vs lost opportunities" directly instead of making the model subtract.
-    from sqlalchemy import and_, case, func
+    from sqlalchemy import and_, case, func, or_
     from database.models import WorkItemOutcome, TokenTransaction
 
     work_item_scope = workspace_filter(WorkItem, workspace_id)
@@ -1002,6 +1010,15 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
         q = query.filter(work_item_scope) if work_item_scope is not None else query
         if account is not None:
             q = q.filter(WorkItem.account_id == account.id)
+        if department_scope:
+            # Phase 2 slice 4: this raw won/lost spend split has its own
+            # separate query from outcome_result above and never touched
+            # department at all -- WorkItem is already in scope from the
+            # join below, same tolerant match as _run_outcome_query.
+            q = q.filter(or_(
+                WorkItem.department == department_scope,
+                WorkItem.department.like(f"%:{department_scope}"),
+            ))
         return q
 
     is_won = and_(WorkItem.context_type == "opportunity", WorkItemOutcome.outcome_success.is_(True))
@@ -1050,12 +1067,13 @@ def run_get_account_outcomes(db, workspace_id: Optional[str], entity_name: Optio
 def run_get_cost_per_outcome(
     db, workspace_id: Optional[str],
     context_type: Optional[str] = None, entity_name: Optional[str] = None,
+    department_scope: Optional[str] = None,
 ) -> dict:
     from core.metrics_query import compute_cost_per_outcome
 
     ct = (context_type or "").strip() or None
     name = (entity_name or "").strip() or None
-    return compute_cost_per_outcome(db, workspace_id, context_type=ct, account_name=name)
+    return compute_cost_per_outcome(db, workspace_id, context_type=ct, account_name=name, department_scope=department_scope)
 
 
 def run_get_data_coverage(db, workspace_id: Optional[str]) -> dict:

@@ -687,6 +687,20 @@ def _run_outcome_query(
         # (which would duplicate WorkItemOutcome rows for any WorkItem with
         # more than one transaction and inflate every count/sum below).
         q = q.filter(WorkItem.id.in_(filters["work_item_ids"]))
+    if filters.get("charged_unit"):
+        # Phase 2 slice 4 (Ask CostPilot department scoping): mirrors
+        # _run_activity_query's charged_unit filter, applied to
+        # WorkItem.department instead of TokenTransaction.department --
+        # this query has no charged_org_unit_name column of its own to
+        # fall back to, only the plain department string. Opt-in on this
+        # filter key existing, so every other caller (Business Profile's
+        # outcome panel, the Business Impact card) is unaffected -- they
+        # never set it.
+        charged_unit = filters["charged_unit"]
+        q = q.filter(or_(
+            WorkItem.department == charged_unit,
+            WorkItem.department.like(f"%:{charged_unit}"),
+        ))
 
     dim_exprs = [_dimension_expr(d) for d in dim_keys]
     key_exprs = [e[0] for e in dim_exprs]
@@ -981,6 +995,7 @@ def compute_cost_per_outcome(
     account_name: Optional[str] = None,
     agent_id: Optional[int] = None,
     person_external_id: Optional[str] = None,
+    department_scope: Optional[str] = None,
 ) -> dict:
     """
     AI investment associated with successful outcomes, divided by the count
@@ -1008,6 +1023,13 @@ def compute_cost_per_outcome(
         filters["context_type"] = context_type
     if account_name:
         filters["account"] = account_name
+    if department_scope:
+        # Phase 2 slice 4: this base dict feeds both run_metrics_query()
+        # calls below (ai_spend on the TokenTransaction side, successful_
+        # outcomes/outcomes_with_data on the WorkItemOutcome side) -- one
+        # line here scopes both, now that _run_outcome_query honors
+        # charged_unit too.
+        filters["charged_unit"] = department_scope
 
     touched_work_item_ids: Optional[list] = None
     if agent_id is not None or person_external_id is not None:

@@ -2902,11 +2902,15 @@ def _ask_run_agent_tool(
             department_scope=department_scope,
         )
     if name == "get_account_outcomes":
-        return executor(db, request.workspace_id, args.get("entity_name") or None)
+        return executor(
+            db, request.workspace_id, args.get("entity_name") or None,
+            department_scope=department_scope,
+        )
     if name == "get_cost_per_outcome":
         return executor(
             db, request.workspace_id,
             args.get("context_type") or None, args.get("entity_name") or None,
+            department_scope=department_scope,
         )
     if name == "get_data_coverage":
         return executor(db, request.workspace_id)
