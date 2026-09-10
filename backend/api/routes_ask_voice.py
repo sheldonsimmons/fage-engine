@@ -181,6 +181,21 @@ async def transcribe(audio: UploadFile = File(...)):
             model="whisper-1",
             file=(audio.filename or "clip.webm", io.BytesIO(raw), audio.content_type or "audio/webm"),
             response_format="verbose_json",
+            # Whisper's prompt param biases word choice toward vocabulary it
+            # contains -- it does not add facts or context, just spelling
+            # preference among acoustically similar candidates. Without this,
+            # "spend" (a CostPilot-specific noun with no strong acoustic
+            # anchor) loses to generic-sounding neighbors: confirmed live,
+            # "Marcus Reed's spend" was transcribed as "Marcus's reed spin"
+            # and, separately, "spend" alone as "spin" -- both silently
+            # misinterpreted downstream rather than caught as unrecognized.
+            prompt=(
+                "CostPilot governs enterprise AI spend, tokens, requests, "
+                "budgets, departments, agents, models, and accounts. Common "
+                "terms: spend, cost, budget cap, tokens, governed requests, "
+                "agent adoption, department, Salesforce, ServiceNow, "
+                "Scout, Analyst, Advisor, Strategist, Flagship."
+            ),
         )
     except Exception as e:
         logger.warning("ASK_VOICE: transcription failed: %s", e)
