@@ -2859,7 +2859,7 @@ def _ask_agent_reporting_filters(request: "AskCostPilotRequest") -> dict:
 
 def _ask_run_agent_tool(
     name: str, args: dict, db: Session, request: "AskCostPilotRequest", reporting_filters: dict,
-    department_scope: Optional[str] = None,
+    department_scope: Optional[str] = None, user_id: Optional[int] = None,
 ) -> dict:
     """
     department_scope (Phase 2 slice 1): when present, forced onto the 3
@@ -2940,6 +2940,15 @@ def _ask_run_agent_tool(
             event_type=args.get("event_type") or None,
             limit=int(args.get("limit") or 10),
             department_scope=department_scope,
+        )
+    if name == "propose_budget_cap_change":
+        return executor(
+            db, request.workspace_id,
+            department=args.get("department") or "",
+            new_cap_usd=float(args.get("new_cap_usd") or 0),
+            reason=args.get("reason") or "",
+            department_scope=department_scope,
+            user_id=user_id,
         )
     return {"error": f"unhandled tool: {name}"}
 
@@ -3310,6 +3319,15 @@ def _ask_agent_final_payload(
         ),
     }
 
+    # Action Proposals slice 1: any tool result carrying a "proposal" key
+    # (e.g. propose_budget_cap_change) is surfaced generically here, keyed
+    # by tool name so future propose_* tools work without touching this
+    # function again -- last one found wins, matching the same "closer to
+    # the final answer" rule used for suggestion_category above.
+    for tool_name, _call_args, result in tool_call_log:
+        if isinstance(result, dict) and result.get("proposal"):
+            payload["proposal"] = result["proposal"]
+
     try:
         for signal in workspace_attention_signals(db, request.workspace_id, limit=3):
             department = (signal.get("department") or "").lower()
@@ -3397,6 +3415,7 @@ def _ask_record_agent_fallback(workspace_id: Optional[str], reason: str, detail:
 
 def _ask_costpilot_agent(
     request: "AskCostPilotRequest", db: Session, department_scope: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> Optional[dict]:
     """
     Bounded tool-calling loop: the model chooses which deterministic lookups
@@ -3516,6 +3535,14 @@ against the decision rationale text), and/or event_type; leave any of those empt
 on it. Narrate directly from the rationale field of each returned decision -- never invent a
 justification it didn't actually state, and never claim a specific named human approved a
 decision unless the rationale itself says so.
+Call propose_budget_cap_change ONLY when the user has clearly asked to change a department's
+budget cap, or has just explicitly accepted a recommendation you made to do so (e.g. they say
+"do it" or "yes" right after you proposed a specific number). Never call it for a "what if"
+question -- that is asking you to imagine, not to act, and this tool creates a real proposal
+that a human will be asked to confirm. Never call it speculatively to illustrate an idea. After
+calling it, your final answer must clearly state this is only a proposal awaiting confirmation --
+never say the change has been made, since it has not; a human must confirm it before anything
+changes.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call
@@ -3615,7 +3642,7 @@ depend on that exact range mattering."""
                     _ask_record_agent_fallback(request.workspace_id, "max_tool_calls", f"turn={_turn}")
                     return None
                 call_args = dict(call.input or {})
-                result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters, department_scope=department_scope)
+                result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters, department_scope=department_scope, user_id=user_id)
                 tool_call_log.append((call.name, call_args, result))
                 _ask_debug_log(request, "tool_call", {
                     "turn": _turn, "tool": call.name, "args": call_args, "result": result,
@@ -3802,7 +3829,7 @@ def ask_costpilot(
     error_type = None
     result = None
     try:
-        result = _ask_costpilot_answer(request, db, department_scope=ask_department_scope)
+        result = _ask_costpilot_answer(request, db, department_scope=ask_department_scope, user_id=ask_user_id)
     except Exception as exc:
         error_type = type(exc).__name__
         raise
@@ -3860,6 +3887,7 @@ def _ask_costpilot_answer(
     request: AskCostPilotRequest,
     db: Session,
     department_scope: Optional[str] = None,
+    user_id: Optional[int] = None,
 ):
     """
     Answer executive questions using CostPilot-calculated facts.
@@ -3871,6 +3899,10 @@ def _ask_costpilot_answer(
     department_scope (Phase 2 slice 1): forwarded to the agent loop only
     -- the deterministic path below does not honor it yet (see
     ask_costpilot's docstring for the full list of what's covered).
+
+    user_id (Action Proposals slice 1): forwarded to the agent loop only,
+    so a proposal created conversationally attributes proposed_by_user_id
+    correctly instead of always logging None.
     """
     from api.routes_work_items import project_activity_reporting
 
@@ -3885,7 +3917,7 @@ def _ask_costpilot_answer(
         }
 
     if _ask_agent_mode_enabled():
-        agent_result = _ask_costpilot_agent(request, db, department_scope=department_scope)
+        agent_result = _ask_costpilot_agent(request, db, department_scope=department_scope, user_id=user_id)
         if agent_result is not None:
             return agent_result
         # Falls through to the deterministic path below unchanged.

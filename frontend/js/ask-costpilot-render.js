@@ -208,6 +208,57 @@ function askFollowUps(data) {
   return ["What changed compared with the previous period?"];
 }
 
+function askFormatProposalValue(valueObj) {
+  if (!valueObj || typeof valueObj !== "object") return "—";
+  const entries = Object.entries(valueObj);
+  if (!entries.length) return "—";
+  const [key, val] = entries[0];
+  if (typeof val === "number" && key.toLowerCase().includes("usd")) {
+    return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return String(val);
+}
+
+function askFormatEstimatedImpact(impact) {
+  if (!impact || typeof impact !== "object") return "";
+  const label = impact.label || "Estimated";
+  const parts = Object.entries(impact)
+    .filter(([key]) => key !== "label" && key !== "note")
+    .map(([key, val]) => {
+      const niceKey = key.replaceAll("_", " ");
+      if (typeof val === "number" && key.toLowerCase().includes("usd")) {
+        const sign = val >= 0 ? "+" : "-";
+        return `${niceKey}: ${sign}$${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+      return `${niceKey}: ${val}`;
+    });
+  const note = impact.note ? ` (${impact.note})` : "";
+  return `${label} — ${parts.join(", ")}${note}`;
+}
+
+function renderAskProposalCard(proposal) {
+  if (!proposal) return "";
+  const isPending = proposal.status === "awaiting_confirmation";
+  const statusLabel = {
+    awaiting_confirmation: "Awaiting confirmation",
+    executed: "Executed",
+    rejected: "Cancelled",
+    expired: "Expired — ask again to create a new proposal",
+  }[proposal.status] || proposal.status;
+  const impact = askFormatEstimatedImpact(proposal.estimated_impact);
+  return `<section><h4>Proposed action</h4><div class="cp-ask-proposal">
+    <div><strong>${askRenderEscapeHtml(proposal.target_id || proposal.target_type || "Proposed change")}</strong>
+      <span>${askRenderEscapeHtml(askFormatProposalValue(proposal.current_value))} → ${askRenderEscapeHtml(askFormatProposalValue(proposal.proposed_value))}</span></div>
+    ${proposal.reason ? `<div><span>${askRenderEscapeHtml(proposal.reason)}</span></div>` : ""}
+    ${impact ? `<div><span>${askRenderEscapeHtml(impact)}</span></div>` : ""}
+    <div><span>Risk: ${askRenderEscapeHtml(proposal.risk_level || "low")} · Status: ${askRenderEscapeHtml(statusLabel)}</span></div>
+    ${isPending ? `<div class="cp-ask-proposal-actions">
+      <button type="button" class="cp-ask-supporting" data-ask-confirm-id="${askRenderEscapeHtml(String(proposal.id))}">Confirm</button>
+      <button type="button" data-ask-reject-id="${askRenderEscapeHtml(String(proposal.id))}">Cancel</button>
+    </div>` : ""}
+  </div></section>`;
+}
+
 function renderAskAnswerCard(data) {
   const provenance = data.data_provenance || {};
   const liveRequests = Number(provenance.live_requests || 0);
@@ -239,6 +290,7 @@ function renderAskAnswerCard(data) {
   const supportingRecords = rowCount > 0
     ? `<button type="button" class="cp-ask-supporting" data-ask-scope="${askRenderEscapeHtml(encodeURIComponent(JSON.stringify(answerScope)))}">View ${rowCount.toLocaleString()} supporting ${rowCount === 1 ? "record" : "records"} →</button>`
     : "";
+  const proposalCard = renderAskProposalCard(data.proposal);
   const followUps = askFollowUps(data);
   const budgetFlag = renderAskBudgetFlag(data.budget_flag);
   const workspaceLabel = renderAskWorkspaceLabel(data.workspace_name);
@@ -254,6 +306,7 @@ function renderAskAnswerCard(data) {
     ${evidence ? `<section><h4>Evidence</h4>${evidence}</section>` : ""}
     ${calculation}
     ${supportingRecords}
+    ${proposalCard}
     ${recommendations}
     ${followUps.length ? `<section><h4>You might also ask</h4><div class="cp-ask-followups">${followUps.map(question => `<button type="button" data-ask-question="${askRenderEscapeHtml(question)}">${askRenderEscapeHtml(question)}</button>`).join("")}</div></section>` : ""}
     <small>${askRenderEscapeHtml(data.measurement_note || "Calculated from governed CostPilot activity.")}</small>

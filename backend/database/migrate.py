@@ -546,6 +546,19 @@ def run_migrations():
         except Exception:
             conn.rollback()
 
+        # Permissioned Actions, Action Proposals slice 1: the reusable
+        # propose -> confirm -> execute -> audit flow. Purely additive,
+        # same create-if-missing precedent as the RBAC tables above.
+        try:
+            from database.models import ActionProposal
+            ActionProposal.__table__.create(bind=engine, checkfirst=True)
+        except Exception:
+            conn.rollback()
+        try:
+            ensure_column(conn, "audit_events", "proposal_id", "INTEGER REFERENCES action_proposals(id)")
+        except Exception:
+            conn.rollback()
+
         # Uses its OWN connection, deliberately not the shared `conn` above.
         # The trial_accounts loop just above issues raw ALTER TABLE ADD
         # COLUMN statements without IF NOT EXISTS, which fail (columns

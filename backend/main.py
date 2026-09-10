@@ -281,6 +281,12 @@ app.include_router(routes_agentlake.router, prefix="/api/agents", tags=["Agentla
 from api import routes_agent_profile
 app.include_router(routes_agent_profile.router, prefix="/api/agents", tags=["Agent Intelligence"])
 
+# Action Proposals -- the reusable propose -> confirm -> execute -> audit
+# flow (Permissioned Actions phase). Standalone router: callable directly
+# and from Ask CostPilot's agent-loop tools (api/ask_costpilot_tools.py).
+from api import routes_action_proposals
+app.include_router(routes_action_proposals.router, prefix="/api/ask/actions", tags=["Action Proposals"])
+
 # Person Intelligence Profile -- factual AI-usage story per person, the
 # same "one entity's full story" pattern as Agent Intelligence Profile
 # and account_profile(), for the AI Activity Explorer's Person drill-down.

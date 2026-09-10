@@ -589,6 +589,12 @@ class AuditEvent(Base):
     # any existing write site; wiring real callers to populate it is a
     # separate, later step.
     user_id          = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Permissioned Actions (Action Proposals slice 1): links a "proposed"
+    # audit row to its later "executed"/"rejected" row for the same
+    # proposal -- governed_request_id above ties to a different thing (one
+    # governed LLM request), so a new dedicated key avoids corrupting its
+    # existing meaning for every downstream reader.
+    proposal_id      = Column(Integer, ForeignKey("action_proposals.id"), nullable=True, index=True)
     workspace_id       = Column(String, nullable=True, index=True)
     actor_org_unit_id  = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
     actor_org_unit_name = Column(String, nullable=True)
@@ -999,3 +1005,42 @@ class UserSession(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
     expires_at  = Column(DateTime, nullable=False)
     revoked_at  = Column(DateTime, nullable=True)
+
+
+class ActionProposal(Base):
+    """
+    A governance action Ask CostPilot has proposed but not yet executed --
+    the reusable propose -> confirm -> execute -> audit flow (Permissioned
+    Actions phase). One row per proposal; `action_type` looks up the real
+    executor in core/action_proposals.py's EXECUTORS dict, so adding a new
+    kind of proposal later means adding one executor function, not a new
+    table or a new confirm/reject endpoint.
+
+    current_value/proposed_value/estimated_impact are JSON strings (this
+    codebase's existing convention for JSON-shaped fields -- see
+    AuditEvent.context_snapshot -- never a native JSON column type).
+    estimated_impact is always a simple, honestly-labeled estimate, not a
+    verified number; the AI never decides authorization itself -- that's
+    check_membership()'s job alone, called independently at both propose
+    and confirm time.
+    """
+    __tablename__ = "action_proposals"
+
+    id                    = Column(Integer, primary_key=True, index=True)
+    workspace_id          = Column(String, nullable=True, index=True)
+    department            = Column(String, nullable=True)
+    proposed_by_user_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolved_by_user_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action_type           = Column(String, nullable=False)
+    target_type           = Column(String, nullable=False)
+    target_id             = Column(String, nullable=False)
+    current_value         = Column(Text, nullable=True)    # JSON string
+    proposed_value        = Column(Text, nullable=False)   # JSON string
+    reason                = Column(Text, nullable=True)
+    estimated_impact      = Column(Text, nullable=True)    # JSON string -- always "Estimated", never measured
+    risk_level            = Column(String, default="low")  # low | medium | high | critical
+    required_permission   = Column(String, nullable=False)
+    status                = Column(String, nullable=False, default="awaiting_confirmation")
+    # awaiting_confirmation | executed | rejected | expired
+    created_at            = Column(DateTime, default=datetime.utcnow)
+    resolved_at           = Column(DateTime, nullable=True)

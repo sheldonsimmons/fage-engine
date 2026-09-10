@@ -482,6 +482,40 @@ TOOL_SCHEMAS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "propose_budget_cap_change",
+        "description": (
+            "Propose changing a department's monthly AI budget cap. This does NOT "
+            "change anything yet -- it creates a proposal that a human must "
+            "explicitly confirm before it takes effect. Only call this when the "
+            "user has clearly asked to change a budget cap, or has explicitly "
+            "accepted a recommendation you just made to do so -- never "
+            "speculatively, and never for a 'what if' question (that is a "
+            "simulation, not a real proposal -- do not call this tool for "
+            "hypothetical questions)."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "department": {
+                    "type": "string",
+                    "description": "The exact department name the user named, e.g. 'Finance' or 'Support'.",
+                },
+                "new_cap_usd": {
+                    "type": "number",
+                    "description": "The proposed new monthly cap in US dollars.",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "A short, plain-English reason for this change, grounded in data already retrieved this conversation.",
+                },
+            },
+            "required": ["department", "new_cap_usd", "reason"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 FINAL_ANSWER_TOOL = {
@@ -1313,6 +1347,62 @@ def run_get_decision_history(
     }
 
 
+def run_propose_budget_cap_change(
+    db, workspace_id: Optional[str], department: str, new_cap_usd: float, reason: str,
+    department_scope: Optional[str] = None, user_id: Optional[int] = None,
+) -> dict:
+    """
+    Action Proposals slice 1: creates a real ActionProposal row via
+    core/action_proposals.py -- this tool never mutates the budget itself,
+    it only proposes. A human confirms via POST /api/ask/actions/{id}/confirm
+    (routes_action_proposals.py), which independently re-checks permission
+    and is the only thing that actually calls core.budget.set_cap().
+
+    department_scope enforcement matches every other Phase 2 tool: a
+    scoped user can only propose a change to their own department, even if
+    they name a different one.
+    """
+    from core.budget import get_all_budgets
+    from core.action_proposals import create_proposal, serialize_proposal
+
+    requested = (department or "").strip()
+    if department_scope and requested and requested != department_scope:
+        requested = department_scope
+    elif department_scope and not requested:
+        requested = department_scope
+
+    budgets = get_all_budgets(db, workspace_id)
+    match = next(
+        (b for b in budgets if str(b.get("department") or "").split(":")[-1].lower() == requested.lower()),
+        None,
+    )
+    if match is None:
+        return {
+            "found": False,
+            "message": f"No budget found for department '{requested}'.",
+        }
+
+    current_cap = float(match["monthly_cap_usd"] or 0)
+    delta = round(float(new_cap_usd) - current_cap, 2)
+    proposal = create_proposal(
+        db,
+        workspace_id=workspace_id, department=match["department"],
+        action_type="BUDGET_CAP_SET", target_type="budget_department", target_id=match["department"],
+        current_value={"monthly_cap_usd": current_cap},
+        proposed_value={"new_cap_usd": float(new_cap_usd)},
+        reason=reason or "",
+        estimated_impact={
+            "label": "Estimated",
+            "monthly_cap_delta_usd": delta,
+            "note": "This is a cap change, not a guaranteed change in actual spend.",
+        },
+        risk_level="medium" if abs(delta) >= current_cap * 0.25 else "low",
+        required_permission="manage_budgets",
+        user_id=user_id,
+    )
+    return {"found": True, "proposal": serialize_proposal(proposal)}
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
@@ -1325,4 +1415,5 @@ EXECUTORS = {
     "query_metrics": run_query_metrics,
     "get_priority_signals": run_get_priority_signals,
     "get_decision_history": run_get_decision_history,
+    "propose_budget_cap_change": run_propose_budget_cap_change,
 }

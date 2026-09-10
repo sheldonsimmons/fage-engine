@@ -379,7 +379,17 @@
         return;
       }
       const speakBtn = event.target.closest("[data-ask-speak]");
-      if (speakBtn) speakAskAnswer(speakBtn.dataset.askSpeak, speakBtn);
+      if (speakBtn) {
+        speakAskAnswer(speakBtn.dataset.askSpeak, speakBtn);
+        return;
+      }
+      const confirmBtn = event.target.closest("[data-ask-confirm-id]");
+      if (confirmBtn) {
+        confirmAskProposal(confirmBtn.dataset.askConfirmId, confirmBtn);
+        return;
+      }
+      const rejectBtn = event.target.closest("[data-ask-reject-id]");
+      if (rejectBtn) rejectAskProposal(rejectBtn.dataset.askRejectId, rejectBtn);
     });
     document.getElementById("cpAskMic").addEventListener("click", toggleAskVoiceRecording);
     const wakeToggle = document.getElementById("cpWakeToggle");
@@ -672,6 +682,43 @@
   // Shared with the Overview page's inline Ask box — see
   // js/ask-costpilot-render.js for renderAskAnswerCard/askDrillUrl/etc.,
   // so the two surfaces render identical answer cards from one place.
+
+  async function postAskAction(path) {
+    // Same auth-header convention as postGlobalAsk -- confirm/reject
+    // independently re-check permission server-side either way, this
+    // just attributes the action to a real user when one is logged in.
+    const token = localStorage.getItem("cp_auth_token");
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(path, { method: "POST", headers });
+  }
+
+  async function resolveAskProposal(id, buttonEl, action) {
+    const section = buttonEl.closest("section");
+    if (!section) return;
+    const buttons = section.querySelectorAll("button");
+    buttons.forEach((btn) => { btn.disabled = true; });
+    try {
+      const response = await postAskAction(`/api/ask/actions/${id}/${action}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`);
+      section.outerHTML = renderAskProposalCard(action === "confirm" ? data.proposal : data);
+    } catch (error) {
+      section.insertAdjacentHTML(
+        "beforeend",
+        `<div class="cp-ask-error"><span>${escapeHtml(error.message || "This action could not be completed.")}</span></div>`,
+      );
+      buttons.forEach((btn) => { btn.disabled = false; });
+    }
+  }
+
+  function confirmAskProposal(id, buttonEl) {
+    return resolveAskProposal(id, buttonEl, "confirm");
+  }
+
+  function rejectAskProposal(id, buttonEl) {
+    return resolveAskProposal(id, buttonEl, "reject");
+  }
 
   function bindGlobalAskDrills(container) {
     container?.querySelectorAll("[data-ask-scope],[data-ask-filter]").forEach((button) => {
