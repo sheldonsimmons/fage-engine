@@ -21,7 +21,7 @@ Endpoints:
 import json
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
@@ -30,8 +30,22 @@ from database.db import get_db
 from database.models import AuditEvent, KnownModel, ModelRegistry, TokenTransaction
 from config import FLAGSHIP_MODEL, MICRO_MODEL
 from core.workspace_scope import workspace_filter as _calibration_workspace_filter
+from core.auditor import write_audit_event
+from core.auth import check_membership
 
 router = APIRouter()
+
+
+def _check_model_permission(db: Session, authorization: Optional[str], workspace_id: Optional[str]):
+    """
+    Permissioned Actions slice 1: soft-mode-gated (see core/auth.py's
+    AUTH_ENFORCEMENT_ENABLED docstring) -- a no-op today, real once turned
+    on. Mirrors routes_agentlake.py's own _check_agent_permission()
+    pattern; these routes key by model_id, not {workspace_id}, so
+    require_membership()'s Depends shape doesn't fit without adding a new
+    required query param that would break existing callers.
+    """
+    return check_membership(db, authorization, workspace_id or "default", "manage_models")
 
 TIER_META = {
     1: {
@@ -839,9 +853,13 @@ def list_models(
 
 
 @router.post("")
-def create_model(body: ModelIn, db: Session = Depends(get_db)):
+def create_model(
+    body: ModelIn, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     if body.tier not in TIER_META:
         raise HTTPException(status_code=400, detail="tier must be 1, 2, 3, or 4")
+    ctx = _check_model_permission(db, authorization, workspace_id)
 
     # If this is set as default, clear existing default for same tier + same department scope
     if body.is_default:
@@ -859,17 +877,29 @@ def create_model(body: ModelIn, db: Session = Depends(get_db)):
     db.add(m)
     db.commit()
     db.refresh(m)
+    write_audit_event(
+        db=db, event_type="GOVERNANCE", department=body.department or "global",
+        routing_decision="MODEL_CREATED",
+        routing_reason=f"Registered model '{body.display_name}' ({body.model_id}), tier {body.tier}",
+        prompt_payload="", model_tier=None,
+        decision_outcome=f"Model '{body.display_name}' added to registry",
+        user_id=ctx.user.id if ctx else None,
+    )
     return _serialize(m)
 
 
 @router.put("/{model_id}")
-def update_model(model_id: int, body: ModelIn, db: Session = Depends(get_db)):
+def update_model(
+    model_id: int, body: ModelIn, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     m = db.query(ModelRegistry).filter(ModelRegistry.id == model_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Model not found")
 
     if body.tier not in TIER_META:
         raise HTTPException(status_code=400, detail="tier must be 1, 2, 3, or 4")
+    ctx = _check_model_permission(db, authorization, workspace_id)
 
     # If setting as default, clear others in same tier + same department scope
     if body.is_default:
@@ -889,21 +919,44 @@ def update_model(model_id: int, body: ModelIn, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(m)
+    write_audit_event(
+        db=db, event_type="GOVERNANCE", department=body.department or "global",
+        routing_decision="MODEL_UPDATED",
+        routing_reason=f"Updated model '{body.display_name}' ({body.model_id})",
+        prompt_payload="", model_tier=None,
+        decision_outcome=f"Model '{body.display_name}' updated",
+        user_id=ctx.user.id if ctx else None,
+    )
     return _serialize(m)
 
 
 @router.patch("/{model_id}/toggle")
-def toggle_model(model_id: int, db: Session = Depends(get_db)):
+def toggle_model(
+    model_id: int, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     m = db.query(ModelRegistry).filter(ModelRegistry.id == model_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Model not found")
+    ctx = _check_model_permission(db, authorization, workspace_id)
     m.is_enabled = not m.is_enabled
     db.commit()
+    write_audit_event(
+        db=db, event_type="GOVERNANCE", department=m.department or "global",
+        routing_decision="MODEL_TOGGLED",
+        routing_reason=f"Model '{m.display_name}' {'enabled' if m.is_enabled else 'disabled'}",
+        prompt_payload="", model_tier=None,
+        decision_outcome=f"Model '{m.display_name}' is now {'enabled' if m.is_enabled else 'disabled'}",
+        user_id=ctx.user.id if ctx else None,
+    )
     return {"id": m.id, "is_enabled": m.is_enabled}
 
 
 @router.patch("/{model_id}/sync-price")
-def sync_model_price(model_id: int, db: Session = Depends(get_db)):
+def sync_model_price(
+    model_id: int, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """
     Apply the Known Models catalog's current price for this model_id to this
     registry row. Only touches cost_input_per_1m/cost_output_per_1m — tier,
@@ -913,6 +966,7 @@ def sync_model_price(model_id: int, db: Session = Depends(get_db)):
     m = db.query(ModelRegistry).filter(ModelRegistry.id == model_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Model not found")
+    ctx = _check_model_permission(db, authorization, workspace_id)
 
     catalog = db.query(KnownModel).filter(KnownModel.model_id == m.model_id).first()
     if not catalog:
@@ -925,14 +979,35 @@ def sync_model_price(model_id: int, db: Session = Depends(get_db)):
     m.cost_output_per_1m = catalog.cost_output_per_1m
     db.commit()
     db.refresh(m)
+    write_audit_event(
+        db=db, event_type="GOVERNANCE", department=m.department or "global",
+        routing_decision="MODEL_PRICE_SYNCED",
+        routing_reason=f"Synced '{m.display_name}' pricing from Known Models catalog",
+        prompt_payload="", model_tier=None,
+        decision_outcome=f"Price synced: input ${m.cost_input_per_1m}/1M, output ${m.cost_output_per_1m}/1M",
+        user_id=ctx.user.id if ctx else None,
+    )
     return _serialize(m, {catalog.model_id: catalog})
 
 
 @router.delete("/{model_id}")
-def delete_model(model_id: int, db: Session = Depends(get_db)):
+def delete_model(
+    model_id: int, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     m = db.query(ModelRegistry).filter(ModelRegistry.id == model_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Model not found")
+    ctx = _check_model_permission(db, authorization, workspace_id)
+    deleted_name, deleted_department = m.display_name, (m.department or "global")
     db.delete(m)
     db.commit()
+    write_audit_event(
+        db=db, event_type="GOVERNANCE", department=deleted_department,
+        routing_decision="MODEL_DELETED",
+        routing_reason=f"Removed model '{deleted_name}' from registry",
+        prompt_payload="", model_tier=None,
+        decision_outcome=f"Model '{deleted_name}' deleted",
+        user_id=ctx.user.id if ctx else None,
+    )
     return {"status": "ok", "deleted_id": model_id}

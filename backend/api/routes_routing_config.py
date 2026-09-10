@@ -8,7 +8,7 @@ DELETE /api/routing-config/keywords/{keyword}     — remove a keyword
 PATCH  /api/routing-config/tier-names             — update custom tier display names
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -18,8 +18,23 @@ from core.routing_config import (
     get_routing_config, set_threshold, add_keyword, remove_keyword,
     set_budget_pressure_threshold, PROTECTED_KEYWORDS,
 )
+from core.auditor import write_audit_event
+from core.auth import check_membership
 
 router = APIRouter()
+
+
+def _check_routing_config_permission(db: Session, authorization: Optional[str], workspace_id: Optional[str]):
+    """
+    Permissioned Actions slice 1: soft-mode-gated (see core/auth.py's
+    AUTH_ENFORCEMENT_ENABLED docstring) -- a no-op today, real once turned
+    on. This config table has no workspace/department concept at all
+    (a single global config row) -- workspace_id is accepted only to
+    resolve which membership to check permission against, same "default"
+    fallback used everywhere else in this codebase for the legacy
+    single-workspace case.
+    """
+    return check_membership(db, authorization, workspace_id or "default", "manage_governance")
 
 
 class RoutingConfigOut(BaseModel):
@@ -65,46 +80,102 @@ def get_config(db: Session = Depends(get_db)):
 
 
 @router.patch("/threshold")
-def update_threshold(body: ThresholdRequest, db: Session = Depends(get_db)):
+def update_threshold(
+    body: ThresholdRequest, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
+    ctx = _check_routing_config_permission(db, authorization, workspace_id)
     try:
-        return _out(set_threshold(db, body.threshold))
+        result = _out(set_threshold(db, body.threshold))
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department="global",
+            routing_decision="ROUTING_THRESHOLD_SET",
+            routing_reason=f"Complexity token threshold set to {body.threshold}",
+            prompt_payload="", model_tier=None,
+            decision_outcome=f"Complexity threshold updated to {body.threshold} tokens",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.patch("/budget-pressure-threshold")
-def update_budget_pressure_threshold(body: BudgetPressureThresholdRequest, db: Session = Depends(get_db)):
+def update_budget_pressure_threshold(
+    body: BudgetPressureThresholdRequest, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """
     Set the department-budget-utilization % at which low-complexity requests
     get downgraded to Scout as a precaution (Routing 2.0, Phase 1). Null
     disables the behavior entirely -- only the existing hard 100%+ throttle
     still applies.
     """
+    ctx = _check_routing_config_permission(db, authorization, workspace_id)
     try:
-        return _out(set_budget_pressure_threshold(db, body.threshold_pct))
+        result = _out(set_budget_pressure_threshold(db, body.threshold_pct))
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department="global",
+            routing_decision="BUDGET_PRESSURE_THRESHOLD_SET",
+            routing_reason=f"Budget-pressure downgrade threshold set to {body.threshold_pct}",
+            prompt_payload="", model_tier=None,
+            decision_outcome=f"Budget-pressure threshold updated to {body.threshold_pct}",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/keywords", status_code=201)
-def create_keyword(body: KeywordRequest, db: Session = Depends(get_db)):
+def create_keyword(
+    body: KeywordRequest, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
+    ctx = _check_routing_config_permission(db, authorization, workspace_id)
     try:
-        return _out(add_keyword(db, body.keyword))
+        result = _out(add_keyword(db, body.keyword))
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department="global",
+            routing_decision="ROUTING_KEYWORD_ADDED",
+            routing_reason=f"Added complexity keyword '{body.keyword}'",
+            prompt_payload="", model_tier=None,
+            decision_outcome=f"Keyword '{body.keyword}' added",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.delete("/keywords/{keyword}")
-def delete_keyword(keyword: str, db: Session = Depends(get_db)):
+def delete_keyword(
+    keyword: str, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
+    ctx = _check_routing_config_permission(db, authorization, workspace_id)
     try:
-        return _out(remove_keyword(db, keyword))
+        result = _out(remove_keyword(db, keyword))
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department="global",
+            routing_decision="ROUTING_KEYWORD_REMOVED",
+            routing_reason=f"Removed complexity keyword '{keyword}'",
+            prompt_payload="", model_tier=None,
+            decision_outcome=f"Keyword '{keyword}' removed",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.patch("/tier-names")
-def update_tier_names(body: TierNamesRequest, db: Session = Depends(get_db)):
+def update_tier_names(
+    body: TierNamesRequest, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Update custom display names for tiers 1–4. Empty/null values revert to defaults."""
+    ctx = _check_routing_config_permission(db, authorization, workspace_id)
     cfg = get_routing_config(db)
     current = cfg.tier_names
     updates = {
@@ -125,4 +196,12 @@ def update_tier_names(body: TierNamesRequest, db: Session = Depends(get_db)):
     from datetime import datetime
     cfg.updated_at = datetime.utcnow()
     db.commit()
+    write_audit_event(
+        db=db, event_type="GOVERNANCE", department="global",
+        routing_decision="ROUTING_TIER_NAMES_SET",
+        routing_reason=f"Tier display names updated: {updates}",
+        prompt_payload="", model_tier=None,
+        decision_outcome="Tier display names updated",
+        user_id=ctx.user.id if ctx else None,
+    )
     return _out(cfg)

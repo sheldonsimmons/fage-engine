@@ -10,7 +10,7 @@ POST /api/budget/{department}/reset     — reset spend to zero (new month)
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -21,8 +21,22 @@ from core.budget import (
     set_raw_logging, archive_department,
 )
 from core.auditor import write_audit_event
+from core.auth import check_membership
 
 router = APIRouter()
+
+
+def _check_budget_permission(db: Session, authorization: Optional[str], workspace_id: Optional[str]):
+    """
+    Permissioned Actions slice 1: soft-mode-gated permission check (see
+    core/auth.py's AUTH_ENFORCEMENT_ENABLED docstring) -- a no-op today,
+    real once turned on. Mirrors routes_agentlake.py's own
+    _check_agent_permission() pattern exactly, since these routes key by
+    `department`, not `{workspace_id}` in the path, so require_membership()'s
+    Depends shape doesn't fit here without adding a new required query
+    param that would break existing callers.
+    """
+    return check_membership(db, authorization, workspace_id or "default", "manage_budgets")
 
 
 class BudgetStatus(BaseModel):
@@ -72,19 +86,36 @@ def dept_budget(department: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{department}/cap", response_model=BudgetStatus)
-def update_cap(department: str, body: SetCapRequest, db: Session = Depends(get_db)):
+def update_cap(
+    department: str, body: SetCapRequest, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Supervisor action: update a department's monthly spending cap."""
     if body.new_cap_usd < 0:
         raise HTTPException(status_code=400, detail="Cap cannot be negative.")
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
-        return set_cap(db, department, body.new_cap_usd)
+        result = set_cap(db, department, body.new_cap_usd)
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department=department,
+            routing_decision="BUDGET_CAP_SET",
+            routing_reason=f"Monthly cap set to ${body.new_cap_usd:,.2f}",
+            prompt_payload="", model_tier=None,
+            decision_outcome=f"Monthly cap updated to ${body.new_cap_usd:,.2f}",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/{department}/override", response_model=BudgetStatus)
-def override_throttle(department: str, db: Session = Depends(get_db)):
+def override_throttle(
+    department: str, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Supervisor action: grant a throttle override so flagship models can run again."""
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
         result = grant_override(db, department)
         write_audit_event(
@@ -96,6 +127,7 @@ def override_throttle(department: str, db: Session = Depends(get_db)):
             prompt_payload="",
             model_tier=None,
             decision_outcome="Budget throttle override granted",
+            user_id=ctx.user.id if ctx else None,
         )
         return result
     except ValueError as e:
@@ -103,8 +135,12 @@ def override_throttle(department: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{department}/revoke", response_model=BudgetStatus)
-def revoke_throttle_override(department: str, db: Session = Depends(get_db)):
+def revoke_throttle_override(
+    department: str, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Supervisor action: revoke a previously granted override."""
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
         result = revoke_override(db, department)
         write_audit_event(
@@ -116,6 +152,7 @@ def revoke_throttle_override(department: str, db: Session = Depends(get_db)):
             prompt_payload="",
             model_tier=None,
             decision_outcome="Budget throttle override revoked",
+            user_id=ctx.user.id if ctx else None,
         )
         return result
     except ValueError as e:
@@ -123,48 +160,115 @@ def revoke_throttle_override(department: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{department}/reset", response_model=BudgetStatus)
-def reset_month(department: str, db: Session = Depends(get_db)):
+def reset_month(
+    department: str, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Reset a department's spend to zero — simulates the start of a new billing period."""
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
-        return reset_period(db, department)
+        result = reset_period(db, department)
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department=department,
+            routing_decision="BUDGET_PERIOD_RESET",
+            routing_reason="Supervisor reset department spend to zero for a new billing period",
+            prompt_payload="", model_tier=None,
+            decision_outcome="Spend reset to $0.00",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.patch("/{department}/archive", response_model=BudgetStatus)
-def archive_budget_department(department: str, db: Session = Depends(get_db)):
+def archive_budget_department(
+    department: str, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Soft-hide a stale department from default budget views."""
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
-        return archive_department(db, department, True)
+        result = archive_department(db, department, True)
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department=department,
+            routing_decision="BUDGET_DEPARTMENT_ARCHIVED",
+            routing_reason="Supervisor archived this department from default budget views",
+            prompt_payload="", model_tier=None,
+            decision_outcome="Department archived",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.patch("/{department}/restore", response_model=BudgetStatus)
-def restore_budget_department(department: str, db: Session = Depends(get_db)):
+def restore_budget_department(
+    department: str, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Restore a previously hidden department to default budget views."""
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
-        return archive_department(db, department, False)
+        result = archive_department(db, department, False)
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department=department,
+            routing_decision="BUDGET_DEPARTMENT_RESTORED",
+            routing_reason="Supervisor restored this department to default budget views",
+            prompt_payload="", model_tier=None,
+            decision_outcome="Department restored",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.patch("/{department}/throttle-tier", response_model=BudgetStatus)
-def update_throttle_tier(department: str, body: SetThrottleTierRequest, db: Session = Depends(get_db)):
+def update_throttle_tier(
+    department: str, body: SetThrottleTierRequest, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Set the model tier ceiling a department is capped to when throttled."""
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
-        return set_throttle_tier(db, department, body.tier)
+        result = set_throttle_tier(db, department, body.tier)
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department=department,
+            routing_decision="BUDGET_THROTTLE_TIER_SET",
+            routing_reason=f"Throttle ceiling tier set to {body.tier}",
+            prompt_payload="", model_tier=None,
+            decision_outcome=f"Throttle tier ceiling set to {body.tier}",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         status_code = 400 if "must be" in str(e) else 404
         raise HTTPException(status_code=status_code, detail=str(e))
 
 
 @router.patch("/{department}/raw-logging", response_model=BudgetStatus)
-def update_raw_logging(department: str, body: SetRawLoggingRequest, db: Session = Depends(get_db)):
+def update_raw_logging(
+    department: str, body: SetRawLoggingRequest, db: Session = Depends(get_db),
+    workspace_id: Optional[str] = Query(None), authorization: Optional[str] = Header(default=None),
+):
     """Toggle raw payload logging for a department and set the retention period."""
     if body.retention_days not in (0, 30, 90, 180, 365):
         raise HTTPException(status_code=422, detail="retention_days must be 0 (indefinite), 30, 90, 180, or 365.")
+    ctx = _check_budget_permission(db, authorization, workspace_id)
     try:
-        return set_raw_logging(db, department, body.enabled, body.retention_days)
+        result = set_raw_logging(db, department, body.enabled, body.retention_days)
+        write_audit_event(
+            db=db, event_type="GOVERNANCE", department=department,
+            routing_decision="BUDGET_RAW_LOGGING_SET",
+            routing_reason=f"Raw payload logging {'enabled' if body.enabled else 'disabled'} "
+                           f"(retention: {body.retention_days} days)",
+            prompt_payload="", model_tier=None,
+            decision_outcome=f"Raw logging {'on' if body.enabled else 'off'}, "
+                             f"retention {body.retention_days}d",
+            user_id=ctx.user.id if ctx else None,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
