@@ -4357,7 +4357,16 @@ def _ask_costpilot_answer(
             if row.get("id") is not None
         }
         agent_query = db.query(RegisteredAgent)
-        if request.workspace_id:
+        if request.workspace_id and department_scope:
+            # Phase 2 slice 5: exact match on the one department, mirroring
+            # the same fix already made to the agent-loop's get_agent_
+            # adoption tool -- the in-period counts above (current_rows,
+            # via report/reporting_filters) are already scoped by Slice 2;
+            # this "universe of registered agents" query was not.
+            agent_query = agent_query.filter(
+                RegisteredAgent.department == f"{request.workspace_id}:{department_scope}"
+            )
+        elif request.workspace_id:
             agent_query = agent_query.filter(
                 RegisteredAgent.department.like(f"{request.workspace_id}:%")
             )
@@ -4731,6 +4740,16 @@ def _ask_costpilot_answer(
             DepartmentBudget.archived.isnot(True),
             DepartmentBudget.workspace_id == (request.workspace_id or "default"),
         ).all()
+        if department_scope:
+            # Phase 2 slice 5: this query is entirely independent of
+            # reporting_filters/charged_unit (Slice 2's fix doesn't reach
+            # it) -- mirrors the agent-loop's run_get_budget_status row
+            # filter, same label convention the downstream budget_rows
+            # loop below already uses.
+            budgets = [
+                b for b in budgets
+                if (b.department or "Unassigned").split(":")[-1] == department_scope
+            ]
         budget_scope = parsed.get("budget_scope") or "status"
         # "closest to going over budget" contains the literal substring
         # "over budget", so the naive over_limit check below previously
