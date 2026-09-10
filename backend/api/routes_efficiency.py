@@ -2701,7 +2701,7 @@ def _ask_help_response(
     }
 
 
-_ASK_NUMBER_PATTERN = re.compile(r"(~\s*)?-?\$?\d[\d,]*(?:\.\d+)?(%)?([mMkK](?![a-zA-Z]))?(×|[xX]\b)?")
+_ASK_NUMBER_PATTERN = re.compile(r"(~\s*)?(?<!\w)-?\$?\d[\d,]*(?:\.\d+)?(%)?([mMkK](?![a-zA-Z]))?(×|[xX]\b)?")
 
 
 def _ask_extract_numbers(value) -> set[float]:
@@ -2759,6 +2759,25 @@ def _ask_extract_numbers(value) -> set[float]:
         # and years/dates would otherwise flood false mismatches for values
         # that were never meant to be verified as a spend/token figure.
         if abs(number) < 10 and number == int(number):
+            continue
+        # "Sept 1-10" -- a date range's second number, immediately preceded
+        # by a hyphen that itself follows another digit (the pattern's own
+        # lookbehind above already stops that hyphen from being read as a
+        # minus sign, but the bare day-of-month number itself still needs
+        # excluding here). Reproduced live: a perfectly accurate answer
+        # citing real tool figures also said "Sept 1-10" and "10 days in",
+        # and the bare 10 -- outside the tiny-integer guard just above --
+        # was flagged as an unverified fact, discarding a correct answer.
+        start = full_match.start()
+        if start >= 2 and text[start - 1] == "-" and text[start - 2].isdigit() and not suffix and "$" not in match and "%" not in match:
+            continue
+        # "10 days in" / "3 weeks ago" -- a duration description, not a
+        # spend/token/count claim the guardrail is meant to verify.
+        following = text[full_match.end():full_match.end() + 12]
+        if (
+            not suffix and "$" not in match and "%" not in match
+            and re.match(r"[\s-]*(?:days?|hours?|minutes?|weeks?|months?|years?)\b", following, re.IGNORECASE)
+        ):
             continue
         # A bare 4-digit integer in a plausible calendar-year range (no
         # currency/percent sign, no magnitude suffix) is almost always a
