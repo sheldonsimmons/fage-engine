@@ -2769,7 +2769,16 @@ def _ask_extract_numbers(value) -> set[float]:
         # and the bare 10 -- outside the tiny-integer guard just above --
         # was flagged as an unverified fact, discarding a correct answer.
         start = full_match.start()
-        if start >= 2 and text[start - 1] == "-" and text[start - 2].isdigit() and not suffix and "$" not in match and "%" not in match:
+        if (
+            start >= 2 and text[start - 1] in "-–—" and text[start - 2].isdigit()
+            # "Aug 1–10" -- a well-formatted markdown answer favors a
+            # real en dash (–) or em dash (—) over an ASCII
+            # hyphen for a date range, which the ASCII-only check above
+            # missed entirely (reproduced live: "Aug 1–10 | Sep 1–10"
+            # in a table header flagged both "10"s as unverified even
+            # though a plain "Sept 1-10" was already excluded).
+            and not suffix and "$" not in match and "%" not in match
+        ):
             continue
         # "10 days in" / "3 weeks ago" -- a duration description, not a
         # spend/token/count claim the guardrail is meant to verify.
