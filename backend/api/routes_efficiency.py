@@ -1982,7 +1982,7 @@ def _ask_named_department(question: str, workspace_id: Optional[str], db: Sessio
 
 
 _ASK_ENTITY_CONTEXT_CUES = {
-    "department": ("department", "departments", "org unit", "organizational unit"),
+    "department": ("department", "departments", "org unit", "organizational unit", "team", "teams"),
     "agent": ("agent", "agents"),
     "person": ("person", "people", "employee", "employees"),
     "account": ("account", "accounts", "customer", "customers", "client", "clients"),
@@ -2026,6 +2026,19 @@ def _ask_named_entity_candidates(question: str, report: dict, context_hint: str 
     if not question_tokens:
         return []
     context_hint_lower = (context_hint or "").lower()
+    # _ask_name_tokens strips "agent"/"department"/"team" as generic stop
+    # words from BOTH the label and the question, so an agent conventionally
+    # named "{Department} Agent" reduces to the exact same token set as the
+    # bare department name -- confirmed live across this workspace's real
+    # data: 7 of 8 departments (Sales, Support, Operations, Finance,
+    # Marketing, Engineering, Legal) collide with an identically-named
+    # agent this way, so this is the normal case here, not a rare edge
+    # case. The one place that word isn't noise is the raw, untokenized
+    # question text: if the user actually says "agent" (or "department"/
+    # "team"), that is a direct, explicit signal of which entity type they
+    # mean, and it deserves to win a tie before falling back to the
+    # weaker prior-turn context_hint signal.
+    question_hint_lower = (question or "").lower()
 
     candidates = []
     configs = (
@@ -2111,9 +2124,15 @@ def _ask_named_entity_candidates(question: str, report: dict, context_hint: str 
                         len(overlap),
                         1 if label_tokens and label_tokens.issubset(question_tokens) else 0,
                         len(" ".join(overlap)),
-                        # Last component -- only ever compared when every
-                        # prior one is already tied, so this can bias a
-                        # genuine tie but never beat a stronger name match.
+                        # Last two components -- only ever compared when
+                        # every prior one is already tied, so these can bias
+                        # a genuine tie but never beat a stronger name
+                        # match. The user's own current wording ("the sales
+                        # AGENT") outranks a mere prior-turn cue.
+                        1 if any(
+                            cue in question_hint_lower
+                            for cue in _ASK_ENTITY_CONTEXT_CUES.get(entity, ())
+                        ) else 0,
                         1 if any(
                             cue in context_hint_lower
                             for cue in _ASK_ENTITY_CONTEXT_CUES.get(entity, ())
