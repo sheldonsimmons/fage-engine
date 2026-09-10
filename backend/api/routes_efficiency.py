@@ -797,6 +797,27 @@ def _ask_intent(question: str, default_days: int) -> dict:
             outcome_filter = "lost"
             outcome_filter_label = "unsuccessful"
 
+    # "Is AI helping us close deals?" / "does AI help us win business?" --
+    # a general question about whether AI activity is associated with real
+    # business outcomes, distinct from outcome_filter above (which requires
+    # a specific won/lost/approved/denied signal). Without this, a question
+    # naming no specific outcome word had no deterministic route to
+    # run_get_account_outcomes at all, and fell back to a generic activity
+    # summary that never touched won/lost/pipeline data -- confirmed live:
+    # "Is AI helping us close deals?" answered with request/token counts,
+    # not a single opportunity outcome, whenever the agent loop (the only
+    # other path that knows about outcomes) had a transient failure.
+    # Deliberately narrow, matching outcome_filter's own "kept minimal"
+    # precedent -- only fires when no more specific outcome_filter already
+    # matched, so "which deals did we lose" keeps using that path.
+    general_outcome_question = bool(
+        entity == "context" and not outcome_filter
+        and re.search(r"\b(?:is|are|does|do|can)\b", text)
+        and re.search(r"\bai\b", text)
+        and re.search(r"\b(?:help|helping|helps|drive|driving|drives|improv\w*|increas\w*|impact\w*|contribut\w*)\b", text)
+        and re.search(r"\b(?:deals?|sales|revenue|business|win(?:s|ning)?|closing)\b", text)
+    )
+
     comparison_key = None
     if intent in {"comparison", "change_drivers"}:
         if any(term in text for term in (
@@ -840,6 +861,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "budget_scope": budget_scope,
         "outcome_filter": outcome_filter,
         "outcome_filter_label": outcome_filter_label,
+        "general_outcome_question": general_outcome_question,
     }
     canonical = canonical_ask_intent(question)
     if canonical:
@@ -1260,6 +1282,18 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     # not be broadened into a general usage overview by the language planner.
     if fallback["intent"] == "agent_adoption":
         return fallback, "deterministic_agent_adoption"
+    # "Is AI helping us close deals?"-style business-outcome questions: the
+    # regex classifier's entity=="context" detection here is confident and
+    # correct (deals?/opportunit\w* is an explicit, deliberate synonym --
+    # see _ask_intent), but the OpenAI planner below has no outcome-aware
+    # intent to select and can only replace this with a worse guess
+    # (confirmed live: it picked entity="agent" for this exact question).
+    # Bypassing it here is what actually lets _ask_costpilot_answer's
+    # dedicated business-outcomes branch run instead of a generic activity
+    # summary whenever the agent loop (the primary path for this question
+    # type) has a transient failure and falls back to this path.
+    if fallback.get("general_outcome_question"):
+        return fallback, "deterministic_business_outcomes"
     # Exact calendar and lifetime phrases are reporting contracts. A language
     # model must not widen one day to a year or shrink all history to 30 days.
     if fallback.get("period_key") in {
@@ -4049,6 +4083,7 @@ def _ask_costpilot_answer(
     # for any caller that set outcome_filter directly without a label
     # (e.g. a canonical-intent contract match), preserving old behavior.
     outcome_filter_label = parsed.get("outcome_filter_label") or outcome_filter
+    general_outcome_question = bool(parsed.get("general_outcome_question"))
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -4647,6 +4682,47 @@ def _ask_costpilot_answer(
         calculation_row_count = None
         calculation_formula = (
             "Count of WorkItemOutcome rows for this account's Opportunities, "
+            "grouped by outcome_success/is_closed"
+        )
+    elif general_outcome_question and not (named_entity and named_entity["entity"] == "account"):
+        # "Is AI helping us close deals?" with no named account -- reuses
+        # the exact same trusted account-outcomes lookup as the branch
+        # just above and the agent loop's get_account_outcomes tool,
+        # company-wide instead of scoped to one account. Without this,
+        # the question fell through to a generic activity/spend summary
+        # that never touched won/lost/pipeline data at all (confirmed
+        # live) whenever the agent loop -- the only other path that knows
+        # about outcomes -- had a transient failure and this deterministic
+        # path answered instead.
+        from api.ask_costpilot_tools import run_get_account_outcomes
+
+        outcomes = run_get_account_outcomes(
+            db, request.workspace_id, entity_name=None, department_scope=department_scope,
+        )
+        title = "Is AI helping close deals?"
+        if not outcomes.get("has_outcome_data"):
+            answer = (
+                "No business outcome data is currently synced for this workspace, so "
+                "there is no evidence either way yet -- this reflects missing data, "
+                "not that AI isn't helping."
+            )
+        else:
+            won_count = int(outcomes.get("opportunities_won") or 0)
+            lost_count = int(outcomes.get("opportunities_lost") or 0)
+            open_count = int(outcomes.get("opportunities_open") or 0)
+            pipeline_value = float(outcomes.get("pipeline_value_usd") or 0)
+            closed_won_value = float(outcomes.get("closed_won_value_usd") or 0)
+            answer = (
+                f"Across this workspace, {won_count:,} opportunit{'y' if won_count == 1 else 'ies'} "
+                f"{'is' if won_count == 1 else 'are'} tracked as won and {lost_count:,} as lost "
+                f"(${closed_won_value:,.2f} in closed-won value), with {open_count:,} still open "
+                f"(${pipeline_value:,.2f} in pipeline). AI activity is tracked alongside this work, "
+                "but this is association, not proof that AI caused these outcomes."
+            )
+        evidence = []
+        calculation_row_count = None
+        calculation_formula = (
+            "Count of WorkItemOutcome rows across all tracked Opportunities, "
             "grouped by outcome_success/is_closed"
         )
     elif named_entity and intent not in {
