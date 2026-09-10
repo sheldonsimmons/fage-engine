@@ -441,6 +441,47 @@ TOOL_SCHEMAS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "get_decision_history",
+        "description": (
+            "Search past governance decisions and their plain-English rationale -- "
+            "why a specific model was selected, why a budget action fired, why a "
+            "collision lock was applied. Use this for 'why did we...', 'why are we "
+            "using...', or 'what's our decision history on...' questions. This is "
+            "different from a single pinned decision the user already has an id "
+            "for -- this searches across many past events by agent, model, "
+            "keyword, or event type."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "description": "Filter to decisions involving this agent (partial match). Empty string for no filter.",
+                },
+                "model_name": {
+                    "type": "string",
+                    "description": "Filter to decisions involving this model name (partial match). Empty string for no filter.",
+                },
+                "keyword": {
+                    "type": "string",
+                    "description": "Search this keyword/phrase within the decision rationale text. Empty string for no filter.",
+                },
+                "event_type": {
+                    "type": "string",
+                    "description": "Filter to one event type, e.g. 'ROUTING', 'BUDGET', 'DECISION', 'LOCK'. Empty string for no filter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of decisions to return. Default 10.",
+                },
+            },
+            "required": ["agent_name", "model_name", "keyword", "event_type", "limit"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 FINAL_ANSWER_TOOL = {
@@ -1200,6 +1241,78 @@ def run_get_priority_signals(
     return {"signals": signals[:5], "period_days": days}
 
 
+def run_get_decision_history(
+    db, workspace_id: Optional[str],
+    agent_name: Optional[str] = None, model_name: Optional[str] = None,
+    keyword: Optional[str] = None, event_type: Optional[str] = None,
+    limit: int = 10, department_scope: Optional[str] = None,
+) -> dict:
+    """
+    Phase 2 slice 6 (decision memory): searches AuditEvent.rationale --
+    already real, auto-generated plain-English text (core/auditor.py's
+    _build_rationale) written on every routing/budget/lock decision --
+    across agent/model/keyword/event_type, instead of requiring an
+    already-known audit_event_id the way _ask_decision_response does.
+    """
+    from sqlalchemy import or_
+    from core.workspace_scope import workspace_filter
+    from database.models import AuditEvent, RegisteredAgent
+
+    query = db.query(AuditEvent)
+    scope = workspace_filter(AuditEvent, workspace_id)
+    if scope is not None:
+        query = query.filter(scope)
+    if department_scope:
+        query = query.filter(or_(
+            AuditEvent.department == department_scope,
+            AuditEvent.department.like(f"%:{department_scope}"),
+        ))
+
+    name = (agent_name or "").strip()
+    if name:
+        agent_ids = [
+            row[0] for row in db.query(RegisteredAgent.id)
+            .filter(RegisteredAgent.name.ilike(f"%{name}%")).all()
+        ]
+        query = query.filter(AuditEvent.agent_id.in_(agent_ids or [-1]))
+
+    model = (model_name or "").strip()
+    if model:
+        query = query.filter(AuditEvent.selected_model_name.ilike(f"%{model}%"))
+
+    word = (keyword or "").strip()
+    if word:
+        query = query.filter(AuditEvent.rationale.ilike(f"%{word}%"))
+
+    etype = (event_type or "").strip()
+    if etype:
+        query = query.filter(AuditEvent.event_type.ilike(etype))
+
+    rows = (
+        query.order_by(AuditEvent.timestamp.desc())
+        .limit(max(1, min(int(limit or 10), 50)))
+        .all()
+    )
+
+    return {
+        "decisions": [
+            {
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "department": str(row.department or "Unassigned").split(":")[-1],
+                "selected_model_name": row.selected_model_name,
+                "selected_model_tier": row.selected_model_tier,
+                "event_type": row.event_type,
+                "decision_outcome": row.decision_outcome,
+                "risk_level": row.risk_level,
+                "rationale": row.rationale,
+                "governed_request_id": row.governed_request_id,
+            }
+            for row in rows
+        ],
+        "count": len(rows),
+    }
+
+
 EXECUTORS = {
     "get_usage_report": run_get_usage_report,
     "get_change_drivers": run_get_change_drivers,
@@ -1211,4 +1324,5 @@ EXECUTORS = {
     "get_cost_per_outcome": run_get_cost_per_outcome,
     "query_metrics": run_query_metrics,
     "get_priority_signals": run_get_priority_signals,
+    "get_decision_history": run_get_decision_history,
 }

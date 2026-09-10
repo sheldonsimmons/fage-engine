@@ -2931,6 +2931,16 @@ def _ask_run_agent_tool(
         )
     if name == "get_priority_signals":
         return executor(db, request.workspace_id, days=int(args.get("days") or 7), department_scope=department_scope)
+    if name == "get_decision_history":
+        return executor(
+            db, request.workspace_id,
+            agent_name=args.get("agent_name") or None,
+            model_name=args.get("model_name") or None,
+            keyword=args.get("keyword") or None,
+            event_type=args.get("event_type") or None,
+            limit=int(args.get("limit") or 10),
+            department_scope=department_scope,
+        )
     return {"error": f"unhandled tool: {name}"}
 
 
@@ -3499,6 +3509,13 @@ today", "is anything unusual happening", "what are the top things I should know 
 returns a pre-ranked list (budget risk first, then biggest spend swings); narrate that list, do
 not reorder it by your own judgment or add priorities it didn't return. If it returns an empty
 list, say plainly that nothing needs attention right now rather than inventing a concern.
+Call get_decision_history for "why did we..." or "why are we using..." questions about a past
+governance decision -- model selection, budget action, or collision lock -- when the user has
+NOT already given you a specific decision id. Filter by agent_name, model_name, keyword (searched
+against the decision rationale text), and/or event_type; leave any of those empty to not filter
+on it. Narrate directly from the rationale field of each returned decision -- never invent a
+justification it didn't actually state, and never claim a specific named human approved a
+decision unless the rationale itself says so.
 Call get_product_help only for questions about how CostPilot itself works.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call
