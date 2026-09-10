@@ -509,6 +509,18 @@ def run_migrations():
             UserSession.__table__.create(bind=engine, checkfirst=True)
         except Exception:
             conn.rollback()
+        # Phase 0 (security architecture assessment, next slice): identity
+        # threading. Nullable on both tables -- NULL for every historical
+        # row and for any question/event that never carried a session, in
+        # the same soft-rollout spirit as AUTH_ENFORCEMENT_ENABLED itself.
+        try:
+            ensure_column(conn, "ask_interactions", "user_id", "INTEGER REFERENCES users(id)")
+        except Exception:
+            conn.rollback()
+        try:
+            ensure_column(conn, "audit_events", "user_id", "INTEGER REFERENCES users(id)")
+        except Exception:
+            conn.rollback()
         try:
             from core.rbac import BUILTIN_ROLES
             from database.db import SessionLocal

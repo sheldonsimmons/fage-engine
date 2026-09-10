@@ -20,11 +20,12 @@ import re
 import time
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 
+from core.auth import check_membership
 from database.db import get_db
 from database.models import (
     AskInteraction,
@@ -3641,6 +3642,7 @@ def _ask_log_interaction(
     latency_ms: int,
     error_type: Optional[str],
     db: Session,
+    user_id: Optional[int] = None,
 ) -> None:
     """
     Phase 1 of the governed continuous-learning plan: log one AskInteraction
@@ -3688,6 +3690,7 @@ def _ask_log_interaction(
 
         db.add(AskInteraction(
             workspace_id=request.workspace_id,
+            user_id=user_id,
             governed_request_id=result.get("governed_request_id") if isinstance(result, dict) else None,
             question_text=(request.question or "")[:2000],
             intent=intent,
@@ -3726,13 +3729,26 @@ def _ask_log_interaction(
 def ask_costpilot(
     request: AskCostPilotRequest,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Thin wrapper: guarantees the deterministic budget_flag badge and the
     active workspace's real name are attached to every answer no matter
     which internal path (agent loop or the deterministic intent classifier,
     and any of their early-return branches) produced it. Also logs one
     AskInteraction row per question (Phase 1 of the governed continuous-
-    learning plan) -- purely observational, never affects the response."""
+    learning plan) -- purely observational, never affects the response.
+
+    Phase 0 identity threading (next slice of the security architecture
+    assessment): resolves the caller's session via the same non-blocking
+    check_membership() every other retrofitted route already uses --
+    returns a real TenantContext when a valid session is presented, None
+    for anything else (no header, expired session, no membership), and
+    never raises since AUTH_ENFORCEMENT_ENABLED stays off. This does not
+    change who can ask a question or what they're answered; it only
+    means a question asked while logged in gets attributed to a real
+    user_id in the audit trail instead of staying anonymous."""
+    ask_ctx = check_membership(db, authorization, request.workspace_id) if request.workspace_id else None
+    ask_user_id = ask_ctx.user.id if ask_ctx else None
     start = time.monotonic()
     error_type = None
     result = None
@@ -3743,7 +3759,7 @@ def ask_costpilot(
         raise
     finally:
         latency_ms = int((time.monotonic() - start) * 1000)
-        _ask_log_interaction(request, result, latency_ms, error_type, db)
+        _ask_log_interaction(request, result, latency_ms, error_type, db, user_id=ask_user_id)
     if isinstance(result, dict):
         result["budget_flag"] = _ask_budget_flag(db, request.workspace_id)
         result["workspace_name"] = _ask_workspace_name(db, request.workspace_id)

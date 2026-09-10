@@ -581,6 +581,14 @@ class AuditEvent(Base):
     actor_name       = Column(String, nullable=True)
     actor_email      = Column(String, nullable=True)
     actor_source_platform = Column(String, nullable=True)
+    # Phase 0 (security architecture assessment): a real, logged-in
+    # CostPilot user, when the request that produced this event carried a
+    # valid session -- distinct from actor_name/actor_email above, which
+    # are free-text and describe the origin system's own actor (e.g. a
+    # Salesforce user), not a CostPilot account. Nullable and unused by
+    # any existing write site; wiring real callers to populate it is a
+    # separate, later step.
+    user_id          = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     workspace_id       = Column(String, nullable=True, index=True)
     actor_org_unit_id  = Column(Integer, ForeignKey("organizational_units.id"), nullable=True, index=True)
     actor_org_unit_name = Column(String, nullable=True)
@@ -702,6 +710,7 @@ class AskInteraction(Base):
 
     id                  = Column(Integer,  primary_key=True, index=True)
     workspace_id        = Column(String,   nullable=True, index=True)
+    user_id             = Column(Integer,  ForeignKey("users.id"), nullable=True, index=True)  # populated only when the request carried a valid session (Phase 0 identity threading); NULL for every historical row and for any question asked without logging in
     session_id          = Column(String,   nullable=True, index=True)  # unpopulated until Phase 3 (rephrase detection)
     governed_request_id = Column(String,   nullable=True, index=True)
     timestamp           = Column(DateTime, default=datetime.utcnow, index=True)

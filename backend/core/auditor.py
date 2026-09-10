@@ -263,6 +263,7 @@ def write_audit_event(
     routing_policy_version: str  = None,
     routing_reason_code: str     = None,
     execution_status: str        = None,
+    user_id:          int        = None,  # a real CostPilot account, when the caller resolved one from a session (Phase 0 identity threading) -- distinct from actor_name/actor_email, which describe the origin system's own actor
 ) -> dict:
     if matched_keywords is None:
         matched_keywords = []
@@ -335,6 +336,7 @@ def write_audit_event(
         actor_name       = work_user.name if work_user else None,
         actor_email      = work_user.email if work_user else None,
         actor_source_platform = work_user.source_platform if work_user else None,
+        user_id          = user_id,
         workspace_id       = attribution.get("workspace_id"),
         actor_org_unit_id  = attribution.get("actor_org_unit_id"),
         actor_org_unit_name = attribution.get("actor_org_unit_name"),

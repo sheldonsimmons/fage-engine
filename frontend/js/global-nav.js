@@ -644,9 +644,17 @@
   }
 
   async function postGlobalAsk(payload) {
+    // Phase 0 identity threading: attach the existing login session, if
+    // any, so a logged-in question gets attributed to a real user in the
+    // audit trail. A signed-out visitor sends no header at all -- the
+    // backend already treats that exactly like every request today, so
+    // this is invisible unless someone has actually signed in.
+    const token = localStorage.getItem("cp_auth_token");
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
     return fetch("/api/reports/bot-efficiency/ask", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
     });
   }
