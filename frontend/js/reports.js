@@ -445,6 +445,20 @@ document.querySelectorAll(".rpt-tab").forEach(btn => {
 
 // ── Date preset picker ────────────────────────────────────────────────────────
 
+// <input type="date">.value is always a bare "YYYY-MM-DD" string.
+// new Date("2026-09-01") parses that as UTC midnight, not local midnight
+// -- in any timezone behind UTC (most of the US), that instant falls on
+// the previous local calendar day, so every downstream local-time
+// display (toLocaleDateString, etc.) silently shows Aug 31 for a
+// picker that says Sep 1. Confirmed live 2026-09-11: a custom range of
+// Sep 1 - Sep 11 rendered as "Aug 31 - Sep 10". Splitting the string and
+// constructing the Date from y/m/d components uses the local-time
+// constructor instead, which doesn't have this offset.
+function parseDateInputLocal(value) {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function resolveDatePreset(preset) {
   const now   = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -457,8 +471,8 @@ function resolveDatePreset(preset) {
   if (preset === "custom") {
     const f = document.getElementById("rptDateFrom").value;
     const t = document.getElementById("rptDateTo").value;
-    from = f ? new Date(f) : addDays(today, -30);
-    to   = t ? addDays(new Date(t), 1) : addDays(today, 1);
+    from = f ? parseDateInputLocal(f) : addDays(today, -30);
+    to   = t ? addDays(parseDateInputLocal(t), 1) : addDays(today, 1);
   } else if (preset === "today") {
     from = today; to = addDays(today, 1);
   } else if (preset === "yesterday") {
@@ -504,12 +518,22 @@ function resolveDatePreset(preset) {
   return { date_from: from.toISOString(), date_to: to.toISOString(), days };
 }
 
+// range.date_from/date_to is a bare "YYYY-MM-DD" string when it came from
+// a drill-down URL's date_from/date_to query params (see the reportDrillDateRange
+// assignment below), but a full ISO datetime string (already UTC-instant-
+// correct, safe for plain `new Date()`) everywhere else -- e.g.
+// resolveDatePreset's own return value. Only the bare-date-string case
+// hits the UTC-midnight parsing bug parseDateInputLocal exists to avoid.
+function parseRangeBoundary(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? parseDateInputLocal(value) : new Date(value);
+}
+
 function updateReportRangeSummary() {
   const host = document.getElementById("rptRangeSummary");
   if (!host) return;
   const range = getActiveDateRange();
-  const from = new Date(range.date_from);
-  const exclusiveTo = new Date(range.date_to);
+  const from = parseRangeBoundary(range.date_from);
+  const exclusiveTo = parseRangeBoundary(range.date_to);
   exclusiveTo.setDate(exclusiveTo.getDate() - 1);
   const format = value => value.toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric",
@@ -2231,8 +2255,8 @@ function askCostPilotSuggestion(button) {
 }
 
 function askCostPilotDateLabel(range = getActiveDateRange()) {
-  const from = new Date(range.date_from);
-  const exclusiveTo = new Date(range.date_to);
+  const from = parseRangeBoundary(range.date_from);
+  const exclusiveTo = parseRangeBoundary(range.date_to);
   exclusiveTo.setDate(exclusiveTo.getDate() - 1);
   const format = value => value.toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric",
