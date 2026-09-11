@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Ask CostPilot — Voice</title>
+<link rel="icon" type="image/png" href="/favicon.png" />
+<style>
+  :root {
+    --navy: #0b1220;
+    --navy-800: #14213d;
+    --accent: #2e7df7;
+    --ink: #101828;
+    --ink-muted: #667085;
+    --danger: #d03b3b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--navy); color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    min-height: 100dvh; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  }
+  header { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; opacity: 0.9; }
+  header img { height: 22px; width: auto; }
+
+  /* Mobile-only: above this width, hide the mic UI and show a desktop
+     notice instead -- this page is deliberately not meant to be used
+     from a desktop browser. */
+  #desktopNotice { display: none; }
+  @media (min-width: 700px) {
+    #app { display: none; }
+    #desktopNotice { display: flex; }
+  }
+
+  #desktopNotice {
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: 12px; flex: 1; max-width: 380px;
+  }
+  #desktopNotice h1 { font-size: 20px; margin: 0; }
+  #desktopNotice p { color: #cbd5e1; margin: 0; line-height: 1.5; font-size: 14px; }
+
+  #app { display: flex; flex-direction: column; align-items: center; justify-content: space-between; flex: 1; width: 100%; }
+
+  .mic-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; margin-top: 8vh; }
+
+  #micButton {
+    width: 128px; height: 128px; border-radius: 999px; border: none;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 0 rgba(46,125,247,0.5);
+    transition: transform 0.15s ease, box-shadow 0.3s ease, background 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #micButton:active { transform: scale(0.96); }
+  #micButton.recording {
+    background: var(--danger);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  #micButton.busy { background: var(--navy-800); }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(208,59,59,0.5); }
+    70%  { box-shadow: 0 0 0 26px rgba(208,59,59,0); }
+    100% { box-shadow: 0 0 0 0 rgba(208,59,59,0); }
+  }
+  #micButton svg { width: 48px; height: 48px; }
+
+  #statusText { font-size: 15px; font-weight: 500; text-align: center; min-height: 20px; color: #e2e8f0; }
+
+  #transcript, #answer {
+    width: 100%; max-width: 420px; border-radius: 14px; padding: 16px;
+    font-size: 15px; line-height: 1.5; display: none;
+  }
+  #transcript { background: rgba(255,255,255,0.06); color: #cbd5e1; font-style: italic; }
+  #answer { background: #ffffff; color: var(--ink); }
+  #answer.visible, #transcript.visible { display: block; }
+
+  #stopSpeaking {
+    display: none; align-items: center; gap: 8px; margin-top: 4px;
+    background: rgba(255,255,255,0.1); border: none; color: #fff;
+    padding: 8px 14px; border-radius: 999px; font-size: 13px;
+  }
+  #stopSpeaking.visible { display: inline-flex; }
+
+  #errorText { color: #fca5a5; font-size: 13px; text-align: center; min-height: 16px; }
+
+  footer { font-size: 12px; color: #64748b; text-align: center; }
+
+  .scroll-area { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; overflow-y: auto; flex: 1; padding: 24px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="/assets/costpilot-logo-transparent.svg" alt="" />
+  Ask CostPilot
+</header>
+
+<div id="desktopNotice">
+  <h1>This page is for your phone</h1>
+  <p>Ask CostPilot's one-tap voice button is designed for mobile. Open this page on your phone to use it — for the full dashboard, go to the Executive Dashboard instead.</p>
+</div>
+
+<div id="app">
+  <div class="scroll-area">
+    <div class="mic-wrap">
+      <button id="micButton" type="button" aria-label="Tap to ask CostPilot a question">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <div id="statusText">Tap to ask a question</div>
+      <div id="errorText"></div>
+    </div>
+
+    <div id="transcript"></div>
+    <div id="answer"></div>
+    <button id="stopSpeaking" type="button">🔊 Stop speaking</button>
+  </div>
+</div>
+
+<footer>Answers come only from CostPilot's governed data.</footer>
+
+<script>
+(function () {
+  const micButton = document.getElementById("micButton");
+  const statusText = document.getElementById("statusText");
+  const errorText = document.getElementById("errorText");
+  const transcriptEl = document.getElementById("transcript");
+  const answerEl = document.getElementById("answer");
+  const stopSpeakingBtn = document.getElementById("stopSpeaking");
+
+  function getWorkspaceId() {
+    try {
+      return localStorage.getItem("cp_workspace_id") ||
+        new URLSearchParams(window.location.search).get("workspace_id") || "";
+    } catch (e) { return ""; }
+  }
+
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recording = false;
+  let busy = false;
+  let currentAudio = null;
+
+  function setStatus(text) { statusText.textContent = text || ""; }
+  function setError(text) { errorText.textContent = text || ""; }
+
+  function setBusy(isBusy) {
+    busy = isBusy;
+    micButton.classList.toggle("busy", isBusy);
+    micButton.disabled = isBusy;
+  }
+
+  function stopSpeaking() {
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    stopSpeakingBtn.classList.remove("visible");
+  }
+
+  async function speak(text) {
+    stopSpeaking();
+    if (!text) return;
+    try {
+      setStatus("Generating voice reply…");
+      const res = await fetch("/api/ask-voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error("Speech unavailable");
+      const blob = await res.blob();
+      currentAudio = new Audio(URL.createObjectURL(blob));
+      currentAudio.onended = () => { stopSpeakingBtn.classList.remove("visible"); setStatus("Tap to ask another question"); };
+      stopSpeakingBtn.classList.add("visible");
+      setStatus("Speaking…");
+      await currentAudio.play();
+    } catch (err) {
+      setStatus("Tap to ask another question");
+    }
+  }
+
+  async function askQuestion(question) {
+    setStatus("Thinking…");
+    try {
+      const body = { question, workspace_id: getWorkspaceId() || undefined, modality: "voice" };
+      const res = await fetch("/api/reports/bot-efficiency/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Ask CostPilot could not answer that.");
+      answerEl.textContent = data.answer || "";
+      answerEl.classList.add("visible");
+      await speak(data.answer);
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+      setStatus("Tap to try again");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function transcribeAndAsk() {
+    if (!audioChunks.length) { setStatus("Tap to ask a question"); setBusy(false); return; }
+    setStatus("Transcribing…");
+    const blob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
+    const form = new FormData();
+    form.append("audio", blob, "question.webm");
+    try {
+      const res = await fetch("/api/ask-voice/transcribe", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Could not transcribe that clip.");
+      const transcript = (data.transcript || "").trim();
+      if (!transcript) {
+        setError("Didn't catch a question — tap and try again.");
+        setStatus("Tap to ask a question");
+        setBusy(false);
+        return;
+      }
+      transcriptEl.textContent = "“" + transcript + "”";
+      transcriptEl.classList.add("visible");
+      answerEl.classList.remove("visible");
+      answerEl.textContent = "";
+      // Deliberate press-and-go flow -- unlike the dashboard's Ask
+      // CostPilot widget (which shows the transcript for review before
+      // sending), a single explicit tap-to-record-tap-to-stop gesture is
+      // already the user's confirmation to ask; auto-submitting here is
+      // the point of a one-button mobile flow.
+      await askQuestion(transcript);
+    } catch (err) {
+      setError(err.message || "Could not transcribe that clip.");
+      setStatus("Tap to try again");
+      setBusy(false);
+    }
+  }
+
+  async function startRecording() {
+    setError("");
+    answerEl.classList.remove("visible");
+    transcriptEl.classList.remove("visible");
+    stopSpeaking();
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("Voice isn't supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        recording = false;
+        micButton.classList.remove("recording");
+        setBusy(true);
+        transcribeAndAsk();
+      };
+      mediaRecorder.start();
+      recording = true;
+      micButton.classList.add("recording");
+      setStatus("Listening… tap to stop");
+    } catch (err) {
+      setError("Couldn't access your microphone — check permissions.");
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorder?.stop();
+  }
+
+  micButton.addEventListener("click", () => {
+    if (busy) return;
+    if (recording) stopRecording();
+    else startRecording();
+  });
+})();
+</script>
+</body>
+</html>
