@@ -842,6 +842,14 @@ def _ask_intent(question: str, default_days: int) -> dict:
         or re.search(r"\bis\s+anything\s+unusual\b", text)
         or re.search(r"\bwhat(?:'s| is)\s+important\s+right\s+now\b", text)
         or re.search(r"\bwhat\s+(?:should|do)\s+i\s+(?:know|watch)\s+(?:about|for)\b", text)
+        # "What should I review first?" -- one of Ask CostPilot's own
+        # suggested questions (AskCostPilot.tsx's SUGGESTIONS), previously
+        # uncovered here: it fell through to a generic company overview
+        # instead of this same pre-ranked attention list. Anchored to
+        # "what should i" + a look/check/review verb, same style as the
+        # know/watch pattern above, so it doesn't widen to unrelated
+        # "should I" questions (e.g. "should I increase the budget?").
+        or re.search(r"\bwhat\s+should\s+i\s+(?:review|look\s+at|check)(?:\s+first)?\b", text)
     )
 
     # "Why are we using Sonnet for the Sales agent?" / "who approved this
