@@ -111,7 +111,18 @@ def resolve_primary_period(
     utc_now = now or datetime.utcnow()
     local_now = _from_utc_naive(utc_now, zone)
     today = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    this_week = today - timedelta(days=today.weekday())
+    # today.weekday() is ISO (Monday=0..Sunday=6) -- using it directly made
+    # "this_week"/"last_week" Monday-anchored here, while the frontend's own
+    # resolveDatePreset("this_week"/"last_week") (frontend/js/reports.js)
+    # is Sunday-anchored (JS Date.getDay(), Sunday=0), matching the
+    # US-week convention the reports page's own "Last Week: Aug 30 - Sep 5"
+    # label already shows users. Confirmed live 2026-09-11: Ask CostPilot
+    # answered "the week of August 31 to September 7" (Monday-anchored) for
+    # a person the reports page's Sunday-anchored "Last Week" filter showed
+    # real activity for -- same nominal period, two different date ranges,
+    # so a real answer looked wrong. (days_since_sunday + 1) % 7 converts
+    # weekday() to "days since the most recent Sunday" instead.
+    this_week = today - timedelta(days=(today.weekday() + 1) % 7)
     this_month = today.replace(day=1)
     this_quarter = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
     this_year = today.replace(month=1, day=1)
