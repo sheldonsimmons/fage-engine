@@ -4505,47 +4505,70 @@ def _ask_costpilot_answer(
             labels = sorted({
                 str(match["row"].get("label") or "Unknown") for match in ambiguous_matches
             })
-            # Picking a label re-asks a brand new question with none of
-            # this turn's context -- re-asking the bare label alone lost
-            # that context and got misclassified (confirmed live: "Support"
-            # alone resolves to intent="help", not a department lookup,
-            # since a lone noun out of context looks like a product
-            # question to the OpenAI planner). Naming the entity type
-            # (already known here) makes the re-ask classify correctly.
-            #
-            # The re-ask text alone can't disambiguate two candidates that
-            # share a root word once generic suffix words are stripped for
-            # matching (confirmed live: "Support" the department and
-            # "Support Agent" the agent both reduce to the same name-token
-            # set, so any rephrasing ties again). filter_name/filter_value
-            # carry the exact already-resolved row directly -- the same
-            # convention _ask_evidence()'s drill-through buttons already
-            # use -- so the frontend can pin it via pinned_filter_name
-            # instead of asking the matcher to guess a second time.
-            match_by_name = {
-                str(match["row"].get("label") or "Unknown"): match
-                for match in ambiguous_matches
-            }
-            return {
-                "title": "Which one did you mean?",
-                "answer": (
-                    f"I found {len(labels)} matches for that name: {', '.join(labels)}. "
-                    "Which one did you mean?"
-                ),
-                "intent": "clarification_required",
-                "confidence": "CLARIFICATION_REQUIRED",
-                "evidence": [
-                    {
-                        "label": label, "value": None, "metric_label": None,
-                        "question": f"Tell me about the {label} {match_by_name[label]['entity_label']}".strip(),
-                        "filter_name": match_by_name[label]["filter_name"],
-                        "filter_value": match_by_name[label]["row"].get("id"),
-                    }
-                    for label in labels
-                ],
-                "recommendations": [],
-                "read_only": True,
-            }
+            # Two (or more) tied candidates can share the IDENTICAL label
+            # -- e.g. two separate "person" rows both named "David Kim"
+            # with different emails, merged() above keys on (entity,
+            # label, email) so they never combined into one row -- and
+            # `labels` above dedupes by string, silently collapsing them
+            # to one entry. That produced a nonsensical "I found 1 matches
+            # for that name: David Kim. Which one did you mean?" (confirmed
+            # live 2026-09-11): a dead end, since the user has no way to
+            # tell the offered "one" apart from itself. When every tied
+            # candidate is the same entity type with the same label, there
+            # is nothing meaningful to disambiguate -- sum them into one
+            # merged row and answer directly instead, same "merge, don't
+            # fabricate" precedent department_outcome_breakdown() already
+            # uses for genuine duplicate-record situations.
+            if len(labels) == 1 and len({m["entity"] for m in ambiguous_matches}) == 1:
+                merged_row = dict(ambiguous_matches[0]["row"])
+                for other in ambiguous_matches[1:]:
+                    for field in ("request_count", "input_tokens", "output_tokens", "tokens_saved",
+                                  "spend_usd", "simulation_count", "total_tokens", "live_count"):
+                        if field in other["row"]:
+                            merged_row[field] = (merged_row.get(field) or 0) + (other["row"].get(field) or 0)
+                named_entity = {**ambiguous_matches[0], "row": merged_row}
+            else:
+                # Picking a label re-asks a brand new question with none of
+                # this turn's context -- re-asking the bare label alone lost
+                # that context and got misclassified (confirmed live: "Support"
+                # alone resolves to intent="help", not a department lookup,
+                # since a lone noun out of context looks like a product
+                # question to the OpenAI planner). Naming the entity type
+                # (already known here) makes the re-ask classify correctly.
+                #
+                # The re-ask text alone can't disambiguate two candidates that
+                # share a root word once generic suffix words are stripped for
+                # matching (confirmed live: "Support" the department and
+                # "Support Agent" the agent both reduce to the same name-token
+                # set, so any rephrasing ties again). filter_name/filter_value
+                # carry the exact already-resolved row directly -- the same
+                # convention _ask_evidence()'s drill-through buttons already
+                # use -- so the frontend can pin it via pinned_filter_name
+                # instead of asking the matcher to guess a second time.
+                match_by_name = {
+                    str(match["row"].get("label") or "Unknown"): match
+                    for match in ambiguous_matches
+                }
+                return {
+                    "title": "Which one did you mean?",
+                    "answer": (
+                        f"I found {len(labels)} matches for that name: {', '.join(labels)}. "
+                        "Which one did you mean?"
+                    ),
+                    "intent": "clarification_required",
+                    "confidence": "CLARIFICATION_REQUIRED",
+                    "evidence": [
+                        {
+                            "label": label, "value": None, "metric_label": None,
+                            "question": f"Tell me about the {label} {match_by_name[label]['entity_label']}".strip(),
+                            "filter_name": match_by_name[label]["filter_name"],
+                            "filter_value": match_by_name[label]["row"].get("id"),
+                        }
+                        for label in labels
+                    ],
+                    "recommendations": [],
+                    "read_only": True,
+                }
 
     entity_config = {
         **_ASK_ENTITY_CONFIG_STATIC,
