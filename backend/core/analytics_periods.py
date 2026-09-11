@@ -155,10 +155,34 @@ def resolve_primary_period(
             day=1,
         )
         key = "last_quarter"
+    elif period_key == "last_2q":
+        # frontend/js/reports.js's "Last 2 Quarters" preset had no backend
+        # equivalent at all -- a question scoped to it fell through to the
+        # plain rolling_days fallback below instead, an actual mismatch,
+        # not just a boundary drift. Combined year*4+quarter-index lets
+        # "2 quarters back" subtract cleanly across a year boundary
+        # without the off-by-one a day-stepping loop invites.
+        end = this_quarter
+        total_quarters = end.year * 4 + (end.month - 1) // 3
+        start_quarters = total_quarters - 2
+        start = end.replace(
+            year=start_quarters // 4, month=(start_quarters % 4) * 3 + 1, day=1,
+        )
+        key = "last_2q"
     elif period_key == "this_year":
         start, end, key = this_year, local_now, "this_year"
     elif period_key == "last_year":
         start, end, key = this_year.replace(year=this_year.year - 1), this_year, "last_year"
+    elif period_key == "all_time":
+        # Accepted as a valid period_key (_ASK_PERIOD_KEYS) but never had a
+        # branch here -- silently fell through to the rolling_days
+        # fallback below, becoming a plain 30-day window (or whatever
+        # `days` happened to be) despite the name promising literally
+        # everything. A fixed far-past constant, not a real "since
+        # inception" lookup (this function does pure date math, no db/
+        # workspace_id access) -- 2000-01-01 predates every real or demo
+        # dataset in this app by a wide margin, so it can't clip real data.
+        start, end, key = today.replace(year=2000, month=1, day=1), today + timedelta(days=1), "all_time"
     elif period_key == "same_range_last_year":
         # Same rolling window size as a normal "days" lookup, just anchored
         # to end exactly one year ago instead of now — for ranking
@@ -173,7 +197,20 @@ def resolve_primary_period(
         end = start + timedelta(days=1)
         key = "same_date_last_year"
     else:
-        end = local_now
+        # This is the default path for almost every Ask CostPilot question
+        # (no explicit period_key, just days=N) -- was end=local_now, a
+        # rolling N*24-hour window ending at this exact moment, while the
+        # frontend's own "Last N Days" presets (frontend/js/reports.js's
+        # resolveDatePreset) are calendar-midnight-aligned: N full local
+        # days plus all of today, ending at tomorrow's midnight. Mid-day,
+        # the old version cut into part of what should have counted as
+        # "N days ago" and included part of the day before that instead --
+        # a smaller, sub-day version of the same this_week/last_week
+        # anchor mismatch fixed above. today+1 day matches every other
+        # "assume no future data exists" boundary this function already
+        # uses (this_week/this_month/this_year all end at local_now or a
+        # forward boundary, never mid-day-anchored).
+        end = today + timedelta(days=1)
         start = end - timedelta(days=max(1, int(days or 30)))
         key = "rolling_days"
 

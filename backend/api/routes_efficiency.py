@@ -980,7 +980,7 @@ _ASK_METRICS = {
 _ASK_DIRECTIONS = {"asc", "desc"}
 _ASK_PERIOD_KEYS = {
     "today", "yesterday", "this_week", "last_week", "this_month",
-    "last_month", "this_quarter", "last_quarter", "this_year", "last_year",
+    "last_month", "this_quarter", "last_quarter", "last_2q", "this_year", "last_year",
     "same_date_last_year", "all_time", "rolling_days",
 }
 _ASK_COMPARISON_KEYS = {
