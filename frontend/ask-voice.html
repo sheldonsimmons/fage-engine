@@ -193,6 +193,34 @@
   const voicePlayer = document.getElementById("voicePlayer");
   let audioUnlocked = false;
 
+  // In-memory only, per your choice -- resets on reload/close, matches
+  // global-nav.js's own normalizedAskPayload() convention exactly (same
+  // 12-turn cap, same conversation_context round-trip: each response's
+  // conversation_context becomes the next request's `context`) so this
+  // page gets the same real multi-turn memory the desktop pages already
+  // have, not a separate/weaker mechanism.
+  let conversationHistory = [];
+  let lastConversationContext = null;
+  const CONTEXT_STRING_FIELDS = [
+    "intent", "entity", "metric", "direction", "source_platform", "subject_entity",
+    "subject_filter_name", "subject_filter_value", "model_tier", "period_key",
+    "comparison_key", "usage_status", "budget_scope",
+  ];
+  const CONTEXT_INT_FIELDS = ["days", "result_limit", "usage_threshold"];
+
+  function normalizeConversationContext(ctx) {
+    if (!ctx || typeof ctx !== "object") return null;
+    const normalized = {};
+    CONTEXT_STRING_FIELDS.forEach((key) => {
+      if (typeof ctx[key] === "string" && ctx[key]) normalized[key] = ctx[key];
+    });
+    CONTEXT_INT_FIELDS.forEach((key) => {
+      const value = Number(ctx[key]);
+      if (Number.isInteger(value) && value > 0) normalized[key] = value;
+    });
+    return Object.keys(normalized).length ? normalized : null;
+  }
+
   // Text-fallback display only -- speech playback already goes through
   // the backend's own markdown-to-speech cleanup (routes_ask_voice.py);
   // this just keeps the on-screen answer readable instead of showing
@@ -241,7 +269,17 @@
       if (!res.ok) throw new Error("Speech unavailable from the server.");
       const blob = await res.blob();
       voicePlayer.src = URL.createObjectURL(blob);
-      voicePlayer.onended = () => { stopSpeakingBtn.classList.remove("visible"); setStatus("Tap to ask another question"); };
+      // Every question on this page is voice-originated (there's no typed
+      // input here) -- auto-listening for a follow-up after every answer
+      // is the whole point of a hands-free mobile flow, per your choice.
+      // Recording itself still stops manually (tap the mic); tapping to
+      // stop without saying anything ends the loop naturally via the
+      // existing empty-transcript path, rather than needing a separate
+      // "stop the loop" control.
+      voicePlayer.onended = () => {
+        stopSpeakingBtn.classList.remove("visible");
+        startRecording();
+      };
       stopSpeakingBtn.classList.add("visible");
       setStatus("Speaking…");
       await voicePlayer.play();
@@ -260,7 +298,11 @@
     setStatus("Thinking…");
     if (!resolvedWorkspaceId) await resolveWorkspaceId();
     try {
-      const body = { question, workspace_id: getWorkspaceId() || undefined, modality: "voice" };
+      const body = {
+        question, workspace_id: getWorkspaceId() || undefined, modality: "voice",
+        conversation: conversationHistory.slice(-12),
+      };
+      if (lastConversationContext) body.context = lastConversationContext;
       const res = await fetch("/api/reports/bot-efficiency/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -270,6 +312,9 @@
       if (!res.ok) throw new Error(data.detail || "Ask CostPilot could not answer that.");
       answerEl.textContent = stripMarkdown(data.answer);
       answerEl.classList.add("visible");
+      conversationHistory.push({ role: "user", content: question });
+      conversationHistory.push({ role: "assistant", content: data.answer || "" });
+      lastConversationContext = normalizeConversationContext(data.conversation_context) || lastConversationContext;
       await speak(data.answer);
     } catch (err) {
       setError(err.message || "Something went wrong.");
