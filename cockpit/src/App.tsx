@@ -130,6 +130,7 @@ function App() {
                 savings={data.savings}
                 budget={data.budget}
                 businessImpact={data.businessImpact}
+                recommendations={data.recommendations}
                 workspaceId={workspaceId}
               />
               <KpiRow dashboard={data.dashboard} savings={data.savings} health={data.health} budget={data.budget} businessImpact={data.businessImpact} />
@@ -150,10 +151,12 @@ function App() {
                   {(() => {
                     const rec = topRecommendation(data.recommendations)
                     return rec ? (
-                      <RecommendationHero
-                        recommendation={rec}
-                        onAskAboutIt={(text) => setPendingQuestion({ text, nonce: Date.now() })}
-                      />
+                      <div id="recommendation-hero">
+                        <RecommendationHero
+                          recommendation={rec}
+                          onAskAboutIt={(text) => setPendingQuestion({ text, nonce: Date.now() })}
+                        />
+                      </div>
                     ) : null
                   })()}
                 </div>
