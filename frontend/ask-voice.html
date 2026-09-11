@@ -371,12 +371,25 @@
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunks = [];
+      const recordingStartedAt = Date.now();
       mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         recording = false;
         micButton.classList.remove("recording");
+        // Cheap first line of defense before even calling the transcribe
+        // API: a clip this short is essentially certain to be an
+        // accidental/instant tap-to-stop with no real speech in it,
+        // most likely from auto-listen starting before the user was
+        // ready to talk. The backend's own no_speech_prob check (routes_
+        // ask_voice.py) is the real guard against Whisper hallucinating
+        // text from longer stretches of silence/ambient noise -- this
+        // just skips a wasted round trip for the shortest, clearest case.
+        if (Date.now() - recordingStartedAt < 600) {
+          setStatus("Tap to ask a question");
+          return;
+        }
         setBusy(true);
         transcribeAndAsk();
       };

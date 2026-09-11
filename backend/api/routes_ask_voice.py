@@ -264,6 +264,28 @@ async def transcribe(audio: UploadFile = File(...)):
     if not transcript:
         raise HTTPException(status_code=422, detail="Could not make out any speech in that clip.")
 
+    # Whisper hallucinates plausible-sounding but fake text from silence
+    # or ambient noise instead of returning nothing -- confirmed live
+    # 2026-09-11 via the mobile voice page's new auto-listen flow (mic
+    # starts recording right after CostPilot finishes speaking, before
+    # the user necessarily starts talking): "Thank you for watching!" and
+    # "Learn more at www.salesforce.com" both got transcribed, then
+    # answered as if they were real questions. Both are well-documented
+    # classic Whisper hallucination artifacts (YouTube-outro/sponsor-
+    # plug phrases from its training data), not something the user said.
+    # no_speech_prob (Whisper's own per-segment "this segment probably
+    # has no real speech in it" estimate) is the purpose-built signal for
+    # exactly this, not a repurposed one like avg_logprob below -- a
+    # high no_speech_prob is treated the same as an empty transcript,
+    # before this ever reaches Ask CostPilot as a "question."
+    segments = getattr(result, "segments", None) or []
+    no_speech_probs = [
+        seg.no_speech_prob for seg in segments
+        if getattr(seg, "no_speech_prob", None) is not None
+    ]
+    if no_speech_probs and (sum(no_speech_probs) / len(no_speech_probs)) > 0.6:
+        raise HTTPException(status_code=422, detail="Could not make out any speech in that clip.")
+
     # whisper-1's verbose_json response has no single top-level confidence
     # score. Per-segment avg_logprob (natural-log probability) is the
     # closest real signal it exposes -- averaging exp(avg_logprob) across
@@ -273,7 +295,6 @@ async def transcribe(audio: UploadFile = File(...)):
     # good enough to gate "should the UI ask the user to confirm the
     # transcript," not a claim of measured accuracy.
     confidence = None
-    segments = getattr(result, "segments", None) or []
     logprobs = [
         seg.avg_logprob for seg in segments
         if getattr(seg, "avg_logprob", None) is not None
