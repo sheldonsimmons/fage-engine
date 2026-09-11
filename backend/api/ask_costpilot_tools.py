@@ -860,13 +860,22 @@ def run_get_change_drivers(
         days=days,
     )
     plan = comparison_plan(primary_period, comparison_key or "previous_period")
+    # activity_limit=1, not the 500-row default -- this function only
+    # reads "period"/"summary"/report[dimension] off each report below,
+    # never "activities" (the raw per-request log project_activity_
+    # reporting() builds separately, real SQL LIMIT at its own query --
+    # see that function's activity_limit docstring). project_activity_
+    # reporting() is already documented as "the single most expensive
+    # call in the app," and change_drivers calls it twice (current +
+    # prior period, genuinely different data, not cache-hit-able)
+    # confirmed live: ~19-25s per change_drivers answer before this.
     current_report = project_activity_reporting(
         workspace_id=workspace_id, date_from=plan.primary.start, date_to=plan.primary.end,
-        days=days, **reporting_filters, activity_limit=500, exclude_prune_only_rows=True, db=db,
+        days=days, **reporting_filters, activity_limit=1, exclude_prune_only_rows=True, db=db,
     )
     prior_report = project_activity_reporting(
         workspace_id=workspace_id, date_from=plan.comparison.start, date_to=plan.comparison.end,
-        days=days, **reporting_filters, activity_limit=500, exclude_prune_only_rows=True, db=db,
+        days=days, **reporting_filters, activity_limit=1, exclude_prune_only_rows=True, db=db,
     )
     current_summary = current_report.get("summary") or {}
     prior_summary = prior_report.get("summary") or {}
