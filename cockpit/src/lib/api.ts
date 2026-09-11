@@ -255,15 +255,52 @@ export function displayDepartment(raw: string, workspaceId: string): string {
   return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw
 }
 
-export async function askCostPilot(workspaceId: string, question: string): Promise<AskResponse> {
+// voiceMeta tags a question that came from the mic, exactly matching
+// global-nav.js's normalizedAskPayload() convention (modality="voice" +
+// transcription_confidence) -- Ask CostPilot itself doesn't change
+// behavior for a voice-originated question, this is purely so the
+// interaction gets logged accurately.
+export async function askCostPilot(
+  workspaceId: string,
+  question: string,
+  voiceMeta?: { confidence: number | null } | null,
+): Promise<AskResponse> {
+  const body: Record<string, unknown> = { question, workspace_id: workspaceId || undefined }
+  if (voiceMeta) {
+    body.modality = "voice"
+    if (typeof voiceMeta.confidence === "number") body.transcription_confidence = voiceMeta.confidence
+  }
   const res = await fetch("/api/reports/bot-efficiency/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, workspace_id: workspaceId || undefined }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `Ask CostPilot failed: ${res.status}`)
+    const errBody = await res.json().catch(() => ({}))
+    throw new Error(errBody.detail || `Ask CostPilot failed: ${res.status}`)
   }
   return res.json()
+}
+
+// CostPilot Voice (Phase 1) -- see backend/api/routes_ask_voice.py's
+// module docstring. These two endpoints do ONLY speech-to-text and
+// text-to-speech; the transcript still goes through askCostPilot() above
+// exactly like a typed question.
+export async function transcribeVoiceQuestion(blob: Blob): Promise<{ transcript: string; confidence: number | null }> {
+  const form = new FormData()
+  form.append("audio", blob, "question.webm")
+  const res = await fetch("/api/ask-voice/transcribe", { method: "POST", body: form })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.detail || "Could not transcribe that clip.")
+  return { transcript: data.transcript || "", confidence: typeof data.confidence === "number" ? data.confidence : null }
+}
+
+export async function speakText(text: string): Promise<Blob> {
+  const res = await fetch("/api/ask-voice/speak", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) throw new Error("Speech unavailable")
+  return res.blob()
 }

@@ -95,8 +95,18 @@ function NavItem({ item }: { item: NavItemData }) {
       </div>
     )
   }
+  // Ask CostPilot jumps straight to the widget already on this page --
+  // instant, not a smooth scroll-over-time, so it reads as "go to Ask
+  // CostPilot" rather than "scroll down a bit" (confirmed live: the
+  // smooth-scroll version felt like it hadn't done anything).
+  const onClick = item.label === "Ask CostPilot"
+    ? (e: React.MouseEvent) => {
+        e.preventDefault()
+        document.getElementById("ask-costpilot")?.scrollIntoView({ behavior: "auto", block: "start" })
+      }
+    : undefined
   return (
-    <a href={href} className={className}>
+    <a href={href} className={className} onClick={onClick}>
       <Icon className="h-4 w-4" />
       {item.label}
     </a>

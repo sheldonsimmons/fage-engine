@@ -175,7 +175,9 @@ function App() {
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <WhatChanged periodDays={data.changes.period_days} changes={data.changes.changes} />
                 <BusinessImpact data={data.businessImpact} />
-                <Recommendations recommendations={data.recommendations} />
+                <div id="recommendations-full">
+                  <Recommendations recommendations={data.recommendations} />
+                </div>
               </div>
             </>
           )}

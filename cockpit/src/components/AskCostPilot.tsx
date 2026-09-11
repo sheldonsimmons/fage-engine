@@ -3,8 +3,8 @@ import ReactMarkdown from "react-markdown"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { askCostPilot } from "@/lib/api"
-import { Send, Sparkles } from "lucide-react"
+import { askCostPilot, speakText, transcribeVoiceQuestion } from "@/lib/api"
+import { Mic, Send, Sparkles, Volume2 } from "lucide-react"
 
 // The backend returns markdown (bold, bullet/numbered lists) meant to be
 // rendered, not shown as raw "**text**" -- these overrides just apply the
@@ -57,23 +57,45 @@ export function AskCostPilot({
   const [answer, setAnswer] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const cardRef = useRef<HTMLDivElement | null>(null)
+
+  // CostPilot Voice (Phase 1) -- mirrors global-nav.js's push-to-talk
+  // flow (backend/api/routes_ask_voice.py), minus the opt-in "Hey
+  // CostPilot" wake-word listener (off by default there too, bigger
+  // scope than basic voice access). pendingVoiceMeta tags the NEXT ask()
+  // call as voice-originated, then is cleared -- same "only stays voice
+  // for the send that follows recording" rule the legacy version uses.
+  const [recording, setRecording] = useState(false)
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null)
+  const [speaking, setSpeaking] = useState(false)
+  const pendingVoiceMeta = useRef<{ confidence: number | null } | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     if (!pendingQuestion) return
     setQuestion(pendingQuestion.text)
     ask(pendingQuestion.text)
-    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    // Same id + getElementById pattern App.tsx's own #ask-costpilot
+    // hash-scroll effect already uses -- a ref on the shadcn Card here
+    // was unreliable (confirmed live: the hero button's scroll silently
+    // did nothing), this is the proven path.
+    document.getElementById("ask-costpilot")?.scrollIntoView({ behavior: "auto", block: "start" })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingQuestion?.nonce])
 
   async function ask(q: string) {
     if (!q.trim()) return
+    const voiceMeta = pendingVoiceMeta.current
+    pendingVoiceMeta.current = null
     setLoading(true)
     setError(null)
     try {
-      const res = await askCostPilot(workspaceId, q)
+      const res = await askCostPilot(workspaceId, q, voiceMeta)
       setAnswer(res.answer)
+      // Voice in, voice back out -- a typed question never auto-plays,
+      // matching global-nav.js's speakAskAnswer() call site.
+      if (voiceMeta && res.answer) speak(res.answer)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.")
     } finally {
@@ -81,8 +103,76 @@ export function AskCostPilot({
     }
   }
 
+  function stopSpeaking() {
+    currentAudioRef.current?.pause()
+    currentAudioRef.current = null
+    setSpeaking(false)
+  }
+
+  async function speak(text: string) {
+    stopSpeaking()
+    try {
+      const blob = await speakText(text)
+      const audio = new Audio(URL.createObjectURL(blob))
+      currentAudioRef.current = audio
+      audio.onended = () => setSpeaking(false)
+      setSpeaking(true)
+      await audio.play()
+    } catch {
+      setSpeaking(false)
+    }
+  }
+
+  async function toggleRecording() {
+    if (recording) {
+      mediaRecorderRef.current?.stop()
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setVoiceStatus("Voice isn't supported in this browser — try typing instead.")
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioChunksRef.current = []
+      const recorder = new MediaRecorder(stream)
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop())
+        setRecording(false)
+        transcribe(recorder.mimeType)
+      }
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+      setVoiceStatus("Listening… click the mic again to stop.")
+    } catch {
+      setVoiceStatus("Couldn't access your microphone — check your browser permissions.")
+    }
+  }
+
+  async function transcribe(mimeType: string) {
+    if (!audioChunksRef.current.length) { setVoiceStatus(null); return }
+    setVoiceStatus("Transcribing…")
+    const blob = new Blob(audioChunksRef.current, { type: mimeType || "audio/webm" })
+    try {
+      const { transcript, confidence } = await transcribeVoiceQuestion(blob)
+      setQuestion(transcript)
+      pendingVoiceMeta.current = { confidence }
+      const lowConfidence = confidence !== null && confidence < 0.5
+      setVoiceStatus(
+        lowConfidence
+          ? "Not fully sure I caught that — check the text below before sending."
+          : "Review your question, then hit Ask.",
+      )
+    } catch (err) {
+      pendingVoiceMeta.current = null
+      setVoiceStatus(err instanceof Error ? err.message : "Could not transcribe that clip. Try typing instead.")
+    }
+  }
+
   return (
-    <Card ref={cardRef}>
+    <Card>
       <CardContent className="pt-6">
         <div className="mb-3 flex items-center gap-2 text-sm font-medium">
           <Sparkles className="h-4 w-4" />
@@ -97,19 +187,41 @@ export function AskCostPilot({
         >
           <Input
             value={question}
-            onChange={(e) => setQuestion(e.target.value)}
+            onChange={(e) => { setQuestion(e.target.value); pendingVoiceMeta.current = null }}
             placeholder="What would you like to know about your AI usage?"
           />
+          <Button
+            type="button"
+            size="icon"
+            variant={recording ? "default" : "outline"}
+            onClick={toggleRecording}
+            aria-label="Ask by voice"
+            title="Ask by voice"
+          >
+            <Mic className={`h-4 w-4 ${recording ? "animate-pulse" : ""}`} />
+          </Button>
           <Button type="submit" size="icon" disabled={loading}>
             <Send className="h-4 w-4" />
           </Button>
         </form>
+        {voiceStatus && <p className="mt-2 text-xs text-muted-foreground">{voiceStatus}</p>}
+        {speaking && (
+          <button
+            type="button"
+            onClick={stopSpeaking}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent"
+          >
+            <Volume2 className="h-3 w-3 animate-pulse" />
+            Speaking… click to stop
+          </button>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => {
+                pendingVoiceMeta.current = null
                 setQuestion(s)
                 ask(s)
               }}

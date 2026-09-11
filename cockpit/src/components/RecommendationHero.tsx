@@ -61,12 +61,16 @@ export function RecommendationHero({
             <Sparkles className="mr-1.5 h-3.5 w-3.5" />
             Ask CostPilot about this
           </Button>
-          <a
-            href="/reports.html?tab=impact"
+          {/* Stays on this page -- scrolls to the full recommendations
+              list (#recommendations-full) instead of sending the user
+              out to Reports. */}
+          <button
+            type="button"
+            onClick={() => document.getElementById("recommendations-full")?.scrollIntoView({ behavior: "smooth", block: "start" })}
             className="inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
           >
             Review evidence
-          </a>
+          </button>
         </div>
       </CardContent>
     </Card>

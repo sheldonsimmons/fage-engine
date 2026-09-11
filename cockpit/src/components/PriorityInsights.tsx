@@ -64,9 +64,17 @@ export function PriorityInsights({ recommendations }: { recommendations: Recomme
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-medium">Priority Insights</CardTitle>
-        <a href="/reports.html?tab=impact" className="text-xs text-primary hover:underline">
+        {/* Stays on this page -- the full recommendations list is
+            already rendered further down (#recommendations-full), no
+            reason to send the user out to Reports for something that's
+            right here. */}
+        <button
+          type="button"
+          onClick={() => document.getElementById("recommendations-full")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          className="text-xs text-primary hover:underline"
+        >
           View all →
-        </a>
+        </button>
       </CardHeader>
       <CardContent className="space-y-3">
         {cards.length ? (
