@@ -1931,6 +1931,14 @@ _ASK_NAME_STOP_WORDS = {
     "have", "many", "much", "person", "project", "request", "requests",
     "show", "spend", "team", "token", "tokens", "used", "usage", "user",
     "what", "which", "who", "with",
+    # "What should I review first?" (one of Ask CostPilot's own suggested
+    # questions) tokenized to {should, review, first} -- none previously
+    # stop words -- and "review" alone matched every WorkItem/agent whose
+    # name happens to end in "Review" (a common suffix in this
+    # workspace's data, e.g. "Billing Review"), producing a false
+    # "which one did you mean?" for a question that named no entity at
+    # all. Confirmed live via the cockpit's voice input on 2026-09-10.
+    "review", "should", "first",
 }
 
 
