@@ -44,7 +44,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from sqlalchemy import func
 
 from database.db import SessionLocal
-from database.models import RegisteredAgent, TokenTransaction, WorkItem, WorkUser
+from database.models import AuditEvent, RegisteredAgent, TokenTransaction, WorkItem, WorkUser
 
 TIER_DETAILS = {
     "Scout": ("gpt-4.1-nano", 0.20, 1.25),
@@ -140,6 +140,7 @@ def simulate_gap_fill(
     rng = random.Random()
     gap_days = max((now.date() - last_timestamp.date()).days, 1)
     transaction_batch = []
+    audit_batch = []
     inserted = 0
 
     baseline = _trailing_daily_volume(db, workspace_id, last_timestamp)
@@ -172,6 +173,7 @@ def simulate_gap_fill(
             cost = round((input_tokens * input_rate + output_tokens * output_rate) / 1_000_000, 6)
             request_id = f"gapfill:{workspace_id}:{timestamp.strftime('%Y%m%d%H%M%S%f')}:{index}"
 
+            routing_decision = "COMPLEX" if tier in {"Advisor", "Strategist"} else "ROUTINE"
             transaction_batch.append(TokenTransaction(
                 governed_request_id=request_id,
                 agent_id=agent.id,
@@ -188,15 +190,55 @@ def simulate_gap_fill(
                 model_source="gap_fill", is_simulation=True,
                 input_tokens=input_tokens, output_tokens=output_tokens,
                 usage_source="estimated", cost_usd=cost, timestamp=timestamp,
-                routing_reason="COMPLEX" if tier in {"Advisor", "Strategist"} else "ROUTINE",
+                routing_reason=routing_decision,
                 routing_policy_version="gap-fill-v1",
                 execution_status="succeeded",
                 was_pruned=True, tokens_saved=tokens_saved,
+            ))
+            # One AuditEvent per TokenTransaction, matched by
+            # governed_request_id -- a real live call always produces both
+            # (see api/routes_router.py's control-mode path), but this
+            # script previously only wrote the transaction half. Without
+            # this, Governance Event Stream / Decision Timeline (which read
+            # audit_events, not token_transactions) showed nothing for any
+            # day this script filled, even though AI Activity showed real
+            # volume for that same day -- confirmed live: only 9 audit
+            # events existed in the entire workspace, all real traffic,
+            # zero for any of the 14,000+ simulated requests.
+            audit_batch.append(AuditEvent(
+                governed_request_id=request_id,
+                event_type="ROUTING",
+                agent_id=agent.id,
+                work_item_id=work_item.id,
+                work_user_id=user.id if user else None,
+                actor_external_id=user.external_id if user else None,
+                actor_name=user.name if user else None,
+                actor_email=user.email if user else None,
+                actor_source_platform=user.source_platform if user else None,
+                workspace_id=workspace_id,
+                department=department_key,
+                model_tier=tier,
+                selected_model_name=model_name,
+                selected_model_tier=tier,
+                routing_policy_version="gap-fill-v1",
+                routing_reason_code=routing_decision,
+                execution_status="succeeded",
+                rationale=(
+                    f"{tier} selected for a {routing_decision.lower()} request."
+                    if routing_decision == "ROUTINE" else
+                    f"{tier} selected after complexity analysis routed this request to the premium tier."
+                ),
+                decision_outcome="ROUTED",
+                cost_usd=cost,
+                risk_level="low",
+                is_simulation=True,
+                timestamp=timestamp,
             ))
             inserted += 1
 
     if not dry_run:
         db.bulk_save_objects(transaction_batch)
+        db.bulk_save_objects(audit_batch)
         db.commit()
 
     return {
@@ -208,6 +250,7 @@ def simulate_gap_fill(
         "workspace_id": workspace_id,
         "gap_days": gap_days,
         "transactions": inserted,
+        "audit_events": len(audit_batch),
         "last_timestamp_before": last_timestamp.isoformat(),
     }
 
