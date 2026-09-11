@@ -10,11 +10,11 @@ import type { DashboardChange } from "@/lib/api"
 // event, not a before/after comparison), so it gets a fixed icon instead
 // of an arrow.
 const METRIC_STYLE: Record<string, { bg: string; icon: ComponentType<{ className?: string }> }> = {
-  spend: { bg: "bg-red-500/15 text-red-400", icon: DollarSign },
-  calls: { bg: "bg-blue-500/15 text-blue-400", icon: Phone },
-  model_mix: { bg: "bg-indigo-500/15 text-indigo-400", icon: Cpu },
-  model_shift: { bg: "bg-violet-500/15 text-violet-400", icon: Cpu },
-  new_agents: { bg: "bg-emerald-500/15 text-emerald-400", icon: Sparkles },
+  spend: { bg: "bg-red-500/15 text-red-600", icon: DollarSign },
+  calls: { bg: "bg-blue-500/15 text-blue-600", icon: Phone },
+  model_mix: { bg: "bg-indigo-500/15 text-indigo-600", icon: Cpu },
+  model_shift: { bg: "bg-violet-500/15 text-violet-600", icon: Cpu },
+  new_agents: { bg: "bg-emerald-500/15 text-emerald-600", icon: Sparkles },
 }
 
 function ChangeIcon({ change }: { change: DashboardChange }) {
@@ -32,7 +32,7 @@ function DirectionBadge({ pctChange }: { pctChange: number | null }) {
   const isUp = pctChange >= 0
   const Icon = isUp ? ArrowUp : ArrowDown
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isUp ? "text-emerald-600" : "text-red-600"}`}>
       <Icon className="h-3 w-3" />
       {Math.abs(pctChange)}%
     </span>

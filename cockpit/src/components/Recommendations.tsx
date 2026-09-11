@@ -20,9 +20,9 @@ const ICON: Record<string, typeof OctagonAlert> = {
 }
 
 const PRIORITY_STYLE: Record<string, string> = {
-  critical: "bg-red-500/15 text-red-400",
-  high: "bg-amber-500/15 text-amber-400",
-  medium: "bg-blue-500/15 text-blue-400",
+  critical: "bg-red-500/15 text-red-600",
+  high: "bg-amber-500/15 text-amber-600",
+  medium: "bg-blue-500/15 text-blue-600",
   low: "bg-muted text-muted-foreground",
 }
 
@@ -37,7 +37,7 @@ function PriorityBadge({ priority }: { priority: string }) {
 function RecIcon({ type }: { type: string }) {
   const Icon = ICON[type] ?? Lightbulb
   const isRisk = type === "budget_risk" || type === "high_spend_weak_outcome" || type === "high_spend_stalled_work"
-  const bg = isRisk ? "bg-red-500/15 text-red-400" : type === "low_cost_strong_outcome" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
+  const bg = isRisk ? "bg-red-500/15 text-red-600" : type === "low_cost_strong_outcome" ? "bg-emerald-500/15 text-emerald-600" : "bg-amber-500/15 text-amber-600"
   return (
     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${bg}`}>
       <Icon className="h-4 w-4" />
@@ -70,7 +70,7 @@ export function Recommendations({ recommendations }: { recommendations: Recommen
                   </div>
                   <p className="mt-0.5 text-muted-foreground">{rec.current_state}</p>
                   {rec.estimated_impact !== null && rec.impact_type === "savings_usd" && (
-                    <p className="mt-0.5 font-medium text-emerald-400">
+                    <p className="mt-0.5 font-medium text-emerald-600">
                       Potential savings: {usd(rec.estimated_impact)}/mo
                     </p>
                   )}

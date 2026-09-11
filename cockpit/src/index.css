@@ -13,18 +13,18 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: #2e7df7;
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: #f4f6fa;
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
+  --muted: #f4f6fa;
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: #f4f6fa;
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: #2e7df7;
   /* Validated categorical palette (dataviz skill reference instance) --
      fixed hue order, never cycled/reassigned by rank. Light-mode steps;
      see .dark below for the dark-surface steps of the same 8 hues. */
@@ -40,14 +40,14 @@
   --status-warning: #fab219;
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #0b1220;
+  --sidebar-foreground: #e7ecf5;
+  --sidebar-primary: #2e7df7;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #172a4d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(231, 236, 245, 0.12);
+  --sidebar-ring: #2e7df7;
 }
 
 .dark {

@@ -108,7 +108,7 @@ export function BusinessImpact({ data }: { data: BusinessImpactData }) {
                   is always the improvement, so a negative delta is green
                   regardless of which row it's on. */}
               {r.trendPct != null && (
-                <span className={`text-xs tabular-nums ${r.trendPct < 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                <span className={`text-xs tabular-nums ${r.trendPct < 0 ? "text-emerald-600" : "text-amber-600"}`}>
                   {r.trendPct < 0 ? "↓" : "↑"} {Math.abs(r.trendPct)}%
                 </span>
               )}

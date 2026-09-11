@@ -217,6 +217,35 @@ export function fetchRecommendations(workspaceId: string) {
   )
 }
 
+// GET /api/dashboard/work-outcomes -- top projects (WorkItem) and top
+// customers (WorkAccount, real account names -- there is no
+// customer-segment/tier field in the schema) ranked by AI spend, plus the
+// same real business-outcome totals get_business_impact() already
+// computes. See routes_dashboard.py's get_work_outcomes() docstring.
+export interface WorkOutcomeRow {
+  name: string
+  spend_usd: number
+}
+
+export interface BusinessOutcomeRow {
+  name: string
+  value_usd: number | null
+  count?: number
+  count_total?: number
+}
+
+export interface WorkOutcomes {
+  workspace_id: string | null
+  by_project: WorkOutcomeRow[]
+  by_customer: WorkOutcomeRow[]
+  business_outcomes: BusinessOutcomeRow[]
+}
+
+export function fetchWorkOutcomes(workspaceId: string) {
+  const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""
+  return apiGet<WorkOutcomes>(`/api/dashboard/work-outcomes${qs}`)
+}
+
 // Strips the "WORKSPACE_ID:" prefix legacy department rows carry -- same
 // convention core/agentlake.py's display_department() applies server-side
 // for every other page; duplicated here rather than adding a new endpoint

@@ -84,8 +84,8 @@ function NavItem({ item }: { item: NavItemData }) {
   const Icon = ICONS[item.icon] ?? Home
   const className = `flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
     isCurrentPage
-      ? "bg-primary/10 font-medium text-foreground"
-      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      ? "bg-sidebar-primary/15 font-medium text-sidebar-foreground"
+      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
   }`
   if (isCurrentPage) {
     return (
@@ -111,7 +111,7 @@ export function AppSidebar() {
   const settingsItem = items.find((item) => item.label === "Settings")
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
+    <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex md:flex-col">
       <div className="flex items-center px-5 py-5">
         {/* Same brand asset used across every legacy page header and the
             favicon (frontend/assets/costpilot-logo.png) -- one image, not
@@ -128,10 +128,10 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-border px-3 py-4">
+      <div className="border-t border-sidebar-border px-3 py-4">
         <a
           href={settingsItem?.href ?? "/admin.html"}
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
           <Settings className="h-4 w-4" />
           Settings

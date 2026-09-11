@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -40,11 +40,32 @@ const SUGGESTIONS = [
   "What should I review first?",
 ]
 
-export function AskCostPilot({ workspaceId }: { workspaceId: string }) {
+// pendingQuestion lets other sections of the page (e.g. the
+// Recommendation hero card) hand this component a question to ask on
+// the user's behalf -- incrementing `nonce` each time re-triggers the
+// effect below even if the same question text is asked twice in a row.
+// This never calls a new/different backend endpoint: it's the exact
+// same askCostPilot() call the suggestion chips already make.
+export function AskCostPilot({
+  workspaceId,
+  pendingQuestion,
+}: {
+  workspaceId: string
+  pendingQuestion?: { text: string; nonce: number }
+}) {
   const [question, setQuestion] = useState("")
   const [answer, setAnswer] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const cardRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!pendingQuestion) return
+    setQuestion(pendingQuestion.text)
+    ask(pendingQuestion.text)
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingQuestion?.nonce])
 
   async function ask(q: string) {
     if (!q.trim()) return
@@ -61,7 +82,7 @@ export function AskCostPilot({ workspaceId }: { workspaceId: string }) {
   }
 
   return (
-    <Card>
+    <Card ref={cardRef}>
       <CardContent className="pt-6">
         <div className="mb-3 flex items-center gap-2 text-sm font-medium">
           <Sparkles className="h-4 w-4" />

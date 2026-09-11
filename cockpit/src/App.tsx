@@ -9,6 +9,9 @@ import { Recommendations } from "@/components/Recommendations"
 import { BusinessImpact } from "@/components/BusinessImpact"
 import { WhatChanged } from "@/components/WhatChanged"
 import { AskCostPilot } from "@/components/AskCostPilot"
+import { PriorityInsights } from "@/components/PriorityInsights"
+import { RecommendationHero, topRecommendation } from "@/components/RecommendationHero"
+import { WorkAndOutcomes } from "@/components/WorkAndOutcomes"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   fetchBudget,
@@ -19,6 +22,7 @@ import {
   fetchRecommendations,
   fetchSavings,
   fetchTopModels,
+  fetchWorkOutcomes,
   getWorkspaceId,
   type BudgetDepartment,
   type BusinessImpact as BusinessImpactData,
@@ -28,6 +32,7 @@ import {
   type Recommendation,
   type SavingsSummary,
   type TopModelsResponse,
+  type WorkOutcomes,
 } from "@/lib/api"
 
 interface CockpitData {
@@ -39,11 +44,13 @@ interface CockpitData {
   topModels: TopModelsResponse
   businessImpact: BusinessImpactData
   recommendations: Recommendation[]
+  workOutcomes: WorkOutcomes
 }
 
 function App() {
   const [data, setData] = useState<CockpitData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pendingQuestion, setPendingQuestion] = useState<{ text: string; nonce: number } | undefined>()
   const workspaceId = getWorkspaceId()
 
   useEffect(() => {
@@ -56,11 +63,13 @@ function App() {
       fetchTopModels(workspaceId, 30, 5),
       fetchBusinessImpact(workspaceId),
       fetchRecommendations(workspaceId),
+      fetchWorkOutcomes(workspaceId),
     ])
-      .then(([dashboard, savings, budget, health, changes, topModels, businessImpact, recommendationsResponse]) =>
+      .then(([dashboard, savings, budget, health, changes, topModels, businessImpact, recommendationsResponse, workOutcomes]) =>
         setData({
           dashboard, savings, budget, health, changes, topModels, businessImpact,
           recommendations: recommendationsResponse.recommendations,
+          workOutcomes,
         })
       )
       .catch((err: Error) => setError(err.message))
@@ -81,7 +90,7 @@ function App() {
   }, [data])
 
   return (
-    <div className="dark flex min-h-screen bg-background text-foreground">
+    <div className="flex min-h-screen bg-background text-foreground">
       <AppSidebar />
       <div className="flex-1 overflow-x-hidden">
         <header className="border-b border-border px-8 py-6">
@@ -128,9 +137,27 @@ function App() {
               {/* Ask CostPilot sits right after the glance-value Brief/KPIs
                   (not above them -- those are shaped by direct executive
                   feedback, see KpiRow's own ordering comment) and above the
-                  charts/recommendations below, per user decision. */}
-              <div id="ask-costpilot">
-                <AskCostPilot workspaceId={workspaceId} />
+                  charts/recommendations below, per user decision. Priority
+                  Insights sits alongside it (a curated top-3 view of the
+                  same real /api/dashboard/recommendations data the full
+                  Recommendations list below also renders in full) --
+                  see PriorityInsights.tsx for the bucketing. */}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="space-y-4 lg:col-span-2">
+                  <div id="ask-costpilot">
+                    <AskCostPilot workspaceId={workspaceId} pendingQuestion={pendingQuestion} />
+                  </div>
+                  {(() => {
+                    const rec = topRecommendation(data.recommendations)
+                    return rec ? (
+                      <RecommendationHero
+                        recommendation={rec}
+                        onAskAboutIt={(text) => setPendingQuestion({ text, nonce: Date.now() })}
+                      />
+                    ) : null
+                  })()}
+                </div>
+                <PriorityInsights recommendations={data.recommendations} />
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
@@ -138,6 +165,12 @@ function App() {
                 <SpendByDepartment budget={data.budget} workspaceId={workspaceId} />
                 <TopModels models={data.topModels.models} />
               </div>
+
+              <WorkAndOutcomes
+                byProject={data.workOutcomes.by_project}
+                byCustomer={data.workOutcomes.by_customer}
+                businessOutcomes={data.workOutcomes.business_outcomes}
+              />
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <WhatChanged periodDays={data.changes.period_days} changes={data.changes.changes} />

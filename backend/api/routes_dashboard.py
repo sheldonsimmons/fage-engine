@@ -1225,3 +1225,74 @@ def get_recommendations(
 
     recommendations = run_recommendations(db, workspace_id)
     return {"workspace_id": workspace_id, "recommendations": recommendations}
+
+
+@router.get("/work-outcomes")
+def get_work_outcomes(
+    workspace_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    _check_reporting_access(db, authorization, workspace_id)
+    """
+    "Work & Outcomes" for the cockpit dashboard: top WorkItems (projects)
+    and top WorkAccounts (real customer/account names -- there is no
+    customer-segment/tier field in the schema, so this is never bucketed
+    into invented tiers like "Enterprise/SMB") ranked by AI spend, plus
+    the same real business-outcome totals already computed for
+    get_business_impact() above (won/lost/open opportunities, pipeline
+    value, closed-won value, support cases) -- reused here rather than
+    recomputed, so the two endpoints can never disagree.
+
+    by_project / by_customer both go through the existing, shared
+    run_metrics_query() registry (dimensions "work_item" and "account" are
+    already registered transaction-sourced dimensions -- see
+    core/metrics_query.py's _dimension_expr()), not a bespoke query, so
+    this reuses the exact same spend numbers every other "ai_spend by X"
+    view in the app already agrees on.
+    """
+    from core.metrics_query import run_metrics_query
+
+    def _top(dimension: str, unassigned_label: str, limit: int = 8) -> list[dict]:
+        result = run_metrics_query(db, workspace_id, metrics=["ai_spend"], dimensions=[dimension], limit=200)
+        rows = [
+            {
+                "name": (row["dimensions"].get(dimension) or unassigned_label),
+                "spend_usd": round(float(row.get("ai_spend") or 0.0), 2),
+            }
+            for row in result.rows
+        ]
+        rows = [r for r in rows if r["spend_usd"] > 0]
+        rows.sort(key=lambda r: r["spend_usd"], reverse=True)
+        return rows[:limit]
+
+    by_project = _top("work_item", "Unassigned work item")
+    by_customer = _top("account", "Internal")
+
+    outcome_result = run_metrics_query(
+        db, workspace_id,
+        metrics=["won_count", "won_value", "pipeline_value", "support_cases_total", "support_cases_resolved"],
+    )
+    o = outcome_result.rows[0] if outcome_result.rows else {
+        "won_count": 0, "won_value": 0.0, "pipeline_value": 0.0,
+        "support_cases_total": 0, "support_cases_resolved": 0,
+    }
+    business_outcomes = [
+        {"name": "Closed-Won Value", "value_usd": round(float(o["won_value"] or 0.0), 2)},
+        {"name": "Open Pipeline Value", "value_usd": round(float(o["pipeline_value"] or 0.0), 2)},
+    ]
+    if int(o["support_cases_total"] or 0) > 0:
+        business_outcomes.append({
+            "name": "Support Cases Resolved",
+            "value_usd": None,
+            "count": int(o["support_cases_resolved"] or 0),
+            "count_total": int(o["support_cases_total"] or 0),
+        })
+    business_outcomes = [row for row in business_outcomes if (row.get("value_usd") or row.get("count") or 0) > 0]
+
+    return {
+        "workspace_id": workspace_id,
+        "by_project": by_project,
+        "by_customer": by_customer,
+        "business_outcomes": business_outcomes,
+    }
