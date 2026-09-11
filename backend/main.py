@@ -558,6 +558,20 @@ def serve_reports_html():
 def serve_live_reports_html():
     return _FileResponse(os.path.join(frontend_path, "live-reports.html"), media_type="text/html")
 
+@app.get("/ask-voice.html")
+def serve_ask_voice_html():
+    # Explicit no-store, not just a fresh-from-disk FileResponse -- this
+    # page is opened directly on a phone (bookmarked/home-screen, not via
+    # normal in-app navigation) and reports real financial numbers, so a
+    # stale cached copy silently running old logic is a correctness bug,
+    # not just a staleness nuisance. Confirmed live 2026-09-11: a mobile
+    # browser served a pre-fix cached copy of this exact page after the
+    # underlying bug was already fixed and deployed.
+    return _FileResponse(
+        os.path.join(frontend_path, "ask-voice.html"), media_type="text/html",
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
+
 # The Executive Cockpit (React/Vite/shadcn) is a separate frontend project
 # that only talks to the same REST APIs everything else here uses -- built
 # with `npm run build` in cockpit/, producing cockpit/dist/. Mounted before
