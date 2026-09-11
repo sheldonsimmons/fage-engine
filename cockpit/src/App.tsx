@@ -160,7 +160,10 @@ function App() {
                     ) : null
                   })()}
                 </div>
-                <PriorityInsights recommendations={data.recommendations} />
+                <PriorityInsights
+                  recommendations={data.recommendations}
+                  onAskAboutIt={(text) => setPendingQuestion({ text, nonce: Date.now() })}
+                />
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">

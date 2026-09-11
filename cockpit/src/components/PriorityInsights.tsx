@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { OctagonAlert, Gauge, ShieldAlert } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { OctagonAlert, Gauge, ShieldAlert, Sparkles } from "lucide-react"
 import type { Recommendation } from "@/lib/api"
 
 const usd = (n: number) =>
@@ -55,7 +56,17 @@ function topOf(recommendations: Recommendation[], types: string[]): Recommendati
 // shown as a fabricated "all clear" card, matching this codebase's
 // existing "omit rather than show a misleading state" convention (e.g.
 // KpiRow.tsx's Potential Savings card).
-export function PriorityInsights({ recommendations }: { recommendations: Recommendation[] }) {
+export function PriorityInsights({
+  recommendations,
+  onAskAboutIt,
+}: {
+  recommendations: Recommendation[]
+  // Hands the full context off into Ask CostPilot -- this panel never
+  // computes or displays its own separate answer/action, per the
+  // product spec's explicit rule that Priority Insights must not fake
+  // an independent result.
+  onAskAboutIt: (question: string) => void
+}) {
   const cards = BUCKETS.map((bucket) => ({ bucket, rec: topOf(recommendations, bucket.types) })).filter(
     (c): c is { bucket: (typeof BUCKETS)[number]; rec: Recommendation } => c.rec !== null
   )
@@ -100,6 +111,19 @@ export function PriorityInsights({ recommendations }: { recommendations: Recomme
                         {usd(rec.estimated_impact)}/mo
                       </p>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => onAskAboutIt(
+                        rec.affected_department
+                          ? `Tell me more about ${bucket.label.toLowerCase()} in ${rec.affected_department}: ${rec.title}`
+                          : `Tell me more about: ${rec.title}`,
+                      )}
+                    >
+                      <Sparkles className="mr-1.5 h-3 w-3" />
+                      Ask CostPilot
+                    </Button>
                   </div>
                 </div>
               </div>
