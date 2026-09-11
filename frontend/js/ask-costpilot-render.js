@@ -20,6 +20,32 @@ function askRenderEscapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+// A real Ask CostPilot answer needs two sequential Claude turns (pick a
+// tool, then write the answer), each taking several real seconds of model
+// reasoning/generation -- confirmed live via direct timing instrumentation,
+// not something caching or backend work can shorten. Rather than one
+// static "thinking" line for the whole wait, cycle it through a few honest,
+// timing-matched stages so silence doesn't read as "stuck." Shared here so
+// both Ask CostPilot surfaces show the identical sequence.
+const ASK_THINKING_STAGES = [
+  { at: 0, text: "Thinking…" },
+  { at: 2500, text: "Checking your data…" },
+  { at: 5500, text: "Crunching the numbers…" },
+  { at: 9000, text: "Almost there…" },
+  { at: 15000, text: "Still working — this one's taking a bit longer…" },
+];
+
+function startAskThinkingCycle(textEl) {
+  if (!textEl) return () => {};
+  textEl.textContent = ASK_THINKING_STAGES[0].text;
+  const timers = ASK_THINKING_STAGES.slice(1).map(stage =>
+    setTimeout(() => { textEl.textContent = stage.text; }, stage.at)
+  );
+  return function stop() {
+    timers.forEach(clearTimeout);
+  };
+}
+
 function renderAskMarkdown(text) {
   const escaped = askRenderEscapeHtml(text);
   const inline = (line) => line

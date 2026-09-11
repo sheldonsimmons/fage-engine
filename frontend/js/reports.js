@@ -2696,8 +2696,9 @@ async function submitAskCostPilot(event) {
   button.textContent = "Calculating…";
   const pending = appendAskMessage(
     "assistant",
-    `<div class="ask-thinking"><span></span><span></span><span></span> Checking governed activity</div>`
+    `<div class="ask-thinking"><span></span><span></span><span></span> <span class="ask-thinking-text">Checking governed activity</span></div>`
   );
+  const stopThinking = startAskThinkingCycle(pending.querySelector(".ask-thinking-text"));
 
   try {
     const payload = askCostPilotPayload(question);
@@ -2722,6 +2723,7 @@ async function submitAskCostPilot(event) {
         throw error;
       }
     }
+    stopThinking();
     if (pending) pending.querySelector(".ask-message-body").innerHTML = renderAskCostPilotAnswer(data);
     askCostPilotHistory.push(
       { role: "user", content: question },
@@ -2734,6 +2736,7 @@ async function submitAskCostPilot(event) {
     writeAskCostPilotStorage("history", askCostPilotHistory);
     writeAskCostPilotStorage("context", askCostPilotContext);
   } catch (error) {
+    stopThinking();
     if (pending) {
       pending.querySelector(".ask-message-body").innerHTML =
         `<div class="ask-error-state"><strong>CostPilot did not generate an answer.</strong><p>${escapeHtml(askCostPilotErrorMessage(error))}</p><span>Your question and existing data were not changed.</span></div>`;

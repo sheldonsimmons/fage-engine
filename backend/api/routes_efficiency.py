@@ -4006,7 +4006,6 @@ appeared in their question."""
                 _ask_record_agent_fallback(request.workspace_id, "budget_preflight", f"turn={_turn}")
                 return None
             _ask_debug_log(request, "calling_model", {"turn": _turn, "model": model})
-            _t0 = time.monotonic()
             response = client.messages.create(
                 model=model,
                 max_tokens=1024,
@@ -4015,7 +4014,6 @@ appeared in their question."""
                 tools=all_tools,
                 tool_choice={"type": "any"},
             )
-            logger.warning("ASK_PERF turn=%s claude_call_ms=%d", _turn, int((time.monotonic() - _t0) * 1000))
             tool_uses = [block for block in response.content if getattr(block, "type", None) == "tool_use"]
             if not tool_uses:
                 _ask_debug_log(request, "abort_no_tool_use_block", {
@@ -4050,9 +4048,7 @@ appeared in their question."""
                     _ask_record_agent_fallback(request.workspace_id, "max_tool_calls", f"turn={_turn}")
                     return None
                 call_args = dict(call.input or {})
-                _t1 = time.monotonic()
                 result = _ask_run_agent_tool(call.name, call_args, db, request, reporting_filters, department_scope=department_scope, user_id=user_id)
-                logger.warning("ASK_PERF turn=%s tool=%s tool_call_ms=%d", _turn, call.name, int((time.monotonic() - _t1) * 1000))
                 tool_call_log.append((call.name, call_args, result))
                 _ask_debug_log(request, "tool_call", {
                     "turn": _turn, "tool": call.name, "args": call_args, "result": result,
@@ -4232,9 +4228,7 @@ def ask_costpilot(
     8 agent-loop tools honor it today (get_usage_report, get_change_drivers,
     query_metrics); the rest, and the deterministic fallback path, are
     not scoped yet -- a documented gap, not an oversight."""
-    _membership_t0 = time.monotonic()
     ask_ctx = check_membership(db, authorization, request.workspace_id) if request.workspace_id else None
-    logger.warning("ASK_PERF check_membership_ms=%d", int((time.monotonic() - _membership_t0) * 1000))
     ask_user_id = ask_ctx.user.id if ask_ctx else None
     ask_department_scope = ask_ctx.department_scope if ask_ctx else None
     start = time.monotonic()
@@ -4247,15 +4241,10 @@ def ask_costpilot(
         raise
     finally:
         latency_ms = int((time.monotonic() - start) * 1000)
-        logger.warning("ASK_PERF answer_total_ms=%d", latency_ms)
-        _log_t0 = time.monotonic()
         _ask_log_interaction(request, result, latency_ms, error_type, db, user_id=ask_user_id)
-        logger.warning("ASK_PERF log_interaction_ms=%d", int((time.monotonic() - _log_t0) * 1000))
-    _post_t0 = time.monotonic()
     if isinstance(result, dict):
         result["budget_flag"] = _ask_budget_flag(db, request.workspace_id)
         result["workspace_name"] = _ask_workspace_name(db, request.workspace_id)
-    logger.warning("ASK_PERF post_processing_ms=%d", int((time.monotonic() - _post_t0) * 1000))
     return result
 
 

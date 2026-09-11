@@ -1175,7 +1175,8 @@
     input.value = "";
     send.disabled = true;
     send.textContent = "Checking…";
-    const pending = addAskMessage("assistant", `<div class="cp-ask-thinking">Calculating from governed activity…</div>`);
+    const pending = addAskMessage("assistant", `<div class="cp-ask-thinking"><span class="cp-ask-thinking-text">Calculating from governed activity…</span></div>`);
+    const stopThinking = startAskThinkingCycle(pending.querySelector(".cp-ask-thinking-text"));
     const history = readAskStorage("history", []);
     const context = readAskStorage("context", null);
     try {
@@ -1189,6 +1190,7 @@
       }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const data = await response.json();
+      stopThinking();
       pending.innerHTML = renderAskAnswerCard(data);
       bindGlobalAskDrills(pending);
       appendAskSpeakControl(pending, data.answer || "");
@@ -1211,6 +1213,7 @@
         speakAskAnswer(data.answer, pending.querySelector("[data-ask-speak]"), { continueConversation });
       }
     } catch (error) {
+      stopThinking();
       const statusMessage = /503/.test(error.message || "")
         ? "The analytics service is temporarily unavailable. No answer was generated."
         : error.message || "CostPilot could not safely calculate this answer.";
