@@ -798,6 +798,38 @@ function projectAttributionFilterValue(id) {
   return document.getElementById(id)?.value || "";
 }
 
+// Names each active attribution filter using its dropdown's own visible
+// option text (not the raw id/value) -- e.g. "Person: David Kim", not
+// "Person: HIST2Y:...:USER:42". Confirmed live 2026-09-11: a filtered
+// Usage & Attribution view looked pixel-identical to the unfiltered
+// company total, with nothing on the page indicating a filter was
+// active -- the KPI cards were correct for that filter, but nothing
+// said so. This must render (or hide) every time the KPI cards do, so
+// the two can never disagree about whether a filter is active.
+const CONTEXT_FILTER_LABELS = {
+  ctxOrgFilter: "Department/Team", ctxProjectFilter: "Project",
+  ctxPersonFilter: "Person", ctxAccountFilter: "Account",
+  ctxAgentFilter: "Agent", ctxSourceFilter: "Source",
+  ctxRecordTypeFilter: "Record Type", ctxPurposeFilter: "Business Purpose",
+};
+
+function updateContextFilterBanner() {
+  const banner = document.getElementById("rptContextFilterBanner");
+  const text = document.getElementById("rptContextFilterBannerText");
+  if (!banner || !text) return;
+  const active = Object.entries(CONTEXT_FILTER_LABELS)
+    .map(([id, label]) => {
+      const select = document.getElementById(id);
+      const optionText = select?.selectedOptions?.[0]?.textContent?.trim();
+      return select?.value ? `${label}: ${optionText || select.value}` : null;
+    })
+    .filter(Boolean);
+  banner.hidden = active.length === 0;
+  if (active.length) {
+    text.textContent = `Filtered to ${active.join(", ")} — showing this activity only, not the full company.`;
+  }
+}
+
 function resetProjectAttributionFilters() {
   reportDrillDateRange = null;
   [
@@ -1020,6 +1052,7 @@ async function loadBusinessContexts() {
     setKpi("ctx-spend", fmtUsd(Number(summary.spend_usd || 0)));
     setKpi("ctx-people", fmtNum(summary.people_count || 0));
     setKpi("ctx-agents", fmtNum(summary.agent_count || 0));
+    updateContextFilterBanner();
 
     const options = data.filter_options || {};
     projectAttributionSelect("ctxOrgFilter", "All Departments & Teams", options.organizational_units);
