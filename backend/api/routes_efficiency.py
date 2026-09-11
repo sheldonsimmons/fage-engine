@@ -5811,6 +5811,17 @@ def _ask_costpilot_answer(
     elif intent == "ranking" and entity in entity_config:
         breakdown_key, filter_name, entity_label = entity_config[entity]
         ranking_rows = report.get(breakdown_key) or []
+        # people_breakdown/project_breakdown carry a "__unknown__"/
+        # "__simulator__" placeholder bucket (routes_work_items.py's
+        # project_activity_reporting()) for activity with no real
+        # attributed person/work item -- e.g. "Simulator User" is that
+        # bucket's label, not an actual person. real_person_count/
+        # real_project_count (routes_work_items.py:2425) already treat
+        # these ids as non-real; a ranking answer must too, or "who had
+        # the highest spend" can crown a synthetic catch-all bucket
+        # instead of an actual named individual (confirmed live
+        # 2026-09-11: "Simulator User" answered as the top person).
+        ranking_rows = [row for row in ranking_rows if row.get("id") not in ("__unknown__", "__simulator__")]
         if entity == "context" and outcome_filter:
             # "Which won opportunities had the highest AI investment" --
             # narrow to rows whose synced outcome matches, before ranking.
