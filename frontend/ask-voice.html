@@ -75,7 +75,7 @@
     font-size: 15px; line-height: 1.5; display: none;
   }
   #transcript { background: rgba(255,255,255,0.06); color: #cbd5e1; font-style: italic; }
-  #answer { background: #ffffff; color: var(--ink); }
+  #answer { background: #ffffff; color: var(--ink); white-space: pre-line; }
   #answer.visible, #transcript.visible { display: block; }
 
   #stopSpeaking {
@@ -127,6 +127,16 @@
 
 <footer>Answers come only from CostPilot's governed data.</footer>
 
+<!-- One persistent element, "unlocked" synchronously inside the tap
+     handler below -- mobile browsers (iOS Safari especially) only allow
+     audio.play() when it's tied closely to a real user gesture. By the
+     time the real speech reply is ready, several real awaits (transcribe,
+     ask) have passed since the tap, so a brand-new Audio() created then
+     gets silently blocked. Reusing the SAME element that was already
+     played-from-a-real-tap earlier keeps it inside that gesture's
+     permission for the rest of the page's life. -->
+<audio id="voicePlayer" playsinline></audio>
+
 <script>
 (function () {
   const micButton = document.getElementById("micButton");
@@ -147,7 +157,19 @@
   let audioChunks = [];
   let recording = false;
   let busy = false;
-  let currentAudio = null;
+  const voicePlayer = document.getElementById("voicePlayer");
+  let audioUnlocked = false;
+
+  // Text-fallback display only -- speech playback already goes through
+  // the backend's own markdown-to-speech cleanup (routes_ask_voice.py);
+  // this just keeps the on-screen answer readable instead of showing
+  // literal "**bold**"/numbered-list markdown syntax.
+  function stripMarkdown(text) {
+    return (text || "")
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/^[ \t]*[-*]\s+/gm, "• ")
+      .replace(/\n{2,}/g, "\n\n");
+  }
 
   function setStatus(text) { statusText.textContent = text || ""; }
   function setError(text) { errorText.textContent = text || ""; }
@@ -159,8 +181,18 @@
   }
 
   function stopSpeaking() {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    voicePlayer.pause();
     stopSpeakingBtn.classList.remove("visible");
+  }
+
+  // Called synchronously from the tap that starts recording, before any
+  // await -- playing (and immediately pausing) a real, silent clip here
+  // is what tells iOS Safari this element is allowed to play audio later
+  // from JS, even after the async transcribe/ask chain that follows.
+  function unlockAudioPlayback() {
+    if (audioUnlocked) return;
+    voicePlayer.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+    voicePlayer.play().then(() => { voicePlayer.pause(); audioUnlocked = true; }).catch(() => {});
   }
 
   async function speak(text) {
@@ -173,14 +205,20 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) throw new Error("Speech unavailable");
+      if (!res.ok) throw new Error("Speech unavailable from the server.");
       const blob = await res.blob();
-      currentAudio = new Audio(URL.createObjectURL(blob));
-      currentAudio.onended = () => { stopSpeakingBtn.classList.remove("visible"); setStatus("Tap to ask another question"); };
+      voicePlayer.src = URL.createObjectURL(blob);
+      voicePlayer.onended = () => { stopSpeakingBtn.classList.remove("visible"); setStatus("Tap to ask another question"); };
       stopSpeakingBtn.classList.add("visible");
       setStatus("Speaking…");
-      await currentAudio.play();
+      await voicePlayer.play();
     } catch (err) {
+      stopSpeakingBtn.classList.remove("visible");
+      setError(
+        err && err.name === "NotAllowedError"
+          ? "Your browser blocked audio playback — tap the mic once more to allow sound."
+          : (err && err.message) || "Could not play the spoken reply — the answer is shown below instead."
+      );
       setStatus("Tap to ask another question");
     }
   }
@@ -196,7 +234,7 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Ask CostPilot could not answer that.");
-      answerEl.textContent = data.answer || "";
+      answerEl.textContent = stripMarkdown(data.answer);
       answerEl.classList.add("visible");
       await speak(data.answer);
     } catch (err) {
@@ -242,6 +280,7 @@
   }
 
   async function startRecording() {
+    unlockAudioPlayback();
     setError("");
     answerEl.classList.remove("visible");
     transcriptEl.classList.remove("visible");
