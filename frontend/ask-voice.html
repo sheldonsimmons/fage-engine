@@ -319,6 +319,11 @@
     if (recording) stopRecording();
     else startRecording();
   });
+
+  stopSpeakingBtn.addEventListener("click", () => {
+    stopSpeaking();
+    setStatus("Tap to ask another question");
+  });
 })();
 </script>
 </body>
