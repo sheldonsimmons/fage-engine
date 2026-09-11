@@ -3971,6 +3971,19 @@ appeared in their question."""
             "ASK_COSTPILOT_AGENT_MODEL", os.getenv("ANTHROPIC_FLAGSHIP_MODEL", "claude-sonnet-4-6")
         )
         all_tools = to_anthropic_tools(TOOL_SCHEMAS + [FINAL_ANSWER_TOOL])
+        # Prompt caching: this tool list + the instructions string below are
+        # identical on essentially every Ask CostPilot call, from every user,
+        # every turn -- confirmed live these were being resent uncached,
+        # contributing to a measured ~10-12s floor even for a single-tool-
+        # call question. cache_control on the last tool caches the entire
+        # tools array (Anthropic's caching order is tools -> system ->
+        # messages, cumulative up to each breakpoint); marking the system
+        # prompt too extends the cached prefix through both. Only the
+        # per-request messages (the actual question) stay uncached, which is
+        # exactly the small, unique-per-call part that should be.
+        if all_tools:
+            all_tools[-1] = {**all_tools[-1], "cache_control": {"type": "ephemeral"}}
+        cached_system = [{"type": "text", "text": instructions, "cache_control": {"type": "ephemeral"}}]
         conversation_text = _ask_conversation_text(request)
         if request.date_from and request.date_to:
             window_line = (
@@ -3996,7 +4009,7 @@ appeared in their question."""
             response = client.messages.create(
                 model=model,
                 max_tokens=1024,
-                system=instructions,
+                system=cached_system,
                 messages=messages,
                 tools=all_tools,
                 tool_choice={"type": "any"},
