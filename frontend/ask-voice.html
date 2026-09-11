@@ -146,11 +146,44 @@
   const answerEl = document.getElementById("answer");
   const stopSpeakingBtn = document.getElementById("stopSpeaking");
 
-  function getWorkspaceId() {
+  // Same hardcoded fallback pair global-nav.js's own workspace switcher
+  // uses when GET /api/workspaces hasn't resolved -- "Simulated" is the
+  // real, populated demo workspace the rest of the app defaults to.
+  // Only reached if resolveWorkspaceId()'s own /api/workspaces fetch also
+  // fails; never used to override a workspace_id that's actually set.
+  const FALLBACK_WORKSPACE_ID = "SIM-HISTORICAL-2Y";
+  let resolvedWorkspaceId = null;
+
+  function cachedWorkspaceId() {
     try {
       return localStorage.getItem("cp_workspace_id") ||
         new URLSearchParams(window.location.search).get("workspace_id") || "";
     } catch (e) { return ""; }
+  }
+
+  // A phone opening this page directly (not via the site's normal
+  // navigation) never had a chance to set cp_workspace_id -- without
+  // this, workspace_id was sent empty and the backend silently fell back
+  // to an unrelated, generic "default" workspace's data (confirmed live
+  // 2026-09-11: wildly wrong department budget caps, from that other
+  // workspace's seed data, not this one's real numbers). Resolved once,
+  // then cached the same way the rest of the app already does.
+  async function resolveWorkspaceId() {
+    const cached = cachedWorkspaceId();
+    if (cached) { resolvedWorkspaceId = cached; return; }
+    try {
+      const res = await fetch("/api/workspaces");
+      const data = await res.json().catch(() => ({}));
+      const first = (data.workspaces || [])[0];
+      resolvedWorkspaceId = (first && first.workspace_id) || FALLBACK_WORKSPACE_ID;
+    } catch (e) {
+      resolvedWorkspaceId = FALLBACK_WORKSPACE_ID;
+    }
+    try { localStorage.setItem("cp_workspace_id", resolvedWorkspaceId); } catch (e) {}
+  }
+
+  function getWorkspaceId() {
+    return resolvedWorkspaceId || cachedWorkspaceId();
   }
 
   let mediaRecorder = null;
@@ -225,6 +258,7 @@
 
   async function askQuestion(question) {
     setStatus("Thinking…");
+    if (!resolvedWorkspaceId) await resolveWorkspaceId();
     try {
       const body = { question, workspace_id: getWorkspaceId() || undefined, modality: "voice" };
       const res = await fetch("/api/reports/bot-efficiency/ask", {
@@ -324,6 +358,8 @@
     stopSpeaking();
     setStatus("Tap to ask another question");
   });
+
+  resolveWorkspaceId();
 })();
 </script>
 </body>
