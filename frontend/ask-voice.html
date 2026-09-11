@@ -301,6 +301,16 @@
       const body = {
         question, workspace_id: getWorkspaceId() || undefined, modality: "voice",
         conversation: conversationHistory.slice(-12),
+        // Without this, date-relative questions ("today," "this week")
+        // were computed in UTC (AskCostPilotRequest's default) instead of
+        // the user's real local day -- confirmed live 2026-09-11: at
+        // 1:20pm Central, "today's spend" came back as $2.81 (the UTC
+        // window, which includes ~5 hours of the previous evening in
+        // Central time) instead of the real $1.52 for the actual local
+        // calendar day. global-nav.js's normalizedAskPayload() already
+        // sends this same real browser timezone on every request; this
+        // page just never picked up that pattern.
+        timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       };
       if (lastConversationContext) body.context = lastConversationContext;
       const res = await fetch("/api/reports/bot-efficiency/ask", {
