@@ -3559,8 +3559,106 @@ function exportSavingsCsv() {
   downloadCsv(`fage_savings_${date}.csv`, headers, rows);
 }
 
+// Captures the four already-rendered Chart.js canvases as static images at
+// build time (not relying on printSection's own canvas->image swap, which
+// operates on the DOM section being printed -- this report is a separate,
+// purpose-built document, not a clone of #tab-savings).
+function savingsReportChartImg(canvasId, caption) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return "";
+  let dataUrl;
+  try { dataUrl = canvas.toDataURL("image/png"); } catch (_err) { return ""; }
+  return `
+    <figure class="report-chart-figure">
+      <img src="${dataUrl}" style="max-width:100%;height:auto" />
+      <figcaption>${escapeHtml(caption)}</figcaption>
+    </figure>`;
+}
+
+function renderSavingsReportHtml() {
+  const data = _rptSavingsData;
+  if (!data) return `<div class="report-doc"><p>No savings data loaded — open the Performance tab first.</p></div>`;
+  const generatedAt = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const kpiCard = (label, value, sub) => `
+    <div class="report-kpi">
+      <div class="report-kpi-label-row"><span class="report-kpi-label">${escapeHtml(label)}</span></div>
+      <div class="report-kpi-value">${value}</div>
+      ${sub ? `<div class="report-kpi-sub">${escapeHtml(sub)}</div>` : ""}
+    </div>`;
+
+  // Deterministic sentence built from the same fields the KPI cards already
+  // render -- same pattern biNarrativeSummary() uses for Business Impact,
+  // not free-form LLM math.
+  const summary = `Over the selected period, CostPilot processed ${fmtNum(data.total_calls)} calls at an actual `
+    + `cost of ${fmtUsd(data.total_cost_usd)}, against an estimated ${fmtUsd(data.cost_if_no_fage_usd)} at full `
+    + `flagship rate — a total savings of ${fmtUsd(data.total_saved_usd)} from context pruning and model routing combined.`;
+
+  return `
+    <div class="report-doc">
+      <header class="report-header">
+        <div class="report-header-brand">CostPilot</div>
+        <h1 class="report-title">Savings &amp; Performance Report</h1>
+        <div class="report-meta">
+          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+          <span>${askCostPilotDateLabel()}</span>
+          <span>Generated ${escapeHtml(generatedAt)}</span>
+        </div>
+      </header>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Executive Brief</h2>
+        <p class="bi-summary">${summary}</p>
+        <div class="report-kpi-row">
+          ${kpiCard("Total Saved", fmtUsd(data.total_saved_usd), "pruning + model downgrade")}
+          ${kpiCard("Without CostPilot", fmtUsd(data.cost_if_no_fage_usd), "est. cost at full flagship rate")}
+          ${kpiCard("Actual Cost", fmtUsd(data.total_cost_usd), "what you paid")}
+          ${kpiCard("Pruning Saved", fmtUsd(data.pruning_saved_usd), `${fmtNum(data.tokens_pruned)} tokens removed`)}
+          ${kpiCard("Model Downgrade Saved", fmtUsd(data.downgrade_saved_usd), `${data.micro_pct}% routed to micro`)}
+          ${kpiCard("Total Calls", fmtNum(data.total_calls), `${fmtNum(data.micro_calls)} micro / ${fmtNum(data.flagship_calls)} flagship`)}
+        </div>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">AI Investment &amp; Trends</h2>
+        <div class="report-chart-row">
+          ${savingsReportChartImg("chartDailySpend", "Daily spend across the selected period")}
+          ${savingsReportChartImg("chartModelSplit", "Model tier split — micro vs. flagship")}
+        </div>
+        <div class="report-chart-row">
+          ${savingsReportChartImg("chartTokensPruned", "Daily tokens pruned")}
+          ${savingsReportChartImg("chartSavingsBreakdown", "Savings breakdown")}
+        </div>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
+        <div class="bi-note">
+          CostPilot reports consumption and attribution only. Pruning and model-downgrade savings are calculated
+          against the same governed request ledger every other CostPilot report and Ask CostPilot answer reads
+          from — this report introduces no separate calculation.
+        </div>
+      </section>
+
+      <footer class="report-footer">CostPilot — Savings &amp; Performance Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+    </div>`;
+}
+
 function exportSavingsPdf() {
-  printSection("tab-savings", "CostPilot — Savings Report");
+  if (!_rptSavingsData) {
+    alert("No savings data loaded yet — open the Performance tab first.");
+    return;
+  }
+  let container = document.getElementById("savingsReportDoc");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "savingsReportDoc";
+    container.style.display = "none";
+    document.getElementById("tab-savings").after(container);
+  }
+  container.innerHTML = renderSavingsReportHtml();
+  printSection("savingsReportDoc", "CostPilot — Savings Report");
 }
 
 // ── Draggable report cards ────────────────────────────────────────────────────

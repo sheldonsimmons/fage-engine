@@ -1403,10 +1403,21 @@ body {
   #printOverlay .report-section-title {
     font-size: 14px; font-weight: 700; color: #111; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 10px;
   }
-  /* Keep a KPI card, table, or recommendation card from splitting across a
-     page boundary -- confirmed absent everywhere else in this codebase. */
-  #printOverlay .report-kpi, #printOverlay tr, #printOverlay .bi-rec-card {
+  /* Keep a KPI card, table, chart figure, or recommendation card from
+     splitting across a page boundary -- confirmed absent everywhere else
+     in this codebase. */
+  #printOverlay .report-kpi, #printOverlay tr, #printOverlay .bi-rec-card,
+  #printOverlay .report-chart-figure {
     break-inside: avoid;
+  }
+  #printOverlay .report-chart-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px;
+  }
+  #printOverlay .report-chart-figure {
+    margin: 0; border: 1px solid #ddd; border-radius: 6px; padding: 8px;
+  }
+  #printOverlay .report-chart-figure figcaption {
+    font-size: 10px; color: #666; margin-top: 4px; text-align: center;
   }
   #printOverlay .report-kpi-row {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px;
