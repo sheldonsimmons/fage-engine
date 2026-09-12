@@ -5,6 +5,28 @@ from typing import Optional
 
 COSTPILOT_KNOWLEDGE = (
     {
+        "id": "capabilities",
+        "title": "What Ask CostPilot can do",
+        "keywords": (
+            "what can you do", "what can ask costpilot do", "what can costpilot do",
+            "how can you help", "what can i ask", "your capabilities",
+        ),
+        "summary": (
+            "Ask CostPilot can analyze your governed AI spend, tokens, people, agents, "
+            "business contexts (projects/accounts), models, routing, pruning, budgets, and risk."
+        ),
+        "details": (
+            "You can ask about totals, rankings, and comparisons over any date range; drill into "
+            "a specific person, agent, department, account, project, platform, or model; ask why a "
+            "number changed; check budget status or propose a budget cap change; and ask about "
+            "CostPilot's own behavior (what data it uses, how it handles an ambiguous name, "
+            "measured vs. estimated data). It answers only from your workspace's own governed "
+            "activity -- never a guess or outside knowledge."
+        ),
+        "page": "/index.html",
+        "action": "Try a specific question about spend, usage, budgets, or a named person/agent/account.",
+    },
+    {
         "id": "routing",
         "title": "AI routing and model tiers",
         "keywords": ("route", "routing", "tier", "scout", "analyst", "advisor", "strategist", "model choice"),
@@ -96,6 +118,111 @@ COSTPILOT_KNOWLEDGE = (
         ),
         "page": "/index.html",
         "action": "Check the active filters and date range before comparing a dashboard number with another page.",
+    },
+    {
+        "id": "honesty_no_guessing",
+        "title": "No guessing, no invented numbers",
+        "keywords": (
+            "guess", "make up a number", "estimate numbers you don't have",
+            "if you don't know", "don't know the answer", "invent a number", "fabricate",
+        ),
+        "summary": "Ask CostPilot never guesses or invents a number it doesn't have real data for.",
+        "details": (
+            "Every figure comes from a governed request, a stored calculation, or an explicitly "
+            "labeled estimate or projection -- never a made-up value. When there isn't enough data "
+            "to answer (an unsupported time period, a missing dimension, zero matching activity), "
+            "CostPilot says so directly and explains what it can answer instead, rather than "
+            "substituting a plausible-looking guess."
+        ),
+        "page": "/index.html",
+        "action": "Ask a narrower or differently scoped question if an answer comes back as unsupported.",
+    },
+    {
+        "id": "disambiguation",
+        "title": "Handling an ambiguous name",
+        "keywords": (
+            "name that could mean", "two different things", "ambiguous name",
+            "which one did you mean", "same name",
+        ),
+        "summary": "When a name matches more than one real record, CostPilot asks which one you meant instead of guessing.",
+        "details": (
+            "If a person, account, or business record name resolves to multiple distinct matches, "
+            "the answer lists the specific candidates and asks you to pick one -- it never silently "
+            "picks the first match or blends them together into one number."
+        ),
+        "page": "/index.html",
+        "action": "Reply with the exact name of the option you meant, or its filter, to continue.",
+    },
+    {
+        "id": "measured_vs_estimated",
+        "title": "Measured vs. estimated data",
+        "keywords": (
+            "measured and estimated", "measured or estimated", "measured vs estimated",
+            "measured data", "estimated data",
+        ),
+        "summary": (
+            "Measured data comes directly from a recorded governed AI request; estimated data is "
+            "calculated or projected from that measured activity."
+        ),
+        "details": (
+            "A measured figure (like total AI spend for a period) is summed directly from logged "
+            "requests. An estimated or projected figure (like annualized savings) extrapolates from "
+            "measured activity using a stated method, and CostPilot labels it as an estimate or "
+            "projection rather than presenting it as an already-recorded fact."
+        ),
+        "page": "/reports.html",
+        "action": "Check a number's evidence/calculation detail to see whether it's measured or estimated.",
+    },
+    {
+        "id": "outcome_causation",
+        "title": "Outcome association, not causation",
+        "keywords": (
+            "caused by ai", "just associated with it", "caused or associated",
+            "did ai cause", "ai-caused",
+        ),
+        "summary": "CostPilot tracks AI activity associated with a business outcome, not proof that the AI caused it.",
+        "details": (
+            "Outcome numbers (won or lost deals, resolved cases, business value) show that AI "
+            "activity occurred alongside that outcome's record -- CostPilot doesn't claim, and "
+            "can't prove, that the AI activity caused the result. Answers involving outcomes say "
+            "'associated with' rather than 'caused by' for exactly this reason."
+        ),
+        "page": "/reports.html",
+        "action": "Open the account or work item's outcome evidence to see the underlying record.",
+    },
+    {
+        "id": "data_sources",
+        "title": "What data Ask CostPilot uses",
+        "keywords": (
+            "what data do you use", "data do you use to answer", "where does your data come from",
+            "what data sources",
+        ),
+        "summary": "Ask CostPilot answers only from your workspace's own governed AI activity, not external knowledge or web data.",
+        "details": (
+            "Every answer is computed from logged AI requests, their attribution (people, agents, "
+            "departments, accounts, business records), and related governance/audit events captured "
+            "through your connected platforms -- never from the model's general knowledge or an "
+            "internet search."
+        ),
+        "page": "/connections.html",
+        "action": "Check Connections to see which platforms are feeding data into your workspace.",
+    },
+    {
+        "id": "budget_change_capability",
+        "title": "Requesting a budget change",
+        "keywords": (
+            "change a budget", "ask you to change", "propose a budget change",
+            "make a budget change", "budget cap change", "can you change my budget",
+        ),
+        "summary": "Yes -- you can ask CostPilot to propose a department's budget cap change, but it never changes anything on its own.",
+        "details": (
+            "Asking to change a cap (e.g. 'increase Engineering's cap to $10,000') creates a "
+            "proposal that a human must explicitly confirm before it takes effect. You can also ask "
+            "a 'what if' question to simulate a cap change and see the projected impact without "
+            "creating anything that needs approval."
+        ),
+        "page": "/admin.html",
+        "action": "Confirm or reject a pending budget proposal from Admin before it takes effect.",
     },
 )
 

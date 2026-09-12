@@ -497,23 +497,65 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # -system data. See core/model_provider.py for how provider is
         # actually resolved from the recorded model name.
         entity = "provider"
-    elif any(term in text for term in ("platform", "source system", "source app")):
+    elif any(term in text for term in (
+        "platform", "source system", "source app",
+        # "Which integration has the most AI activity flowing through
+        # it?" named no literal "platform"/"source system" word, so it
+        # fell through to entity="overview" -- confirmed live: the
+        # answer became a generic company total instead of a per-
+        # platform ranking, since ranking requires entity != "overview"
+        # (see intent classification below). "integration"/"connection"
+        # are the same concept (Salesforce/ServiceNow/HubSpot) under a
+        # different, equally common name.
+        "integration", "integrations", "connection", "connections",
+    )):
         entity = "platform"
     elif any(term in text for term in ("model", "tier", "opus", "sonnet", "haiku", "gpt", "claude")):
         entity = "model"
     elif "where did" in text and any(term in text for term in ("spend", "cost", "token", "usage")):
         entity = "context"
 
+    # "What's the cost per work item this quarter?" names no "how much"/
+    # "how many" trigger phrase and no ranking term, so it fell through
+    # every branch below to a generic overview -- confirmed live: the
+    # answer was the total spend across ALL work items, mislabeled as if
+    # it were already a per-item figure, never actually divided by the
+    # number of items. Forces intent="total" below; the answer branch
+    # divides by the real distinct-project count instead of guessing.
+    per_item_cost_question = bool(re.search(
+        r"\b(?:cost|spend)\s+per\s+(?:work\s*item|project|matter|case)\b", text,
+    ))
+
     asks_for_help = any(term in text for term in (
         "what can you do", "what all can you do", "how can you help",
         "what can i ask", "sample question", "example question",
         "help me use", "your capabilities",
+        # "What can Ask CostPilot do?" -- one of the app's own suggested
+        # questions -- named "ask costpilot" instead of "you", which none
+        # of the phrases above match. Confirmed live: it fell through to
+        # a generic company overview instead of the capability list this
+        # exact question is supposed to trigger.
+        "what can ask costpilot do", "what can costpilot do",
     ))
     asks_about_product = any(term in text for term in (
         "how does costpilot", "how costpilot", "what is costpilot", "explain costpilot",
         "what does this mean", "explain this", "this number", "this chart",
         "how is this calculated", "how was this calculated", "why did costpilot",
         "how does routing", "how does pruning", "how do savings", "how is savings",
+        # The rest of "Getting to Know CostPilot" -- meta-questions about
+        # Ask CostPilot's own answering behavior/policies, not a data
+        # lookup. All previously fell through to a generic company
+        # overview (or, for the budget one, a real but wrong-question
+        # budget-status report) because nothing routed them to
+        # _ask_product_response()'s curated knowledge lookup at all.
+        "what data do you use", "data do you use to answer", "what data sources",
+        "guess or estimate", "make up a number", "invent a number",
+        "if you don't know", "don't know the answer",
+        "name that could mean", "two different things", "which one did you mean",
+        "measured and estimated", "measured or estimated", "measured vs estimated",
+        "measured versus estimated",
+        "caused by ai", "just associated with it", "caused or associated",
+        "ask you to change a budget", "change a budget cap", "propose a budget change",
     ))
     ranking_terms = (
         "highest", "most", "top", "largest", "lowest", "least", "fewest",
@@ -536,6 +578,30 @@ def _ask_intent(question: str, default_days: int) -> dict:
         entity = "overview"
     elif asks_about_product:
         intent = "product"
+        entity = "overview"
+    elif any(term in text for term in (
+        "connection healthy", "connections healthy", "platform connections",
+        "connection issue", "connection issues", "connections having issues",
+        "connection health", "integration health", "healthy integration",
+        "healthy connection", "last sync", "last synced", "sync status",
+    )) or (
+        # "Are there any connection health issues I should know about?" /
+        # "Are any of our data connections having issues?" -- neither
+        # names one of the exact phrases above, but combines a
+        # connection/integration noun with a health/status adjective.
+        # Confirmed live without this: every one of these questions fell
+        # through to a generic company spend overview with zero mention
+        # of connection status, or (worse) "When did Salesforce last
+        # sync?" got answered with Salesforce's AI SPEND figures -- a
+        # confidently-wrong answer to a completely different question,
+        # not just an unhelpful one.
+        any(term in text for term in ("connection", "connections", "integration", "integrations"))
+        and any(term in text for term in (
+            "health", "healthy", "issue", "issues", "sync", "synced",
+            "working", "broken", "down",
+        ))
+    ):
+        intent = "connection_health"
         entity = "overview"
     elif any(term in text for term in (
         "why were requests blocked", "why was the request blocked",
@@ -561,6 +627,22 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "which agents contributed", "activity connected to",
     )):
         intent = "activity"
+    elif entity == "context" and any(term in text for term in (
+        "no ai activity", "no activity at all", "zero ai activity",
+        "zero activity", "never had any ai activity", "never had any activity",
+        "haven't had any activity", "hasn't had any activity",
+        "no ai activity at all", "dormant project", "dormant projects",
+    )):
+        # "Which projects have no AI activity at all?" -- the same
+        # full-catalog-minus-activity shape as the agent-inactivity block
+        # below, but for work items/projects instead of agents. Placed
+        # ahead of that block (and scoped to entity=="context") so it
+        # doesn't get swallowed by "never used"/"not been used" below,
+        # which is agent-specific phrasing. Confirmed live without this:
+        # the question fell through to a plain company overview whose
+        # evidence rows were the projects WITH activity -- the exact
+        # opposite of what was asked, presented with full confidence.
+        intent = "inactive_context"
     elif any(term in text for term in (
         "what have we built", "is anyone using", "agent adoption",
         "agent usage status", "adoption overview",
@@ -661,7 +743,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # ranking question keeps its ranking intent and instead gets its
         # date window shifted to that historical period below.
         intent = "comparison"
-    elif (
+    elif per_item_cost_question or (
         any(term in text for term in (
             "how much", "how many", "what is our", "what's our", "whats our",
         ))
@@ -925,6 +1007,24 @@ def _ask_intent(question: str, default_days: int) -> dict:
         and re.search(r"\b(?:across|connected|coverage)\b", text)
     )
 
+    # "Which project's AI spend grew the most this month?" / "Whose AI
+    # usage grew the most this month?" -- already correctly resolve to
+    # intent="ranking" (entity != "overview" plus the ranking_terms hit
+    # on "most"), but the ranking branch ranks by absolute value THIS
+    # PERIOD, silently dropping the "grew" comparison the question
+    # actually asked for. Confirmed live: "grew the most" returned
+    # whichever project had the highest raw spend this month, not the
+    # one with the biggest month-over-month increase -- a plausible-
+    # looking but wrong answer to a delta question. This flag doesn't
+    # change `intent` (ranking is still correct); the ranking answer
+    # branch reads it to rank by period-over-period change instead.
+    growth_ranking_question = bool(re.search(
+        r"\b(?:grew|grow|growth|increased?|jumped?|surged?)\b[^.?!]{0,25}"
+        r"\b(?:most|fastest|biggest)\b"
+        r"|\b(?:fell|dropped?|decreased?|declined?)\b[^.?!]{0,25}\b(?:most|fastest|biggest)\b",
+        text,
+    ))
+
     comparison_key = None
     if intent in {"comparison", "change_drivers"}:
         if any(term in text for term in (
@@ -972,6 +1072,8 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "attention_question": attention_question,
         "decision_history_question": decision_history_question,
         "data_coverage_question": data_coverage_question,
+        "growth_ranking_question": growth_ranking_question,
+        "per_item_cost_question": per_item_cost_question,
     }
     canonical = canonical_ask_intent(question)
     if canonical:
@@ -986,7 +1088,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
 _ASK_INTENTS = {
     "ranking", "overview", "savings", "budget", "pruning", "source_mix",
     "blocked", "risk_events", "total", "comparison", "activity", "inactive",
-    "agent_adoption",
+    "agent_adoption", "connection_health", "inactive_context",
     "tier_usage", "optimization", "change_drivers", "help", "product", "decision",
 }
 # Shared by _ask_intent()'s data_coverage_question detection and
@@ -4004,7 +4106,14 @@ an already-executed change to what was projected before it. Narrate its exact nu
 trend label (accelerated/slowed/about the same); if it says too_soon, tell the user plainly that
 it is too early to measure rather than offering a verdict anyway. If it reports no executed change
 found, say so rather than guessing at one.
-Call get_product_help only for questions about how CostPilot itself works.
+Call get_product_help for questions about how CostPilot/Ask CostPilot itself works or behaves --
+including "what can you do" / "what can Ask CostPilot do" capability questions, what data it
+uses, whether it guesses or invents numbers, how it handles an ambiguous name, the difference
+between measured and estimated data, outcome association vs. causation, and whether it can
+change a budget on your behalf. "CostPilot" or "Ask CostPilot" in a question is the product
+asking about itself -- never pass it as get_usage_report's entity_name looking for a customer
+entity that happens to share the name (e.g. an agent or platform named "CostPilot-API"); that
+answers a completely different, unasked question with a real-looking but wrong number.
 You may call more than one tool if the question needs it — for example checking change drivers
 and then budget status. Once you have enough information, call final_answer. Do not call
 final_answer without having called at least one data tool first, unless the question is purely
@@ -4574,6 +4683,8 @@ def _ask_costpilot_answer(
     attention_question = bool(parsed.get("attention_question"))
     decision_history_question = bool(parsed.get("decision_history_question"))
     data_coverage_question = bool(parsed.get("data_coverage_question"))
+    growth_ranking_question = bool(parsed.get("growth_ranking_question"))
+    per_item_cost_question = bool(parsed.get("per_item_cost_question"))
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -5386,7 +5497,13 @@ def _ask_costpilot_answer(
         calculation_row_count = None
         calculation_formula = "Connected-platform status from the workspace's registered integrations"
     elif named_entity and intent not in {
-        "budget", "savings", "optimization", "pruning", "blocked", "risk_events", "ranking"
+        "budget", "savings", "optimization", "pruning", "blocked", "risk_events", "ranking",
+        # "When did Salesforce last sync?" named "Salesforce," which
+        # matched as a platform entity here and overrode intent="lookup"
+        # -- answering with Salesforce's AI SPEND figures instead of its
+        # connection sync status. connection_health has its own named-
+        # platform handling (see that branch) and must not be preempted.
+        "connection_health", "inactive_context",
     }:
         entity = named_entity["entity"]
         row = named_entity["row"]
@@ -5431,6 +5548,65 @@ def _ask_costpilot_answer(
             f"alongside those outcomes, not evidence that the AI activity caused them."
         )
         evidence = _ask_evidence(outcome_rows, metric, "project_id", limit=result_limit)
+    elif intent == "total" and entity == "context" and per_item_cost_question:
+        # "What's the cost per work item this quarter?" was answered with
+        # the plain company-wide total (identical to the generic "total"
+        # branch below), mislabeled as if it were already a per-item
+        # figure -- it was never actually divided by the number of items.
+        project_count = int(summary.get("project_count") or 0)
+        total_value = _ask_row_metric(summary, metric)
+        per_item_value = (total_value / project_count) if project_count else 0.0
+        value, metric_label = _ask_metric_value(metric, per_item_value)
+        total_formatted, _ = _ask_metric_value(metric, total_value)
+        context_noun = context_plural.lower()
+        title = f"{metric_label} per {context_noun}"
+        if project_count:
+            answer = (
+                f"{value} {metric_label} per {context_noun} for {period_label} "
+                f"({total_formatted} total {metric_label} across {project_count:,} {context_noun})."
+            )
+        else:
+            answer = f"No {context_noun} had recorded AI activity for {period_label}."
+        evidence = [{
+            "label": f"{metric_label} per {context_noun}",
+            "value": value,
+            "metric_label": metric_label,
+            "detail": f"{total_formatted} total across {project_count:,} {context_noun}",
+            "filter_name": None,
+            "filter_value": None,
+        }]
+    elif (
+        intent == "total" and entity in entity_config
+        and not named_entity
+        and not reporting_filters.get(entity_config[entity][1] or "")
+    ):
+        # "How many platforms are we governing AI activity across?" /
+        # "How many active projects are we tracking?" / "How many work
+        # items have AI-touched activity?" all landed on the generic
+        # "total" branch below, which ignores `entity` entirely and
+        # always returns the plain company spend/request total --
+        # confirmed live: all three questions returned the identical
+        # 191-governed-requests figure regardless of what was asked
+        # about. Only fires for an UNSCOPED "how many X" question (no
+        # named instance already filtered into the report, e.g. "how
+        # much did Sales spend" keeps using the branch below, which
+        # already answers that correctly from the pre-filtered summary).
+        breakdown_key, filter_name, entity_label = entity_config[entity]
+        if entity == "person":
+            count = int(summary.get("people_count") or 0)
+        elif entity == "agent":
+            count = int(summary.get("agent_count") or 0)
+        elif entity == "context":
+            count = int(summary.get("project_count") or 0)
+        else:
+            count = len(report.get(breakdown_key) or [])
+        noun = entity_label.lower()
+        title = f"Distinct {noun} with AI activity"
+        answer = (
+            f"CostPilot recorded {count:,} distinct {noun} with AI activity for "
+            f"{period_label}, across {int(summary.get('request_count') or 0):,} governed requests."
+        )
+        evidence = _ask_evidence(report.get(breakdown_key) or [], metric, filter_name, limit=result_limit)
     elif intent == "total":
         value, metric_label = _ask_metric_value(metric, _ask_row_metric(summary, metric))
         title = f"Total {metric_label}"
@@ -5874,6 +6050,134 @@ def _ask_costpilot_answer(
                 "simulation_count": simulation_count,
             },
         ]
+    elif intent == "connection_health":
+        # "Which platform connections are healthy?" / "When did
+        # Salesforce last sync?" / "Are there any connection health
+        # issues?" -- previously fell through to a generic company spend
+        # overview with zero mention of connection status, or (worse)
+        # answered "when did Salesforce last sync" with Salesforce's AI
+        # SPEND figures. Reuses core.data_coverage.get_data_coverage(),
+        # the same real, already-populated IntegrationConnection-backed
+        # function the data_coverage_question branch above already uses
+        # for "is Salesforce connected" -- not a new data source, just a
+        # health-focused framing of the same trusted status.
+        from core.data_coverage import get_data_coverage
+
+        coverage = get_data_coverage(db, request.workspace_id)
+        platforms = coverage.platforms
+        title = "Connection health"
+        calculation_formula = (
+            "Read integration_connections.status/last_outcome_sync_at directly -- "
+            "not derived from AI activity volume"
+        )
+        calculation_row_count = len(platforms)
+        evidence = [
+            {
+                "label": p["platform"].title(),
+                "value": p.get("status") or ("connected" if p["connected"] else "not connected"),
+                "metric_label": "connection status",
+                "detail": (
+                    (f"last outcome sync: {p['last_outcome_sync_at']}" if p.get("last_outcome_sync_at")
+                     else "never synced")
+                    + (" · sync is stale" if p.get("stale") else "")
+                ),
+                "filter_name": None,
+                "filter_value": None,
+            }
+            for p in platforms
+        ]
+        named = [p for p in platforms if p["platform"] in question.lower()]
+        if named:
+            target = named[0]
+            if target.get("last_outcome_sync_at"):
+                try:
+                    sync_display = datetime.fromisoformat(
+                        target["last_outcome_sync_at"]
+                    ).strftime("%b %-d, %Y at %H:%M UTC")
+                except ValueError:
+                    sync_display = target["last_outcome_sync_at"]
+                answer = (
+                    f"{target['platform'].title()} last completed an outcome sync at "
+                    f"{sync_display}"
+                    + (", but that sync data now looks stale." if target.get("stale") else ".")
+                )
+            elif target["connected"]:
+                answer = f"{target['platform'].title()} is connected but has never completed an outcome sync."
+            else:
+                answer = f"{target['platform'].title()} is not currently connected."
+        else:
+            unhealthy = [
+                p for p in platforms
+                if p["connected"] and (p.get("status") not in (None, "active") or p.get("stale"))
+            ]
+            healthy = [
+                p for p in platforms
+                if p["connected"] and not p.get("stale") and p.get("status") in (None, "active")
+            ]
+            if unhealthy:
+                names = ", ".join(p["platform"].title() for p in unhealthy)
+                answer = (
+                    f"{len(unhealthy)} of {len(platforms)} connection"
+                    f"{'s' if len(platforms) != 1 else ''} need attention: {names}."
+                )
+            elif not healthy:
+                answer = "No platforms are currently connected."
+            else:
+                names = ", ".join(p["platform"].title() for p in healthy)
+                answer = f"All {len(healthy)} connected platform{'s' if len(healthy) != 1 else ''} are healthy: {names}."
+    elif intent == "inactive_context":
+        # "Which projects have no AI activity at all?" -- mirrors the
+        # agent-adoption block above (full catalog minus entities with
+        # real activity) for work items/projects instead of agents.
+        # Confirmed live without this: the question fell through to a
+        # generic overview whose evidence rows were the projects WITH
+        # activity, the opposite of what was asked.
+        workitem_query = db.query(WorkItem).filter(WorkItem.merged_into_work_item_id.is_(None))
+        if request.workspace_id:
+            workitem_query = workitem_query.filter(WorkItem.workspace_id == request.workspace_id)
+        work_items = workitem_query.all()
+        work_item_ids = [wi.id for wi in work_items]
+        ids_with_activity = set()
+        if work_item_ids:
+            ids_with_activity = {
+                row[0] for row in db.query(TokenTransaction.work_item_id)
+                .filter(TokenTransaction.work_item_id.in_(work_item_ids))
+                .distinct()
+                .all()
+                if row[0] is not None
+            }
+        dormant = [wi for wi in work_items if wi.id not in ids_with_activity]
+        context_noun = context_plural.lower()
+        title = f"{context_plural} with no AI activity"
+        calculation_formula = (
+            f"{context_plural} in the catalog with zero TokenTransaction rows ever recorded"
+        )
+        calculation_row_count = len(dormant)
+        evidence = [
+            {
+                "label": wi.name or wi.external_id,
+                "value": "0",
+                "metric_label": "lifetime AI requests",
+                "detail": (
+                    f"status: {wi.status or 'unknown'}"
+                    + (f" · owner: {wi.owner}" if wi.owner else "")
+                ),
+                "filter_name": "project_id",
+                "filter_value": wi.external_id,
+            }
+            for wi in dormant[:result_limit]
+        ]
+        if not work_items:
+            answer = f"No {context_noun} are tracked yet."
+        elif dormant:
+            names = ", ".join((wi.name or wi.external_id) for wi in dormant[:5])
+            more = f" and {len(dormant) - 5} more" if len(dormant) > 5 else ""
+            answer = (
+                f"{len(dormant):,} of {len(work_items):,} {context_noun} have never had any "
+                f"recorded AI activity: {names}{more}."
+            )
+        else:
+            answer = f"All {len(work_items):,} {context_noun} have at least some recorded AI activity."
     elif intent in {"savings", "optimization"}:
         activities = report.get("activities") or []
         premium = [
@@ -5930,6 +6234,91 @@ def _ask_costpilot_answer(
         evidence = _ask_evidence(
             report.get("agent_breakdown") or [], "spend_usd", "agent_id"
         )
+    elif intent == "ranking" and entity in entity_config and growth_ranking_question:
+        # "Which project's AI spend grew the most this month?" -- the
+        # generic ranking branch below ranks by ABSOLUTE value this
+        # period, silently dropping the "grew" comparison the question
+        # actually asked for. Confirmed live: it returned whichever
+        # project had the highest raw spend this month, not the one
+        # with the biggest period-over-period increase. Computes the
+        # prior period of equal length via the same comparison_plan()
+        # the company-wide comparison/change_drivers intents already
+        # use, re-runs project_activity_reporting() for it with the
+        # same reporting_filters, and ranks by the delta instead.
+        breakdown_key, filter_name, entity_label = entity_config[entity]
+        growth_primary_period = resolve_primary_period(
+            period_key=parsed.get("period_key"), days=parsed["days"],
+            timezone_name=effective_timezone,
+            date_from=request.date_from, date_to=request.date_to,
+        )
+        growth_comparison_plan = comparison_plan(growth_primary_period, "previous_period")
+        prior_report = project_activity_reporting(
+            workspace_id=request.workspace_id,
+            date_from=growth_comparison_plan.comparison.start,
+            date_to=growth_comparison_plan.comparison.end,
+            days=parsed["days"], **reporting_filters,
+            activity_limit=2000, exclude_prune_only_rows=True, db=db,
+        )
+        current_rows = {
+            row["id"]: row for row in (report.get(breakdown_key) or [])
+            if row.get("id") not in ("__unknown__", "__simulator__")
+        }
+        prior_rows = {
+            row["id"]: row for row in (prior_report.get(breakdown_key) or [])
+            if row.get("id") not in ("__unknown__", "__simulator__")
+        }
+        deltas = []
+        for entity_id, row in current_rows.items():
+            current_value = _ask_row_metric(row, metric)
+            prior_value = _ask_row_metric(prior_rows.get(entity_id, {}), metric)
+            deltas.append({
+                "id": entity_id,
+                "label": row.get("label"),
+                "current": current_value,
+                "prior": prior_value,
+                "delta": current_value - prior_value,
+            })
+        wants_increase = not any(
+            term in question.lower() for term in ("fell", "dropped", "decreased", "declined")
+        )
+        deltas.sort(key=lambda d: d["delta"], reverse=wants_increase)
+        calculation_row_count = len(deltas)
+        calculation_formula = (
+            f"{metric} for {period_label} minus {metric} for the immediately preceding "
+            "period of equal length, ranked by that difference"
+        )
+        top_deltas = deltas[:max(1, result_limit)]
+        _, metric_label = _ask_metric_value(metric, 0)
+        title = f"Biggest {'increase' if wants_increase else 'decrease'} in {metric_label.lower()} by {entity_label.lower()}"
+        evidence = [
+            {
+                "label": d["label"] or "Unknown",
+                "value": _ask_metric_value(metric, d["delta"])[0],
+                "metric_label": f"change in {metric_label}",
+                "detail": (
+                    f"{_ask_metric_value(metric, d['prior'])[0]} → "
+                    f"{_ask_metric_value(metric, d['current'])[0]}"
+                ),
+                "filter_name": filter_name,
+                "filter_value": d["id"],
+            }
+            for d in top_deltas
+        ]
+        if top_deltas and top_deltas[0]["delta"] != 0:
+            leader = top_deltas[0]
+            direction_word = "increase" if leader["delta"] >= 0 else "decrease"
+            answer = (
+                f"{leader['label'] or 'Unknown'} had the biggest {direction_word} in "
+                f"{metric_label.lower()} for {period_label} vs. the prior period: "
+                f"{_ask_metric_value(metric, leader['prior'])[0]} → "
+                f"{_ask_metric_value(metric, leader['current'])[0]} "
+                f"({_ask_metric_value(metric, leader['delta'])[0]})."
+            )
+        else:
+            answer = (
+                f"No {entity_label.lower()} showed a change in {metric_label.lower()} between "
+                f"{period_label} and the prior period."
+            )
     elif intent == "ranking" and entity in entity_config:
         breakdown_key, filter_name, entity_label = entity_config[entity]
         ranking_rows = report.get(breakdown_key) or []

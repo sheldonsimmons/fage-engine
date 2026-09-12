@@ -177,8 +177,15 @@ TOOL_SCHEMAS = [
         "name": "get_product_help",
         "description": (
             "Look up curated CostPilot product documentation — what a term means, "
-            "how a metric is calculated, or how a feature works. Use for questions "
-            "about CostPilot itself, not the customer's data."
+            "how a metric is calculated, how a feature works, or a question about "
+            "Ask CostPilot's own behavior (what it can do, what data it uses, "
+            "whether it guesses, how it handles an ambiguous name, measured vs. "
+            "estimated data, outcome association vs. causation, or whether it can "
+            "change a budget). Use this for ANY question about CostPilot or Ask "
+            "CostPilot itself, not the customer's data — including 'what can you "
+            "do' style questions. Do NOT call get_usage_report with entity_name "
+            "set to 'CostPilot'/'Ask CostPilot'/etc. for these — CostPilot is the "
+            "product answering the question, not a customer entity to look up."
         ),
         "strict": True,
         "parameters": {
@@ -367,7 +374,14 @@ TOOL_SCHEMAS = [
                 "dimensions": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Zero or more of: account, department, agent, platform, model, outcome_status.",
+                    "description": (
+                        "Zero or more of: account, department, agent, platform, model, "
+                        "outcome_status, work_item. 'work_item' groups by the individual "
+                        "project/matter/case/opportunity a request is attributed to -- use it "
+                        "for 'which work item/project had the most requests/spend' style "
+                        "questions. It cannot be combined in one call with an outcome-sourced "
+                        "metric (won_value, pipeline_value, etc.) -- request those separately."
+                    ),
                 },
                 "filters": {
                     "type": "object",
@@ -688,6 +702,14 @@ _USAGE_REPORT_DIMENSIONS = (
     ("top_platforms", "platform"),
     ("top_models", "model"),
     ("top_providers", "provider"),
+    # "Which work item has the most governed requests?" had no
+    # tool-exposed way to answer at all -- run_metrics_query's "work_item"
+    # dimension (core/metrics_catalog.py) already existed and is fully
+    # wired up, but was never added here, so the agent correctly (if
+    # confusingly) reported "not an available dimension" for a dimension
+    # that, in fact, is. See the entity_name section below for the other
+    # half of this same gap.
+    ("top_work_items", "work_item"),
 )
 
 
@@ -817,15 +839,6 @@ def run_get_usage_report(
     # use" except by guessing from the truncated top lists or falling back
     # to the overall total. Match against the FULL (untruncated) breakdowns
     # so any named entity is found regardless of rank.
-    #
-    # No "project"/context breakdown is included here -- the metrics
-    # registry has no dimension for WorkItem-level context entities today
-    # (only project_activity_reporting()'s richer report has one), so a
-    # named lookup that would have matched a project/WorkItem by name
-    # specifically won't resolve through this tool. Documented gap, not a
-    # silent one: get_usage_report never exposed project_breakdown to the
-    # model as a top_* field anyway, so this only affects entity_name
-    # matching against that one entity type.
     if entity_name and entity_name.strip():
         pseudo_report = {
             "people_breakdown": breakdowns.get("person"),
@@ -834,6 +847,7 @@ def run_get_usage_report(
             "organizational_unit_breakdown": breakdowns.get("department"),
             "source_platform_breakdown": breakdowns.get("platform"),
             "model_breakdown": breakdowns.get("model"),
+            "project_breakdown": breakdowns.get("work_item"),
         }
         match = _ask_named_entity(entity_name.strip(), pseudo_report)
         result["named_entity_match"] = (
