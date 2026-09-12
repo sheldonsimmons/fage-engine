@@ -2870,6 +2870,15 @@ async function drillFromAskCostPilot(scopeOrName, filterValue) {
   applyScopeSelects();
   await loadBusinessContexts();
   applyScopeSelects();
+  // loadBusinessContexts() only refreshes the KPI cards and the always-
+  // unfiltered "Company AI Usage" summary -- confirmed live: the AI
+  // Activity Explorer pivot above it kept showing every department's
+  // company-wide numbers after an Ask CostPilot drill-through, even
+  // though the Department/Team filter it reads (explorerCrossFilters())
+  // was correctly set to the drilled department. Nothing had ever told
+  // the pivot to refetch after the scope changed.
+  _explorerScope = [];
+  loadExplorerPivot();
   syncAskDrillQuery(scope);
   pane?.scrollIntoView({ behavior: "smooth", block: "start" });
 }

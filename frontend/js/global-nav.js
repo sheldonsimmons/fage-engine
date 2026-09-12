@@ -61,7 +61,16 @@
 
   function activeWorkspace() {
     const options = workspaceOptionsList();
-    const id = localStorage.getItem("cp_workspace_id") || options[0].id;
+    // A fresh browser with no saved choice used to fall back to
+    // options[0] -- whichever workspace the API happened to list first
+    // (confirmed live: "Historical Demo," not the legacy/default bucket
+    // Ask CostPilot itself resolves to with no workspace_id set, e.g.
+    // reportWorkspaceId() and the ask payload's `|| "default"` below).
+    // The switcher and every other workspace-aware read must agree on
+    // the same default or a first-time visitor's sidebar and their
+    // Ask CostPilot answers silently point at different data.
+    const id = localStorage.getItem("cp_workspace_id")
+      || (options.some((workspace) => workspace.id === "default") ? "default" : options[0].id);
     return options.find((workspace) => workspace.id === id)
       || { id, label: localStorage.getItem("cp_workspace_name") || "Current workspace", kind: "Workspace" };
   }
