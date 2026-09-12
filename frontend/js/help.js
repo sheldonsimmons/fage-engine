@@ -361,9 +361,16 @@ function endTour() {
 }
 
 // ── Auto-launch tour on first visit ──────────────────────────────────────────
+// Skipped when the URL carries a query string -- confirmed live: an Ask
+// CostPilot drill-through (e.g. "?tab=contexts&filter_label=Legal&...")
+// landed a first-time visitor on exactly the evidence they asked to see,
+// then covered it 1.2s later with "STEP 1 OF 11." Anyone arriving with a
+// query string already has a specific task in hand, not idle first-visit
+// browsing -- the plain sidebar nav case this tour is actually for never
+// adds one (see reports.js's own "No ?tab= param" landing-tab comment).
 window.addEventListener("load", () => {
   try {
-    if (!localStorage.getItem("costpilot_tour_done")) {
+    if (!localStorage.getItem("costpilot_tour_done") && !location.search) {
       setTimeout(startTour, 1200);
     }
   } catch(e) {}

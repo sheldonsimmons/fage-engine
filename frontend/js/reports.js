@@ -1358,13 +1358,15 @@ async function loadExplorerPivot() {
   if (!head) return; // Explorer markup not on this page/tab
   head.innerHTML = `<th>${escapeHtml(dimDef ? dimDef.label : _explorerViewBy)}</th><th>AI Investment</th><th>Requests</th><th>Tokens</th><th></th>`;
 
-  const { days } = getActiveDateRange();
+  const { days, date_from, date_to } = getActiveDateRange();
   const body = {
     workspace_id: reportWorkspaceId() || null,
     metrics: ["ai_spend", "ai_requests", "total_tokens"],
     dimensions: [_explorerViewBy],
     filters: explorerScopeFilters(),
     days: Math.min(365, days),
+    date_from,
+    date_to,
     period_key: "none",
     sort: "ai_spend",
     limit: 50,
@@ -1454,12 +1456,15 @@ async function loadExplorerSecondary() {
     `<th>${escapeHtml(dimDef ? dimDef.label : _explorerBreakDownBy)}</th><th>AI Investment</th><th>Requests</th><th>Tokens</th><th></th>`;
   wrap.hidden = false;
 
+  const secondaryRange = getActiveDateRange();
   const body = {
     workspace_id: reportWorkspaceId() || null,
     metrics: ["ai_spend", "ai_requests", "total_tokens"],
     dimensions: [_explorerBreakDownBy],
     filters: explorerScopeFilters(),
-    days: Math.min(365, getActiveDateRange().days),
+    days: Math.min(365, secondaryRange.days),
+    date_from: secondaryRange.date_from,
+    date_to: secondaryRange.date_to,
     period_key: "none",
     sort: "ai_spend",
     limit: 25,
