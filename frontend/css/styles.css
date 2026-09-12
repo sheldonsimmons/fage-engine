@@ -1406,9 +1406,7 @@ body {
   #printOverlay .report-header {
     border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 18px;
   }
-  #printOverlay .report-header-brand {
-    font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #444;
-  }
+  #printOverlay .report-logo { height: 22px; width: auto; display: block; margin-bottom: 8px; }
   #printOverlay .report-title { font-size: 22px; margin: 4px 0 8px; color: #111; }
   #printOverlay .report-meta { display: flex; gap: 16px; font-size: 11px; color: #555; }
   #printOverlay .report-section { margin-top: 22px; }

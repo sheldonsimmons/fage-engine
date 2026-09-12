@@ -793,6 +793,23 @@ async function loadBusinessImpactRecommendations() {
   }
 }
 
+// Shared banner for every .report-doc (Business Impact, Savings, Governance
+// & Risk, Departments) -- one place so the brand mark/title/meta layout
+// can't drift between reports the way four independently hand-written
+// headers eventually would.
+function reportDocHeaderHtml(title, generatedAt) {
+  return `
+    <header class="report-header">
+      <img class="report-logo" src="/assets/costpilot-logo-transparent.svg" alt="CostPilot" />
+      <h1 class="report-title">${escapeHtml(title)}</h1>
+      <div class="report-meta">
+        <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+        <span>${askCostPilotDateLabel()}</span>
+        <span>Generated ${escapeHtml(generatedAt)}</span>
+      </div>
+    </header>`;
+}
+
 // ── Business Impact — printable report ──────────────────────────────────────
 // A purpose-built report document, not a clone of the live interactive tab
 // (printSection()'s usual DOM-clone approach would also carry the rank-by/
@@ -869,15 +886,7 @@ function renderBusinessImpactReportHtml() {
 
   return `
     <div class="report-doc">
-      <header class="report-header">
-        <div class="report-header-brand">CostPilot</div>
-        <h1 class="report-title">Business Impact Report</h1>
-        <div class="report-meta">
-          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
-          <span>${askCostPilotDateLabel()}</span>
-          <span>Generated ${escapeHtml(generatedAt)}</span>
-        </div>
-      </header>
+      ${reportDocHeaderHtml("Business Impact Report", generatedAt)}
 
       <section class="report-section">
         <h2 class="report-section-title">Executive Brief</h2>
@@ -3563,15 +3572,7 @@ function renderGovernanceReportHtml() {
 
   return `
     <div class="report-doc">
-      <header class="report-header">
-        <div class="report-header-brand">CostPilot</div>
-        <h1 class="report-title">Governance &amp; Risk Report</h1>
-        <div class="report-meta">
-          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
-          <span>${askCostPilotDateLabel()}</span>
-          <span>Generated ${escapeHtml(generatedAt)}</span>
-        </div>
-      </header>
+      ${reportDocHeaderHtml("Governance & Risk Report", generatedAt)}
 
       <section class="report-section">
         <h2 class="report-section-title">Executive Brief</h2>
@@ -3688,15 +3689,7 @@ function renderDepartmentsReportHtml() {
 
   return `
     <div class="report-doc">
-      <header class="report-header">
-        <div class="report-header-brand">CostPilot</div>
-        <h1 class="report-title">Department Report</h1>
-        <div class="report-meta">
-          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
-          <span>${askCostPilotDateLabel()}</span>
-          <span>Generated ${escapeHtml(generatedAt)}</span>
-        </div>
-      </header>
+      ${reportDocHeaderHtml("Department Report", generatedAt)}
 
       <section class="report-section">
         <h2 class="report-section-title">Executive Brief</h2>
@@ -3803,15 +3796,7 @@ function renderSavingsReportHtml() {
 
   return `
     <div class="report-doc">
-      <header class="report-header">
-        <div class="report-header-brand">CostPilot</div>
-        <h1 class="report-title">Savings &amp; Performance Report</h1>
-        <div class="report-meta">
-          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
-          <span>${askCostPilotDateLabel()}</span>
-          <span>Generated ${escapeHtml(generatedAt)}</span>
-        </div>
-      </header>
+      ${reportDocHeaderHtml("Savings & Performance Report", generatedAt)}
 
       <section class="report-section">
         <h2 class="report-section-title">Executive Brief</h2>
