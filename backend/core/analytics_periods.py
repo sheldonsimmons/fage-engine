@@ -75,9 +75,20 @@ def _shift_month(value: datetime, months: int) -> datetime:
 
 
 def period_label(start: datetime, end: datetime) -> str:
-    """Human label for a half-open interval, shown as inclusive calendar dates."""
+    """
+    Human label for a half-open interval, shown as inclusive calendar
+    dates. Was raw ISO ("2026-08-21 through 2026-08-31") -- confirmed
+    live in a change_drivers answer ("AI Spend increased ... for
+    2026-08-21 through 2026-08-31 to ...") reading like a data export,
+    not something someone would say. format_date_range() already exists
+    in this same file for exactly this ("Aug 21 - Aug 31, 2026") and is
+    already the single source of truth for every other displayed date
+    range this app has (both Ask CostPilot's answer text and the
+    frontend's own "Date range" field); this only had its own separate,
+    unformatted path because it predates that function.
+    """
     display_end = end - timedelta(microseconds=1)
-    return f"{start.date().isoformat()} through {display_end.date().isoformat()}"
+    return format_date_range(start, display_end)
 
 
 def format_date_range(start, end) -> str:
