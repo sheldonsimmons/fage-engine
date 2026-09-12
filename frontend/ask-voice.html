@@ -126,7 +126,7 @@
         </svg>
       </button>
       <div id="statusText">Tap to ask a question</div>
-      <button id="cancelButton" type="button">✕ Cancel — don't send</button>
+      <button id="cancelButton" type="button">✕ Cancel</button>
       <div id="errorText"></div>
     </div>
 
@@ -248,10 +248,17 @@
   function setStatus(text) { statusText.textContent = text || ""; }
   function setError(text) { errorText.textContent = text || ""; }
 
+  // Shared across transcribeAndAsk() and askQuestion() -- one Cancel tap
+  // during either "Transcribing..." or "Thinking..." aborts whichever
+  // real network call is currently in flight, since the mic itself is
+  // disabled during both and there was previously no way out at all.
+  let currentAbortController = null;
+
   function setBusy(isBusy) {
     busy = isBusy;
     micButton.classList.toggle("busy", isBusy);
     micButton.disabled = isBusy;
+    cancelButton.classList.toggle("visible", isBusy);
   }
 
   function stopSpeaking() {
@@ -278,6 +285,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
+        signal: currentAbortController?.signal,
       });
       if (!res.ok) throw new Error("Speech unavailable from the server.");
       const blob = await res.blob();
@@ -298,6 +306,7 @@
       await voicePlayer.play();
     } catch (err) {
       stopSpeakingBtn.classList.remove("visible");
+      if (err?.name === "AbortError") { setStatus("Cancelled — tap to ask a question"); return; }
       setError(
         err && err.name === "NotAllowedError"
           ? "Your browser blocked audio playback — tap the mic once more to allow sound."
@@ -330,6 +339,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: currentAbortController?.signal,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Ask CostPilot could not answer that.");
@@ -340,6 +350,7 @@
       lastConversationContext = normalizeConversationContext(data.conversation_context) || lastConversationContext;
       await speak(data.answer);
     } catch (err) {
+      if (err?.name === "AbortError") { setStatus("Cancelled — tap to ask a question"); return; }
       setError(err.message || "Something went wrong.");
       setStatus("Tap to try again");
     } finally {
@@ -350,11 +361,14 @@
   async function transcribeAndAsk() {
     if (!audioChunks.length) { setStatus("Tap to ask a question"); setBusy(false); return; }
     setStatus("Transcribing…");
+    currentAbortController = new AbortController();
     const blob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
     const form = new FormData();
     form.append("audio", blob, "question.webm");
     try {
-      const res = await fetch("/api/ask-voice/transcribe", { method: "POST", body: form });
+      const res = await fetch("/api/ask-voice/transcribe", {
+        method: "POST", body: form, signal: currentAbortController.signal,
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Could not transcribe that clip.");
       const transcript = (data.transcript || "").trim();
@@ -375,6 +389,7 @@
       // the point of a one-button mobile flow.
       await askQuestion(transcript);
     } catch (err) {
+      if (err?.name === "AbortError") { setStatus("Cancelled — tap to ask a question"); setBusy(false); return; }
       setError(err.message || "Could not transcribe that clip.");
       setStatus("Tap to try again");
       setBusy(false);
@@ -478,6 +493,10 @@
   });
 
   cancelButton.addEventListener("click", () => {
+    if (busy) {
+      currentAbortController?.abort();
+      return;
+    }
     if (!recording) return;
     cancelledRecording = true;
     stopRecording();
