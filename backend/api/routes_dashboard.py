@@ -1158,34 +1158,27 @@ def get_business_impact_top_work_items(
     from core.metrics_query import run_metrics_query
 
     filters = {"outcome_status": outcome_status} if outcome_status else {}
-    # Fetch extra rows to absorb the test-fixture exclusion below without
-    # under-filling `limit` -- these are real seed-data artifacts (verified
-    # live: a "Test TEST-VERIFICATION-NNN" WorkItem actually exists in the
-    # default workspace's data, not a cross-workspace scoping leak), not
-    # something query scoping can filter out.
     result = run_metrics_query(
         db, workspace_id,
         metrics=["ai_spend", "ai_requests"],
         dimensions=["work_item"],
         filters=filters,
         sort="ai_spend",
-        limit=limit * 3,
+        limit=limit,
     )
-    rows = [
-        {
-            "work_item_id": row["dimension_ids"]["work_item"],
-            "label": row["dimensions"]["work_item"],
-            "ai_spend_usd": round(float(row.get("ai_spend") or 0.0), 6),
-            "ai_requests": int(row.get("ai_requests") or 0),
-        }
-        for row in result.rows
-        if not str(row["dimensions"]["work_item"] or "").startswith("Test TEST-VERIFICATION-")
-    ][:limit]
     return {
         "workspace_id": workspace_id,
         "outcome_status": outcome_status,
         "rank_by": rank_by,
-        "rows": rows,
+        "rows": [
+            {
+                "work_item_id": row["dimension_ids"]["work_item"],
+                "label": row["dimensions"]["work_item"],
+                "ai_spend_usd": round(float(row.get("ai_spend") or 0.0), 6),
+                "ai_requests": int(row.get("ai_requests") or 0),
+            }
+            for row in result.rows
+        ],
         "errors": result.errors,
     }
 

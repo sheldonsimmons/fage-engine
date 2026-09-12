@@ -663,21 +663,7 @@ def _run_outcome_query(
         .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
         .outerjoin(WorkAccount, WorkItem.account_id == WorkAccount.id)
     )
-    # No workspace_id (None, "", or the literal "default") means the
-    # legacy/default bucket specifically, matching project_activity_
-    # reporting()'s contract (routes_work_items.py) and the transaction
-    # side of this same module (_run_activity_query). workspace_filter()
-    # itself returns None (skip filtering) for a falsy workspace_id --
-    # confirmed live: compute_cost_per_outcome()'s spend side was already
-    # correctly scoped to one workspace, but this outcome-count side
-    # wasn't, so a small, correctly-scoped numerator got divided by every
-    # workspace's outcome count blended together, producing a
-    # near-zero cost-per-outcome ($0.000005) instead of the real ~$0.06.
-    scope = (
-        workspace_filter(WorkItem, workspace_id)
-        if workspace_id and workspace_id != "default"
-        else WorkItem.workspace_id.is_(None)
-    )
+    scope = workspace_filter(WorkItem, workspace_id)
     if scope is not None:
         q = q.filter(scope)
     # Synthetic/test outcome events (Universal Connection's "Send Test
@@ -1258,16 +1244,7 @@ def department_outcome_breakdown(db: Session, workspace_id: Optional[str]) -> li
     department value -- WorkItem.department is not a reliable source in
     practice, TokenTransaction is.
     """
-    # No workspace_id (None, "", or the literal "default") means the
-    # legacy/default bucket specifically, matching project_activity_
-    # reporting()'s contract (routes_work_items.py) -- workspace_filter()
-    # itself returns None (skip filtering) for a falsy workspace_id, which
-    # blends every workspace's WorkItems into one breakdown/ranking.
-    work_item_scope = (
-        workspace_filter(WorkItem, workspace_id)
-        if workspace_id and workspace_id != "default"
-        else WorkItem.workspace_id.is_(None)
-    )
+    work_item_scope = workspace_filter(WorkItem, workspace_id)
 
     def _scoped(query):
         return query.filter(work_item_scope) if work_item_scope is not None else query
@@ -1404,16 +1381,7 @@ def work_items_by_cost_ratio(
     actionable direction: "where is AI investment least efficient,"
     not "where is it already working well."
     """
-    # No workspace_id (None, "", or the literal "default") means the
-    # legacy/default bucket specifically, matching project_activity_
-    # reporting()'s contract (routes_work_items.py) -- workspace_filter()
-    # itself returns None (skip filtering) for a falsy workspace_id, which
-    # blends every workspace's WorkItems into one breakdown/ranking.
-    work_item_scope = (
-        workspace_filter(WorkItem, workspace_id)
-        if workspace_id and workspace_id != "default"
-        else WorkItem.workspace_id.is_(None)
-    )
+    work_item_scope = workspace_filter(WorkItem, workspace_id)
 
     def _scoped(query):
         return query.filter(work_item_scope) if work_item_scope is not None else query
