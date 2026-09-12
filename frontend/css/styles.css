@@ -1365,7 +1365,19 @@ body {
   body * { visibility: hidden !important; }
   #printOverlay, #printOverlay * { visibility: visible !important; }
   #printOverlay {
-    position: fixed !important;
+    /* absolute, not fixed -- confirmed live: fixed positioning pins the
+       overlay to each page's viewport, so content longer than one page
+       (a real answer's evidence list, a multi-page report) got redrawn
+       identically on every single printed page instead of flowing across
+       them, with visible overlap between the repeated copies. absolute
+       still starts the overlay at the top of the document (nothing else
+       is positioned, so it's relative to the initial containing block,
+       same 0,0 origin fixed gave it) but participates in normal page-
+       break flow, so long content actually paginates. The small
+       .report-footer below is deliberately still position:fixed --
+       repeating identically on every page is exactly what a running
+       footer should do. */
+    position: absolute !important;
     top: 0; left: 0;
     width: 100%; height: auto;
     background: white !important;
