@@ -1687,6 +1687,12 @@ or asks for unused, never-used, inactive, low-usage, or active agents. Use usage
 agents with no governed activity ever; recently_inactive for agents with history but no activity in
 the selected period; unused for both groups; low for agents above zero but below usage_threshold;
 and all for an adoption overview. The default low-usage threshold is 10 requests.
+Choose connection_health for questions about whether a platform connection/integration is healthy,
+has issues, or when it last synced -- never overview.
+Choose inactive_context for "which projects/work items have no AI activity at all" -- never overview
+or ranking.
+Choose total (never overview or ranking) for "cost per work item/project" questions -- the server
+divides total spend by the distinct project count.
 For budget questions, choose budget_scope all when the user asks what budget each department has;
 remaining for budget left or available; forecast for projected month-end spend or whether spend is
 on track; variance for spend compared with the time-phased budget; alerts for departments nearing
@@ -1749,6 +1755,46 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
                     # wide agent adoption overview, discarding both the
                     # spend question and the named person "Marcus" entirely.
                     return fallback, "deterministic_fallback_adoption_override"
+                if (
+                    fallback.get("intent") in ("connection_health", "inactive_context")
+                    and validated.get("intent") != fallback.get("intent")
+                ):
+                    # Same class of guard as agent_adoption above, for the two
+                    # newer exact-phrase intents (connection/sync health
+                    # questions, "which projects have no activity at all").
+                    # This OpenAI classifier's own instructions text (above)
+                    # was never updated to know these exist, so it reliably
+                    # guesses something else (usually "overview") whenever
+                    # fallback already correctly identified one of them from
+                    # an exact phrase match -- confirmed live: "Which
+                    # platform connections are healthy?" only produced its
+                    # real connection-status answer because this guard (added
+                    # alongside connection_health/inactive_context) stopped
+                    # OpenAI's "overview" guess from overriding it.
+                    return fallback, "deterministic_fallback_intent_override"
+                if (
+                    fallback.get("per_item_cost_question")
+                    and validated.get("intent") != "total"
+                ):
+                    # "What's the cost per work item this quarter?" -- the
+                    # regex-matched cost-per-item phrasing is exact and
+                    # reliable (see per_item_cost_question's definition
+                    # above); this classifier's instructions text has no
+                    # concept of it and reliably guesses "overview" instead,
+                    # which silently drops the per-item division and returns
+                    # the plain company total again. Confirmed live on the
+                    # deployed app.
+                    return fallback, "deterministic_fallback_per_item_cost_override"
+                if (
+                    fallback.get("growth_ranking_question")
+                    and validated.get("intent") != "ranking"
+                ):
+                    # "Which project's spend grew the most this month?" --
+                    # same reasoning: the regex-detected growth-ranking
+                    # phrasing is reliable, and this classifier doesn't know
+                    # to preserve it, so it can knock the question off the
+                    # ranking intent the growth-by-delta answer requires.
+                    return fallback, "deterministic_fallback_growth_ranking_override"
                 return (
                     validated,
                     "openai_tool_planner",
