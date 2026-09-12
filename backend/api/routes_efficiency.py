@@ -3979,8 +3979,12 @@ governance decision -- model selection, budget action, or collision lock -- when
 NOT already given you a specific decision id. Filter by agent_name, model_name, keyword (searched
 against the decision rationale text), and/or event_type; leave any of those empty to not filter
 on it. Narrate directly from the rationale field of each returned decision -- never invent a
-justification it didn't actually state, and never claim a specific named human approved a
-decision unless the rationale itself says so.
+justification it didn't actually state. Each returned decision also carries agent_name,
+actor_name, and actor_email (the real person/system that triggered it, when known) -- state these
+plainly when the user asks who or what agent was involved, e.g. a "which user/agent caused this
+policy violation" follow-up. Only say the identity is unknown when these fields are actually null
+on the matching row(s); never claim a specific named human approved a decision beyond what these
+fields and the rationale actually state.
 Call simulate_budget_cap_change for any "what if we raised/lowered X's cap to $Y", "would $Y be
 enough", or "should we raise the cap" question -- it is read-only, creates nothing, and answers
 the question directly with the department's real current-period spend, its run-rate projection to

@@ -1403,11 +1403,32 @@ def run_get_decision_history(
         .all()
     )
 
+    # Resolve each row's agent id to a real name in one batch query rather
+    # than N+1 lookups -- AuditEvent has no ORM relationship to
+    # RegisteredAgent (agent_id is a bare FK column), and this tool
+    # previously never surfaced who/which agent a decision belonged to at
+    # all, even though the real data exists. Confirmed live 2026-09-12:
+    # "who made this policy violation?" / "what agent, model, or
+    # department was involved?" as follow-ups to a matched decision had
+    # no way to be answered -- the row was found, but actor_name/
+    # actor_email/the agent's name were silently dropped before the model
+    # ever saw them.
+    agent_ids_present = {row.agent_id for row in rows if row.agent_id}
+    agent_names = {}
+    if agent_ids_present:
+        agent_names = dict(
+            db.query(RegisteredAgent.id, RegisteredAgent.name)
+            .filter(RegisteredAgent.id.in_(agent_ids_present)).all()
+        )
+
     return {
         "decisions": [
             {
                 "timestamp": row.timestamp.isoformat() if row.timestamp else None,
                 "department": str(row.department or "Unassigned").split(":")[-1],
+                "agent_name": agent_names.get(row.agent_id),
+                "actor_name": row.actor_name,
+                "actor_email": row.actor_email,
                 "selected_model_name": row.selected_model_name,
                 "selected_model_tier": row.selected_model_tier,
                 "event_type": row.event_type,
