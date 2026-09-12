@@ -390,6 +390,10 @@
         No outcome data yet — connect a system that reports business outcomes (Salesforce/ServiceNow sync, or any
         custom platform via Universal Connection's <code>mode="outcome"</code>) to see this tab populate.
       </div>
+      <div class="rpt-export-bar">
+        <button class="export-btn" onclick="exportBusinessImpactReport()">🖨 Generate report</button>
+      </div>
+      <div id="biReportDoc" style="display:none"></div>
       <div id="biContent">
         <p class="bi-summary" id="biSummary">Loading…</p>
 

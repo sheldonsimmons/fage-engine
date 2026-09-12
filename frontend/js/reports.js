@@ -38,6 +38,11 @@ let _rptRiskEvents  = [];
 let _rptDeptData    = [];
 let _rptSavingsData = null;
 let _rptContextData = null;
+let _biData             = null;
+let _biDeptRows         = [];
+let _biTopWorkItemsRows = [];
+let _biTopWorkItemsByRatio = false;
+let _biRecommendations  = [];
 const _contextBreakdownExpanded = { project: false, person: false, agent: false };
 const CONTEXT_BREAKDOWN_LIMIT = 7;
 const _hiddenDeptChartLabels = new Set();
@@ -632,6 +637,7 @@ function biNarrativeSummary(data) {
 
 async function loadBusinessImpact() {
   const data = await apiGet(reportScopedPath("/api/dashboard/business-impact"));
+  _biData = data;
 
   document.getElementById("biNoDataBanner").hidden = !!data.has_outcome_data;
   document.getElementById("biContent").style.display = data.has_outcome_data ? "" : "none";
@@ -687,6 +693,7 @@ async function loadBusinessImpactByDepartment() {
   try {
     const data = await apiGet(reportScopedPath("/api/dashboard/business-impact/by-department"));
     const rows = data.rows || [];
+    _biDeptRows = rows;
     body.innerHTML = rows.length
       ? rows.map((row, i) => `
         <tr>
@@ -736,6 +743,8 @@ async function loadBusinessImpactTopWorkItems() {
     const url = `${path}${path.includes("?") ? "&" : "?"}${params.toString()}`;
     const data = await apiGet(url);
     const rows = data.rows || [];
+    _biTopWorkItemsRows = rows;
+    _biTopWorkItemsByRatio = byRatio;
     body.innerHTML = rows.length
       ? rows.map((row, i) => {
           const href = EXPLORER_DIMENSION_CONFIG.work_item.profile(row.work_item_id);
@@ -762,6 +771,7 @@ async function loadBusinessImpactRecommendations() {
   try {
     const data = await apiGet(reportScopedPath("/api/dashboard/recommendations"));
     const recs = data.recommendations || [];
+    _biRecommendations = recs;
     wrap.innerHTML = recs.length
       ? recs.slice(0, 6).map(rec => `
         <div class="bi-rec-card">
@@ -779,6 +789,180 @@ async function loadBusinessImpactRecommendations() {
   } catch (err) {
     wrap.innerHTML = `<div class="bi-note">Could not load recommendations: ${escapeHtml(err.message)}</div>`;
   }
+}
+
+// ── Business Impact — printable report ──────────────────────────────────────
+// A purpose-built report document, not a clone of the live interactive tab
+// (printSection()'s usual DOM-clone approach would also carry the rank-by/
+// filter dropdowns and any "Loading…" placeholder still on screen). Every
+// number below is read from _biData/_biDeptRows/_biTopWorkItemsRows/
+// _biRecommendations -- the exact same already-fetched, already-trusted data
+// the live tab renders -- never recomputed here.
+function biReportEvidenceLegend() {
+  return Object.entries(BI_EVIDENCE_LABELS).map(([key, label]) =>
+    `<span class="bi-evidence-tag ${key}">${escapeHtml(label)}</span>`
+  ).join(" ");
+}
+
+function renderBusinessImpactReportHtml() {
+  const data = _biData;
+  if (!data || !data.has_outcome_data) {
+    return `<div class="report-doc"><p>No outcome data available for this workspace/period yet.</p></div>`;
+  }
+  const evidenceByKpi = data.evidence_by_kpi || {};
+  const generatedAt = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const successfulOutcomes = (data.opportunities_won || 0) + (data.support_cases_resolved || 0);
+  const investmentSuccessful = (data.won_ai_investment_usd || 0) + (data.support_resolved_ai_investment_usd || 0);
+  const investmentUnsuccessful = (data.lost_ai_investment_usd || 0) + (data.support_unresolved_ai_investment_usd || 0);
+
+  const kpiCard = (label, value, evidenceLabel, sub) => `
+    <div class="report-kpi">
+      <div class="report-kpi-label-row">
+        <span class="report-kpi-label">${escapeHtml(label)}</span>
+        ${evidenceLabel ? `<span class="bi-evidence-tag ${evidenceLabel}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceLabel] || evidenceLabel)}</span>` : ""}
+      </div>
+      <div class="report-kpi-value">${value}</div>
+      ${sub ? `<div class="report-kpi-sub">${sub}</div>` : ""}
+    </div>`;
+
+  const deptRows = _biDeptRows.length
+    ? _biDeptRows.map((row, i) => `
+        <tr>
+          <td class="bi-rank">${i + 1}</td>
+          <td>${escapeHtml(row.department)}</td>
+          <td>${fmtUsd(row.ai_investment_usd)}</td>
+          <td>${fmtNum(row.opportunities_won)}</td>
+          <td>${fmtNum(row.opportunities_lost)}</td>
+          <td>${fmtNum(row.opportunities_open)}</td>
+          <td>${fmtUsd(row.closed_won_value_usd)}</td>
+          <td>${fmtUsd(row.cost_per_won_opportunity_usd)}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="8">No department-level outcome data.</td></tr>`;
+
+  const workItemRows = _biTopWorkItemsRows.length
+    ? _biTopWorkItemsRows.map((row, i) => `
+        <tr>
+          <td class="bi-rank">${i + 1}</td>
+          <td>${escapeHtml(row.label)}</td>
+          <td>${fmtUsd(row.ai_spend_usd)}</td>
+          <td>${_biTopWorkItemsByRatio ? `${fmtUsd(row.outcome_value_usd)}</td><td>${fmtCostRatioPct(row.cost_ratio)}` : fmtNum(row.ai_requests)}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="4">No matching AI activity.</td></tr>`;
+
+  const recCards = _biRecommendations.length
+    ? _biRecommendations.slice(0, 6).map(rec => `
+        <div class="bi-rec-card" style="break-inside:avoid">
+          <div class="bi-rec-head">
+            <span class="bi-rec-title">${escapeHtml(rec.title)}</span>
+            <span class="bi-rec-priority ${escapeHtml(rec.priority || "low")}">${escapeHtml(rec.priority || "low")}</span>
+          </div>
+          <div class="bi-rec-body">${escapeHtml(rec.why_it_matters || rec.current_state || "")}</div>
+          <div class="bi-rec-action">→ ${escapeHtml(rec.recommended_action || "")}</div>
+          ${rec.impact_type === "savings_usd" && rec.estimated_impact != null
+            ? `<div class="bi-rec-impact">Potential savings: ${fmtUsd(rec.estimated_impact)}/mo</div>` : ""}
+        </div>`).join("")
+    : `<div class="bi-note">No recommendations right now.</div>`;
+
+  return `
+    <div class="report-doc">
+      <header class="report-header">
+        <div class="report-header-brand">CostPilot</div>
+        <h1 class="report-title">Business Impact Report</h1>
+        <div class="report-meta">
+          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+          <span>${askCostPilotDateLabel()}</span>
+          <span>Generated ${escapeHtml(generatedAt)}</span>
+        </div>
+      </header>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Executive Brief</h2>
+        <p class="bi-summary">${escapeHtml(biNarrativeSummary(data))}</p>
+        <div class="report-kpi-row">
+          ${kpiCard("Associated Business Value", fmtUsd(data.closed_won_value_usd), null, "closed-won + resolved support value")}
+          ${kpiCard("Successful Outcomes", fmtNum(successfulOutcomes), evidenceByKpi.cost_per_won_opportunity_usd, "won opportunities + resolved support work")}
+          ${kpiCard("AI Investment — Successful", fmtUsd(investmentSuccessful), null, "won + resolved")}
+          ${kpiCard("AI Investment — Unsuccessful", fmtUsd(investmentUnsuccessful), null, "lost + unresolved")}
+          ${kpiCard("Cost per Successful Outcome", fmtUsd(data.cost_per_successful_outcome_usd), evidenceByKpi.cost_per_successful_outcome_usd)}
+          ${kpiCard("Outcome Coverage", data.outcome_coverage_pct != null ? `${data.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct, "of AI-touched work with a known outcome")}
+        </div>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Sales Impact — Won vs. Lost</h2>
+        <table class="rpt-context-table">
+          <thead><tr><th></th><th>Won</th><th>Lost</th><th>Open</th></tr></thead>
+          <tbody>
+            <tr><td>Count</td><td>${fmtNum(data.opportunities_won)}</td><td>${fmtNum(data.opportunities_lost)}</td><td>${fmtNum(data.opportunities_open)}</td></tr>
+            <tr><td>AI Investment</td><td>${fmtUsd(data.won_ai_investment_usd)}</td><td>${fmtUsd(data.lost_ai_investment_usd)}</td><td>—</td></tr>
+            <tr><td>Associated Value</td><td>${fmtUsd(data.closed_won_value_usd)}</td><td>—</td><td>${fmtUsd(data.pipeline_value_usd)} pipeline</td></tr>
+            <tr><td>Cost per Opportunity</td><td>${fmtUsd(data.cost_per_won_opportunity_usd)}</td><td colspan="2">${fmtUsd(data.avg_ai_investment_per_opportunity_usd)} avg across all</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Support Impact — Resolved vs. Unresolved</h2>
+        <table class="rpt-context-table">
+          <thead><tr><th></th><th>Resolved</th><th>Unresolved</th></tr></thead>
+          <tbody>
+            <tr><td>Count</td><td>${fmtNum(data.support_cases_resolved)}</td><td>${fmtNum(data.support_cases_unresolved)}</td></tr>
+            <tr><td>AI Investment</td><td>${fmtUsd(data.support_resolved_ai_investment_usd)}</td><td>${fmtUsd(data.support_unresolved_ai_investment_usd)}</td></tr>
+          </tbody>
+        </table>
+        <div class="bi-note">
+          <strong>Cost per Resolution</strong> ${fmtUsd(data.support_cost_per_resolution_usd)}
+          <span class="bi-evidence-tag ${escapeHtml(evidenceByKpi.support_cost_per_resolution_usd || "")}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.support_cost_per_resolution_usd] || "")}</span>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Business Impact by Department</h2>
+        <table class="rpt-context-table">
+          <thead><tr><th></th><th>Department</th><th>AI Investment</th><th>Won</th><th>Lost</th><th>Open</th><th>Closed-Won Value</th><th>Cost / Won Opp</th></tr></thead>
+          <tbody>${deptRows}</tbody>
+        </table>
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Top WorkItems by AI Investment</h2>
+        <table class="rpt-context-table">
+          <thead><tr><th></th><th>WorkItem</th><th>AI Investment</th><th>${_biTopWorkItemsByRatio ? "Outcome Value</th><th>Cost / Value" : "Requests"}</th></tr></thead>
+          <tbody>${workItemRows}</tbody>
+        </table>
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">CostPilot Recommendations</h2>
+        <div class="bi-rec-grid">${recCards}</div>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
+        <div class="bi-note" style="margin-bottom:10px">${biReportEvidenceLegend()}</div>
+        <div class="bi-note">
+          <strong>Associated, not caused:</strong> these figures show AI activity that occurred on work which
+          later reached a known outcome — not evidence the AI activity caused that outcome. Trend arrows compare
+          the trailing 30 days against the prior 30. CostPilot reports consumption and attribution only; it does
+          not score employee productivity or infer business outcomes.
+        </div>
+      </section>
+
+      <footer class="report-footer">CostPilot — Business Impact Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+    </div>`;
+}
+
+function exportBusinessImpactReport() {
+  if (!_biData || !_biData.has_outcome_data) {
+    alert("No outcome data loaded yet — open the Business Impact tab first.");
+    return;
+  }
+  const container = document.getElementById("biReportDoc");
+  if (!container) return;
+  container.innerHTML = renderBusinessImpactReportHtml();
+  printSection("biReportDoc", "CostPilot — Business Impact Report");
 }
 
 function projectAttributionSelect(id, defaultLabel, options) {
