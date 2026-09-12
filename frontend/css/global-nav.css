@@ -943,6 +943,13 @@ button.cp-ask-evidence:focus-visible {
   flex: 1;
   margin-top: 0;
   text-align: center;
+  /* A solid, filled CTA -- distinct from Cancel's plain outline -- so this
+     is the one button on the card that reads as "the real action," not an
+     equal-weight pair a user might type past instead of clicking. */
+  color: #fff;
+  background: var(--accent, #58a6ff);
+  border-color: var(--accent, #58a6ff);
+  font-size: 11px;
 }
 
 .cp-ask-proposal-actions button:not(.cp-ask-supporting) {
