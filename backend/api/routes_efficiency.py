@@ -5599,6 +5599,14 @@ def _ask_costpilot_answer(
         # the plain company-wide total (identical to the generic "total"
         # branch below), mislabeled as if it were already a per-item
         # figure -- it was never actually divided by the number of items.
+        # "cost"/"spend" per item always means total dollars / item count --
+        # never divide an already-per-request metric like
+        # avg_cost_per_request by the item count again (confirmed live: the
+        # OpenAI intent-refinement layer relabeled this question's metric
+        # to avg_cost_per_request, which this per_item_cost_question guard
+        # doesn't itself gate on, producing a meaningless cost-per-request-
+        # per-project micro-figure instead of a real per-item dollar cost).
+        metric = "spend_usd" if metric == "avg_cost_per_request" else metric
         project_count = int(summary.get("project_count") or 0)
         total_value = _ask_row_metric(summary, metric)
         per_item_value = (total_value / project_count) if project_count else 0.0
