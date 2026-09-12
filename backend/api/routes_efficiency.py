@@ -4013,10 +4013,15 @@ when the caller already told you what range they're looking at. Only widen or ch
 window if the caller's default window comes back with no activity and the question doesn't
 depend on that exact range mattering.
 If this is a follow-up question in an ongoing conversation and it does not name its own period
-either (e.g. "who has the second highest?" right after a "this month" ranking), reuse the exact
-period_key/days from your most recent tool call in this conversation instead of the DEFAULT_WINDOW
-or any other window -- the caller is continuing to look at the same time range until they say
-otherwise. Only switch away from it when the new question explicitly names a different period.
+either, reuse the exact period_key/days from your most recent tool call in this conversation
+instead of the DEFAULT_WINDOW, "none", or any rolling-days default -- the caller is continuing to
+look at the same time range until they say otherwise. Concrete example: you were just asked
+"Which department has the highest AI spend for this month?" and called query_metrics with
+period_key="this_month"; the caller now asks "Who has the second highest?" with no period of its
+own -- call query_metrics again with period_key="this_month" (NOT period_key="none"/days=30, which
+silently switches to a rolling 30-day window and answers a different question than the one still
+being discussed). Only switch away from the prior period when the new question explicitly names a
+different one itself (e.g. "...last month instead?").
 The question may come from voice transcription and can contain misheard words (e.g. a person's
 surname transcribed as an unrelated common word). Once a tool result resolves the actual entity
 you matched (its real name/label as returned by the tool), always use that resolved name in your
