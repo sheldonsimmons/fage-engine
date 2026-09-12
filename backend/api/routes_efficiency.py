@@ -991,6 +991,19 @@ def _ask_intent(question: str, default_days: int) -> dict:
         and (
             (re.search(r"\bwhy\b", text) and re.search(r"\b(?:are we using|is .+ using|we're using|we are using)\b", text))
             or re.search(r"\bwho approved\b", text)
+            # "Show recent budget-cap decisions." -- a LIST request, not a
+            # single already-known decision to explain. Previously matched
+            # nothing here, so it fell through to intent="budget" (a plain
+            # budget-status answer to a completely different question) or,
+            # via the OpenAI refinement layer, intent="decision" --
+            # _ask_decision_response() requires an already-known
+            # audit_event_id/governed_request_id and has none for a bare
+            # "show me recent decisions" question, so it failed its own
+            # contract check and returned a generic "please try again."
+            # Confirmed live 2026-09-12. Routes to the same real,
+            # AuditEvent.rationale-backed lookup as "why are we using X"
+            # above instead, scoped by keyword below.
+            or re.search(r"\b(?:show|recent|latest)\b.{0,20}\bdecisions?\b", text)
         )
     )
 
@@ -5509,16 +5522,33 @@ def _ask_costpilot_answer(
             agent_name = named_entity["row"].get("label")
         elif named_entity and named_entity["entity"] == "model":
             model_name = named_entity["row"].get("label")
+        # "Show recent budget-cap decisions" names no agent/model to scope
+        # by -- scope by keyword instead so this doesn't return every
+        # governance decision ever recorded (routing, locks, throttles)
+        # when the user specifically asked about budget.
+        question_lower_for_decisions = question.lower()
+        decision_keyword = (
+            "budget"
+            if not (agent_name or model_name)
+            and ("budget" in question_lower_for_decisions or "cap" in question_lower_for_decisions)
+            else None
+        )
         history = run_get_decision_history(
             db, request.workspace_id, agent_name=agent_name, model_name=model_name,
-            department_scope=department_scope,
+            keyword=decision_keyword, department_scope=department_scope,
         )
         decisions = history.get("decisions") or []
         subject = agent_name or model_name
-        title = f"Why {subject}" if subject else "Recent governance decisions"
+        if decision_keyword:
+            title = "Recent budget-cap decisions"
+        elif subject:
+            title = f"Why {subject}"
+        else:
+            title = "Recent governance decisions"
         if not decisions:
             answer = (
                 f"No recorded decisions matched {subject}." if subject
+                else "No recorded budget-cap decisions were found." if decision_keyword
                 else "No recorded governance decisions were found."
             )
         else:
