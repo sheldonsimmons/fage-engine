@@ -43,6 +43,8 @@ let _biDeptRows         = [];
 let _biTopWorkItemsRows = [];
 let _biTopWorkItemsByRatio = false;
 let _biRecommendations  = [];
+let _rptRiskData = null;
+let _rptGovernanceDashboard = null;
 const _contextBreakdownExpanded = { project: false, person: false, agent: false };
 const CONTEXT_BREAKDOWN_LIMIT = 7;
 const _hiddenDeptChartLabels = new Set();
@@ -1829,6 +1831,7 @@ async function loadSavings() {
 async function loadRisk() {
   const range = getActiveDateRange();
   const data = await apiGet(`/api/reports/risk?${reportApiParams(range)}`);
+  _rptRiskData = data;
   _rptRiskEvents = data.recent_events || [];
   populateRiskEventFilters(_rptRiskEvents);
 
@@ -1942,6 +1945,7 @@ async function loadRisk() {
   // Load governance summary panels from dashboard API
   try {
     const d = await apiGet(reportScopedPath("/api/dashboard"));
+    _rptGovernanceDashboard = d;
     renderComplianceGrid(d);
     renderExecSummary(d);
   } catch (e) {
@@ -3516,8 +3520,125 @@ function exportRiskCsv() {
   downloadCsv(`fage_risk_events_${date}.csv`, headers, rows);
 }
 
+function renderGovernanceReportHtml() {
+  const data = _rptRiskData;
+  if (!data) return `<div class="report-doc"><p>No risk data loaded — open the Governance &amp; Risk tab first.</p></div>`;
+  const d = _rptGovernanceDashboard || {};
+  const generatedAt = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const kpiCard = (label, value, sub) => `
+    <div class="report-kpi">
+      <div class="report-kpi-label-row"><span class="report-kpi-label">${escapeHtml(label)}</span></div>
+      <div class="report-kpi-value">${value}</div>
+      ${sub ? `<div class="report-kpi-sub">${escapeHtml(sub)}</div>` : ""}
+    </div>`;
+
+  const summary = data.critical > 0 || data.high > 0
+    ? `Over the selected period, CostPilot logged ${fmtNum(data.total_events)} governance events, including `
+      + `${fmtNum(data.critical)} critical and ${fmtNum(data.high)} high-risk events. `
+      + `${fmtNum(data.blocked)} requests were blocked by policy before reaching an AI model.`
+    : `Over the selected period, CostPilot logged ${fmtNum(data.total_events)} governance events with no critical `
+      + `or high-risk findings. ${fmtNum(data.blocked)} requests were blocked by policy before reaching an AI model.`;
+
+  const collisionBreakdown = d.collision_breakdown || { lock: d.collision_count || 0, queue: 0, skip: 0 };
+  const complianceRows = [
+    ["Requests Blocked", fmtNum(d.blocked_count), "Sensitive terms triggered block policy before the request reached an AI model."],
+    ["Escalated to Flagship", fmtNum(d.escalated_count), "Requests routed to Advisor, Strategist, or flagship review."],
+    ["Flagged in Audit Log", fmtNum(d.flagged_count), "High-risk keywords logged for compliance review."],
+    ["PII Detected", fmtNum(d.pii_count), "Credit cards, SSNs, emails, phone numbers caught before AI processing."],
+    ["Budget Overruns Prevented", fmtNum(d.throttle_prevented), "Auto-throttle engaged before a department cap was breached."],
+    ["Agent Collisions Controlled", fmtNum(d.collision_count),
+      `${collisionBreakdown.lock || 0} locked · ${collisionBreakdown.queue || 0} queued · ${collisionBreakdown.skip || 0} skipped — zero silent overwrites.`],
+  ];
+
+  const eventRows = _rptRiskEvents.slice(0, 15).map(e => `
+    <tr>
+      <td>${escapeHtml(fmtTs(e.timestamp))}</td>
+      <td>${escapeHtml(e.event_type || "")}</td>
+      <td>${escapeHtml(displayDeptName(e.display_department || e.department) || "")}</td>
+      <td>${escapeHtml(e.risk_level || "")}</td>
+      <td>${escapeHtml(e.decision_outcome || "")}</td>
+    </tr>`).join("") || `<tr><td colspan="5">No events in this period.</td></tr>`;
+
+  return `
+    <div class="report-doc">
+      <header class="report-header">
+        <div class="report-header-brand">CostPilot</div>
+        <h1 class="report-title">Governance &amp; Risk Report</h1>
+        <div class="report-meta">
+          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+          <span>${askCostPilotDateLabel()}</span>
+          <span>Generated ${escapeHtml(generatedAt)}</span>
+        </div>
+      </header>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Executive Brief</h2>
+        <p class="bi-summary">${summary}</p>
+        <div class="report-kpi-row">
+          ${kpiCard("Total Events", fmtNum(data.total_events), "audit log entries")}
+          ${kpiCard("Critical", fmtNum(data.critical), "HIPAA, fraud, lawsuits")}
+          ${kpiCard("High Risk", fmtNum(data.high), "legal, compliance, locks")}
+          ${kpiCard("Blocked Requests", fmtNum(data.blocked), "stopped by term policy")}
+          ${kpiCard("Agent Collisions", fmtNum(data.locks), "concurrent write conflicts")}
+          ${kpiCard("Term Library", fmtNum(data.term_library?.total), `${data.term_library?.block ?? 0} block / ${data.term_library?.escalate ?? 0} escalate`)}
+        </div>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Risk Trend</h2>
+        <div class="report-chart-row">
+          ${savingsReportChartImg("chartRiskTimeline", "Daily risk events by severity")}
+          ${savingsReportChartImg("chartRiskBreakdown", "Risk level breakdown")}
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Governance &amp; Compliance Activity</h2>
+        <table class="rpt-context-table">
+          <thead><tr><th>Control</th><th>Count</th><th>What it means</th></tr></thead>
+          <tbody>${complianceRows.map(([label, value, note]) => `
+            <tr><td>${escapeHtml(label)}</td><td>${value}</td><td>${escapeHtml(note)}</td></tr>`).join("")}</tbody>
+        </table>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Recent High-Stakes Events</h2>
+        <table class="rpt-context-table">
+          <thead><tr><th>Timestamp</th><th>Event Type</th><th>Department</th><th>Risk Level</th><th>Decision</th></tr></thead>
+          <tbody>${eventRows}</tbody>
+        </table>
+        ${_rptRiskEvents.length > 15 ? `<div class="bi-note">Showing the 15 most recent of ${fmtNum(_rptRiskEvents.length)} events. See the live Governance &amp; Risk tab for the full audit log.</div>` : ""}
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
+        <div class="bi-note">
+          Every event in this report comes from CostPilot's immutable audit log — the same governed request ledger
+          every other CostPilot report and Ask CostPilot answer reads from. This report introduces no separate
+          calculation or risk scoring.
+        </div>
+      </section>
+
+      <footer class="report-footer">CostPilot — Governance &amp; Risk Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+    </div>`;
+}
+
 function exportRiskPdf() {
-  printSection("tab-risk", "CostPilot — Risk & Compliance Report");
+  if (!_rptRiskData) {
+    alert("No risk data loaded yet — open the Governance & Risk tab first.");
+    return;
+  }
+  let container = document.getElementById("riskReportDoc");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "riskReportDoc";
+    container.style.display = "none";
+    document.getElementById("tab-risk").after(container);
+  }
+  container.innerHTML = renderGovernanceReportHtml();
+  printSection("riskReportDoc", "CostPilot — Governance & Risk Report");
 }
 
 function exportDeptCsv() {
@@ -3537,8 +3658,93 @@ function exportDeptCsv() {
   downloadCsv(`fage_departments_${date}.csv`, headers, rows);
 }
 
+function renderDepartmentsReportHtml() {
+  if (!_rptDeptData.length) return `<div class="report-doc"><p>No department data loaded — open the Department detail view first.</p></div>`;
+  const generatedAt = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const totalCost = _rptDeptData.reduce((sum, d) => sum + (d.total_cost_usd || 0), 0);
+  const totalSaved = _rptDeptData.reduce((sum, d) => sum + (d.pruning_saved_usd || 0), 0);
+  const throttled = _rptDeptData.filter(d => d.throttled);
+
+  const summary = throttled.length
+    ? `Across ${fmtNum(_rptDeptData.length)} departments, CostPilot governed ${fmtUsd(totalCost)} in AI spend this `
+      + `period, with ${fmtUsd(totalSaved)} saved through pruning. ${throttled.length} department${throttled.length === 1 ? " is" : "s are"} `
+      + `currently throttled: ${throttled.map(d => displayDeptName(d.display_department || d.department)).join(", ")}.`
+    : `Across ${fmtNum(_rptDeptData.length)} departments, CostPilot governed ${fmtUsd(totalCost)} in AI spend this `
+      + `period, with ${fmtUsd(totalSaved)} saved through pruning. No department is currently throttled.`;
+
+  const rows = _rptDeptData.map(d => `
+    <tr>
+      <td>${escapeHtml(displayDeptName(d.display_department || d.department))}</td>
+      <td>${fmtNum(d.total_calls)}</td>
+      <td>${d.micro_pct}%</td>
+      <td>${fmtUsd(d.total_cost_usd)}</td>
+      <td>${fmtUsd(d.pruning_saved_usd)}</td>
+      <td>${d.budget_used_pct}%</td>
+      <td>${fmtUsd(d.monthly_cap_usd)}</td>
+      <td>${d.throttled ? "Throttled" : d.override_granted ? "Override" : "OK"}</td>
+    </tr>`).join("");
+
+  return `
+    <div class="report-doc">
+      <header class="report-header">
+        <div class="report-header-brand">CostPilot</div>
+        <h1 class="report-title">Department Report</h1>
+        <div class="report-meta">
+          <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+          <span>${askCostPilotDateLabel()}</span>
+          <span>Generated ${escapeHtml(generatedAt)}</span>
+        </div>
+      </header>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Executive Brief</h2>
+        <p class="bi-summary">${summary}</p>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Spend by Department</h2>
+        <div class="report-chart-row">
+          ${savingsReportChartImg("chartDeptSpend", "Daily spend by department")}
+          ${savingsReportChartImg("chartDeptCost", "Total cost by department")}
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Department Scorecard</h2>
+        <table class="rpt-context-table">
+          <thead><tr><th>Department</th><th>Calls</th><th>Micro %</th><th>Actual Cost</th><th>Pruning Saved</th><th>Budget Used</th><th>Monthly Cap</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
+        <div class="bi-note">
+          Every figure above comes from the same governed request ledger every other CostPilot report and Ask
+          CostPilot answer reads from. This report introduces no separate calculation.
+        </div>
+      </section>
+
+      <footer class="report-footer">CostPilot — Department Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+    </div>`;
+}
+
 function exportDeptPdf() {
-  printSection("tab-departments", "CostPilot — Department Report");
+  if (!_rptDeptData.length) {
+    alert("No department data loaded yet — open the Department detail view first.");
+    return;
+  }
+  let container = document.getElementById("deptReportDoc");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "deptReportDoc";
+    container.style.display = "none";
+    document.getElementById("tab-departments").after(container);
+  }
+  container.innerHTML = renderDepartmentsReportHtml();
+  printSection("deptReportDoc", "CostPilot — Department Report");
 }
 
 function exportSavingsCsv() {
