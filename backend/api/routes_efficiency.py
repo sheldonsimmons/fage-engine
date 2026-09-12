@@ -330,6 +330,48 @@ _ASK_OUTCOME_DECISION_WORDS_RE = re.compile(
 )
 
 
+_ASK_MONTH_NAMES = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+}
+_ASK_MONTH_NAME_RE = re.compile(r"\b(" + "|".join(_ASK_MONTH_NAMES) + r")\b", re.IGNORECASE)
+
+
+def _ask_named_month_unsupported(question: str, now: Optional[datetime] = None) -> Optional[str]:
+    """
+    Detect a named calendar month (e.g. "June", "compare June and July")
+    that isn't "this month" or "last month" -- there is no period_key, no
+    date parsing, nothing anywhere in this file that resolves an arbitrary
+    named historical month into real calendar boundaries. Without this,
+    a question like "compare sales usage for June and July" reached the
+    OpenAI classifier/narrator with nothing real to map it to, and it
+    silently substituted a fallback window (today's rolling period) while
+    narrating the substituted dates AS IF they were June and July --
+    confirmed live 2026-09-12: a real September/August comparison was
+    presented as "a proxy for late June usage" and "a proxy for late July
+    usage." That's worse than an "unsupported" answer -- it's a fabricated
+    relabeling dressed up to look like it answered the real question.
+    Caught here, before the OpenAI classifier is ever called (same
+    early-short-circuit point help/product intents already use), so
+    there's no chance for a downstream step to paper over the gap.
+
+    Returns the offending month name (for the honest response's wording)
+    or None if every named month in the question is one CostPilot can
+    actually answer about.
+    """
+    matches = _ASK_MONTH_NAME_RE.findall(question or "")
+    if not matches:
+        return None
+    reference = now or datetime.utcnow()
+    this_month_num = reference.month
+    last_month_num = 12 if this_month_num == 1 else this_month_num - 1
+    for raw in matches:
+        month_num = _ASK_MONTH_NAMES[raw.lower()]
+        if month_num not in (this_month_num, last_month_num):
+            return raw.capitalize()
+    return None
+
+
 def _ask_intent(question: str, default_days: int) -> dict:
     """Translate common executive questions into a bounded reporting intent."""
     text = " ".join((question or "").lower().split())
@@ -1371,6 +1413,10 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     deterministic parser remains available.
     """
     global _ASK_OPENAI_DISABLED_UNTIL
+
+    named_month = _ask_named_month_unsupported(request.question)
+    if named_month:
+        return {"intent": "unsupported_period", "named_month": named_month}, "unsupported_named_period"
 
     fallback = _ask_fallback_intent(request)
     if fallback["intent"] == "help":
@@ -2725,6 +2771,34 @@ def _ask_decision_response(
             "subject_filter_name": "governed_request_id",
             "subject_filter_value": governed_request_id,
         },
+        "read_only": True,
+    }
+
+
+def _ask_unsupported_period_response(named_month: str) -> dict:
+    """
+    Honest decline for a named historical month/period CostPilot has no
+    real way to resolve (see _ask_named_month_unsupported) -- states the
+    limitation plainly instead of silently substituting a different real
+    period and narrating it as if it were the one asked about.
+    """
+    return {
+        "title": "That time period isn't supported yet",
+        "answer": (
+            f"CostPilot can't look up {named_month} specifically yet -- there's no way to "
+            "resolve an arbitrary named month into a calendar range today. "
+            "Supported time periods are: today, yesterday, this week, last week, this month, "
+            "last month, this quarter, last quarter, the last 2 quarters, this year, last year, "
+            "all time, or a specific number of days back (e.g. \"the last 14 days\")."
+        ),
+        "intent": "unsupported_period",
+        "evidence": [],
+        "recommendations": [],
+        "suggested_questions": [
+            "How much did we spend this month?",
+            "How much did we spend last month?",
+            "Compare this month's AI spend to last month.",
+        ],
         "read_only": True,
     }
 
@@ -4338,6 +4412,15 @@ def _ask_costpilot_answer(
             "recommendations": [],
         }
 
+    # Checked before EITHER answer path -- the agent loop's query_metrics
+    # tool takes a period_key from a fixed enum with nothing for an
+    # arbitrary named month either, so it's just as able to guess wrong
+    # and narrate the guess as fact. See _ask_named_month_unsupported's
+    # docstring for the live incident this guards against.
+    named_month = _ask_named_month_unsupported(question)
+    if named_month:
+        return _ask_unsupported_period_response(named_month)
+
     if _ask_agent_mode_enabled():
         agent_result = _ask_costpilot_agent(request, db, department_scope=department_scope, user_id=user_id)
         if agent_result is not None:
@@ -4352,6 +4435,8 @@ def _ask_costpilot_answer(
         return _ask_product_response(request, parsed, assistant_mode)
     if parsed.get("intent") == "decision":
         return _ask_decision_response(request, parsed, db, assistant_mode)
+    if parsed.get("intent") == "unsupported_period":
+        return _ask_unsupported_period_response(parsed.get("named_month") or "that period")
 
     reporting_filters = _ask_reporting_filters(request, parsed)
     if department_scope:
