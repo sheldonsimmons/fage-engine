@@ -442,7 +442,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
     metric = metric_for_keywords(text)
 
     entity = "overview"
-    if any(term in text for term in ("employee", "person", "people", "user", "who ")):
+    if any(term in text for term in ("employee", "person", "people", "user", "who ", "whose")):
         entity = "person"
     elif any(term in text for term in ("agent", "bot")):
         entity = "agent"
@@ -1336,7 +1336,7 @@ def _ask_fallback_intent(request: AskCostPilotRequest) -> dict:
         ))
     )
     explicit_entity = any(term in text for term in (
-        "employee", "person", "people", "user", "who ", "agent", "bot",
+        "employee", "person", "people", "user", "who ", "whose", "agent", "bot",
         "department", "team", "business unit", "cost center", "account",
         "customer", "project", "matter", "opportunit", "business context",
         "work item", "platform", "provider", "source system", "model", "tier",
@@ -4058,6 +4058,12 @@ separate top_people and top_accounts lists — "account" means a business/custom
 a company record in Salesforce), "people" means individual human users. These are never the
 same thing; never answer an "accounts" question using top_people data, or vice versa, even if
 one list is empty and the other has rows.
+A bare "who"/"whose" question (e.g. "who has the highest AI spend", "whose usage grew the
+most") with no department/team/account language means an individual PERSON -- answer from
+top_people, never top_departments, even if a department's number happens to be larger. Confirmed
+live: "Who has the highest AI spend this month?" was wrongly answered with a department's spend
+("Operations has the highest AI spend") instead of naming the actual top person -- pick the
+breakdown that matches what was asked, not whichever number is largest across all of them.
 Always set get_usage_report's limit argument to match the question — "top 10 users" needs
 limit=10, "who spent the most" needs limit=1, a general overview can use the default of 5.
 Never assume more rows exist beyond what the tool actually returned.
@@ -4080,10 +4086,18 @@ named_entity_match field for a named-entity question, and never answer it with t
 total or say the entity had no usage just because it is missing from a top_* list.
 Call get_change_drivers for questions about why a number changed, increased, or decreased.
 Call get_budget_status for budget, cap, or "on track" questions.
-Call get_agent_adoption for questions about which agents are active, inactive, unused, never
-used, or recently quiet. get_usage_report only ever returns agents that HAVE activity, so it
-cannot answer "which agents are inactive" — you must call get_agent_adoption for that, never
-infer an answer by subtracting counts.
+Call get_agent_adoption for questions about which AGENTS (AI bots/automations, e.g. "Sensor
+Summary Agent") are active, inactive, unused, never used, or recently quiet. get_usage_report
+only ever returns agents that HAVE activity, so it cannot answer "which agents are inactive" —
+you must call get_agent_adoption for that, never infer an answer by subtracting counts.
+get_agent_adoption is ONLY about agents, never about people/users/employees -- "agent" and
+"user"/"person" are different entities (an agent is a piece of software; a person is a human).
+There is currently no tool that answers "which people/users have been inactive" -- if asked
+that, say plainly that this isn't something you can compute yet, rather than calling
+get_agent_adoption and presenting its agent-level counts as if they were about people. Confirmed
+live: this produced "all 7 registered users have been active" -- a fabricated reframing of an
+agent-adoption result (7 was never a count of people) as if it answered a completely different
+question about people.
 Call get_account_outcomes for any question about business outcomes — Opportunities won/lost/open,
 pipeline value, closed-won value, resolved support cases, or AI spend tied to won vs lost deals.
 get_usage_report NEVER returns outcome data, even for a named account's entity_name lookup — it
