@@ -3302,12 +3302,33 @@ def _ask_narration_unverified_numbers(facts: dict, narrated_answer: str) -> set[
     but nothing previously checked that — this is the fidelity check that
     was missing, catching a fluent rewrite that silently swaps or drops a
     figure before it reaches the user.
+
+    A number that equals the sum or difference of two source numbers is
+    also accepted, the same tolerant spirit as the ratio_marker exception
+    in _ask_extract_numbers ("2.6x last month's total" for a multiplicative
+    derivation the model computed itself from figures already confirmed
+    present). Reproduced live: an agent-loop answer correctly said a
+    department was "$4.75 over budget" (its real $22.75 spend minus its
+    real $18.00 cap, both individually present in the tool facts) and got
+    discarded as a fabrication because the validator only ever checked for
+    an exact figure match, never a same-question subtraction across two
+    verified facts. This is deliberately limited to one arithmetic step
+    over the raw source numbers -- not a general calculator -- to keep this
+    a fidelity check, not a second place answers can go newly wrong.
     """
     source_numbers = _ask_extract_numbers(facts)
     narrated_numbers = _ask_extract_numbers(narrated_answer)
+    source_list = list(source_numbers)
     unverified = set()
     for number in narrated_numbers:
         if any(abs(number - source) <= max(0.01, abs(source) * 0.005) for source in source_numbers):
+            continue
+        tolerance = max(0.01, abs(number) * 0.005)
+        if any(
+            abs(number - (a + b)) <= tolerance or abs(number - abs(a - b)) <= tolerance
+            for i, a in enumerate(source_list)
+            for b in source_list[i + 1:]
+        ):
             continue
         unverified.add(number)
     return unverified
