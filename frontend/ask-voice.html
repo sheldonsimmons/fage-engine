@@ -85,6 +85,16 @@
   }
   #stopSpeaking.visible { display: inline-flex; }
 
+  /* Only shown while actively recording -- lets a listening session
+     (especially an auto-restarted one) be exited without whatever the
+     mic picked up getting transcribed and sent as a question. */
+  #cancelButton {
+    display: none; margin-top: 4px;
+    background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #cbd5e1;
+    padding: 7px 14px; border-radius: 999px; font-size: 13px;
+  }
+  #cancelButton.visible { display: inline-flex; }
+
   #errorText { color: #fca5a5; font-size: 13px; text-align: center; min-height: 16px; }
 
   footer { font-size: 12px; color: #64748b; text-align: center; }
@@ -116,6 +126,7 @@
         </svg>
       </button>
       <div id="statusText">Tap to ask a question</div>
+      <button id="cancelButton" type="button">✕ Cancel — don't send</button>
       <div id="errorText"></div>
     </div>
 
@@ -145,6 +156,7 @@
   const transcriptEl = document.getElementById("transcript");
   const answerEl = document.getElementById("answer");
   const stopSpeakingBtn = document.getElementById("stopSpeaking");
+  const cancelButton = document.getElementById("cancelButton");
 
   // Same hardcoded fallback pair global-nav.js's own workspace switcher
   // uses when GET /api/workspaces hasn't resolved -- "Simulated" is the
@@ -189,6 +201,7 @@
   let mediaRecorder = null;
   let audioChunks = [];
   let recording = false;
+  let cancelledRecording = false;
   let busy = false;
   const voicePlayer = document.getElementById("voicePlayer");
   let audioUnlocked = false;
@@ -388,6 +401,18 @@
         stream.getTracks().forEach((t) => t.stop());
         recording = false;
         micButton.classList.remove("recording");
+        cancelButton.classList.remove("visible");
+        // Explicit cancel (the "✕ Cancel" button) -- discard whatever was
+        // captured entirely, no transcribe call, no auto-listen restart.
+        // This is the actual exit from a listening session: auto-listen
+        // (speak()'s onended) only re-arms after a real spoken ANSWER,
+        // never after a cancelled recording, so cancelling here is enough
+        // to fully stop the hands-free loop.
+        if (cancelledRecording) {
+          cancelledRecording = false;
+          setStatus("Tap to ask a question");
+          return;
+        }
         // Cheap first line of defense before even calling the transcribe
         // API: a clip this short is essentially certain to be an
         // accidental/instant tap-to-stop with no real speech in it,
@@ -406,7 +431,8 @@
       mediaRecorder.start();
       recording = true;
       micButton.classList.add("recording");
-      setStatus("Listening… tap to stop");
+      cancelButton.classList.add("visible");
+      setStatus("Listening… tap the mic to send, or Cancel to discard");
     } catch (err) {
       setError("Couldn't access your microphone — check permissions.");
     }
@@ -425,6 +451,12 @@
   stopSpeakingBtn.addEventListener("click", () => {
     stopSpeaking();
     setStatus("Tap to ask another question");
+  });
+
+  cancelButton.addEventListener("click", () => {
+    if (!recording) return;
+    cancelledRecording = true;
+    stopRecording();
   });
 
   resolveWorkspaceId();
