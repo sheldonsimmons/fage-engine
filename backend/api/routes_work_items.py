@@ -1955,10 +1955,27 @@ def project_activity_reporting(
     if exclude_prune_only_rows:
         from core.metrics_query import IS_AI_CALL
         query = query.filter(IS_AI_CALL)
-    if workspace_id:
+    # No workspace_id (None, "", or the literal "default") means the
+    # legacy/default bucket specifically -- same contract core/budget.py's
+    # get_all_budgets() already documents -- never "every workspace pooled
+    # together." Confirmed live: with no filter at all here, any answer
+    # computed with no workspace selected (the normal state for a
+    # first-time visitor) silently blended in whatever another workspace's
+    # own simulator was actively generating in real time, so the same
+    # question could return a different total from one minute to the next
+    # depending on unrelated background activity.
+    if workspace_id and workspace_id != "default":
         query = query.filter(or_(
             TokenTransaction.workspace_id == workspace_id,
             TokenTransaction.workspace_id.is_(None) & (WorkItem.workspace_id == workspace_id),
+        ))
+    else:
+        # The live routing path (api/routes_router.py) writes the literal
+        # string "default" onto new rows for unscoped traffic; older/seeded
+        # rows leave it NULL. Both mean the same bucket.
+        query = query.filter(or_(
+            TokenTransaction.workspace_id.is_(None),
+            TokenTransaction.workspace_id == "default",
         ))
 
     # Full SQL-side aggregation -- no per-transaction row is loaded into

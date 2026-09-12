@@ -505,10 +505,19 @@ def _run_activity_query(
         q = q.filter(TokenTransaction.timestamp >= start)
     if end is not None:
         q = q.filter(TokenTransaction.timestamp < end)
-    if workspace_id:
+    # Matches project_activity_reporting()'s own contract (routes_work_items.py):
+    # no workspace_id means the legacy/default bucket, not "skip the filter."
+    # Live-routed rows store that bucket as the literal "default" string;
+    # older/seeded rows leave it NULL -- both mean the same bucket.
+    if workspace_id and workspace_id != "default":
         q = q.filter(or_(
             TokenTransaction.workspace_id == workspace_id,
             and_(TokenTransaction.workspace_id.is_(None), WorkItem.workspace_id == workspace_id),
+        ))
+    else:
+        q = q.filter(or_(
+            TokenTransaction.workspace_id.is_(None),
+            TokenTransaction.workspace_id == "default",
         ))
     if account is not None:
         q = q.filter(WorkItem.account_id == account.id)
