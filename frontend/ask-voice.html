@@ -291,7 +291,7 @@
       // "stop the loop" control.
       voicePlayer.onended = () => {
         stopSpeakingBtn.classList.remove("visible");
-        startRecording();
+        startRecording(true);
       };
       stopSpeakingBtn.classList.add("visible");
       setStatus("Speaking…");
@@ -381,7 +381,19 @@
     }
   }
 
-  async function startRecording() {
+  // Auto-listen is meant to be conditional -- a bounded window tied to
+  // an active, ongoing exchange right after CostPilot just answered
+  // something, not an indefinite hot mic. Without this timeout it
+  // stayed listening until the user noticed and manually tapped Cancel,
+  // which is how real ambient conversation (not questions) was getting
+  // captured and transcribed. A manually-tapped recording (the user
+  // deliberately pressed the mic) has no timeout -- only the automatic
+  // restart after an answer does.
+  const AUTO_LISTEN_TIMEOUT_MS = 7000;
+  let autoListenTimeoutId = null;
+  let autoListenTimedOut = false;
+
+  async function startRecording(isAutoListen = false) {
     unlockAudioPlayback();
     setError("");
     answerEl.classList.remove("visible");
@@ -398,6 +410,7 @@
       mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
       mediaRecorder.onstop = () => {
+        clearTimeout(autoListenTimeoutId);
         stream.getTracks().forEach((t) => t.stop());
         recording = false;
         micButton.classList.remove("recording");
@@ -410,7 +423,8 @@
         // to fully stop the hands-free loop.
         if (cancelledRecording) {
           cancelledRecording = false;
-          setStatus("Tap to ask a question");
+          setStatus(autoListenTimedOut ? "Didn't hear a follow-up — tap to ask a question" : "Tap to ask a question");
+          autoListenTimedOut = false;
           return;
         }
         // Cheap first line of defense before even calling the transcribe
@@ -432,7 +446,17 @@
       recording = true;
       micButton.classList.add("recording");
       cancelButton.classList.add("visible");
-      setStatus("Listening… tap the mic to send, or Cancel to discard");
+      if (isAutoListen) {
+        setStatus("Listening for a follow-up… (tap to send, or Cancel)");
+        autoListenTimeoutId = setTimeout(() => {
+          if (!recording) return;
+          cancelledRecording = true;
+          autoListenTimedOut = true;
+          stopRecording();
+        }, AUTO_LISTEN_TIMEOUT_MS);
+      } else {
+        setStatus("Listening… tap the mic to send, or Cancel to discard");
+      }
     } catch (err) {
       setError("Couldn't access your microphone — check permissions.");
     }
