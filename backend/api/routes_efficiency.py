@@ -4731,6 +4731,18 @@ def _ask_costpilot_answer(
     data_coverage_question = bool(parsed.get("data_coverage_question"))
     growth_ranking_question = bool(parsed.get("growth_ranking_question"))
     per_item_cost_question = bool(parsed.get("per_item_cost_question"))
+    # "Who had the highest AI spend this month and compare to last month?"
+    # -- the intent classifier (both the regex fallback and the optional
+    # OpenAI refinement layer) correctly sets comparison_key on a ranking
+    # question, not just on intent=="comparison"/"change_drivers", but
+    # nothing in the ranking answer branch below ever read it -- the
+    # winning entity's prior-period figure was never fetched, so the
+    # narration had no comparison data and said so, even though the
+    # workspace has a full year of history and the earlier period's real
+    # number was one query away. Confirmed live 2026-09-12.
+    ranking_comparison_key = (
+        parsed.get("comparison_key") if intent == "ranking" and not growth_ranking_question else None
+    )
     evidence = []
     recommendations = []
     title = "AI usage overview"
@@ -6414,6 +6426,51 @@ def _ask_costpilot_answer(
             live_count = risk_live
             simulation_count = risk_simulation
         ranked = _ask_rank(ranking_rows, metric, direction)
+        # "Who had the highest AI spend this month and compare to last
+        # month?" -- comparison_key was already correctly detected (by
+        # both the regex fallback and the OpenAI refinement layer) but
+        # nothing here ever read it, so the winning entity's prior-period
+        # figure was never fetched and the narration said no comparison
+        # data existed, even on a workspace with a full year of history.
+        # Confirmed live 2026-09-12. Only looks up the already-ranked
+        # winner(s) in a second, prior-period report -- same
+        # comparison_plan()-driven pattern the growth-ranking branch above
+        # uses, just applied to an existing ranking instead of re-ranking
+        # by delta.
+        ranking_comparison_sentence = ""
+        if ranking_comparison_key and ranked:
+            comparison_ranking_period = resolve_primary_period(
+                period_key=parsed.get("period_key"), days=parsed["days"],
+                timezone_name=effective_timezone,
+                date_from=request.date_from, date_to=request.date_to,
+            )
+            ranking_comparison_plan = comparison_plan(comparison_ranking_period, ranking_comparison_key)
+            ranking_comparison_report = project_activity_reporting(
+                workspace_id=request.workspace_id,
+                date_from=ranking_comparison_plan.comparison.start,
+                date_to=ranking_comparison_plan.comparison.end,
+                days=parsed["days"], **reporting_filters,
+                activity_limit=2000, exclude_prune_only_rows=True, db=db,
+            )
+            comparison_rows_by_id = {
+                row["id"]: row for row in (ranking_comparison_report.get(breakdown_key) or [])
+                if row.get("id") not in ("__unknown__", "__simulator__")
+            }
+            winner_comparison_row = comparison_rows_by_id.get(ranked[0].get("id"))
+            comparison_period_label = ranking_comparison_plan.comparison.contract()["label"]
+            if winner_comparison_row:
+                comparison_value, _ = _ask_metric_value(
+                    metric, _ask_row_metric(winner_comparison_row, metric)
+                )
+                ranking_comparison_sentence = (
+                    f" For {comparison_period_label}, {ranked[0].get('label') or 'Unknown'} "
+                    f"had {comparison_value}."
+                )
+            else:
+                ranking_comparison_sentence = (
+                    f" {ranked[0].get('label') or 'Unknown'} had no attributed AI activity "
+                    f"for {comparison_period_label}."
+                )
         evidence = _ask_evidence(
             ranked,
             metric,
@@ -6449,6 +6506,7 @@ def _ask_costpilot_answer(
                     f"{'lowest to highest' if direction == 'asc' else 'highest to lowest'} "
                     f"{metric_label} for {period_label}. "
                     f"{ranked[0].get('label') or 'Unknown'} is first at {value}."
+                    f"{ranking_comparison_sentence}"
                 )
             else:
                 answer = (
@@ -6456,6 +6514,7 @@ def _ask_costpilot_answer(
                     f"{'lowest' if direction == 'asc' else 'highest'} {metric_label}{scope_suffix} "
                     f"for {period_label}: {value}. "
                     f"That includes {int(ranked[0].get('request_count') or 0):,} governed requests."
+                    f"{ranking_comparison_sentence}"
                 )
         else:
             if latest_available_at:
