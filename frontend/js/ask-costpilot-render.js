@@ -508,7 +508,7 @@ function buildAskGeneratedReportHtml(data, tool, replayed) {
 
   return `
     <div class="report-doc">
-      ${REPORT_LOGO_SVG}
+      ${ASK_REPORT_LOGO_SVG}
       <header class="report-header" style="border-top:none">
         <h1 class="report-title">${askRenderEscapeHtml(data.title || "CostPilot Report")}</h1>
         <div class="report-meta">
@@ -532,12 +532,12 @@ function buildAskGeneratedReportHtml(data, tool, replayed) {
     </div>`;
 }
 
-// Same inline-SVG logo as reports.js's REPORT_LOGO_SVG (duplicated, not
+// Same inline-SVG logo as reports.js's ASK_REPORT_LOGO_SVG (duplicated, not
 // shared -- this file runs on pages that never load reports.js). Inlined
 // rather than an <img src> for the same reason: confirmed live there that
 // a network-loaded image hadn't finished loading by the time window.print()
 // fired.
-const REPORT_LOGO_SVG = `<svg class="report-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 150" role="img" aria-label="CostPilot" style="height:22px;width:auto;display:block;margin-bottom:8px">
+const ASK_REPORT_LOGO_SVG = `<svg class="report-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 150" role="img" aria-label="CostPilot" style="height:22px;width:auto;display:block;margin-bottom:8px">
   <g transform="translate(32 22)">
     <circle fill="none" stroke="#07336f" stroke-width="9" cx="55" cy="55" r="47"/>
     <circle fill="none" stroke="#0a2a5b" stroke-width="5" opacity="0.55" cx="55" cy="55" r="35"/>

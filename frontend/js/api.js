@@ -160,8 +160,28 @@ function printSection(sectionId, title) {
   });
   document.body.appendChild(overlay);
   document.body.classList.add("printing");
+  // Cleanup is deferred to the browser's own "afterprint" event, not run
+  // synchronously right after window.print() returns. Confirmed live: a
+  // real "Save as PDF" export came back completely blank -- PDF generation
+  // for that path happens asynchronously after the print dialog closes,
+  // and the overlay had already been removed by the time Chrome actually
+  // read the DOM to build the file. A live print preview (and every
+  // mocked-window.print() check used to verify these reports) looks fine
+  // regardless, because both read the DOM before this ever ran -- this
+  // bug is invisible until someone actually saves the file. The timeout
+  // is a safety net for any export path that never fires afterprint at
+  // all, so the overlay (and the "printing" class hiding the live app)
+  // can't get stuck indefinitely.
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    document.body.classList.remove("printing");
+    overlay.remove();
+    document.title = prev;
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  setTimeout(cleanup, 5000);
   window.print();
-  document.body.classList.remove("printing");
-  overlay.remove();
-  document.title = prev;
 }
