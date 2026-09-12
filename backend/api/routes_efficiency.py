@@ -671,6 +671,33 @@ def _ask_intent(question: str, default_days: int) -> dict:
     )):
         intent = "source_mix"
         entity = "overview"
+    elif (
+        any(term in text for term in ("non-approved", "non approved", "unapproved", "unauthorized"))
+        and "model" in text
+    ):
+        # "Are we using any non-approved models?" -- there is no approved-
+        # model allowlist/policy anywhere in this codebase to check against
+        # (KnownModel is a catalog for the Model Registry's picker, not an
+        # enforcement gate). Confirmed live: without this, the question
+        # fell to a generic overview and the narrator made an unsupported
+        # logical leap ("all usage was governed, so no non-approved
+        # models") -- true but non-responsive, since "governed" and
+        # "approved" are not the same claim, and nothing was actually
+        # checked. Routes to a dedicated, honest branch instead: state
+        # plainly that no approval policy exists to check yet, and show
+        # the real models actually seen in activity.
+        intent = "model_approval_unsupported"
+        entity = "model"
+    elif "share" in text and "request" in text and "model" in text:
+        # "What share of requests use our most expensive model?" --
+        # placed ahead of the "optimization" check below because
+        # "expensive model" alone is one of that intent's own trigger
+        # phrases, and this question contains it literally -- confirmed
+        # live: without this ordering, the question was classified as
+        # "optimization" (a cost-saving recommendation) instead of the
+        # percentage-of-requests question actually asked.
+        intent = "model_share_of_requests"
+        entity = "model"
     elif any(term in text for term in (
         "save money", "saving", "reduce cost", "cut cost", "optimize",
         "recommend", "advice", "cheaper model", "expensive model",
@@ -702,6 +729,18 @@ def _ask_intent(question: str, default_days: int) -> dict:
         intent = "budget"
         entity = "department"
         metric = "spend_usd"
+    elif any(term in text for term in ("model tier mix", "tier mix", "model tier breakdown", "tier breakdown")):
+        # "What's our model tier mix this quarter?" -- asks for the full
+        # Scout/Analyst/Advisor/Strategist breakdown, not live-vs-simulator
+        # (source_mix) and not one single named tier's usage (tier_usage
+        # below, which requires a specific tier name like "Strategist" in
+        # the question). Confirmed live: this got classified as
+        # intent="source_mix" (by the OpenAI refinement layer -- neither
+        # exact phrase this checks for matches any source_mix keyword
+        # either), answering with a live/simulator percentage split for a
+        # question that had nothing to do with live vs. simulated traffic.
+        intent = "tier_mix_overview"
+        entity = "model"
     elif any(term in text for term in (
         "routed to the", "routed to strategist", "routed to advisor",
         "strategist tier", "advisor tier", "scout tier", "analyst tier",
@@ -1137,6 +1176,7 @@ _ASK_INTENTS = {
     "blocked", "risk_events", "total", "comparison", "activity", "inactive",
     "agent_adoption", "connection_health", "inactive_context",
     "tier_usage", "optimization", "change_drivers", "help", "product", "decision",
+    "model_approval_unsupported", "tier_mix_overview", "model_share_of_requests",
 }
 # Shared by _ask_intent()'s data_coverage_question detection and
 # _ask_costpilot_answer()'s data-coverage branch -- one list so the two
@@ -1872,6 +1912,26 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
                     # actually asking about missing caps, not who's close
                     # to their cap.
                     return fallback, "deterministic_fallback_budget_all_override"
+                if (
+                    fallback.get("intent") == "tier_mix_overview"
+                    and validated.get("intent") != "tier_mix_overview"
+                ):
+                    # "What's our model tier mix this quarter?" -- same
+                    # reasoning: confirmed live this classifier picked
+                    # "source_mix" (live vs. simulator), a completely
+                    # different concept from Scout/Analyst/Advisor/
+                    # Strategist tier mix, for a phrase that doesn't even
+                    # overlap with any of source_mix's own trigger words.
+                    return fallback, "deterministic_fallback_tier_mix_override"
+                if (
+                    fallback.get("intent") == "model_share_of_requests"
+                    and validated.get("intent") != "model_share_of_requests"
+                ):
+                    # "What share of requests use our most expensive
+                    # model?" -- same reasoning: confirmed live this
+                    # returned a plain spend ranking with no percentage
+                    # computed at all.
+                    return fallback, "deterministic_fallback_model_share_override"
                 return (
                     validated,
                     "openai_tool_planner",
@@ -5457,6 +5517,52 @@ def _ask_costpilot_answer(
             f"in spend to the {(parsed.get('model_tier') or 'selected').title()} tier for {period_label}."
         )
         evidence = _ask_evidence(report.get("model_breakdown") or [], metric, None, limit=result_limit)
+    elif intent == "tier_mix_overview":
+        # "What's our model tier mix this quarter?" -- the full Scout/
+        # Analyst/Advisor/Strategist breakdown, distinct from tier_usage
+        # above (one specific named tier) and source_mix (live vs.
+        # simulator, an unrelated concept). Queries model_tier directly
+        # rather than model_breakdown, which groups by model name/label,
+        # not the resolved routing tier.
+        tier_query = db.query(
+            TokenTransaction.model_tier,
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        ).filter(
+            TokenTransaction.timestamp >= date_from,
+            TokenTransaction.timestamp < date_to,
+        )
+        if request.workspace_id:
+            tier_query = tier_query.filter(TokenTransaction.workspace_id == request.workspace_id)
+        tier_rows = sorted(tier_query.group_by(TokenTransaction.model_tier).all(), key=lambda r: -(r[1] or 0))
+        total_tier_requests = sum(int(count or 0) for _, count, _ in tier_rows)
+        title = "Model tier mix"
+        calculation_formula = (
+            "Governed requests grouped by resolved model tier (Scout/Analyst/Advisor/Strategist)"
+        )
+        if tier_rows and total_tier_requests:
+            parts = [
+                f"{(tier or 'Unknown').title()}: {count:,} requests "
+                f"({count / total_tier_requests * 100:.1f}%, ${float(spend or 0):,.4f})"
+                for tier, count, spend in tier_rows
+            ]
+            answer = f"Model tier mix for {period_label} -- " + "; ".join(parts) + "."
+        else:
+            answer = f"No model-tier activity was recorded for {period_label}."
+        evidence = [
+            {
+                "label": (tier or "Unknown").title(),
+                "value": f"{count:,}",
+                "metric_label": "requests",
+                "detail": (
+                    f"${float(spend or 0):,.4f} spend"
+                    + (f" · {count / total_tier_requests * 100:.1f}% of requests" if total_tier_requests else "")
+                ),
+                "filter_name": "model_tier",
+                "filter_value": tier,
+            }
+            for tier, count, spend in tier_rows
+        ]
     elif named_entity and outcome_filter and named_entity["entity"] == "account":
         # "How many opportunities has Brightwater Marine won?" used to fall
         # into the named-entity branch below, which has no concept of won/
@@ -6302,6 +6408,53 @@ def _ask_costpilot_answer(
             "filter_name": None,
             "filter_value": None,
         }]
+    elif intent == "model_share_of_requests":
+        # "expensive" already maps metric_for_keywords() to spend_usd (see
+        # core/analytics_metrics.py's METRIC_KEYWORD_ALIASES), so "most
+        # expensive model" here means the model with the highest total
+        # recorded spend -- the same model "which model is driving the
+        # most AI spend" already answers, just paired with a share-of-
+        # requests figure instead of a dollar amount.
+        model_rows = [
+            row for row in (report.get("model_breakdown") or [])
+            if row.get("id") not in ("__unknown__", "__simulator__")
+        ]
+        ranked_by_spend = _ask_rank(model_rows, "spend_usd", "desc")
+        title = "Share of requests on the most expensive model"
+        total_model_requests = sum(int(row.get("request_count") or 0) for row in model_rows)
+        if ranked_by_spend and total_model_requests:
+            top_model = ranked_by_spend[0]
+            top_requests = int(top_model.get("request_count") or 0)
+            share_pct = top_requests / total_model_requests * 100
+            answer = (
+                f"{top_model.get('label') or 'Unknown'} is the most expensive model by total spend "
+                f"(${float(top_model.get('spend_usd') or 0):,.4f}) for {period_label}, accounting for "
+                f"{share_pct:.1f}% of requests ({top_requests:,} of {total_model_requests:,})."
+            )
+        else:
+            answer = f"No model activity was recorded for {period_label}."
+        calculation_formula = "Top model's request count divided by total requests across all models"
+        evidence = _ask_evidence(ranked_by_spend, "spend_usd", "model_name", limit=result_limit)
+    elif intent == "model_approval_unsupported":
+        model_rows = [
+            row for row in (report.get("model_breakdown") or [])
+            if row.get("id") not in ("__unknown__", "__simulator__")
+        ]
+        ranked_models = _ask_rank(model_rows, "request_count", "desc")
+        title = "Model approval policy"
+        model_names = ", ".join(row.get("label") or "Unknown" for row in ranked_models[:8])
+        answer = (
+            "CostPilot doesn't have an approved-model allowlist to check activity against yet -- "
+            "there's no policy defining which models are \"approved,\" so this isn't something "
+            "I can answer as a yes/no today. "
+            + (
+                f"For {period_label}, the models actually seen in activity are: {model_names}."
+                if ranked_models
+                else f"No model activity was recorded for {period_label}."
+            )
+        )
+        calculation_formula = "Distinct model_name values observed in governed activity -- no approval policy exists to compare against"
+        evidence = _ask_evidence(ranked_models, "request_count", "model_name", limit=result_limit)
     elif intent == "source_mix":
         total = live_count + simulation_count
         live_pct = live_count / total * 100 if total else 0.0

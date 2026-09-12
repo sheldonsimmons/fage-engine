@@ -226,6 +226,17 @@ _CANONICAL_INTENTS = (
 def canonical_ask_intent(question: str) -> Optional[dict]:
     """Return a high-confidence intent only when wording matches a buyer-safe contract."""
     text = " ".join((question or "").lower().split())
+    if re.search(r"\bshare of requests?\b", text):
+        # "What share of requests use our most expensive model?" matched
+        # model_cost_ranking's own spend-ranking pattern (it contains
+        # "most"..."expensive"..."model" in order, with no way for that
+        # pattern's own lookahead to see "share of requests" appearing
+        # earlier in the sentence) and silently discarded the
+        # deterministic classifier's correct model_share_of_requests
+        # intent -- this function's match always wins unconditionally.
+        # None of the canonical contracts are share/percentage questions,
+        # so this phrasing should never take the canonical shortcut at all.
+        return None
     for contract in _CANONICAL_INTENTS:
         if any(re.search(pattern, text) for pattern in contract["patterns"]):
             return {key: value for key, value in contract.items() if key != "patterns"}
