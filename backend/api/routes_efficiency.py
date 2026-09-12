@@ -4701,6 +4701,55 @@ def ask_costpilot(
     return result
 
 
+class AskReportDataRequest(BaseModel):
+    workspace_id: Optional[str] = None
+    question: str = ""
+    tool: str
+    args: dict = Field(default_factory=dict)
+    timezone_name: Optional[str] = None
+
+
+@router.post("/ask/report-data")
+def ask_costpilot_report_data(
+    request: AskReportDataRequest, db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Printable-reports Phase 2, "re-derive" approach: "Generate Report" on an
+    agent-loop answer needs more than the chat card's top-5 evidence rows,
+    but nothing from the original answer survives past that one request
+    (see _ask_costpilot_agent's tool_call_log, which goes out of scope the
+    moment the response is sent) -- so rather than persisting raw tool
+    output somewhere new, this re-runs ONE tool call at report scale.
+
+    (tool, args) come from the client's own query_plan on the original
+    answer (e.g. {"tool": "query_metrics", "args": {...}}) -- never
+    re-invokes the LLM, and never trusts the client with a free-form query.
+    Replayed through the exact same validated dispatch and department-scope
+    enforcement _ask_run_agent_tool already gives every agent-loop answer
+    (unknown tool names return an error, not an arbitrary DB call), so a
+    report can never see data the original chat answer couldn't have --
+    only more rows of the same thing, via a forced higher limit.
+    """
+    ask_ctx = check_membership(db, authorization, request.workspace_id) if request.workspace_id else None
+    department_scope = ask_ctx.department_scope if ask_ctx else None
+    ask_request = AskCostPilotRequest(
+        workspace_id=request.workspace_id, question=request.question,
+        timezone_name=request.timezone_name or "UTC",
+    )
+    reporting_filters = _ask_agent_reporting_filters(ask_request)
+    report_args = dict(request.args)
+    # Same idea as the chat answer's own row cap, just wider -- a report
+    # table can hold more than 5-20 rows, but this is still a bounded
+    # replay, not "give the client whatever limit it asks for."
+    report_args["limit"] = min(max(int(report_args.get("limit") or 20), 20) * 3, 100)
+    result = _ask_run_agent_tool(
+        request.tool, report_args, db, ask_request, reporting_filters,
+        department_scope=department_scope,
+    )
+    return {"tool": request.tool, "args": report_args, "result": result}
+
+
 def _ask_workspace_name(db: Session, workspace_id: Optional[str]) -> str:
     """
     Every answer states which workspace it's scoped to — the confusion
