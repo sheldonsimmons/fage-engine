@@ -2218,6 +2218,17 @@ _ASK_NAME_STOP_WORDS = {
     # "which one did you mean?" for a question that named no entity at
     # all. Confirmed live via the cockpit's voice input on 2026-09-10.
     "review", "should", "first",
+    # "Which source platform generates the most AI activity?" tokenized
+    # to include "platform" -- not previously a stop word -- which then
+    # fuzzy-matched every WorkItem whose name happens to contain the word
+    # "Platform" (this workspace's data has ~46 work items literally named
+    # "... -- Platform Migration N"), producing a bizarre 46-way "which
+    # one did you mean?" for a question that named no specific entity at
+    # all -- it was asking about the platform DIMENSION, not a work item
+    # named "platform". Same failure mode as "review" above. "model" and
+    # "system" are generic dimension/type words for the same reason (the
+    # "source system"/"model" entity types), stop-worded alongside it.
+    "platform", "model", "system",
 }
 
 
@@ -5259,9 +5270,29 @@ def _ask_costpilot_answer(
                 RegisteredAgent.department == f"{request.workspace_id}:{department_scope}"
             )
         elif request.workspace_id:
-            agent_query = agent_query.filter(
-                RegisteredAgent.department.like(f"{request.workspace_id}:%")
-            )
+            # A real seeded workspace can contain RegisteredAgent rows that
+            # were never tagged with this workspace's department prefix or
+            # workspace_id column at all -- confirmed live: 46 of 54 agents
+            # with real, current activity in SIM-HISTORICAL-2Y have
+            # department="Sales" (no prefix) and workspace_id=NULL, making
+            # them completely invisible to "which agents need attention" /
+            # "agent adoption" -- a clean bill of health reported for 13%
+            # of the real agent population. Falls back to "has any recorded
+            # activity in this workspace's TokenTransaction ledger" for
+            # agents the prefix-based match misses.
+            activity_agent_ids = [
+                row[0] for row in db.query(TokenTransaction.agent_id)
+                .filter(
+                    TokenTransaction.workspace_id == request.workspace_id,
+                    TokenTransaction.agent_id.isnot(None),
+                )
+                .distinct()
+                .all()
+            ]
+            agent_query = agent_query.filter(or_(
+                RegisteredAgent.department.like(f"{request.workspace_id}:%"),
+                RegisteredAgent.id.in_(activity_agent_ids or [-1]),
+            ))
         agent_query = agent_query.filter(
             RegisteredAgent.archived.isnot(True)
         )
@@ -6713,6 +6744,36 @@ def _ask_costpilot_answer(
                 )
             else:
                 answer = f"No {entity_label.lower()} had attributed AI activity in this period."
+    elif entity in entity_config and entity != "context":
+        # "Show me spend by model for this quarter" (entity="model",
+        # intent="overview" -- no ranking word, so it never reaches the
+        # "ranking" branch above) fell all the way through to the generic
+        # catch-all below, which is hardcoded to project_breakdown
+        # regardless of what dimension was actually asked about --
+        # confirmed live: it answered with a spend-by-PROJECT breakdown
+        # for a question that named "model" explicitly. Any entity with a
+        # real breakdown (platform/model/agent/department/account/
+        # provider) needs its own dimension's rows here, not project's.
+        breakdown_key, filter_name, entity_label = entity_config[entity]
+        dimension_rows = [
+            row for row in (report.get(breakdown_key) or [])
+            if row.get("id") not in ("__unknown__", "__simulator__")
+        ]
+        ranked_dimension_rows = _ask_rank(dimension_rows, metric, "desc")
+        title = f"{entity_label} by {_ask_metric_value(metric, 0)[1]}"
+        if ranked_dimension_rows:
+            value, metric_label = _ask_metric_value(
+                metric, _ask_row_metric(ranked_dimension_rows[0], metric)
+            )
+            available = min(result_limit, len(ranked_dimension_rows))
+            answer = (
+                f"Showing {available} matching {entity_label.lower()} by {metric_label} "
+                f"for {period_label}. {ranked_dimension_rows[0].get('label') or 'Unknown'} "
+                f"leads at {value}."
+            )
+        else:
+            answer = f"No {entity_label.lower()} had attributed AI activity for {period_label}."
+        evidence = _ask_evidence(ranked_dimension_rows, metric, filter_name, limit=result_limit)
     else:
         context_rows = report.get("project_breakdown") or []
         if entity == "context" and outcome_filter:

@@ -984,7 +984,27 @@ def run_get_agent_adoption(
         # the wildcard "every department in the workspace" match below.
         agent_query = agent_query.filter(RegisteredAgent.department == f"{workspace_id}:{department_scope}")
     elif workspace_id:
-        agent_query = agent_query.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
+        # Same fallback as the deterministic agent_adoption intent in
+        # routes_efficiency.py: a RegisteredAgent row can have real
+        # activity in this workspace's ledger without ever being tagged
+        # with this workspace's department prefix or workspace_id column
+        # (confirmed live: 46 of 54 agents with real current activity in
+        # SIM-HISTORICAL-2Y have department="Sales", workspace_id=NULL) --
+        # the prefix-only match silently reported a clean bill of health
+        # for 13% of the real agent population.
+        from database.models import TokenTransaction
+        from sqlalchemy import or_
+
+        activity_agent_ids = [
+            row[0] for row in db.query(TokenTransaction.agent_id)
+            .filter(TokenTransaction.workspace_id == workspace_id, TokenTransaction.agent_id.isnot(None))
+            .distinct()
+            .all()
+        ]
+        agent_query = agent_query.filter(or_(
+            RegisteredAgent.department.like(f"{workspace_id}:%"),
+            RegisteredAgent.id.in_(activity_agent_ids or [-1]),
+        ))
     agents = agent_query.all()
 
     lifetime_query = db.query(
