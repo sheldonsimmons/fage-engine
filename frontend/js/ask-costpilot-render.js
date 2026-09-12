@@ -314,7 +314,35 @@ function renderAskProposalCard(proposal) {
   </div></section>`;
 }
 
+let _askAnswerCardSeq = 0;
+
+// Every answer gets a report button, regardless of what the answer contains.
+// Gating this on answer "richness" would need a classifier deciding what's
+// report-worthy, and that classifier would be wrong sometimes -- especially
+// since path selection upstream is non-deterministic, so the same question
+// could grow or lose the button between identical runs. Instead the button
+// always shows, and printSection() (js/api.js) just clones whatever sections
+// this card actually rendered -- evidence, calculation, proposal, etc. are
+// already each individually optional above, so a thin answer just prints
+// thin. Still strictly better than making the user rebuild it by hand.
+function renderAskReportButton(cardId, data) {
+  const title = `CostPilot — ${data.title || "Ask CostPilot Answer"}`;
+  return `<button type="button" class="cp-ask-report-btn" data-ask-report-target="${cardId}" data-ask-report-title="${askRenderEscapeHtml(title)}">🖨️ Generate report</button>`;
+}
+
+// Shared delegated-click handler for the report button, called from each
+// Ask CostPilot surface's own click delegation (global-nav.js, index.html,
+// business-profile.html) alongside their data-ask-question/-confirm-id/etc.
+// handlers. Returns true if it handled the click.
+function handleAskReportButtonClick(event) {
+  const btn = event.target.closest("[data-ask-report-target]");
+  if (!btn) return false;
+  printSection(btn.dataset.askReportTarget, btn.dataset.askReportTitle);
+  return true;
+}
+
 function renderAskAnswerCard(data) {
+  const cardId = `cp-ask-answer-${++_askAnswerCardSeq}`;
   const provenance = data.data_provenance || {};
   const liveRequests = Number(provenance.live_requests || 0);
   const simulatorRequests = Number(provenance.simulator_requests || 0);
@@ -349,10 +377,11 @@ function renderAskAnswerCard(data) {
   const followUps = askFollowUps(data);
   const budgetFlag = renderAskBudgetFlag(data.budget_flag);
   const workspaceLabel = renderAskWorkspaceLabel(data.workspace_name);
-  return `<article class="cp-ask-answer">
+  return `<article class="cp-ask-answer" id="${cardId}">
     ${workspaceLabel}
     <div class="cp-ask-answer-head"><span>${askRenderEscapeHtml(provenance.period_label || "Selected period")}</span><b class="${clarification ? "clarification" : ""}">${clarification ? "Needs clarification" : "Calculated"}</b></div>
     <h3>${askRenderEscapeHtml(data.title || "CostPilot answer")}</h3>
+    ${renderAskReportButton(cardId, data)}
     ${budgetFlag}
     ${data.interpreted_as ? `<div class="cp-ask-interpretation"><strong>Interpreted as</strong><span>${askRenderEscapeHtml(data.interpreted_as)}</span></div>` : ""}
     <div class="cp-ask-answer-scope"><span><b>Date range</b>${askRenderEscapeHtml(provenance.period_label || "Selected period")}</span><span><b>Scope</b>${askRenderEscapeHtml(sourceLabel)}</span></div>

@@ -1041,6 +1041,9 @@
         if (!response.ok) throw new Error(`Request failed (${response.status})`);
         const data = await response.json();
         slot.innerHTML = typeof renderAskAnswerCard === "function" ? renderAskAnswerCard(data) : `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        slot.querySelectorAll("[data-ask-report-target]").forEach((button) => {
+          button.addEventListener("click", (event) => handleAskReportButtonClick(event));
+        });
       } catch (err) {
         slot.innerHTML = `<div class="cp-ask-error"><strong>CostPilot did not generate an answer.</strong><br/>${(err.message || "").replace(/</g, "&lt;")}</div>`;
       }

@@ -1776,6 +1776,9 @@ async function checkHealth() {
 // by the panel) — one answer format, two entry points, no second copy of
 // the rendering logic.
 function bindOvAskDrills(container) {
+  container?.querySelectorAll("[data-ask-report-target]").forEach((button) => {
+    button.addEventListener("click", (event) => handleAskReportButtonClick(event));
+  });
   container?.querySelectorAll("[data-ask-scope]").forEach((button) => {
     button.addEventListener("click", () => {
       const scope = JSON.parse(decodeURIComponent(button.dataset.askScope));
