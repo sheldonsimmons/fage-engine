@@ -1277,9 +1277,12 @@ def _ask_is_follow_up(question: str) -> bool:
     if not text:
         return False
     if re.search(
-        r"\b(?:that|those|them|these|same|previous|prior|above|former|latter)\b",
+        r"\b(?:that|those|them|these|same|previous|prior|above|former|latter|"
+        r"he|him|his|she|her|hers)\b",
         text,
     ):
+        return True
+    if re.search(r"\bthe\s+two\b|\bboth\s+of\s+them\b|\beither\s+of\s+them\b", text):
         return True
     if re.match(
         r"^(?:and|also|then|instead|what about|how about|"
