@@ -793,6 +793,38 @@ async function loadBusinessImpactRecommendations() {
   }
 }
 
+// Inlined, not an <img src="..."> to the real asset -- confirmed live: an
+// <img> logo hadn't finished its network load by the time printSection()
+// called window.print(), the same "must not depend on something loading
+// asynchronously" class of bug the chart-image conversion already had to
+// solve (there, by capturing an already-rendered canvas; here, by never
+// making a network request in the first place). Also recolored: the real
+// asset's wordmark uses a near-white fill (#e9eef7) meant for the app's
+// dark header -- invisible on this report's white background -- so the
+// wordmark paths use navy (matching the compass mark) instead.
+const REPORT_LOGO_SVG = `<svg class="report-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 150" role="img" aria-label="CostPilot">
+  <g transform="translate(32 22)">
+    <circle fill="none" stroke="#07336f" stroke-width="9" cx="55" cy="55" r="47"/>
+    <circle fill="none" stroke="#0a2a5b" stroke-width="5" opacity="0.55" cx="55" cy="55" r="35"/>
+    <rect fill="#07336f" x="35" y="58" width="15" height="34" rx="1"/>
+    <rect fill="#07336f" x="61" y="38" width="15" height="54" rx="1"/>
+    <rect fill="#07336f" x="87" y="15" width="15" height="77" rx="1"/>
+    <path fill="#25c4b5" d="M77 46 123 32 98 90Z"/>
+    <path fill="#07336f" d="M88 15h14v38H88z"/>
+  </g>
+  <g transform="translate(178 36)">
+    <path fill="#07336f" d="M48 80c-27 0-45-17-45-41S21 0 48 0c23 0 39 12 43 32H67c-3-8-10-13-20-13-13 0-22 8-22 20s9 21 22 21c10 0 18-5 21-14h24C88 67 72 80 48 80Z"/>
+    <path fill="#07336f" d="M139 80c-26 0-45-17-45-40s19-40 45-40 45 17 45 40-19 40-45 40Zm0-20c13 0 23-8 23-20s-10-20-23-20-23 8-23 20 10 20 23 20Z"/>
+    <path fill="#07336f" d="M232 80c-25 0-42-11-44-31h23c2 8 10 12 22 12 10 0 16-3 16-9 0-7-8-9-23-12-18-4-35-9-35-29 0-18 15-30 39-30 23 0 39 11 41 30h-23c-2-7-8-11-18-11-9 0-15 3-15 9 0 6 8 8 22 11 19 4 37 9 37 30 0 18-16 30-42 30Z"/>
+    <path fill="#07336f" d="M299 78V21h-30V2h82v19h-30v57Z"/>
+    <path fill="#25c4b5" d="M359 78V2h47c21 0 35 13 35 32s-14 32-35 32h-25v12Zm22-31h22c10 0 16-5 16-13s-6-13-16-13h-22Z"/>
+    <path fill="#25c4b5" d="M452 78V2h22v76Z"/>
+    <path fill="#25c4b5" d="M490 78V2h22v57h44v19Z"/>
+    <path fill="#25c4b5" d="M604 80c-26 0-45-17-45-40s19-40 45-40 45 17 45 40-19 40-45 40Zm0-20c13 0 23-8 23-20s-10-20-23-20-23 8-23 20 10 20 23 20Z"/>
+    <path fill="#25c4b5" d="M679 78V21h-30V2h82v19h-30v57Z"/>
+  </g>
+</svg>`;
+
 // Shared banner for every .report-doc (Business Impact, Savings, Governance
 // & Risk, Departments) -- one place so the brand mark/title/meta layout
 // can't drift between reports the way four independently hand-written
@@ -800,7 +832,7 @@ async function loadBusinessImpactRecommendations() {
 function reportDocHeaderHtml(title, generatedAt) {
   return `
     <header class="report-header">
-      <img class="report-logo" src="/assets/costpilot-logo-transparent.svg" alt="CostPilot" />
+      ${REPORT_LOGO_SVG}
       <h1 class="report-title">${escapeHtml(title)}</h1>
       <div class="report-meta">
         <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
