@@ -315,6 +315,12 @@ function renderAskProposalCard(proposal) {
 }
 
 let _askAnswerCardSeq = 0;
+// Keyed by cardId, not a DOM dataset attribute -- the full answer object
+// (evidence pool, query_plan, calculation) is too large/nested to round-trip
+// through a data-* string, and this file runs on pages that don't load
+// reports.js, so it can't rely on that file's report-building helpers
+// either. Self-contained on purpose.
+const _askAnswerDataByCardId = new Map();
 
 // Every answer gets a report button, regardless of what the answer contains.
 // Gating this on answer "richness" would need a classifier deciding what's
@@ -337,12 +343,261 @@ function renderAskReportButton(cardId, data) {
 function handleAskReportButtonClick(event) {
   const btn = event.target.closest("[data-ask-report-target]");
   if (!btn) return false;
-  printSection(btn.dataset.askReportTarget, btn.dataset.askReportTitle);
+  const cardId = btn.dataset.askReportTarget;
+  generateAskReport(cardId, btn.dataset.askReportTitle, _askAnswerDataByCardId.get(cardId));
   return true;
+}
+
+// ── Ask CostPilot -> full report (Phase 2, "re-derive") ─────────────────────
+// Printing the chat card as-is (the fallback below) only ever shows the
+// answer's own curated top-5 evidence. When the answer came from the agent
+// tool loop, query_plan records exactly which tool/args produced it -- this
+// replays that ONE call at report scale (api/routes_efficiency.py's
+// /ask/report-data, never a fresh LLM call) and builds a real multi-section
+// report from the fuller result. Deterministic-path answers and anything
+// the replay can't make sense of fall back to the plain card print --
+// same "works uniformly, degrades gracefully" principle the button itself
+// was built on.
+
+function askReportFmtUsd(v) {
+  const n = Number(v || 0);
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
+function askReportFmtNum(v) {
+  return Number(v || 0).toLocaleString();
+}
+
+// Data-producing tools whose result shape this knows how to turn into a
+// report table + chart. Tools that only ever return a single fact (get_
+// product_help, propose_/simulate_/measure_budget_cap_*, get_data_coverage)
+// or free text are deliberately not listed -- there is no "more rows" to
+// ask for, so the fallback (print the chat card) already shows everything
+// a report could.
+const ASK_REPORT_REPLAYABLE_TOOLS = new Set([
+  "query_metrics", "get_budget_status", "get_priority_signals",
+  "get_usage_report", "get_change_drivers", "get_agent_adoption",
+]);
+
+function askReportRowsFromResult(tool, result) {
+  if (!result || typeof result !== "object") return null;
+  if (tool === "get_budget_status" && Array.isArray(result.departments)) {
+    return {
+      metricLabel: "Budget used", valueFormat: "pct",
+      rows: result.departments.map(d => ({
+        label: d.label, value: Number(d.used_pct || 0),
+        sub: `${askReportFmtUsd(d.current_spend_usd)} of ${askReportFmtUsd(d.monthly_cap_usd)}${d.throttled ? " · throttled" : ""}`,
+      })),
+    };
+  }
+  if (tool === "get_priority_signals" && Array.isArray(result.signals)) {
+    // Severity is categorical, not a rankable number -- a table-only
+    // section, no chart, matching "don't force a chart on data that isn't
+    // a ranked comparison."
+    return {
+      metricLabel: "Severity", valueFormat: "text",
+      rows: result.signals.map(s => ({ label: s.label, value: s.severity, sub: s.detail })),
+    };
+  }
+  if (tool === "get_agent_adoption" && Array.isArray(result.agents)) {
+    return {
+      metricLabel: "Status", valueFormat: "text",
+      rows: result.agents.map(a => ({ label: a.name, value: a.status, sub: a.department || "" })),
+    };
+  }
+  if (tool === "get_change_drivers" && Array.isArray(result.top_contributors)) {
+    return {
+      metricLabel: "Change", valueFormat: "usd",
+      rows: result.top_contributors.map(c => ({
+        label: c.label || c.name, value: Number(c.absolute_change || 0),
+        sub: c.percent_change != null ? `${c.percent_change}% change` : "",
+      })),
+    };
+  }
+  if (tool === "get_usage_report") {
+    const list = result.top_people || result.top_departments || result.top_agents
+      || result.top_accounts || result.top_platforms || result.top_models || result.top_providers;
+    if (Array.isArray(list)) {
+      return {
+        metricLabel: "AI spend", valueFormat: "usd",
+        rows: list.map(r => ({ label: r.label || r.name, value: Number(r.spend_usd || 0), sub: r.request_count != null ? `${askReportFmtNum(r.request_count)} requests` : "" })),
+      };
+    }
+  }
+  if (tool === "query_metrics" && Array.isArray(result.rows)) {
+    const metricKey = (result.metrics && result.metrics[0]) || Object.keys(result.rows[0] || {}).find(k => k !== "dimensions" && k !== "dimension_ids");
+    return {
+      metricLabel: metricKey || "Value", valueFormat: metricKey && metricKey.toLowerCase().includes("spend") ? "usd" : "num",
+      rows: result.rows.map(r => ({
+        label: Object.values(r.dimensions || {})[0] ?? "Unknown",
+        value: Number(r[metricKey] || 0),
+      })),
+    };
+  }
+  return null;
+}
+
+function askReportFormatValue(value, format) {
+  if (format === "usd") return askReportFmtUsd(value);
+  if (format === "pct") return `${value}%`;
+  if (format === "num") return askReportFmtNum(value);
+  return askRenderEscapeHtml(String(value ?? ""));
+}
+
+// Renders an ad-hoc horizontal bar chart to a hidden canvas and captures it
+// as a static image -- same reasoning as printSection()'s own canvas fix:
+// print output needs a bitmap, not a live canvas. Chart.js isn't loaded on
+// every page this file runs on, so this degrades to "table only, no chart"
+// rather than throwing when it's unavailable.
+function askReportChartImg(rows, metricLabel, valueFormat) {
+  if (typeof Chart === "undefined" || valueFormat === "text" || rows.length < 2) return "";
+  const canvas = document.createElement("canvas");
+  canvas.width = 700;
+  canvas.height = Math.max(220, rows.length * 28);
+  document.body.appendChild(canvas);
+  let dataUrl = "";
+  try {
+    const chart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: rows.map(r => String(r.label)),
+        datasets: [{ label: metricLabel, data: rows.map(r => r.value), backgroundColor: "rgba(37,196,181,0.75)" }],
+      },
+      options: {
+        indexAxis: "y", responsive: false, animation: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true } },
+      },
+    });
+    chart.resize();
+    chart.render();
+    dataUrl = canvas.toDataURL("image/png");
+    chart.destroy();
+  } catch (_err) { /* leave dataUrl empty -- table still renders without it */ }
+  canvas.remove();
+  if (!dataUrl) return "";
+  return `<figure class="report-chart-figure" style="max-width:600px"><img src="${dataUrl}" style="width:100%;height:auto" /></figure>`;
+}
+
+function buildAskGeneratedReportHtml(data, tool, replayed) {
+  const provenance = data.data_provenance || {};
+  const generatedAt = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const workspaceLabel = data.workspace_name || (typeof getActiveWorkspace === "function" ? (getActiveWorkspace()?.name || getActiveWorkspace()?.label) : null) || "Current workspace";
+  const extracted = askReportRowsFromResult(tool, replayed);
+
+  const evidence = (data.evidence || []).map((item) => renderAskEvidence(item, data)).join("");
+  const recommendations = (data.recommendations || []).length
+    ? `<section class="report-section"><h2 class="report-section-title">Recommended Next Steps</h2><div class="bi-rec-grid">${
+        data.recommendations.map(r => `<div class="bi-rec-card"><div class="bi-rec-title">${askRenderEscapeHtml(r.title || "")}</div><div class="bi-rec-body">${askRenderEscapeHtml(r.body || "")}</div></div>`).join("")
+      }</div></section>`
+    : "";
+
+  const tableSection = extracted ? `
+    <section class="report-section">
+      <h2 class="report-section-title">${askRenderEscapeHtml(extracted.metricLabel)} — full breakdown</h2>
+      ${askReportChartImg(extracted.rows, extracted.metricLabel, extracted.valueFormat)}
+      <table class="rpt-context-table">
+        <thead><tr><th></th><th>${askRenderEscapeHtml(extracted.metricLabel)}</th><th></th></tr></thead>
+        <tbody>${extracted.rows.map((r, i) => `
+          <tr><td class="bi-rank">${i + 1}</td><td>${askRenderEscapeHtml(String(r.label))}</td>
+          <td>${askReportFormatValue(r.value, extracted.valueFormat)}${r.sub ? ` <span style="color:#777;font-size:10px">(${askRenderEscapeHtml(r.sub)})</span>` : ""}</td></tr>`).join("")}
+        </tbody>
+      </table>
+    </section>` : "";
+
+  return `
+    <div class="report-doc">
+      ${REPORT_LOGO_SVG}
+      <header class="report-header" style="border-top:none">
+        <h1 class="report-title">${askRenderEscapeHtml(data.title || "CostPilot Report")}</h1>
+        <div class="report-meta">
+          <span>${askRenderEscapeHtml(workspaceLabel)}</span>
+          <span>${askRenderEscapeHtml(provenance.period_label || "Selected period")}</span>
+          <span>Generated ${askRenderEscapeHtml(generatedAt)}</span>
+        </div>
+      </header>
+      <section class="report-section">
+        <h2 class="report-section-title">Executive Brief</h2>
+        <p class="bi-summary">${askRenderEscapeHtml(data.answer || "")}</p>
+      </section>
+      ${tableSection}
+      ${evidence ? `<section class="report-section"><h2 class="report-section-title">Evidence</h2>${evidence}</section>` : ""}
+      ${recommendations}
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
+        <div class="bi-note">${askRenderEscapeHtml(data.measurement_note || "CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.")}</div>
+      </section>
+      <footer class="report-footer">CostPilot — ${askRenderEscapeHtml(data.title || "Report")} — ${askRenderEscapeHtml(workspaceLabel)}</footer>
+    </div>`;
+}
+
+// Same inline-SVG logo as reports.js's REPORT_LOGO_SVG (duplicated, not
+// shared -- this file runs on pages that never load reports.js). Inlined
+// rather than an <img src> for the same reason: confirmed live there that
+// a network-loaded image hadn't finished loading by the time window.print()
+// fired.
+const REPORT_LOGO_SVG = `<svg class="report-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 150" role="img" aria-label="CostPilot" style="height:22px;width:auto;display:block;margin-bottom:8px">
+  <g transform="translate(32 22)">
+    <circle fill="none" stroke="#07336f" stroke-width="9" cx="55" cy="55" r="47"/>
+    <circle fill="none" stroke="#0a2a5b" stroke-width="5" opacity="0.55" cx="55" cy="55" r="35"/>
+    <rect fill="#07336f" x="35" y="58" width="15" height="34" rx="1"/>
+    <rect fill="#07336f" x="61" y="38" width="15" height="54" rx="1"/>
+    <rect fill="#07336f" x="87" y="15" width="15" height="77" rx="1"/>
+    <path fill="#25c4b5" d="M77 46 123 32 98 90Z"/>
+    <path fill="#07336f" d="M88 15h14v38H88z"/>
+  </g>
+  <g transform="translate(178 36)">
+    <path fill="#07336f" d="M48 80c-27 0-45-17-45-41S21 0 48 0c23 0 39 12 43 32H67c-3-8-10-13-20-13-13 0-22 8-22 20s9 21 22 21c10 0 18-5 21-14h24C88 67 72 80 48 80Z"/>
+    <path fill="#07336f" d="M139 80c-26 0-45-17-45-40s19-40 45-40 45 17 45 40-19 40-45 40Zm0-20c13 0 23-8 23-20s-10-20-23-20-23 8-23 20 10 20 23 20Z"/>
+    <path fill="#07336f" d="M232 80c-25 0-42-11-44-31h23c2 8 10 12 22 12 10 0 16-3 16-9 0-7-8-9-23-12-18-4-35-9-35-29 0-18 15-30 39-30 23 0 39 11 41 30h-23c-2-7-8-11-18-11-9 0-15 3-15 9 0 6 8 8 22 11 19 4 37 9 37 30 0 18-16 30-42 30Z"/>
+    <path fill="#07336f" d="M299 78V21h-30V2h82v19h-30v57Z"/>
+    <path fill="#25c4b5" d="M359 78V2h47c21 0 35 13 35 32s-14 32-35 32h-25v12Zm22-31h22c10 0 16-5 16-13s-6-13-16-13h-22Z"/>
+    <path fill="#25c4b5" d="M452 78V2h22v76Z"/>
+    <path fill="#25c4b5" d="M490 78V2h22v57h44v19Z"/>
+    <path fill="#25c4b5" d="M604 80c-26 0-45-17-45-40s19-40 45-40 45 17 45 40-19 40-45 40Zm0-20c13 0 23-8 23-20s-10-20-23-20-23 8-23 20 10 20 23 20Z"/>
+    <path fill="#25c4b5" d="M679 78V21h-30V2h82v19h-30v57Z"/>
+  </g>
+</svg>`;
+
+async function generateAskReport(cardId, title, data) {
+  const lastDataStep = data && Array.isArray(data.query_plan)
+    ? [...data.query_plan].reverse().find(step => step.status === "ok" && ASK_REPORT_REPLAYABLE_TOOLS.has(step.tool))
+    : null;
+  if (!data || !lastDataStep) {
+    printSection(cardId, title); // deterministic-path answer, or nothing worth replaying -- print the card as-is
+    return;
+  }
+  let container = document.getElementById(`${cardId}-report`);
+  if (!container) {
+    container = document.createElement("div");
+    container.id = `${cardId}-report`;
+    container.style.display = "none";
+    document.body.appendChild(container);
+  }
+  try {
+    const response = await fetch("/api/reports/bot-efficiency/ask/report-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: data.title || "",
+        workspace_id: localStorage.getItem("cp_workspace_id") || null,
+        tool: lastDataStep.tool,
+        args: lastDataStep.args || {},
+      }),
+    });
+    if (!response.ok) throw new Error(`report-data request failed (${response.status})`);
+    const payload = await response.json();
+    container.innerHTML = buildAskGeneratedReportHtml(data, lastDataStep.tool, payload.result);
+    printSection(container.id, title);
+  } catch (_err) {
+    printSection(cardId, title); // fetch/build failed -- still strictly better than no report at all
+  }
 }
 
 function renderAskAnswerCard(data) {
   const cardId = `cp-ask-answer-${++_askAnswerCardSeq}`;
+  _askAnswerDataByCardId.set(cardId, data);
   const provenance = data.data_provenance || {};
   const liveRequests = Number(provenance.live_requests || 0);
   const simulatorRequests = Number(provenance.simulator_requests || 0);
