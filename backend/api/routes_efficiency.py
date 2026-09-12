@@ -4012,6 +4012,11 @@ of guessing a period of your own — do not assume "this month" or any other arb
 when the caller already told you what range they're looking at. Only widen or change the
 window if the caller's default window comes back with no activity and the question doesn't
 depend on that exact range mattering.
+If this is a follow-up question in an ongoing conversation and it does not name its own period
+either (e.g. "who has the second highest?" right after a "this month" ranking), reuse the exact
+period_key/days from your most recent tool call in this conversation instead of the DEFAULT_WINDOW
+or any other window -- the caller is continuing to look at the same time range until they say
+otherwise. Only switch away from it when the new question explicitly names a different period.
 The question may come from voice transcription and can contain misheard words (e.g. a person's
 surname transcribed as an unrelated common word). Once a tool result resolves the actual entity
 you matched (its real name/label as returned by the tool), always use that resolved name in your

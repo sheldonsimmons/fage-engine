@@ -38,10 +38,10 @@ TOOL_SCHEMAS = [
                     "type": "string",
                     "enum": [
                         "none", "today", "yesterday", "this_week", "last_week",
-                        "this_month", "last_month", "this_quarter", "last_quarter",
-                        "this_year", "last_year",
+                        "this_month", "last_month", "this_quarter", "last_quarter", "last_2q",
+                        "this_year", "last_year", "all_time",
                     ],
-                    "description": "A named calendar period. Use 'none' to fall back to a rolling `days` window.",
+                    "description": "A named calendar period. 'last_2q' is a single combined window spanning the last 2 full quarters. Use 'none' to fall back to a rolling `days` window.",
                 },
                 "entity_name": {
                     "type": "string",
@@ -227,10 +227,10 @@ TOOL_SCHEMAS = [
                     "type": "string",
                     "enum": [
                         "none", "today", "yesterday", "this_week", "last_week",
-                        "this_month", "last_month", "this_quarter", "last_quarter",
-                        "this_year", "last_year",
+                        "this_month", "last_month", "this_quarter", "last_quarter", "last_2q",
+                        "this_year", "last_year", "all_time",
                     ],
-                    "description": "A named calendar period defining 'this period'. Use 'none' to fall back to a rolling `days` window.",
+                    "description": "A named calendar period defining 'this period'. 'last_2q' is a single combined window spanning the last 2 full quarters. Use 'none' to fall back to a rolling `days` window.",
                 },
             },
             "required": ["status", "usage_threshold", "days", "period_key"],
@@ -390,10 +390,10 @@ TOOL_SCHEMAS = [
                     "type": "string",
                     "enum": [
                         "none", "today", "yesterday", "this_week", "last_week",
-                        "this_month", "last_month", "this_quarter", "last_quarter",
-                        "this_year", "last_year",
+                        "this_month", "last_month", "this_quarter", "last_quarter", "last_2q",
+                        "this_year", "last_year", "all_time",
                     ],
-                    "description": "A named calendar period. Use 'none' to fall back to a rolling `days` window. Ignored for outcome-only metric requests, which are not time-windowed.",
+                    "description": "A named calendar period. 'last_2q' is a single combined window spanning the last 2 full quarters (distinct from setting compare_to to compare one quarter against the prior one). Use 'none' to fall back to a rolling `days` window. Ignored for outcome-only metric requests, which are not time-windowed.",
                 },
                 "compare_to": {
                     "type": "string",
