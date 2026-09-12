@@ -686,7 +686,19 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # intent="overview" without this.
         "spending cap", "monthly cap", "budget cap", "near their limit",
         "close to their cap", "closest to its cap", "over their cap",
-    )):
+    )) or (
+        # "Simulate increasing Engineering's cap to $10,000" / "what if we
+        # lowered Sales's cap by 10%" -- names a bare "cap" with no
+        # "budget"/"spending"/"monthly" qualifier at all, and no simulate/
+        # what-if trigger word alone implies a budget cap (a "what if we
+        # doubled headcount" question has nothing to do with budgets), so
+        # this only fires when BOTH a simulate/hypothetical phrase AND the
+        # word "cap" are present. Confirmed live: fell through to a plain
+        # department spend lookup instead of ever reaching intent="budget"
+        # at all, so budget_scope="simulate" (below) was never reached.
+        any(term in text for term in ("simulate", "what if we", "what happens if we", "what would happen if"))
+        and "cap" in text
+    ):
         intent = "budget"
         entity = "department"
         metric = "spend_usd"
@@ -845,10 +857,32 @@ def _ask_intent(question: str, default_days: int) -> dict:
             # departments. An explicit phrase like "last month" earlier in
             # this function already set period_key and is left alone.
             days, period_key = 31, "this_month"
-        if any(term in text for term in (
+        if (
+            any(term in text for term in ("simulate", "what if we", "what happens if we", "what would happen if"))
+            and any(term in text for term in ("cap", "budget"))
+        ):
+            # "Simulate increasing Engineering's cap to $10,000" / "What
+            # happens if we increase Support's budget cap by 20%?" -- this
+            # capability previously existed ONLY in the agent loop's
+            # simulate_budget_cap_change tool; when the agent path bails
+            # (confirmed happens non-deterministically -- the same
+            # question got a real simulation once and a generic
+            # company-wide budget summary the next time), the deterministic
+            # fallback had no equivalent at all and silently answered a
+            # completely different question instead of simulating anything.
+            budget_scope = "simulate"
+        elif any(term in text for term in (
             "each department", "every department", "all department",
             "department budget", "departments budget", "budget by department",
             "all budgets",
+            # "Which departments have no budget cap set?" -- a full-listing
+            # question (same as "what are the department budgets") phrased
+            # as a negative. Confirmed live: without an exact-phrase match
+            # here, this question's budget_scope was left to the OpenAI
+            # refinement layer to guess, which non-deterministically landed
+            # on "alerts" once, producing a confusing 70%-risk-threshold
+            # answer to a completely different question about missing caps.
+            "no budget cap", "no cap set", "without a budget cap", "have no cap",
         )):
             budget_scope = "all"
         elif any(term in text for term in ("how much", "left", "remaining", "available")):
@@ -1144,7 +1178,7 @@ _ASK_COMPARISON_KEYS = {
     "previous_period", "same_period_previous_year", "previous_month", "previous_quarter",
 }
 _ASK_USAGE_STATUSES = {"all", "unused", "never", "recently_inactive", "low", "active"}
-_ASK_BUDGET_SCOPES = {"all", "alerts", "status", "remaining", "forecast", "variance"}
+_ASK_BUDGET_SCOPES = {"all", "alerts", "status", "remaining", "forecast", "variance", "simulate"}
 
 
 def _validated_ask_intent(candidate: dict, fallback: dict) -> dict:
@@ -1712,7 +1746,9 @@ divides total spend by the distinct project count.
 For budget questions, choose budget_scope all when the user asks what budget each department has;
 remaining for budget left or available; forecast for projected month-end spend or whether spend is
 on track; variance for spend compared with the time-phased budget; alerts for departments nearing
-or exceeding their cap; and status for a general within-budget question.
+or exceeding their cap; status for a general within-budget question; and simulate for "simulate
+increasing X's cap to $Y" / "what if we raise/lower X's cap" / "what happens if we change X's
+budget by N%" -- a hypothetical cap change for one named department, never status or forecast.
 Never infer employee productivity, performance, or business outcomes.
 Always call query_costpilot_usage. Do not answer the question yourself."""
 
@@ -1811,6 +1847,31 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
                     # to preserve it, so it can knock the question off the
                     # ranking intent the growth-by-delta answer requires.
                     return fallback, "deterministic_fallback_growth_ranking_override"
+                if (
+                    fallback.get("budget_scope") == "simulate"
+                    and validated.get("budget_scope") != "simulate"
+                ):
+                    # "Simulate increasing Engineering's cap to $10,000" --
+                    # same reasoning as the guards above: the regex-detected
+                    # "simulate"/"what if we" phrasing is reliable, but this
+                    # is a brand-new budget_scope value and nothing stops
+                    # the classifier from guessing "status" instead.
+                    # Confirmed live 2026-09-12: the same question got a
+                    # real simulation once (agent loop succeeded) and a
+                    # generic company-wide budget summary the next time
+                    # (agent loop bailed, this classifier picked "status").
+                    return fallback, "deterministic_fallback_budget_simulate_override"
+                if (
+                    fallback.get("budget_scope") == "all"
+                    and validated.get("budget_scope") != "all"
+                ):
+                    # "Which departments have no budget cap set?" -- same
+                    # reasoning again. Confirmed live: this landed on
+                    # budget_scope="alerts" once, producing a confusing
+                    # 70%-risk-threshold answer to a question that was
+                    # actually asking about missing caps, not who's close
+                    # to their cap.
+                    return fallback, "deterministic_fallback_budget_all_override"
                 return (
                     validated,
                     "openai_tool_planner",
@@ -6050,6 +6111,85 @@ def _ask_costpilot_answer(
             else:
                 answer = "No active department budgets are configured, so budget status cannot be calculated."
             calculation_formula = "Combined current department spend divided by combined configured monthly budget"
+        elif budget_scope == "simulate":
+            # "Simulate increasing Engineering's cap to $10,000" / "What
+            # happens if we increase Support's budget cap by 20%?" -- the
+            # only prior route to this answer was the agent loop's
+            # simulate_budget_cap_change tool; when the agent path bails,
+            # there was no deterministic equivalent at all, so the question
+            # silently fell through to the generic company-wide budget
+            # summary above instead. Reuses the exact same shared
+            # projection math (core.budget.project_department_spend) the
+            # agent tool and a real proposal's impact both already use, so
+            # the numbers can't disagree with either.
+            question_lower_sim = question.lower()
+            named_row = next(
+                (row for row in budget_rows if row["label"].lower() in question_lower_sim),
+                None,
+            )
+            title = "Budget cap simulation"
+            if not named_row:
+                answer = (
+                    "Name the specific department whose cap you want to simulate changing, "
+                    "e.g. \"simulate increasing Engineering's cap to $10,000.\""
+                )
+                calculation_formula = None
+            else:
+                pct_match = re.search(r"by\s+(\d+(?:\.\d+)?)\s*%", question_lower_sim)
+                dollar_match = re.search(r"to\s*\$?\s*([\d,]+(?:\.\d+)?)", question_lower_sim)
+                current_cap = named_row["cap"]
+                if pct_match:
+                    increase = float(pct_match.group(1)) / 100
+                    # "by 20%" lowers the cap when the question says
+                    # decrease/lower/reduce/cut instead of increase/raise.
+                    if any(term in question_lower_sim for term in ("decrease", "lower", "reduce", "cut")):
+                        increase = -increase
+                    new_cap = current_cap * (1 + increase)
+                elif dollar_match:
+                    new_cap = float(dollar_match.group(1).replace(",", ""))
+                else:
+                    new_cap = None
+                if new_cap is None:
+                    answer = (
+                        f"Name a new cap amount (e.g. \"to $10,000\") or a percentage change "
+                        f"(e.g. \"by 20%\") to simulate for {named_row['label']}."
+                    )
+                    calculation_formula = None
+                else:
+                    from core.budget import project_department_spend
+
+                    budget_orm_row = next(
+                        (b for b in budgets if (b.department or "").split(":")[-1] == named_row["label"]),
+                        None,
+                    )
+                    period_start = (
+                        budget_orm_row.period_start
+                        if budget_orm_row and budget_orm_row.period_start
+                        else datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                    )
+                    projection = project_department_spend(
+                        current_spend_usd=named_row["spent"],
+                        period_start=period_start,
+                        new_cap_usd=new_cap,
+                    )
+                    exceed_word = "would" if projection["will_exceed_cap"] else "would not"
+                    tail = (
+                        f", around {projection['projected_exceed_date']}."
+                        if projection["will_exceed_cap"]
+                        else f", leaving ${projection['headroom_usd']:,.2f} in headroom."
+                    )
+                    direction_verb = "Raising" if new_cap >= current_cap else "Lowering"
+                    answer = (
+                        f"{direction_verb} {named_row['label']}'s monthly cap from ${current_cap:,.2f} to "
+                        f"${new_cap:,.2f}: at the current daily rate of ${projection['daily_rate_usd']:,.2f}/day, "
+                        f"projected month-end spend is ${projection['projected_period_end_spend_usd']:,.2f}. "
+                        f"The new cap {exceed_word} be exceeded{tail} "
+                        "This is a simulation only -- nothing has been changed."
+                    )
+                    calculation_formula = (
+                        "Run-rate projection to month end against the simulated cap "
+                        "(core.budget.project_department_spend)"
+                    )
         elif is_proximity_question:
             title = "Budget watch"
             # budget_rows is sorted by -pct here (the non-"all" sort key
