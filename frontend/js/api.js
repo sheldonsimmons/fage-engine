@@ -138,6 +138,26 @@ function printSection(sectionId, title) {
   const overlay = document.createElement("div");
   overlay.id    = "printOverlay";
   overlay.innerHTML = el.outerHTML;
+  // outerHTML cloning copies a <canvas> element but never what's actually
+  // drawn to its bitmap -- every Chart.js chart (and any hand-rolled
+  // canvas drawing) printed as a blank box. Swap each cloned canvas for a
+  // static image of the LIVE canvas's current bitmap, matched by position
+  // since canvases don't all carry unique ids -- purely additive to the
+  // print output, the live page's own canvases are never touched.
+  const liveCanvases = el.querySelectorAll("canvas");
+  const clonedCanvases = overlay.querySelectorAll("canvas");
+  liveCanvases.forEach((canvas, i) => {
+    const clone = clonedCanvases[i];
+    if (!clone) return;
+    let dataUrl;
+    try { dataUrl = canvas.toDataURL("image/png"); } catch (_err) { return; } // tainted canvas -- leave as-is rather than throw
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    img.style.width = "100%";
+    img.style.maxWidth = (canvas.getBoundingClientRect().width || canvas.width) + "px";
+    img.style.height = "auto";
+    clone.replaceWith(img);
+  });
   document.body.appendChild(overlay);
   document.body.classList.add("printing");
   window.print();
