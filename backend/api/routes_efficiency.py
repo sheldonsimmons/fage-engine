@@ -1017,11 +1017,30 @@ def _ask_intent(question: str, default_days: int) -> dict:
     # precedent -- only fires when no more specific outcome_filter already
     # matched, so "which deals did we lose" keeps using that path.
     general_outcome_question = bool(
-        entity == "context" and not outcome_filter
-        and re.search(r"\b(?:is|are|does|do|can)\b", text)
-        and re.search(r"\bai\b", text)
-        and re.search(r"\b(?:help|helping|helps|drive|driving|drives|improv\w*|increas\w*|impact\w*|contribut\w*)\b", text)
-        and re.search(r"\b(?:deals?|sales|revenue|business|win(?:s|ning)?|closing)\b", text)
+        not outcome_filter
+        and (
+            (
+                entity == "context"
+                and re.search(r"\b(?:is|are|does|do|can)\b", text)
+                and re.search(r"\bai\b", text)
+                and re.search(r"\b(?:help|helping|helps|drive|driving|drives|improv\w*|increas\w*|impact\w*|contribut\w*)\b", text)
+                and re.search(r"\b(?:deals?|sales|revenue|business|win(?:s|ning)?|closing)\b", text)
+            )
+            # "Show me business outcomes for this quarter." -- a direct
+            # request to see outcome data, not a yes/no question about
+            # whether AI helps, so none of the "is/are/does" + help-word
+            # patterns above ever matched it (and it doesn't reliably
+            # classify with entity=="context" either, since it names no
+            # opportunity/case/project directly). It fell through to a
+            # generic overview whose intent/metric combination didn't
+            # satisfy the answer contract at all, producing a dead-end
+            # "I need to verify this analysis" for a plainly answerable
+            # question (confirmed live 2026-09-13, reproduced on both
+            # trials). "Show/give me business outcomes" is unambiguous
+            # enough to route here directly regardless of entity.
+            or re.search(r"\b(?:show|give)\s+me\b.*\bbusiness\s+outcomes?\b", text)
+            or re.search(r"\bbusiness\s+outcomes?\b.*\bfor\s+this\b", text)
+        )
     )
 
     # "What should I be paying attention to?" -- an open-ended request for
@@ -5108,6 +5127,38 @@ def _ask_costpilot_answer(
     metric_contract = metric_definition(metric)
     intent = parsed["intent"]
     entity = parsed["entity"]
+    # "activity" is the classifier's catch-all for a question that names a
+    # concrete entity dimension but doesn't obviously ask for a metric
+    # comparison -- yet its own answer branch below only knows how to dump
+    # a raw activity log ("Showing N matching results for <period>."),
+    # which is not an answer to "How many people used AI this month?",
+    # "How many platforms are we governing AI activity across?", or
+    # "Which accounts have the most AI-supported activity?" (all three
+    # confirmed live in a 156-question QA pass, 2026-09-13, misclassified
+    # as intent="activity" with the correct entity still resolved). That
+    # content-free fallback only looked acceptable in earlier testing
+    # because the optional LLM "grounded_narrator" pass usually rewrites
+    # it into a real sentence from the underlying data -- but that pass is
+    # itself flaky (same question, same entity, one trial got the narrated
+    # version and the other didn't), so the deterministic answer must be
+    # self-sufficient. Redirect to the intent the question is actually
+    # asking for whenever a concrete, known entity was resolved: "how
+    # many" -> total (count), everything else naming an entity -> ranking
+    # (top-N by governed activity). Skip the specific "which agent
+    # contributed"/"who used" phrasings, which the activity branch already
+    # answers well on its own.
+    if (
+        intent == "activity"
+        and entity in (*_ASK_ENTITY_CONFIG_STATIC, "context")
+        and not any(
+            phrase in question.lower()
+            for phrase in (
+                "which agent", "agents contributed", "who used",
+                "which user", "which people",
+            )
+        )
+    ):
+        intent = "total" if "how many" in question.lower() else "ranking"
     direction = parsed["direction"]
     result_limit = parsed["result_limit"]
     outcome_filter = parsed.get("outcome_filter")
@@ -5582,6 +5633,146 @@ def _ask_costpilot_answer(
             f"for {period_label}."
             if evidence else f"No matching AI activity was recorded for {period_label}."
         )
+    elif intent in {"inactive", "agent_adoption"} and entity == "person":
+        # "Which users haven't used AI in the last 30 days?" -- the
+        # correct entity="person" was resolved, but this whole intent's
+        # only implementation (the next elif branch) is hardcoded to
+        # RegisteredAgent/TokenTransaction.agent_id and ignores `entity`
+        # entirely, so a question about PEOPLE came back describing
+        # AGENTS ("0 registered agents match this definition...").
+        # Confirmed live 2026-09-13. Mirrors that branch's never/
+        # recently_inactive/low/active classification, but against
+        # WorkUser + TokenTransaction.work_user_id instead.
+        from database.models import WorkUser
+
+        user_query = db.query(WorkUser)
+        if request.workspace_id:
+            user_query = user_query.filter(WorkUser.workspace_id == request.workspace_id)
+        users = user_query.all()
+        user_ids = [u.id for u in users]
+        current_rows_map: dict = {}
+        lifetime_rows: dict = {}
+        if user_ids:
+            current_query = db.query(
+                TokenTransaction.work_user_id,
+                func.count(TokenTransaction.id),
+            ).filter(
+                TokenTransaction.work_user_id.in_(user_ids),
+                TokenTransaction.timestamp >= date_from,
+                TokenTransaction.timestamp < date_to,
+            )
+            if request.workspace_id:
+                current_query = current_query.filter(TokenTransaction.workspace_id == request.workspace_id)
+            current_rows_map = {
+                str(uid): int(rc or 0)
+                for uid, rc in current_query.group_by(TokenTransaction.work_user_id).all()
+            }
+            lifetime_query = db.query(
+                TokenTransaction.work_user_id,
+                func.count(TokenTransaction.id),
+                func.max(TokenTransaction.timestamp),
+            ).filter(TokenTransaction.work_user_id.in_(user_ids))
+            if request.workspace_id:
+                lifetime_query = lifetime_query.filter(TokenTransaction.workspace_id == request.workspace_id)
+            lifetime_rows = {
+                str(uid): {"request_count": int(rc or 0), "last_used_at": lu}
+                for uid, rc, lu in lifetime_query.group_by(TokenTransaction.work_user_id).all()
+            }
+        threshold = max(1, int(parsed.get("usage_threshold") or 10))
+        requested_status = parsed.get("usage_status") or (
+            "unused" if intent == "inactive" else "all"
+        )
+        adoption_rows = []
+        status_counts = {"never": 0, "recently_inactive": 0, "low": 0, "active": 0}
+        for user in users:
+            key = str(user.id)
+            current_count = current_rows_map.get(key, 0)
+            lifetime = lifetime_rows.get(key) or {}
+            lifetime_count = int(lifetime.get("request_count") or 0)
+            last_used_at = lifetime.get("last_used_at")
+            if lifetime_count == 0:
+                status = "never"
+            elif current_count == 0:
+                status = "recently_inactive"
+            elif current_count < threshold:
+                status = "low"
+            else:
+                status = "active"
+            status_counts[status] += 1
+            if requested_status == "unused" and status not in {"never", "recently_inactive"}:
+                continue
+            if requested_status not in {"all", "unused", status}:
+                continue
+            adoption_rows.append({
+                "user": user, "status": status, "current_count": current_count,
+                "lifetime_count": lifetime_count, "last_used_at": last_used_at,
+            })
+        status_order = {"never": 0, "recently_inactive": 1, "low": 2, "active": 3}
+        adoption_rows.sort(key=lambda row: (
+            status_order[row["status"]],
+            row["current_count"] if row["status"] == "low" else -row["current_count"],
+            row["user"].name or "",
+        ))
+        status_labels = {
+            "never": "Never used",
+            "recently_inactive": "Recently inactive",
+            "low": f"Low usage (1–{threshold - 1} requests)",
+            "active": f"Active ({threshold}+ requests)",
+        }
+        evidence = []
+        for row in adoption_rows[:result_limit]:
+            last_used = row["last_used_at"]
+            detail_parts = [
+                status_labels[row["status"]],
+                row["user"].source_platform or "Unknown platform",
+                f"{row['lifetime_count']:,} lifetime requests",
+            ]
+            if last_used:
+                detail_parts.append(f"last used {last_used.strftime('%b %d, %Y')}")
+            evidence.append({
+                "label": row["user"].name or "Unnamed person",
+                "value": f"{row['current_count']:,}",
+                "metric_label": "requests in period",
+                "detail": " · ".join(detail_parts),
+                "filter_name": "user_external_id",
+                "filter_value": row["user"].external_id,
+            })
+        if requested_status == "all":
+            title = "People adoption overview"
+            answer = (
+                f"CostPilot found {len(users):,} people with AI access: "
+                f"{status_counts['active']:,} active, {status_counts['low']:,} low usage, "
+                f"{status_counts['recently_inactive']:,} recently inactive, and "
+                f"{status_counts['never']:,} never used. Low usage means fewer than "
+                f"{threshold:,} governed requests in {period_label}."
+            )
+        else:
+            title_by_status = {
+                "unused": "People with no recent AI usage",
+                "never": "People who have never used AI",
+                "recently_inactive": "Recently inactive people",
+                "low": "Low-usage people",
+                "active": "Active people",
+            }
+            definition_by_status = {
+                "unused": "no requests in the selected period",
+                "never": "no governed requests at any time",
+                "recently_inactive": "historical usage but no requests in the selected period",
+                "low": f"between 1 and {max(threshold - 1, 1):,} requests in the selected period",
+                "active": f"at least {threshold:,} requests in the selected period",
+            }
+            title = title_by_status.get(requested_status, "People adoption")
+            answer = (
+                f"{len(adoption_rows):,} "
+                f"{'person matches' if len(adoption_rows) == 1 else 'people match'} "
+                f"this definition: {definition_by_status.get(requested_status, requested_status)}."
+            )
+        calculation_formula = (
+            "Classify every person with AI access using lifetime activity and "
+            f"governed requests in the selected period; low-usage threshold is {threshold:,}"
+        )
+        calculation_row_count = len(users)
+        intent = "agent_adoption"
     elif intent in {"inactive", "agent_adoption"}:
         current_rows = report.get("agent_breakdown") or []
         current_by_id = {
@@ -6007,6 +6198,7 @@ def _ask_costpilot_answer(
         history = run_get_decision_history(
             db, request.workspace_id, agent_name=agent_name, model_name=model_name,
             keyword=decision_keyword, department_scope=department_scope,
+            budget_cap_only=bool(decision_keyword),
         )
         decisions = history.get("decisions") or []
         subject = agent_name or model_name
@@ -6019,7 +6211,7 @@ def _ask_costpilot_answer(
         if not decisions:
             answer = (
                 f"No recorded decisions matched {subject}." if subject
-                else "No recorded budget-cap decisions were found." if decision_keyword
+                else "No recorded budget-cap decisions were found -- this workspace has no supervisor cap changes, overrides, or other budget-governance actions logged yet." if decision_keyword
                 else "No recorded governance decisions were found."
             )
         else:

@@ -1389,6 +1389,7 @@ def run_get_decision_history(
     agent_name: Optional[str] = None, model_name: Optional[str] = None,
     keyword: Optional[str] = None, event_type: Optional[str] = None,
     limit: int = 10, department_scope: Optional[str] = None,
+    budget_cap_only: bool = False,
 ) -> dict:
     """
     Phase 2 slice 6 (decision memory): searches AuditEvent.rationale --
@@ -1423,9 +1424,27 @@ def run_get_decision_history(
     if model:
         query = query.filter(AuditEvent.selected_model_name.ilike(f"%{model}%"))
 
-    word = (keyword or "").strip()
-    if word:
-        query = query.filter(AuditEvent.rationale.ilike(f"%{word}%"))
+    if budget_cap_only:
+        # "Show recent budget-cap decisions" / "Who approved the last
+        # budget change?" -- a plain keyword="budget" ILIKE against
+        # AuditEvent.rationale matched almost every ordinary per-request
+        # ROUTING decision instead of an actual cap change, because
+        # core/auditor.py's _build_rationale() stamps a "Budget position
+        # at time of decision: X% used ($Y of $Z cap)" boilerplate line
+        # onto EVERY routing decision's rationale, budget-related or not.
+        # Confirmed live 2026-09-13: this workspace has never had a real
+        # supervisor cap change, so the query always fell through to the
+        # most recent ordinary model-routing decision and presented it as
+        # a "budget-cap decision." Real cap/override/throttle changes are
+        # written with event_type BUDGET or GOVERNANCE (routes_budget.py)
+        # and never with event_type ROUTING, so restricting to those two
+        # types -- instead of a rationale substring match -- is the
+        # correct way to isolate genuine budget-governance actions.
+        query = query.filter(AuditEvent.event_type.in_(["BUDGET", "GOVERNANCE"]))
+    else:
+        word = (keyword or "").strip()
+        if word:
+            query = query.filter(AuditEvent.rationale.ilike(f"%{word}%"))
 
     etype = (event_type or "").strip()
     if etype:
