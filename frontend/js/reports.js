@@ -1008,6 +1008,288 @@ function exportBusinessImpactReport() {
   printSection("biReportDoc", "CostPilot — Business Impact Report");
 }
 
+// ── Support AI Cost Increase Analysis — first composite briefing report ────
+// Phase 5: unlike every report above (one chart, one data source), this
+// pulls FOUR different views (trend, agent ranking, tier-mix composition,
+// resolved/unresolved) from one backend call (GET /api/dashboard/support-
+// briefing) into a single document -- see that endpoint's own docstring
+// for why it's a standalone aggregation rather than four separate
+// "Generate Report" replays stitched together by hand.
+const REPORT_CHART_TEXT_COLOR = "#1a2733";
+const REPORT_CHART_GRID_COLOR = "#e2e6ea";
+const REPORT_CHART_PALETTE = ["#25c4b5", "#5a8dee", "#f5a623", "#e8618c", "#8c6fe0", "#4fb477"];
+
+// Generic ad-hoc chart -> image capture, same reasoning as askReportChartImg
+// in ask-costpilot-render.js (print output needs a bitmap, not a live
+// canvas) -- text/grid colors are set explicitly rather than inherited
+// from chart-theme.js's dark-dashboard defaults, since this always
+// renders on a white report page regardless of the app's active theme
+// (see this session's chart-legibility fix for why that distinction
+// matters).
+function reportChartImg(config, width, height) {
+  if (typeof Chart === "undefined") return "";
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  document.body.appendChild(canvas);
+  let dataUrl = "";
+  try {
+    const chart = new Chart(canvas.getContext("2d"), config);
+    chart.resize();
+    chart.render();
+    dataUrl = canvas.toDataURL("image/png");
+    chart.destroy();
+  } catch (_err) { /* leave dataUrl empty -- report still renders without it */ }
+  canvas.remove();
+  if (!dataUrl) return "";
+  return `<figure class="report-chart-figure"><img src="${dataUrl}" style="width:100%;height:auto" /></figure>`;
+}
+
+function supportBriefingSpendTrendChart(spendTrend) {
+  if (!spendTrend || spendTrend.length < 2) return "";
+  return reportChartImg({
+    type: "line",
+    data: {
+      labels: spendTrend.map(r => r.date.slice(5)),
+      datasets: [{
+        label: "Daily support AI spend", data: spendTrend.map(r => r.spend_usd),
+        borderColor: REPORT_CHART_PALETTE[0], backgroundColor: "rgba(37,196,181,0.12)",
+        fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: false, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: REPORT_CHART_TEXT_COLOR, maxTicksLimit: 10 }, grid: { color: REPORT_CHART_GRID_COLOR } },
+        y: { beginAtZero: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
+      },
+    },
+  }, 700, 260);
+}
+
+function supportBriefingAgentChart(topAgents) {
+  if (!topAgents || topAgents.length < 2) return "";
+  return reportChartImg({
+    type: "bar",
+    data: {
+      labels: topAgents.map(r => r.agent),
+      datasets: [{ data: topAgents.map(r => r.spend_usd), backgroundColor: REPORT_CHART_PALETTE[1] }],
+    },
+    options: {
+      indexAxis: "y", responsive: false, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
+        y: { ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
+      },
+    },
+  }, 700, Math.max(220, topAgents.length * 32));
+}
+
+function supportBriefingModelMixChart(modelMixByAgent) {
+  if (!modelMixByAgent || modelMixByAgent.length < 1) return "";
+  const tiers = ["Scout", "Analyst", "Advisor", "Strategist"];
+  const tierColors = { Scout: "#4fb477", Analyst: "#5a8dee", Advisor: "#f5a623", Strategist: "#e8618c" };
+  return reportChartImg({
+    type: "bar",
+    data: {
+      labels: modelMixByAgent.map(r => r.agent),
+      datasets: tiers.map(tier => ({
+        label: tier, data: modelMixByAgent.map(r => r[tier] || 0),
+        backgroundColor: tierColors[tier],
+      })),
+    },
+    options: {
+      indexAxis: "y", responsive: false, animation: false,
+      plugins: { legend: { display: true, position: "bottom", labels: { color: REPORT_CHART_TEXT_COLOR, boxWidth: 12 } } },
+      scales: {
+        x: { stacked: true, beginAtZero: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
+        y: { stacked: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
+      },
+    },
+  }, 700, Math.max(220, modelMixByAgent.length * 40));
+}
+
+function supportBriefingOutcomeChart(resolved, unresolved) {
+  if (!resolved && !unresolved) return "";
+  return reportChartImg({
+    type: "doughnut",
+    data: {
+      labels: ["Resolved", "Unresolved"],
+      datasets: [{ data: [resolved, unresolved], backgroundColor: [REPORT_CHART_PALETTE[0], "#c9ccd1"], borderWidth: 0 }],
+    },
+    options: {
+      responsive: false, animation: false,
+      plugins: { legend: { display: true, position: "right", labels: { color: REPORT_CHART_TEXT_COLOR, boxWidth: 14 } } },
+    },
+  }, 500, 260);
+}
+
+function renderSupportBriefingReportHtml(data) {
+  const generatedAt = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const k = data.kpis || {};
+  const evidenceByKpi = data.evidence_by_kpi || {};
+
+  const kpiCard = (label, value, evidenceLabel, sub) => `
+    <div class="report-kpi">
+      <div class="report-kpi-label-row">
+        <span class="report-kpi-label">${escapeHtml(label)}</span>
+        ${evidenceLabel ? `<span class="bi-evidence-tag ${evidenceLabel}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceLabel] || evidenceLabel)}</span>` : ""}
+      </div>
+      <div class="report-kpi-value">${value}</div>
+      ${sub ? `<div class="report-kpi-sub">${sub}</div>` : ""}
+    </div>`;
+
+  const changeLabel = k.pct_change == null ? "—" : `${k.pct_change >= 0 ? "+" : ""}${k.pct_change}%`;
+
+  const findingsList = (data.findings || []).length
+    ? `<ul class="report-findings-list">${data.findings.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>`
+    : `<p class="bi-note">Not enough activity in this period to surface findings.</p>`;
+
+  const recCards = (data.recommendations || []).length
+    ? data.recommendations.map(rec => `
+        <div class="bi-rec-card" style="break-inside:avoid">
+          <div class="bi-rec-head">
+            <span class="bi-rec-title">${escapeHtml(rec.title || "")}</span>
+            <span class="bi-rec-priority ${escapeHtml(rec.priority || "low")}">${escapeHtml(rec.priority || "low")}</span>
+          </div>
+          <div class="bi-rec-body">${escapeHtml(rec.why_it_matters || rec.current_state || "")}</div>
+          <div class="bi-rec-action">→ ${escapeHtml(rec.recommended_action || "")}</div>
+          ${rec.impact_type === "savings_usd" && rec.estimated_impact != null
+            ? `<div class="bi-rec-impact">Potential savings: ${fmtUsd(rec.estimated_impact)}/mo</div>` : ""}
+        </div>`).join("")
+    : `<div class="bi-note">No recommendations right now.</div>`;
+
+  const agentTableRows = (data.top_agents || []).length
+    ? data.top_agents.map((r, i) => `<tr><td class="bi-rank">${i + 1}</td><td>${escapeHtml(r.agent)}</td><td>${fmtUsd(r.spend_usd)}</td></tr>`).join("")
+    : `<tr><td colspan="3">No support agent activity in this period.</td></tr>`;
+
+  return `
+    <div class="report-doc">
+      ${reportDocHeaderHtml("Support AI Cost Increase Analysis", generatedAt)}
+
+      <section class="report-section">
+        <h2 class="report-section-title">Executive Summary</h2>
+        <p class="bi-summary">
+          Support AI investment ${k.pct_change == null
+            ? `totaled ${fmtUsd(k.ai_investment_usd)}`
+            : `${k.pct_change >= 0 ? "increased" : "decreased"} ${Math.abs(k.pct_change)}% to ${fmtUsd(k.ai_investment_usd)}`
+          } over ${escapeHtml(data.period_label || "the selected period")}${
+            data.recommendations && data.recommendations.length ? ", with a clear optimization opportunity identified below." : "."
+          }
+        </p>
+        <div class="report-kpi-row">
+          ${kpiCard("AI Investment", fmtUsd(k.ai_investment_usd), null, `vs ${fmtUsd(k.prior_period_usd)} prior period`)}
+          ${kpiCard("Change vs Prior Period", changeLabel, null, null)}
+          ${kpiCard("Savings Opportunity", k.savings_opportunity_usd != null ? fmtUsd(k.savings_opportunity_usd) : "—", null, "workspace-wide model-routing estimate")}
+          ${kpiCard("Cost per Resolution", k.cost_per_resolution_usd != null ? fmtUsd(k.cost_per_resolution_usd) : "—", evidenceByKpi.cost_per_resolution_usd, null)}
+          ${kpiCard("Outcome Coverage", k.outcome_coverage_pct != null ? `${k.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct, null)}
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">AI Spend Trend</h2>
+        ${supportBriefingSpendTrendChart(data.spend_trend) || `<p class="bi-note">Not enough daily data to chart a trend.</p>`}
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Spend by Support Agent</h2>
+        ${supportBriefingAgentChart(data.top_agents) || `<p class="bi-note">Not enough agent-level activity to chart.</p>`}
+        <table class="rpt-context-table">
+          <thead><tr><th></th><th>Agent</th><th>AI Spend</th></tr></thead>
+          <tbody>${agentTableRows}</tbody>
+        </table>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Model Mix by Agent</h2>
+        ${supportBriefingModelMixChart(data.model_mix_by_agent) || `<p class="bi-note">Not enough per-agent tier data to chart.</p>`}
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Resolved vs. Unresolved Cases</h2>
+        ${supportBriefingOutcomeChart(k.resolved_cases, k.unresolved_cases) || `<p class="bi-note">No case outcome data in this period.</p>`}
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Key Findings</h2>
+        ${findingsList}
+      </section>
+
+      <section class="report-section">
+        <h2 class="report-section-title">Recommendations</h2>
+        <div class="bi-rec-grid">${recCards}</div>
+      </section>
+
+      <section class="report-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
+        <div class="bi-note">
+          <div><strong>Data period:</strong> ${escapeHtml(data.evidence?.data_period_label || "")}</div>
+          <div><strong>AI requests analyzed:</strong> ${fmtNum(data.evidence?.requests_analyzed)}</div>
+          <div><strong>Cases analyzed:</strong> ${fmtNum(data.evidence?.cases_analyzed)}</div>
+          <div><strong>Outcome-covered cases:</strong> ${fmtNum(data.evidence?.outcome_covered_cases)}</div>
+          ${data.truncated ? `<div><strong>Note:</strong> this period had more matching activity than could be fully loaded — figures reflect a bounded sample, not silently under-counted without notice.</div>` : ""}
+          <div style="margin-top:8px">Associated business outcomes reflect cases with recorded AI activity and do not imply AI caused the outcome. Savings Opportunity is an estimate (routine calls priced at the cheapest active model tier), not money already saved.</div>
+        </div>
+      </section>
+
+      <footer class="report-footer">CostPilot — Support AI Cost Increase Analysis — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+    </div>`;
+}
+
+async function openSupportBriefingReport() {
+  const modalId = "supportBriefingPreview";
+  const existing = document.getElementById(modalId);
+  if (existing) existing.remove();
+  const workspaceId = reportWorkspaceId();
+  let data;
+  try {
+    const qs = new URLSearchParams({ days: "30" });
+    if (workspaceId) qs.set("workspace_id", workspaceId);
+    data = await apiGet(`/api/dashboard/support-briefing?${qs.toString()}`);
+  } catch (err) {
+    alert("Could not load the Support Cost Briefing: " + (err.message || "unknown error"));
+    return;
+  }
+  const html = renderSupportBriefingReportHtml(data);
+  const modal = document.createElement("div");
+  modal.id = modalId;
+  modal.className = "cp-report-preview-backdrop";
+  modal.innerHTML = `
+    <div class="cp-report-preview-modal">
+      <div class="cp-report-preview-toolbar">
+        <div style="font-weight:600">Support AI Cost Increase Analysis</div>
+        <button type="button" data-support-briefing-save class="cp-report-preview-print">💾 Save</button>
+        <button type="button" data-support-briefing-print class="cp-report-preview-print">🖨 Print / Save as PDF</button>
+        <button type="button" data-support-briefing-close class="cp-report-preview-close">✕</button>
+      </div>
+      <div class="cp-report-preview-scroll">
+        <div id="${modalId}-body">${html}</div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", async (event) => {
+    if (event.target === modal || event.target.closest("[data-support-briefing-close]")) { modal.remove(); return; }
+    if (event.target.closest("[data-support-briefing-print]")) { printSection(`${modalId}-body`, "Support AI Cost Increase Analysis"); return; }
+    if (event.target.closest("[data-support-briefing-save]")) {
+      try {
+        await apiPost("/api/saved-reports", {
+          workspace_id: workspaceId || null,
+          title: `Support AI Cost Increase Analysis — ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+          report_type: "support_briefing",
+          source: { days: 30 },
+        });
+        alert('Report saved. Reopen it anytime from "Saved reports."');
+      } catch (err) {
+        alert("Could not save report: " + (err.message || "unknown error"));
+      }
+    }
+  });
+}
+
 function projectAttributionSelect(id, defaultLabel, options) {
   const select = document.getElementById(id);
   if (!select) return;
@@ -1767,6 +2049,7 @@ const SAVED_REPORT_TITLES = {
   risk: "Governance & Risk Report",
   departments: "Department Scorecard",
   ask_costpilot: "Ask CostPilot Report",
+  support_briefing: "Support AI Cost Increase Analysis",
 };
 
 async function saveCurrentReport(reportType) {
@@ -1855,6 +2138,14 @@ async function openSavedReport(id) {
     saved = await apiGet(`/api/saved-reports/${id}`);
   } catch (err) {
     alert("Could not open saved report: " + (err.message || "unknown error"));
+    return;
+  }
+  if (saved.report_type === "support_briefing") {
+    // Same "re-derive, don't persist a snapshot" principle as every other
+    // saved report -- openSupportBriefingReport() re-fetches the live
+    // /api/dashboard/support-briefing endpoint itself, so this just needs
+    // to open it, not replay any stored data.
+    openSupportBriefingReport();
     return;
   }
   if (saved.report_type === "ask_costpilot") {

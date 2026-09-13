@@ -102,6 +102,7 @@
       <div class="rpt-utilities" aria-label="Reporting tools">
         <button id="rptTabEfficiency" type="button" data-report-utility="efficiency" onclick="openReportView('efficiency')">Ask CostPilot</button>
         <button type="button" onclick="openSavedReportsModal()">📁 Saved reports</button>
+        <button type="button" onclick="openSupportBriefingReport()">📋 Support Cost Briefing</button>
         <a id="rptTabRoi" href="/roi.html">ROI planning →</a>
       </div>
     </div>
@@ -1163,7 +1164,7 @@
 </div>
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/reports.js?v=20260913a-chart-colors"></script>
+  <script src="js/reports.js?v=20260913b-support-briefing"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
     const ROI_RATES = {

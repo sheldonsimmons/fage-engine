@@ -1438,3 +1438,229 @@ def get_work_outcomes(
         "by_customer": by_customer,
         "business_outcomes": business_outcomes,
     }
+
+
+# Printable Reports Phase 5: composite briefing reports. Everything above
+# in this file (and the classic Reports engine) answers ONE question with
+# ONE chart -- a real "boardroom" report (per the reporting-architecture
+# conversation) needs several different data sources stitched into one
+# document: a spend trend, a ranking, a composition breakdown, an outcome
+# comparison, and recommendations, all scoped to the same story. This is
+# the first such template ("Support AI Cost Increase Analysis" -- the
+# demo script's own pick: voice question -> why -> recommendation ->
+# report). Deliberately NOT routed through core.metrics_query's shared
+# registry: a per-agent MODEL-TIER breakdown (for the stacked bar) has no
+# registered two-dimension shape there today -- same "standalone when the
+# registry can't cleanly express it" precedent as
+# core.metrics_query.department_outcome_breakdown/work_items_by_cost_ratio.
+_BRIEFING_TIER_LABELS = ("Scout", "Analyst", "Advisor", "Strategist")
+
+
+_BRIEFING_TIER_ALIAS = {"micro": "Scout", "flagship": "Advisor"}
+
+
+def _briefing_tier_bucket(tier: str) -> str:
+    """Normalize legacy two-tier names onto the four-tier scale."""
+    mapped = _BRIEFING_TIER_ALIAS.get(tier, tier)
+    return mapped if mapped in _BRIEFING_TIER_LABELS else "Scout"
+
+
+@router.get("/support-briefing")
+def get_support_cost_briefing(
+    workspace_id: str | None = Query(None),
+    days: int = Query(30, ge=7, le=180),
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Assembles the "Support AI Cost Increase Analysis" briefing: current-
+    vs-prior-period spend (for the headline % change), a daily spend
+    trend, top support agents by spend, each of those agents' model-tier
+    mix (for a stacked bar), resolved/unresolved case counts, cost per
+    resolution, outcome coverage, a potential-savings estimate, and the
+    existing recommendations engine's top entries -- one call, one
+    response, so the frontend renders one multi-section report instead of
+    stitching together several separate "Generate Report" replays.
+
+    Support-scoped throughout via WorkItem.context_type IN
+    (case/ticket/incident) -- the same _SUPPORT_CONTEXT_TYPES set
+    get_business_impact already uses for support_cost_per_resolution_usd,
+    so this report's numbers agree with Business Impact's for the same
+    population, not a second, differently-scoped definition of "support."
+
+    Row-bounded (MAX_BRIEFING_ROWS) the same way the classic Reports
+    engine's Python-side aggregation was capped after the live memory
+    incident this session -- this endpoint loops over matching
+    TokenTransaction rows in Python (daily buckets + per-agent tier
+    counts, neither of which the shared registry can express in one
+    query), so it needs the same safety valve.
+    """
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
+    MAX_BRIEFING_ROWS = 50_000
+
+    now = datetime.utcnow()
+    start = now - timedelta(days=days)
+    prior_start = start - timedelta(days=days)
+    tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    is_support = WorkItem.context_type.in_(_SUPPORT_CONTEXT_TYPES)
+
+    def _dept_clause():
+        return or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )
+
+    def _base_query():
+        q = db.query(TokenTransaction).join(WorkItem, TokenTransaction.work_item_id == WorkItem.id).filter(is_support)
+        if tx_scope is not None:
+            q = q.filter(tx_scope)
+        if department_scope:
+            q = q.filter(_dept_clause())
+        return q
+
+    # Prior-period total is a single SUM -- no need to load those rows.
+    def _period_spend(period_start, period_end):
+        q = _base_query().with_entities(func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0)).filter(
+            TokenTransaction.timestamp >= period_start, TokenTransaction.timestamp < period_end,
+        )
+        return float(q.scalar() or 0.0)
+
+    current_spend = _period_spend(start, now)
+    prior_spend = _period_spend(prior_start, start)
+    pct_change = round(((current_spend - prior_spend) / prior_spend) * 100, 1) if prior_spend else None
+
+    # Current-period rows, bounded -- the only rows we need loaded into
+    # Python are these (daily trend + per-agent + per-tier all come from
+    # this one set).
+    current_q = _base_query().filter(TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now)
+    truncated = current_q.count() > MAX_BRIEFING_ROWS
+    txns = (
+        current_q
+        .outerjoin(RegisteredAgent, TokenTransaction.agent_id == RegisteredAgent.id)
+        .with_entities(
+            TokenTransaction.timestamp, TokenTransaction.cost_usd, TokenTransaction.model_tier,
+            TokenTransaction.agent_id, RegisteredAgent.name,
+        )
+        .limit(MAX_BRIEFING_ROWS)
+        .all()
+    )
+
+    daily: dict[str, float] = {}
+    spend_by_agent: dict[str, float] = {}
+    tier_by_agent: dict[str, dict[str, float]] = {}
+    for timestamp, cost_usd, model_tier, agent_id, agent_name in txns:
+        cost = float(cost_usd or 0.0)
+        day = timestamp.strftime("%Y-%m-%d") if timestamp else "unknown"
+        daily[day] = round(daily.get(day, 0.0) + cost, 6)
+        label = agent_name or "Unassigned agent"
+        spend_by_agent[label] = round(spend_by_agent.get(label, 0.0) + cost, 6)
+        tier = _briefing_tier_bucket(model_tier)
+        bucket = tier_by_agent.setdefault(label, {t: 0.0 for t in _BRIEFING_TIER_LABELS})
+        bucket[tier] = round(bucket.get(tier, 0.0) + cost, 6)
+
+    spend_trend = [{"date": day, "spend_usd": daily.get(day, 0.0)} for day in _timeline_dates_local(start, now)]
+    top_agents = sorted(spend_by_agent.items(), key=lambda kv: kv[1], reverse=True)[:8]
+    model_mix_by_agent = [
+        {"agent": agent, **tier_by_agent.get(agent, {t: 0.0 for t in _BRIEFING_TIER_LABELS})}
+        for agent, _ in top_agents
+    ]
+
+    # Resolved/unresolved + cost per resolution -- same definitions
+    # get_business_impact() already uses for this exact population, so
+    # this report's numbers agree with Business Impact's.
+    resolved_n, resolved_spend = _base_query().join(
+        WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id,
+    ).filter(
+        WorkItemOutcome.is_closed.is_(True), TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
+    ).with_entities(
+        func.count(func.distinct(WorkItem.id)), func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+    ).first() or (0, 0.0)
+    total_cases_n = _base_query().filter(
+        TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
+    ).with_entities(func.count(func.distinct(WorkItem.id))).scalar() or 0
+    resolved_n = int(resolved_n or 0)
+    unresolved_n = max(int(total_cases_n) - resolved_n, 0)
+    cost_per_resolution_usd = round(float(resolved_spend or 0.0) / resolved_n, 6) if resolved_n else None
+
+    touched_ids = [
+        row[0] for row in _base_query().filter(
+            TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
+        ).with_entities(WorkItem.id).distinct().all()
+    ]
+    outcomes_with_data = (
+        db.query(func.count(func.distinct(WorkItemOutcome.work_item_id)))
+        .filter(WorkItemOutcome.work_item_id.in_(touched_ids), WorkItemOutcome.is_simulation.isnot(True))
+        .scalar() if touched_ids else 0
+    ) or 0
+    outcome_coverage_pct = round(100.0 * outcomes_with_data / len(touched_ids), 1) if touched_ids else None
+
+    from core.metrics_query import compute_potential_savings, evidence_for_sample
+    from core.recommendations import run_recommendations
+
+    potential_savings = compute_potential_savings(db, workspace_id, department_scope=department_scope)
+    recommendations = run_recommendations(db, workspace_id)[:3]
+
+    # Deterministic (never LLM-generated) findings -- plain conditionals
+    # over the numbers already computed above, same "no invented insight"
+    # rule as every other narration in this app.
+    findings = []
+    if pct_change is not None:
+        direction = "increased" if pct_change >= 0 else "decreased"
+        findings.append(f"Support AI spend {direction} {abs(pct_change):.0f}% vs. the prior {days} days.")
+    if top_agents:
+        top2 = ", ".join(a for a, _ in top_agents[:2])
+        findings.append(f"{top2} account{'s' if len(top_agents[:2]) > 1 else ''} for the largest share of support spend.")
+    premium_share = None
+    total_tier_spend = sum(sum(row[t] for t in _BRIEFING_TIER_LABELS) for row in model_mix_by_agent)
+    if total_tier_spend:
+        premium_spend = sum(row["Advisor"] + row["Strategist"] for row in model_mix_by_agent)
+        premium_share = round(100.0 * premium_spend / total_tier_spend, 0)
+        findings.append(f"Premium-tier models (Advisor/Strategist) account for {premium_share:.0f}% of support spend in this period.")
+    if resolved_n or unresolved_n:
+        findings.append(f"{resolved_n:,} support cases resolved vs. {unresolved_n:,} unresolved during this period.")
+    if potential_savings.get("potential_savings_usd"):
+        findings.append(f"An estimated ${potential_savings['potential_savings_usd']:,.0f} in model-routing savings is available workspace-wide.")
+
+    return {
+        "workspace_id": workspace_id,
+        "period_days": days,
+        "period_label": f"{start.strftime('%b %-d')} – {now.strftime('%b %-d, %Y')}",
+        "truncated": truncated,
+        "kpis": {
+            "ai_investment_usd": round(current_spend, 6),
+            "prior_period_usd": round(prior_spend, 6),
+            "pct_change": pct_change,
+            "savings_opportunity_usd": potential_savings.get("potential_savings_usd"),
+            "savings_opportunity_evidence": potential_savings.get("evidence"),
+            "cost_per_resolution_usd": cost_per_resolution_usd,
+            "resolved_cases": resolved_n,
+            "unresolved_cases": unresolved_n,
+            "outcome_coverage_pct": outcome_coverage_pct,
+        },
+        "evidence_by_kpi": {
+            "cost_per_resolution_usd": evidence_for_sample(resolved_n, noun="resolved support items")["evidence_label"],
+            "outcome_coverage_pct": evidence_for_sample(len(touched_ids), noun="AI-touched cases")["evidence_label"],
+        },
+        "spend_trend": spend_trend,
+        "top_agents": [{"agent": a, "spend_usd": s} for a, s in top_agents],
+        "model_mix_by_agent": model_mix_by_agent,
+        "findings": findings,
+        "recommendations": recommendations,
+        "evidence": {
+            "data_period_label": f"{start.strftime('%b %-d')} – {now.strftime('%b %-d, %Y')}",
+            "requests_analyzed": len(txns),
+            "cases_analyzed": int(total_cases_n),
+            "outcome_covered_cases": int(outcomes_with_data),
+        },
+    }
+
+
+def _timeline_dates_local(start: datetime, end: datetime):
+    current = start.date()
+    last = (end - timedelta(microseconds=1)).date()
+    out = []
+    while current <= last:
+        out.append(current.strftime("%Y-%m-%d"))
+        current += timedelta(days=1)
+    return out

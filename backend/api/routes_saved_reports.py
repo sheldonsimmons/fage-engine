@@ -26,7 +26,7 @@ from database.models import SavedReport
 
 router = APIRouter()
 
-REPORT_TYPES = {"business_impact", "savings", "risk", "departments", "ask_costpilot"}
+REPORT_TYPES = {"business_impact", "savings", "risk", "departments", "ask_costpilot", "support_briefing"}
 
 
 def _check_reporting_access(
