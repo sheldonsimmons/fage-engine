@@ -1596,6 +1596,16 @@ body {
 .cp-report-preview-modal .bi-rec-card { border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; }
 .cp-report-preview-modal .bi-rec-title { font-size: 11.5px; font-weight: 700; color: #111; }
 .cp-report-preview-modal .bi-rec-body { font-size: 10.5px; color: #555; }
+.cp-report-preview-modal .bi-rec-action { font-size: 11px; color: #111; font-weight: 600; margin-top: 4px; }
+.cp-report-preview-modal .bi-rec-impact { font-size: 11px; color: #1a7a4c; margin-top: 3px; }
+.cp-report-preview-modal .bi-rec-priority {
+  font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 999px; background: #eee; color: #444;
+}
+.cp-report-preview-modal .bi-evidence-tag {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 9px;
+  font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: #eee; color: #444;
+}
 .cp-report-preview-modal table.rpt-context-table { border-collapse: collapse; width: 100%; font-size: 12px; }
 .cp-report-preview-modal table.rpt-context-table th,
 .cp-report-preview-modal table.rpt-context-table td { border: 1px solid #ddd; padding: 5px 8px; color: #111; text-align: left; }
