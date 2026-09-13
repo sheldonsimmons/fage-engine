@@ -526,6 +526,21 @@ def _ask_intent(question: str, default_days: int) -> dict:
         r"\b(?:cost|spend)\s+per\s+(?:work\s*item|project|matter|case)\b", text,
     ))
 
+    # "What's our cost per successful outcome?" -- with no per_item_cost_
+    # question or general_outcome_question match (it's neither "cost per
+    # work item" nor a yes/no "is AI helping" question), this fell through
+    # to a generic total/overview answer that divided total AI spend by
+    # every governed REQUEST in the period ($2.43 / 606 requests =
+    # $0.004), not by any real successful business outcome -- a
+    # completely different, far smaller number than the trusted
+    # WorkItemOutcome-based compute_cost_per_outcome() the agent-loop path
+    # already uses for the exact same question ($12.37 / 132 successful
+    # outcomes = $0.094), a ~23x discrepancy depending purely on which
+    # code path happened to answer. Confirmed live 2026-09-13.
+    per_outcome_cost_question = bool(re.search(
+        r"\bcost\s+per\s+(?:successful\s+)?outcome\b", text,
+    ))
+
     asks_for_help = any(term in text for term in (
         "what can you do", "what all can you do", "how can you help",
         "what can i ask", "sample question", "example question",
@@ -1179,6 +1194,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "data_coverage_question": data_coverage_question,
         "growth_ranking_question": growth_ranking_question,
         "per_item_cost_question": per_item_cost_question,
+        "per_outcome_cost_question": per_outcome_cost_question,
     }
     canonical = canonical_ask_intent(question)
     if canonical:
@@ -1896,6 +1912,20 @@ Always call query_costpilot_usage. Do not answer the question yourself."""
                     # the plain company total again. Confirmed live on the
                     # deployed app.
                     return fallback, "deterministic_fallback_per_item_cost_override"
+                if fallback.get("per_outcome_cost_question"):
+                    # "What's our cost per successful outcome?" -- same
+                    # class of guard: the regex-matched "cost per
+                    # (successful) outcome" phrasing is exact, but this
+                    # classifier has no concept of the real WorkItemOutcome-
+                    # based cost-per-outcome computation and reliably
+                    # answers with total spend divided by raw governed-
+                    # request count instead -- a completely different,
+                    # much smaller number mislabeled the same way.
+                    # Confirmed live 2026-09-13. Unconditional (unlike the
+                    # intent-mismatch guards above) because there is no
+                    # dedicated intent value for this question the
+                    # classifier could get "right" by coincidence.
+                    return fallback, "deterministic_fallback_per_outcome_cost_override"
                 if (
                     fallback.get("growth_ranking_question")
                     and validated.get("intent") != "ranking"
@@ -5193,6 +5223,7 @@ def _ask_costpilot_answer(
     data_coverage_question = bool(parsed.get("data_coverage_question"))
     growth_ranking_question = bool(parsed.get("growth_ranking_question"))
     per_item_cost_question = bool(parsed.get("per_item_cost_question"))
+    per_outcome_cost_question = bool(parsed.get("per_outcome_cost_question"))
     # "Who had the highest AI spend this month and compare to last month?"
     # -- the intent classifier (both the regex fallback and the optional
     # OpenAI refinement layer) correctly sets comparison_key on a ranking
@@ -6108,6 +6139,45 @@ def _ask_costpilot_answer(
         calculation_formula = (
             "Count of WorkItemOutcome rows for this account's Opportunities, "
             "grouped by outcome_success/is_closed"
+        )
+    elif per_outcome_cost_question:
+        # "What's our cost per successful outcome?" -- reuses the same
+        # trusted WorkItemOutcome-based computation the agent loop's
+        # get_cost_per_outcome tool already uses, instead of falling
+        # through to a generic total/overview answer that divides spend
+        # by raw governed-request count and calls that "per outcome"
+        # (confirmed live 2026-09-13: $0.004/request vs. the real
+        # $0.094/successful-outcome -- a ~23x discrepancy from mislabeling
+        # one metric as the other).
+        from api.ask_costpilot_tools import run_get_cost_per_outcome
+
+        cost_per_outcome_result = run_get_cost_per_outcome(
+            db, request.workspace_id, department_scope=department_scope,
+        )
+        title = "Cost per successful outcome"
+        spend_on_success = float(cost_per_outcome_result.get("ai_spend_on_successful_outcomes_usd") or 0)
+        success_count = int(cost_per_outcome_result.get("successful_outcomes") or 0)
+        known_count = int(cost_per_outcome_result.get("outcomes_with_known_data") or 0)
+        cost_per = cost_per_outcome_result.get("cost_per_successful_outcome_usd")
+        if success_count:
+            answer = (
+                f"Across this workspace, the cost per successful outcome is "
+                f"${cost_per:,.4f}, based on ${spend_on_success:,.2f} in AI spend "
+                f"associated with {success_count:,} successful outcome"
+                f"{'s' if success_count != 1 else ''} (out of {known_count:,} outcomes "
+                f"with known data). This reflects AI activity associated with the "
+                f"outcome, not proof that AI caused it."
+            )
+        else:
+            answer = (
+                "No successful outcomes with known data were found for this workspace, "
+                "so a cost-per-outcome figure can't be calculated yet."
+            )
+        evidence = []
+        calculation_row_count = known_count
+        calculation_formula = (
+            "AI spend associated with successful WorkItemOutcome rows, divided by the "
+            "count of successful outcomes"
         )
     elif general_outcome_question and not (named_entity and named_entity["entity"] == "account"):
         # "Is AI helping us close deals?" with no named account -- reuses
