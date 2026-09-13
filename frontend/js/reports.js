@@ -890,12 +890,17 @@ function renderBusinessImpactReportHtml() {
   const investmentSuccessful = (data.won_ai_investment_usd || 0) + (data.support_resolved_ai_investment_usd || 0);
   const investmentUnsuccessful = (data.lost_ai_investment_usd || 0) + (data.support_unresolved_ai_investment_usd || 0);
   const totalInvestment = investmentSuccessful + investmentUnsuccessful;
-  // "Value multiple" -- associated closed-won value per dollar of AI
-  // investment on that same successful work. Framed as ASSOCIATED, never
-  // "generated," matching this report's own causation footnote below --
-  // the number is a real ratio of two real figures, not a causal claim.
-  const valueMultiple = totalInvestment > 0 && data.closed_won_value_usd
-    ? data.closed_won_value_usd / totalInvestment : null;
+  // A dollar-per-dollar "value multiple" (closed-won value / AI spend)
+  // was tried here first and confirmed live to produce absurd numbers
+  // like "545976.6x" -- mathematically correct, but AI spend on a single
+  // deal is bookkeeping-scale next to a real enterprise deal's value, so
+  // the ratio is meaningless as a headline and actively hurts
+  // credibility. A bounded rate (successful vs. total outcomes) is the
+  // same "is this working" story without that runaway-number risk, and
+  // matches every other report's scorecard being a percentage.
+  const unsuccessfulOutcomes = (data.opportunities_lost || 0) + (data.support_cases_unresolved || 0);
+  const successRatePct = (successfulOutcomes + unsuccessfulOutcomes) > 0
+    ? Math.round((successfulOutcomes / (successfulOutcomes + unsuccessfulOutcomes)) * 100) : null;
 
   const biFindings = [];
   if (data.closed_won_value_usd) {
@@ -968,15 +973,15 @@ function renderBusinessImpactReportHtml() {
         </div>
       </section>
 
-      ${valueMultiple != null ? `
+      ${successRatePct != null ? `
       <section class="report-section rpt-outcome-section" style="break-inside:avoid">
-        <h2 class="report-section-title">Associated Value per Dollar Invested</h2>
+        <h2 class="report-section-title">Successful Outcome Rate</h2>
         <div class="rpt-outcome-grid" style="grid-template-columns:1fr">
           <div class="rpt-scorecard" style="max-width:280px">
-            ${reportIconBadge("dollarCircle", "green")}
-            <div class="rpt-scorecard-value">${valueMultiple.toFixed(1)}&times;</div>
-            <div class="rpt-scorecard-label">Value Multiple (Associated)</div>
-            <div class="rpt-scorecard-sub">${fmtUsd(data.closed_won_value_usd)} associated value per ${fmtUsd(totalInvestment)} invested</div>
+            ${reportIconBadge("checkTarget", "green")}
+            <div class="rpt-scorecard-value">${successRatePct}%</div>
+            <div class="rpt-scorecard-label">Successful Outcome Rate</div>
+            <div class="rpt-scorecard-sub">${fmtNum(successfulOutcomes)} of ${fmtNum(successfulOutcomes + unsuccessfulOutcomes)} won/resolved outcomes</div>
           </div>
         </div>
       </section>` : ""}
