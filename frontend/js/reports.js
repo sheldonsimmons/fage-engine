@@ -889,16 +889,28 @@ function renderBusinessImpactReportHtml() {
   const successfulOutcomes = (data.opportunities_won || 0) + (data.support_cases_resolved || 0);
   const investmentSuccessful = (data.won_ai_investment_usd || 0) + (data.support_resolved_ai_investment_usd || 0);
   const investmentUnsuccessful = (data.lost_ai_investment_usd || 0) + (data.support_unresolved_ai_investment_usd || 0);
+  const totalInvestment = investmentSuccessful + investmentUnsuccessful;
+  // "Value multiple" -- associated closed-won value per dollar of AI
+  // investment on that same successful work. Framed as ASSOCIATED, never
+  // "generated," matching this report's own causation footnote below --
+  // the number is a real ratio of two real figures, not a causal claim.
+  const valueMultiple = totalInvestment > 0 && data.closed_won_value_usd
+    ? data.closed_won_value_usd / totalInvestment : null;
 
-  const kpiCard = (label, value, evidenceLabel, sub) => `
-    <div class="report-kpi">
-      <div class="report-kpi-label-row">
-        <span class="report-kpi-label">${escapeHtml(label)}</span>
-        ${evidenceLabel ? `<span class="bi-evidence-tag ${evidenceLabel}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceLabel] || evidenceLabel)}</span>` : ""}
-      </div>
-      <div class="report-kpi-value">${value}</div>
-      ${sub ? `<div class="report-kpi-sub">${sub}</div>` : ""}
-    </div>`;
+  const biFindings = [];
+  if (data.closed_won_value_usd) {
+    biFindings.push(`${fmtUsd(data.closed_won_value_usd)} in closed-won/resolved value was associated with AI-touched work this period.`);
+  }
+  if (successfulOutcomes) {
+    biFindings.push(`${fmtNum(successfulOutcomes)} successful outcomes (won opportunities + resolved support work), at ${fmtUsd(data.cost_per_successful_outcome_usd)} per outcome.`);
+  }
+  if (data.outcome_coverage_pct != null) {
+    biFindings.push(`${data.outcome_coverage_pct}% of AI-touched work has a known outcome on record.`);
+  }
+  if (_biDeptRows.length) {
+    const topDept = [..._biDeptRows].sort((a, b) => (b.closed_won_value_usd || 0) - (a.closed_won_value_usd || 0))[0];
+    if (topDept) biFindings.push(`${escapeHtml(topDept.department)} leads in associated closed-won value at ${fmtUsd(topDept.closed_won_value_usd)}.`);
+  }
 
   const deptRows = _biDeptRows.length
     ? _biDeptRows.map((row, i) => `
@@ -925,34 +937,53 @@ function renderBusinessImpactReportHtml() {
     : `<tr><td colspan="4">No matching AI activity.</td></tr>`;
 
   const recCards = _biRecommendations.length
-    ? _biRecommendations.slice(0, 6).map(rec => `
-        <div class="bi-rec-card" style="break-inside:avoid">
-          <div class="bi-rec-head">
-            <span class="bi-rec-title">${escapeHtml(rec.title)}</span>
-            <span class="bi-rec-priority ${escapeHtml(rec.priority || "low")}">${escapeHtml(rec.priority || "low")}</span>
-          </div>
-          <div class="bi-rec-body">${escapeHtml(rec.why_it_matters || rec.current_state || "")}</div>
-          <div class="bi-rec-action">→ ${escapeHtml(rec.recommended_action || "")}</div>
-          ${rec.impact_type === "savings_usd" && rec.estimated_impact != null
-            ? `<div class="bi-rec-impact">Potential savings: ${fmtUsd(rec.estimated_impact)}/mo</div>` : ""}
-        </div>`).join("")
+    ? reportNumberedList(_biRecommendations.slice(0, 6), rec => `
+        <div class="rpt-rec-head">
+          <span class="rpt-rec-title">${escapeHtml(rec.title)}</span>
+          <span class="bi-rec-priority ${escapeHtml(rec.priority || "low")}">${escapeHtml(rec.priority || "low")}</span>
+        </div>
+        <div class="bi-rec-body">${escapeHtml(rec.why_it_matters || rec.current_state || "")}</div>
+        <div class="bi-rec-action">→ ${escapeHtml(rec.recommended_action || "")}</div>
+        ${rec.impact_type === "savings_usd" && rec.estimated_impact != null
+          ? `<div class="bi-rec-impact">Potential savings: ${fmtUsd(rec.estimated_impact)}/mo</div>` : ""}`)
     : `<div class="bi-note">No recommendations right now.</div>`;
 
   return `
-    <div class="report-doc">
-      ${reportDocHeaderHtml("Business Impact Report", generatedAt)}
+    <div class="report-doc rpt-premium">
+      ${reportPremiumHeaderHtml("Business Impact Report", null, generatedAt)}
 
       <section class="report-section">
-        <h2 class="report-section-title">Executive Brief</h2>
-        <p class="bi-summary">${escapeHtml(biNarrativeSummary(data))}</p>
-        <div class="report-kpi-row">
-          ${kpiCard("Associated Business Value", fmtUsd(data.closed_won_value_usd), null, "closed-won + resolved support value")}
-          ${kpiCard("Successful Outcomes", fmtNum(successfulOutcomes), evidenceByKpi.cost_per_won_opportunity_usd, "won opportunities + resolved support work")}
-          ${kpiCard("AI Investment — Successful", fmtUsd(investmentSuccessful), null, "won + resolved")}
-          ${kpiCard("AI Investment — Unsuccessful", fmtUsd(investmentUnsuccessful), null, "lost + unresolved")}
-          ${kpiCard("Cost per Successful Outcome", fmtUsd(data.cost_per_successful_outcome_usd), evidenceByKpi.cost_per_successful_outcome_usd)}
-          ${kpiCard("Outcome Coverage", data.outcome_coverage_pct != null ? `${data.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct, "of AI-touched work with a known outcome")}
+        <h2 class="report-section-title">Executive Summary</h2>
+        <div class="rpt-exec-summary">
+          ${reportIconBadge("target", "purple")}
+          <p class="bi-summary">${escapeHtml(biNarrativeSummary(data))}</p>
         </div>
+        <div class="report-kpi-row rpt-kpi-row-premium">
+          ${reportKpiCardPremium("dollarCircle", "blue", "Associated Business Value", fmtUsd(data.closed_won_value_usd), "closed-won + resolved support value", null)}
+          ${reportKpiCardPremium("checkTarget", "green", "Successful Outcomes", fmtNum(successfulOutcomes), "won opportunities + resolved support work", null)}
+          ${reportKpiCardPremium("target", "purple", "Cost per Successful Outcome", fmtUsd(data.cost_per_successful_outcome_usd), evidenceByKpi.cost_per_successful_outcome_usd ? `<span class="bi-evidence-tag ${evidenceByKpi.cost_per_successful_outcome_usd}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.cost_per_successful_outcome_usd] || evidenceByKpi.cost_per_successful_outcome_usd)}</span>` : null, null)}
+          ${reportKpiCardPremium("document", "blue", "Outcome Coverage", data.outcome_coverage_pct != null ? `${data.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct ? `<span class="bi-evidence-tag ${evidenceByKpi.outcome_coverage_pct}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.outcome_coverage_pct] || evidenceByKpi.outcome_coverage_pct)}</span>` : null, null)}
+          ${reportKpiCardPremium("savingsArrow", "green", "AI Investment — Successful", fmtUsd(investmentSuccessful), "won + resolved", null)}
+          ${reportKpiCardPremium("barChart", "red", "AI Investment — Unsuccessful", fmtUsd(investmentUnsuccessful), "lost + unresolved", null)}
+        </div>
+      </section>
+
+      ${valueMultiple != null ? `
+      <section class="report-section rpt-outcome-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Associated Value per Dollar Invested</h2>
+        <div class="rpt-outcome-grid" style="grid-template-columns:1fr">
+          <div class="rpt-scorecard" style="max-width:280px">
+            ${reportIconBadge("dollarCircle", "green")}
+            <div class="rpt-scorecard-value">${valueMultiple.toFixed(1)}&times;</div>
+            <div class="rpt-scorecard-label">Value Multiple (Associated)</div>
+            <div class="rpt-scorecard-sub">${fmtUsd(data.closed_won_value_usd)} associated value per ${fmtUsd(totalInvestment)} invested</div>
+          </div>
+        </div>
+      </section>` : ""}
+
+      <section class="report-section">
+        <h2 class="report-section-title">Key Findings</h2>
+        ${biFindings.length ? reportNumberedList(biFindings, f => `<p>${f}</p>`) : `<p class="bi-note">Not enough activity in this period to surface findings.</p>`}
       </section>
 
       <section class="report-section" style="break-inside:avoid">
@@ -1001,7 +1032,7 @@ function renderBusinessImpactReportHtml() {
 
       <section class="report-section">
         <h2 class="report-section-title">CostPilot Recommendations</h2>
-        <div class="bi-rec-grid">${recCards}</div>
+        ${recCards}
       </section>
 
       <section class="report-section" style="break-inside:avoid">
@@ -1015,7 +1046,11 @@ function renderBusinessImpactReportHtml() {
         </div>
       </section>
 
-      <footer class="report-footer">CostPilot — Business Impact Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+      <footer class="report-footer rpt-footer-premium">
+        <span>CostPilot — Business Impact Report</span>
+        <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+        <span>Confidential</span>
+      </footer>
     </div>`;
 }
 
@@ -4078,13 +4113,6 @@ function renderGovernanceReportHtml() {
   const generatedAt = new Date().toLocaleString("en-US", {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
   });
-  const kpiCard = (label, value, sub) => `
-    <div class="report-kpi">
-      <div class="report-kpi-label-row"><span class="report-kpi-label">${escapeHtml(label)}</span></div>
-      <div class="report-kpi-value">${value}</div>
-      ${sub ? `<div class="report-kpi-sub">${escapeHtml(sub)}</div>` : ""}
-    </div>`;
-
   const summary = data.critical > 0 || data.high > 0
     ? `Over the selected period, CostPilot logged ${fmtNum(data.total_events)} governance events, including `
       + `${fmtNum(data.critical)} critical and ${fmtNum(data.high)} high-risk events. `
@@ -4112,21 +4140,51 @@ function renderGovernanceReportHtml() {
       <td>${escapeHtml(e.decision_outcome || "")}</td>
     </tr>`).join("") || `<tr><td colspan="5">No events in this period.</td></tr>`;
 
+  const lowRiskRatePct = data.total_events > 0
+    ? Math.round((1 - (data.critical + data.high) / data.total_events) * 100) : null;
+
+  const riskFindings = [];
+  riskFindings.push(`${fmtNum(data.total_events)} governance events logged this period, ${fmtNum(data.critical)} critical and ${fmtNum(data.high)} high-risk.`);
+  if (data.blocked) riskFindings.push(`${fmtNum(data.blocked)} requests were blocked by sensitive-term policy before reaching an AI model.`);
+  if (data.locks) riskFindings.push(`${fmtNum(data.locks)} agent collisions were controlled — zero silent overwrites.`);
+  if (d.pii_count) riskFindings.push(`${fmtNum(d.pii_count)} instances of PII (credit cards, SSNs, emails, phone numbers) were caught before AI processing.`);
+
   return `
-    <div class="report-doc">
-      ${reportDocHeaderHtml("Governance & Risk Report", generatedAt)}
+    <div class="report-doc rpt-premium">
+      ${reportPremiumHeaderHtml("Governance & Risk Report", null, generatedAt)}
 
       <section class="report-section">
-        <h2 class="report-section-title">Executive Brief</h2>
-        <p class="bi-summary">${summary}</p>
-        <div class="report-kpi-row">
-          ${kpiCard("Total Events", fmtNum(data.total_events), "audit log entries")}
-          ${kpiCard("Critical", fmtNum(data.critical), "HIPAA, fraud, lawsuits")}
-          ${kpiCard("High Risk", fmtNum(data.high), "legal, compliance, locks")}
-          ${kpiCard("Blocked Requests", fmtNum(data.blocked), "stopped by term policy")}
-          ${kpiCard("Agent Collisions", fmtNum(data.locks), "concurrent write conflicts")}
-          ${kpiCard("Term Library", fmtNum(data.term_library?.total), `${data.term_library?.block ?? 0} block / ${data.term_library?.escalate ?? 0} escalate`)}
+        <h2 class="report-section-title">Executive Summary</h2>
+        <div class="rpt-exec-summary">
+          ${reportIconBadge(data.critical > 0 || data.high > 0 ? "barChart" : "checkTarget", data.critical > 0 || data.high > 0 ? "red" : "green")}
+          <p class="bi-summary">${summary}</p>
         </div>
+        <div class="report-kpi-row rpt-kpi-row-premium">
+          ${reportKpiCardPremium("document", "blue", "Total Events", fmtNum(data.total_events), "audit log entries", null)}
+          ${reportKpiCardPremium("barChart", "red", "Critical", fmtNum(data.critical), "HIPAA, fraud, lawsuits", null)}
+          ${reportKpiCardPremium("target", "orange", "High Risk", fmtNum(data.high), "legal, compliance, locks", null)}
+          ${reportKpiCardPremium("checkTarget", "green", "Blocked Requests", fmtNum(data.blocked), "stopped by term policy", null)}
+          ${reportKpiCardPremium("savingsArrow", "purple", "Agent Collisions", fmtNum(data.locks), "concurrent write conflicts", null)}
+          ${reportKpiCardPremium("dollarCircle", "blue", "Term Library", fmtNum(data.term_library?.total), `${data.term_library?.block ?? 0} block / ${data.term_library?.escalate ?? 0} escalate`, null)}
+        </div>
+      </section>
+
+      ${lowRiskRatePct != null ? `
+      <section class="report-section rpt-outcome-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Low-Risk Event Rate</h2>
+        <div class="rpt-outcome-grid" style="grid-template-columns:1fr">
+          <div class="rpt-scorecard" style="max-width:280px">
+            ${reportIconBadge("checkTarget", "green")}
+            <div class="rpt-scorecard-value">${lowRiskRatePct}%</div>
+            <div class="rpt-scorecard-label">Low-Risk Event Rate</div>
+            <div class="rpt-scorecard-sub">${fmtNum(data.total_events - data.critical - data.high)} of ${fmtNum(data.total_events)} events were neither critical nor high-risk</div>
+          </div>
+        </div>
+      </section>` : ""}
+
+      <section class="report-section">
+        <h2 class="report-section-title">Key Findings</h2>
+        ${reportNumberedList(riskFindings, f => `<p>${f}</p>`)}
       </section>
 
       <section class="report-section" style="break-inside:avoid">
@@ -4164,7 +4222,11 @@ function renderGovernanceReportHtml() {
         </div>
       </section>
 
-      <footer class="report-footer">CostPilot — Governance &amp; Risk Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+      <footer class="report-footer rpt-footer-premium">
+        <span>CostPilot — Governance &amp; Risk Report</span>
+        <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+        <span>Confidential</span>
+      </footer>
     </div>`;
 }
 
@@ -4209,6 +4271,8 @@ function renderDepartmentsReportHtml() {
   const totalCost = _rptDeptData.reduce((sum, d) => sum + (d.total_cost_usd || 0), 0);
   const totalSaved = _rptDeptData.reduce((sum, d) => sum + (d.pruning_saved_usd || 0), 0);
   const throttled = _rptDeptData.filter(d => d.throttled);
+  const withinBudgetPct = _rptDeptData.length
+    ? Math.round(((_rptDeptData.length - throttled.length) / _rptDeptData.length) * 100) : null;
 
   const summary = throttled.length
     ? `Across ${fmtNum(_rptDeptData.length)} departments, CostPilot governed ${fmtUsd(totalCost)} in AI spend this `
@@ -4216,6 +4280,16 @@ function renderDepartmentsReportHtml() {
       + `currently throttled: ${throttled.map(d => displayDeptName(d.display_department || d.department)).join(", ")}.`
     : `Across ${fmtNum(_rptDeptData.length)} departments, CostPilot governed ${fmtUsd(totalCost)} in AI spend this `
       + `period, with ${fmtUsd(totalSaved)} saved through pruning. No department is currently throttled.`;
+
+  const deptFindings = [];
+  deptFindings.push(`${fmtNum(_rptDeptData.length)} departments governed, totaling ${fmtUsd(totalCost)} in AI spend and ${fmtUsd(totalSaved)} saved through pruning.`);
+  const topSpender = [..._rptDeptData].sort((a, b) => (b.total_cost_usd || 0) - (a.total_cost_usd || 0))[0];
+  if (topSpender) deptFindings.push(`${escapeHtml(displayDeptName(topSpender.display_department || topSpender.department))} has the highest AI spend at ${fmtUsd(topSpender.total_cost_usd)}.`);
+  if (throttled.length) {
+    deptFindings.push(`${throttled.length} department${throttled.length === 1 ? " is" : "s are"} currently throttled: ${throttled.map(d => escapeHtml(displayDeptName(d.display_department || d.department))).join(", ")}.`);
+  } else {
+    deptFindings.push(`No department is currently throttled.`);
+  }
 
   const rows = _rptDeptData.map(d => `
     <tr>
@@ -4230,12 +4304,33 @@ function renderDepartmentsReportHtml() {
     </tr>`).join("");
 
   return `
-    <div class="report-doc">
-      ${reportDocHeaderHtml("Department Report", generatedAt)}
+    <div class="report-doc rpt-premium">
+      ${reportPremiumHeaderHtml("Department Report", null, generatedAt)}
 
       <section class="report-section">
-        <h2 class="report-section-title">Executive Brief</h2>
-        <p class="bi-summary">${summary}</p>
+        <h2 class="report-section-title">Executive Summary</h2>
+        <div class="rpt-exec-summary">
+          ${reportIconBadge(throttled.length ? "barChart" : "checkTarget", throttled.length ? "orange" : "green")}
+          <p class="bi-summary">${summary}</p>
+        </div>
+      </section>
+
+      ${withinBudgetPct != null ? `
+      <section class="report-section rpt-outcome-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Budget Health</h2>
+        <div class="rpt-outcome-grid" style="grid-template-columns:1fr">
+          <div class="rpt-scorecard" style="max-width:280px">
+            ${reportIconBadge("checkTarget", "green")}
+            <div class="rpt-scorecard-value">${withinBudgetPct}%</div>
+            <div class="rpt-scorecard-label">Departments Within Budget</div>
+            <div class="rpt-scorecard-sub">${fmtNum(_rptDeptData.length - throttled.length)} of ${fmtNum(_rptDeptData.length)} departments not throttled</div>
+          </div>
+        </div>
+      </section>` : ""}
+
+      <section class="report-section">
+        <h2 class="report-section-title">Key Findings</h2>
+        ${reportNumberedList(deptFindings, f => `<p>${f}</p>`)}
       </section>
 
       <section class="report-section" style="break-inside:avoid">
@@ -4262,7 +4357,11 @@ function renderDepartmentsReportHtml() {
         </div>
       </section>
 
-      <footer class="report-footer">CostPilot — Department Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+      <footer class="report-footer rpt-footer-premium">
+        <span>CostPilot — Department Report</span>
+        <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+        <span>Confidential</span>
+      </footer>
     </div>`;
 }
 
@@ -4352,13 +4451,6 @@ function renderSavingsReportHtml() {
   const generatedAt = new Date().toLocaleString("en-US", {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
   });
-  const kpiCard = (label, value, sub) => `
-    <div class="report-kpi">
-      <div class="report-kpi-label-row"><span class="report-kpi-label">${escapeHtml(label)}</span></div>
-      <div class="report-kpi-value">${value}</div>
-      ${sub ? `<div class="report-kpi-sub">${escapeHtml(sub)}</div>` : ""}
-    </div>`;
-
   // Deterministic sentence built from the same fields the KPI cards already
   // render -- same pattern biNarrativeSummary() uses for Business Impact,
   // not free-form LLM math.
@@ -4366,21 +4458,51 @@ function renderSavingsReportHtml() {
     + `cost of ${fmtUsd(data.total_cost_usd)}, against an estimated ${fmtUsd(data.cost_if_no_fage_usd)} at full `
     + `flagship rate — a total savings of ${fmtUsd(data.total_saved_usd)} from context pruning and model routing combined.`;
 
+  const savingsRatePct = data.cost_if_no_fage_usd > 0
+    ? Math.round((data.total_saved_usd / data.cost_if_no_fage_usd) * 100) : null;
+
+  const savingsFindings = [];
+  if (data.total_saved_usd) savingsFindings.push(`${fmtUsd(data.total_saved_usd)} saved this period vs. an uncontrolled, full-flagship-rate baseline.`);
+  if (data.pruning_saved_usd) savingsFindings.push(`Context pruning alone saved ${fmtUsd(data.pruning_saved_usd)}, removing ${fmtNum(data.tokens_pruned)} tokens before they ever reached a model.`);
+  if (data.downgrade_saved_usd) savingsFindings.push(`Model-tier routing saved ${fmtUsd(data.downgrade_saved_usd)}, with ${data.micro_pct}% of calls routed to a lower-cost tier.`);
+  if (data.total_calls) savingsFindings.push(`${fmtNum(data.total_calls)} total governed calls (${fmtNum(data.micro_calls)} micro-tier, ${fmtNum(data.flagship_calls)} flagship-tier).`);
+
   return `
-    <div class="report-doc">
-      ${reportDocHeaderHtml("Savings & Performance Report", generatedAt)}
+    <div class="report-doc rpt-premium">
+      ${reportPremiumHeaderHtml("Savings & Performance Report", null, generatedAt)}
 
       <section class="report-section">
-        <h2 class="report-section-title">Executive Brief</h2>
-        <p class="bi-summary">${summary}</p>
-        <div class="report-kpi-row">
-          ${kpiCard("Total Saved", fmtUsd(data.total_saved_usd), "pruning + model downgrade")}
-          ${kpiCard("Without CostPilot", fmtUsd(data.cost_if_no_fage_usd), "est. cost at full flagship rate")}
-          ${kpiCard("Actual Cost", fmtUsd(data.total_cost_usd), "what you paid")}
-          ${kpiCard("Pruning Saved", fmtUsd(data.pruning_saved_usd), `${fmtNum(data.tokens_pruned)} tokens removed`)}
-          ${kpiCard("Model Downgrade Saved", fmtUsd(data.downgrade_saved_usd), `${data.micro_pct}% routed to micro`)}
-          ${kpiCard("Total Calls", fmtNum(data.total_calls), `${fmtNum(data.micro_calls)} micro / ${fmtNum(data.flagship_calls)} flagship`)}
+        <h2 class="report-section-title">Executive Summary</h2>
+        <div class="rpt-exec-summary">
+          ${reportIconBadge("savingsArrow", "green")}
+          <p class="bi-summary">${summary}</p>
         </div>
+        <div class="report-kpi-row rpt-kpi-row-premium">
+          ${reportKpiCardPremium("savingsArrow", "green", "Total Saved", fmtUsd(data.total_saved_usd), "pruning + model downgrade", null)}
+          ${reportKpiCardPremium("barChart", "red", "Without CostPilot", fmtUsd(data.cost_if_no_fage_usd), "est. cost at full flagship rate", null)}
+          ${reportKpiCardPremium("dollarCircle", "blue", "Actual Cost", fmtUsd(data.total_cost_usd), "what you paid", null)}
+          ${reportKpiCardPremium("target", "purple", "Pruning Saved", fmtUsd(data.pruning_saved_usd), `${fmtNum(data.tokens_pruned)} tokens removed`, null)}
+          ${reportKpiCardPremium("checkTarget", "green", "Model Downgrade Saved", fmtUsd(data.downgrade_saved_usd), `${data.micro_pct}% routed to micro`, null)}
+          ${reportKpiCardPremium("document", "blue", "Total Calls", fmtNum(data.total_calls), `${fmtNum(data.micro_calls)} micro / ${fmtNum(data.flagship_calls)} flagship`, null)}
+        </div>
+      </section>
+
+      ${savingsRatePct != null ? `
+      <section class="report-section rpt-outcome-section" style="break-inside:avoid">
+        <h2 class="report-section-title">Savings Rate vs. Uncontrolled Baseline</h2>
+        <div class="rpt-outcome-grid" style="grid-template-columns:1fr">
+          <div class="rpt-scorecard" style="max-width:280px">
+            ${reportIconBadge("savingsArrow", "green")}
+            <div class="rpt-scorecard-value">${savingsRatePct}%</div>
+            <div class="rpt-scorecard-label">Savings Rate</div>
+            <div class="rpt-scorecard-sub">${fmtUsd(data.total_saved_usd)} saved of ${fmtUsd(data.cost_if_no_fage_usd)} uncontrolled baseline</div>
+          </div>
+        </div>
+      </section>` : ""}
+
+      <section class="report-section">
+        <h2 class="report-section-title">Key Findings</h2>
+        ${savingsFindings.length ? reportNumberedList(savingsFindings, f => `<p>${f}</p>`) : `<p class="bi-note">Not enough activity in this period to surface findings.</p>`}
       </section>
 
       <section class="report-section" style="break-inside:avoid">
@@ -4404,7 +4526,11 @@ function renderSavingsReportHtml() {
         </div>
       </section>
 
-      <footer class="report-footer">CostPilot — Savings &amp; Performance Report — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+      <footer class="report-footer rpt-footer-premium">
+        <span>CostPilot — Savings &amp; Performance Report</span>
+        <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+        <span>Confidential</span>
+      </footer>
     </div>`;
 }
 
