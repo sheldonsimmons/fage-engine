@@ -23,12 +23,14 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from database.models import TokenTransaction, RegisteredAgent
 from core.agentlake import display_agent_name, display_department, agent_active_recently
+from core.workspace_scope import workspace_filter
 
 router = APIRouter()
 
 
 @router.get("")
 def get_agent_activity(
+    workspace_id: Optional[str] = Query(None),
     platform:   Optional[str] = Query(None),
     department: Optional[str] = Query(None),
     agent_id:   Optional[int] = Query(None),
@@ -61,6 +63,9 @@ def get_agent_activity(
         TokenTransaction.timestamp >= since,
         TokenTransaction.timestamp <  until,
     )
+    tx_scope = workspace_filter(TokenTransaction, workspace_id)
+    if tx_scope is not None:
+        q = q.filter(tx_scope)
 
     if department:
         q = q.filter(TokenTransaction.department == department)
@@ -73,7 +78,19 @@ def get_agent_activity(
     all_txs = q.all()
 
     # ── Load matching agents ────────────────────────────────────────────────────
+    # Had no workspace_id parameter at all until this pass -- confirmed
+    # live (2026-09-13): this powered operate.html's "AgentLake
+    # Operations" summary (Registered/Used/Adoption/Never used), which
+    # always counted every registered agent across every workspace,
+    # regardless of the sidebar's selected workspace -- a deliberate
+    # design choice per this file's prior lack of scoping, but one that
+    # visually contradicted every other workspace-scoped surface in the
+    # app (Ask CostPilot, Agent Lake's own registry table) sitting right
+    # next to it. Filtered by department prefix, matching core.agentlake.
+    # list_agents()'s established convention for this exact table.
     agent_q = db.query(RegisteredAgent)
+    if workspace_id:
+        agent_q = agent_q.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
     if include_unused:
         agent_q = agent_q.filter(
             or_(RegisteredAgent.archived == False, RegisteredAgent.archived.is_(None))

@@ -379,8 +379,18 @@ async function renderAgentEfficiency() {
   try {
     const now  = new Date();
     const from = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString();
-    const path = `/api/reports/agent-activity?date_from=${encodeURIComponent(from)}`
-      + `&date_to=${encodeURIComponent(now.toISOString())}&include_unused=true`;
+    // workspaceScopedApiPath (not scopedApiPath) deliberately -- this
+    // page opts OUT of workspace scoping for other widgets via
+    // data-dashboard-scope="all", but that produced the exact confusion
+    // this fix addresses: the sidebar shows one workspace selected while
+    // this summary silently counted every workspace's agents combined.
+    // Always scoping this specific call is the user's own confirmed
+    // choice (2026-09-13) after finding this widget disagreed with Ask
+    // CostPilot's answer for the same selected workspace.
+    const path = workspaceScopedApiPath(
+      `/api/reports/agent-activity?date_from=${encodeURIComponent(from)}`
+      + `&date_to=${encodeURIComponent(now.toISOString())}&include_unused=true`
+    );
     const data = await apiGet(path);
     agentUsageRows = data.agents || [];
     populateAgentUsageFilters();
