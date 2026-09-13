@@ -59,7 +59,20 @@ function effectiveAgentStatus(agent) {
 /** Fetch all agents and render the registry table */
 async function loadAgents() {
   try {
-    const agents = await apiGet("/api/agents");
+    // workspace_id was missing here entirely -- every OTHER /api/agents/*
+    // call in this file passes agentlakeWorkspaceId() explicitly, but this
+    // one, the actual agent-list fetch, silently always returned the
+    // unscoped "Default" workspace's agents regardless of what the page's
+    // own workspace selector showed as active. Confirmed live: with
+    // "Historical Demo" selected, this returned the Default workspace's
+    // 87 agents (SF-CampaignBot leading) instead of Historical Demo's own
+    // 7, while Ask CostPilot -- correctly scoped -- answered about
+    // Historical Demo's real top agent (Pipeline Coach Agent). Both
+    // answers were individually correct for the workspace each one
+    // actually queried; only Agent Lake was silently querying the wrong
+    // one.
+    const workspaceId = agentlakeWorkspaceId();
+    const agents = await apiGet(workspaceId ? `/api/agents?workspace_id=${encodeURIComponent(workspaceId)}` : "/api/agents");
     renderAgentTable(agents);
     updateKpiAgents(agents);
   } catch (err) {
@@ -669,7 +682,14 @@ function toggleArchivedAgents() {
 const _origLoadAgents = loadAgents;
 async function loadAgents() {
   try {
-    const url = _showArchived ? "/api/agents?include_archived=true" : "/api/agents";
+    // Same missing-workspace_id bug as the original loadAgents() above --
+    // this override (the one actually used on the page) had it too.
+    const workspaceId = agentlakeWorkspaceId();
+    const params = new URLSearchParams();
+    if (_showArchived) params.set("include_archived", "true");
+    if (workspaceId) params.set("workspace_id", workspaceId);
+    const qs = params.toString();
+    const url = qs ? `/api/agents?${qs}` : "/api/agents";
     const agents = await apiGet(url);
     _allAgents = agents;
     await Promise.all([loadAgentlakeSpend(), loadAgentlakeProjects()]);
@@ -692,7 +712,9 @@ async function loadAgentlakeSpend() {
   const stale = Date.now() - _agentSpendLoadedAt > 30000;
   if (!stale) return;
   try {
-    _agentSpend = await apiGet("/api/agents/spend");
+    // Same missing-workspace_id bug as loadAgents() above.
+    const workspaceId = agentlakeWorkspaceId();
+    _agentSpend = await apiGet(workspaceId ? `/api/agents/spend?workspace_id=${encodeURIComponent(workspaceId)}` : "/api/agents/spend");
     _agentSpendLoadedAt = Date.now();
   } catch (error) {
     console.warn("Agent spend summary unavailable:", error);

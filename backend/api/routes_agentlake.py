@@ -170,20 +170,32 @@ def deregister(
 
 
 @router.get("/spend")
-def agent_spend_summary(db: Session = Depends(get_db)):
+def agent_spend_summary(workspace_id: str = None, db: Session = Depends(get_db)):
     """
     Per-agent spend summary — aggregates TokenTransaction by agent_id.
     Returns every registered agent with their total cost, token counts,
     call volume, and top model tier used. Ordered by total cost descending.
+
+    Had no workspace_id parameter at all until this pass -- confirmed
+    live (2026-09-13): this always returned EVERY registered agent across
+    EVERY workspace combined, regardless of which workspace the Agent
+    Lake page had selected (that page's own fetch was also missing the
+    param, a separate frontend bug fixed alongside this one). Filtered by
+    department prefix, not the RegisteredAgent.workspace_id column
+    directly, to match core.agentlake.list_agents()'s own established
+    convention for this exact table -- using a different filter here
+    would just create a second, differently-scoped definition of
+    "this workspace's agents."
     """
     from database.models import RegisteredAgent
 
     TIER_ORDER = {"Strategist": 4, "Advisor": 3, "flagship": 3,
                   "Analyst": 2, "Scout": 1, "micro": 1}
 
-    agents = db.query(RegisteredAgent).filter(
-        RegisteredAgent.archived.isnot(True)
-    ).all()
+    query = db.query(RegisteredAgent).filter(RegisteredAgent.archived.isnot(True))
+    if workspace_id:
+        query = query.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
+    agents = query.all()
 
     results = []
     for agent in agents:
