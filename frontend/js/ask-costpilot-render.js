@@ -468,24 +468,58 @@ function askReportFormatValue(value, format) {
   return askRenderEscapeHtml(String(value ?? ""));
 }
 
-// Renders an ad-hoc horizontal bar chart to a hidden canvas and captures it
-// as a static image -- same reasoning as printSection()'s own canvas fix:
-// print output needs a bitmap, not a live canvas. Chart.js isn't loaded on
-// every page this file runs on, so this degrades to "table only, no chart"
-// rather than throwing when it's unavailable.
-function askReportChartImg(rows, metricLabel, valueFormat, forceChart) {
+// Rule-based chart-type selection (never LLM-picked -- see the printable-
+// reports architecture assessment's own chart-selection principle: the
+// model chooses WHICH data to include, never how to plot it). A doughnut
+// only makes honest sense when the values are non-negative parts that sum
+// to one real whole (e.g. spend split across departments) -- a percentage
+// column (each department's OWN budget-used %, not shares of one total)
+// or a signed delta (get_change_drivers' increase/decrease) would make a
+// pie that visually lies, so those stay bar charts. Capped at 6 slices --
+// past that a pie stops being readable and a ranked bar communicates
+// better anyway.
+function askReportPickChartType(tool, rows, valueFormat) {
+  if (valueFormat !== "usd" && valueFormat !== "num") return "bar";
+  if (tool === "get_change_drivers") return "bar"; // signed deltas, not one whole
+  if (rows.length >= 2 && rows.length <= 6 && rows.every(r => Number(r.value) >= 0)) return "doughnut";
+  return "bar";
+}
+
+const ASK_REPORT_DOUGHNUT_COLORS = [
+  "#25c4b5", "#5a8dee", "#f5a623", "#e8618c", "#8c6fe0", "#4fb477",
+];
+
+// Renders an ad-hoc chart (bar or doughnut, per askReportPickChartType) to
+// a hidden canvas and captures it as a static image -- same reasoning as
+// printSection()'s own canvas fix: print output needs a bitmap, not a
+// live canvas. Chart.js isn't loaded on every page this file runs on, so
+// this degrades to "table only, no chart" rather than throwing when it's
+// unavailable.
+function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType) {
   if (forceChart === false) return "";
   // valueFormat === "text" (categorical, e.g. priority-signal severity) is
   // still skipped even when forceChart === true -- there's no numeric
   // ranking to plot, "add a chart" can't invent one.
   if (typeof Chart === "undefined" || valueFormat === "text" || rows.length < 2) return "";
+  const type = chartType || "bar";
   const canvas = document.createElement("canvas");
+  const isDoughnut = type === "doughnut";
   canvas.width = 700;
-  canvas.height = Math.max(220, rows.length * 28);
+  canvas.height = isDoughnut ? 420 : Math.max(220, rows.length * 28);
   document.body.appendChild(canvas);
   let dataUrl = "";
   try {
-    const chart = new Chart(canvas.getContext("2d"), {
+    const chart = new Chart(canvas.getContext("2d"), isDoughnut ? {
+      type: "doughnut",
+      data: {
+        labels: rows.map(r => String(r.label)),
+        datasets: [{ data: rows.map(r => r.value), backgroundColor: ASK_REPORT_DOUGHNUT_COLORS, borderWidth: 0 }],
+      },
+      options: {
+        responsive: false, animation: false,
+        plugins: { legend: { display: true, position: "right", labels: { boxWidth: 14 } } },
+      },
+    } : {
       type: "bar",
       data: {
         labels: rows.map(r => String(r.label)),
@@ -522,10 +556,11 @@ function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
       }</div></section>`
     : "";
 
+  const chartType = options.chartType || askReportPickChartType(tool, extracted ? extracted.rows : [], extracted ? extracted.valueFormat : "text");
   const tableSection = extracted ? `
     <section class="report-section">
       <h2 class="report-section-title">${askRenderEscapeHtml(extracted.metricLabel)} — full breakdown</h2>
-      ${askReportChartImg(extracted.rows, extracted.metricLabel, extracted.valueFormat, options.forceChart)}
+      ${askReportChartImg(extracted.rows, extracted.metricLabel, extracted.valueFormat, options.forceChart, chartType)}
       <table class="rpt-context-table">
         <thead><tr><th></th><th>${askRenderEscapeHtml(extracted.metricLabel)}</th><th></th></tr></thead>
         <tbody>${extracted.rows.map((r, i) => `
@@ -708,6 +743,11 @@ function askReportParseRefinement(text) {
     if (/\bmonth\b/.test(t)) return { type: "compare", compare_to: "previous_month", label: "previous month" };
     if (/\b(period|week)\b/.test(t)) return { type: "compare", compare_to: "previous_period", label: "the prior period" };
   }
+  // Chart-TYPE requests are checked before the generic add/remove-chart
+  // check below, so "show this as a pie chart" matches the type switch,
+  // not the plain "show...chart" => show:true branch.
+  if (/\b(pie|donut|doughnut)\b/.test(t) && /\bchart\b/.test(t)) return { type: "chart_type", chartType: "doughnut" };
+  if (/\bbar\b/.test(t) && /\bchart\b/.test(t)) return { type: "chart_type", chartType: "bar" };
   const topMatch = t.match(/\btop\s*(\d{1,3})\b/) || t.match(/\bshow\s*(\d{1,3})\b/);
   if (topMatch) return { type: "limit", limit: Math.max(1, Math.min(100, parseInt(topMatch[1], 10))) };
   if (/\b(remove|hide|no)\b.*\bchart\b/.test(t)) return { type: "chart", show: false };
@@ -731,19 +771,23 @@ async function applyAskReportRefinement(cardId) {
   if (!text) return;
   const refinement = askReportParseRefinement(text);
   if (!refinement) {
-    if (status) status.textContent = 'Not sure how to apply that. Try: "compare to last month/quarter/year", "top 10", or "remove the chart".';
+    if (status) status.textContent = 'Not sure how to apply that. Try: "compare to last month/quarter/year", "top 10", "remove the chart", or "show as a pie chart".';
     return;
   }
   if (status) status.textContent = "Applying…";
   try {
     let html;
     if (refinement.type === "chart") {
-      html = buildAskGeneratedReportHtml(state.data, state.step.tool, state.result, { forceChart: refinement.show });
+      html = buildAskGeneratedReportHtml(state.data, state.step.tool, state.result, { forceChart: refinement.show, chartType: state.chartType });
       state.forceChart = refinement.show;
+    } else if (refinement.type === "chart_type") {
+      state.chartType = refinement.chartType;
+      state.forceChart = state.forceChart === false ? true : state.forceChart; // requesting a chart type implies wanting a chart
+      html = buildAskGeneratedReportHtml(state.data, state.step.tool, state.result, { forceChart: state.forceChart, chartType: state.chartType });
     } else {
       state.step = askReportApplyRefinementToStep(state.step, refinement);
       state.result = await fetchAskReportData(state.step, true);
-      html = buildAskGeneratedReportHtml(state.data, state.step.tool, state.result, { forceChart: state.forceChart });
+      html = buildAskGeneratedReportHtml(state.data, state.step.tool, state.result, { forceChart: state.forceChart, chartType: state.chartType });
     }
     const body = document.getElementById(`${cardId}-preview-body`);
     if (body) body.innerHTML = html;
@@ -790,14 +834,14 @@ async function saveAskReportPreview(cardId, title) {
 
 function showAskReportPreview(cardId, title, data, step, result) {
   closeAskReportPreview(cardId);
-  _askReportPreviewState.set(cardId, { data, step, result, forceChart: undefined });
+  _askReportPreviewState.set(cardId, { data, step, result, forceChart: undefined, chartType: undefined });
   const modal = document.createElement("div");
   modal.id = `${cardId}-preview`;
   modal.className = "cp-report-preview-backdrop";
   modal.innerHTML = `
     <div class="cp-report-preview-modal">
       <div class="cp-report-preview-toolbar">
-        <input type="text" id="${cardId}-refine-input" placeholder='Refine this report — e.g. "compare to last month", "top 10", "remove the chart"' />
+        <input type="text" id="${cardId}-refine-input" placeholder='Refine this report — e.g. "compare to last month", "top 10", "show as a pie chart"' />
         <button type="button" data-ask-report-refine="${cardId}">Apply</button>
         <button type="button" data-ask-report-save="${cardId}" class="cp-report-preview-print">💾 Save</button>
         <button type="button" data-ask-report-print="${cardId}" class="cp-report-preview-print">🖨 Print / Save as PDF</button>
