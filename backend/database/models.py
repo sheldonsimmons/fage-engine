@@ -1049,3 +1049,47 @@ class ActionProposal(Base):
     # awaiting_confirmation | executed | rejected | expired
     created_at            = Column(DateTime, default=datetime.utcnow)
     resolved_at           = Column(DateTime, nullable=True)
+
+
+class SavedReport(Base):
+    """
+    Printable Reports Phase 4: a saved, shareable report -- a link a user
+    can revisit and reopen later, rather than a report only ever existing
+    for the lifetime of one browser tab (Phases 1-3).
+
+    Deliberately stores a RECIPE (report_type + source_json), never a data
+    snapshot: the same "re-derive, don't persist raw output" principle
+    Phase 2 established for Ask-generated reports (see
+    api/routes_efficiency.py's ask_costpilot_report_data docstring),
+    extended to the new "shared across time and possibly viewers"
+    dimension Phase 4 introduces. A snapshot would go stale the moment
+    underlying data changed, and -- more importantly -- would freeze in
+    whatever access the ORIGINAL saver had at save time; re-deriving on
+    every open means a saved report always reflects the CURRENT viewer's
+    real department-scoped access (api/routes_saved_reports.py resolves
+    that fresh on every GET), never the saver's.
+
+    source_json shape depends on report_type:
+      - "business_impact" | "savings" | "risk" | "departments": params for
+        the matching classic report endpoint (routes_dashboard.py's
+        Business Impact family, or routes_reports.py's savings/risk/
+        departments), e.g. {"days": 30}.
+      - "ask_costpilot": {"tool": ..., "args": ...} -- the same replayable
+        step shape Phase 2/3's report-data endpoint already accepts.
+
+    created_department_scope is informational only (who saved it, for
+    display/audit) -- NEVER used to authorize a later GET; the RBAC
+    retrofit (see routes_dashboard.py's _check_reporting_access) always
+    resolves the CURRENT caller's own department_scope fresh.
+    """
+    __tablename__ = "saved_reports"
+
+    id                        = Column(Integer, primary_key=True, index=True)
+    workspace_id              = Column(String, nullable=True, index=True)
+    title                     = Column(String, nullable=False)
+    report_type               = Column(String, nullable=False)
+    source_json               = Column(Text, nullable=False)
+    created_by_user_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_department_scope  = Column(String, nullable=True)
+    created_at                = Column(DateTime, default=datetime.utcnow)
+    last_viewed_at            = Column(DateTime, nullable=True)

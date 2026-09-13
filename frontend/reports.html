@@ -101,6 +101,7 @@
       </div>
       <div class="rpt-utilities" aria-label="Reporting tools">
         <button id="rptTabEfficiency" type="button" data-report-utility="efficiency" onclick="openReportView('efficiency')">Ask CostPilot</button>
+        <button type="button" onclick="openSavedReportsModal()">📁 Saved reports</button>
         <a id="rptTabRoi" href="/roi.html">ROI planning →</a>
       </div>
     </div>
@@ -114,6 +115,7 @@
         <button id="rptTabDepts" class="export-btn" onclick="openReportView('departments')">Department detail</button>
         <button class="export-btn" onclick="exportSavingsCsv()">⬇ CSV</button>
         <button class="export-btn" onclick="exportSavingsPdf()">🖨 PDF</button>
+        <button class="export-btn" onclick="saveCurrentReport('savings')">💾 Save</button>
       </div>
 
       <!-- Today Counter — live, refreshes every 10s -->
@@ -219,6 +221,7 @@
       <div class="rpt-export-bar">
         <button class="export-btn" onclick="exportRiskCsv()">⬇ CSV</button>
         <button class="export-btn" onclick="exportRiskPdf()">🖨 PDF</button>
+        <button class="export-btn" onclick="saveCurrentReport('risk')">💾 Save</button>
       </div>
 
       <div class="rpt-kpi-row">
@@ -392,6 +395,7 @@
       </div>
       <div class="rpt-export-bar">
         <button class="export-btn" onclick="exportBusinessImpactReport()">🖨 Generate report</button>
+        <button class="export-btn" onclick="saveCurrentReport('business_impact')">💾 Save</button>
       </div>
       <div id="biReportDoc" style="display:none"></div>
       <div id="biContent">
@@ -749,6 +753,7 @@
         <button class="export-btn" onclick="openReportView('savings')">← Performance</button>
         <button class="export-btn" onclick="exportDeptCsv()">⬇ CSV</button>
         <button class="export-btn" onclick="exportDeptPdf()">🖨 PDF</button>
+        <button class="export-btn" onclick="saveCurrentReport('departments')">💾 Save</button>
       </div>
 
       <!-- Cards — draggable container -->

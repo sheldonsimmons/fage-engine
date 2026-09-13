@@ -333,6 +333,10 @@ app.include_router(routes_models.router, prefix="/api/models", tags=["Models"])
 from api import routes_reports
 app.include_router(routes_reports.router, prefix="/api/reports", tags=["Reports"])
 
+# Step 10b — Saved Reports (Printable Reports Phase 4)
+from api import routes_saved_reports
+app.include_router(routes_saved_reports.router, prefix="/api/saved-reports", tags=["Saved Reports"])
+
 # Step 11 — Bot Efficiency Review
 from api import routes_efficiency
 app.include_router(routes_efficiency.router, prefix="/api/reports/bot-efficiency", tags=["Efficiency"])

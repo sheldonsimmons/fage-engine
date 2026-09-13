@@ -740,6 +740,28 @@ function printAskReportPreview(cardId, title) {
   printSection(body.id, title);
 }
 
+async function saveAskReportPreview(cardId, title) {
+  const state = _askReportPreviewState.get(cardId);
+  if (!state) return;
+  const defaultTitle = title || "Ask CostPilot Report";
+  const saveTitle = prompt("Save this report as:", defaultTitle);
+  if (saveTitle === null) return; // cancelled
+  try {
+    await apiPost("/api/saved-reports", {
+      workspace_id: localStorage.getItem("cp_workspace_id") || null,
+      title: (saveTitle || "").trim() || defaultTitle,
+      report_type: "ask_costpilot",
+      // The step, including any refinement already applied (compare_to/
+      // limit) -- reopening this saved report replays THIS exact recipe,
+      // not the original unrefined question.
+      source: { tool: state.step.tool, args: state.step.args || {} },
+    });
+    alert('Report saved. Reopen it anytime from "Saved reports."');
+  } catch (err) {
+    alert("Could not save report: " + (err.message || "unknown error"));
+  }
+}
+
 function showAskReportPreview(cardId, title, data, step, result) {
   closeAskReportPreview(cardId);
   _askReportPreviewState.set(cardId, { data, step, result, forceChart: undefined });
@@ -751,6 +773,7 @@ function showAskReportPreview(cardId, title, data, step, result) {
       <div class="cp-report-preview-toolbar">
         <input type="text" id="${cardId}-refine-input" placeholder='Refine this report — e.g. "compare to last month", "top 10", "remove the chart"' />
         <button type="button" data-ask-report-refine="${cardId}">Apply</button>
+        <button type="button" data-ask-report-save="${cardId}" class="cp-report-preview-print">💾 Save</button>
         <button type="button" data-ask-report-print="${cardId}" class="cp-report-preview-print">🖨 Print / Save as PDF</button>
         <button type="button" data-ask-report-close="${cardId}" class="cp-report-preview-close">✕</button>
       </div>
@@ -764,6 +787,7 @@ function showAskReportPreview(cardId, title, data, step, result) {
     if (event.target === modal) closeAskReportPreview(cardId);
     if (event.target.closest(`[data-ask-report-close="${cardId}"]`)) closeAskReportPreview(cardId);
     if (event.target.closest(`[data-ask-report-refine="${cardId}"]`)) applyAskReportRefinement(cardId);
+    if (event.target.closest(`[data-ask-report-save="${cardId}"]`)) saveAskReportPreview(cardId, title);
     if (event.target.closest(`[data-ask-report-print="${cardId}"]`)) printAskReportPreview(cardId, title);
   });
   const input = document.getElementById(`${cardId}-refine-input`);

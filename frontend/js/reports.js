@@ -1756,6 +1756,131 @@ function reportApiParams(range) {
   return params.toString();
 }
 
+// ── Printable Reports Phase 4: saved, shareable reports ────────────────────
+// Saves a RECIPE (report_type + date-range params), never a data snapshot --
+// see database/models.py's SavedReport docstring. Business Impact has no
+// date-range controls of its own (always all-time), so its source is empty;
+// the other three classic tabs carry whatever range is currently active.
+const SAVED_REPORT_TITLES = {
+  business_impact: "Business Impact Report",
+  savings: "Savings & Performance Report",
+  risk: "Governance & Risk Report",
+  departments: "Department Scorecard",
+  ask_costpilot: "Ask CostPilot Report",
+};
+
+async function saveCurrentReport(reportType) {
+  let source = {};
+  if (reportType !== "business_impact") {
+    const range = getActiveDateRange();
+    source = { days: Math.min(365, range.days || 30), date_from: range.date_from, date_to: range.date_to };
+  }
+  const stamp = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const defaultTitle = `${SAVED_REPORT_TITLES[reportType] || "Report"} — ${stamp}`;
+  const title = prompt("Save this report as:", defaultTitle);
+  if (title === null) return; // cancelled
+  try {
+    await apiPost("/api/saved-reports", {
+      workspace_id: reportWorkspaceId() || null,
+      title: (title || "").trim() || defaultTitle,
+      report_type: reportType,
+      source,
+    });
+    alert('Report saved. Reopen it anytime from "Saved reports."');
+  } catch (err) {
+    alert("Could not save report: " + (err.message || "unknown error"));
+  }
+}
+
+async function openSavedReportsModal() {
+  let list;
+  try {
+    const workspaceId = reportWorkspaceId();
+    const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+    const data = await apiGet(`/api/saved-reports${qs}`);
+    list = data.reports || [];
+  } catch (err) {
+    alert("Could not load saved reports: " + (err.message || "unknown error"));
+    return;
+  }
+  const existing = document.getElementById("cpSavedReportsModal");
+  if (existing) existing.remove();
+  const rows = list.length ? list.map(r => `
+    <tr>
+      <td>${escapeHtml(r.title)}</td>
+      <td>${escapeHtml(SAVED_REPORT_TITLES[r.report_type] || r.report_type)}</td>
+      <td>${new Date(r.created_at).toLocaleDateString()}</td>
+      <td style="white-space:nowrap">
+        <button type="button" class="export-btn" data-saved-report-open="${r.id}">Open</button>
+        <button type="button" class="export-btn" data-saved-report-delete="${r.id}">Delete</button>
+      </td>
+    </tr>`).join("") : `<tr><td colspan="4">No saved reports yet.</td></tr>`;
+  const modal = document.createElement("div");
+  modal.id = "cpSavedReportsModal";
+  modal.className = "cp-report-preview-backdrop";
+  modal.innerHTML = `
+    <div class="cp-report-preview-modal" style="max-width:640px">
+      <div class="cp-report-preview-toolbar">
+        <div style="font-weight:600">Saved reports</div>
+        <button type="button" data-saved-report-close class="cp-report-preview-close">✕</button>
+      </div>
+      <div class="cp-report-preview-scroll">
+        <table class="rpt-context-table">
+          <thead><tr><th>Title</th><th>Type</th><th>Saved</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", async (event) => {
+    if (event.target === modal || event.target.closest("[data-saved-report-close]")) { modal.remove(); return; }
+    const openBtn = event.target.closest("[data-saved-report-open]");
+    if (openBtn) { await openSavedReport(Number(openBtn.dataset.savedReportOpen)); modal.remove(); return; }
+    const delBtn = event.target.closest("[data-saved-report-delete]");
+    if (delBtn) {
+      if (!confirm("Delete this saved report?")) return;
+      try {
+        await apiDelete(`/api/saved-reports/${delBtn.dataset.savedReportDelete}`);
+        openSavedReportsModal(); // refresh the list in place
+      } catch (err) {
+        alert("Could not delete: " + (err.message || "unknown error"));
+      }
+    }
+  });
+}
+
+async function openSavedReport(id) {
+  let saved;
+  try {
+    saved = await apiGet(`/api/saved-reports/${id}`);
+  } catch (err) {
+    alert("Could not open saved report: " + (err.message || "unknown error"));
+    return;
+  }
+  if (saved.report_type === "ask_costpilot") {
+    // No original chat card to attach to (this can be reopened long after
+    // the conversation that created it) -- fetchAskReportData/
+    // showAskReportPreview (ask-costpilot-render.js, Phase 2/3) both work
+    // from a bare {tool, args} step and append their own modal straight to
+    // document.body, so this needs nothing from the DOM to reopen cleanly.
+    const step = { tool: saved.source.tool, args: saved.source.args || {} };
+    try {
+      const result = await fetchAskReportData(step);
+      showAskReportPreview(`saved-report-${id}`, saved.title, {}, step, result);
+    } catch (err) {
+      alert("Could not regenerate this report: " + (err.message || "unknown error"));
+    }
+    return;
+  }
+  const tabByType = { business_impact: "impact", savings: "savings", risk: "risk", departments: "departments" };
+  const tab = tabByType[saved.report_type];
+  if (!tab) return;
+  if (saved.source && saved.source.date_from && saved.source.date_to) {
+    reportDrillDateRange = { days: saved.source.days || 30, date_from: saved.source.date_from, date_to: saved.source.date_to };
+  }
+  openReportView(tab);
+}
+
 async function loadSavings() {
   const range = getActiveDateRange();
   const data = await apiGet(`/api/reports/savings?${reportApiParams(range)}`);
