@@ -337,31 +337,51 @@ function renderAskReportButton(cardId, data) {
 }
 
 // Additive action shown alongside (never instead of) the normal text
-// answer, when the backend recognized this as a "why did {department}'s
-// AI costs change" question -- see routes_efficiency.py's report_action
-// comment for the gating logic and why this stays a button rather than
-// auto-opening the report. openSupportBriefingReport() lives in
-// reports.js, which this file cannot assume is loaded (same reasoning as
-// the _askAnswerDataByCardId comment above), hence the guarded call in
-// the click handler below instead of calling it directly here.
+// answer, when the backend recognized this as either a "why did
+// {department}'s AI costs change" question (report_id "support_briefing")
+// or the company-wide "where's it going / is it working" shape
+// (report_id "business_impact") -- see routes_efficiency.py's two
+// report_action comments for the gating logic and why this stays a
+// button rather than auto-opening the report. openSupportBriefingReport()
+// lives in reports.js, which this file cannot assume is loaded (same
+// reasoning as the _askAnswerDataByCardId comment above), hence the
+// guarded call in the click handler below instead of calling it directly
+// here.
 function renderAskBriefingReportButton(data) {
   const action = data.report_action;
-  if (!action || !action.params || !action.params.department) return "";
-  return `<button type="button" class="cp-ask-report-btn cp-ask-briefing-btn" data-ask-briefing-department="${askRenderEscapeHtml(action.params.department)}" data-ask-briefing-days="${askRenderEscapeHtml(String(action.params.days || 30))}">📋 ${askRenderEscapeHtml(action.label || "View full briefing report")}</button>`;
+  if (!action || !action.report_id) return "";
+  return `<button type="button" class="cp-ask-report-btn cp-ask-briefing-btn" data-ask-briefing-report-id="${askRenderEscapeHtml(action.report_id)}" data-ask-briefing-params="${askRenderEscapeHtml(encodeURIComponent(JSON.stringify(action.params || {})))}">📋 ${askRenderEscapeHtml(action.label || "View full report")}</button>`;
 }
 
 function handleAskBriefingButtonClick(event) {
-  const btn = event.target.closest("[data-ask-briefing-department]");
+  const btn = event.target.closest("[data-ask-briefing-report-id]");
   if (!btn) return false;
-  if (typeof openSupportBriefingReport !== "function") {
-    alert("Full briefing reports are available from the Reports page.");
+  const reportId = btn.dataset.askBriefingReportId;
+  let params = {};
+  try { params = JSON.parse(decodeURIComponent(btn.dataset.askBriefingParams || "%7B%7D")); } catch (_e) { /* fall through with {} */ }
+
+  if (reportId === "support_briefing") {
+    if (typeof openSupportBriefingReport !== "function") {
+      alert("Full briefing reports are available from the Reports page.");
+      return true;
+    }
+    openSupportBriefingReport({ department: params.department, days: Number(params.days) || 30 });
     return true;
   }
-  openSupportBriefingReport({
-    department: btn.dataset.askBriefingDepartment,
-    days: Number(btn.dataset.askBriefingDays) || 30,
-  });
-  return true;
+  if (reportId === "business_impact") {
+    // No on-screen preview modal exists for Business Impact today (unlike
+    // Cost Briefing) -- reports.html already restores tab state from its
+    // own ?tab= URL param (used by every other Ask CostPilot "View
+    // activity" drill link, see askDrillUrl()), so navigating straight
+    // there is the lowest-risk way to land on this report rather than
+    // building a second, parallel modal system just for this one link.
+    const qs = new URLSearchParams({ tab: "impact" });
+    const workspaceId = localStorage.getItem("cp_workspace_id");
+    if (workspaceId) qs.set("workspace_id", workspaceId);
+    window.location.href = `/reports.html?${qs.toString()}`;
+    return true;
+  }
+  return false;
 }
 
 // Shared delegated-click handler for the report button, called from each

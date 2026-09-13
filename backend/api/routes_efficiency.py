@@ -2314,6 +2314,20 @@ def _ask_risk_breakdown(events: list[AuditEvent], entity: str) -> list[dict]:
     return list(rows.values())
 
 
+# Triggers the company-wide "View Full Business Impact Report" action
+# (see report_action below) -- the blunt, plain-English way a real leader
+# actually asks this ("I'm spending a lot on AI. Where is it going, and
+# is it working?", confirmed live 2026-09-13 as the lead example question
+# for this exact report). Deliberately narrower than just "spend" +
+# "outcome" words separately -- gates on genuinely outcome-oriented
+# phrasing, not every plain spend-total question, so this doesn't turn
+# "how much have we spent on AI this month" into a report-trigger too.
+_ASK_BUSINESS_IMPACT_TRIGGER_RE = re.compile(
+    r"\b(is it working|is this working|is our ai (investment|spend)|"
+    r"paying off|worth it|worth the investment|\broi\b|return on investment)\b",
+    re.IGNORECASE,
+)
+
 _ASK_NAME_STOP_WORDS = {
     "about", "account", "agent", "cost", "department", "employee", "has",
     "have", "many", "much", "person", "project", "request", "requests",
@@ -4239,6 +4253,20 @@ def _ask_agent_final_payload(
                     "label": f"View Full {report_department} Cost Briefing",
                     "params": {"department": report_department, "days": resolved_days},
                 }
+
+    # Company-wide counterpart to the department-scoped trigger above --
+    # same reasoning as the deterministic path's own business_impact
+    # branch (see that comment for the full design rationale). Only
+    # applies when no department-scoped report_action already fired above.
+    if (
+        not payload.get("report_action")
+        and _ASK_BUSINESS_IMPACT_TRIGGER_RE.search(request.question or "")
+    ):
+        payload["report_action"] = {
+            "report_id": "business_impact",
+            "label": "View Full Business Impact Report",
+            "params": {},
+        }
 
     try:
         for signal in workspace_attention_signals(db, request.workspace_id, limit=3):
@@ -7668,6 +7696,28 @@ def _ask_costpilot_answer(
                 "label": f"View Full {report_department} Cost Briefing",
                 "params": {"department": report_department, "days": report_days},
             }
+    elif (
+        intent in {"overview", "total"}
+        and metric == "spend_usd"
+        and not reporting_filters.get("charged_unit")
+        and _ASK_BUSINESS_IMPACT_TRIGGER_RE.search(question)
+    ):
+        # The company-wide counterpart to the department-scoped trigger
+        # above -- "I'm spending a lot on AI. Where is it going, and is it
+        # working?" (the exact phrasing this was scoped around) asks about
+        # the whole company, not one department, so it can't use the Cost
+        # Briefing report's own premise. Business Impact is the existing
+        # report that already tells the company-wide "where's it going /
+        # is it working" story (spend + outcomes together), so this points
+        # there instead of building a redundant company-wide clone of Cost
+        # Briefing -- the design decision made explicitly (2026-09-13) when
+        # this trigger was first scoped, now unblocked since Business
+        # Impact has since gotten the same report-quality visual pass.
+        report_action = {
+            "report_id": "business_impact",
+            "label": "View Full Business Impact Report",
+            "params": {},
+        }
 
     payload = {
         "question": question,

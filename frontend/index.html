@@ -1779,7 +1779,7 @@ function bindOvAskDrills(container) {
   container?.querySelectorAll("[data-ask-report-target]").forEach((button) => {
     button.addEventListener("click", (event) => handleAskReportButtonClick(event));
   });
-  container?.querySelectorAll("[data-ask-briefing-department]").forEach((button) => {
+  container?.querySelectorAll("[data-ask-briefing-report-id]").forEach((button) => {
     button.addEventListener("click", (event) => handleAskBriefingButtonClick(event));
   });
   container?.querySelectorAll("[data-ask-scope]").forEach((button) => {
@@ -2204,7 +2204,7 @@ setInterval(loadOverview, 30000);
 </div>
 </div>
 <script src="/vendor/tabler/tabler.min.js?v=1.4.0"></script>
-<script src="/js/ask-costpilot-render.js?v=20260913e-nl-report-trigger"></script>
+<script src="/js/ask-costpilot-render.js?v=20260913j-business-impact-trigger"></script>
 <script src="/js/global-nav.js?v=20260913e-nl-report-trigger"></script>
 <script src="/js/left-nav.js?v=20260826-add-models-projects"></script>
 </body>
