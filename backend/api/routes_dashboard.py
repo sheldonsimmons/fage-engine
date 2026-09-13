@@ -962,7 +962,19 @@ def get_business_impact(
         compute_potential_savings, evidence_for_sample,
     )
 
-    work_item_scope = _workspace_filter(WorkItem, workspace_id)
+    # _workspace_filter() (core.workspace_scope.workspace_filter) returns
+    # None -- no filter at all, every workspace unconditionally -- when
+    # workspace_id is falsy/"default". Confirmed live (2026-09-13): that
+    # left this endpoint's whole no-workspace-selected view (every figure
+    # below routes through _scoped()) blending every workspace's
+    # opportunities/spend/outcomes together, the same root cause already
+    # found and fixed in core/metrics_query.py's _run_outcome_query for
+    # this endpoint's own compute_cost_per_outcome() call -- this closes
+    # the same gap for the rest of this endpoint's hand-rolled queries.
+    if workspace_id and workspace_id != "default":
+        work_item_scope = _workspace_filter(WorkItem, workspace_id)
+    else:
+        work_item_scope = or_(WorkItem.workspace_id.is_(None), WorkItem.workspace_id == "default")
 
     def _scoped(query):
         # RBAC retrofit: every query passed through here joins WorkItem
