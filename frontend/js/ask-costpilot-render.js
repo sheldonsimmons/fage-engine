@@ -560,12 +560,58 @@ const ASK_REPORT_LOGO_SVG = `<svg class="report-logo" xmlns="http://www.w3.org/2
   </g>
 </svg>`;
 
+// Deterministic-path answers have no query_plan (that's an agent-loop-only
+// field) -- but they already carry the exact metric/dimension/filter shape
+// a report needs, just under different names: {entity, metric, filters,
+// interpreted_intent: {days, period_key}}, the parsed-intent structure
+// _resolve_ask_intent already builds (api/routes_efficiency.py). Since
+// query_metrics's args ARE metrics/dimensions/filters/days/period_key,
+// a deterministic answer can be replayed the exact same way as an
+// agent-loop one -- just synthesized client-side into the same shape,
+// no backend change needed.
+const ASK_REPORT_ENTITY_TO_DIMENSION = {
+  person: "person", agent: "agent", department: "department", platform: "platform", model: "model",
+};
+const ASK_REPORT_METRIC_TO_CATALOG = {
+  spend_usd: "ai_spend", request_count: "ai_requests", tokens_saved: "tokens_saved_count",
+};
+function askReportSyntheticStep(data) {
+  const dimension = ASK_REPORT_ENTITY_TO_DIMENSION[data.entity];
+  const metric = ASK_REPORT_METRIC_TO_CATALOG[data.metric];
+  // "overview"/"request"/"context" entities and non-catalog metrics
+  // (risk_event_count, avg_cost_per_request, contract_validation,
+  // product_knowledge, ...) have no ranked-table shape to report on --
+  // correctly falls through to the plain card print below, same as an
+  // agent-loop answer whose tool isn't in ASK_REPORT_REPLAYABLE_TOOLS.
+  if (!dimension || !metric) return null;
+  const filters = {};
+  Object.entries(data.filters || {}).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== "") filters[k] = v;
+  });
+  const interpreted = data.interpreted_intent || {};
+  let days = Number(interpreted.days) || 0;
+  if (!days && data.period?.date_from && data.period?.date_to) {
+    const from = new Date(data.period.date_from);
+    const to = new Date(data.period.date_to);
+    if (!isNaN(from) && !isNaN(to) && to > from) days = Math.max(1, Math.ceil((to - from) / 86400000));
+  }
+  return {
+    tool: "query_metrics", status: "ok",
+    args: {
+      metrics: [metric], dimensions: [dimension], filters,
+      days: days || 30, period_key: interpreted.period_key || "none",
+      sort: metric, limit: 20,
+    },
+  };
+}
+
 async function generateAskReport(cardId, title, data) {
   const lastDataStep = data && Array.isArray(data.query_plan)
     ? [...data.query_plan].reverse().find(step => step.status === "ok" && ASK_REPORT_REPLAYABLE_TOOLS.has(step.tool))
     : null;
-  if (!data || !lastDataStep) {
-    printSection(cardId, title); // deterministic-path answer, or nothing worth replaying -- print the card as-is
+  const step = lastDataStep || (data ? askReportSyntheticStep(data) : null);
+  if (!data || !step) {
+    printSection(cardId, title); // nothing worth replaying (a help/product/decision-style answer) -- print the card as-is
     return;
   }
   let container = document.getElementById(`${cardId}-report`);
@@ -582,13 +628,13 @@ async function generateAskReport(cardId, title, data) {
       body: JSON.stringify({
         question: data.title || "",
         workspace_id: localStorage.getItem("cp_workspace_id") || null,
-        tool: lastDataStep.tool,
-        args: lastDataStep.args || {},
+        tool: step.tool,
+        args: step.args || {},
       }),
     });
     if (!response.ok) throw new Error(`report-data request failed (${response.status})`);
     const payload = await response.json();
-    container.innerHTML = buildAskGeneratedReportHtml(data, lastDataStep.tool, payload.result);
+    container.innerHTML = buildAskGeneratedReportHtml(data, step.tool, payload.result);
     printSection(container.id, title);
   } catch (_err) {
     printSection(cardId, title); // fetch/build failed -- still strictly better than no report at all
