@@ -158,6 +158,13 @@ COSTPILOT_KNOWLEDGE = (
         "title": "Measured vs. estimated data",
         "keywords": (
             "measured and estimated", "measured or estimated", "measured vs estimated",
+            # "How much of our data is measured versus estimated?" (a real
+            # QA-pass question, 2026-09-13) scored zero against every
+            # variant above -- none of them account for the full word
+            # "versus" (only "vs") -- and fell through to the generic
+            # no-match fallback, which returned an unrelated model-routing
+            # explanation instead.
+            "measured versus estimated", "measured or estimate", "measure versus estimate",
             "measured data", "estimated data",
         ),
         "summary": (

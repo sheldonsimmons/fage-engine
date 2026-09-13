@@ -36,7 +36,7 @@ from database.models import (
     WorkItem,
     WorkspaceAnalyticsSettings,
 )
-from core.costpilot_knowledge import search_costpilot_knowledge
+from core.costpilot_knowledge import search_costpilot_knowledge, COSTPILOT_KNOWLEDGE
 from core.ask_costpilot_contracts import (
     ask_interpretation_label,
     canonical_ask_intent,
@@ -2289,6 +2289,20 @@ _ASK_NAME_STOP_WORDS = {
     # "system" are generic dimension/type words for the same reason (the
     # "source system"/"model" entity types), stop-worded alongside it.
     "platform", "model", "system",
+    # Same failure mode again, found via a 156-question QA pass
+    # (2026-09-13): six generic "Data Coverage & Trust"/meta questions --
+    # "How fresh is this data?", "What's our data coverage for this
+    # period?", "How far back does our AI usage data go?", "What happens
+    # when there's insufficient data to answer?", "How much AI-associated
+    # business value have we generated?", "Which integration has the most
+    # AI activity flowing through it?" -- none naming any real business
+    # record, all got hijacked into "I found N matches for that name:
+    # ...", because this workspace's real case/opportunity titles happen
+    # to contain these exact common words ("Data export request",
+    # "... — New Business 5", "Integration failure"). These are ordinary
+    # English words describing the QUESTION's topic, not a named subject.
+    "data", "business", "integration", "coverage", "fresh", "insufficient",
+    "answer", "happens", "flowing",
 }
 
 
@@ -2538,6 +2552,43 @@ def _ask_named_entity(question: str, report: dict, context_hint: str = "") -> Op
     if len(candidates) > 1 and candidates[0]["score"] == candidates[1]["score"]:
         return None
     return candidates[0]
+
+
+def _ask_two_named_entities(question: str, report: dict, breakdown_key: str) -> Optional[tuple[dict, dict]]:
+    """
+    Find exactly two distinct rows of ONE dimension (e.g. two departments)
+    whose full label appears as a whole word/phrase in the question --
+    "Compare Engineering's spend to Sales this quarter" naming two real
+    departments. Deliberately whole-word matching (not the token-overlap
+    scoring _ask_named_entity_candidates uses for a single ambiguous
+    name): comparing exactly two SPECIFIC named things is a much stronger
+    signal than "some words overlap," and a real department/agent/model
+    name is short enough that a literal substring match is reliable here
+    (unlike the free-form single-name case, which needs the fuzzier
+    scorer to handle a bare first name).
+
+    Returns None (never guesses) unless the match is unambiguous: exactly
+    two distinct labels found, each appearing once.
+    """
+    text = " ".join((question or "").lower().split())
+    matches = []
+    for row in report.get(breakdown_key) or []:
+        label = str(row.get("label") or "").strip()
+        if len(label) < 3:
+            continue
+        if re.search(rf"\b{re.escape(label.lower())}\b", text):
+            matches.append(row)
+    distinct_labels = {str(row.get("label") or "") for row in matches}
+    if len(distinct_labels) != 2:
+        return None
+    # One label per distinct name -- if the same name somehow matched
+    # more than once (duplicate rows), keep the first occurrence of each.
+    seen: dict[str, dict] = {}
+    for row in matches:
+        seen.setdefault(str(row.get("label") or ""), row)
+    if len(seen) != 2:
+        return None
+    return tuple(seen.values())
 
 
 def _ask_named_entity_ambiguity(question: str, report: dict, context_hint: str = "") -> list:
@@ -2881,7 +2932,17 @@ def _ask_product_response(
             limit=3,
         )
     if not topics:
-        topics = search_costpilot_knowledge("dashboard audit routing", limit=3)
+        # Confirmed live (2026-09-13 QA pass): this used to re-search with
+        # a fixed "dashboard audit routing" seed phrase, which reliably
+        # scores the "routing" topic (it contains the literal keyword
+        # "routing") regardless of what was actually asked -- any product
+        # question that genuinely matched nothing silently came back with
+        # an unrelated model-tier-routing explanation instead of an honest
+        # "here's broadly what I can help with." Falls back to the
+        # "capabilities" topic by id directly -- the one topic that's true
+        # regardless of the question's actual subject -- instead of
+        # re-running the same scoring search with different bait words.
+        topics = [dict(topic) for topic in COSTPILOT_KNOWLEDGE if topic["id"] == "capabilities"]
 
     primary = topics[0]
     location = ""
@@ -5274,6 +5335,46 @@ def _ask_costpilot_answer(
             int(summary.get("request_count") or 0)
             + int(prior_summary.get("request_count") or 0)
         )
+    elif intent == "comparison" and entity in entity_config and _ask_two_named_entities(question, report, entity_config[entity][0]):
+        # "Compare Engineering's spend to Sales this quarter" -- confirmed
+        # live (2026-09-13 QA pass) that the generic branch below only
+        # ever knows how to compare the SAME scope across two PERIODS; it
+        # has no concept of comparing two NAMED entities within one
+        # period, so it silently fell back to a company-wide period-over-
+        # period number while the answer text still named both
+        # departments as if their individual figures had been compared --
+        # or, depending on tie-break order, refused entirely ("the data
+        # does not specify AI spend separately for Engineering and
+        # Sales"), despite that exact per-department data being available
+        # and correctly returned by other questions in the same test run.
+        # This branch handles the two-named-entity case directly, using
+        # the SAME single-period breakdown rows a "which department is
+        # highest" ranking question already reads from -- no separate
+        # fetch, so this can never disagree with that question's own
+        # numbers for the same period.
+        row_a, row_b = _ask_two_named_entities(question, report, entity_config[entity][0])
+        entity_label_word = entity_config[entity][2][:-1] if entity_config[entity][2].endswith("s") else entity_config[entity][2]
+        raw_a, raw_b = _ask_row_metric(row_a, metric), _ask_row_metric(row_b, metric)
+        value_a, metric_label = _ask_metric_value(metric, raw_a)
+        value_b, _ = _ask_metric_value(metric, raw_b)
+        label_a, label_b = row_a.get("label") or "Unknown", row_b.get("label") or "Unknown"
+        title = f"{label_a} vs. {label_b} — {metric_label}"
+        if raw_a == raw_b:
+            answer = f"For {period_label}, {label_a} and {label_b} are even on {metric_label}, both at {value_a}."
+        else:
+            if raw_a > raw_b:
+                leader, other, lead_value, other_value, other_raw = label_a, label_b, value_a, value_b, raw_b
+            else:
+                leader, other, lead_value, other_value, other_raw = label_b, label_a, value_b, value_a, raw_a
+            pct_gap = round(abs(raw_a - raw_b) / other_raw * 100, 1) if other_raw else None
+            answer = (
+                f"For {period_label}, {leader} leads {other} on {metric_label}: "
+                f"{lead_value} vs. {other_value}"
+                f"{f' ({pct_gap}% higher)' if pct_gap is not None else ''}."
+            )
+        evidence = _ask_evidence([row_a, row_b], metric, entity_config[entity][1], limit=2)
+        calculation_formula = f"Direct {metric_label} comparison between two named {entity_label_word}s for the same period"
+        calculation_row_count = int((row_a.get("request_count") or 0) + (row_b.get("request_count") or 0))
     elif intent == "comparison":
         current_value = _ask_row_metric(summary, metric)
         if comparison_execution_plan:
@@ -5897,6 +5998,21 @@ def _ask_costpilot_answer(
         # connection sync status. connection_health has its own named-
         # platform handling (see that branch) and must not be preempted.
         "connection_health", "inactive_context",
+        # "Compare live requests to simulator requests this month" --
+        # canonical_ask_intent() (core/ask_costpilot_contracts.py)
+        # correctly, deterministically classified this as "source_mix"
+        # before this branch ever ran, but named_entity still matched
+        # SOMETHING in this workspace's data on one of the question's
+        # remaining tokens and this branch unconditionally overwrote that
+        # correct classification with intent="lookup"/entity=<whatever
+        # matched> anyway -- the answer contract then rejected the
+        # resulting mismatch (expected intent=source_mix, received
+        # lookup), and the user got a dead-end "I need to verify this
+        # analysis" for a perfectly answerable question. source_mix is
+        # inherently about the live-vs-simulator DATA SOURCE axis, never
+        # about one named business entity, so it must never be preempted
+        # here -- same reasoning as connection_health above.
+        "source_mix",
     }:
         entity = named_entity["entity"]
         row = named_entity["row"]
