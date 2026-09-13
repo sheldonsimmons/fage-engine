@@ -85,7 +85,7 @@ def test_dept_scorecard_pruning_savings_matches_the_registry_per_department():
 
     scorecard = {
         row["department"]: row
-        for row in dept_scorecard(days=1, workspace_id="WS-AGREE", date_from=None, date_to=None, db=db)["scorecards"]
+        for row in dept_scorecard(days=1, workspace_id="WS-AGREE", date_from=None, date_to=None, db=db, authorization=None)["scorecards"]
     }
 
     registry = run_metrics_query(

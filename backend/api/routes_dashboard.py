@@ -55,7 +55,9 @@ def _keyword_stats(db: Session, days: int = 30, top_n: int = 10, workspace_id: s
     return [{"kw": kw, "count": cnt} for kw, cnt in sorted_kws]
 
 
-def _check_reporting_access(db: Session, authorization: Optional[str], workspace_id: Optional[str]) -> None:
+def _check_reporting_access(
+    db: Session, authorization: Optional[str], workspace_id: Optional[str],
+) -> Optional[str]:
     """
     Security architecture assessment, Finding 9: this reporting surface
     (and ~dozens of others across the app) always correctly scopes its
@@ -76,9 +78,20 @@ def _check_reporting_access(db: Session, authorization: Optional[str], workspace
     legitimate "all workspaces" admin view still relied on elsewhere in
     the app, same reasoning as _agent_scoped_or_404 in
     routes_agentlake.py).
+
+    Returns the caller's department_scope (None for an unscoped/admin
+    membership, or when no session is presented -- soft mode's existing
+    "no verified identity, behave as today" contract). This is the same
+    TenantContext.department_scope Ask CostPilot's tool loop has enforced
+    since Phase 2 slice 1 -- until now it was resolved here and then
+    thrown away, which is the actual RBAC gap: workspace isolation was
+    closed, but a Department Manager's own dashboard/report still
+    silently blended every other department's numbers into what they saw.
     """
-    if workspace_id:
-        check_membership(db, authorization, workspace_id, "view_reports")
+    if not workspace_id:
+        return None
+    ctx = check_membership(db, authorization, workspace_id, "view_reports")
+    return ctx.department_scope if ctx else None
 
 
 @router.get("")
@@ -88,7 +101,7 @@ def get_dashboard(
     authorization: Optional[str] = Header(default=None),
 ):
     """Single endpoint that powers the entire executive dashboard."""
-    _check_reporting_access(db, authorization, workspace_id)
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
 
     now         = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -99,6 +112,31 @@ def get_dashboard(
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
     audit_scope = _workspace_filter(AuditEvent, workspace_id)
     agent_scope = _workspace_filter(RegisteredAgent, workspace_id)
+    # RBAC retrofit: every raw query below already funnels through
+    # _filters(tx_scope/audit_scope/agent_scope, ...), so ANDing a
+    # department clause into these three scope objects (rather than
+    # editing each of the ~20 call sites individually) closes the
+    # department-level gap for the whole executive dashboard in one place.
+    if department_scope:
+        tx_scope = and_(tx_scope, or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )) if tx_scope is not None else or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )
+        audit_scope = and_(audit_scope, or_(
+            AuditEvent.department == department_scope,
+            AuditEvent.department.like(f"%:{department_scope}"),
+        )) if audit_scope is not None else or_(
+            AuditEvent.department == department_scope,
+            AuditEvent.department.like(f"%:{department_scope}"),
+        )
+        if workspace_id:
+            dept_agent_clause = RegisteredAgent.department == f"{workspace_id}:{department_scope}"
+            agent_scope = and_(agent_scope, dept_agent_clause) if agent_scope is not None else dept_agent_clause
 
     def _filters(*items):
         return [x for x in items if x is not None]
@@ -116,6 +154,7 @@ def get_dashboard(
         result = run_metrics_query(
             db, workspace_id, metrics=["ai_spend"],
             timeframe={"start": start, "end": end},
+            filters={"charged_unit": department_scope} if department_scope else None,
         )
         if result.rows:
             return result.rows[0].get("ai_spend") or 0.0
@@ -453,7 +492,7 @@ def get_dashboard(
 def _spend_driver_department(
     db: Session, workspace_id: str | None,
     current_start: datetime, current_end: datetime, prior_start: datetime, prior_end: datetime,
-    *, total_delta: float,
+    *, total_delta: float, department_scope: str | None = None,
 ) -> dict | None:
     """
     Which department contributed most to an overall spend swing --
@@ -462,10 +501,22 @@ def _spend_driver_department(
     overall total, just grouped one more dimension. Returns None when the
     total delta is negligible (avoids a meaningless "100% of a $0.01
     swing" driver) or no single department explains a meaningful share.
+
+    department_scope: when the caller is department-scoped, a "which
+    department drove this" attribution is meaningless (there's only ever
+    one department in view) -- callers should skip invoking this
+    entirely, but this also degrades safely if not.
     """
     if abs(total_delta) < 0.01:
         return None
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    if department_scope:
+        dept_clause = or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )
+        tx_scope = and_(tx_scope, dept_clause) if tx_scope is not None else dept_clause
 
     def _spend_by_department(start, end):
         base = [tx_scope] if tx_scope is not None else []
@@ -501,7 +552,7 @@ def _spend_driver_department(
 def _spend_driver_agent(
     db: Session, workspace_id: str | None,
     current_start: datetime, current_end: datetime, prior_start: datetime, prior_end: datetime,
-    *, total_delta: float,
+    *, total_delta: float, department_scope: str | None = None,
 ) -> dict | None:
     """
     Same shape as _spend_driver_department, one dimension down -- which
@@ -513,6 +564,13 @@ def _spend_driver_agent(
     if abs(total_delta) < 0.01:
         return None
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    if department_scope:
+        dept_clause = or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )
+        tx_scope = and_(tx_scope, dept_clause) if tx_scope is not None else dept_clause
 
     def _spend_by_agent(start, end):
         base = [tx_scope] if tx_scope is not None else []
@@ -548,7 +606,7 @@ def _spend_driver_agent(
 def _biggest_model_spend_shift(
     db: Session, workspace_id: str | None,
     current_start: datetime, current_end: datetime, prior_start: datetime, prior_end: datetime,
-    days: int,
+    days: int, department_scope: str | None = None,
 ) -> dict | None:
     """
     Which specific model (not just tier) had the largest spend increase --
@@ -559,6 +617,13 @@ def _biggest_model_spend_shift(
     the same thing whether the caller asked for a 7-day or 90-day change.
     """
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    if department_scope:
+        dept_clause = or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )
+        tx_scope = and_(tx_scope, dept_clause) if tx_scope is not None else dept_clause
 
     def _spend_by_model(start, end):
         base = [tx_scope] if tx_scope is not None else []
@@ -613,6 +678,7 @@ def get_dashboard_changes(
     workspace_id: str | None = Query(None),
     days: int = Query(30, ge=1, le=180),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Real period-over-period comparison -- "what changed" vs the prior period
@@ -624,7 +690,12 @@ def get_dashboard_changes(
     cases resolved, etc.) -- that needs a real link between AI activity and
     outcome data that doesn't exist yet. This only covers what CostPilot's
     own tables can already answer: spend, call volume, tier mix, new agents.
+
+    Had no membership check at all until this pass (unlike get_dashboard/
+    get_business_impact in this same file) -- brought in line with the
+    rest, department_scope threaded the same way.
     """
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     from core.metrics_query import run_metrics_query
 
     now = datetime.utcnow()
@@ -633,6 +704,16 @@ def get_dashboard_changes(
 
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
     agent_scope = _workspace_filter(RegisteredAgent, workspace_id)
+    if department_scope:
+        dept_tx_clause = or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )
+        tx_scope = and_(tx_scope, dept_tx_clause) if tx_scope is not None else dept_tx_clause
+        if workspace_id:
+            dept_agent_clause = RegisteredAgent.department == f"{workspace_id}:{department_scope}"
+            agent_scope = and_(agent_scope, dept_agent_clause) if agent_scope is not None else dept_agent_clause
     IS_AI_CALL = or_(TokenTransaction.routing_reason.is_(None), TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE")
     ECONOMY_TIERS = ("Scout", "Analyst", "micro")
 
@@ -647,6 +728,7 @@ def get_dashboard_changes(
     spend_calls = run_metrics_query(
         db, workspace_id, metrics=["ai_spend", "ai_requests"],
         timeframe={"start": current_start, "end": now}, compare_to="previous_period",
+        filters={"charged_unit": department_scope} if department_scope else None,
     )
     cmp_row = spend_calls.comparison["rows"][0] if spend_calls.comparison and spend_calls.comparison["rows"] else {
         "ai_spend": {"current": 0.0, "previous": 0.0, "pct_difference": None},
@@ -690,11 +772,11 @@ def get_dashboard_changes(
         summary = f"AI spend {direction} {abs(spend_pct):.1f}% (${abs(current['spend'] - previous['spend']):,.2f}) vs the prior {days} days."
         driver = _spend_driver_department(
             db, workspace_id, current_start, now, prior_start, current_start,
-            total_delta=current["spend"] - previous["spend"],
+            total_delta=current["spend"] - previous["spend"], department_scope=department_scope,
         )
         agent_driver = _spend_driver_agent(
             db, workspace_id, current_start, now, prior_start, current_start,
-            total_delta=current["spend"] - previous["spend"],
+            total_delta=current["spend"] - previous["spend"], department_scope=department_scope,
         )
         if driver:
             summary += f" Primary driver: {driver['department']} ({driver['contribution_pct']:.0f}% of the {change_noun})"
@@ -734,7 +816,7 @@ def get_dashboard_changes(
             "summary": f"Routing shifted {direction} economy-tier models ({previous['economy_pct']}% → {current['economy_pct']}% of calls).",
         })
 
-    model_shift = _biggest_model_spend_shift(db, workspace_id, current_start, now, prior_start, current_start, days)
+    model_shift = _biggest_model_spend_shift(db, workspace_id, current_start, now, prior_start, current_start, days, department_scope=department_scope)
     if model_shift:
         changes.append(model_shift)
 
@@ -765,6 +847,7 @@ def get_top_models(
     days: int = Query(30, ge=1, le=180),
     limit: int = Query(5, ge=1, le=50),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Real per-model spend breakdown, grouped via the shared metrics layer
@@ -777,10 +860,21 @@ def get_top_models(
     bespoke to this endpoint (the shared "model" dimension doesn't carry
     it), so it's computed here as a thin second query, same pattern
     already used by this file's own provider_breakdown-style derivations.
+
+    Had no membership check at all until this pass -- brought in line
+    with the rest of this file, department_scope threaded the same way.
     """
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     from core.metrics_query import run_metrics_query
 
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
+    if department_scope:
+        dept_clause = or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        )
+        tx_scope = and_(tx_scope, dept_clause) if tx_scope is not None else dept_clause
     IS_AI_CALL = or_(TokenTransaction.routing_reason.is_(None), TokenTransaction.routing_reason != "VOICE_GUARD_PRUNE")
     cutoff = datetime.utcnow() - timedelta(days=days)
 
@@ -802,6 +896,7 @@ def get_top_models(
     result = run_metrics_query(
         db, workspace_id, metrics=["ai_spend", "ai_requests"], dimensions=["model"],
         timeframe={"start": cutoff, "end": datetime.utcnow()}, sort="ai_spend", limit=100,
+        filters={"charged_unit": department_scope} if department_scope else None,
     )
     total_spend = sum(r["ai_spend"] for r in result.rows)
     results = [
@@ -838,7 +933,7 @@ def get_business_impact(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
 ):
-    _check_reporting_access(db, authorization, workspace_id)
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     """
     Workspace-wide version of api/routes_work_items.py's account_profile()
     outcome totals -- same real WorkItemOutcome aggregation (opportunity
@@ -870,7 +965,20 @@ def get_business_impact(
     work_item_scope = _workspace_filter(WorkItem, workspace_id)
 
     def _scoped(query):
-        return query.filter(work_item_scope) if work_item_scope is not None else query
+        # RBAC retrofit: every query passed through here joins WorkItem
+        # (either directly or via WorkItemOutcome/TokenTransaction ->
+        # WorkItem), so this one seam covers every raw query in this
+        # endpoint -- a Department Manager's own dashboard no longer
+        # silently blends every other department's opportunities/cases
+        # into the numbers they see.
+        if work_item_scope is not None:
+            query = query.filter(work_item_scope)
+        if department_scope:
+            query = query.filter(or_(
+                WorkItem.department == department_scope,
+                WorkItem.department.like(f"%:{department_scope}"),
+            ))
+        return query
 
     # won/lost/open/pipeline/closed-won/support-case counts now come from
     # the shared metrics layer's outcome-sourced metrics (Milestone 4) --
@@ -880,6 +988,7 @@ def get_business_impact(
         db, workspace_id,
         metrics=["won_count", "lost_count", "open_count", "won_value", "pipeline_value",
                  "support_cases_total", "support_cases_resolved"],
+        filters={"charged_unit": department_scope} if department_scope else None,
     )
     o = outcome_result.rows[0] if outcome_result.rows else {
         "won_count": 0, "lost_count": 0, "open_count": 0, "won_value": 0.0,
@@ -917,9 +1026,9 @@ def get_business_impact(
     # name) -- there's no equivalent risk at workspace scope. Both already
     # carry their own real sample-size-based evidence label -- reused
     # directly below instead of recomputed.
-    coverage = compute_outcome_coverage(db, workspace_id)
-    cost_per_outcome = compute_cost_per_outcome(db, workspace_id)
-    potential_savings = compute_potential_savings(db, workspace_id)
+    coverage = compute_outcome_coverage(db, workspace_id, department_scope=department_scope)
+    cost_per_outcome = compute_cost_per_outcome(db, workspace_id, department_scope=department_scope)
+    potential_savings = compute_potential_savings(db, workspace_id, department_scope=department_scope)
 
     # Business Impact's deeper economics layer -- same TokenTransaction ->
     # WorkItem -> WorkItemOutcome join the ai_spend query above already
@@ -1127,7 +1236,7 @@ def get_business_impact_top_work_items(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
 ):
-    _check_reporting_access(db, authorization, workspace_id)
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     """
     Top WorkItems by AI investment, optionally narrowed to one outcome
     bucket -- "highest AI investment on unsuccessful work," "highest
@@ -1152,12 +1261,14 @@ def get_business_impact_top_work_items(
     if rank_by == "cost_ratio":
         from core.metrics_query import work_items_by_cost_ratio
 
-        rows = work_items_by_cost_ratio(db, workspace_id, outcome_status, limit)
+        rows = work_items_by_cost_ratio(db, workspace_id, outcome_status, limit, department_scope=department_scope)
         return {"workspace_id": workspace_id, "outcome_status": outcome_status, "rank_by": rank_by, "rows": rows, "errors": []}
 
     from core.metrics_query import run_metrics_query
 
     filters = {"outcome_status": outcome_status} if outcome_status else {}
+    if department_scope:
+        filters["charged_unit"] = department_scope
     # Fetch extra rows to absorb the test-fixture exclusion below without
     # under-filling `limit` -- confirmed live these "Test TEST-VERIFICATION-
     # NNN" WorkItems are real rows in the actual data (some prior
@@ -1196,7 +1307,7 @@ def get_business_impact_by_department(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
 ):
-    _check_reporting_access(db, authorization, workspace_id)
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     """
     Business Impact ranked by department -- won/lost/open opportunity
     counts, closed-won value, AI investment, and cost per won opportunity,
@@ -1214,6 +1325,14 @@ def get_business_impact_by_department(
     from core.metrics_query import department_outcome_breakdown
 
     rows = department_outcome_breakdown(db, workspace_id)
+    if department_scope:
+        # department_outcome_breakdown() merges several independent
+        # queries by department label in Python (see its own docstring on
+        # why it's standalone) -- rather than duplicating that merge logic
+        # with a department filter threaded through each one, filter the
+        # already-labeled output. A department-scoped caller has no
+        # legitimate reason to see any other department's row here.
+        rows = [r for r in rows if r["department"] == department_scope]
     return {"workspace_id": workspace_id, "rows": rows}
 
 
@@ -1221,13 +1340,25 @@ def get_business_impact_by_department(
 def get_recommendations(
     workspace_id: str | None = Query(None),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Recommendations engine v1 -- see core/recommendations.py for the full
     detector list and the shared contract every recommendation returns.
     Deterministic: every entry here comes from a plain SQL/Python
     condition over real data, nothing LLM-generated.
+
+    This endpoint had NO membership check at all until this pass (every
+    other endpoint in this file at least closes the cross-workspace gap
+    via _check_reporting_access) -- brought in line with the rest.
+    run_recommendations() itself has no department dimension on its
+    detectors today, so this closes the workspace-isolation gap; a
+    department-scoped caller still sees workspace-wide recommendations,
+    same as before -- narrower than the department gap this pass is
+    otherwise closing, called out as a real remaining gap rather than
+    silently left unscoped.
     """
+    _check_reporting_access(db, authorization, workspace_id)
     from core.recommendations import run_recommendations
 
     recommendations = run_recommendations(db, workspace_id)
@@ -1240,7 +1371,7 @@ def get_work_outcomes(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
 ):
-    _check_reporting_access(db, authorization, workspace_id)
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     """
     "Work & Outcomes" for the cockpit dashboard: top WorkItems (projects)
     and top WorkAccounts (real customer/account names -- there is no
@@ -1261,7 +1392,10 @@ def get_work_outcomes(
     from core.metrics_query import run_metrics_query
 
     def _top(dimension: str, unassigned_label: str, limit: int = 8) -> list[dict]:
-        result = run_metrics_query(db, workspace_id, metrics=["ai_spend"], dimensions=[dimension], limit=200)
+        result = run_metrics_query(
+            db, workspace_id, metrics=["ai_spend"], dimensions=[dimension], limit=200,
+            filters={"charged_unit": department_scope} if department_scope else None,
+        )
         rows = [
             {
                 "name": (row["dimensions"].get(dimension) or unassigned_label),
@@ -1279,6 +1413,7 @@ def get_work_outcomes(
     outcome_result = run_metrics_query(
         db, workspace_id,
         metrics=["won_count", "won_value", "pipeline_value", "support_cases_total", "support_cases_resolved"],
+        filters={"charged_unit": department_scope} if department_scope else None,
     )
     o = outcome_result.rows[0] if outcome_result.rows else {
         "won_count": 0, "won_value": 0.0, "pipeline_value": 0.0,

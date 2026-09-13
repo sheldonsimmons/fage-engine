@@ -1121,6 +1121,7 @@ def compute_outcome_coverage(
     account_name: Optional[str] = None,
     agent_id: Optional[int] = None,
     person_external_id: Optional[str] = None,
+    department_scope: Optional[str] = None,
 ) -> dict:
     """
     What share of AI-supported WorkItems actually have a known outcome --
@@ -1161,6 +1162,15 @@ def compute_outcome_coverage(
                 "outcome_coverage_pct": None, "coverage_note": error["message"],
             }
         touched_query = touched_query.filter(WorkItem.account_id == account.id)
+    if department_scope:
+        # Same WorkItem.department clause as _run_outcome_query's
+        # charged_unit filter (metrics_query.py:699) -- a department-scoped
+        # caller (RBAC retrofit) must never see coverage computed over
+        # WorkItems outside their department.
+        touched_query = touched_query.filter(or_(
+            WorkItem.department == department_scope,
+            WorkItem.department.like(f"%:{department_scope}"),
+        ))
     if agent_id is not None:
         # The TokenTransaction join already exists above -- scoping "touched"
         # to one agent is just one more filter on it, same definition of
@@ -1363,6 +1373,7 @@ def department_outcome_breakdown(db: Session, workspace_id: Optional[str]) -> li
 
 def work_items_by_cost_ratio(
     db: Session, workspace_id: Optional[str], outcome_status: Optional[str], limit: int,
+    department_scope: Optional[str] = None,
 ) -> list[dict]:
     """
     Ranks WorkItems by a computed ratio -- AI spend as a fraction of the
@@ -1400,6 +1411,16 @@ def work_items_by_cost_ratio(
     )
     if status_clause is not None:
         outcome_q = outcome_q.filter(status_clause)
+    if department_scope:
+        # RBAC retrofit: this function returns no department label per
+        # row (unlike department_outcome_breakdown), so unlike that
+        # function this can't be filtered after the fact -- the WorkItem
+        # query itself needs the clause. Same WorkItem.department clause
+        # used everywhere else in this module.
+        outcome_q = outcome_q.filter(or_(
+            WorkItem.department == department_scope,
+            WorkItem.department.like(f"%:{department_scope}"),
+        ))
     outcome_rows = _scoped(outcome_q).all()
     if not outcome_rows:
         return []
@@ -1452,6 +1473,7 @@ def compute_potential_savings(
     top_agent_limit: int = 5,
     agent_id: Optional[int] = None,
     person_external_id: Optional[str] = None,
+    department_scope: Optional[str] = None,
 ) -> dict:
     """
     "Potential Savings" (Business Impact upgrade plan, Part B) -- v1:
@@ -1502,6 +1524,14 @@ def compute_potential_savings(
         query = query.filter(TokenTransaction.agent_id == agent_id)
     if person_external_id is not None:
         query = query.filter(person_clause(person_external_id))
+    if department_scope:
+        # Same TokenTransaction charged_org_unit_name/department clause as
+        # _run_activity_query's charged_unit filter (metrics_query.py:526).
+        query = query.filter(or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        ))
 
     savings_by_agent: dict[Optional[int], float] = {}
     total_savings = 0.0

@@ -51,9 +51,9 @@ def test_report_endpoints_use_explicit_inclusive_calendar_window_and_workspace()
 
     start = datetime(2025, 7, 1)
     end = datetime(2025, 8, 1)
-    savings = savings_report(31, "DATE-TEST", start, end, db)
-    risk = risk_report(31, "DATE-TEST", start, end, db)
-    departments = dept_scorecard(31, "DATE-TEST", start, end, db)
+    savings = savings_report(31, "DATE-TEST", start, end, db, authorization=None)
+    risk = risk_report(31, "DATE-TEST", start, end, db, authorization=None)
+    departments = dept_scorecard(31, "DATE-TEST", start, end, db, authorization=None)
 
     assert savings["total_calls"] == 1
     assert savings["total_cost_usd"] == .01

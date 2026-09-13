@@ -59,8 +59,19 @@ def metrics_query(
     # this calls check_membership() directly rather than the
     # require_membership() dependency -- same reasoning as
     # create_universal_connection in routes_connections_universal.py).
+    #
+    # RBAC retrofit: the resolved TenantContext used to be thrown away
+    # right here -- workspace isolation was closed, but a department-
+    # scoped caller's Explorer query still had free rein over `filters`
+    # (this is a raw client-supplied pivot query, unlike Ask CostPilot's
+    # tool loop), including passing its OWN charged_unit filter to look at
+    # another department entirely. department_scope below is forced onto
+    # clean_filters, never merely defaulted, so the client's own filter
+    # value can never override it.
+    department_scope = None
     if body.workspace_id:
-        check_membership(db, authorization, body.workspace_id, "view_reports")
+        ctx = check_membership(db, authorization, body.workspace_id, "view_reports")
+        department_scope = ctx.department_scope if ctx else None
 
     # Same period resolution ask_costpilot_tools.py's run_query_metrics
     # already uses -- period_key wins when given; otherwise a rolling
@@ -99,6 +110,8 @@ def metrics_query(
     # option sends "" for "not filtering," which must mean None here, not
     # a literal empty-string filter value.
     clean_filters = {k: v for k, v in (body.filters or {}).items() if v not in (None, "")}
+    if department_scope:
+        clean_filters["charged_unit"] = department_scope
 
     result = run_metrics_query(
         db, body.workspace_id, metrics=body.metrics, dimensions=body.dimensions,

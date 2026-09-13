@@ -9,14 +9,32 @@ GET /api/reports/timeline    — Daily spend + call volume bucketed by day (for 
 
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, and_
+from fastapi import APIRouter, Depends, Header, Query
+from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models import TokenTransaction, AuditEvent, DepartmentBudget, SensitiveTerm
 from core.agentlake import display_department
+from core.auth import check_membership
 from core.workspace_scope import workspace_filter
+
+
+def _check_reporting_access(
+    db: Session, authorization: Optional[str], workspace_id: Optional[str],
+) -> Optional[str]:
+    """
+    Same retrofit as api/routes_dashboard.py's helper of the same name --
+    this file (the classic Savings/Risk/Departments report tabs) had NO
+    membership check of any kind until this pass, unlike Business Impact/
+    the Executive Dashboard. See routes_dashboard.py's docstring for the
+    full soft-mode-gated reasoning; kept as a duplicate here rather than
+    a shared import to avoid a cross-router dependency for one helper.
+    """
+    if not workspace_id:
+        return None
+    ctx = check_membership(db, authorization, workspace_id, "view_reports")
+    return ctx.department_scope if ctx else None
 # The rate table and economy-tier set here used to be a second, independently
 # maintained copy of core/metrics_query.py's -- same numbers, but nothing
 # stopped them from silently drifting apart. Now sourced from one place;
@@ -62,6 +80,7 @@ def compute_realized_savings(
     db: Session, workspace_id: Optional[str], days: int,
     date_from: Optional[datetime] = None, date_to: Optional[datetime] = None,
     *, agent_id: Optional[int] = None, person_external_id: Optional[str] = None,
+    department_scope: Optional[str] = None,
 ) -> dict:
     """
     The trusted "Realized Savings" calculation (pruning + model-downgrade
@@ -88,6 +107,12 @@ def compute_realized_savings(
     if person_external_id is not None:
         from core.metrics_query import person_clause
         q = q.filter(person_clause(person_external_id))
+    if department_scope:
+        q = q.filter(or_(
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        ))
     txns = q.all()
 
     total_cost       = sum(t.cost_usd for t in txns)
@@ -148,8 +173,10 @@ def savings_report(days: int = Query(30, ge=1, le=365),
                    workspace_id: str = Query(None),
                    date_from: Optional[datetime] = Query(None),
                    date_to: Optional[datetime] = Query(None),
-                   db: Session = Depends(get_db)):
-    return compute_realized_savings(db, workspace_id, days, date_from, date_to)
+                   db: Session = Depends(get_db),
+                   authorization: Optional[str] = Header(default=None)):
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
+    return compute_realized_savings(db, workspace_id, days, date_from, date_to, department_scope=department_scope)
 
 
 # ── Risk Report ────────────────────────────────────────────────────────────────
@@ -159,7 +186,9 @@ def risk_report(days: int = Query(30, ge=1, le=365),
                 workspace_id: str = Query(None),
                 date_from: Optional[datetime] = Query(None),
                 date_to: Optional[datetime] = Query(None),
-                db: Session = Depends(get_db)):
+                db: Session = Depends(get_db),
+                authorization: Optional[str] = Header(default=None)):
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     start, end = _parse_range(days, date_from, date_to)
 
     q = db.query(AuditEvent).filter(
@@ -168,6 +197,11 @@ def risk_report(days: int = Query(30, ge=1, le=365),
     )
     if workspace_id:
         q = q.filter(workspace_filter(AuditEvent, workspace_id))
+    if department_scope:
+        q = q.filter(or_(
+            AuditEvent.department == department_scope,
+            AuditEvent.department.like(f"%:{department_scope}"),
+        ))
     events = q.order_by(AuditEvent.timestamp.desc()).all()
 
     total_events  = len(events)
@@ -269,7 +303,9 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
                    workspace_id: str = Query(None),
                    date_from: Optional[datetime] = Query(None),
                    date_to: Optional[datetime] = Query(None),
-                   db: Session = Depends(get_db)):
+                   db: Session = Depends(get_db),
+                   authorization: Optional[str] = Header(default=None)):
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
     start, end = _parse_range(days, date_from, date_to)
 
     q = db.query(TokenTransaction).filter(
@@ -278,9 +314,20 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
     )
     if workspace_id:
         q = q.filter(workspace_filter(TokenTransaction, workspace_id))
+    if department_scope:
+        q = q.filter(or_(
+            TokenTransaction.department == department_scope,
+            TokenTransaction.department.like(f"%:{department_scope}"),
+        ))
     txns = q.all()
 
-    budgets = {b.department: b for b in db.query(DepartmentBudget).all()}
+    def _dept_matches_scope(raw_dept: str) -> bool:
+        return not department_scope or raw_dept == department_scope or (raw_dept or "").endswith(f":{department_scope}")
+
+    budgets = {
+        b.department: b for b in db.query(DepartmentBudget).all()
+        if _dept_matches_scope(b.department)
+    }
 
     # Aggregate per department
     dept_data = {}
