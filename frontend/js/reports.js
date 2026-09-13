@@ -842,6 +842,28 @@ function reportDocHeaderHtml(title, generatedAt) {
     </header>`;
 }
 
+// Premium banner variant for composite reports (Support Cost Briefing and
+// future story-driven reports) -- kept separate from reportDocHeaderHtml
+// rather than changed in place, so the plainer existing reports (Business
+// Impact, Savings, Governance & Risk, Departments) are untouched.
+function reportPremiumHeaderHtml(title, periodLabel, generatedAt) {
+  return `
+    <header class="report-header rpt-header-premium">
+      <div class="rpt-header-top">
+        ${REPORT_LOGO_SVG}
+        <span class="rpt-header-confidential">Confidential</span>
+      </div>
+      <div class="rpt-header-eyebrow">Report</div>
+      <h1 class="report-title">${escapeHtml(title)}</h1>
+      <div class="rpt-header-tagline">AI cost governance, told as a story your leadership can act on.</div>
+      <div class="report-meta">
+        <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+        <span>${escapeHtml(periodLabel || askCostPilotDateLabel())}</span>
+        <span>Generated ${escapeHtml(generatedAt)}</span>
+      </div>
+    </header>`;
+}
+
 // ── Business Impact — printable report ──────────────────────────────────────
 // A purpose-built report document, not a clone of the live interactive tab
 // (printSection()'s usual DOM-clone approach would also carry the rank-by/
@@ -1019,6 +1041,54 @@ const REPORT_CHART_TEXT_COLOR = "#1a2733";
 const REPORT_CHART_GRID_COLOR = "#e2e6ea";
 const REPORT_CHART_PALETTE = ["#25c4b5", "#5a8dee", "#f5a623", "#e8618c", "#8c6fe0", "#4fb477"];
 
+// ── Composite-report design system ──────────────────────────────────────────
+// Built for the "boardroom-ready" polish pass (2026-09-13, following a real
+// design-mockup review) -- a small, reusable set of icon badges, KPI cards,
+// a scorecard callout, and CSS-drawn stacked bars, so every FUTURE composite
+// report (not just Support Cost Briefing) gets this look for free instead
+// of each one hand-rolling its own. Icons are plain SVG primitives (rects/
+// circles/polylines, no path-data glyphs) specifically so they render
+// correctly without depending on getting bezier curves right by hand.
+const REPORT_ICON_COLORS = {
+  blue: "#2f6fed", green: "#1a9c5c", orange: "#e08a1f", purple: "#7c5cff", red: "#d94f4f",
+};
+const REPORT_ICONS = {
+  barChart: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="12" width="4" height="8" rx="1" fill="currentColor"/><rect x="10" y="7" width="4" height="13" rx="1" fill="currentColor"/><rect x="16" y="3" width="4" height="17" rx="1" fill="currentColor"/></svg>`,
+  dollarCircle: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><text x="12" y="16.5" font-size="11" font-weight="700" text-anchor="middle" fill="currentColor" font-family="sans-serif">$</text></svg>`,
+  savingsArrow: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8 9v6h6M8 15l8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  target: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`,
+  lightbulb: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="10" r="6" stroke="currentColor" stroke-width="2"/><rect x="9.5" y="16" width="5" height="3" rx="1" fill="currentColor"/><line x1="10.5" y1="20" x2="13.5" y2="20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  checkTarget: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><polyline points="8,12.5 10.7,15 16,9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  document: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3h8l4 4v14H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.5"/><line x1="9" y1="15.5" x2="15" y2="15.5" stroke="currentColor" stroke-width="1.5"/></svg>`,
+};
+
+function reportIconBadge(icon, colorKey) {
+  const color = REPORT_ICON_COLORS[colorKey] || REPORT_ICON_COLORS.blue;
+  return `<span class="rpt-icon-badge" style="background:${color}1a;color:${color}">${REPORT_ICONS[icon] || ""}</span>`;
+}
+
+// A richer KPI card than reportDocHeaderHtml's plain siblings elsewhere in
+// this file (Business Impact, Savings, etc. keep their existing look --
+// this is deliberately scoped to composite reports only, not a global
+// restyle). delta is {text, positive} or null.
+function reportKpiCardPremium(icon, colorKey, label, value, sub, delta) {
+  const deltaHtml = delta
+    ? `<span class="rpt-kpi-delta ${delta.positive ? "up" : "down"}">${delta.positive ? "▲" : "▼"} ${escapeHtml(delta.text)}</span>`
+    : "";
+  return `
+    <div class="rpt-kpi-premium">
+      ${reportIconBadge(icon, colorKey)}
+      <div class="rpt-kpi-premium-label">${escapeHtml(label)}</div>
+      <div class="rpt-kpi-premium-value">${value}</div>
+      ${deltaHtml || (sub ? `<div class="rpt-kpi-premium-sub">${sub}</div>` : "")}
+    </div>`;
+}
+
+function reportNumberedList(items, renderItem) {
+  return `<ol class="rpt-numbered-list">${items.map((item, i) => `
+    <li><span class="rpt-numbered-badge">${i + 1}</span><div class="rpt-numbered-body">${renderItem(item, i)}</div></li>`).join("")}</ol>`;
+}
+
 // Generic ad-hoc chart -> image capture, same reasoning as askReportChartImg
 // in ask-costpilot-render.js (print output needs a bitmap, not a live
 // canvas) -- text/grid colors are set explicitly rather than inherited
@@ -1087,28 +1157,30 @@ function supportBriefingAgentChart(topAgents) {
   }, 700, Math.max(220, topAgents.length * 32));
 }
 
-function supportBriefingModelMixChart(modelMixByAgent) {
-  if (!modelMixByAgent || modelMixByAgent.length < 1) return "";
-  const tiers = ["Scout", "Analyst", "Advisor", "Strategist"];
-  const tierColors = { Scout: "#4fb477", Analyst: "#5a8dee", Advisor: "#f5a623", Strategist: "#e8618c" };
-  return reportChartImg({
-    type: "bar",
-    data: {
-      labels: modelMixByAgent.map(r => r.agent),
-      datasets: tiers.map(tier => ({
-        label: tier, data: modelMixByAgent.map(r => r[tier] || 0),
-        backgroundColor: tierColors[tier],
-      })),
-    },
-    options: {
-      indexAxis: "y", responsive: false, animation: false,
-      plugins: { legend: { display: true, position: "bottom", labels: { color: REPORT_CHART_TEXT_COLOR, boxWidth: 12 } } },
-      scales: {
-        x: { stacked: true, beginAtZero: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
-        y: { stacked: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
-      },
-    },
-  }, 700, Math.max(220, modelMixByAgent.length * 40));
+// CSS-drawn stacked bars for Model Mix, replacing the earlier Chart.js
+// image version --
+// sharper at print resolution and lets each segment carry a real
+// percentage label instead of relying on a legend to decode color.
+const MODEL_TIER_ORDER = ["Scout", "Analyst", "Advisor", "Strategist"];
+const MODEL_TIER_COLORS = { Scout: "#4fb477", Analyst: "#5a8dee", Advisor: "#f5a623", Strategist: "#e8618c" };
+
+function supportBriefingModelMixBars(modelMixByAgent) {
+  if (!modelMixByAgent || !modelMixByAgent.length) return "";
+  const legend = MODEL_TIER_ORDER.map(tier => `
+    <span class="rpt-stackbar-legend-item"><span class="rpt-stackbar-swatch" style="background:${MODEL_TIER_COLORS[tier]}"></span>${tier}</span>`).join("");
+  const rows = modelMixByAgent.map(r => {
+    const total = MODEL_TIER_ORDER.reduce((sum, t) => sum + (r[t] || 0), 0) || 1;
+    const segments = MODEL_TIER_ORDER.filter(t => (r[t] || 0) > 0).map(t => {
+      const pct = (r[t] || 0) / total * 100;
+      return `<span class="rpt-stackbar-seg" style="width:${pct.toFixed(1)}%;background:${MODEL_TIER_COLORS[t]}" title="${escapeHtml(t)}: ${pct.toFixed(0)}%">${pct >= 12 ? `${pct.toFixed(0)}%` : ""}</span>`;
+    }).join("");
+    return `
+      <div class="rpt-stackbar-row">
+        <div class="rpt-stackbar-label">${escapeHtml(r.agent)}</div>
+        <div class="rpt-stackbar-track">${segments}</div>
+      </div>`;
+  }).join("");
+  return `<div class="rpt-stackbar-chart"><div class="rpt-stackbar-legend">${legend}</div>${rows}</div>`;
 }
 
 function supportBriefingOutcomeChart(resolved, unresolved) {
@@ -1132,61 +1204,55 @@ function renderSupportBriefingReportHtml(data) {
   });
   const k = data.kpis || {};
   const evidenceByKpi = data.evidence_by_kpi || {};
-
-  const kpiCard = (label, value, evidenceLabel, sub) => `
-    <div class="report-kpi">
-      <div class="report-kpi-label-row">
-        <span class="report-kpi-label">${escapeHtml(label)}</span>
-        ${evidenceLabel ? `<span class="bi-evidence-tag ${evidenceLabel}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceLabel] || evidenceLabel)}</span>` : ""}
-      </div>
-      <div class="report-kpi-value">${value}</div>
-      ${sub ? `<div class="report-kpi-sub">${sub}</div>` : ""}
-    </div>`;
-
-  const changeLabel = k.pct_change == null ? "—" : `${k.pct_change >= 0 ? "+" : ""}${k.pct_change}%`;
+  const changePositive = k.pct_change != null && k.pct_change < 0; // a cost DECREASE is the "good" direction
+  const changeLabel = k.pct_change == null ? "—" : `${Math.abs(k.pct_change)}% vs prior period`;
 
   const findingsList = (data.findings || []).length
-    ? `<ul class="report-findings-list">${data.findings.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>`
+    ? reportNumberedList(data.findings, f => `<p>${escapeHtml(f)}</p>`)
     : `<p class="bi-note">Not enough activity in this period to surface findings.</p>`;
 
   const recCards = (data.recommendations || []).length
-    ? data.recommendations.map(rec => `
-        <div class="bi-rec-card" style="break-inside:avoid">
-          <div class="bi-rec-head">
-            <span class="bi-rec-title">${escapeHtml(rec.title || "")}</span>
-            <span class="bi-rec-priority ${escapeHtml(rec.priority || "low")}">${escapeHtml(rec.priority || "low")}</span>
-          </div>
-          <div class="bi-rec-body">${escapeHtml(rec.why_it_matters || rec.current_state || "")}</div>
-          <div class="bi-rec-action">→ ${escapeHtml(rec.recommended_action || "")}</div>
-          ${rec.impact_type === "savings_usd" && rec.estimated_impact != null
-            ? `<div class="bi-rec-impact">Potential savings: ${fmtUsd(rec.estimated_impact)}/mo</div>` : ""}
-        </div>`).join("")
+    ? reportNumberedList(data.recommendations, rec => `
+        <div class="rpt-rec-head">
+          <span class="rpt-rec-title">${escapeHtml(rec.title || "")}</span>
+          <span class="bi-rec-priority ${escapeHtml(rec.priority || "low")}">${escapeHtml(rec.priority || "low")}</span>
+        </div>
+        <div class="bi-rec-body">${escapeHtml(rec.why_it_matters || rec.current_state || "")}</div>
+        <div class="bi-rec-action">→ ${escapeHtml(rec.recommended_action || "")}</div>
+        ${rec.impact_type === "savings_usd" && rec.estimated_impact != null
+          ? `<div class="bi-rec-impact">Potential savings: ${fmtUsd(rec.estimated_impact)}/mo</div>` : ""}`)
     : `<div class="bi-note">No recommendations right now.</div>`;
 
   const agentTableRows = (data.top_agents || []).length
     ? data.top_agents.map((r, i) => `<tr><td class="bi-rank">${i + 1}</td><td>${escapeHtml(r.agent)}</td><td>${fmtUsd(r.spend_usd)}</td></tr>`).join("")
     : `<tr><td colspan="3">No support agent activity in this period.</td></tr>`;
 
+  const resolutionRatePct = (k.resolved_cases != null && k.unresolved_cases != null && (k.resolved_cases + k.unresolved_cases) > 0)
+    ? Math.round(k.resolved_cases / (k.resolved_cases + k.unresolved_cases) * 100) : null;
+
   return `
-    <div class="report-doc">
-      ${reportDocHeaderHtml("Support AI Cost Increase Analysis", generatedAt)}
+    <div class="report-doc rpt-premium">
+      ${reportPremiumHeaderHtml("Support AI Cost Increase Analysis", data.period_label, generatedAt)}
 
       <section class="report-section">
         <h2 class="report-section-title">Executive Summary</h2>
-        <p class="bi-summary">
-          Support AI investment ${k.pct_change == null
-            ? `totaled ${fmtUsd(k.ai_investment_usd)}`
-            : `${k.pct_change >= 0 ? "increased" : "decreased"} ${Math.abs(k.pct_change)}% to ${fmtUsd(k.ai_investment_usd)}`
-          } over ${escapeHtml(data.period_label || "the selected period")}${
-            data.recommendations && data.recommendations.length ? ", with a clear optimization opportunity identified below." : "."
-          }
-        </p>
-        <div class="report-kpi-row">
-          ${kpiCard("AI Investment", fmtUsd(k.ai_investment_usd), null, `vs ${fmtUsd(k.prior_period_usd)} prior period`)}
-          ${kpiCard("Change vs Prior Period", changeLabel, null, null)}
-          ${kpiCard("Savings Opportunity", k.savings_opportunity_usd != null ? fmtUsd(k.savings_opportunity_usd) : "—", null, "workspace-wide model-routing estimate")}
-          ${kpiCard("Cost per Resolution", k.cost_per_resolution_usd != null ? fmtUsd(k.cost_per_resolution_usd) : "—", evidenceByKpi.cost_per_resolution_usd, null)}
-          ${kpiCard("Outcome Coverage", k.outcome_coverage_pct != null ? `${k.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct, null)}
+        <div class="rpt-exec-summary">
+          ${reportIconBadge(changePositive ? "savingsArrow" : "barChart", changePositive ? "green" : "orange")}
+          <p class="bi-summary">
+            Support AI investment ${k.pct_change == null
+              ? `totaled ${fmtUsd(k.ai_investment_usd)}`
+              : `${k.pct_change >= 0 ? "increased" : "decreased"} ${Math.abs(k.pct_change)}% to ${fmtUsd(k.ai_investment_usd)}`
+            } over ${escapeHtml(data.period_label || "the selected period")}${
+              data.recommendations && data.recommendations.length ? ", with a clear optimization opportunity identified below." : "."
+            }
+          </p>
+        </div>
+        <div class="report-kpi-row rpt-kpi-row-premium">
+          ${reportKpiCardPremium("dollarCircle", "blue", "AI Investment", fmtUsd(k.ai_investment_usd), `vs ${fmtUsd(k.prior_period_usd)} prior period`, null)}
+          ${reportKpiCardPremium(changePositive ? "savingsArrow" : "barChart", changePositive ? "green" : "red", "Change vs Prior Period", changeLabel, null, k.pct_change == null ? null : { text: changeLabel, positive: changePositive })}
+          ${reportKpiCardPremium("target", "purple", "Savings Opportunity", k.savings_opportunity_usd != null ? fmtUsd(k.savings_opportunity_usd) : "—", "workspace-wide model-routing estimate", null)}
+          ${reportKpiCardPremium("checkTarget", "green", "Cost per Resolution", k.cost_per_resolution_usd != null ? fmtUsd(k.cost_per_resolution_usd) : "—", evidenceByKpi.cost_per_resolution_usd ? `<span class="bi-evidence-tag ${evidenceByKpi.cost_per_resolution_usd}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.cost_per_resolution_usd] || evidenceByKpi.cost_per_resolution_usd)}</span>` : null, null)}
+          ${reportKpiCardPremium("document", "blue", "Outcome Coverage", k.outcome_coverage_pct != null ? `${k.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct ? `<span class="bi-evidence-tag ${evidenceByKpi.outcome_coverage_pct}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.outcome_coverage_pct] || evidenceByKpi.outcome_coverage_pct)}</span>` : null, null)}
         </div>
       </section>
 
@@ -1206,12 +1272,21 @@ function renderSupportBriefingReportHtml(data) {
 
       <section class="report-section" style="break-inside:avoid">
         <h2 class="report-section-title">Model Mix by Agent</h2>
-        ${supportBriefingModelMixChart(data.model_mix_by_agent) || `<p class="bi-note">Not enough per-agent tier data to chart.</p>`}
+        ${supportBriefingModelMixBars(data.model_mix_by_agent) || `<p class="bi-note">Not enough per-agent tier data to chart.</p>`}
       </section>
 
-      <section class="report-section" style="break-inside:avoid">
+      <section class="report-section rpt-outcome-section" style="break-inside:avoid">
         <h2 class="report-section-title">Resolved vs. Unresolved Cases</h2>
-        ${supportBriefingOutcomeChart(k.resolved_cases, k.unresolved_cases) || `<p class="bi-note">No case outcome data in this period.</p>`}
+        <div class="rpt-outcome-grid">
+          ${supportBriefingOutcomeChart(k.resolved_cases, k.unresolved_cases) || `<p class="bi-note">No case outcome data in this period.</p>`}
+          ${resolutionRatePct != null ? `
+            <div class="rpt-scorecard">
+              ${reportIconBadge("checkTarget", "green")}
+              <div class="rpt-scorecard-value">${resolutionRatePct}%</div>
+              <div class="rpt-scorecard-label">Resolution Rate</div>
+              <div class="rpt-scorecard-sub">${fmtNum(k.resolved_cases)} of ${fmtNum(k.resolved_cases + k.unresolved_cases)} cases resolved</div>
+            </div>` : ""}
+        </div>
       </section>
 
       <section class="report-section">
@@ -1221,7 +1296,7 @@ function renderSupportBriefingReportHtml(data) {
 
       <section class="report-section">
         <h2 class="report-section-title">Recommendations</h2>
-        <div class="bi-rec-grid">${recCards}</div>
+        ${recCards}
       </section>
 
       <section class="report-section" style="break-inside:avoid">
@@ -1236,7 +1311,11 @@ function renderSupportBriefingReportHtml(data) {
         </div>
       </section>
 
-      <footer class="report-footer">CostPilot — Support AI Cost Increase Analysis — ${escapeHtml(askCostPilotWorkspaceLabel())}</footer>
+      <footer class="report-footer rpt-footer-premium">
+        <span>CostPilot — Support AI Cost Increase Analysis</span>
+        <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
+        <span>Confidential</span>
+      </footer>
     </div>`;
 }
 

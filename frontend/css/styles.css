@@ -1489,6 +1489,61 @@ body {
     position: fixed; bottom: 0.3in; left: 0.65in; right: 0.65in;
     font-size: 9px; color: #888; border-top: 1px solid #ddd; padding-top: 4px;
   }
+
+  /* ── Composite-report design system (icons, premium KPI cards, scorecard,
+     CSS stacked bars, numbered lists) -- print scope. Added for the
+     Support Cost Briefing visual pass (2026-09-13); scoped under
+     .rpt-premium so it never touches the plainer existing reports. */
+  #printOverlay .rpt-icon-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  }
+  #printOverlay .rpt-icon-badge svg { width: 17px; height: 17px; }
+  #printOverlay .rpt-header-premium .rpt-header-top { display: flex; align-items: center; justify-content: space-between; }
+  #printOverlay .rpt-header-confidential {
+    font-size: 8.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+    color: #888; border: 1px solid #ccc; border-radius: 999px; padding: 2px 8px;
+  }
+  #printOverlay .rpt-header-eyebrow {
+    font-size: 9.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: #25a99c; margin-top: 10px;
+  }
+  #printOverlay .rpt-header-tagline { font-size: 10.5px; color: #666; margin: 2px 0 8px; font-style: italic; }
+  #printOverlay .rpt-exec-summary { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  #printOverlay .rpt-exec-summary .bi-summary { flex: 1; margin-bottom: 0; }
+  #printOverlay .rpt-kpi-row-premium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  #printOverlay .rpt-kpi-premium { border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; break-inside: avoid; }
+  #printOverlay .rpt-kpi-premium-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #666; margin-top: 6px; }
+  #printOverlay .rpt-kpi-premium-value { font-size: 17px; font-weight: 700; color: #111; margin-top: 2px; }
+  #printOverlay .rpt-kpi-premium-sub { font-size: 9px; color: #777; margin-top: 2px; }
+  #printOverlay .rpt-kpi-delta { font-size: 10px; font-weight: 700; margin-top: 2px; display: inline-block; }
+  #printOverlay .rpt-kpi-delta.up { color: #1a7a4c; }
+  #printOverlay .rpt-kpi-delta.down { color: #b5442e; }
+  #printOverlay .rpt-stackbar-legend { display: flex; gap: 12px; margin-bottom: 8px; font-size: 9.5px; color: #555; }
+  #printOverlay .rpt-stackbar-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+  #printOverlay .rpt-stackbar-swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  #printOverlay .rpt-stackbar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #printOverlay .rpt-stackbar-label { width: 130px; font-size: 10px; color: #333; flex-shrink: 0; text-align: right; }
+  #printOverlay .rpt-stackbar-track { flex: 1; display: flex; height: 16px; border-radius: 3px; overflow: hidden; background: #f0f0f0; }
+  #printOverlay .rpt-stackbar-seg { display: flex; align-items: center; justify-content: center; font-size: 8px; color: #fff; font-weight: 700; }
+  #printOverlay .rpt-outcome-grid { display: grid; grid-template-columns: 1fr 220px; gap: 16px; align-items: center; }
+  #printOverlay .rpt-scorecard {
+    border: 1px solid #ddd; border-radius: 8px; padding: 14px; text-align: center; break-inside: avoid;
+  }
+  #printOverlay .rpt-scorecard-value { font-size: 26px; font-weight: 800; color: #111; margin-top: 6px; }
+  #printOverlay .rpt-scorecard-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #666; margin-top: 2px; }
+  #printOverlay .rpt-scorecard-sub { font-size: 9.5px; color: #888; margin-top: 4px; }
+  #printOverlay .rpt-numbered-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  #printOverlay .rpt-numbered-list li { display: flex; gap: 10px; break-inside: avoid; }
+  #printOverlay .rpt-numbered-badge {
+    flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: #07336f; color: #fff;
+    font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+  }
+  #printOverlay .rpt-numbered-body { flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; }
+  #printOverlay .rpt-numbered-body p { font-size: 10.5px; color: #333; margin: 0; }
+  #printOverlay .rpt-rec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  #printOverlay .rpt-rec-title { font-size: 11px; font-weight: 700; color: #111; }
+  #printOverlay .rpt-footer-premium { display: flex; justify-content: space-between; gap: 10px; }
 }
 
 /* ── Ask CostPilot report preview modal (Phase 3: conversational refinement) ──────
@@ -1552,6 +1607,59 @@ body {
    background without an explicit override. */
 .cp-report-preview-modal .cp-ask-evidence { color: #111; border-color: #ddd; }
 .cp-report-preview-modal .cp-ask-evidence span { color: #666; }
+
+/* ── Composite-report design system -- on-screen preview scope. Mirrors the
+   #printOverlay rules above; kept in sync deliberately rather than shared,
+   per this file's existing two-scope pattern (see the report-doc block's
+   header comment). */
+.cp-report-preview-modal .rpt-icon-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+}
+.cp-report-preview-modal .rpt-icon-badge svg { width: 19px; height: 19px; }
+.cp-report-preview-modal .rpt-header-premium .rpt-header-top { display: flex; align-items: center; justify-content: space-between; }
+.cp-report-preview-modal .rpt-header-confidential {
+  font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  color: #888; border: 1px solid #ccc; border-radius: 999px; padding: 2px 9px;
+}
+.cp-report-preview-modal .rpt-header-eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: #25a99c; margin-top: 10px;
+}
+.cp-report-preview-modal .rpt-header-tagline { font-size: 11px; color: #666; margin: 2px 0 8px; font-style: italic; }
+.cp-report-preview-modal .rpt-exec-summary { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.cp-report-preview-modal .rpt-exec-summary .bi-summary { flex: 1; margin-bottom: 0; }
+.cp-report-preview-modal .rpt-kpi-row-premium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.cp-report-preview-modal .rpt-kpi-premium { border: 1px solid #ddd; border-radius: 9px; padding: 12px 14px; }
+.cp-report-preview-modal .rpt-kpi-premium-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #666; margin-top: 7px; }
+.cp-report-preview-modal .rpt-kpi-premium-value { font-size: 19px; font-weight: 700; color: #111; margin-top: 2px; }
+.cp-report-preview-modal .rpt-kpi-premium-sub { font-size: 10px; color: #777; margin-top: 2px; }
+.cp-report-preview-modal .rpt-kpi-delta { font-size: 11px; font-weight: 700; margin-top: 2px; display: inline-block; }
+.cp-report-preview-modal .rpt-kpi-delta.up { color: #1a7a4c; }
+.cp-report-preview-modal .rpt-kpi-delta.down { color: #b5442e; }
+.cp-report-preview-modal .rpt-stackbar-legend { display: flex; gap: 14px; margin-bottom: 9px; font-size: 10.5px; color: #555; }
+.cp-report-preview-modal .rpt-stackbar-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.cp-report-preview-modal .rpt-stackbar-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.cp-report-preview-modal .rpt-stackbar-row { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+.cp-report-preview-modal .rpt-stackbar-label { width: 140px; font-size: 11px; color: #333; flex-shrink: 0; text-align: right; }
+.cp-report-preview-modal .rpt-stackbar-track { flex: 1; display: flex; height: 18px; border-radius: 4px; overflow: hidden; background: #f0f0f0; }
+.cp-report-preview-modal .rpt-stackbar-seg { display: flex; align-items: center; justify-content: center; font-size: 9px; color: #fff; font-weight: 700; }
+.cp-report-preview-modal .rpt-outcome-grid { display: grid; grid-template-columns: 1fr 220px; gap: 18px; align-items: center; }
+.cp-report-preview-modal .rpt-scorecard { border: 1px solid #ddd; border-radius: 9px; padding: 16px; text-align: center; }
+.cp-report-preview-modal .rpt-scorecard-value { font-size: 28px; font-weight: 800; color: #111; margin-top: 6px; }
+.cp-report-preview-modal .rpt-scorecard-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #666; margin-top: 2px; }
+.cp-report-preview-modal .rpt-scorecard-sub { font-size: 10.5px; color: #888; margin-top: 4px; }
+.cp-report-preview-modal .rpt-numbered-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.cp-report-preview-modal .rpt-numbered-list li { display: flex; gap: 12px; }
+.cp-report-preview-modal .rpt-numbered-badge {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: #07336f; color: #fff;
+  font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.cp-report-preview-modal .rpt-numbered-body { flex: 1; border: 1px solid #ddd; border-radius: 7px; padding: 9px 11px; }
+.cp-report-preview-modal .rpt-numbered-body p { font-size: 11.5px; color: #333; margin: 0; }
+.cp-report-preview-modal .rpt-rec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.cp-report-preview-modal .rpt-rec-title { font-size: 12px; font-weight: 700; color: #111; }
+.cp-report-preview-modal .rpt-footer-premium { display: flex; justify-content: space-between; gap: 10px; color: #888; font-size: 10.5px; }
 
 /* ── Misc ─────────────────────────────────────────────────────────────────────── */
 .placeholder { color: var(--text-muted); font-style: italic; font-size: 12px; padding: 8px 0; }
