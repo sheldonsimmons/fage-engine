@@ -2303,6 +2303,24 @@ _ASK_NAME_STOP_WORDS = {
     # English words describing the QUESTION's topic, not a named subject.
     "data", "business", "integration", "coverage", "fresh", "insufficient",
     "answer", "happens", "flowing",
+    # "I'm spending a lot on AI. Where is it going, and is it working?"
+    # (the lead question in the new Cost Briefing trigger set, confirmed
+    # live 2026-09-13) tokenized to include "and" -- never previously a
+    # stop word, and the single most common connective in English business
+    # record names ("Jordan Customer -- Return and Refund", any "X and Y"
+    # title). A single-token overlap is enough for _ask_named_department's
+    # matcher to treat a record as a candidate (see its scoring just
+    # below), so "and" alone hijacked a broad, no-department-named
+    # question into "Jordan Customer -- Return and Refund AI usage" --
+    # same failure mode as "review"/"platform"/"data" above, just a far
+    # more common word than any of those. Rather than wait for the next
+    # ordinary English word to do the same thing, stop-wording the rest of
+    # the common connective/function words this same length-3+ filter
+    # otherwise lets through untouched ("the" and "for" are exactly as
+    # dangerous as "and" and were still open).
+    "and", "the", "for", "but", "not", "are", "was", "were", "this",
+    "that", "these", "those", "where", "when", "why", "how", "does",
+    "did", "can", "will", "your", "our",
 }
 
 
