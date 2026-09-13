@@ -6378,15 +6378,35 @@ def _ask_costpilot_answer(
         )
         if budget_scope == "all":
             title = "Department AI budgets"
+            # total_spent/total_cap (recomputed_department_spend, above)
+            # are ALWAYS current-calendar-month-to-date -- correct for a
+            # genuine over/near-cap question, since a budget cap is
+            # inherently monthly, but this "all" branch answers questions
+            # like "What's our AI spend for the last 2 quarters?", whose
+            # own resolved period can be anything. Confirmed live
+            # (2026-09-13 QA pass): the OLD wording stated total_spent
+            # (this month's figure, e.g. $19.02) as if it were the spend
+            # for THE QUESTION'S OWN PERIOD ("for the last 2 quarters...
+            # $19.02 attributed activity spend used") -- the same $19.02
+            # then appeared verbatim for four different, non-overlapping
+            # date ranges in different questions, and a 6-month total
+            # divided by a 1-month cap produced a nonsensical "21.1%
+            # utilization." report_spend (already computed above from
+            # THIS question's own resolved date range, matching
+            # summary.spend_usd) is the period-correct figure; the
+            # monthly cap utilization is now stated as its own separate,
+            # explicitly-dated clause instead of conflating the two.
             answer = (
-                f"{len(budget_rows):,} active departments have ${total_cap:,.2f} "
-                f"in combined monthly AI budget, with ${total_spent:,.4f} in attributed "
-                f"activity spend used.{coverage_note}"
+                f"For {period_label}, attributed AI activity spend across {len(budget_rows):,} "
+                f"active departments was ${report_spend:,.4f}. Separately, this calendar month's "
+                f"combined monthly AI budget is ${total_cap:,.2f}, with ${total_spent:,.4f} "
+                f"({budget_pct_display(total_pct)}) used so far.{coverage_note}"
                 if budget_rows else
                 "No active department budgets are configured."
             )
             calculation_formula = (
-                "List each active department's configured monthly cap and current usage"
+                "Sum attributed AI activity spend for the requested period; "
+                "separately, list each active department's configured monthly cap and current-month usage"
             )
         elif budget_scope == "remaining":
             title = "AI budget remaining"
