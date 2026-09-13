@@ -1469,6 +1469,7 @@ def _briefing_tier_bucket(tier: str) -> str:
 def get_support_cost_briefing(
     workspace_id: str | None = Query(None),
     days: int = Query(30, ge=7, le=180),
+    department: str = Query("Support", description="Which department this briefing is about."),
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
 ):
@@ -1482,11 +1483,28 @@ def get_support_cost_briefing(
     response, so the frontend renders one multi-section report instead of
     stitching together several separate "Generate Report" replays.
 
-    Support-scoped throughout via WorkItem.context_type IN
-    (case/ticket/incident) -- the same _SUPPORT_CONTEXT_TYPES set
-    get_business_impact already uses for support_cost_per_resolution_usd,
-    so this report's numbers agree with Business Impact's for the same
-    population, not a second, differently-scoped definition of "support."
+    Scoped by DEPARTMENT (TokenTransaction.charged_org_unit_name/
+    department, same clause/precedence Ask CostPilot's own "charged_unit"
+    filter uses), not by WorkItem.context_type -- confirmed live these are
+    genuinely different populations on the real demo dataset (5,778 rows
+    scoped by context_type in case/ticket/incident vs. 3,236 rows scoped
+    by department="Support", not a subset relationship), and a plain-
+    English "why did Support spend increase?" question is a question
+    about the SUPPORT TEAM's own spend, which is what Ask CostPilot's own
+    change-driver/department-filter answers already mean by "Support."
+    Scoping this report by context_type instead produced a report whose
+    numbers flatly contradicted what Ask CostPilot said about the same
+    question -- confirmed live via a full voice-to-report demo walkthrough
+    (chat showed Support spend roughly flat/down, this report showed a
+    142% increase, for what should have been the same story). Department-
+    scoping this report is what makes "ask about Support -> generate this
+    report" tell one consistent story instead of two disagreeing ones.
+    "Cases analyzed"/resolved-unresolved below are therefore "work items
+    this department's AI spend touched," not "work items of a support
+    context_type" -- a deliberate, documented redefinition from
+    get_business_impact()'s support_cost_per_resolution_usd (which IS
+    context_type-scoped) for this department-story-shaped report
+    specifically.
 
     Row-bounded (MAX_BRIEFING_ROWS) the same way the classic Reports
     engine's Python-side aggregation was capped after the live memory
@@ -1502,21 +1520,29 @@ def get_support_cost_briefing(
     start = now - timedelta(days=days)
     prior_start = start - timedelta(days=days)
     tx_scope = _workspace_filter(TokenTransaction, workspace_id)
-    is_support = WorkItem.context_type.in_(_SUPPORT_CONTEXT_TYPES)
 
-    def _dept_clause():
+    def _dept_clause(dept_name):
         return or_(
-            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
-            TokenTransaction.department == department_scope,
-            TokenTransaction.department.like(f"%:{department_scope}"),
+            func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == dept_name,
+            TokenTransaction.department == dept_name,
+            TokenTransaction.department.like(f"%:{dept_name}"),
         )
 
     def _base_query():
-        q = db.query(TokenTransaction).join(WorkItem, TokenTransaction.work_item_id == WorkItem.id).filter(is_support)
+        # Outer join -- this department's spend total must include every
+        # matching transaction, whether or not it happens to be linked to
+        # a WorkItem; an inner join here would silently undercount total
+        # department spend by dropping unlinked transactions.
+        q = db.query(TokenTransaction).outerjoin(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+        q = q.filter(_dept_clause(department))
         if tx_scope is not None:
             q = q.filter(tx_scope)
         if department_scope:
-            q = q.filter(_dept_clause())
+            # RBAC: a department-scoped caller can only ever see their OWN
+            # department's data -- if that doesn't match the `department`
+            # this briefing is about, every query below correctly returns
+            # nothing rather than leaking another department's numbers.
+            q = q.filter(_dept_clause(department_scope))
         return q
 
     # Prior-period total is a single SUM -- no need to load those rows.
@@ -1566,9 +1592,11 @@ def get_support_cost_briefing(
         for agent, _ in top_agents
     ]
 
-    # Resolved/unresolved + cost per resolution -- same definitions
-    # get_business_impact() already uses for this exact population, so
-    # this report's numbers agree with Business Impact's.
+    # Resolved/unresolved + cost per resolution, scoped to the same
+    # department population as everything else above (NOT
+    # get_business_impact()'s context_type-scoped definition -- see this
+    # endpoint's own docstring for why that would disagree with the rest
+    # of this report).
     resolved_n, resolved_spend = _base_query().join(
         WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id,
     ).filter(
@@ -1583,10 +1611,15 @@ def get_support_cost_briefing(
     unresolved_n = max(int(total_cases_n) - resolved_n, 0)
     cost_per_resolution_usd = round(float(resolved_spend or 0.0) / resolved_n, 6) if resolved_n else None
 
+    # Filters out None explicitly -- unlike the COUNT(DISTINCT ...)
+    # aggregates above, a plain SELECT DISTINCT does not drop NULL rows on
+    # its own, and _base_query()'s outer join means a department
+    # transaction with no linked WorkItem produces exactly that NULL row.
     touched_ids = [
         row[0] for row in _base_query().filter(
             TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
         ).with_entities(WorkItem.id).distinct().all()
+        if row[0] is not None
     ]
     outcomes_with_data = (
         db.query(func.count(func.distinct(WorkItemOutcome.work_item_id)))
