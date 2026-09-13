@@ -600,14 +600,40 @@ const ASK_REPORT_LOGO_SVG = `<svg class="report-logo" xmlns="http://www.w3.org/2
 // no backend change needed.
 const ASK_REPORT_ENTITY_TO_DIMENSION = {
   person: "person", agent: "agent", department: "department", platform: "platform", model: "model",
+  // "context" and "overview" both land on routes_efficiency.py's generic
+  // project_breakdown catch-all ("Where your AI usage went" / "AI spend
+  // on won opportunities") whenever no more specific entity was named --
+  // confirmed live, a plain "AI spend overview" question comes back with
+  // entity="overview", not "context" as the backend's own entity_config
+  // naming would suggest. Both are the same per-work-item breakdown
+  // shape, which query_metrics already exposes as the registered
+  // "work_item" dimension (core/metrics_catalog.py). Without this
+  // mapping, this was the single most common "Generate Report" case with
+  // no chart/table at all -- silently falling through to the plain-card
+  // print instead.
+  context: "work_item", overview: "work_item",
 };
 const ASK_REPORT_METRIC_TO_CATALOG = {
   spend_usd: "ai_spend", request_count: "ai_requests", tokens_saved: "tokens_saved_count",
 };
+// "context"/"overview" are ALSO the entity value for several totally
+// different answer shapes (department budgets, tier mix, activity
+// narration...) that have nothing to do with a work-item breakdown -- the
+// entity alone can't tell those apart (confirmed live: a budget question
+// comes back with entity="overview" too). Only these two intents are the
+// actual project_breakdown branches (routes_efficiency.py's "Where your
+// AI usage went" / "AI spend on won opportunities"); gating on intent as
+// well is what keeps this from attaching a work-item chart to an
+// unrelated answer.
+const _ASK_REPORT_WORK_ITEM_INTENTS = new Set(["overview", "total"]);
+
 function askReportSyntheticStep(data) {
-  const dimension = ASK_REPORT_ENTITY_TO_DIMENSION[data.entity];
+  let dimension = ASK_REPORT_ENTITY_TO_DIMENSION[data.entity];
+  if ((data.entity === "context" || data.entity === "overview") && !_ASK_REPORT_WORK_ITEM_INTENTS.has(data.intent)) {
+    dimension = null;
+  }
   const metric = ASK_REPORT_METRIC_TO_CATALOG[data.metric];
-  // "overview"/"request"/"context" entities and non-catalog metrics
+  // "overview"/"request" entities and non-catalog metrics
   // (risk_event_count, avg_cost_per_request, contract_validation,
   // product_knowledge, ...) have no ranked-table shape to report on --
   // correctly falls through to the plain card print below, same as an
