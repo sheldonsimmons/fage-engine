@@ -448,7 +448,11 @@ function askReportFormatValue(value, format) {
 // print output needs a bitmap, not a live canvas. Chart.js isn't loaded on
 // every page this file runs on, so this degrades to "table only, no chart"
 // rather than throwing when it's unavailable.
-function askReportChartImg(rows, metricLabel, valueFormat) {
+function askReportChartImg(rows, metricLabel, valueFormat, forceChart) {
+  if (forceChart === false) return "";
+  // valueFormat === "text" (categorical, e.g. priority-signal severity) is
+  // still skipped even when forceChart === true -- there's no numeric
+  // ranking to plot, "add a chart" can't invent one.
   if (typeof Chart === "undefined" || valueFormat === "text" || rows.length < 2) return "";
   const canvas = document.createElement("canvas");
   canvas.width = 700;
@@ -478,7 +482,7 @@ function askReportChartImg(rows, metricLabel, valueFormat) {
   return `<figure class="report-chart-figure" style="max-width:600px"><img src="${dataUrl}" style="width:100%;height:auto" /></figure>`;
 }
 
-function buildAskGeneratedReportHtml(data, tool, replayed) {
+function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
   const provenance = data.data_provenance || {};
   const generatedAt = new Date().toLocaleString("en-US", {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
@@ -496,7 +500,7 @@ function buildAskGeneratedReportHtml(data, tool, replayed) {
   const tableSection = extracted ? `
     <section class="report-section">
       <h2 class="report-section-title">${askRenderEscapeHtml(extracted.metricLabel)} — full breakdown</h2>
-      ${askReportChartImg(extracted.rows, extracted.metricLabel, extracted.valueFormat)}
+      ${askReportChartImg(extracted.rows, extracted.metricLabel, extracted.valueFormat, options.forceChart)}
       <table class="rpt-context-table">
         <thead><tr><th></th><th>${askRenderEscapeHtml(extracted.metricLabel)}</th><th></th></tr></thead>
         <tbody>${extracted.rows.map((r, i) => `
@@ -605,6 +609,19 @@ function askReportSyntheticStep(data) {
   };
 }
 
+async function fetchAskReportData(step, isRefinement) {
+  const response = await fetch("/api/reports/bot-efficiency/ask/report-data", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question: "", workspace_id: localStorage.getItem("cp_workspace_id") || null,
+      tool: step.tool, args: step.args || {}, is_refinement: !!isRefinement,
+    }),
+  });
+  if (!response.ok) throw new Error(`report-data request failed (${response.status})`);
+  return (await response.json()).result;
+}
+
 async function generateAskReport(cardId, title, data) {
   const lastDataStep = data && Array.isArray(data.query_plan)
     ? [...data.query_plan].reverse().find(step => step.status === "ok" && ASK_REPORT_REPLAYABLE_TOOLS.has(step.tool))
@@ -614,31 +631,118 @@ async function generateAskReport(cardId, title, data) {
     printSection(cardId, title); // nothing worth replaying (a help/product/decision-style answer) -- print the card as-is
     return;
   }
-  let container = document.getElementById(`${cardId}-report`);
-  if (!container) {
-    container = document.createElement("div");
-    container.id = `${cardId}-report`;
-    container.style.display = "none";
-    document.body.appendChild(container);
-  }
   try {
-    const response = await fetch("/api/reports/bot-efficiency/ask/report-data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        question: data.title || "",
-        workspace_id: localStorage.getItem("cp_workspace_id") || null,
-        tool: step.tool,
-        args: step.args || {},
-      }),
-    });
-    if (!response.ok) throw new Error(`report-data request failed (${response.status})`);
-    const payload = await response.json();
-    container.innerHTML = buildAskGeneratedReportHtml(data, step.tool, payload.result);
-    printSection(container.id, title);
+    const result = await fetchAskReportData(step);
+    showAskReportPreview(cardId, title, data, step, result);
   } catch (_err) {
     printSection(cardId, title); // fetch/build failed -- still strictly better than no report at all
   }
+}
+
+// ── Phase 3: conversational report refinement ───────────────────────────────
+// Scoped deliberately narrow: a fixed set of PATTERN-MATCHED refinements
+// that map onto real query_metrics parameters (comparison period, row
+// count, chart on/off) -- never a free-form LLM rewrite of the report.
+// "No LLM-generated numbers" was already the rule for the report's own
+// data; extending that same rule to *how the report gets edited* is the
+// point, not a limitation to hide. An unrecognized request says plainly
+// what IS supported instead of guessing at intent.
+const _askReportPreviewState = new Map(); // keyed by cardId
+
+function askReportParseRefinement(text) {
+  const t = (text || "").toLowerCase();
+  if (/\b(compare|comparison|vs\.?|versus)\b/.test(t)) {
+    if (/\bquarter\b/.test(t)) return { type: "compare", compare_to: "previous_quarter", label: "previous quarter" };
+    if (/\byear\b/.test(t)) return { type: "compare", compare_to: "previous_year", label: "previous year" };
+    if (/\bmonth\b/.test(t)) return { type: "compare", compare_to: "previous_month", label: "previous month" };
+    if (/\b(period|week)\b/.test(t)) return { type: "compare", compare_to: "previous_period", label: "the prior period" };
+  }
+  const topMatch = t.match(/\btop\s*(\d{1,3})\b/) || t.match(/\bshow\s*(\d{1,3})\b/);
+  if (topMatch) return { type: "limit", limit: Math.max(1, Math.min(100, parseInt(topMatch[1], 10))) };
+  if (/\b(remove|hide|no)\b.*\bchart\b/.test(t)) return { type: "chart", show: false };
+  if (/\b(add|show)\b.*\bchart\b/.test(t)) return { type: "chart", show: true };
+  return null;
+}
+
+function askReportApplyRefinementToStep(step, refinement) {
+  const next = { ...step, args: { ...step.args } };
+  if (refinement.type === "compare") next.args.compare_to = refinement.compare_to;
+  if (refinement.type === "limit") next.args.limit = refinement.limit;
+  return next;
+}
+
+async function applyAskReportRefinement(cardId) {
+  const state = _askReportPreviewState.get(cardId);
+  if (!state) return;
+  const input = document.getElementById(`${cardId}-refine-input`);
+  const status = document.getElementById(`${cardId}-refine-status`);
+  const text = input ? input.value.trim() : "";
+  if (!text) return;
+  const refinement = askReportParseRefinement(text);
+  if (!refinement) {
+    if (status) status.textContent = 'Not sure how to apply that. Try: "compare to last month/quarter/year", "top 10", or "remove the chart".';
+    return;
+  }
+  if (status) status.textContent = "Applying…";
+  try {
+    let html;
+    if (refinement.type === "chart") {
+      html = buildAskGeneratedReportHtml(state.data, state.step.tool, state.result, { forceChart: refinement.show });
+      state.forceChart = refinement.show;
+    } else {
+      state.step = askReportApplyRefinementToStep(state.step, refinement);
+      state.result = await fetchAskReportData(state.step, true);
+      html = buildAskGeneratedReportHtml(state.data, state.step.tool, state.result, { forceChart: state.forceChart });
+    }
+    const body = document.getElementById(`${cardId}-preview-body`);
+    if (body) body.innerHTML = html;
+    if (status) status.textContent = "Applied.";
+    if (input) input.value = "";
+  } catch (_err) {
+    if (status) status.textContent = "Could not apply that refinement — the report is unchanged.";
+  }
+}
+
+function closeAskReportPreview(cardId) {
+  const modal = document.getElementById(`${cardId}-preview`);
+  if (modal) modal.remove();
+  _askReportPreviewState.delete(cardId);
+}
+
+function printAskReportPreview(cardId, title) {
+  const body = document.getElementById(`${cardId}-preview-body`);
+  if (!body) return;
+  printSection(body.id, title);
+}
+
+function showAskReportPreview(cardId, title, data, step, result) {
+  closeAskReportPreview(cardId);
+  _askReportPreviewState.set(cardId, { data, step, result, forceChart: undefined });
+  const modal = document.createElement("div");
+  modal.id = `${cardId}-preview`;
+  modal.className = "cp-report-preview-backdrop";
+  modal.innerHTML = `
+    <div class="cp-report-preview-modal">
+      <div class="cp-report-preview-toolbar">
+        <input type="text" id="${cardId}-refine-input" placeholder='Refine this report — e.g. "compare to last month", "top 10", "remove the chart"' />
+        <button type="button" data-ask-report-refine="${cardId}">Apply</button>
+        <button type="button" data-ask-report-print="${cardId}" class="cp-report-preview-print">🖨 Print / Save as PDF</button>
+        <button type="button" data-ask-report-close="${cardId}" class="cp-report-preview-close">✕</button>
+      </div>
+      <div class="cp-report-preview-status" id="${cardId}-refine-status"></div>
+      <div class="cp-report-preview-scroll">
+        <div id="${cardId}-preview-body">${buildAskGeneratedReportHtml(data, step.tool, result)}</div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeAskReportPreview(cardId);
+    if (event.target.closest(`[data-ask-report-close="${cardId}"]`)) closeAskReportPreview(cardId);
+    if (event.target.closest(`[data-ask-report-refine="${cardId}"]`)) applyAskReportRefinement(cardId);
+    if (event.target.closest(`[data-ask-report-print="${cardId}"]`)) printAskReportPreview(cardId, title);
+  });
+  const input = document.getElementById(`${cardId}-refine-input`);
+  if (input) input.addEventListener("keydown", (e) => { if (e.key === "Enter") applyAskReportRefinement(cardId); });
 }
 
 function renderAskAnswerCard(data) {

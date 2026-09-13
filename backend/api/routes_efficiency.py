@@ -4707,6 +4707,7 @@ class AskReportDataRequest(BaseModel):
     tool: str
     args: dict = Field(default_factory=dict)
     timezone_name: Optional[str] = None
+    is_refinement: bool = False
 
 
 @router.post("/ask/report-data")
@@ -4739,10 +4740,18 @@ def ask_costpilot_report_data(
     )
     reporting_filters = _ask_agent_reporting_filters(ask_request)
     report_args = dict(request.args)
-    # Same idea as the chat answer's own row cap, just wider -- a report
-    # table can hold more than 5-20 rows, but this is still a bounded
-    # replay, not "give the client whatever limit it asks for."
-    report_args["limit"] = min(max(int(report_args.get("limit") or 20), 20) * 3, 100)
+    if request.is_refinement:
+        # A Phase 3 refinement ("top 3", "top 50") is an explicit row-count
+        # request from the user, not the chat answer's original top-5/20 --
+        # honor it exactly (still bounded, so it can't be used to bypass
+        # the report-scale cap entirely).
+        report_args["limit"] = min(max(int(report_args.get("limit") or 20), 1), 100)
+    else:
+        # Initial report generation: same idea as the chat answer's own row
+        # cap, just wider -- a report table can hold more than 5-20 rows,
+        # but this is still a bounded replay, not "give the client whatever
+        # limit it asks for."
+        report_args["limit"] = min(max(int(report_args.get("limit") or 20), 20) * 3, 100)
     result = _ask_run_agent_tool(
         request.tool, report_args, db, ask_request, reporting_filters,
         department_scope=department_scope,
