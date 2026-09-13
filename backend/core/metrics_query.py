@@ -663,9 +663,29 @@ def _run_outcome_query(
         .join(WorkItem, WorkItemOutcome.work_item_id == WorkItem.id)
         .outerjoin(WorkAccount, WorkItem.account_id == WorkAccount.id)
     )
-    scope = workspace_filter(WorkItem, workspace_id)
-    if scope is not None:
-        q = q.filter(scope)
+    # workspace_filter() returns None (no filter at all -- every workspace,
+    # unconditionally) when workspace_id is falsy/"default", which does
+    # NOT match _run_activity_query()'s own inline scoping just above: that
+    # query, in the exact same no-workspace-given case, narrows to the
+    # "default"/NULL bucket specifically, not everything. Confirmed live
+    # (2026-09-13): with no workspace selected, this mismatch let
+    # compute_cost_per_outcome() divide a "default"-bucket-only spend
+    # figure by a successful_outcomes count spanning every workspace in
+    # the database, producing a cost-per-outcome off by roughly 15,000x
+    # (a real number like $0.09 rendering as $0.000005). Mirrors
+    # _run_activity_query()'s own default-bucket branch instead of relying
+    # on the shared helper's differently-scoped default.
+    if workspace_id and workspace_id != "default":
+        # Same shape workspace_filter() itself uses for this branch (real
+        # workspace_id column, falling back to the department-prefix match
+        # for legacy rows that predate that column) -- only the no-
+        # workspace-given branch below needed to change.
+        q = q.filter(or_(
+            WorkItem.workspace_id == workspace_id,
+            and_(WorkItem.workspace_id.is_(None), WorkItem.department.like(f"{workspace_id}:%")),
+        ))
+    else:
+        q = q.filter(or_(WorkItem.workspace_id.is_(None), WorkItem.workspace_id == "default"))
     # Synthetic/test outcome events (Universal Connection's "Send Test
     # Event" flow, core/outcome_ingestion.py) must never inflate real
     # business-impact reporting -- same guarantee TokenTransaction.
