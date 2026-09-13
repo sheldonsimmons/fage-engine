@@ -6146,11 +6146,24 @@ def _ask_costpilot_answer(
             "simulation_count": simulation_count,
         }]
     elif intent in {"blocked", "risk_events"}:
+        # Named _governance_* deliberately, NOT live_count/simulation_count
+        # -- confirmed live (2026-09-13 QA pass): reusing those two names
+        # here shadowed the real activity-volume counts (from `summary`,
+        # set well above this branch) for the rest of the function. The
+        # payload's own data_scope/data_provenance computation runs AFTER
+        # this whole if/elif chain and reads whichever live_count/
+        # simulation_count happen to still be bound -- for a period with
+        # thousands of real governed requests but zero risk/audit events,
+        # that produced "scope": "no_activity" and "no live or simulator
+        # requests during this period" for a question like "Are there any
+        # governance gaps I should know about?", flatly contradicting what
+        # an activity/spend question for the same window correctly showed.
+        # Unused anywhere else in this branch -- safe to rename outright.
         (
             governance_events,
             governance_total,
-            live_count,
-            simulation_count,
+            _governance_live_count,
+            _governance_simulation_count,
         ) = _ask_governance_events(db, request, period, intent)
         evidence = _ask_governance_evidence(governance_events, result_limit)
         calculation_row_count = governance_total
@@ -7020,8 +7033,14 @@ def _ask_costpilot_answer(
             calculation_formula = (
                 "Count meaningful audit events grouped by the selected entity"
             )
-            live_count = risk_live
-            simulation_count = risk_simulation
+            # Deliberately NOT reassigning live_count/simulation_count here
+            # -- same bug as the blocked/risk_events branch above (see its
+            # comment): those two names feed the payload's data_scope
+            # computation much later, which must reflect real activity
+            # volume for the period, not the (possibly zero) count of risk
+            # events specifically. risk_live/risk_simulation are already
+            # available under their own names if a future caller needs
+            # them for something risk-event-specific.
         ranked = _ask_rank(ranking_rows, metric, direction)
         # "Who had the highest AI spend this month and compare to last
         # month?" -- comparison_key was already correctly detected (by
