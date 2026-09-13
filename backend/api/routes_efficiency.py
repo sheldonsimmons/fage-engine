@@ -7351,11 +7351,23 @@ def _ask_costpilot_answer(
     # $Y budget, Z% used" sentence anyway, using real (non-fabricated)
     # numbers pulled from two different timeframes, which the numeric-
     # fidelity check can't catch since nothing was invented -- only
-    # juxtaposed confusingly. This specific answer shape is numerically
-    # delicate enough to skip the LLM rewrite step entirely rather than
-    # rely on prompt wording alone, same reasoning as
-    # deterministic_period_contract below.
-    if assistant_mode == "deterministic_period_contract" or (intent == "budget" and budget_scope == "all"):
+    # juxtaposed confusingly.
+    #
+    # Widened from just budget_scope=='all' to the WHOLE budget intent
+    # after confirming live that narrowing it to one scope wasn't enough:
+    # the OpenAI intent-refinement step (assistant_mode="openai_tool_
+    # planner") non-deterministically resolved the SAME question ("What's
+    # our AI spend for the last 2 quarters?") to budget_scope=="status" on
+    # other tries -- a scope whose own deterministic template never
+    # mentions the requested period at all (correctly so; "status" is
+    # inherently month-to-date) -- and the narrator then prepended a "for
+    # the last two quarters" framing pulled from facts["period"] onto that
+    # month-to-date answer anyway, recreating the identical conflation
+    # from a different branch this fix didn't originally cover. Every
+    # budget_scope answer is already clear, self-contained prose; skipping
+    # narration for the whole intent removes this failure mode instead of
+    # chasing it scope by scope.
+    if assistant_mode == "deterministic_period_contract" or intent == "budget":
         narrated_title, narrated_answer, narrated = (
             payload["title"], payload["answer"], False
         )
