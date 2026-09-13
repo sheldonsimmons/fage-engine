@@ -112,7 +112,7 @@ def deregister_agent(db: Session, agent_id: int) -> dict:
     return {"deleted": True, "message": f"Agent '{name}' removed from registry."}
 
 
-def workspace_agent_filter(db: Session, workspace_id: str):
+def workspace_agent_filter(db: Session, workspace_id: str, since=None, until=None):
     """
     Build the WHERE clause for "agents belonging to this workspace" --
     shared by list_agents() and every other endpoint that lists/aggregates
@@ -123,32 +123,46 @@ def workspace_agent_filter(db: Session, workspace_id: str):
     Three clauses, OR'd together, because a single one isn't reliable
     against the real backfilled data:
       - department.like("{workspace_id}:%") -- the normal convention.
-      - RegisteredAgent.workspace_id == workspace_id -- some rows carry
-        the real column instead of (or in addition to) the department
-        prefix.
+        Not date-bounded: a genuinely-tagged agent still belongs to this
+        workspace even if dormant this month -- that's exactly what a
+        caller's own separate "Never Used" stat is supposed to capture,
+        not something this membership check should hide.
+      - RegisteredAgent.workspace_id == workspace_id -- same reasoning,
+        some rows carry the real column instead of (or alongside) the
+        department prefix.
       - id IN (agent_ids seen on this workspace's own TokenTransaction
-        rows) -- confirmed live (2026-09-13): three real agents in the
-        Historical Demo workspace ("Pipeline Coach Agent", "HubSpot
-        Marketing Agent", "ServiceNow Case Agent") have neither a
-        prefixed department NOR a populated workspace_id column on their
-        OWN RegisteredAgent row (a backfill gap), even though their
-        TRANSACTIONS are correctly scoped to this workspace. The first
-        two clauses alone silently dropped all three -- exactly the
-        agent Ask CostPilot (transaction-scoped, like the metrics
-        registry) correctly named as the workspace's #1 by usage. This
-        third clause is the one that actually matches how the metrics
-        registry decides "does this agent belong to this workspace":
-        activity, not the agent's own possibly-incomplete metadata.
+        rows, optionally within [since, until)) -- confirmed live
+        (2026-09-13): three real agents in the Historical Demo workspace
+        ("Pipeline Coach Agent", "HubSpot Marketing Agent", "ServiceNow
+        Case Agent") have neither a prefixed department NOR a populated
+        workspace_id column on their OWN RegisteredAgent row (a backfill
+        gap), even though their TRANSACTIONS are correctly scoped to this
+        workspace -- the first two clauses alone silently dropped all
+        three. Left UNBOUNDED (since/until omitted), this fallback clause
+        over-corrected: it pulled in every agent with a transaction at
+        ANY point across this workspace's full 2-year history (54 agents
+        for a workspace whose real 30-day roster is closer to 10),
+        confirmed live the same day. Callers that ARE asking about a
+        specific window (e.g. get_agent_activity's own date_from/date_to)
+        should pass that same since/until here, so a one-off transaction
+        from 18 months ago in an unrelated demo scenario doesn't count
+        this agent as part of THIS window's roster -- while a genuinely-
+        tagged agent (the first two clauses) still counts regardless, so
+        "registered but currently idle" stays representable.
     """
     from sqlalchemy import or_
     from database.models import TokenTransaction
     from core.workspace_scope import workspace_filter
 
     tx_scope = workspace_filter(TokenTransaction, workspace_id)
-    activity_agent_ids = db.query(TokenTransaction.agent_id).filter(
-        TokenTransaction.agent_id.isnot(None),
-        *([tx_scope] if tx_scope is not None else []),
-    ).distinct()
+    activity_q = db.query(TokenTransaction.agent_id).filter(TokenTransaction.agent_id.isnot(None))
+    if tx_scope is not None:
+        activity_q = activity_q.filter(tx_scope)
+    if since is not None:
+        activity_q = activity_q.filter(TokenTransaction.timestamp >= since)
+    if until is not None:
+        activity_q = activity_q.filter(TokenTransaction.timestamp < until)
+    activity_agent_ids = activity_q.distinct()
     return or_(
         RegisteredAgent.department.like(f"{workspace_id}:%"),
         RegisteredAgent.workspace_id == workspace_id,

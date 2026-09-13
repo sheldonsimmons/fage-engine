@@ -95,7 +95,7 @@ def get_agent_activity(
 
     agent_q = db.query(RegisteredAgent)
     if workspace_id:
-        agent_q = agent_q.filter(workspace_agent_filter(db, workspace_id))
+        agent_q = agent_q.filter(workspace_agent_filter(db, workspace_id, since=since, until=until))
     if include_unused:
         agent_q = agent_q.filter(
             or_(RegisteredAgent.archived == False, RegisteredAgent.archived.is_(None))
