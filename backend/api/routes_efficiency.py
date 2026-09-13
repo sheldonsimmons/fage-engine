@@ -1744,6 +1744,11 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
                 },
                 "period_key": {
                     "type": "string",
+                    "description": (
+                        "\"none\" (a rolling recent window) unless the question literally names a "
+                        "time period. Never guess last_2q/this_year/last_year/same_date_last_year "
+                        "for a question with no period wording at all."
+                    ),
                     "enum": ["none", *sorted(_ASK_PERIOD_KEYS)],
                 },
                 "comparison_key": {
@@ -1804,6 +1809,14 @@ Use total_tokens for token questions, spend_usd for cost/spend, and request_coun
 Choose change_drivers when the user asks why a measured spend, cost, token, request, or usage value
 changed, increased, decreased, spiked, or dropped. This selects deterministic contribution analysis;
 never invent a business cause.
+Default period_key to "none" (a rolling recent window) whenever the question does not literally name
+a time period. Do not guess a specific quarter, half-year, or year range ("last_2q", "this_year",
+"last_year", "same_date_last_year") for a question with no time-period wording at all, such as "show
+me recent risk events" or "what are we spending on AI" -- confirmed live that guessing among these
+produced a different, wildly larger time window on some requests than others for the exact same
+question, sometimes finding zero results in an old, empty period while the same request moments
+earlier correctly covered current activity. Only choose a specific dated period_key when the question
+itself contains real period language ("this quarter", "last year", "in 2025").
 Choose comparison with comparison_key same_period_previous_year for year-over-year, same-period-last-year,
 "around this time last year", and year-to-date versus last-year questions. Choose previous_period for an
 immediately preceding equal-length comparison. Never invent date boundaries; the server resolves them.
@@ -4455,6 +4468,12 @@ spend, so a named entity may not appear there even though it exists — always r
 named_entity_match field for a named-entity question, and never answer it with the overall
 total or say the entity had no usage just because it is missing from a top_* list.
 Call get_change_drivers for questions about why a number changed, increased, or decreased.
+When any tool call takes a period_key argument, default to "none" (a rolling recent window) unless
+the question literally names a time period. Never guess a specific quarter/half-year/year range
+(last_2q, this_year, last_year) for a question with no period wording at all, such as "show me
+recent risk events" or "what are we spending on AI" -- confirmed live that guessing among these
+produced a wildly different, sometimes much older and emptier, time window across otherwise
+identical requests for the exact same question.
 Call get_budget_status for budget, cap, or "on track" questions.
 Call get_agent_adoption for questions about which AGENTS (AI bots/automations, e.g. "Sensor
 Summary Agent") are active, inactive, unused, never used, or recently quiet. get_usage_report
@@ -7261,10 +7280,23 @@ def _ask_costpilot_answer(
         saved_tokens = int(summary.get("tokens_saved") or 0)
         top_agents = _ask_rank(report.get("agent_breakdown") or [], "spend_usd")
         title = "Cost-saving opportunities"
-        estimated_pruning_savings = (
-            saved_tokens * total_spend / int(summary.get("total_tokens") or 0)
-            if int(summary.get("total_tokens") or 0) > 0 else 0.0
-        )
+        # Was saved_tokens * total_spend / total_tokens -- a blended
+        # average $/token rate across every request in scope (a mix of
+        # micro and flagship pricing), not what a pruned token actually
+        # would have cost. Confirmed live (2026-09-13): for the identical
+        # ~1.41M pruned tokens, this produced $11.69 while the Savings &
+        # Performance report (the tested, cross-checked source of truth --
+        # see test_reports_metrics_registry_agreement.py) produced $4.25
+        # for the same fact, using tokens_saved * FLAGSHIP_INPUT_COST --
+        # pricing a pruned token at what it would have cost had it reached
+        # the model, which for CostPilot's pruning step is always the
+        # flagship rate (pruning happens before routing/downgrade
+        # decisions). Reusing that exact constant instead of re-deriving a
+        # workspace-average rate guarantees this answer and that report
+        # can no longer disagree about the same underlying fact.
+        from core.metrics_query import FLAGSHIP_INPUT_COST
+
+        estimated_pruning_savings = saved_tokens * FLAGSHIP_INPUT_COST
         period_days = max(1, int(parsed.get("days") or 30))
         projected_annual = estimated_pruning_savings * 365 / period_days
         answer = (

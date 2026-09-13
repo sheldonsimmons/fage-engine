@@ -41,7 +41,7 @@ TOOL_SCHEMAS = [
                         "this_month", "last_month", "this_quarter", "last_quarter", "last_2q",
                         "this_year", "last_year", "all_time",
                     ],
-                    "description": "A named calendar period. 'last_2q' is a single combined window spanning the last 2 full quarters. Use 'none' to fall back to a rolling `days` window.",
+                    "description": "A named calendar period. Default to 'none' (a rolling recent window) unless the question literally names a time period -- never guess last_2q/this_year/last_year for a question with no period wording at all. 'last_2q' is a single combined window spanning the last 2 full quarters.",
                 },
                 "entity_name": {
                     "type": "string",
@@ -109,6 +109,11 @@ TOOL_SCHEMAS = [
                 "days": {"type": "integer", "description": "Length of the primary period in days."},
                 "period_key": {
                     "type": "string",
+                    "description": (
+                        "Default to 'none' (a rolling recent window) unless the question literally "
+                        "names a time period -- never guess this_year/this_quarter for a question "
+                        "with no period wording at all."
+                    ),
                     "enum": [
                         "none", "today", "this_week", "this_month", "this_quarter", "this_year",
                     ],
@@ -237,7 +242,7 @@ TOOL_SCHEMAS = [
                         "this_month", "last_month", "this_quarter", "last_quarter", "last_2q",
                         "this_year", "last_year", "all_time",
                     ],
-                    "description": "A named calendar period defining 'this period'. 'last_2q' is a single combined window spanning the last 2 full quarters. Use 'none' to fall back to a rolling `days` window.",
+                    "description": "A named calendar period defining 'this period'. Default to 'none' (a rolling recent window) unless the question literally names a time period -- never guess last_2q/this_year/last_year for a question with no period wording at all. 'last_2q' is a single combined window spanning the last 2 full quarters.",
                 },
             },
             "required": ["status", "usage_threshold", "days", "period_key"],
@@ -407,7 +412,7 @@ TOOL_SCHEMAS = [
                         "this_month", "last_month", "this_quarter", "last_quarter", "last_2q",
                         "this_year", "last_year", "all_time",
                     ],
-                    "description": "A named calendar period. 'last_2q' is a single combined window spanning the last 2 full quarters (distinct from setting compare_to to compare one quarter against the prior one). Use 'none' to fall back to a rolling `days` window. Ignored for outcome-only metric requests, which are not time-windowed.",
+                    "description": "A named calendar period. Default to 'none' (a rolling recent window) unless the question literally names a time period -- never guess last_2q/this_year/last_year for a question with no period wording at all. 'last_2q' is a single combined window spanning the last 2 full quarters (distinct from setting compare_to to compare one quarter against the prior one). Ignored for outcome-only metric requests, which are not time-windowed.",
                 },
                 "compare_to": {
                     "type": "string",
