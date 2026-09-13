@@ -160,18 +160,27 @@ function printSection(sectionId, title) {
   });
   document.body.appendChild(overlay);
   document.body.classList.add("printing");
-  // Cleanup is deferred to the browser's own "afterprint" event, not run
-  // synchronously right after window.print() returns. Confirmed live: a
-  // real "Save as PDF" export came back completely blank -- PDF generation
-  // for that path happens asynchronously after the print dialog closes,
-  // and the overlay had already been removed by the time Chrome actually
-  // read the DOM to build the file. A live print preview (and every
-  // mocked-window.print() check used to verify these reports) looks fine
-  // regardless, because both read the DOM before this ever ran -- this
-  // bug is invisible until someone actually saves the file. The timeout
-  // is a safety net for any export path that never fires afterprint at
-  // all, so the overlay (and the "printing" class hiding the live app)
-  // can't get stuck indefinitely.
+  // Cleanup is deferred, not run synchronously right after window.print()
+  // returns. Confirmed live: a real "Save as PDF" export came back
+  // completely blank -- PDF generation for that path happens
+  // asynchronously after the print dialog closes, and the overlay had
+  // already been removed by the time Chrome actually read the DOM to
+  // build the file. A live print preview (and every mocked-window.print()
+  // check used to verify these reports) looks fine regardless, since both
+  // read the DOM before this ever ran -- this bug is invisible until
+  // someone actually saves the file.
+  //
+  // "afterprint" alone isn't trustworthy here either: on macOS, choosing
+  // "Save as PDF" from the print dialog's PDF menu closes that dialog
+  // (firing afterprint) and THEN opens a separate native file-save sheet
+  // -- afterprint can fire before that second sheet is dismissed and the
+  // file is actually written, still cleaning up too early. window regaining
+  // focus is the more reliable signal: both the print dialog and the save
+  // sheet are OS-level modals that blur the browser window for their
+  // entire duration, so focus only returns once the whole sequence -- print
+  // dialog AND any save sheet -- has actually finished. Kept afterprint too
+  // (fires first in flows with no save sheet, e.g. a physical printer) and
+  // a generous fallback timeout in case neither ever fires.
   let cleanedUp = false;
   const cleanup = () => {
     if (cleanedUp) return;
@@ -180,8 +189,10 @@ function printSection(sectionId, title) {
     overlay.remove();
     document.title = prev;
     window.removeEventListener("afterprint", cleanup);
+    window.removeEventListener("focus", cleanup);
   };
   window.addEventListener("afterprint", cleanup);
-  setTimeout(cleanup, 5000);
+  window.addEventListener("focus", cleanup);
+  setTimeout(cleanup, 120000);
   window.print();
 }
