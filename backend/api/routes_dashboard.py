@@ -295,7 +295,18 @@ def get_dashboard(
     # ── Governance & Compliance stats ─────────────────────────────────────────
     blocked_count      = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.decision_outcome.ilike("%blocked%"))).scalar() or 0
     escalated_count    = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type == "ESCALATED")).scalar() or 0
-    flagged_count      = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope)).scalar() or 0
+    # Confirmed live (2026-09-13) via the redesigned Governance & Risk
+    # report: this had no risk-level condition at all -- it counted every
+    # single audit event matching the base scope, unconditionally, despite
+    # every consumer's own label calling it "flagged"/"incidents"/"high-
+    # risk keywords logged for compliance review" (frontend/js/reports.js,
+    # dashboard.js, live-landing.html). That let it exceed the report's own
+    # total_events figure (a mathematical impossibility for a claimed
+    # subset) whenever most events were ordinary low-risk routing
+    # decisions. risk_level in (high, critical) matches routes_reports.py's
+    # own critical/high definitions exactly, the same field this report's
+    # sibling "Critical"/"High Risk" KPI cards already use.
+    flagged_count      = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.risk_level.in_(["high", "critical"]))).scalar() or 0
     pii_count          = db.query(func.count(AuditEvent.id)).filter(*_filters(audit_scope, AuditEvent.event_type.ilike("%PII%"))).scalar()  or 0
     throttle_prevented = db.query(func.count(AuditEvent.id)).filter(
         *_filters(

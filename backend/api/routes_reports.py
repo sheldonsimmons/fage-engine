@@ -385,6 +385,10 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
                                     "total_cost_usd": 0.0, "tokens_pruned": 0, "pruning_saved_usd": 0.0})
         budget = budgets.get(d)
         calls  = data["total_calls"]
+        budget_used_pct = (
+            round((budget.current_spend_usd / budget.monthly_cap_usd * 100), 1)
+            if budget and budget.monthly_cap_usd > 0 else 0
+        )
         scorecards.append({
             "department":        d,
             "display_department": display_department(d),
@@ -397,9 +401,21 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
             "pruning_saved_usd": data["pruning_saved_usd"],
             "monthly_cap_usd":   budget.monthly_cap_usd   if budget else 0,
             "current_spend_usd": round(budget.current_spend_usd, 6) if budget else 0,
-            "budget_used_pct":   round((budget.current_spend_usd / budget.monthly_cap_usd * 100), 1)
-                                  if budget and budget.monthly_cap_usd > 0 else 0,
-            "throttled":         budget.throttled         if budget else False,
+            "budget_used_pct":   budget_used_pct,
+            # Derived from the SAME budget_used_pct just computed above,
+            # not the stored budget.throttled column -- confirmed live
+            # (2026-09-13): the redesigned Department Report showed
+            # Marketing as "Throttled" at only 59.9% budget used, because
+            # the stored column reflects whatever spend figure last
+            # triggered enforcement (potentially a different, drifted
+            # total -- core/budget.py's own get_all_budgets() already
+            # documents this exact "current_spend_usd can drift from the
+            # real recomputed total" failure mode and recomputes fresh
+            # for that reason), while this row's own budget_used_pct is
+            # computed fresh right here. Two numbers describing the same
+            # thing must come from the same calculation or they will
+            # eventually disagree exactly like this.
+            "throttled":         bool(budget and budget_used_pct >= 100 and not budget.override_granted),
             "override_granted":  budget.override_granted  if budget else False,
         })
 
