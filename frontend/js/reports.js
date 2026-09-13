@@ -1183,12 +1183,12 @@ function supportBriefingModelMixBars(modelMixByAgent) {
   return `<div class="rpt-stackbar-chart"><div class="rpt-stackbar-legend">${legend}</div>${rows}</div>`;
 }
 
-function supportBriefingOutcomeChart(resolved, unresolved) {
+function supportBriefingOutcomeChart(resolved, unresolved, labels) {
   if (!resolved && !unresolved) return "";
   return reportChartImg({
     type: "doughnut",
     data: {
-      labels: ["Resolved", "Unresolved"],
+      labels: [labels.resolved, labels.unresolved],
       datasets: [{ data: [resolved, unresolved], backgroundColor: [REPORT_CHART_PALETTE[0], "#c9ccd1"], borderWidth: 0 }],
     },
     options: {
@@ -1206,6 +1206,16 @@ function renderSupportBriefingReportHtml(data) {
   const department = data.department || "Support";
   const reportTitle = `${department} AI Cost Increase Analysis`;
   const evidenceByKpi = data.evidence_by_kpi || {};
+  // Backend picks Won/Lost (Opportunity-driven departments, e.g. Sales)
+  // vs Resolved/Unresolved (Support-like departments) based on what kind
+  // of work this department's AI spend actually touches -- see
+  // get_support_cost_briefing's outcome_labels comment. Falls back to the
+  // original Resolved/Unresolved wording for any response predating this.
+  const outcomeLabels = data.outcome_labels || {
+    resolved: "Resolved", unresolved: "Unresolved", rate_label: "Resolution Rate",
+    cost_per_label: "Cost per Resolution", section_title: "Resolved vs. Unresolved Cases",
+    unit_noun: "case", unit_noun_plural: "cases",
+  };
   const changePositive = k.pct_change != null && k.pct_change < 0; // a cost DECREASE is the "good" direction
   const changeLabel = k.pct_change == null ? "—" : `${Math.abs(k.pct_change)}% vs prior period`;
 
@@ -1253,7 +1263,7 @@ function renderSupportBriefingReportHtml(data) {
           ${reportKpiCardPremium("dollarCircle", "blue", "AI Investment", fmtUsd(k.ai_investment_usd), `vs ${fmtUsd(k.prior_period_usd)} prior period`, null)}
           ${reportKpiCardPremium(changePositive ? "savingsArrow" : "barChart", changePositive ? "green" : "red", "Change vs Prior Period", changeLabel, null, k.pct_change == null ? null : { text: changeLabel, positive: changePositive })}
           ${reportKpiCardPremium("target", "purple", "Savings Opportunity", k.savings_opportunity_usd != null ? fmtUsd(k.savings_opportunity_usd) : "—", "workspace-wide model-routing estimate", null)}
-          ${reportKpiCardPremium("checkTarget", "green", "Cost per Resolution", k.cost_per_resolution_usd != null ? fmtUsd(k.cost_per_resolution_usd) : "—", evidenceByKpi.cost_per_resolution_usd ? `<span class="bi-evidence-tag ${evidenceByKpi.cost_per_resolution_usd}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.cost_per_resolution_usd] || evidenceByKpi.cost_per_resolution_usd)}</span>` : null, null)}
+          ${reportKpiCardPremium("checkTarget", "green", outcomeLabels.cost_per_label, k.cost_per_resolution_usd != null ? fmtUsd(k.cost_per_resolution_usd) : "—", evidenceByKpi.cost_per_resolution_usd ? `<span class="bi-evidence-tag ${evidenceByKpi.cost_per_resolution_usd}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.cost_per_resolution_usd] || evidenceByKpi.cost_per_resolution_usd)}</span>` : null, null)}
           ${reportKpiCardPremium("document", "blue", "Outcome Coverage", k.outcome_coverage_pct != null ? `${k.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct ? `<span class="bi-evidence-tag ${evidenceByKpi.outcome_coverage_pct}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.outcome_coverage_pct] || evidenceByKpi.outcome_coverage_pct)}</span>` : null, null)}
         </div>
       </section>
@@ -1278,15 +1288,15 @@ function renderSupportBriefingReportHtml(data) {
       </section>
 
       <section class="report-section rpt-outcome-section" style="break-inside:avoid">
-        <h2 class="report-section-title">Resolved vs. Unresolved Cases</h2>
+        <h2 class="report-section-title">${escapeHtml(outcomeLabels.section_title)}</h2>
         <div class="rpt-outcome-grid">
-          ${supportBriefingOutcomeChart(k.resolved_cases, k.unresolved_cases) || `<p class="bi-note">No case outcome data in this period.</p>`}
+          ${supportBriefingOutcomeChart(k.resolved_cases, k.unresolved_cases, outcomeLabels) || `<p class="bi-note">No ${escapeHtml(outcomeLabels.unit_noun)} outcome data in this period.</p>`}
           ${resolutionRatePct != null ? `
             <div class="rpt-scorecard">
               ${reportIconBadge("checkTarget", "green")}
               <div class="rpt-scorecard-value">${resolutionRatePct}%</div>
-              <div class="rpt-scorecard-label">Resolution Rate</div>
-              <div class="rpt-scorecard-sub">${fmtNum(k.resolved_cases)} of ${fmtNum(k.resolved_cases + k.unresolved_cases)} cases resolved</div>
+              <div class="rpt-scorecard-label">${escapeHtml(outcomeLabels.rate_label)}</div>
+              <div class="rpt-scorecard-sub">${fmtNum(k.resolved_cases)} of ${fmtNum(k.resolved_cases + k.unresolved_cases)} ${escapeHtml(outcomeLabels.unit_noun_plural)} ${escapeHtml(outcomeLabels.resolved.toLowerCase())}</div>
             </div>` : ""}
         </div>
       </section>

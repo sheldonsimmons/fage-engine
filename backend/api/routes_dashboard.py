@@ -1592,27 +1592,8 @@ def get_support_cost_briefing(
         for agent, _ in top_agents
     ]
 
-    # Resolved/unresolved + cost per resolution, scoped to the same
-    # department population as everything else above (NOT
-    # get_business_impact()'s context_type-scoped definition -- see this
-    # endpoint's own docstring for why that would disagree with the rest
-    # of this report).
-    resolved_n, resolved_spend = _base_query().join(
-        WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id,
-    ).filter(
-        WorkItemOutcome.is_closed.is_(True), TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
-    ).with_entities(
-        func.count(func.distinct(WorkItem.id)), func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
-    ).first() or (0, 0.0)
-    total_cases_n = _base_query().filter(
-        TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
-    ).with_entities(func.count(func.distinct(WorkItem.id))).scalar() or 0
-    resolved_n = int(resolved_n or 0)
-    unresolved_n = max(int(total_cases_n) - resolved_n, 0)
-    cost_per_resolution_usd = round(float(resolved_spend or 0.0) / resolved_n, 6) if resolved_n else None
-
     # Filters out None explicitly -- unlike the COUNT(DISTINCT ...)
-    # aggregates above, a plain SELECT DISTINCT does not drop NULL rows on
+    # aggregates below, a plain SELECT DISTINCT does not drop NULL rows on
     # its own, and _base_query()'s outer join means a department
     # transaction with no linked WorkItem produces exactly that NULL row.
     touched_ids = [
@@ -1621,6 +1602,76 @@ def get_support_cost_briefing(
         ).with_entities(WorkItem.id).distinct().all()
         if row[0] is not None
     ]
+
+    # What "resolved" means depends on what kind of work this department's
+    # AI spend actually touches -- a Sales department's AI-touched work is
+    # Salesforce Opportunities, where "is this working" means WON vs LOST
+    # (WorkItemOutcome.outcome_success), not merely closed (an Opportunity
+    # can close as a loss). A Support department's AI-touched work is
+    # cases/tickets, where is_closed IS the meaningful resolved/unresolved
+    # split -- there's no separate "won"/"lost" concept for a case. Reuses
+    # get_business_impact()'s own is_won/is_lost definitions (same file,
+    # ~line 1041) so this report and Business Impact never disagree about
+    # what counts as a won Opportunity. Dominant context_type is majority-
+    # vote over this department's own touched work items, not a fixed
+    # per-department assumption -- a department could plausibly touch a
+    # mix, and this picks whichever shape actually describes most of it.
+    context_type_counts = dict(
+        db.query(WorkItem.context_type, func.count(WorkItem.id))
+        .filter(WorkItem.id.in_(touched_ids))
+        .group_by(WorkItem.context_type)
+        .all()
+    ) if touched_ids else {}
+    dominant_context_type = max(context_type_counts, key=context_type_counts.get) if context_type_counts else None
+    is_opportunity_dept = dominant_context_type == "opportunity"
+
+    if is_opportunity_dept:
+        is_won = WorkItemOutcome.outcome_success.is_(True)
+        is_lost = and_(WorkItemOutcome.outcome_success.is_(False), WorkItemOutcome.is_closed.is_(True))
+        resolved_n, resolved_spend = _base_query().join(
+            WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id,
+        ).filter(
+            is_won, TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
+        ).with_entities(
+            func.count(func.distinct(WorkItem.id)), func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        ).first() or (0, 0.0)
+        unresolved_n = _base_query().join(
+            WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id,
+        ).filter(
+            is_lost, TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
+        ).with_entities(func.count(func.distinct(WorkItem.id))).scalar() or 0
+        # Denominator is closed opportunities (won + lost) only, NOT every
+        # touched work item -- an opportunity still open in the pipeline
+        # has no outcome yet, so counting it as "unresolved" alongside a
+        # genuinely lost one would conflate "not decided yet" with "AI
+        # spend that didn't pay off," understating the win rate.
+        total_cases_n = resolved_n + unresolved_n
+        outcome_labels = {
+            "resolved": "Won", "unresolved": "Lost", "rate_label": "Win Rate",
+            "cost_per_label": "Cost per Won Opportunity", "section_title": "Won vs. Lost Opportunities",
+            "unit_noun": "opportunity", "unit_noun_plural": "opportunities",
+        }
+    else:
+        resolved_n, resolved_spend = _base_query().join(
+            WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id,
+        ).filter(
+            WorkItemOutcome.is_closed.is_(True), TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
+        ).with_entities(
+            func.count(func.distinct(WorkItem.id)), func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        ).first() or (0, 0.0)
+        total_cases_n = _base_query().filter(
+            TokenTransaction.timestamp >= start, TokenTransaction.timestamp < now,
+        ).with_entities(func.count(func.distinct(WorkItem.id))).scalar() or 0
+        unresolved_n = max(int(total_cases_n) - int(resolved_n or 0), 0)
+        outcome_labels = {
+            "resolved": "Resolved", "unresolved": "Unresolved", "rate_label": "Resolution Rate",
+            "cost_per_label": "Cost per Resolution", "section_title": "Resolved vs. Unresolved Cases",
+            "unit_noun": "case", "unit_noun_plural": "cases",
+        }
+    resolved_n = int(resolved_n or 0)
+    unresolved_n = int(unresolved_n or 0)
+    cost_per_resolution_usd = round(float(resolved_spend or 0.0) / resolved_n, 6) if resolved_n else None
+
     outcomes_with_data = (
         db.query(func.count(func.distinct(WorkItemOutcome.work_item_id)))
         .filter(WorkItemOutcome.work_item_id.in_(touched_ids), WorkItemOutcome.is_simulation.isnot(True))
@@ -1640,18 +1691,18 @@ def get_support_cost_briefing(
     findings = []
     if pct_change is not None:
         direction = "increased" if pct_change >= 0 else "decreased"
-        findings.append(f"Support AI spend {direction} {abs(pct_change):.0f}% vs. the prior {days} days.")
+        findings.append(f"{department} AI spend {direction} {abs(pct_change):.0f}% vs. the prior {days} days.")
     if top_agents:
         top2 = ", ".join(a for a, _ in top_agents[:2])
-        findings.append(f"{top2} account{'s' if len(top_agents[:2]) > 1 else ''} for the largest share of support spend.")
+        findings.append(f"{top2} account{'s' if len(top_agents[:2]) > 1 else ''} for the largest share of {department.lower()} spend.")
     premium_share = None
     total_tier_spend = sum(sum(row[t] for t in _BRIEFING_TIER_LABELS) for row in model_mix_by_agent)
     if total_tier_spend:
         premium_spend = sum(row["Advisor"] + row["Strategist"] for row in model_mix_by_agent)
         premium_share = round(100.0 * premium_spend / total_tier_spend, 0)
-        findings.append(f"Premium-tier models (Advisor/Strategist) account for {premium_share:.0f}% of support spend in this period.")
+        findings.append(f"Premium-tier models (Advisor/Strategist) account for {premium_share:.0f}% of {department.lower()} spend in this period.")
     if resolved_n or unresolved_n:
-        findings.append(f"{resolved_n:,} support cases resolved vs. {unresolved_n:,} unresolved during this period.")
+        findings.append(f"{resolved_n:,} {outcome_labels['unit_noun_plural']} {outcome_labels['resolved'].lower()} vs. {unresolved_n:,} {outcome_labels['unresolved'].lower()} during this period.")
     if potential_savings.get("potential_savings_usd"):
         findings.append(f"An estimated ${potential_savings['potential_savings_usd']:,.0f} in model-routing savings is available workspace-wide.")
 
@@ -1673,9 +1724,10 @@ def get_support_cost_briefing(
             "outcome_coverage_pct": outcome_coverage_pct,
         },
         "evidence_by_kpi": {
-            "cost_per_resolution_usd": evidence_for_sample(resolved_n, noun="resolved support items")["evidence_label"],
-            "outcome_coverage_pct": evidence_for_sample(len(touched_ids), noun="AI-touched cases")["evidence_label"],
+            "cost_per_resolution_usd": evidence_for_sample(resolved_n, noun=f"{outcome_labels['resolved'].lower()} {outcome_labels['unit_noun_plural']}")["evidence_label"],
+            "outcome_coverage_pct": evidence_for_sample(len(touched_ids), noun=f"AI-touched {outcome_labels['unit_noun_plural']}")["evidence_label"],
         },
+        "outcome_labels": outcome_labels,
         "spend_trend": spend_trend,
         "top_agents": [{"agent": a, "spend_usd": s} for a, s in top_agents],
         "model_mix_by_agent": model_mix_by_agent,
