@@ -425,12 +425,37 @@ function askReportRowsFromResult(tool, result) {
   }
   if (tool === "query_metrics" && Array.isArray(result.rows)) {
     const metricKey = (result.metrics && result.metrics[0]) || Object.keys(result.rows[0] || {}).find(k => k !== "dimensions" && k !== "dimension_ids");
+    const valueFormat = metricKey && metricKey.toLowerCase().includes("spend") ? "usd" : "num";
+    // A "compare to X" refinement re-fetches with compare_to set, and the
+    // backend (core/metrics_query.py's comparison_block) comes back with a
+    // SEPARATE comparison.rows array keyed by dimension label, not merged
+    // into result.rows -- without this, the refinement silently changed
+    // nothing visible (confirmed live: status said "Applied.", output was
+    // byte-identical). Match by label and fold the prior-period delta into
+    // each row's caption.
+    let compareByLabel = null;
+    if (result.comparison && Array.isArray(result.comparison.rows)) {
+      compareByLabel = new Map();
+      result.comparison.rows.forEach(cr => {
+        const label = Object.values(cr.dimensions || {})[0] ?? "Unknown";
+        const m = cr[metricKey];
+        if (m) compareByLabel.set(label, m);
+      });
+    }
     return {
-      metricLabel: metricKey || "Value", valueFormat: metricKey && metricKey.toLowerCase().includes("spend") ? "usd" : "num",
-      rows: result.rows.map(r => ({
-        label: Object.values(r.dimensions || {})[0] ?? "Unknown",
-        value: Number(r[metricKey] || 0),
-      })),
+      metricLabel: metricKey || "Value", valueFormat,
+      rows: result.rows.map(r => {
+        const label = Object.values(r.dimensions || {})[0] ?? "Unknown";
+        let sub = "";
+        const cmp = compareByLabel && compareByLabel.get(label);
+        if (cmp) {
+          const prevFmt = askReportFormatValue(cmp.previous, valueFormat);
+          const pct = cmp.pct_difference;
+          const arrow = cmp.difference > 0 ? "▲" : cmp.difference < 0 ? "▼" : "—";
+          sub = `vs ${prevFmt} prior period ${arrow}${pct != null ? ` ${Math.abs(pct)}%` : ""}`;
+        }
+        return { label, value: Number(r[metricKey] || 0), sub };
+      }),
     };
   }
   return null;
