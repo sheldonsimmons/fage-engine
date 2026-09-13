@@ -4153,10 +4153,24 @@ def _ask_agent_final_payload(
         if tool_name == "get_change_drivers" and call_args.get("metric") == "spend_usd":
             report_department = call_args.get("department")
             if report_department:
+                # call_args["days"] is what the model requested, not what
+                # period_key actually resolved to (e.g. period_key=
+                # "this_month" ignores days and resolves to however many
+                # days have elapsed this calendar month) -- confirmed live
+                # (2026-09-13) this produced a report whose 30-day trailing
+                # window told a different story (Sales spend DOWN 4.2%)
+                # than the 13-day "this month so far" window the chat
+                # answer had just described (Sales spend UP 40%). The tool
+                # result's own resolved period.days is the real window.
+                resolved_days = (
+                    (_result or {}).get("period", {}).get("days")
+                    or call_args.get("days")
+                    or 30
+                )
                 payload["report_action"] = {
                     "report_id": "support_briefing",
                     "label": f"View Full {report_department} Cost Briefing",
-                    "params": {"department": report_department, "days": call_args.get("days") or 30},
+                    "params": {"department": report_department, "days": resolved_days},
                 }
 
     try:
@@ -7318,10 +7332,26 @@ def _ask_costpilot_answer(
     if intent == "change_drivers" and metric in {"spend_usd", "avg_cost_per_request"}:
         report_department = reporting_filters.get("charged_unit")
         if report_department:
+            # parsed["days"] is the raw requested length, not what the
+            # period actually resolved to -- confirmed live (2026-09-13)
+            # this question's own period_label read "Sep 1 - Sep 13" (13
+            # elapsed days of the current month) while parsed["days"] was
+            # 31, so the linked report opened a 30-day trailing window
+            # instead of matching the 13-day window the chat answer just
+            # described -- same-looking question, two different stories.
+            # plan_contract["primary"] (set above, unconditionally, for
+            # every change_drivers answer) carries the real resolved
+            # start/end, so derive the day count from that instead.
+            try:
+                _primary_start = datetime.fromisoformat(plan_contract["primary"]["start"])
+                _primary_end = datetime.fromisoformat(plan_contract["primary"]["end"])
+                report_days = max(1, (_primary_end - _primary_start).days)
+            except (KeyError, ValueError, TypeError):
+                report_days = parsed["days"]
             report_action = {
                 "report_id": "support_briefing",
                 "label": f"View Full {report_department} Cost Briefing",
-                "params": {"department": report_department, "days": parsed["days"]},
+                "params": {"department": report_department, "days": report_days},
             }
 
     payload = {
