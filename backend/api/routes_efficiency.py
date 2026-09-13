@@ -1055,6 +1055,18 @@ def _ask_intent(question: str, default_days: int) -> dict:
             # enough to route here directly regardless of entity.
             or re.search(r"\b(?:show|give)\s+me\b.*\bbusiness\s+outcomes?\b", text)
             or re.search(r"\bbusiness\s+outcomes?\b.*\bfor\s+this\b", text)
+            # "Is our AI spend actually connected to real business
+            # outcomes?" -- confirmed live (2026-09-13), reproduced on 3/3
+            # trials: matched neither pattern above ("connected" isn't a
+            # help/drive/improve-family word, so the first clause's word
+            # list missed it) and didn't classify as entity=="context"
+            # either (no project/opportunity/deal word), so this fell all
+            # the way through to the OpenAI planner, which misclassified
+            # it as intent="decision" (the single-governed-request
+            # "why did CostPilot make this technical routing decision"
+            # branch, wrong for a general business-value question) and
+            # produced a dead-end contract rejection instead of an answer.
+            or re.search(r"\b(?:connected|tied|linked)\s+to\b.*\boutcomes?\b", text)
         )
     )
 
@@ -1820,6 +1832,14 @@ itself contains real period language ("this quarter", "last year", "in 2025").
 Choose comparison with comparison_key same_period_previous_year for year-over-year, same-period-last-year,
 "around this time last year", and year-to-date versus last-year questions. Choose previous_period for an
 immediately preceding equal-length comparison. Never invent date boundaries; the server resolves them.
+Choose decision ONLY when the user asks why CostPilot made a specific technical routing/policy
+decision for one already-identified request or audit event (e.g. "why was this request routed to
+the Advisor model", "why was this one blocked"). Never choose decision for a general question about
+business value, ROI, or whether AI spend is connected to business outcomes overall -- confirmed live
+that "is our AI spend actually connected to real business outcomes?" was wrongly classified as
+decision (which requires one specific request to explain) and produced a dead-end instead of an
+answer. A general "is it working" / "is it connected to outcomes" question is an overview or
+outcomes question, never decision.
 Choose agent_adoption when the user asks what agents have been built, whether they are being used,
 or asks for unused, never-used, inactive, low-usage, or active agents. Use usage_status never for
 agents with no governed activity ever; recently_inactive for agents with history but no activity in
