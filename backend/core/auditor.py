@@ -194,6 +194,50 @@ def _build_rationale(
             f"Future requests will follow the department throttle policy."
         )
 
+    # Human supervisor actions on a department's budget configuration --
+    # distinct from the automated per-request ROUTING decisions the
+    # default case below describes. Without these, "Show recent
+    # budget-cap decisions" (routes_efficiency.py's decision_history_
+    # question branch, which now correctly restricts to event_type
+    # BUDGET/GOVERNANCE) still surfaced the generic "ROUTINE REQUEST --
+    # Scout selected for <department>. Monthly cap set to $X." text below,
+    # which reads as a garbled hybrid of an ordinary routing decision and
+    # a cap change. Confirmed live 2026-09-13.
+    if routing_decision == "BUDGET_CAP_SET":
+        return (
+            f"BUDGET CAP UPDATED for {department} department. "
+            f"{routing_reason}. Budget position at time of change: "
+            f"{used_pct}% used (${spent} of ${cap}). "
+            f"This action is logged for compliance review."
+        )
+
+    if routing_decision == "BUDGET_PERIOD_RESET":
+        return (
+            f"BUDGET PERIOD RESET for {department} department. "
+            f"{routing_reason}. This action is logged for compliance review."
+        )
+
+    if routing_decision in ("BUDGET_DEPARTMENT_ARCHIVED", "BUDGET_DEPARTMENT_RESTORED"):
+        action = "archived from" if routing_decision == "BUDGET_DEPARTMENT_ARCHIVED" else "restored to"
+        return (
+            f"BUDGET VIEW CHANGED for {department} department -- {action} default budget views. "
+            f"{routing_reason}. This action is logged for compliance review."
+        )
+
+    if routing_decision == "BUDGET_THROTTLE_TIER_SET":
+        return (
+            f"THROTTLE CEILING UPDATED for {department} department. "
+            f"{routing_reason}. Budget position at time of change: "
+            f"{used_pct}% used (${spent} of ${cap}). "
+            f"This action is logged for compliance review."
+        )
+
+    if routing_decision == "BUDGET_RAW_LOGGING_SET":
+        return (
+            f"RAW PAYLOAD LOGGING SETTING CHANGED for {department} department. "
+            f"{routing_reason}. This action is logged for compliance review."
+        )
+
     # ROUTINE — keep the default view concise. The context snapshot retains
     # the complete budget, routing, retention, and evidence fields.
     tier_label = model_tier or "Scout"
