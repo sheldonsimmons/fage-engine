@@ -50,6 +50,23 @@ from core.metrics_query import (
 
 router = APIRouter()
 
+# Emergency memory safety valve (added after a live production R14/OOM
+# incident): this file aggregates by looping over every matching row in
+# PYTHON (see this module's docstring on why -- per-day/tier timelines the
+# shared metrics registry has no bucketing support for), unlike
+# core/metrics_query.py's SQL-side GROUP BY aggregation. The "Default
+# (legacy)" workspace's unscoped bucket alone holds ~135K TokenTransaction
+# rows within the last year -- a single 365-day Savings/Risk/Departments
+# request against it loaded the WHOLE result set as ORM objects in one
+# request, and concurrent requests like that were enough to exceed a
+# Standard-2X dyno's 1GB quota and take down Ask CostPilot (an unrelated
+# endpoint on the same dyno) with it. This cap bounds the worst case; the
+# real fix is migrating this file onto the registry's SQL-side aggregation
+# (already flagged as a known gap in the reporting architecture
+# assessment), not yet done here. `truncated` is surfaced in every
+# response that hits it rather than silently under-counting.
+MAX_REPORT_ROWS = 100_000
+
 PREMIUM_TIERS = {"Advisor", "Strategist", "flagship"}
 
 def _tier_bucket(tier: str) -> str:
@@ -113,7 +130,8 @@ def compute_realized_savings(
             TokenTransaction.department == department_scope,
             TokenTransaction.department.like(f"%:{department_scope}"),
         ))
-    txns = q.all()
+    truncated = q.count() > MAX_REPORT_ROWS
+    txns = q.limit(MAX_REPORT_ROWS).all()
 
     total_cost       = sum(t.cost_usd for t in txns)
     total_calls      = len(txns)
@@ -165,6 +183,7 @@ def compute_realized_savings(
         "total_saved_usd":       total_saved,
         "cost_if_no_fage_usd":   round(cost_if_all_flagship, 6),
         "timeline":              timeline,
+        "truncated":             truncated,
     }
 
 
@@ -202,7 +221,8 @@ def risk_report(days: int = Query(30, ge=1, le=365),
             AuditEvent.department == department_scope,
             AuditEvent.department.like(f"%:{department_scope}"),
         ))
-    events = q.order_by(AuditEvent.timestamp.desc()).all()
+    risk_truncated = q.count() > MAX_REPORT_ROWS
+    events = q.order_by(AuditEvent.timestamp.desc()).limit(MAX_REPORT_ROWS).all()
 
     total_events  = len(events)
     critical      = sum(1 for e in events if e.risk_level == "critical")
@@ -293,6 +313,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
             "block":    block_terms,
             "escalate": escalate_terms,
         },
+        "truncated":       risk_truncated,
     }
 
 
@@ -319,7 +340,8 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
             TokenTransaction.department == department_scope,
             TokenTransaction.department.like(f"%:{department_scope}"),
         ))
-    txns = q.all()
+    dept_truncated = q.count() > MAX_REPORT_ROWS
+    txns = q.limit(MAX_REPORT_ROWS).all()
 
     def _dept_matches_scope(raw_dept: str) -> bool:
         return not department_scope or raw_dept == department_scope or (raw_dept or "").endswith(f":{department_scope}")
@@ -399,4 +421,5 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
         "scorecards":  scorecards,
         "timeline":    timeline,
         "departments": sorted(all_depts),
+        "truncated":   dept_truncated,
     }

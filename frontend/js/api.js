@@ -132,6 +132,17 @@ function downloadCsv(filename, headers, rows) {
 function printSection(sectionId, title) {
   const el = document.getElementById(sectionId);
   if (!el) return;
+  // A prior printSection() call defers its own overlay's removal until
+  // afterprint/focus/a 120s timeout (see below) -- calling this again
+  // before that fires (e.g. Generate Report on a second tab while the
+  // first print dialog is still open, or a browser where afterprint
+  // never fires) left the STALE overlay in the DOM when a new one was
+  // appended. Two elements sharing id="printOverlay" is invalid HTML but
+  // browsers allow it, and the print stylesheet's #printOverlay rules
+  // match BOTH -- confirmed live: this is what "print report isn't
+  // working" turned out to be, not a repeat of the earlier display:none
+  // bug. Force any stale overlay out before starting a new one.
+  document.querySelectorAll("#printOverlay").forEach(stale => stale.remove());
   const prev = document.title;
   document.title = title || "CostPilot Export";
   // Clone element into a print-only overlay
