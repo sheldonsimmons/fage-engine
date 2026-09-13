@@ -481,7 +481,13 @@ function askReportFormatValue(value, format) {
 function askReportPickChartType(tool, rows, valueFormat) {
   if (valueFormat !== "usd" && valueFormat !== "num") return "bar";
   if (tool === "get_change_drivers") return "bar"; // signed deltas, not one whole
-  if (rows.length >= 2 && rows.length <= 6 && rows.every(r => Number(r.value) >= 0)) return "doughnut";
+  // Confirmed live (2026-09-13): capped at <=6 rows, this fell back to
+  // bar for nearly every real answer -- a model/department/platform
+  // breakdown routinely has 7-8 real entries ("all 7 matching models"),
+  // not the 2-6 this cap assumed. Raised to 10, the common "still
+  // readable as a pie" convention -- past that a ranked bar genuinely
+  // communicates better, but 7-8 slices reads fine.
+  if (rows.length >= 2 && rows.length <= 10 && rows.every(r => Number(r.value) >= 0)) return "doughnut";
   return "bar";
 }
 
