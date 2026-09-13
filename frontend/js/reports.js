@@ -4463,8 +4463,21 @@ function renderSavingsReportHtml() {
     + `cost of ${fmtUsd(data.total_cost_usd)}, against an estimated ${fmtUsd(data.cost_if_no_fage_usd)} at full `
     + `flagship rate — a total savings of ${fmtUsd(data.total_saved_usd)} from context pruning and model routing combined.`;
 
-  const savingsRatePct = data.cost_if_no_fage_usd > 0
-    ? Math.round((data.total_saved_usd / data.cost_if_no_fage_usd) * 100) : null;
+  // cost_if_no_fage_usd (the pre-existing "Without CostPilot" KPI field) is
+  // total_cost + downgrade_saved ONLY -- it deliberately excludes pruning
+  // (routes_reports.py: cost_if_all_flagship = total_cost + downgrade_
+  // saved), so it's the model-routing counterfactual alone, not a true
+  // "if CostPilot did nothing at all" baseline. Confirmed live: dividing
+  // total_saved_usd (pruning + downgrade combined) by that narrower field
+  // produced a Savings Rate of 41% when the real, fully-uncontrolled-
+  // baseline rate is 38% -- correct as a standalone dollar figure next to
+  // other dollar figures (which is all it was before this report's
+  // redesign), but wrong as the denominator of a rate that's supposed to
+  // mean "% saved off doing nothing." The true uncontrolled baseline is
+  // actual cost plus BOTH savings sources, not actual cost plus one of them.
+  const trueUncontrolledBaselineUsd = data.total_cost_usd + data.total_saved_usd;
+  const savingsRatePct = trueUncontrolledBaselineUsd > 0
+    ? Math.round((data.total_saved_usd / trueUncontrolledBaselineUsd) * 100) : null;
 
   const savingsFindings = [];
   if (data.total_saved_usd) savingsFindings.push(`${fmtUsd(data.total_saved_usd)} saved this period vs. an uncontrolled, full-flagship-rate baseline.`);
@@ -4500,7 +4513,7 @@ function renderSavingsReportHtml() {
             ${reportIconBadge("savingsArrow", "green")}
             <div class="rpt-scorecard-value">${savingsRatePct}%</div>
             <div class="rpt-scorecard-label">Savings Rate</div>
-            <div class="rpt-scorecard-sub">${fmtUsd(data.total_saved_usd)} saved of ${fmtUsd(data.cost_if_no_fage_usd)} uncontrolled baseline</div>
+            <div class="rpt-scorecard-sub">${fmtUsd(data.total_saved_usd)} saved of ${fmtUsd(trueUncontrolledBaselineUsd)} uncontrolled baseline</div>
           </div>
         </div>
       </section>` : ""}

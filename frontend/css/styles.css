@@ -1479,14 +1479,22 @@ body {
   #printOverlay .report-kpi-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #666; }
   #printOverlay .report-kpi-value { font-size: 16px; font-weight: 700; color: #111; margin-top: 2px; }
   #printOverlay .report-kpi-sub { font-size: 9.5px; color: #777; margin-top: 2px; }
-  /* Running footer -- position:fixed repeats on every printed page in
-     Chrome/Firefox print, the one reliable cross-browser way to get a
-     per-page footer without CSS Paged Media margin-box support (Chrome
-     does not implement @page margin boxes/counter(page), so a literal
-     "Page X of Y" is not achievable here -- the browser's own optional
-     print-dialog header/footer setting is the only source for that). */
+  /* Was position:fixed (repeats on every printed page) -- confirmed live
+     (2026-09-13) via real multi-page PDF output (not just an on-screen
+     print-media screenshot, which never revealed this) that a fixed
+     footer collides with and overlaps live table/section content
+     whenever a page's normal content flow happens to reach close to the
+     page bottom, which the taller, content-richer redesigned reports hit
+     routinely -- confirmed on Governance & Risk, where the footer text
+     rendered directly on top of a "Requests Blocked" table row, making
+     both illegible. Chrome has no real page-aware way to reserve footer
+     space per page (same @page margin-box gap already documented for
+     page numbering below), so the only reliable fix is to stop fighting
+     it: flow normally at the true end of the document instead. Trades
+     "footer on every page" for "never unreadable" -- the safer failure
+     mode of the two. */
   #printOverlay .report-footer {
-    position: fixed; bottom: 0.3in; left: 0.65in; right: 0.65in;
+    margin-top: 16px;
     font-size: 9px; color: #888; border-top: 1px solid #ddd; padding-top: 4px;
   }
 
