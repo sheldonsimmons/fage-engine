@@ -3922,8 +3922,38 @@ function exportSavingsCsv() {
 function savingsReportChartImg(canvasId, caption) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return "";
+  // These charts are built once for the live, DARK dashboard (COLORS.muted
+  // tick/legend text) and captured as-is via toDataURL() -- confirmed live:
+  // once pasted onto this report's WHITE page, that text is nearly
+  // invisible (same root cause as the Ask CostPilot report chart bug this
+  // session). Rather than a second print-only chart instance, temporarily
+  // swap the LIVE chart's text/grid colors to print-safe dark ones, snapshot,
+  // then restore -- the on-screen dashboard is never left altered.
+  const chartKey = canvasId.replace(/^chart/, "").replace(/^./, c => c.toLowerCase());
+  const chart = charts[chartKey];
+  const PRINT_TEXT = "#1a2733", PRINT_GRID = "#e2e6ea";
+  const restoreFns = [];
+  if (chart) {
+    const swapColor = (obj, key, value) => {
+      if (!obj) return;
+      const prev = obj[key];
+      obj[key] = value;
+      restoreFns.push(() => { obj[key] = prev; });
+    };
+    if (chart.options?.plugins?.legend?.labels) swapColor(chart.options.plugins.legend.labels, "color", PRINT_TEXT);
+    Object.values(chart.options?.scales || {}).forEach(scale => {
+      swapColor(scale.ticks, "color", PRINT_TEXT);
+      swapColor(scale.grid, "color", PRINT_GRID);
+    });
+    if (restoreFns.length) chart.update("none");
+  }
   let dataUrl;
-  try { dataUrl = canvas.toDataURL("image/png"); } catch (_err) { return ""; }
+  try { dataUrl = canvas.toDataURL("image/png"); } catch (_err) { dataUrl = null; }
+  if (restoreFns.length) {
+    restoreFns.forEach(fn => fn());
+    chart.update("none");
+  }
+  if (!dataUrl) return "";
   return `
     <figure class="report-chart-figure">
       <img src="${dataUrl}" style="max-width:100%;height:auto" />

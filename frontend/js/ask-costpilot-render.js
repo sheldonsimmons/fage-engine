@@ -508,6 +508,14 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
   canvas.height = isDoughnut ? 420 : Math.max(220, rows.length * 28);
   document.body.appendChild(canvas);
   let dataUrl = "";
+  // Chart.js's global defaults (chart-theme.js) set a light-gray tick/
+  // legend color tuned for the app's DARK dashboard background --
+  // confirmed live: on this chart's white report-doc background, that
+  // color was nearly invisible. Report charts always render on white
+  // regardless of the app's active theme, so every text color here is
+  // set explicitly rather than inherited from those defaults.
+  const REPORT_CHART_TEXT_COLOR = "#1a2733";
+  const REPORT_CHART_GRID_COLOR = "#e2e6ea";
   try {
     const chart = new Chart(canvas.getContext("2d"), isDoughnut ? {
       type: "doughnut",
@@ -517,7 +525,7 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
       },
       options: {
         responsive: false, animation: false,
-        plugins: { legend: { display: true, position: "right", labels: { boxWidth: 14 } } },
+        plugins: { legend: { display: true, position: "right", labels: { boxWidth: 14, color: REPORT_CHART_TEXT_COLOR } } },
       },
     } : {
       type: "bar",
@@ -528,7 +536,10 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
       options: {
         indexAxis: "y", responsive: false, animation: false,
         plugins: { legend: { display: false } },
-        scales: { x: { beginAtZero: true } },
+        scales: {
+          x: { beginAtZero: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
+          y: { ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },
+        },
       },
     });
     chart.resize();
