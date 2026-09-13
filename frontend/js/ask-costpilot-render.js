@@ -616,7 +616,7 @@ function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
       </header>
       <section class="report-section">
         <h2 class="report-section-title">Executive Brief</h2>
-        <p class="bi-summary">${askRenderEscapeHtml(data.answer || "")}</p>
+        <div class="bi-summary">${data.answer ? renderAskMarkdown(data.answer) : "<p>No answer was returned.</p>"}</div>
       </section>
       ${tableSection}
       ${recommendations}
