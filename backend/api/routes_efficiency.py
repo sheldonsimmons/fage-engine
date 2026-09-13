@@ -1832,6 +1832,14 @@ itself contains real period language ("this quarter", "last year", "in 2025").
 Choose comparison with comparison_key same_period_previous_year for year-over-year, same-period-last-year,
 "around this time last year", and year-to-date versus last-year questions. Choose previous_period for an
 immediately preceding equal-length comparison. Never invent date boundaries; the server resolves them.
+Choose savings or optimization ONLY when the user explicitly asks how to save money, reduce cost,
+or find optimization opportunities (e.g. "how can we save money on AI", "what could we optimize").
+A plain spend/breakdown question that merely contains the word "spending" -- e.g. "what are we
+spending on AI, broken down by model" -- is an overview/total question with entity=model, NOT
+savings, even though both mention spend. Confirmed live that this exact phrasing was
+non-deterministically misclassified as savings on roughly half of identical tries, which then
+answered about premium-tier requests and top agents while completely ignoring the requested model
+breakdown, since the savings answer never reads the entity field at all.
 Choose decision ONLY when the user asks why CostPilot made a specific technical routing/policy
 decision for one already-identified request or audit event (e.g. "why was this request routed to
 the Advisor model", "why was this one blocked"). Never choose decision for a general question about
