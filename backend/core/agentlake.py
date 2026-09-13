@@ -112,11 +112,55 @@ def deregister_agent(db: Session, agent_id: int) -> dict:
     return {"deleted": True, "message": f"Agent '{name}' removed from registry."}
 
 
+def workspace_agent_filter(db: Session, workspace_id: str):
+    """
+    Build the WHERE clause for "agents belonging to this workspace" --
+    shared by list_agents() and every other endpoint that lists/aggregates
+    agents by workspace (agent spend summary, agent activity report), so
+    they can't silently drift into three different definitions of the
+    same thing again.
+
+    Three clauses, OR'd together, because a single one isn't reliable
+    against the real backfilled data:
+      - department.like("{workspace_id}:%") -- the normal convention.
+      - RegisteredAgent.workspace_id == workspace_id -- some rows carry
+        the real column instead of (or in addition to) the department
+        prefix.
+      - id IN (agent_ids seen on this workspace's own TokenTransaction
+        rows) -- confirmed live (2026-09-13): three real agents in the
+        Historical Demo workspace ("Pipeline Coach Agent", "HubSpot
+        Marketing Agent", "ServiceNow Case Agent") have neither a
+        prefixed department NOR a populated workspace_id column on their
+        OWN RegisteredAgent row (a backfill gap), even though their
+        TRANSACTIONS are correctly scoped to this workspace. The first
+        two clauses alone silently dropped all three -- exactly the
+        agent Ask CostPilot (transaction-scoped, like the metrics
+        registry) correctly named as the workspace's #1 by usage. This
+        third clause is the one that actually matches how the metrics
+        registry decides "does this agent belong to this workspace":
+        activity, not the agent's own possibly-incomplete metadata.
+    """
+    from sqlalchemy import or_
+    from database.models import TokenTransaction
+    from core.workspace_scope import workspace_filter
+
+    tx_scope = workspace_filter(TokenTransaction, workspace_id)
+    activity_agent_ids = db.query(TokenTransaction.agent_id).filter(
+        TokenTransaction.agent_id.isnot(None),
+        *([tx_scope] if tx_scope is not None else []),
+    ).distinct()
+    return or_(
+        RegisteredAgent.department.like(f"{workspace_id}:%"),
+        RegisteredAgent.workspace_id == workspace_id,
+        RegisteredAgent.id.in_(activity_agent_ids),
+    )
+
+
 def list_agents(db: Session, include_archived: bool = False, workspace_id: str = None) -> list:
     """Return registered agents. Archived agents are hidden by default."""
     q = db.query(RegisteredAgent)
     if workspace_id:
-        q = q.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
+        q = q.filter(workspace_agent_filter(db, workspace_id))
     if not include_archived:
         q = q.filter((RegisteredAgent.archived == False) | (RegisteredAgent.archived == None))
     return [_serialize(a) for a in q.all()]

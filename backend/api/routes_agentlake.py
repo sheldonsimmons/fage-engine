@@ -194,7 +194,14 @@ def agent_spend_summary(workspace_id: str = None, db: Session = Depends(get_db))
 
     query = db.query(RegisteredAgent).filter(RegisteredAgent.archived.isnot(True))
     if workspace_id:
-        query = query.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
+        # workspace_agent_filter(), not a bare department-prefix match --
+        # confirmed live some real agents in this exact workspace have no
+        # prefixed department AND no populated workspace_id column on
+        # their own row (a backfill gap); that match alone silently
+        # dropped them despite their transactions being correctly scoped.
+        # See that function's own docstring for the full story.
+        from core.agentlake import workspace_agent_filter
+        query = query.filter(workspace_agent_filter(db, workspace_id))
     agents = query.all()
 
     results = []

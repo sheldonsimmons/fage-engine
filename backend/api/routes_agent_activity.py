@@ -86,11 +86,16 @@ def get_agent_activity(
     # design choice per this file's prior lack of scoping, but one that
     # visually contradicted every other workspace-scoped surface in the
     # app (Ask CostPilot, Agent Lake's own registry table) sitting right
-    # next to it. Filtered by department prefix, matching core.agentlake.
-    # list_agents()'s established convention for this exact table.
+    # next to it. Uses core.agentlake.workspace_agent_filter() (not a bare
+    # department-prefix match) since some real agents in this exact
+    # workspace have neither a prefixed department nor a populated
+    # workspace_id column on their own row -- see that function's
+    # docstring for the confirmed-live example that motivated it.
+    from core.agentlake import workspace_agent_filter
+
     agent_q = db.query(RegisteredAgent)
     if workspace_id:
-        agent_q = agent_q.filter(RegisteredAgent.department.like(f"{workspace_id}:%"))
+        agent_q = agent_q.filter(workspace_agent_filter(db, workspace_id))
     if include_unused:
         agent_q = agent_q.filter(
             or_(RegisteredAgent.archived == False, RegisteredAgent.archived.is_(None))
