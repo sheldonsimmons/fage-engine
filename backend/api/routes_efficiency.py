@@ -5004,10 +5004,26 @@ def _ask_costpilot_answer(
             except (TypeError, ValueError):
                 subject_filter_value = None
         reporting_filters[subject_filter_name] = subject_filter_value
-    if parsed.get("entity") != "department" and not reporting_filters.get("charged_unit"):
+    if not reporting_filters.get("charged_unit"):
         # The question ranks something other than department (e.g. models,
         # platforms) but may still name one to scope by -- see
         # _ask_named_department for why entity alone can't carry this.
+        #
+        # Used to also require entity != "department", on the assumption
+        # that entity=="department" always meant "rank across every
+        # department" (so no single one should be scoped). That held for
+        # the regex classifier, but confirmed live (2026-09-13) the
+        # OpenAI-assisted classifier (assistant_mode="openai_tool_planner")
+        # sets entity="department" far more liberally -- e.g. "What's
+        # driving the increase in Sales's AI spend, and did outcomes
+        # improve?" got entity="department" with charged_unit left None,
+        # so this whole block never ran and the answer silently fell back
+        # to the company-wide total instead of Sales specifically. The
+        # asks_cross_department_comparison check just below already exists
+        # to protect the one case that guard was actually meant for ("how
+        # does Sales compare to OTHER departments"), so it alone is enough
+        # to gate the scoping decision -- the blanket entity check was
+        # over-broad.
         named_department = _ask_named_department(question, request.workspace_id, db)
         if named_department:
             # "How does Sales compare to other departments?" names Sales
