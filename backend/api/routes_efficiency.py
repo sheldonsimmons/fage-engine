@@ -5159,6 +5159,25 @@ def _ask_costpilot_answer(
         )
     ):
         intent = "total" if "how many" in question.lower() else "ranking"
+    # "How much have we spent on AI in the last 7 days?" / "What was our
+    # AI spend last month?" / "How much have we spent on AI this
+    # quarter?" -- the classifier occasionally (flaky, not every trial)
+    # picks intent="budget" for a plain spend-total question that never
+    # mentions budget or cap at all. The "budget" answer branch always
+    # reports month-to-date utilization against the configured monthly
+    # cap regardless of the period actually asked about, so a "last 7
+    # days"/"this quarter" question came back with an unrelated
+    # "$21.57 of $87.75 used (24.6%) this month" answer that silently
+    # ignored the requested window entirely. Confirmed live 2026-09-13,
+    # reproduced on 1 of ~6 identical trials. Every genuine budget
+    # question in this workspace's own question set ("closest to going
+    # over budget," "budget utilization," "budget cap," "over its AI
+    # budget," etc.) says "budget" or "cap" somewhere -- so a "budget"
+    # classification on a question naming neither is almost certainly
+    # this misfire, not a real budget question, and is safe to redirect
+    # back to a plain spend overview.
+    if intent == "budget" and not re.search(r"\bbudget|\bcap\b", question.lower()):
+        intent = "total"
     direction = parsed["direction"]
     result_limit = parsed["result_limit"]
     outcome_filter = parsed.get("outcome_filter")
