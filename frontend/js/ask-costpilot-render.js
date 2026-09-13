@@ -560,12 +560,34 @@ function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
   const workspaceLabel = data.workspace_name || (typeof getActiveWorkspace === "function" ? (getActiveWorkspace()?.name || getActiveWorkspace()?.label) : null) || "Current workspace";
   const extracted = askReportRowsFromResult(tool, replayed);
 
-  const evidence = (data.evidence || []).map((item) => renderAskEvidence(item, data)).join("");
   const recommendations = (data.recommendations || []).length
     ? `<section class="report-section"><h2 class="report-section-title">Recommended Next Steps</h2><div class="bi-rec-grid">${
         data.recommendations.map(r => `<div class="bi-rec-card"><div class="bi-rec-title">${askRenderEscapeHtml(r.title || "")}</div><div class="bi-rec-body">${askRenderEscapeHtml(r.body || "")}</div></div>`).join("")
       }</div></section>`
     : "";
+
+  // The report's own "full breakdown" table above already lists every row
+  // this replay returned -- the chat answer's ORIGINAL "Evidence" cards
+  // (top-5, pre-replay) were just repeating a subset of the exact same
+  // rows/numbers a second time in a different layout. Replaced with
+  // genuinely different, non-repeating content: the real calculation
+  // formula, data scope (live/simulator/mixed), and filters actually
+  // applied -- all real fields the backend already returns but that
+  // never appeared anywhere in the printed report before.
+  const calc = data.calculation || null;
+  const scopeLabel = {
+    live: "Live data", simulator: "Simulator data", mixed: "Live + simulator",
+    no_activity: "No matching activity", product_knowledge: "CostPilot product knowledge",
+  }[provenance.scope] || null;
+  const scopeCounts = (provenance.live_requests || provenance.simulator_requests)
+    ? ` (${Number(provenance.live_requests || 0).toLocaleString()} live / ${Number(provenance.simulator_requests || 0).toLocaleString()} simulator)`
+    : "";
+  const appliedFilters = Object.entries(data.filters || {}).filter(([, v]) => v !== null && v !== undefined && v !== "");
+  const calcRows = [
+    calc?.formula ? `<div><strong>Calculation:</strong> ${askRenderEscapeHtml(calc.formula)}${calc.row_count != null ? ` across ${Number(calc.row_count).toLocaleString()} matching records` : ""}.</div>` : "",
+    scopeLabel ? `<div><strong>Data scope:</strong> ${askRenderEscapeHtml(scopeLabel)}${scopeCounts}.</div>` : "",
+    appliedFilters.length ? `<div><strong>Filters applied:</strong> ${appliedFilters.map(([k, v]) => `${askRenderEscapeHtml(k)}=${askRenderEscapeHtml(String(v))}`).join(", ")}.</div>` : "",
+  ].filter(Boolean).join("");
 
   const chartType = options.chartType || askReportPickChartType(tool, extracted ? extracted.rows : [], extracted ? extracted.valueFormat : "text");
   const tableSection = extracted ? `
@@ -597,11 +619,13 @@ function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
         <p class="bi-summary">${askRenderEscapeHtml(data.answer || "")}</p>
       </section>
       ${tableSection}
-      ${evidence ? `<section class="report-section"><h2 class="report-section-title">Evidence</h2>${evidence}</section>` : ""}
       ${recommendations}
       <section class="report-section" style="break-inside:avoid">
-        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
-        <div class="bi-note">${askRenderEscapeHtml(data.measurement_note || "CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.")}</div>
+        <h2 class="report-section-title">Calculation &amp; Data Scope</h2>
+        <div class="bi-note">
+          ${calcRows}
+          <div>${askRenderEscapeHtml(data.measurement_note || "CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.")}</div>
+        </div>
       </section>
       <footer class="report-footer">CostPilot — ${askRenderEscapeHtml(data.title || "Report")} — ${askRenderEscapeHtml(workspaceLabel)}</footer>
     </div>`;
