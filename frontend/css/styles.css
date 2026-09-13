@@ -1384,6 +1384,19 @@ body {
     color: #111 !important;
     font-size: 11px;
     z-index: 9999;
+    /* The four new report containers (biReportDoc/savingsReportDoc/
+       riskReportDoc/deptReportDoc) and the Ask-generated report's
+       container all stay hidden during normal viewing via an inline
+       style="display:none" -- printSection()'s outerHTML clone carries
+       that same inline style straight into this overlay. visibility
+       alone can't undo it: an element with display:none generates no
+       box at all, so setting visibility:visible on it is a no-op, not
+       an override. Confirmed live: Chrome's own print preview -- not
+       just a saved file, the live preview pane itself -- showed a
+       correctly-paginated but completely blank document. !important
+       here beats the cloned inline style (inline styles only win over
+       a stylesheet rule that lacks !important). */
+    display: block !important;
   }
   /* Force light colors for print */
   #printOverlay .badge, #printOverlay [class*="badge"] { border: 1px solid #ccc !important; color: #333 !important; background: #f5f5f5 !important; }

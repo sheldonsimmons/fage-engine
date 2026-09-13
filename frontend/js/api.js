@@ -138,6 +138,22 @@ function printSection(sectionId, title) {
   const overlay = document.createElement("div");
   overlay.id    = "printOverlay";
   overlay.innerHTML = el.outerHTML;
+  // Several report containers (biReportDoc/savingsReportDoc/riskReportDoc/
+  // deptReportDoc, the Ask-generated report's container) stay hidden
+  // during normal viewing via an inline style="display:none" -- outerHTML
+  // cloning carries that same inline style straight into this overlay.
+  // "display" doesn't inherit, so the #printOverlay stylesheet rule
+  // fixing its OWN display can't reach this child's separate inline
+  // style; visibility:visible is also a no-op on a display:none element
+  // (no box is generated at all, so there's nothing to make visible).
+  // Confirmed live: Chrome's own print preview -- not just a saved file --
+  // showed a correctly-paginated but completely blank document because of
+  // exactly this. Only the cloned root is touched (not a blanket sweep
+  // for any inline display:none anywhere in the clone) -- printSection()
+  // also clones live interactive tabs (Auditor, Voice Guard) that can
+  // legitimately nest an intentionally-hidden element, e.g. an inactive
+  // filter panel, which must stay hidden in print.
+  if (overlay.firstElementChild) overlay.firstElementChild.style.display = "";
   // outerHTML cloning copies a <canvas> element but never what's actually
   // drawn to its bitmap -- every Chart.js chart (and any hand-rolled
   // canvas drawing) printed as a blank box. Swap each cloned canvas for a
