@@ -4139,6 +4139,26 @@ def _ask_agent_final_payload(
         if isinstance(result, dict) and result.get("proposal"):
             payload["proposal"] = result["proposal"]
 
+    # Same "View Full {Department} Cost Briefing" action as the
+    # deterministic change_drivers branch (see that branch's own comment)
+    # -- needed here too because the SAME "why did Support's AI costs
+    # increase" question confirmed live (2026-09-13) to route through this
+    # agent-tool-loop path on most tries, non-deterministically, and the
+    # deterministic-path-only fix reached it on only ~1 in 4 identical
+    # requests. Reads straight from this function's own tool_call_log
+    # rather than parsed intent (this path has no "parsed" of that shape),
+    # last matching get_change_drivers call wins -- same precedence rule
+    # already used above for suggestion_category/suggestion_department.
+    for tool_name, call_args, _result in tool_call_log:
+        if tool_name == "get_change_drivers" and call_args.get("metric") == "spend_usd":
+            report_department = call_args.get("department")
+            if report_department:
+                payload["report_action"] = {
+                    "report_id": "support_briefing",
+                    "label": f"View Full {report_department} Cost Briefing",
+                    "params": {"department": report_department, "days": call_args.get("days") or 30},
+                }
+
     try:
         for signal in workspace_attention_signals(db, request.workspace_id, limit=3):
             department = (signal.get("department") or "").lower()
