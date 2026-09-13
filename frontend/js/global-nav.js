@@ -382,6 +382,7 @@
     });
     document.getElementById("cpAskMessages").addEventListener("click", (event) => {
       if (handleAskReportButtonClick(event)) return;
+      if (handleAskBriefingButtonClick(event)) return;
       const followUp = event.target.closest("[data-ask-question]");
       if (followUp) {
         document.getElementById("cpAskInput").value = followUp.dataset.askQuestion;

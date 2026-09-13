@@ -7282,6 +7282,28 @@ def _ask_costpilot_answer(
             "subject_filter_value": named_entity.get("row", {}).get("id"),
         })
 
+    # Surface a "View Full Cost Briefing" action alongside the normal text
+    # answer when this question is exactly the shape the Support Cost
+    # Briefing composite report was built to answer -- "why did
+    # {department}'s AI costs change" -- rather than trying to have the
+    # answer itself BE the report. Deliberately additive (the deterministic
+    # text answer above is unchanged) rather than auto-opening the report,
+    # per 2026-09-13 product direction: a wrong/over-eager intent match
+    # here only ever adds a harmless extra button, never replaces or
+    # derails the chat answer itself. Gated to cost-shaped metrics only
+    # (spend_usd/avg_cost_per_request) -- a change_drivers question about
+    # request_count or tokens_saved isn't the "cost increase" story this
+    # report tells.
+    report_action = None
+    if intent == "change_drivers" and metric in {"spend_usd", "avg_cost_per_request"}:
+        report_department = reporting_filters.get("charged_unit")
+        if report_department:
+            report_action = {
+                "report_id": "support_briefing",
+                "label": f"View Full {report_department} Cost Briefing",
+                "params": {"department": report_department, "days": parsed["days"]},
+            }
+
     payload = {
         "question": question,
         "title": title,
@@ -7332,6 +7354,7 @@ def _ask_costpilot_answer(
             ),
             asked_question=question,
         ),
+        "report_action": report_action,
         "read_only": True,
     }
     contract_issues = validate_ask_answer_contract(parsed, payload)

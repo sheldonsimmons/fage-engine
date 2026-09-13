@@ -1203,6 +1203,8 @@ function renderSupportBriefingReportHtml(data) {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
   });
   const k = data.kpis || {};
+  const department = data.department || "Support";
+  const reportTitle = `${department} AI Cost Increase Analysis`;
   const evidenceByKpi = data.evidence_by_kpi || {};
   const changePositive = k.pct_change != null && k.pct_change < 0; // a cost DECREASE is the "good" direction
   const changeLabel = k.pct_change == null ? "—" : `${Math.abs(k.pct_change)}% vs prior period`;
@@ -1225,21 +1227,21 @@ function renderSupportBriefingReportHtml(data) {
 
   const agentTableRows = (data.top_agents || []).length
     ? data.top_agents.map((r, i) => `<tr><td class="bi-rank">${i + 1}</td><td>${escapeHtml(r.agent)}</td><td>${fmtUsd(r.spend_usd)}</td></tr>`).join("")
-    : `<tr><td colspan="3">No support agent activity in this period.</td></tr>`;
+    : `<tr><td colspan="3">No ${escapeHtml(department.toLowerCase())} agent activity in this period.</td></tr>`;
 
   const resolutionRatePct = (k.resolved_cases != null && k.unresolved_cases != null && (k.resolved_cases + k.unresolved_cases) > 0)
     ? Math.round(k.resolved_cases / (k.resolved_cases + k.unresolved_cases) * 100) : null;
 
   return `
     <div class="report-doc rpt-premium">
-      ${reportPremiumHeaderHtml("Support AI Cost Increase Analysis", data.period_label, generatedAt)}
+      ${reportPremiumHeaderHtml(reportTitle, data.period_label, generatedAt)}
 
       <section class="report-section">
         <h2 class="report-section-title">Executive Summary</h2>
         <div class="rpt-exec-summary">
           ${reportIconBadge(changePositive ? "savingsArrow" : "barChart", changePositive ? "green" : "orange")}
           <p class="bi-summary">
-            Support AI investment ${k.pct_change == null
+            ${escapeHtml(department)} AI investment ${k.pct_change == null
               ? `totaled ${fmtUsd(k.ai_investment_usd)}`
               : `${k.pct_change >= 0 ? "increased" : "decreased"} ${Math.abs(k.pct_change)}% to ${fmtUsd(k.ai_investment_usd)}`
             } over ${escapeHtml(data.period_label || "the selected period")}${
@@ -1262,7 +1264,7 @@ function renderSupportBriefingReportHtml(data) {
       </section>
 
       <section class="report-section">
-        <h2 class="report-section-title">Spend by Support Agent</h2>
+        <h2 class="report-section-title">Spend by ${escapeHtml(department)} Agent</h2>
         ${supportBriefingAgentChart(data.top_agents) || `<p class="bi-note">Not enough agent-level activity to chart.</p>`}
         <table class="rpt-context-table">
           <thead><tr><th></th><th>Agent</th><th>AI Spend</th></tr></thead>
@@ -1312,25 +1314,28 @@ function renderSupportBriefingReportHtml(data) {
       </section>
 
       <footer class="report-footer rpt-footer-premium">
-        <span>CostPilot — Support AI Cost Increase Analysis</span>
+        <span>CostPilot — ${escapeHtml(reportTitle)}</span>
         <span>${escapeHtml(askCostPilotWorkspaceLabel())}</span>
         <span>Confidential</span>
       </footer>
     </div>`;
 }
 
-async function openSupportBriefingReport() {
+async function openSupportBriefingReport(opts = {}) {
+  const department = opts.department || "Support";
+  const days = opts.days || 30;
+  const reportTitle = `${department} AI Cost Increase Analysis`;
   const modalId = "supportBriefingPreview";
   const existing = document.getElementById(modalId);
   if (existing) existing.remove();
   const workspaceId = reportWorkspaceId();
   let data;
   try {
-    const qs = new URLSearchParams({ days: "30" });
+    const qs = new URLSearchParams({ days: String(days), department });
     if (workspaceId) qs.set("workspace_id", workspaceId);
     data = await apiGet(`/api/dashboard/support-briefing?${qs.toString()}`);
   } catch (err) {
-    alert("Could not load the Support Cost Briefing: " + (err.message || "unknown error"));
+    alert(`Could not load the ${department} Cost Briefing: ` + (err.message || "unknown error"));
     return;
   }
   const html = renderSupportBriefingReportHtml(data);
@@ -1340,7 +1345,7 @@ async function openSupportBriefingReport() {
   modal.innerHTML = `
     <div class="cp-report-preview-modal">
       <div class="cp-report-preview-toolbar">
-        <div style="font-weight:600">Support AI Cost Increase Analysis</div>
+        <div style="font-weight:600">${escapeHtml(reportTitle)}</div>
         <button type="button" data-support-briefing-save class="cp-report-preview-print">💾 Save</button>
         <button type="button" data-support-briefing-print class="cp-report-preview-print">🖨 Print / Save as PDF</button>
         <button type="button" data-support-briefing-close class="cp-report-preview-close">✕</button>
@@ -1352,14 +1357,14 @@ async function openSupportBriefingReport() {
   document.body.appendChild(modal);
   modal.addEventListener("click", async (event) => {
     if (event.target === modal || event.target.closest("[data-support-briefing-close]")) { modal.remove(); return; }
-    if (event.target.closest("[data-support-briefing-print]")) { printSection(`${modalId}-body`, "Support AI Cost Increase Analysis"); return; }
+    if (event.target.closest("[data-support-briefing-print]")) { printSection(`${modalId}-body`, reportTitle); return; }
     if (event.target.closest("[data-support-briefing-save]")) {
       try {
         await apiPost("/api/saved-reports", {
           workspace_id: workspaceId || null,
-          title: `Support AI Cost Increase Analysis — ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+          title: `${reportTitle} — ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
           report_type: "support_briefing",
-          source: { days: 30 },
+          source: { days, department },
         });
         alert('Report saved. Reopen it anytime from "Saved reports."');
       } catch (err) {
@@ -2224,7 +2229,7 @@ async function openSavedReport(id) {
     // saved report -- openSupportBriefingReport() re-fetches the live
     // /api/dashboard/support-briefing endpoint itself, so this just needs
     // to open it, not replay any stored data.
-    openSupportBriefingReport();
+    openSupportBriefingReport(saved.source || {});
     return;
   }
   if (saved.report_type === "ask_costpilot") {

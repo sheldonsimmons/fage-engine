@@ -507,6 +507,13 @@ header.header .header-sub,
 }
 .cp-ask-report-btn:hover { color: var(--accent, #58a6ff); border-color: var(--accent, #58a6ff); }
 .printing .cp-ask-report-btn { display: none; }
+.cp-ask-briefing-btn {
+  margin-left: 6px;
+  color: #fff;
+  background: var(--accent, #2f6fed);
+  border-color: var(--accent, #2f6fed);
+}
+.cp-ask-briefing-btn:hover { color: #fff; background: #2559c4; border-color: #2559c4; }
 .cp-ask-answer-scope {
   display: grid;
   grid-template-columns: 1fr 1fr;

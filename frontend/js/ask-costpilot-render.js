@@ -336,6 +336,34 @@ function renderAskReportButton(cardId, data) {
   return `<button type="button" class="cp-ask-report-btn" data-ask-report-target="${cardId}" data-ask-report-title="${askRenderEscapeHtml(title)}">🖨️ Generate report</button>`;
 }
 
+// Additive action shown alongside (never instead of) the normal text
+// answer, when the backend recognized this as a "why did {department}'s
+// AI costs change" question -- see routes_efficiency.py's report_action
+// comment for the gating logic and why this stays a button rather than
+// auto-opening the report. openSupportBriefingReport() lives in
+// reports.js, which this file cannot assume is loaded (same reasoning as
+// the _askAnswerDataByCardId comment above), hence the guarded call in
+// the click handler below instead of calling it directly here.
+function renderAskBriefingReportButton(data) {
+  const action = data.report_action;
+  if (!action || !action.params || !action.params.department) return "";
+  return `<button type="button" class="cp-ask-report-btn cp-ask-briefing-btn" data-ask-briefing-department="${askRenderEscapeHtml(action.params.department)}" data-ask-briefing-days="${askRenderEscapeHtml(String(action.params.days || 30))}">📋 ${askRenderEscapeHtml(action.label || "View full briefing report")}</button>`;
+}
+
+function handleAskBriefingButtonClick(event) {
+  const btn = event.target.closest("[data-ask-briefing-department]");
+  if (!btn) return false;
+  if (typeof openSupportBriefingReport !== "function") {
+    alert("Full briefing reports are available from the Reports page.");
+    return true;
+  }
+  openSupportBriefingReport({
+    department: btn.dataset.askBriefingDepartment,
+    days: Number(btn.dataset.askBriefingDays) || 30,
+  });
+  return true;
+}
+
 // Shared delegated-click handler for the report button, called from each
 // Ask CostPilot surface's own click delegation (global-nav.js, index.html,
 // business-profile.html) alongside their data-ask-question/-confirm-id/etc.
@@ -947,6 +975,7 @@ function renderAskAnswerCard(data) {
     <div class="cp-ask-answer-head"><span>${askRenderEscapeHtml(provenance.period_label || "Selected period")}</span><b class="${clarification ? "clarification" : ""}">${clarification ? "Needs clarification" : "Calculated"}</b></div>
     <h3>${askRenderEscapeHtml(data.title || "CostPilot answer")}</h3>
     ${renderAskReportButton(cardId, data)}
+    ${renderAskBriefingReportButton(data)}
     ${budgetFlag}
     ${data.interpreted_as ? `<div class="cp-ask-interpretation"><strong>Interpreted as</strong><span>${askRenderEscapeHtml(data.interpreted_as)}</span></div>` : ""}
     <div class="cp-ask-answer-scope"><span><b>Date range</b>${askRenderEscapeHtml(provenance.period_label || "Selected period")}</span><span><b>Scope</b>${askRenderEscapeHtml(sourceLabel)}</span></div>

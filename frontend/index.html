@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — AI Performance Overview</title>
   <link rel="stylesheet" href="/vendor/tabler/tabler.min.css?v=1.4.0" />
-  <link rel="stylesheet" href="css/styles.css?v=20260913d-rec-contrast-fix" />
+  <link rel="stylesheet" href="css/styles.css?v=20260913e-nl-report-trigger" />
   <link rel="stylesheet" href="css/tokens.css?v=20260821-dark-theme" />
-  <link rel="stylesheet" href="css/global-nav.css?v=20260909-ask-voice" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260913e-nl-report-trigger" />
   <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
   <style>
     /* ── Executive landing layout ─────────────────────────────────────────────── */
@@ -1779,6 +1779,9 @@ function bindOvAskDrills(container) {
   container?.querySelectorAll("[data-ask-report-target]").forEach((button) => {
     button.addEventListener("click", (event) => handleAskReportButtonClick(event));
   });
+  container?.querySelectorAll("[data-ask-briefing-department]").forEach((button) => {
+    button.addEventListener("click", (event) => handleAskBriefingButtonClick(event));
+  });
   container?.querySelectorAll("[data-ask-scope]").forEach((button) => {
     button.addEventListener("click", () => {
       const scope = JSON.parse(decodeURIComponent(button.dataset.askScope));
@@ -2201,8 +2204,8 @@ setInterval(loadOverview, 30000);
 </div>
 </div>
 <script src="/vendor/tabler/tabler.min.js?v=1.4.0"></script>
-<script src="/js/ask-costpilot-render.js?v=20260913b-pie-cap-fix"></script>
-<script src="/js/global-nav.js?v=20260909-ask-voice"></script>
+<script src="/js/ask-costpilot-render.js?v=20260913e-nl-report-trigger"></script>
+<script src="/js/global-nav.js?v=20260913e-nl-report-trigger"></script>
 <script src="/js/left-nav.js?v=20260826-add-models-projects"></script>
 </body>
 </html>

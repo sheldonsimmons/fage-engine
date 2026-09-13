@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Business Profile</title>
   <link rel="icon" type="image/png" href="/assets/costpilot-favicon.png" />
-  <link rel="stylesheet" href="css/styles.css?v=20260913d-rec-contrast-fix" />
+  <link rel="stylesheet" href="css/styles.css?v=20260913e-nl-report-trigger" />
   <link rel="stylesheet" href="css/tokens.css?v=20260821-dark-theme" />
-  <link rel="stylesheet" href="css/global-nav.css?v=20260909-ask-voice" />
+  <link rel="stylesheet" href="css/global-nav.css?v=20260913e-nl-report-trigger" />
   <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
   <script src="/js/chart.umd.min.js"></script>
   <script src="/js/chart-theme.js"></script>
@@ -1044,6 +1044,9 @@
         slot.querySelectorAll("[data-ask-report-target]").forEach((button) => {
           button.addEventListener("click", (event) => handleAskReportButtonClick(event));
         });
+        slot.querySelectorAll("[data-ask-briefing-department]").forEach((button) => {
+          button.addEventListener("click", (event) => handleAskBriefingButtonClick(event));
+        });
       } catch (err) {
         slot.innerHTML = `<div class="cp-ask-error"><strong>CostPilot did not generate an answer.</strong><br/>${(err.message || "").replace(/</g, "&lt;")}</div>`;
       }
@@ -1126,7 +1129,7 @@
     bpStartPolling();
     bpLoadAccounts();
   </script>
-  <script src="/js/ask-costpilot-render.js?v=20260808c-label-fix"></script>
+  <script src="/js/ask-costpilot-render.js?v=20260913e-nl-report-trigger"></script>
   <script src="/js/left-nav.js?v=20260826-add-models-projects"></script>
 </body>
 </html>

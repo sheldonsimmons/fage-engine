@@ -1657,6 +1657,7 @@ def get_support_cost_briefing(
 
     return {
         "workspace_id": workspace_id,
+        "department": department,
         "period_days": days,
         "period_label": f"{start.strftime('%b %-d')} – {now.strftime('%b %-d, %Y')}",
         "truncated": truncated,
