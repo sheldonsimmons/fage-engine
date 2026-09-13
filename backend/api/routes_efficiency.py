@@ -3538,6 +3538,17 @@ drove, caused, produced, or was responsible for a dollar amount or business resu
 a business outcome occurring on the same work item is not evidence that one caused the other.
 If an outcome's freshness is "potentially_stale" or "unavailable", say so rather than presenting it
 as current.
+If the deterministic_answer states a requested period's spend AND a separate current-calendar-month
+budget-cap usage as two distinct statements (e.g. "spend across the requested period was $X.
+Separately, this calendar month's budget is $Y, with $Z used so far"), keep them as two distinct
+statements in your rewrite too -- never combine them into one sentence or compute a new percentage
+of $X against $Y or $Z. Those are two different timeframes describing two different things (every
+number is real, but $X does not belong to the same window as $Y/$Z), and merging them into one
+ratio misrepresents both, even though no individual number was changed. Reproduced live
+(2026-09-13): "the AI spend was $13.32 within a configured monthly budget of $87.75... 22.8% of the
+budget used" -- $13.32 was a 6-month total, $87.75/22.8% were this calendar month's cap and usage;
+none of those three numbers was fabricated, but stating them as one ratio implied a 6-month total
+was measured against a 1-month cap.
 Call write_grounded_costpilot_answer exactly once."""
     try:
         from openai import OpenAI
@@ -7331,7 +7342,20 @@ def _ask_costpilot_answer(
             contract_issues,
         )
         return _ask_contract_failure_response(request, parsed, contract_issues)
-    if assistant_mode == "deterministic_period_contract":
+    # Confirmed live (2026-09-13): the "budget_scope=='all'" deterministic
+    # answer deliberately states a requested period's spend and a separate
+    # current-calendar-month budget-cap usage as two distinct sentences
+    # (see that branch's own comment for why) -- the grounded narrator's
+    # prompt already tells it to preserve that separation, but a rewrite
+    # occasionally collapsed the two back into one misleading "$X within a
+    # $Y budget, Z% used" sentence anyway, using real (non-fabricated)
+    # numbers pulled from two different timeframes, which the numeric-
+    # fidelity check can't catch since nothing was invented -- only
+    # juxtaposed confusingly. This specific answer shape is numerically
+    # delicate enough to skip the LLM rewrite step entirely rather than
+    # rely on prompt wording alone, same reasoning as
+    # deterministic_period_contract below.
+    if assistant_mode == "deterministic_period_contract" or (intent == "budget" and budget_scope == "all"):
         narrated_title, narrated_answer, narrated = (
             payload["title"], payload["answer"], False
         )
