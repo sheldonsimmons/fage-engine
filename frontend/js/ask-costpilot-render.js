@@ -643,7 +643,12 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
       },
       options: {
         responsive: false, animation: false,
-        plugins: { legend: { display: true, position: "right", labels: { boxWidth: 14, color: REPORT_CHART_TEXT_COLOR } } },
+        // boxWidth/font.size previously had no explicit size at all --
+        // confirmed live 2026-09-14: Chart.js's default legend font (~10px
+        // canvas units) reads as illegibly tiny next to a 420px-tall
+        // doughnut that fills nearly the whole canvas, especially once the
+        // resulting image is stretched to a report's full display width.
+        plugins: { legend: { display: true, position: "right", labels: { boxWidth: 18, padding: 12, font: { size: 15 }, color: REPORT_CHART_TEXT_COLOR } } },
       },
     } : {
       type: "bar",
