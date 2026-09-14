@@ -119,7 +119,29 @@
     } catch (_err) {
       // fall back silently, same as global-nav.js
     }
-    const activeId = localStorage.getItem("cp_workspace_id") || options[0].id;
+    // A fresh browser with no saved choice used to fall back to
+    // options[0] -- whichever workspace the API happened to list first --
+    // and only ever used that for THIS dropdown's own display, never
+    // writing it to localStorage. Every other workspace-aware read on
+    // this page (Ask CostPilot's panel included) reads cp_workspace_id
+    // directly and got nothing, silently resolving to the real "default"/
+    // legacy bucket instead -- confirmed live (2026-09-13) on the mobile
+    // live-landing.html page: the dropdown displayed "Historical Demo" as
+    // selected while Ask CostPilot's own "Answers calculated from..."
+    // label said "Default (legacy)," an entirely different workspace,
+    // producing answers that looked wrong for whatever the user was
+    // actually looking at. global-nav.js's own activeWorkspace() already
+    // hit and fixed this exact class of bug (see its comment) by
+    // defaulting to "default" instead of options[0] when nothing is
+    // saved -- matching that choice here, plus actually persisting it,
+    // is what keeps this dropdown and every other reader in agreement.
+    const activeId = localStorage.getItem("cp_workspace_id")
+      || (options.some((o) => o.id === "default") ? "default" : options[0].id);
+    if (!localStorage.getItem("cp_workspace_id")) {
+      const activeOption = options.find((o) => o.id === activeId);
+      localStorage.setItem("cp_workspace_id", activeId);
+      if (activeOption) localStorage.setItem("cp_workspace_name", activeOption.label);
+    }
     if (!options.some((o) => o.id === activeId)) {
       options = [{ id: activeId, label: localStorage.getItem("cp_workspace_name") || "Current workspace" }, ...options];
     }
