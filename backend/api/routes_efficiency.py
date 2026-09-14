@@ -2512,6 +2512,44 @@ def _ask_named_department(question: str, workspace_id: Optional[str], db: Sessio
     return None
 
 
+def _ask_named_people(question: str, workspace_id: Optional[str], db: Session) -> list[str]:
+    """
+    Detect real people named in the question even when _ask_intent's
+    regex classifier found no generic person-word trigger ("person",
+    "employee", "user", "who", "whose") to set entity="person" -- e.g.
+    "Compare AI spend for Maya Chen & Marcus Reed from yesterday" names
+    two real people but contains none of those trigger words, so entity
+    stayed at the generic "overview" default. That default is exactly
+    what disqualifies the two-named-entity comparison branch further down
+    (it only runs when entity=="person"), so both names were dropped
+    entirely -- confirmed live 2026-09-14: this exact question, once the
+    explicit period ("yesterday") routed it onto the deterministic path
+    instead of the agent loop (which resolves names correctly on its
+    own), silently fell back to a company-wide day-over-day comparison.
+
+    Same "match against real workspace data, never guess" contract as
+    _ask_named_department just above -- returns every distinct real
+    person name (WorkUser.name) that appears as a whole word/phrase in
+    the question, not a fuzzy or partial match.
+    """
+    from database.models import WorkUser
+    from core.workspace_scope import workspace_filter
+
+    text = " ".join((question or "").lower().split())
+    if not text or db is None:
+        return []
+    query = db.query(WorkUser.name)
+    scope = workspace_filter(WorkUser, workspace_id)
+    if scope is not None:
+        query = query.filter(scope)
+    rows = query.distinct().all()
+    labels = {str(row[0]).strip() for row in rows if row[0]}
+    return [
+        label for label in labels
+        if len(label) >= 3 and re.search(rf"\b{re.escape(label.lower())}\b", text)
+    ]
+
+
 _ASK_ENTITY_CONTEXT_CUES = {
     "department": ("department", "departments", "org unit", "organizational unit", "team", "teams"),
     "agent": ("agent", "agents"),
@@ -5235,6 +5273,19 @@ def _ask_costpilot_answer(
                 # the database, so it can't check real department names);
                 # this is the earliest point real department data exists.
                 parsed["entity"] = "department"
+    if parsed.get("entity") == "overview" and parsed.get("intent") == "comparison":
+        # Same reasoning as the department block just above, for the
+        # two-named-PEOPLE comparison case specifically -- "Compare AI
+        # spend for Maya Chen & Marcus Reed from yesterday" has no
+        # person/employee/user/who/whose trigger word for _ask_intent's
+        # regex classifier to set entity="person" on its own, so without
+        # this it silently fell all the way through to a company-wide
+        # period-over-period comparison, dropping both named people.
+        # Narrowly scoped to intent=="comparison" (not every question with
+        # two real names in it) to keep this targeted at the confirmed bug.
+        named_people = _ask_named_people(question, request.workspace_id, db)
+        if len(named_people) == 2:
+            parsed["entity"] = "person"
     comparison_execution_plan = None
     comparison_coverage_result = None
     # Only ever assigned inside the change_drivers/comparison branches
