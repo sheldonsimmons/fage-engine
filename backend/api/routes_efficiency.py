@@ -2369,6 +2369,20 @@ _ASK_BUSINESS_IMPACT_TRIGGER_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Triggers the company-wide "View Full AI Spend Report" action -- the
+# generalized (no single department) form of the Support Cost Briefing
+# report, for the plain "what are we spending on AI, and where is it
+# going" framing that names no outcome/ROI angle at all (that framing is
+# _ASK_BUSINESS_IMPACT_TRIGGER_RE's job, checked first below so "...and is
+# it working?" still wins there when both phrasings are present in the
+# same question). This regex intentionally overlaps with that one on
+# "where is it going" -- the elif ordering, not the regex, is what decides
+# which report a mixed question opens.
+_ASK_SPEND_OVERVIEW_TRIGGER_RE = re.compile(
+    r"\bwhere\s+(is|s|does|are)\b[^.?!]{0,40}\bgo(?:ing|es)?\b",
+    re.IGNORECASE,
+)
+
 _ASK_NAME_STOP_WORDS = {
     "about", "account", "agent", "cost", "department", "employee", "has",
     "have", "many", "much", "person", "project", "request", "requests",
@@ -4307,6 +4321,29 @@ def _ask_agent_final_payload(
             "report_id": "business_impact",
             "label": "View Full Business Impact Report",
             "params": {},
+        }
+
+    # Same "View Full AI Spend Report" action as the deterministic path's
+    # own _ASK_SPEND_OVERVIEW_TRIGGER_RE branch (see that comment) -- needed
+    # here too for the same reason the department-scoped trigger above is:
+    # this question can non-deterministically route through either path.
+    # Only applies when nothing else already claimed report_action, same
+    # precedence as the business_impact branch just above.
+    if (
+        not payload.get("report_action")
+        and _ASK_SPEND_OVERVIEW_TRIGGER_RE.search(request.question or "")
+    ):
+        resolved_days = 30
+        for _tool_name, call_args, _result in tool_call_log:
+            resolved_days = (
+                (_result or {}).get("period", {}).get("days")
+                or (call_args or {}).get("days")
+                or resolved_days
+            )
+        payload["report_action"] = {
+            "report_id": "support_briefing",
+            "label": "View Full AI Spend Report",
+            "params": {"days": resolved_days},
         }
 
     try:
@@ -7804,19 +7841,41 @@ def _ask_costpilot_answer(
     ):
         # The company-wide counterpart to the department-scoped trigger
         # above -- "I'm spending a lot on AI. Where is it going, and is it
-        # working?" (the exact phrasing this was scoped around) asks about
-        # the whole company, not one department, so it can't use the Cost
-        # Briefing report's own premise. Business Impact is the existing
-        # report that already tells the company-wide "where's it going /
-        # is it working" story (spend + outcomes together), so this points
-        # there instead of building a redundant company-wide clone of Cost
-        # Briefing -- the design decision made explicitly (2026-09-13) when
-        # this trigger was first scoped, now unblocked since Business
-        # Impact has since gotten the same report-quality visual pass.
+        # working?" asks about the whole company, not one department, so
+        # it can't use the Cost Briefing report's own premise. Business
+        # Impact is the existing report that already tells the "is it
+        # working" (outcomes/ROI) half of that story -- this branch is
+        # checked BEFORE the plain spend-overview one below specifically so
+        # a question naming both angles still opens Business Impact, not
+        # the spend-only report.
         report_action = {
             "report_id": "business_impact",
             "label": "View Full Business Impact Report",
             "params": {},
+        }
+    elif (
+        intent in {"overview", "total"}
+        and metric == "spend_usd"
+        and not reporting_filters.get("charged_unit")
+        and _ASK_SPEND_OVERVIEW_TRIGGER_RE.search(question)
+    ):
+        # "What are we spending on AI, and where is it going?" -- names no
+        # outcome/ROI angle (the business_impact branch above already
+        # claimed those), just wants the company-wide spend story: total,
+        # trend over time, top spenders, model mix. get_support_cost_
+        # briefing() generalizes to exactly this when department is
+        # omitted (2026-09-13) -- reuses that report rather than building a
+        # separate company-wide-only view. parsed["days"] is safe to use
+        # directly here (unlike the change_drivers branch above, which
+        # derives from the resolved comparison plan instead) because this
+        # intent has no comparison_execution_plan at all -- the answer's
+        # own date_from/date_to were already computed straight from this
+        # same value, so there is no requested-vs-resolved mismatch to
+        # guard against.
+        report_action = {
+            "report_id": "support_briefing",
+            "label": "View Full AI Spend Report",
+            "params": {"days": parsed["days"]},
         }
 
     payload = {

@@ -1492,7 +1492,10 @@ def _briefing_tier_bucket(tier: str) -> str:
 def get_support_cost_briefing(
     workspace_id: str | None = Query(None),
     days: int = Query(30, ge=7, le=180),
-    department: str = Query("Support", description="Which department this briefing is about."),
+    department: Optional[str] = Query(
+        None,
+        description="Which department this briefing is about. Omit for a company-wide briefing aggregated across every department.",
+    ),
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
 ):
@@ -1538,6 +1541,11 @@ def get_support_cost_briefing(
     """
     department_scope = _check_reporting_access(db, authorization, workspace_id)
     MAX_BRIEFING_ROWS = 50_000
+    # A department-scoped caller further below (department_scope) still
+    # only ever sees their own department regardless of this -- department
+    # here is only the SUBJECT of the briefing (None = every department
+    # combined), not an access boundary.
+    dept_label = department or "Company-wide"
 
     now = datetime.utcnow()
     start = now - timedelta(days=days)
@@ -1557,7 +1565,8 @@ def get_support_cost_briefing(
         # a WorkItem; an inner join here would silently undercount total
         # department spend by dropping unlinked transactions.
         q = db.query(TokenTransaction).outerjoin(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
-        q = q.filter(_dept_clause(department))
+        if department:
+            q = q.filter(_dept_clause(department))
         if tx_scope is not None:
             q = q.filter(tx_scope)
         if department_scope:
@@ -1714,16 +1723,16 @@ def get_support_cost_briefing(
     findings = []
     if pct_change is not None:
         direction = "increased" if pct_change >= 0 else "decreased"
-        findings.append(f"{department} AI spend {direction} {abs(pct_change):.0f}% vs. the prior {days} days.")
+        findings.append(f"{dept_label} AI spend {direction} {abs(pct_change):.0f}% vs. the prior {days} days.")
     if top_agents:
         top2 = ", ".join(a for a, _ in top_agents[:2])
-        findings.append(f"{top2} account{'s' if len(top_agents[:2]) > 1 else ''} for the largest share of {department.lower()} spend.")
+        findings.append(f"{top2} account{'s' if len(top_agents[:2]) > 1 else ''} for the largest share of {dept_label.lower()} spend.")
     premium_share = None
     total_tier_spend = sum(sum(row[t] for t in _BRIEFING_TIER_LABELS) for row in model_mix_by_agent)
     if total_tier_spend:
         premium_spend = sum(row["Advisor"] + row["Strategist"] for row in model_mix_by_agent)
         premium_share = round(100.0 * premium_spend / total_tier_spend, 0)
-        findings.append(f"Premium-tier models (Advisor/Strategist) account for {premium_share:.0f}% of {department.lower()} spend in this period.")
+        findings.append(f"Premium-tier models (Advisor/Strategist) account for {premium_share:.0f}% of {dept_label.lower()} spend in this period.")
     if resolved_n or unresolved_n:
         findings.append(f"{resolved_n:,} {outcome_labels['unit_noun_plural']} {outcome_labels['resolved'].lower()} vs. {unresolved_n:,} {outcome_labels['unresolved'].lower()} during this period.")
     if potential_savings.get("potential_savings_usd"):

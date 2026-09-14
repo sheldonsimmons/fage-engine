@@ -1244,8 +1244,9 @@ function renderSupportBriefingReportHtml(data) {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
   });
   const k = data.kpis || {};
-  const department = data.department || "Support";
-  const reportTitle = `${department} AI Cost Increase Analysis`;
+  const department = data.department || null;
+  const deptLabel = department || "Company-wide";
+  const reportTitle = department ? `${department} AI Cost Increase Analysis` : "AI Spend Overview";
   const evidenceByKpi = data.evidence_by_kpi || {};
   // Backend picks Won/Lost (Opportunity-driven departments, e.g. Sales)
   // vs Resolved/Unresolved (Support-like departments) based on what kind
@@ -1278,7 +1279,7 @@ function renderSupportBriefingReportHtml(data) {
 
   const agentTableRows = (data.top_agents || []).length
     ? data.top_agents.map((r, i) => `<tr><td class="bi-rank">${i + 1}</td><td>${escapeHtml(r.agent)}</td><td>${fmtUsd(r.spend_usd)}</td></tr>`).join("")
-    : `<tr><td colspan="3">No ${escapeHtml(department.toLowerCase())} agent activity in this period.</td></tr>`;
+    : `<tr><td colspan="3">No ${department ? escapeHtml(department.toLowerCase()) + " " : ""}agent activity in this period.</td></tr>`;
 
   const resolutionRatePct = (k.resolved_cases != null && k.unresolved_cases != null && (k.resolved_cases + k.unresolved_cases) > 0)
     ? Math.round(k.resolved_cases / (k.resolved_cases + k.unresolved_cases) * 100) : null;
@@ -1292,7 +1293,7 @@ function renderSupportBriefingReportHtml(data) {
         <div class="rpt-exec-summary">
           ${reportIconBadge(changePositive ? "savingsArrow" : "barChart", changePositive ? "green" : "orange")}
           <p class="bi-summary">
-            ${escapeHtml(department)} AI investment ${k.pct_change == null
+            ${escapeHtml(deptLabel)} AI investment ${k.pct_change == null
               ? `totaled ${fmtUsd(k.ai_investment_usd)}`
               : `${k.pct_change >= 0 ? "increased" : "decreased"} ${Math.abs(k.pct_change)}% to ${fmtUsd(k.ai_investment_usd)}`
             } over ${escapeHtml(data.period_label || "the selected period")}${
@@ -1315,7 +1316,7 @@ function renderSupportBriefingReportHtml(data) {
       </section>
 
       <section class="report-section">
-        <h2 class="report-section-title">Spend by ${escapeHtml(department)} Agent</h2>
+        <h2 class="report-section-title">${department ? `Spend by ${escapeHtml(department)} Agent` : "AI Spend by Agent"}</h2>
         ${supportBriefingAgentChart(data.top_agents) || `<p class="bi-note">Not enough agent-level activity to chart.</p>`}
         <table class="rpt-context-table">
           <thead><tr><th></th><th>Agent</th><th>AI Spend</th></tr></thead>
@@ -1362,8 +1363,8 @@ function renderSupportBriefingReportHtml(data) {
           ${data.truncated ? `<div><strong>Note:</strong> this period had more matching activity than could be fully loaded — figures reflect a bounded sample, not silently under-counted without notice.</div>` : ""}
           <div style="margin-top:8px">Associated business outcomes reflect cases with recorded AI activity and do not imply AI caused the outcome. Savings Opportunity is an estimate (routine calls priced at the cheapest active model tier), not money already saved.</div>
           ${reportEvidenceLink(
-            { charged_unit: department, date_from: new Date(Date.now() - (data.period_days || 30) * 86400000).toISOString(), date_to: new Date().toISOString() },
-            `View the ${department} requests behind these numbers`,
+            { charged_unit: department || undefined, date_from: new Date(Date.now() - (data.period_days || 30) * 86400000).toISOString(), date_to: new Date().toISOString() },
+            department ? `View the ${department} requests behind these numbers` : "View the requests behind these numbers",
             "rpt-evidence-cta",
             "document.getElementById('supportBriefingPreview')?.remove();",
           )}
@@ -1379,20 +1380,30 @@ function renderSupportBriefingReportHtml(data) {
 }
 
 async function openSupportBriefingReport(opts = {}) {
-  const department = opts.department || "Support";
+  // opts.department distinguishes three cases, not two: the manual
+  // "📋 Support Cost Briefing" button on reports.html calls this with NO
+  // args at all (opts.department is undefined) and has always meant
+  // "Support" specifically -- changed to `opts.department || "Support"`
+  // here would have quietly broken that existing button the same way an
+  // explicit company-wide request (opts.department === null, from the
+  // "what are we spending on AI" trigger below) needs to mean "every
+  // department combined," not "Support." Only a real, explicit null
+  // opts-in to company-wide.
+  const department = opts.department === undefined ? "Support" : opts.department;
   const days = opts.days || 30;
-  const reportTitle = `${department} AI Cost Increase Analysis`;
+  const reportTitle = department ? `${department} AI Cost Increase Analysis` : "AI Spend Overview";
   const modalId = "supportBriefingPreview";
   const existing = document.getElementById(modalId);
   if (existing) existing.remove();
   const workspaceId = reportWorkspaceId();
   let data;
   try {
-    const qs = new URLSearchParams({ days: String(days), department });
+    const qs = new URLSearchParams({ days: String(days) });
+    if (department) qs.set("department", department);
     if (workspaceId) qs.set("workspace_id", workspaceId);
     data = await apiGet(`/api/dashboard/support-briefing?${qs.toString()}`);
   } catch (err) {
-    alert(`Could not load the ${department} Cost Briefing: ` + (err.message || "unknown error"));
+    alert(`Could not load the ${department || "company-wide"} Cost Briefing: ` + (err.message || "unknown error"));
     return;
   }
   const html = renderSupportBriefingReportHtml(data);
