@@ -2533,15 +2533,21 @@ def _ask_named_people(question: str, workspace_id: Optional[str], db: Session) -
     the question, not a fuzzy or partial match.
     """
     from database.models import WorkUser
-    from core.workspace_scope import workspace_filter
 
     text = " ".join((question or "").lower().split())
     if not text or db is None:
         return []
     query = db.query(WorkUser.name)
-    scope = workspace_filter(WorkUser, workspace_id)
-    if scope is not None:
-        query = query.filter(scope)
+    # Not workspace_filter(WorkUser, workspace_id) -- confirmed live
+    # 2026-09-14, that crashed every single comparison-intent question
+    # with AttributeError: WorkUser has no attribute 'department'.
+    # workspace_filter() unconditionally references model.department
+    # before even checking for a workspace_id column (core/workspace_
+    # scope.py), which every OTHER model it's used with here happens to
+    # have -- WorkUser does not. WorkUser.workspace_id is a real column
+    # (see database/models.py), so filter on it directly instead.
+    if workspace_id:
+        query = query.filter(WorkUser.workspace_id == workspace_id)
     rows = query.distinct().all()
     labels = {str(row[0]).strip() for row in rows if row[0]}
     return [
