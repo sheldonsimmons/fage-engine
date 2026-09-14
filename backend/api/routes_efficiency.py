@@ -1170,13 +1170,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
     # workspace_collection_profile()'s earliest_observed_at/
     # latest_observed_at, a direct MIN/MAX over real TokenTransaction
     # rows.
-    data_history_question = bool(re.search(
-        r"\bhow far back\b"
-        r"|\b(?:earliest|oldest)\b[^.?!]{0,20}\bdata\b"
-        r"|\bdata\b[^.?!]{0,20}\b(?:go back|start(?:ed)?|begin|history)\b"
-        r"|\bwhen\s+did\b[^.?!]{0,25}\bdata\b[^.?!]{0,20}\b(?:start|begin)\b",
-        text,
-    ))
+    data_history_question = bool(_ASK_DATA_HISTORY_TRIGGER_RE.search(text))
 
     # "Which project's AI spend grew the most this month?" / "Whose AI
     # usage grew the most this month?" -- already correctly resolve to
@@ -2414,6 +2408,25 @@ def _ask_risk_breakdown(events: list[AuditEvent], entity: str) -> list[dict]:
 _ASK_BUSINESS_IMPACT_TRIGGER_RE = re.compile(
     r"\b(is it working|is this working|is our ai (investment|spend)|"
     r"paying off|worth it|worth the investment|\broi\b|return on investment)\b",
+    re.IGNORECASE,
+)
+
+# "How far back does our AI usage data go?" -- module-level (not inline
+# inside _ask_intent) so the top-level orchestrator (ask_costpilot(),
+# further down) can also check it BEFORE ever calling the agent loop, the
+# same way it already does for _ask_named_month_unsupported just above
+# that call. Confirmed live 2026-09-14: fixing only _ask_intent's
+# classification wasn't enough -- the agent loop runs unconditionally
+# first and only falls through to the deterministic path on its own
+# failure, so a successful (but fabricated) agent-loop answer never gave
+# this question a chance to reach the deterministic branch at all. See
+# that branch's own comment for the exact fabricated claim this guards
+# against ("your records go back to January 1, 2000").
+_ASK_DATA_HISTORY_TRIGGER_RE = re.compile(
+    r"\bhow far back\b"
+    r"|\b(?:earliest|oldest)\b[^.?!]{0,20}\bdata\b"
+    r"|\bdata\b[^.?!]{0,20}\b(?:go back|start(?:ed)?|begin|history)\b"
+    r"|\bwhen\s+did\b[^.?!]{0,25}\bdata\b[^.?!]{0,20}\b(?:start|begin)\b",
     re.IGNORECASE,
 )
 
@@ -5229,7 +5242,16 @@ def _ask_costpilot_answer(
     if named_month:
         return _ask_unsupported_period_response(named_month)
 
-    if _ask_agent_mode_enabled():
+    # Same reasoning as named_month just above, for "how far back does our
+    # AI usage data go" -- confirmed live 2026-09-14 that fixing only the
+    # deterministic classifier wasn't enough on its own: the agent loop
+    # runs unconditionally first and only falls through to the
+    # deterministic path on its own failure, so a successful (but
+    # fabricated -- see _ASK_DATA_HISTORY_TRIGGER_RE's own comment)
+    # agent-loop answer never gave the real branch a chance to run at
+    # all. Skipping the agent loop entirely for this question shape is
+    # what actually lets it happen.
+    if not _ASK_DATA_HISTORY_TRIGGER_RE.search(question) and _ask_agent_mode_enabled():
         agent_result = _ask_costpilot_agent(request, db, department_scope=department_scope, user_id=user_id)
         if agent_result is not None:
             return agent_result
@@ -6632,6 +6654,21 @@ def _ask_costpilot_answer(
                 date_from=earliest_dt,
                 date_to=latest_dt + timedelta(seconds=1),
                 days=max(1, (latest_dt - earliest_dt).days or 1),
+                # Explicit None, not omitted -- called directly as a plain
+                # function (not through FastAPI's request path), so these
+                # parameters' real defaults are FastAPI Query() sentinel
+                # objects, not None. Confirmed live 2026-09-14: omitting
+                # project_id crashed with AttributeError('Query' object
+                # has no attribute 'split') the moment this branch tried
+                # to treat that sentinel as a real filter value. This
+                # question also wants the TRUE unfiltered all-time total,
+                # not whatever incidental filters this question's own
+                # named-entity resolution may have picked up, so these are
+                # deliberately all-None rather than **reporting_filters.
+                project_id=None, user_external_id=None, agent_id=None,
+                account_id=None, source_platform=None, record_type=None,
+                model_tier=None, charged_unit=None, business_purpose=None,
+                provider=None,
                 activity_limit=1,
                 db=db,
             )
