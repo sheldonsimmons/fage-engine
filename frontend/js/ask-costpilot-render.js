@@ -543,6 +543,17 @@ const ASK_REPORT_DOUGHNUT_COLORS = [
   "#25c4b5", "#5a8dee", "#f5a623", "#e8618c", "#8c6fe0", "#4fb477",
 ];
 
+// Bar-chart canvas height scales with row count (see askReportChartImg
+// below) with no cap -- confirmed live 2026-09-13 on a 60-row work-item
+// breakdown ("Where your AI usage went"): the resulting canvas was 1680px
+// tall, and #printOverlay .report-chart-figure's break-inside:avoid
+// (styles.css) cannot actually be honored by a block that tall, so Chrome
+// printed a blank page where it tried and failed to keep the figure
+// together before the image finally started on the page after. The table
+// below the chart already lists every row regardless of chart size, so
+// capping only the CHARTED bars (not the table) loses nothing real.
+const ASK_REPORT_CHART_MAX_BARS = 20;
+
 // Renders an ad-hoc chart (bar or doughnut, per askReportPickChartType) to
 // a hidden canvas and captures it as a static image -- same reasoning as
 // printSection()'s own canvas fix: print output needs a bitmap, not a
@@ -556,10 +567,15 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
   // ranking to plot, "add a chart" can't invent one.
   if (typeof Chart === "undefined" || valueFormat === "text" || rows.length < 2) return "";
   const type = chartType || "bar";
-  const canvas = document.createElement("canvas");
   const isDoughnut = type === "doughnut";
+  // Doughnut is only ever picked for <=10 rows (askReportPickChartType), so
+  // the cap only actually bites for bar charts -- a long ranked list still
+  // gets its full detail in the table underneath, just not as 40+ bars no
+  // reader could compare anyway.
+  const chartRows = isDoughnut ? rows : rows.slice(0, ASK_REPORT_CHART_MAX_BARS);
+  const canvas = document.createElement("canvas");
   canvas.width = 700;
-  canvas.height = isDoughnut ? 420 : Math.max(220, rows.length * 28);
+  canvas.height = isDoughnut ? 420 : Math.max(220, chartRows.length * 28);
   document.body.appendChild(canvas);
   let dataUrl = "";
   // Chart.js's global defaults (chart-theme.js) set a light-gray tick/
@@ -574,8 +590,8 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
     const chart = new Chart(canvas.getContext("2d"), isDoughnut ? {
       type: "doughnut",
       data: {
-        labels: rows.map(r => String(r.label)),
-        datasets: [{ data: rows.map(r => r.value), backgroundColor: ASK_REPORT_DOUGHNUT_COLORS, borderWidth: 0 }],
+        labels: chartRows.map(r => String(r.label)),
+        datasets: [{ data: chartRows.map(r => r.value), backgroundColor: ASK_REPORT_DOUGHNUT_COLORS, borderWidth: 0 }],
       },
       options: {
         responsive: false, animation: false,
@@ -584,8 +600,8 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
     } : {
       type: "bar",
       data: {
-        labels: rows.map(r => String(r.label)),
-        datasets: [{ label: metricLabel, data: rows.map(r => r.value), backgroundColor: "rgba(37,196,181,0.75)" }],
+        labels: chartRows.map(r => String(r.label)),
+        datasets: [{ label: metricLabel, data: chartRows.map(r => r.value), backgroundColor: "rgba(37,196,181,0.75)" }],
       },
       options: {
         indexAxis: "y", responsive: false, animation: false,
@@ -603,7 +619,10 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
   } catch (_err) { /* leave dataUrl empty -- table still renders without it */ }
   canvas.remove();
   if (!dataUrl) return "";
-  return `<figure class="report-chart-figure" style="max-width:600px"><img src="${dataUrl}" style="width:100%;height:auto" /></figure>`;
+  const caption = rows.length > chartRows.length
+    ? `<figcaption>Showing the top ${chartRows.length} of ${rows.length} — full ranked list in the table below.</figcaption>`
+    : "";
+  return `<figure class="report-chart-figure" style="max-width:600px"><img src="${dataUrl}" style="width:100%;height:auto" />${caption}</figure>`;
 }
 
 function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
