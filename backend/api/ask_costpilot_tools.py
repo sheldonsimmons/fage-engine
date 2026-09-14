@@ -1178,21 +1178,6 @@ def run_get_account_outcomes(
     )
     o = outcome_result.rows[0] if outcome_result.rows else {m: 0 for m in outcome_metrics}
 
-    # A separate query, not added to outcome_metrics above -- that list is
-    # entirely source="outcome" metrics (core/metrics_catalog.py), while
-    # work_items_touched is source="transaction"; combining them in one
-    # run_metrics_query call risks an unintended join between
-    # TokenTransaction and WorkItemOutcome silently changing what the
-    # EXISTING won/lost/pipeline numbers above count. A second, independent
-    # call carries zero risk to that already-correct query.
-    touched_result = run_metrics_query(
-        db, workspace_id, metrics=["work_items_touched"],
-        filters=outcome_filters or None,
-    )
-    work_items_touched = int(
-        (touched_result.rows[0] if touched_result.rows else {}).get("work_items_touched") or 0
-    )
-
     won_count, lost_count, open_count = int(o["won_count"]), int(o["lost_count"]), int(o["open_count"])
     pipeline_value, closed_won_value = float(o["pipeline_value"]), float(o["won_value"])
     support_total, support_resolved = int(o["support_cases_total"]), int(o["support_cases_resolved"])
@@ -1242,6 +1227,36 @@ def run_get_account_outcomes(
         .join(WorkItemOutcome, WorkItemOutcome.work_item_id == WorkItem.id)
     ).first()
 
+    # outcome_coverage_pct: what fraction of this scope's AI-touched work
+    # items have a known outcome recorded. Deliberately NOT built from the
+    # outcomes_with_data catalog metric above -- that metric's own
+    # definition ("Count of WorkItems that have any WorkItemOutcome row at
+    # all... regardless of status") is NOT restricted to AI-touched work
+    # items, so pairing it with an AI-touched denominator produced
+    # coverage over 100% (confirmed live 2026-09-14: 728 "outcomes_with_
+    # data" against a smaller AI-touched count). Both halves of this ratio
+    # are computed fresh here, scoped identically via the same _scoped()
+    # helper already used for the won/lost spend split above, mirroring
+    # the already-verified-correct pattern in api/routes_dashboard.py's
+    # get_support_cost_briefing (touched_ids first, then outcomes counted
+    # only within that same id set).
+    touched_ids = [
+        row[0] for row in _scoped(
+            db.query(WorkItem.id).select_from(TokenTransaction)
+            .join(WorkItem, TokenTransaction.work_item_id == WorkItem.id)
+            .distinct()
+        ).all()
+    ]
+    work_items_touched = len(touched_ids)
+    outcomes_with_data_touched = (
+        db.query(func.count(func.distinct(WorkItemOutcome.work_item_id)))
+        .filter(WorkItemOutcome.work_item_id.in_(touched_ids))
+        .scalar() if touched_ids else 0
+    ) or 0
+    outcome_coverage_pct = (
+        round(100.0 * outcomes_with_data_touched / work_items_touched, 1) if work_items_touched else None
+    )
+
     return {
         "entity_name": account.name if account else None,
         "found": True,
@@ -1265,9 +1280,9 @@ def run_get_account_outcomes(
         "open_outcomes": open_outcomes,
         "successful_outcome_value_usd": round(successful_outcome_value, 2),
         "outcomes_with_known_data": outcomes_with_data,
-        "outcome_coverage_pct": (
-            round(100.0 * outcomes_with_data / work_items_touched, 1) if work_items_touched else None
-        ),
+        "ai_touched_work_items": work_items_touched,
+        "ai_touched_work_items_with_known_outcome": outcomes_with_data_touched,
+        "outcome_coverage_pct": outcome_coverage_pct,
     }
 
 

@@ -6388,7 +6388,8 @@ def _ask_costpilot_answer(
             if coverage_pct is not None:
                 answer += (
                     f" {coverage_pct}% of AI-touched work items have a known outcome recorded "
-                    f"({outcomes.get('outcomes_with_known_data', 0):,} of the total touched)."
+                    f"({outcomes.get('ai_touched_work_items_with_known_outcome', 0):,} of "
+                    f"{outcomes.get('ai_touched_work_items', 0):,} touched)."
                 )
         evidence = []
         calculation_row_count = None
