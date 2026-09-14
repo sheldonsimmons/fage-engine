@@ -2392,7 +2392,17 @@ _ASK_BUSINESS_IMPACT_TRIGGER_RE = re.compile(
 # "where is it going" -- the elif ordering, not the regex, is what decides
 # which report a mixed question opens.
 _ASK_SPEND_OVERVIEW_TRIGGER_RE = re.compile(
-    r"\bwhere\s+(is|s|does|are)\b[^.?!]{0,40}\bgo(?:ing|es)?\b",
+    # Confirmed live 2026-09-14: "We're spending six figures on AI and
+    # can't account for where it went" (the actual pitch-deck problem
+    # statement, past tense, no is/does/are auxiliary at all) matched
+    # neither this pattern's required auxiliary verb NOR its go/going/goes-
+    # only verb list, so the report_action button never appeared and the
+    # user only saw the plainer Generate Report output. "went" is now
+    # matched alongside go/going/goes, and the auxiliary verb requirement
+    # is dropped -- "where" ... "went"/"go" within a short span is
+    # unambiguous enough on its own, especially already gated (below) to
+    # only fire on a spend_usd overview/total question with no department.
+    r"\bwhere\b[^.?!]{0,40}\b(?:go(?:ing|es)?|went)\b",
     re.IGNORECASE,
 )
 
