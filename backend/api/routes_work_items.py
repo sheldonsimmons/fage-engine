@@ -1916,13 +1916,27 @@ def project_activity_reporting(
         _cached = _activity_report_cache.get(_cache_key)
         if _cached is not None and (time.monotonic() - _cached[0]) < _ACTIVITY_REPORT_CACHE_TTL_SECONDS:
             return copy.deepcopy(_cached[1])
-        if len(_activity_report_cache) > 200:
-            _stale = [
-                k for k, v in _activity_report_cache.items()
-                if (time.monotonic() - v[0]) >= _ACTIVITY_REPORT_CACHE_TTL_SECONDS
-            ]
-            for k in _stale:
-                _activity_report_cache.pop(k, None)
+        # Sweep every call, not just once the dict passes 200 entries --
+        # confirmed live (2026-09-14) that gate meant an already-expired
+        # entry was NEVER evicted as long as the dict stayed under 200
+        # keys, no matter how long it had been stale. With a 2-second TTL
+        # on THE single most expensive call in the app (this function's
+        # own docstring) and a distinct cache key per filter/date-bucket
+        # combination, a real testing session (many different Ask
+        # CostPilot questions, each with different filters) accumulates
+        # dozens of large deep-copied response payloads that then just sit
+        # in memory for the rest of the process's life -- a real
+        # contributor to the web dyno hitting its memory quota (R14)
+        # during exactly this kind of session. A full dict scan every call
+        # is cheap regardless: with a 2s TTL, this dict rarely holds more
+        # than a handful of genuinely-live entries at once.
+        _now = time.monotonic()
+        _stale = [
+            k for k, v in _activity_report_cache.items()
+            if (_now - v[0]) >= _ACTIVITY_REPORT_CACHE_TTL_SECONDS
+        ]
+        for k in _stale:
+            _activity_report_cache.pop(k, None)
 
     period_end = date_to or datetime.utcnow()
     period_start = date_from or (period_end - timedelta(days=days))
