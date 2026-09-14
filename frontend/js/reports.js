@@ -4706,6 +4706,20 @@ document.addEventListener("DOMContentLoaded", () => {
   if (Object.keys(drillScope).length) {
     setTimeout(() => drillFromAskCostPilot(drillScope), 100);
   }
+  // "View Full [X] Cost Briefing"/"View Full AI Spend Report" clicked from
+  // a page that never loads this file (index.html, live-landing.html --
+  // openSupportBriefingReport lives only here) -- confirmed live
+  // 2026-09-13 that button silently did nothing there beyond an alert.
+  // ask-costpilot-render.js's click handler now navigates here with these
+  // params instead when the function isn't in scope; pick the deep link
+  // up and open the real report rather than leaving the user on a bare
+  // Reports page after following what looked like a working link.
+  const briefingParams = new URLSearchParams(window.location.search);
+  if (briefingParams.get("open_briefing") === "1") {
+    const briefingDept = briefingParams.get("department");
+    const briefingDays = Number(briefingParams.get("days")) || 30;
+    setTimeout(() => openSupportBriefingReport({ department: briefingDept || null, days: briefingDays }), 150);
+  }
   updateReportRangeSummary();
   setTimeout(() => initDraggableReports("savings"), 100);
 });

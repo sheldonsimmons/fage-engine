@@ -362,10 +362,31 @@ function handleAskBriefingButtonClick(event) {
 
   if (reportId === "support_briefing") {
     if (typeof openSupportBriefingReport !== "function") {
-      alert("Full briefing reports are available from the Reports page.");
+      // This page never loads reports.js (index.html, live-landing.html,
+      // ...) -- openSupportBriefingReport only exists there. Confirmed
+      // live 2026-09-13: this used to just alert "available from the
+      // Reports page," leaving the user to go find and re-trigger it
+      // themselves. Navigate to reports.html with the same params instead
+      // -- its own DOMContentLoaded handler picks up open_briefing=1 and
+      // opens the real report automatically, same pattern the
+      // business_impact branch below already uses for its own deep link.
+      const qs = new URLSearchParams({ open_briefing: "1", days: String(Number(params.days) || 30) });
+      if (params.department) qs.set("department", params.department);
+      const workspaceId = localStorage.getItem("cp_workspace_id");
+      if (workspaceId) qs.set("workspace_id", workspaceId);
+      window.location.href = `/reports.html?${qs.toString()}`;
       return true;
     }
-    openSupportBriefingReport({ department: params.department, days: Number(params.days) || 30 });
+    // params.department is genuinely absent (not just falsy) for the
+    // company-wide "View Full AI Spend Report" trigger -- ?? null (not
+    // || "Support") turns that into an explicit null, which
+    // openSupportBriefingReport() requires to tell "no args at all, use
+    // the Support default" apart from "explicitly company-wide." A plain
+    // `department: params.department` here left it `undefined`, which
+    // that function couldn't distinguish from its own zero-arg default,
+    // so this button silently opened the Support-only briefing instead of
+    // the intended company-wide one -- confirmed live 2026-09-13.
+    openSupportBriefingReport({ department: params.department ?? null, days: Number(params.days) || 30 });
     return true;
   }
   if (reportId === "business_impact") {
