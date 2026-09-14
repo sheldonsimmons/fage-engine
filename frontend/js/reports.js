@@ -1113,8 +1113,16 @@ function reportIconBadge(icon, colorKey) {
 // this is deliberately scoped to composite reports only, not a global
 // restyle). delta is {text, positive} or null.
 function reportKpiCardPremium(icon, colorKey, label, value, sub, delta) {
+  // delta.positive means "is this the favorable direction" (colors the
+  // text green/red) -- confirmed live 2026-09-14 that the arrow glyph was
+  // wired to that SAME flag, so a cost INCREASE (unfavorable, pct_change
+  // > 0) rendered a downward ▼ arrow, reading as "spend went down" when it
+  // had gone up 31.2%. delta.direction is a separate, required field now
+  // ("up"/"down") carrying the metric's actual numeric sign -- color
+  // still encodes good/bad, but the arrow always points the way the
+  // number actually moved.
   const deltaHtml = delta
-    ? `<span class="rpt-kpi-delta ${delta.positive ? "up" : "down"}">${delta.positive ? "▲" : "▼"} ${escapeHtml(delta.text)}</span>`
+    ? `<span class="rpt-kpi-delta ${delta.positive ? "up" : "down"}">${delta.direction === "down" ? "▼" : "▲"} ${escapeHtml(delta.text)}</span>`
     : "";
   return `
     <div class="rpt-kpi-premium">
@@ -1259,6 +1267,7 @@ function renderSupportBriefingReportHtml(data) {
     unit_noun: "case", unit_noun_plural: "cases",
   };
   const changePositive = k.pct_change != null && k.pct_change < 0; // a cost DECREASE is the "good" direction
+  const changeDirection = k.pct_change != null && k.pct_change < 0 ? "down" : "up"; // the metric's actual numeric sign, independent of good/bad
   const changeLabel = k.pct_change == null ? "—" : `${Math.abs(k.pct_change)}% vs prior period`;
 
   const findingsList = (data.findings || []).length
@@ -1303,7 +1312,7 @@ function renderSupportBriefingReportHtml(data) {
         </div>
         <div class="report-kpi-row rpt-kpi-row-premium">
           ${reportKpiCardPremium("dollarCircle", "blue", "AI Investment", fmtUsd(k.ai_investment_usd), `vs ${fmtUsd(k.prior_period_usd)} prior period`, null)}
-          ${reportKpiCardPremium(changePositive ? "savingsArrow" : "barChart", changePositive ? "green" : "red", "Change vs Prior Period", changeLabel, null, k.pct_change == null ? null : { text: changeLabel, positive: changePositive })}
+          ${reportKpiCardPremium(changePositive ? "savingsArrow" : "barChart", changePositive ? "green" : "red", "Change vs Prior Period", changeLabel, null, k.pct_change == null ? null : { text: changeLabel, positive: changePositive, direction: changeDirection })}
           ${reportKpiCardPremium("target", "purple", "Savings Opportunity", k.savings_opportunity_usd != null ? fmtUsd(k.savings_opportunity_usd) : "—", "workspace-wide model-routing estimate", null)}
           ${reportKpiCardPremium("checkTarget", "green", outcomeLabels.cost_per_label, k.cost_per_resolution_usd != null ? fmtUsd(k.cost_per_resolution_usd) : "—", evidenceByKpi.cost_per_resolution_usd ? `<span class="bi-evidence-tag ${evidenceByKpi.cost_per_resolution_usd}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.cost_per_resolution_usd] || evidenceByKpi.cost_per_resolution_usd)}</span>` : null, null)}
           ${reportKpiCardPremium("document", "blue", "Outcome Coverage", k.outcome_coverage_pct != null ? `${k.outcome_coverage_pct}%` : "—", evidenceByKpi.outcome_coverage_pct ? `<span class="bi-evidence-tag ${evidenceByKpi.outcome_coverage_pct}">${escapeHtml(BI_EVIDENCE_LABELS[evidenceByKpi.outcome_coverage_pct] || evidenceByKpi.outcome_coverage_pct)}</span>` : null, null)}
