@@ -402,6 +402,23 @@ function handleAskBriefingButtonClick(event) {
     window.location.href = `/reports.html?${qs.toString()}`;
     return true;
   }
+  if (reportId === "risk") {
+    // "What's our audit trail for budget changes this quarter?" -- lands
+    // on the Risk & Governance tab pre-filtered to budget-cap events,
+    // instead of the generic unfiltered tab the user previously had to
+    // find and filter by hand. reports.html's own DOMContentLoaded
+    // handler picks up risk_event_type/risk_days and calls
+    // applyRiskDrilldown() once the tab's data has loaded, same
+    // deep-link-then-apply-on-load pattern open_briefing=1 already uses
+    // for the Cost Briefing report.
+    const qs = new URLSearchParams({ tab: "risk" });
+    if (params.event_type) qs.set("risk_event_type", params.event_type);
+    if (params.days) qs.set("risk_days", String(params.days));
+    const workspaceId = localStorage.getItem("cp_workspace_id");
+    if (workspaceId) qs.set("workspace_id", workspaceId);
+    window.location.href = `/reports.html?${qs.toString()}`;
+    return true;
+  }
   return false;
 }
 
@@ -591,6 +608,41 @@ const ASK_REPORT_DOUGHNUT_COLORS = [
   "#25c4b5", "#5a8dee", "#f5a623", "#e8618c", "#8c6fe0", "#4fb477",
 ];
 
+// Small inline plugin (no chartjs-plugin-datalabels dependency needed) --
+// draws each slice's share of the whole directly on the doughnut, since
+// a legend alone makes the reader do the "how big is that slice" math
+// themselves. Registered per-chart (config.plugins), not globally, so it
+// only ever touches this one doughnut, never any other chart on the page.
+const ASK_REPORT_DOUGHNUT_PCT_PLUGIN = {
+  id: "askReportDoughnutPct",
+  afterDraw(chart) {
+    const meta = chart.getDatasetMeta(0);
+    const values = chart.data.datasets[0].data;
+    const total = values.reduce((sum, v) => sum + (Number(v) || 0), 0);
+    if (!total) return;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 3;
+    meta.data.forEach((arc, i) => {
+      const value = Number(values[i]) || 0;
+      if (!value) return;
+      const pct = Math.round((value / total) * 100);
+      // A sub-5% slice is too thin to hold readable text without
+      // spilling outside its own wedge -- skipped rather than drawn
+      // illegibly small or overlapping its neighbor.
+      if (pct < 5) return;
+      const pos = arc.tooltipPosition();
+      ctx.fillText(`${pct}%`, pos.x, pos.y);
+    });
+    ctx.restore();
+  },
+};
+
 // Bar-chart canvas height scales with row count (see askReportChartImg
 // below) with no cap -- confirmed live 2026-09-13 on a 60-row work-item
 // breakdown ("Where your AI usage went"): the resulting canvas was 1680px
@@ -641,6 +693,7 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
         labels: chartRows.map(r => String(r.label)),
         datasets: [{ data: chartRows.map(r => r.value), backgroundColor: ASK_REPORT_DOUGHNUT_COLORS, borderWidth: 0 }],
       },
+      plugins: [ASK_REPORT_DOUGHNUT_PCT_PLUGIN],
       options: {
         // Found the REAL root cause of the tiny-legend report live
         // 2026-09-14: maintainAspectRatio defaults to true and forces a

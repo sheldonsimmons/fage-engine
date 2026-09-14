@@ -1136,6 +1136,19 @@ def _ask_intent(question: str, default_days: int) -> dict:
             # AuditEvent.rationale-backed lookup as "why are we using X"
             # above instead, scoped by keyword below.
             or re.search(r"\b(?:show|recent|latest)\b.{0,20}\bdecisions?\b", text)
+            # "What's our audit trail for budget changes this quarter?" --
+            # confirmed live 2026-09-14: matched none of the patterns
+            # above (no "why are we using," "who approved," or "show/
+            # recent/latest decisions"), so it fell through to a generic
+            # risk_events answer -- the top 10 sensitive-data/keyword-
+            # policy flags across random departments, not a single actual
+            # budget-cap change. "Audit trail" is unambiguous enough
+            # paired with "budget"/"cap" to route here directly, reusing
+            # the same real AuditEvent.rationale-backed lookup (scoped to
+            # budget-cap events specifically by decision_keyword below)
+            # instead of a generic risk-event dump that never touches
+            # budget decisions at all.
+            or (re.search(r"\baudit trail\b", text) and re.search(r"\bbudget\b|\bcap\b", text))
         )
     )
 
@@ -4459,6 +4472,28 @@ def _ask_agent_final_payload(
             "report_id": "support_briefing",
             "label": "View Full AI Spend Report",
             "params": {"days": resolved_days},
+        }
+
+    # Same "View Full Budget Audit Trail" action as the deterministic
+    # path's own decision_history_question branch (see that comment) --
+    # needed here too since this question can non-deterministically route
+    # through either path.
+    if (
+        not payload.get("report_action")
+        and re.search(r"\baudit trail\b", request.question or "", re.IGNORECASE)
+        and re.search(r"\bbudget\b|\bcap\b", request.question or "", re.IGNORECASE)
+    ):
+        resolved_days = 30
+        for _tool_name, call_args, _result in tool_call_log:
+            resolved_days = (
+                (_result or {}).get("period", {}).get("days")
+                or (call_args or {}).get("days")
+                or resolved_days
+            )
+        payload["report_action"] = {
+            "report_id": "risk",
+            "label": "View Full Budget Audit Trail",
+            "params": {"event_type": "BUDGET", "days": resolved_days},
         }
 
     try:
@@ -8096,6 +8131,27 @@ def _ask_costpilot_answer(
             "report_id": "support_briefing",
             "label": "View Full AI Spend Report",
             "params": {"days": parsed["days"]},
+        }
+    elif decision_history_question and re.search(r"\bbudget\b|\bcap\b", question, re.IGNORECASE):
+        # "What's our audit trail for budget changes this quarter?" --
+        # links straight to the Risk & Governance tab's own event-type
+        # filter (already built, just never reachable from Ask CostPilot
+        # before) instead of leaving the user to find and filter it by
+        # hand. Deliberately re-checks for "budget"/"cap" here rather than
+        # reading the decision_keyword local set inside the
+        # decision_history_question branch above -- that variable only
+        # exists when THIS SPECIFIC intent branch ran, and referencing it
+        # unconditionally here would crash every other answer path with a
+        # NameError.
+        report_action = {
+            "report_id": "risk",
+            "label": "View Full Budget Audit Trail",
+            "params": {
+                "event_type": "BUDGET",
+                "date_from": (period or {}).get("date_from"),
+                "date_to": (period or {}).get("date_to"),
+                "days": parsed["days"],
+            },
         }
 
     payload = {

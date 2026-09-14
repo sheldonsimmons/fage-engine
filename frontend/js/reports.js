@@ -1243,6 +1243,38 @@ function supportBriefingModelMixBars(modelMixByAgent) {
   return `<div class="rpt-stackbar-chart"><div class="rpt-stackbar-legend">${legend}</div>${rows}</div>`;
 }
 
+// Same reasoning as ask-costpilot-render.js's ASK_REPORT_DOUGHNUT_PCT_PLUGIN
+// (duplicated, not shared -- see that file's own note on why these two
+// report systems don't share top-level names): draws each slice's share
+// of the whole directly on the doughnut instead of leaving the reader to
+// eyeball it from the legend alone.
+const REPORT_DOUGHNUT_PCT_PLUGIN = {
+  id: "reportDoughnutPct",
+  afterDraw(chart) {
+    const meta = chart.getDatasetMeta(0);
+    const values = chart.data.datasets[0].data;
+    const total = values.reduce((sum, v) => sum + (Number(v) || 0), 0);
+    if (!total) return;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 3;
+    meta.data.forEach((arc, i) => {
+      const value = Number(values[i]) || 0;
+      if (!value) return;
+      const pct = Math.round((value / total) * 100);
+      if (pct < 5) return;
+      const pos = arc.tooltipPosition();
+      ctx.fillText(`${pct}%`, pos.x, pos.y);
+    });
+    ctx.restore();
+  },
+};
+
 function supportBriefingOutcomeChart(resolved, unresolved, labels) {
   if (!resolved && !unresolved) return "";
   return reportChartImg({
@@ -1251,6 +1283,7 @@ function supportBriefingOutcomeChart(resolved, unresolved, labels) {
       labels: [labels.resolved, labels.unresolved],
       datasets: [{ data: [resolved, unresolved], backgroundColor: [REPORT_CHART_PALETTE[0], "#c9ccd1"], borderWidth: 0 }],
     },
+    plugins: [REPORT_DOUGHNUT_PCT_PLUGIN],
     options: {
       responsive: false, animation: false,
       plugins: { legend: { display: true, position: "right", labels: { color: REPORT_CHART_TEXT_COLOR, boxWidth: 18, padding: 12, font: { size: 15 } } } },
@@ -4706,6 +4739,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const locationScope = askDrillScopeFromLocation();
   const drillScope = Object.keys(locationScope).length ? locationScope : pendingScope;
+  // "View Full Budget Audit Trail" (risk_event_type/risk_days) -- set the
+  // active date range BEFORE the risk tab's own data fetch fires below
+  // (openReportView -> loadActiveTab -> loadRisk reads getActiveDateRange()
+  // synchronously at call time), so the days requested from the Ask
+  // CostPilot answer are what actually gets fetched, not the page's
+  // default 30-day preset.
+  const riskParams = new URLSearchParams(window.location.search);
+  const riskDays = Number(riskParams.get("risk_days"));
+  if (riskParams.get("tab") === "risk" && riskDays > 0) {
+    const to = new Date();
+    const from = new Date(to.getTime() - riskDays * 86400000);
+    reportDrillDateRange = { date_from: from.toISOString(), date_to: to.toISOString(), days: riskDays };
+  }
   // Open the requested tab immediately and unconditionally — this used to
   // only happen when there was NO filter scope, so any failure anywhere in
   // the scope-parsing path silently left the default Performance tab
@@ -4739,6 +4785,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const briefingDept = briefingParams.get("department");
     const briefingDays = Number(briefingParams.get("days")) || 30;
     setTimeout(() => openSupportBriefingReport({ department: briefingDept || null, days: briefingDays }), 150);
+  }
+  // Applies once the risk tab's own async loadRisk() fetch (kicked off by
+  // openReportView above) has actually populated _rptRiskEvents -- same
+  // 150ms deferred-apply pattern the briefing deep link just above uses
+  // for the same reason (nothing here awaits that fetch directly).
+  const riskEventType = riskParams.get("risk_event_type");
+  if (riskParams.get("tab") === "risk" && riskEventType) {
+    setTimeout(() => applyRiskDrilldown({
+      type: riskEventType,
+      label: `${riskEventType[0]}${riskEventType.slice(1).toLowerCase()} audit events`,
+    }), 150);
   }
   updateReportRangeSummary();
   setTimeout(() => initDraggableReports("savings"), 100);
