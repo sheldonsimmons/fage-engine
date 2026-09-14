@@ -5273,7 +5273,7 @@ def _ask_costpilot_answer(
                 # the database, so it can't check real department names);
                 # this is the earliest point real department data exists.
                 parsed["entity"] = "department"
-    if parsed.get("entity") == "overview" and parsed.get("intent") == "comparison":
+    if parsed.get("intent") == "comparison" and parsed.get("entity") != "person":
         # Same reasoning as the department block just above, for the
         # two-named-PEOPLE comparison case specifically -- "Compare AI
         # spend for Maya Chen & Marcus Reed from yesterday" has no
@@ -5281,8 +5281,14 @@ def _ask_costpilot_answer(
         # regex classifier to set entity="person" on its own, so without
         # this it silently fell all the way through to a company-wide
         # period-over-period comparison, dropping both named people.
-        # Narrowly scoped to intent=="comparison" (not every question with
-        # two real names in it) to keep this targeted at the confirmed bug.
+        # Deliberately NOT scoped to entity=="overview" only -- confirmed
+        # live 2026-09-14 that the OpenAI-assisted classifier sometimes
+        # guesses a specific WRONG entity too (e.g. "provider"), not just
+        # the generic default, for this exact question, on different
+        # tries of the identical text. _ask_named_people()'s own
+        # real-data-match contract (exactly two distinct, unambiguous real
+        # people, never a guess) is a strong enough signal to override
+        # whatever entity the classifier landed on, not only its default.
         named_people = _ask_named_people(question, request.workspace_id, db)
         if len(named_people) == 2:
             parsed["entity"] = "person"
