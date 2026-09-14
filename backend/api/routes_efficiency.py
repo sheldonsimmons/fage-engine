@@ -1067,6 +1067,19 @@ def _ask_intent(question: str, default_days: int) -> dict:
             # branch, wrong for a general business-value question) and
             # produced a dead-end contract rejection instead of an answer.
             or re.search(r"\b(?:connected|tied|linked)\s+to\b.*\boutcomes?\b", text)
+            # "What's our outcome coverage percentage?" -- confirmed live
+            # (2026-09-14, a 145-question sweep of the reference doc):
+            # matched none of the patterns above ("coverage" isn't a help/
+            # drive/improve word, and entity didn't resolve to "context"),
+            # so this fell through to the OpenAI planner, which on
+            # different tries either produced a generic spend-overview
+            # non-answer or misclassified into a single-record intent that
+            # failed the answer contract outright ("a selected governed
+            # request or audit event is required") for a question that
+            # names no record at all. "Outcome coverage" is unambiguous
+            # enough to route here directly, same as the "business
+            # outcomes" patterns above.
+            or re.search(r"\boutcome\s+coverage\b", text)
         )
     )
 
@@ -6364,6 +6377,19 @@ def _ask_costpilot_answer(
                 f"(${pipeline_value:,.2f} in pipeline). AI activity is tracked alongside this work, "
                 "but this is association, not proof that AI caused these outcomes."
             )
+            # Purely additive: appended only when the coverage figure is
+            # available, never replacing or altering the won/lost sentence
+            # above -- specifically closes the "outcome coverage
+            # percentage" gap (see general_outcome_question's own comment)
+            # without changing this branch's existing answer for every
+            # other phrasing ("Is AI helping us close deals?", etc.) that
+            # already passed.
+            coverage_pct = outcomes.get("outcome_coverage_pct")
+            if coverage_pct is not None:
+                answer += (
+                    f" {coverage_pct}% of AI-touched work items have a known outcome recorded "
+                    f"({outcomes.get('outcomes_with_known_data', 0):,} of the total touched)."
+                )
         evidence = []
         calculation_row_count = None
         calculation_formula = (

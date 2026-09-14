@@ -1178,6 +1178,21 @@ def run_get_account_outcomes(
     )
     o = outcome_result.rows[0] if outcome_result.rows else {m: 0 for m in outcome_metrics}
 
+    # A separate query, not added to outcome_metrics above -- that list is
+    # entirely source="outcome" metrics (core/metrics_catalog.py), while
+    # work_items_touched is source="transaction"; combining them in one
+    # run_metrics_query call risks an unintended join between
+    # TokenTransaction and WorkItemOutcome silently changing what the
+    # EXISTING won/lost/pipeline numbers above count. A second, independent
+    # call carries zero risk to that already-correct query.
+    touched_result = run_metrics_query(
+        db, workspace_id, metrics=["work_items_touched"],
+        filters=outcome_filters or None,
+    )
+    work_items_touched = int(
+        (touched_result.rows[0] if touched_result.rows else {}).get("work_items_touched") or 0
+    )
+
     won_count, lost_count, open_count = int(o["won_count"]), int(o["lost_count"]), int(o["open_count"])
     pipeline_value, closed_won_value = float(o["pipeline_value"]), float(o["won_value"])
     support_total, support_resolved = int(o["support_cases_total"]), int(o["support_cases_resolved"])
@@ -1250,6 +1265,9 @@ def run_get_account_outcomes(
         "open_outcomes": open_outcomes,
         "successful_outcome_value_usd": round(successful_outcome_value, 2),
         "outcomes_with_known_data": outcomes_with_data,
+        "outcome_coverage_pct": (
+            round(100.0 * outcomes_with_data / work_items_touched, 1) if work_items_touched else None
+        ),
     }
 
 
