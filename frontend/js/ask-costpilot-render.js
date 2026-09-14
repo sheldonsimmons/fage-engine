@@ -426,6 +426,32 @@ const ASK_REPORT_REPLAYABLE_TOOLS = new Set([
   "get_usage_report", "get_change_drivers", "get_agent_adoption",
 ]);
 
+// query_metrics identifies its metric by the backend catalog's raw key
+// (core/metrics_catalog.py, e.g. "ai_spend", "tokens_saved_count") -- fine
+// for an API param, but confirmed live it was also being used verbatim as
+// the report's own section title and table header ("ai_spend — full
+// breakdown"). Mirrors the catalog's real `label=` values for the metrics
+// reachable from this UI; anything not listed falls back to a humanized
+// version of the key rather than the raw snake_case string.
+const ASK_REPORT_METRIC_LABELS = {
+  ai_spend: "AI Spend", ai_requests: "AI Requests", input_tokens: "Input Tokens",
+  output_tokens: "Output Tokens", total_tokens: "Total Tokens",
+  work_items_touched: "Work Items Touched", accounts_touched: "Accounts Touched",
+  active_agents: "Active Agents", people_touched: "People",
+  tokens_saved_count: "Tokens Saved", simulation_count: "Simulated Requests",
+  live_count: "Live Requests", won_count: "Opportunities Won", lost_count: "Opportunities Lost",
+  open_count: "Opportunities Open", won_value: "Closed Won Value", pipeline_value: "Pipeline Value",
+  support_cases_total: "Support Cases", support_cases_resolved: "Support Cases Resolved",
+  successful_outcomes: "Successful Outcomes", unsuccessful_outcomes: "Unsuccessful Outcomes",
+  open_outcomes: "Open Work Items", successful_outcome_value: "Successful Outcome Value",
+  outcomes_with_data: "Work Items With Known Outcome", savings: "Total Savings",
+  pruning_savings: "Pruning Savings", downgrade_savings: "Model Downgrade Savings",
+};
+function askReportMetricLabel(key) {
+  if (!key) return "Value";
+  return ASK_REPORT_METRIC_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function askReportRowsFromResult(tool, result) {
   if (!result || typeof result !== "object") return null;
   if (tool === "get_budget_status" && Array.isArray(result.departments)) {
@@ -474,6 +500,7 @@ function askReportRowsFromResult(tool, result) {
   if (tool === "query_metrics" && Array.isArray(result.rows)) {
     const metricKey = (result.metrics && result.metrics[0]) || Object.keys(result.rows[0] || {}).find(k => k !== "dimensions" && k !== "dimension_ids");
     const valueFormat = metricKey && metricKey.toLowerCase().includes("spend") ? "usd" : "num";
+    const metricLabel = askReportMetricLabel(metricKey);
     // A "compare to X" refinement re-fetches with compare_to set, and the
     // backend (core/metrics_query.py's comparison_block) comes back with a
     // SEPARATE comparison.rows array keyed by dimension label, not merged
@@ -491,7 +518,7 @@ function askReportRowsFromResult(tool, result) {
       });
     }
     return {
-      metricLabel: metricKey || "Value", valueFormat,
+      metricLabel, valueFormat,
       rows: result.rows.map(r => {
         const label = Object.values(r.dimensions || {})[0] ?? "Unknown";
         let sub = "";
