@@ -1152,6 +1152,32 @@ def _ask_intent(question: str, default_days: int) -> dict:
         and re.search(r"\b(?:across|connected|coverage)\b", text)
     )
 
+    # "How far back does our AI usage data go?" -- had no deterministic
+    # route at all, confirmed live 2026-09-14 landing on two different,
+    # both-wrong answers across tries: one used a stale settings field
+    # (workspace_analytics_settings.latest_complete_at, meant as a
+    # conservative "verified complete through" cutoff, not "the latest
+    # data") that read as data collection having silently stopped over a
+    # month before the real latest activity; the other went through the
+    # agent loop, which has no tool that returns a real earliest-
+    # timestamp fact at all -- it narrated the "all_time" period
+    # resolver's internal 2000-01-01 query safety bound (core/
+    # analytics_periods.py, a fixed far-past constant chosen so an
+    # all_time query can't clip real data, never meant to be read back as
+    # a fact) as if it were an actual observed data point ("your records
+    # go back to January 1, 2000"), a real fabrication -- exactly what the
+    # answer contract exists to prevent elsewhere. This routes instead to
+    # workspace_collection_profile()'s earliest_observed_at/
+    # latest_observed_at, a direct MIN/MAX over real TokenTransaction
+    # rows.
+    data_history_question = bool(re.search(
+        r"\bhow far back\b"
+        r"|\b(?:earliest|oldest)\b[^.?!]{0,20}\bdata\b"
+        r"|\bdata\b[^.?!]{0,20}\b(?:go back|start(?:ed)?|begin|history)\b"
+        r"|\bwhen\s+did\b[^.?!]{0,25}\bdata\b[^.?!]{0,20}\b(?:start|begin)\b",
+        text,
+    ))
+
     # "Which project's AI spend grew the most this month?" / "Whose AI
     # usage grew the most this month?" -- already correctly resolve to
     # intent="ranking" (entity != "overview" plus the ranking_terms hit
@@ -1217,6 +1243,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "attention_question": attention_question,
         "decision_history_question": decision_history_question,
         "data_coverage_question": data_coverage_question,
+        "data_history_question": data_history_question,
         "growth_ranking_question": growth_ranking_question,
         "per_item_cost_question": per_item_cost_question,
         "per_outcome_cost_question": per_outcome_cost_question,
@@ -1712,6 +1739,14 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
     # with only whatever's connected, presented as complete.
     if fallback.get("data_coverage_question"):
         return fallback, "deterministic_data_coverage"
+    # "How far back does our AI usage data go?" -- bypassing the OpenAI
+    # planner and agent loop is what lets _ask_costpilot_answer's dedicated
+    # data-history branch run instead: confirmed live 2026-09-14, the
+    # agent loop has no tool that returns a real earliest-data-point fact,
+    # so it fabricated one (see that branch's own comment for the exact
+    # wrong claim it produced).
+    if fallback.get("data_history_question"):
+        return fallback, "deterministic_data_history"
     # Exact calendar and lifetime phrases are reporting contracts. A language
     # model must not widen one day to a year or shrink all history to 30 days.
     if fallback.get("period_key") in {
@@ -5456,6 +5491,7 @@ def _ask_costpilot_answer(
     attention_question = bool(parsed.get("attention_question"))
     decision_history_question = bool(parsed.get("decision_history_question"))
     data_coverage_question = bool(parsed.get("data_coverage_question"))
+    data_history_question = bool(parsed.get("data_history_question"))
     growth_ranking_question = bool(parsed.get("growth_ranking_question"))
     per_item_cost_question = bool(parsed.get("per_item_cost_question"))
     per_outcome_cost_question = bool(parsed.get("per_outcome_cost_question"))
@@ -6571,6 +6607,53 @@ def _ask_costpilot_answer(
         ]
         calculation_row_count = len(decisions)
         calculation_formula = "AuditEvent rows matching the named agent/model, ordered by timestamp desc"
+    elif data_history_question:
+        # "How far back does our AI usage data go?" -- real observed
+        # facts (see this flag's own detection comment above for the two
+        # different wrong answers this used to produce): a direct MIN/MAX
+        # over TokenTransaction.timestamp, not the all_time period
+        # resolver's 2000-01-01 query safety bound and not
+        # workspace_analytics_settings' conservative "verified complete
+        # through" cutoff.
+        profile = workspace_collection_profile(db, request.workspace_id)
+        earliest_raw = profile.get("earliest_observed_at")
+        latest_raw = profile.get("latest_observed_at")
+        title = "AI usage data history"
+        if not earliest_raw or not latest_raw:
+            answer = "No AI usage data has been recorded for this workspace yet."
+            evidence = []
+            calculation_row_count = 0
+            calculation_formula = "MIN/MAX of TokenTransaction.timestamp for this workspace"
+        else:
+            earliest_dt = datetime.fromisoformat(earliest_raw)
+            latest_dt = datetime.fromisoformat(latest_raw)
+            history_report = project_activity_reporting(
+                workspace_id=request.workspace_id,
+                date_from=earliest_dt,
+                date_to=latest_dt + timedelta(seconds=1),
+                days=max(1, (latest_dt - earliest_dt).days or 1),
+                activity_limit=1,
+                db=db,
+            )
+            history_summary = history_report.get("summary") or {}
+            total_spend_display, _ = _ask_metric_value("spend_usd", history_summary.get("spend_usd") or 0)
+            total_requests = int(history_summary.get("request_count") or 0)
+            answer = (
+                f"Your AI usage data spans {earliest_dt.strftime('%B %-d, %Y')} to "
+                f"{latest_dt.strftime('%B %-d, %Y')}. Across that period, CostPilot governed "
+                f"{total_requests:,} requests totaling {total_spend_display} in AI spend."
+            )
+            evidence = [{
+                "label": f"{earliest_dt.strftime('%b %-d, %Y')} – {latest_dt.strftime('%b %-d, %Y')}",
+                "value": total_spend_display, "metric_label": "AI spend",
+                "detail": f"{total_requests:,} governed requests",
+                "filter_name": None, "filter_value": None,
+            }]
+            calculation_row_count = total_requests
+            calculation_formula = (
+                "MIN/MAX of TokenTransaction.timestamp for this workspace, "
+                "then summed spend/requests across that exact observed range"
+            )
     elif data_coverage_question:
         # "Show AI activity across Salesforce, HubSpot, and ServiceNow" --
         # states connection status per named platform before answering,
