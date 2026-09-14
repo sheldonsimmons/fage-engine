@@ -508,8 +508,21 @@
   async function startRecording(isAutoListen = false) {
     unlockAudioPlayback();
     setError("");
-    answerEl.classList.remove("visible");
-    transcriptEl.classList.remove("visible");
+    // Confirmed live (reported as "the response disappears and I can't
+    // view it" on mobile): this used to clear both regardless of why
+    // recording started. speak()'s onended calls startRecording(true) the
+    // instant the spoken reply finishes, specifically to auto-listen for
+    // a hands-free follow-up -- but that meant the just-answered text got
+    // yanked off screen the moment the audio stopped, whether or not the
+    // user was still reading it, on every single answer. A manual tap on
+    // the mic (isAutoListen left false) still starts a fresh exchange and
+    // should clear the old one; auto-listen should keep the last answer
+    // visible in the background until a real new one actually replaces
+    // it -- the mic can listen quietly without the screen going blank.
+    if (!isAutoListen) {
+      answerEl.classList.remove("visible");
+      transcriptEl.classList.remove("visible");
+    }
     stopSpeaking();
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError("Voice isn't supported in this browser.");
