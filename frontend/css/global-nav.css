@@ -268,6 +268,19 @@ header.header .header-sub,
   color: var(--text-primary, #e8eef7);
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  /* 100vh first as a universal fallback, 100dvh after to override it on
+     browsers that actually support the dynamic-viewport unit (iOS Safari
+     15.4+) -- a browser that doesn't recognize `dvh` ignores that whole
+     declaration and keeps the working `vh` one, per normal CSS cascade
+     behavior for an unsupported value; without this, an older mobile
+     browser could resolve `height` to no value at all here, and this
+     row's own minmax(0, 1fr) sizing on .cp-ask-messages below would
+     collapse toward its 0 minimum -- the answer still fully present in
+     the DOM, just squeezed to zero visible height, exactly matching a
+     "the response disappeared and I can't view it" report from mobile
+     that a modern-Chromium-only test (Playwright's iPhone emulation
+     included) can't reproduce, since it never lacks dvh support itself. */
+  height: 100vh;
   height: 100dvh;
   max-width: 100%;
   position: fixed;
@@ -448,6 +461,12 @@ header.header .header-sub,
   gap: 14px;
   overflow-y: auto;
   padding: 8px 20px 20px;
+  /* Belt-and-suspenders alongside the height fallback above -- this row
+     sizes via the drawer's own minmax(0, 1fr) grid track, so it can only
+     ever be as tall as the drawer resolves to. A real minimum keeps an
+     actual answer from ever rendering at literally zero visible height,
+     regardless of what the parent's height calculation does. */
+  min-height: 120px;
 }
 
 .cp-ask-welcome {
