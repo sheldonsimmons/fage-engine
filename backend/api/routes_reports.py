@@ -346,9 +346,33 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
     def _dept_matches_scope(raw_dept: str) -> bool:
         return not department_scope or raw_dept == department_scope or (raw_dept or "").endswith(f":{department_scope}")
 
+    # DepartmentBudget has no real workspace_id column (see the model) --
+    # workspace scoping for it is entirely the "WORKSPACE_ID:Department"
+    # prefix convention every other model here uses when it lacks that
+    # column too. This query previously had NO workspace check at all,
+    # only the unrelated department_scope (RBAC) filter above -- confirmed
+    # live (2026-09-13): querying SIM-HISTORICAL-2Y returned budget rows
+    # literally named "4BE43240A6674314:Marketing" and
+    # "BDB2754C199247E8:Marketing" (two OTHER, unrelated workspaces' own
+    # Marketing budgets) alongside this workspace's real, unprefixed
+    # "Marketing" row -- all three collapse to the same "Marketing"
+    # display name, so the frontend's cross-row cap-summing merge diluted
+    # a genuinely-over-cap 126% used against its real $18 cap down to a
+    # falsely-comfortable 60% against a $38 cap that included two other
+    # workspaces' $10 phantom caps with zero real activity.
+    def _budget_belongs_to_workspace(raw_dept: str) -> bool:
+        raw_dept = raw_dept or ""
+        if workspace_id and workspace_id != "default" and raw_dept.startswith(f"{workspace_id}:"):
+            return True
+        # No colon prefix at all -- the unprefixed/default bucket, same
+        # convention _run_activity_query and workspace_filter() already
+        # use elsewhere; a DIFFERENT explicit workspace's own prefix
+        # (like the two examples above) is what this excludes.
+        return ":" not in raw_dept
+
     budgets = {
         b.department: b for b in db.query(DepartmentBudget).all()
-        if _dept_matches_scope(b.department)
+        if _dept_matches_scope(b.department) and _budget_belongs_to_workspace(b.department)
     }
 
     # Aggregate per department
