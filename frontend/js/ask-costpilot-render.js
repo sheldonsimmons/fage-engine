@@ -695,7 +695,11 @@ function askReportKpiRowHtml(data, provenance) {
   const summary = data.summary || {};
   const cards = [];
   if (summary.spend_usd != null) {
-    cards.push(askReportKpiCardPremium("dollarCircle", "blue", "AI Spend", askReportFmtUsd(summary.spend_usd),
+    // askReportFmtUsd keeps up to 4 decimals for the ranked table below
+    // (real rows there run as low as $0.0266) -- a KPI headline reads
+    // better rounded to whole cents, so this one card formats its own.
+    const spendHeadline = `$${Number(summary.spend_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    cards.push(askReportKpiCardPremium("dollarCircle", "blue", "AI Spend", spendHeadline,
       summary.request_count != null ? `${askReportFmtNum(summary.request_count)} requests` : null));
   }
   if (summary.request_count != null && summary.spend_usd == null) {
