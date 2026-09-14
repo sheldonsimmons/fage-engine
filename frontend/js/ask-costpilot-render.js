@@ -642,7 +642,16 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
         datasets: [{ data: chartRows.map(r => r.value), backgroundColor: ASK_REPORT_DOUGHNUT_COLORS, borderWidth: 0 }],
       },
       options: {
-        responsive: false, animation: false,
+        // Found the REAL root cause of the tiny-legend report live
+        // 2026-09-14: maintainAspectRatio defaults to true and forces a
+        // square canvas regardless of the canvas.width=700/height=420 set
+        // just above -- confirmed the actual output PNG was 1280x1280,
+        // not 700x420, so the doughnut itself ballooned to fill that much
+        // larger square while the legend font stayed sized for the
+        // canvas dimensions that were never actually honored. responsive:
+        // false alone does not prevent this; maintainAspectRatio must be
+        // set separately.
+        responsive: false, maintainAspectRatio: false, animation: false,
         // boxWidth/font.size previously had no explicit size at all --
         // confirmed live 2026-09-14: Chart.js's default legend font (~10px
         // canvas units) reads as illegibly tiny next to a 420px-tall
@@ -657,7 +666,12 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
         datasets: [{ label: metricLabel, data: chartRows.map(r => r.value), backgroundColor: "rgba(37,196,181,0.75)" }],
       },
       options: {
-        indexAxis: "y", responsive: false, animation: false,
+        // Same maintainAspectRatio fix as the doughnut branch above --
+        // this chart's canvas.height is deliberately computed from row
+        // count (see canvas.height assignment above) for readable bar
+        // spacing; leaving Chart.js's default aspect-ratio lock on would
+        // silently override that custom height too.
+        indexAxis: "y", responsive: false, maintainAspectRatio: false, animation: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { beginAtZero: true, ticks: { color: REPORT_CHART_TEXT_COLOR }, grid: { color: REPORT_CHART_GRID_COLOR } },

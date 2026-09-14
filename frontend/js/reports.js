@@ -1152,6 +1152,17 @@ function reportChartImg(config, width, height) {
   canvas.height = height;
   document.body.appendChild(canvas);
   let dataUrl = "";
+  // maintainAspectRatio defaults to true in Chart.js and silently
+  // overrides the canvas.width/height set just above to whatever aspect
+  // ratio the chart type defaults to (1:1 for doughnut, 2:1 for most
+  // others) -- confirmed live 2026-09-14 a doughnut asked for at 500x260
+  // actually rendered at roughly 1280x1280, ballooning the pie while its
+  // legend text (sized for the intended smaller canvas) stayed tiny by
+  // comparison. Applied centrally here (not per call site) so every
+  // report chart through this helper is protected, not just the ones
+  // that happened to hit this already. Merged so an unusual future
+  // caller can still override it explicitly.
+  config.options = { maintainAspectRatio: false, ...(config.options || {}) };
   try {
     const chart = new Chart(canvas.getContext("2d"), config);
     chart.resize();
@@ -1242,7 +1253,7 @@ function supportBriefingOutcomeChart(resolved, unresolved, labels) {
     },
     options: {
       responsive: false, animation: false,
-      plugins: { legend: { display: true, position: "right", labels: { color: REPORT_CHART_TEXT_COLOR, boxWidth: 14 } } },
+      plugins: { legend: { display: true, position: "right", labels: { color: REPORT_CHART_TEXT_COLOR, boxWidth: 18, padding: 12, font: { size: 15 } } } },
     },
   }, 500, 260);
 }
