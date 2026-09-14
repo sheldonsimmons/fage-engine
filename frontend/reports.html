@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CostPilot — Reports</title>
   <link rel="stylesheet" href="css/styles.css?v=20260913i-footer-savings-fix" />
-  <link rel="stylesheet" href="css/reports.css" />
+  <link rel="stylesheet" href="css/reports.css?v=20260913k-evidence-drilldown" />
   <link rel="stylesheet" href="css/demo.css" />
   <link rel="stylesheet" href="css/global-nav.css?v=20260913e-nl-report-trigger" />
   <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
@@ -182,6 +182,7 @@
           <div class="rpt-kpi-sub" id="sv-call-split">— micro / — flagship</div>
         </div>
       </div>
+      <div id="sv-evidence-cta"></div>
 
       <!-- Charts rows — draggable container -->
       <div id="savings-cards" class="rpt-draggable-col">
@@ -474,8 +475,8 @@
           </div>
           <div class="context-breakdown-table-wrap">
             <table class="rpt-context-table">
-              <thead><tr><th></th><th>Department</th><th>AI Investment</th><th>Won</th><th>Lost</th><th>Open</th><th>Closed-Won Value</th><th>Cost / Won Opp</th></tr></thead>
-              <tbody id="biDepartmentBody"><tr><td colspan="8">Loading…</td></tr></tbody>
+              <thead><tr><th></th><th>Department</th><th>AI Investment</th><th>Won</th><th>Lost</th><th>Open</th><th>Closed-Won Value</th><th>Cost / Won Opp</th><th></th></tr></thead>
+              <tbody id="biDepartmentBody"><tr><td colspan="9">Loading…</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -774,10 +775,11 @@
                   <th>Budget Used</th>
                   <th>Cap</th>
                   <th>Status</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody id="deptScorecardTable">
-                <tr><td colspan="8" class="placeholder">Loading...</td></tr>
+                <tr><td colspan="9" class="placeholder">Loading...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1164,7 +1166,7 @@
 </div>
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/reports.js?v=20260913i-footer-savings-fix"></script>
+  <script src="js/reports.js?v=20260913k-evidence-drilldown"></script>
   <script>
     // ── ROI Calculator Tab ────────────────────────────────────────────────────
     const ROI_RATES = {

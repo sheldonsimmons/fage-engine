@@ -888,6 +888,28 @@
 }
 .ask-supporting-records:hover,
 .ask-supporting-records:focus-visible { border-color: var(--accent); }
+
+/* Evidence drill-down from the live report tabs (Departments, Business
+   Impact, Savings & Performance, Governance & Risk, Cost Briefing) into
+   the existing Usage & Attribution explorer -- reuses the exact same
+   drillFromAskCostPilot()/askDrillScope mechanism Ask CostPilot's own
+   chat answers already use, added here for the first time (2026-09-13)
+   since none of the report tabs linked anywhere before this. Two
+   variants: an inline link for a single table row, and a standalone CTA
+   for a section/KPI-row-level link with no single obvious row to attach
+   to. */
+.rpt-evidence-link {
+  padding: 0; margin-left: 8px; color: var(--accent); background: none; border: 0;
+  cursor: pointer; font-size: 10.5px; font-weight: 700; white-space: nowrap;
+}
+.rpt-evidence-link:hover, .rpt-evidence-link:focus-visible { text-decoration: underline; }
+.rpt-evidence-cta {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 10px;
+  padding: 8px 12px; color: var(--accent); background: rgba(88,166,255,.06);
+  border: 1px solid rgba(88,166,255,.24); border-radius: 7px; cursor: pointer;
+  font-size: 11px; font-weight: 800;
+}
+.rpt-evidence-cta:hover, .rpt-evidence-cta:focus-visible { border-color: var(--accent); }
 .ask-follow-ups > div {
   display: flex;
   flex-wrap: wrap;

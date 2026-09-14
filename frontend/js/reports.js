@@ -691,7 +691,7 @@ async function loadBusinessImpact() {
 async function loadBusinessImpactByDepartment() {
   const body = document.getElementById("biDepartmentBody");
   if (!body) return;
-  body.innerHTML = `<tr><td colspan="8">Loading…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="9">Loading…</td></tr>`;
   try {
     const data = await apiGet(reportScopedPath("/api/dashboard/business-impact/by-department"));
     const rows = data.rows || [];
@@ -707,10 +707,11 @@ async function loadBusinessImpactByDepartment() {
           <td>${fmtNum(row.opportunities_open)}</td>
           <td>${fmtUsd(row.closed_won_value_usd)}</td>
           <td>${fmtUsd(row.cost_per_won_opportunity_usd)}</td>
+          <td>${reportEvidenceLink({ charged_unit: row.department }, "Evidence")}</td>
         </tr>`).join("")
-      : `<tr><td colspan="8">No department-level outcome data yet.</td></tr>`;
+      : `<tr><td colspan="9">No department-level outcome data yet.</td></tr>`;
   } catch (err) {
-    body.innerHTML = `<tr><td colspan="8">Could not load: ${escapeHtml(err.message)}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9">Could not load: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -1360,6 +1361,12 @@ function renderSupportBriefingReportHtml(data) {
           <div><strong>Outcome-covered cases:</strong> ${fmtNum(data.evidence?.outcome_covered_cases)}</div>
           ${data.truncated ? `<div><strong>Note:</strong> this period had more matching activity than could be fully loaded — figures reflect a bounded sample, not silently under-counted without notice.</div>` : ""}
           <div style="margin-top:8px">Associated business outcomes reflect cases with recorded AI activity and do not imply AI caused the outcome. Savings Opportunity is an estimate (routine calls priced at the cheapest active model tier), not money already saved.</div>
+          ${reportEvidenceLink(
+            { charged_unit: department, date_from: new Date(Date.now() - (data.period_days || 30) * 86400000).toISOString(), date_to: new Date().toISOString() },
+            `View the ${department} requests behind these numbers`,
+            "rpt-evidence-cta",
+            "document.getElementById('supportBriefingPreview')?.remove();",
+          )}
         </div>
       </section>
 
@@ -2320,6 +2327,14 @@ async function loadSavings() {
   setKpi("sv-micro-pct",   data.micro_pct + "% routed to micro");
   setKpi("sv-calls",       fmtNum(data.total_calls));
   setKpi("sv-call-split",  fmtNum(data.micro_calls) + " micro / " + fmtNum(data.flagship_calls) + " flagship");
+  const svEvidenceCta = document.getElementById("sv-evidence-cta");
+  if (svEvidenceCta) {
+    svEvidenceCta.innerHTML = reportEvidenceLink(
+      { date_from: range.date_from, date_to: range.date_to },
+      "View the governed requests behind these numbers",
+      "rpt-evidence-cta",
+    );
+  }
 
   const labels = (data.timeline || []).map(d => d.date);
 
@@ -2836,6 +2851,7 @@ async function loadDepartments() {
           </td>
           <td>${fmtUsd(d.monthly_cap_usd)}</td>
           <td>${statusBadge}</td>
+          <td>${reportEvidenceLink({ charged_unit: d.department, date_from: range.date_from, date_to: range.date_to }, "Evidence")}</td>
         </tr>
       `;
     }).join("");
@@ -3290,6 +3306,18 @@ function normalizeAskDrillScope(scopeOrName, filterValue) {
     normalized.filter_label = String(source.filter_label).trim();
   }
   return normalized;
+}
+
+// "Go to the reporting area and see the evidence that produced the
+// reply" (2026-09-13) -- the live report tabs (Departments, Business
+// Impact, Savings & Performance, Governance & Risk) had zero drill-down
+// into supporting evidence before this; only Ask CostPilot's own chat
+// answers could. Reuses that exact same mechanism (drillFromAskCostPilot
+// same-page tab switch into the existing Usage & Attribution explorer)
+// rather than building a second evidence viewer.
+function reportEvidenceLink(scope, label, className, preOnClick) {
+  const encoded = encodeURIComponent(JSON.stringify(normalizeAskDrillScope(scope)));
+  return `<button type="button" class="${className || "rpt-evidence-link"}" data-scope="${escapeHtml(encoded)}" onclick="event.stopPropagation(); ${preOnClick || ""} drillFromAskCostPilot(decodeURIComponent(this.dataset.scope))">${escapeHtml(label || "View evidence")} <span aria-hidden="true">→</span></button>`;
 }
 
 function askDrillScopeForEvidence(data, item) {
