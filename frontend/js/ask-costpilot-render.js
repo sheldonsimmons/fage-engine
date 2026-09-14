@@ -625,6 +625,103 @@ function askReportChartImg(rows, metricLabel, valueFormat, forceChart, chartType
   return `<figure class="report-chart-figure" style="max-width:600px"><img src="${dataUrl}" style="width:100%;height:auto" />${caption}</figure>`;
 }
 
+// Same composite-report design system as reports.js's REPORT_ICON_COLORS/
+// REPORT_ICONS/reportIconBadge/reportKpiCardPremium/reportNumberedList/
+// reportPremiumHeaderHtml (built for the "boardroom-ready" reports.html
+// redesign) -- duplicated here under an ASK_/askReport* prefix rather than
+// called directly, same reasoning as ASK_REPORT_LOGO_SVG below: this file
+// runs standalone on pages that never load reports.js (index.html,
+// live-landing.html, ...), but reports.html loads BOTH files in the same
+// global scope -- reusing reports.js's exact top-level const/function
+// names here would throw "Identifier has already been declared" the
+// moment this file parsed after reports.js. Confirmed live 2026-09-13:
+// the Ask-CostPilot-generated report ("Generate report" on any chat
+// answer) never got this visual treatment at all -- it was still the
+// original plain template (a gray text box, one chart, one table), quite
+// different from the dashboard-style KPI-card look every reports.html
+// report already has.
+const ASK_REPORT_ICON_COLORS = {
+  blue: "#2f6fed", green: "#1a9c5c", orange: "#e08a1f", purple: "#7c5cff", red: "#d94f4f",
+};
+const ASK_REPORT_ICONS = {
+  barChart: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="12" width="4" height="8" rx="1" fill="currentColor"/><rect x="10" y="7" width="4" height="13" rx="1" fill="currentColor"/><rect x="16" y="3" width="4" height="17" rx="1" fill="currentColor"/></svg>`,
+  dollarCircle: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><text x="12" y="16.5" font-size="11" font-weight="700" text-anchor="middle" fill="currentColor" font-family="sans-serif">$</text></svg>`,
+  savingsArrow: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8 9v6h6M8 15l8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  target: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`,
+  checkTarget: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><polyline points="8,12.5 10.7,15 16,9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  document: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3h8l4 4v14H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.5"/><line x1="9" y1="15.5" x2="15" y2="15.5" stroke="currentColor" stroke-width="1.5"/></svg>`,
+};
+function askReportIconBadge(icon, colorKey) {
+  const color = ASK_REPORT_ICON_COLORS[colorKey] || ASK_REPORT_ICON_COLORS.blue;
+  return `<span class="rpt-icon-badge" style="background:${color}1a;color:${color}">${ASK_REPORT_ICONS[icon] || ""}</span>`;
+}
+function askReportKpiCardPremium(icon, colorKey, label, value, sub) {
+  return `
+    <div class="rpt-kpi-premium">
+      ${askReportIconBadge(icon, colorKey)}
+      <div class="rpt-kpi-premium-label">${askRenderEscapeHtml(label)}</div>
+      <div class="rpt-kpi-premium-value">${askRenderEscapeHtml(String(value))}</div>
+      ${sub ? `<div class="rpt-kpi-premium-sub">${askRenderEscapeHtml(sub)}</div>` : ""}
+    </div>`;
+}
+function askReportNumberedList(items, renderItem) {
+  return `<ol class="rpt-numbered-list">${items.map((item, i) => `
+    <li><span class="rpt-numbered-badge">${i + 1}</span><div class="rpt-numbered-body">${renderItem(item, i)}</div></li>`).join("")}</ol>`;
+}
+function askReportPremiumHeaderHtml(title, periodLabel, generatedAt, workspaceLabel) {
+  return `
+    <header class="report-header rpt-header-premium">
+      <div class="rpt-header-top">
+        ${ASK_REPORT_LOGO_SVG}
+        <span class="rpt-header-confidential">Confidential</span>
+      </div>
+      <div class="rpt-header-eyebrow">Report</div>
+      <h1 class="report-title">${askRenderEscapeHtml(title)}</h1>
+      <div class="rpt-header-tagline">AI spend, real outcomes.</div>
+      <div class="report-meta">
+        <span>${askRenderEscapeHtml(workspaceLabel)}</span>
+        <span>${askRenderEscapeHtml(periodLabel || "Selected period")}</span>
+        <span>Generated ${askRenderEscapeHtml(generatedAt)}</span>
+      </div>
+    </header>`;
+}
+// Builds up to 6 KPI cards from whatever real fields the answer actually
+// carries -- never fabricated. Ask CostPilot answers vary widely in shape
+// (a spend ranking has a rich `summary`; a comparison/clarification/
+// product-knowledge answer may have none at all), so every card here is
+// individually gated on its source field existing, and the whole row is
+// skipped rather than shown half-empty when nothing qualifies.
+function askReportKpiRowHtml(data, provenance) {
+  const summary = data.summary || {};
+  const cards = [];
+  if (summary.spend_usd != null) {
+    cards.push(askReportKpiCardPremium("dollarCircle", "blue", "AI Spend", askReportFmtUsd(summary.spend_usd),
+      summary.request_count != null ? `${askReportFmtNum(summary.request_count)} requests` : null));
+  }
+  if (summary.request_count != null && summary.spend_usd == null) {
+    cards.push(askReportKpiCardPremium("target", "purple", "Governed Requests", askReportFmtNum(summary.request_count), null));
+  }
+  if (summary.total_tokens != null) {
+    cards.push(askReportKpiCardPremium("barChart", "orange", "Tokens Used", askReportFmtNum(summary.total_tokens), null));
+  }
+  if (summary.tokens_saved) {
+    cards.push(askReportKpiCardPremium("savingsArrow", "green", "Tokens Saved", askReportFmtNum(summary.tokens_saved), null));
+  }
+  const liveN = Number(provenance.live_requests || 0), simN = Number(provenance.simulator_requests || 0);
+  if (liveN + simN > 0) {
+    const livePct = Math.round((liveN / (liveN + simN)) * 100);
+    cards.push(askReportKpiCardPremium("checkTarget", livePct > 0 ? "green" : "red", "Live Data Coverage", `${livePct}%`,
+      `${askReportFmtNum(liveN)} live / ${askReportFmtNum(simN)} simulator`));
+  }
+  if (summary.people_count != null || summary.agent_count != null) {
+    cards.push(askReportKpiCardPremium("document", "purple", "Contributors",
+      summary.people_count != null ? `${askReportFmtNum(summary.people_count)} people` : `${askReportFmtNum(summary.agent_count)} agents`,
+      summary.people_count != null && summary.agent_count != null ? `${askReportFmtNum(summary.agent_count)} agents` : null));
+  }
+  if (!cards.length) return "";
+  return `<div class="report-kpi-row rpt-kpi-row-premium">${cards.slice(0, 6).join("")}</div>`;
+}
+
 function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
   const provenance = data.data_provenance || {};
   const generatedAt = new Date().toLocaleString("en-US", {
@@ -634,9 +731,12 @@ function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
   const extracted = askReportRowsFromResult(tool, replayed);
 
   const recommendations = (data.recommendations || []).length
-    ? `<section class="report-section"><h2 class="report-section-title">Recommended Next Steps</h2><div class="bi-rec-grid">${
-        data.recommendations.map(r => `<div class="bi-rec-card"><div class="bi-rec-title">${askRenderEscapeHtml(r.title || "")}</div><div class="bi-rec-body">${askRenderEscapeHtml(r.body || "")}</div></div>`).join("")
-      }</div></section>`
+    ? `<section class="report-section">
+        <h2 class="report-section-title">CostPilot Recommendations</h2>
+        ${askReportNumberedList(data.recommendations.slice(0, 6), r => `
+          <div class="rpt-rec-head"><span class="rpt-rec-title">${askRenderEscapeHtml(r.title || "")}</span></div>
+          <div class="bi-rec-body">${askRenderEscapeHtml(r.body || "")}</div>`)}
+      </section>`
     : "";
 
   // The report's own "full breakdown" table above already lists every row
@@ -676,31 +776,32 @@ function buildAskGeneratedReportHtml(data, tool, replayed, options = {}) {
       </table>
     </section>` : "";
 
+  const kpiRow = askReportKpiRowHtml(data, provenance);
+
   return `
-    <div class="report-doc">
-      ${ASK_REPORT_LOGO_SVG}
-      <header class="report-header" style="border-top:none">
-        <h1 class="report-title">${askRenderEscapeHtml(data.title || "CostPilot Report")}</h1>
-        <div class="report-meta">
-          <span>${askRenderEscapeHtml(workspaceLabel)}</span>
-          <span>${askRenderEscapeHtml(provenance.period_label || "Selected period")}</span>
-          <span>Generated ${askRenderEscapeHtml(generatedAt)}</span>
-        </div>
-      </header>
+    <div class="report-doc rpt-premium">
+      ${askReportPremiumHeaderHtml(data.title || "CostPilot Report", provenance.period_label, generatedAt, workspaceLabel)}
       <section class="report-section">
-        <h2 class="report-section-title">Executive Brief</h2>
-        <div class="bi-summary">${data.answer ? renderAskMarkdown(data.answer) : "<p>No answer was returned.</p>"}</div>
+        <h2 class="report-section-title">Executive Summary</h2>
+        <div class="rpt-exec-summary">
+          ${askReportIconBadge("barChart", "purple")}
+          <div class="bi-summary">${data.answer ? renderAskMarkdown(data.answer) : "<p>No answer was returned.</p>"}</div>
+        </div>
+        ${kpiRow}
       </section>
       ${tableSection}
       ${recommendations}
       <section class="report-section" style="break-inside:avoid">
-        <h2 class="report-section-title">Calculation &amp; Data Scope</h2>
+        <h2 class="report-section-title">Evidence &amp; Methodology</h2>
         <div class="bi-note">
           ${calcRows}
           <div>${askRenderEscapeHtml(data.measurement_note || "CostPilot reports consumption and attribution only. It does not score employee productivity or infer business outcomes.")}</div>
         </div>
       </section>
-      <footer class="report-footer">CostPilot — ${askRenderEscapeHtml(data.title || "Report")} — ${askRenderEscapeHtml(workspaceLabel)}</footer>
+      <footer class="report-footer rpt-footer-premium">
+        <span>CostPilot — ${askRenderEscapeHtml(data.title || "Report")}</span>
+        <span>${askRenderEscapeHtml(workspaceLabel)}</span>
+      </footer>
     </div>`;
 }
 
