@@ -4787,15 +4787,33 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => openSupportBriefingReport({ department: briefingDept || null, days: briefingDays }), 150);
   }
   // Applies once the risk tab's own async loadRisk() fetch (kicked off by
-  // openReportView above) has actually populated _rptRiskEvents -- same
-  // 150ms deferred-apply pattern the briefing deep link just above uses
-  // for the same reason (nothing here awaits that fetch directly).
+  // openReportView above) has actually populated _rptRiskEvents AND its
+  // event-type <select> options (populateRiskEventFilters, called from
+  // inside that same fetch's .then). A fixed setTimeout here isn't
+  // reliable -- confirmed live 2026-09-14: applyRiskDrilldown ran before
+  // the <option value="BUDGET"> existed yet, so setting the <select>'s
+  // .value to "BUDGET" silently no-opped (a <select> ignores assigning a
+  // value with no matching option) and every event showed unfiltered.
+  // Polls for the option actually existing instead, capped so a real
+  // load failure doesn't retry forever.
   const riskEventType = riskParams.get("risk_event_type");
   if (riskParams.get("tab") === "risk" && riskEventType) {
-    setTimeout(() => applyRiskDrilldown({
-      type: riskEventType,
-      label: `${riskEventType[0]}${riskEventType.slice(1).toLowerCase()} audit events`,
-    }), 150);
+    let riskDrillAttempts = 0;
+    const tryApplyRiskDrilldown = () => {
+      riskDrillAttempts += 1;
+      const hasOption = document.querySelector(
+        `#riskEventType option[value="${riskEventType}"]`
+      );
+      if (hasOption || riskDrillAttempts > 40) {
+        applyRiskDrilldown({
+          type: riskEventType,
+          label: `${riskEventType[0]}${riskEventType.slice(1).toLowerCase()} audit events`,
+        });
+        return;
+      }
+      setTimeout(tryApplyRiskDrilldown, 150);
+    };
+    setTimeout(tryApplyRiskDrilldown, 150);
   }
   updateReportRangeSummary();
   setTimeout(() => initDraggableReports("savings"), 100);
