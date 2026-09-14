@@ -1363,6 +1363,19 @@ body {
 /* ── Print / PDF overlay ────────────────────────────────────────────────────────── */
 @media print {
   body * { visibility: hidden !important; }
+  /* visibility:hidden above hides every other element on the page but does
+     NOT collapse its layout space (that's what display does, not
+     visibility) -- confirmed live 2026-09-13: printing a short 2-page
+     "Generate Report" answer from index.html (a tall dashboard page full
+     of cards/charts) produced 2 fully blank trailing pages in the actual
+     PDF, purely from that invisible-but-still-occupying-space dashboard
+     content underneath the overlay. printSection() (js/api.js) already
+     adds a "printing" class to body for exactly this purpose, but nothing
+     in this stylesheet ever consumed it -- collapsing every other direct
+     child of body (never printOverlay itself) removes their layout space
+     entirely, so the printed document's height matches the overlay's real
+     content, not whatever page it happened to be printed from. */
+  body.printing > *:not(#printOverlay) { display: none !important; }
   #printOverlay, #printOverlay * { visibility: visible !important; }
   #printOverlay {
     /* absolute, not fixed -- confirmed live: fixed positioning pins the
