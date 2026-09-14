@@ -274,24 +274,36 @@ def validate_ask_answer_contract(parsed: dict, payload: dict) -> list[str]:
             issues.append("change-driver answer is missing coverage status")
     if parsed.get("intent") == "comparison":
         calculation = payload.get("calculation") or {}
-        plan = calculation.get("comparison_plan") or {}
         metric_contract = calculation.get("metric_contract") or {}
-        if not plan.get("primary") or not plan.get("comparison"):
-            issues.append("comparison answer is missing explicit paired periods")
-        if plan.get("mode") != (parsed.get("comparison_key") or "previous_period"):
-            issues.append("comparison answer used the wrong temporal rule")
         if metric_contract.get("id") != parsed.get("metric"):
             issues.append("comparison answer used the wrong metric contract")
-        if len(payload.get("evidence") or []) < 2:
-            issues.append("comparison answer is missing period evidence")
-        elif plan.get("primary") and plan.get("comparison"):
-            evidence_labels = [str(item.get("label") or "") for item in payload["evidence"][:2]]
-            expected_labels = [plan["primary"].get("label"), plan["comparison"].get("label")]
-            if evidence_labels != expected_labels:
-                issues.append("comparison evidence does not match the planned periods")
-        coverage = (payload.get("data_provenance") or {}).get("coverage")
-        if not isinstance(coverage, dict) or not coverage.get("status"):
-            issues.append("comparison answer is missing coverage status")
+        if calculation.get("comparison_mode") == "entities":
+            # Two named entities (two people, two departments, ...)
+            # compared within a single period -- there is no paired-period
+            # plan to validate here, only that the answer actually named
+            # and evidenced both sides. The period-plan checks below don't
+            # apply to this shape at all; applying them anyway is what
+            # rejected every real "Compare X to Y" question (confirmed
+            # live 2026-09-13 for both a person comparison and a
+            # department comparison).
+            if len(payload.get("evidence") or []) < 2:
+                issues.append("comparison answer is missing evidence for both compared entities")
+        else:
+            plan = calculation.get("comparison_plan") or {}
+            if not plan.get("primary") or not plan.get("comparison"):
+                issues.append("comparison answer is missing explicit paired periods")
+            if plan.get("mode") != (parsed.get("comparison_key") or "previous_period"):
+                issues.append("comparison answer used the wrong temporal rule")
+            if len(payload.get("evidence") or []) < 2:
+                issues.append("comparison answer is missing period evidence")
+            elif plan.get("primary") and plan.get("comparison"):
+                evidence_labels = [str(item.get("label") or "") for item in payload["evidence"][:2]]
+                expected_labels = [plan["primary"].get("label"), plan["comparison"].get("label")]
+                if evidence_labels != expected_labels:
+                    issues.append("comparison evidence does not match the planned periods")
+            coverage = (payload.get("data_provenance") or {}).get("coverage")
+            if not isinstance(coverage, dict) or not coverage.get("status"):
+                issues.append("comparison answer is missing coverage status")
     if not canonical_name:
         return issues
     for field in ("intent", "entity", "metric"):

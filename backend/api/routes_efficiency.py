@@ -5195,6 +5195,25 @@ def _ask_costpilot_answer(
     # missing branch at a time.
     change = None
     pct = None
+    # comparison_execution_plan is computed unconditionally for any
+    # intent=="comparison" question (see resolve_primary_period/
+    # comparison_plan() below), but not every comparison question is a
+    # period-over-period one -- "Compare Marcus Webb to Avery Johnson"
+    # and "Compare Engineering to Sales" are both single-period
+    # comparisons of two NAMED ENTITIES (the _ask_two_named_entities
+    # branch further down), yet without this flag the shared
+    # `if comparison_execution_plan:` block near the end of this
+    # function still stamped a period-shaped comparison_plan onto the
+    # answer, which validate_ask_answer_contract() then rejected for
+    # every single one of these questions (confirmed live 2026-09-13:
+    # both a person comparison and a department comparison failed the
+    # exact same way, "comparison evidence does not match the planned
+    # periods"/"comparison answer is missing coverage status") because
+    # it expected period labels where the answer actually gave entity
+    # names. Tracking which shape this answer actually is lets both the
+    # calculation payload and the contract validator apply the right
+    # rules for each.
+    comparison_mode = None
     # Looked up once and reused for both the general date-range resolution
     # below and the comparison-intent branch further down (which used to
     # look this up separately) — a workspace's configured timezone should
@@ -5625,6 +5644,7 @@ def _ask_costpilot_answer(
         # highest" ranking question already reads from -- no separate
         # fetch, so this can never disagree with that question's own
         # numbers for the same period.
+        comparison_mode = "entities"
         row_a, row_b = _ask_two_named_entities(question, report, entity_config[entity][0])
         entity_label_word = entity_config[entity][2][:-1] if entity_config[entity][2].endswith("s") else entity_config[entity][2]
         raw_a, raw_b = _ask_row_metric(row_a, metric), _ask_row_metric(row_b, metric)
@@ -7704,7 +7724,9 @@ def _ask_costpilot_answer(
         ),
         "period_label": period_label,
     }
-    if comparison_execution_plan:
+    if comparison_mode:
+        calculation["comparison_mode"] = comparison_mode
+    if comparison_execution_plan and comparison_mode != "entities":
         calculation["comparison_plan"] = comparison_execution_plan.contract()
         calculation["absolute_change"] = change
         calculation["percent_change"] = pct
