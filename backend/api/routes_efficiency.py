@@ -5177,6 +5177,24 @@ def _ask_costpilot_answer(
                 parsed["entity"] = "department"
     comparison_execution_plan = None
     comparison_coverage_result = None
+    # Only ever assigned inside the change_drivers/comparison branches
+    # further down (and even there, only on some sub-paths -- the "not
+    # comparable" sub-paths already explicitly set change = None / pct =
+    # None as a safe default, same reasoning as here). Confirmed live via
+    # a real production crash (2026-09-13/14, reported from a mobile
+    # request): "Compare Marcus Webb AI Usage to Avery Johnson's AI
+    # Usage." reached the shared `if comparison_execution_plan:` block far
+    # below (which unconditionally reads `change`/`pct` into the
+    # `calculation` dict) via a path where comparison_execution_plan ended
+    # up truthy but change/pct were never assigned on this particular
+    # run's actual branch -- a 500 UnboundLocalError instead of any
+    # answer, for a plainly reasonable question. Initializing both here,
+    # matching every other guaranteed-defined variable in this same
+    # region, makes that combination impossible regardless of which
+    # branch actually runs, rather than continuing to patch one specific
+    # missing branch at a time.
+    change = None
+    pct = None
     # Looked up once and reused for both the general date-range resolution
     # below and the comparison-intent branch further down (which used to
     # look this up separately) — a workspace's configured timezone should
