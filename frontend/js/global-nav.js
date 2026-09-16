@@ -336,15 +336,16 @@
 
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(ASK_AVATAR_POS_KEY) || "null"); } catch (_err) {}
-    // Default to bottom-LEFT, not bottom-right -- the drawer itself is
-    // anchored to the right edge of the screen, and its own composer/send
-    // button live in that bottom-right corner (confirmed live: the first
-    // version of this defaulted there and sat directly on top of the Ask
-    // button). Bottom-left sits over the rest of the app page instead,
-    // clear of every drawer control.
+    // Default position avoids two known chrome collisions, both confirmed
+    // live: bottom-right sits on top of the drawer's own composer/send
+    // button (the drawer is anchored to the right edge of the screen);
+    // plain bottom-left then sits on top of the left nav's workspace
+    // switcher + user block (frontend/css/left-nav.css's sidebar is
+    // 232px wide). 260px clears that sidebar and lands in the open
+    // middle content column instead, clear of both.
     const start = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
       ? clampAvatarPos(saved.x, saved.y, size)
-      : clampAvatarPos(28, window.innerHeight - size - 28, size);
+      : clampAvatarPos(260, window.innerHeight - size - 28, size);
     el.style.left = `${start.x}px`;
     el.style.top = `${start.y}px`;
 
