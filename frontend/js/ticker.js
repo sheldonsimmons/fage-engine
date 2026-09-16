@@ -104,10 +104,15 @@
       .filter(b => b && b.department && b.used_pct != null)
       .sort((a, b) => (b.used_pct || 0) - (a.used_pct || 0))[0];
     if (nearestCap && nearestCap.used_pct >= 50) {
+      // department comes back workspace-prefixed ("WORKSPACE_ID:Engineering")
+      // for legacy rows -- confirmed live 2026-09-16 this showed the raw
+      // prefix straight in the ticker. Same display convention already used
+      // everywhere else in this app for this exact field.
+      const deptName = String(nearestCap.department).split(":").pop();
       facts.push({
         badge: "budget", cls: "budget",
-        text: `${nearestCap.department} is at ${Math.round(nearestCap.used_pct)}% of its monthly AI budget`,
-        ask: `Is ${nearestCap.department}'s AI budget under control?`,
+        text: `${deptName} is at ${Math.round(nearestCap.used_pct)}% of its monthly AI budget`,
+        ask: `Is ${deptName}'s AI budget under control?`,
       });
     }
 
@@ -194,7 +199,6 @@
     const textEl = document.getElementById("cpTickerText");
     const actionEl = document.getElementById("cpTickerAction");
     const dotsEl = document.getElementById("cpTickerDots");
-    const rootEl = container.querySelector(".cp-ticker");
 
     dotsEl.innerHTML = facts.map((_, i) => `<span class="cp-ticker-dot" data-i="${i}"></span>`).join("");
 
@@ -238,10 +242,20 @@
     render(0);
     timer = setInterval(advance, ROTATE_MS);
 
-    rootEl.addEventListener("mouseenter", () => { paused = true; });
-    rootEl.addEventListener("mouseleave", () => { paused = false; });
-    rootEl.addEventListener("focusin", () => { paused = true; });
-    rootEl.addEventListener("focusout", () => { paused = false; });
+    // Pausing on hover over the WHOLE strip (rootEl) sounded right but
+    // wasn't, in practice -- confirmed live 2026-09-16: the strip spans
+    // nearly the full page width right below the nav, exactly where a
+    // cursor often just happens to be resting during normal reading, so
+    // it read as "this never rotates" even though the timer was firing
+    // correctly the entire time. Scoped to just the text and action
+    // button -- still pausable on purpose (reading a longer fact,
+    // reaching for "Ask why"), not paused by incidental proximity.
+    [textEl, actionEl].forEach(el => {
+      el.addEventListener("mouseenter", () => { paused = true; });
+      el.addEventListener("mouseleave", () => { paused = false; });
+      el.addEventListener("focusin", () => { paused = true; });
+      el.addEventListener("focusout", () => { paused = false; });
+    });
 
     // A single unhidden mount is the common case, but never leaves a
     // second interval running if a page's own script re-invokes mount()
