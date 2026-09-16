@@ -352,9 +352,14 @@ function usSelectUser(user) {
 
 function usClearSelection() {
   usSelectedUser = null;
+  usAllEvents = [];
   document.getElementById("usSelected").classList.remove("open");
   document.getElementById("usActivitySection").style.display = "none";
   document.getElementById("auditTableBody").innerHTML = "";
+  ["usFilterPlatform", "usFilterDept", "usFilterAgent"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.selectedIndex = 0;
+  });
   usOpenRationaleId = null;
 }
 
@@ -387,6 +392,40 @@ function usOnRangeChange() {
   if (usSelectedUser) usLoadActivity(usSelectedUser.id);
 }
 
+let usAllEvents = [];
+
+// Rebuilds the platform/department/agent dropdown options from whatever
+// events are actually in the current date range -- an empty "All X"
+// option never disappears, but a value with zero events in range does,
+// same convention as auditor.js's own _populateAuditDeptFilter.
+function usPopulateFilterOptions(events) {
+  const build = (id, allLabel, values, current) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const opts = Array.from(new Set(values.filter(Boolean))).sort();
+    const keep = opts.includes(current) ? current : "";
+    el.innerHTML = `<option value="">${allLabel}</option>` +
+      opts.map(v => `<option value="${escHtml(v)}"${v === keep ? " selected" : ""}>${escHtml(v)}</option>`).join("");
+  };
+  build("usFilterPlatform", "All platforms", events.map(e => e.source_platform), document.getElementById("usFilterPlatform")?.value);
+  build("usFilterDept", "All departments", events.map(e => e.display_department || e.department), document.getElementById("usFilterDept")?.value);
+  build("usFilterAgent", "All agents", events.map(e => e.display_agent_name || e.agent_name), document.getElementById("usFilterAgent")?.value);
+}
+
+function usApplyFilters() {
+  const platform = document.getElementById("usFilterPlatform")?.value || "";
+  const dept = document.getElementById("usFilterDept")?.value || "";
+  const agent = document.getElementById("usFilterAgent")?.value || "";
+
+  const filtered = usAllEvents.filter(e => {
+    if (platform && e.source_platform !== platform) return false;
+    if (dept && (e.display_department || e.department) !== dept) return false;
+    if (agent && (e.display_agent_name || e.agent_name) !== agent) return false;
+    return true;
+  });
+  usRenderTable(filtered);
+}
+
 async function usLoadActivity(workUserId) {
   const tbody = document.getElementById("auditTableBody");
   tbody.innerHTML = '<div class="us-placeholder">Loading activity…</div>';
@@ -396,8 +435,9 @@ async function usLoadActivity(workUserId) {
     if (range.date_from) params.set("date_from", range.date_from);
     if (range.date_to) params.set("date_to", range.date_to);
     const path = workspaceScopedApiPath(`/api/audit?${params.toString()}`);
-    const events = await apiGet(path);
-    usRenderTable(events);
+    usAllEvents = await apiGet(path);
+    usPopulateFilterOptions(usAllEvents);
+    usApplyFilters();
   } catch (err) {
     tbody.innerHTML = `<div class="placeholder" style="color:var(--accent-red)">Failed to load activity: ${err.message}</div>`;
   }

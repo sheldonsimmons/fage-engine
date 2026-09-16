@@ -68,6 +68,12 @@
       font-family: var(--font-sans); font-size: 12px; padding: 6px 10px; border-radius: 6px;
     }
     .us-custom-range { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+
+    .us-filter-row { display: flex; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
+    .us-filter-row select {
+      background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-primary);
+      font-family: var(--font-sans); font-size: 12px; padding: 6px 10px; border-radius: 6px;
+    }
   </style>
 </head>
 <body>
@@ -112,6 +118,17 @@
               </span>
             </div>
           </div>
+          <div class="us-filter-row">
+            <select id="usFilterPlatform" onchange="usApplyFilters()">
+              <option value="">All platforms</option>
+            </select>
+            <select id="usFilterDept" onchange="usApplyFilters()">
+              <option value="">All departments</option>
+            </select>
+            <select id="usFilterAgent" onchange="usApplyFilters()">
+              <option value="">All agents</option>
+            </select>
+          </div>
           <div id="auditTableBody" class="audit-timeline"></div>
         </div>
       </div>
@@ -120,7 +137,7 @@
 
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/user-activity.js?v=20260916b"></script>
+  <script src="js/user-activity.js?v=20260916c"></script>
   <script src="/js/left-nav.js?v=20260913l-workspace-mismatch-fix"></script>
 </body>
 </html>
