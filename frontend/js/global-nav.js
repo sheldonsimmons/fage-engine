@@ -311,27 +311,99 @@
   // both animate it; only voice questions also get spoken audio (see
   // speakAskAnswer's own comment on that asymmetry).
   function setAskAvatarState(state) {
-    document.getElementById("cpAskAvatar")?.setAttribute("data-state", state);
+    document.getElementById("cpAskAvatarFloat")?.setAttribute("data-state", state);
+  }
+
+  // Drag-to-reposition for the floating avatar panel. Position persists
+  // per browser (localStorage), constrained to stay fully on-screen even
+  // after a resize. Click-through to the pointerdown/move/up chain does
+  // not conflict with anything else on the page -- this element sits
+  // above everything (see its z-index) and nothing behind it needs its
+  // own pointer events while a drag is in progress.
+  const ASK_AVATAR_POS_KEY = "cp_ask_avatar_float_pos";
+
+  function clampAvatarPos(x, y, size) {
+    const maxX = window.innerWidth - size - 8;
+    const maxY = window.innerHeight - size - 8;
+    return { x: Math.min(Math.max(x, 8), Math.max(8, maxX)), y: Math.min(Math.max(y, 8), Math.max(8, maxY)) };
+  }
+
+  function initAskAvatarFloatDrag() {
+    const el = document.getElementById("cpAskAvatarFloat");
+    if (!el || el.dataset.dragBound) return;
+    el.dataset.dragBound = "1";
+    const size = el.offsetWidth || 108;
+
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(ASK_AVATAR_POS_KEY) || "null"); } catch (_err) {}
+    const start = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
+      ? clampAvatarPos(saved.x, saved.y, size)
+      : clampAvatarPos(window.innerWidth - size - 28, window.innerHeight - size - 28, size);
+    el.style.left = `${start.x}px`;
+    el.style.top = `${start.y}px`;
+
+    let dragging = false;
+    let moved = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    el.addEventListener("pointerdown", (event) => {
+      dragging = true;
+      moved = false;
+      el.setPointerCapture(event.pointerId);
+      const rect = el.getBoundingClientRect();
+      offsetX = event.clientX - rect.left;
+      offsetY = event.clientY - rect.top;
+      el.classList.add("cp-ask-avatar-float-dragging");
+    });
+    el.addEventListener("pointermove", (event) => {
+      if (!dragging) return;
+      moved = true;
+      const pos = clampAvatarPos(event.clientX - offsetX, event.clientY - offsetY, el.offsetWidth || size);
+      el.style.left = `${pos.x}px`;
+      el.style.top = `${pos.y}px`;
+    });
+    const endDrag = (event) => {
+      if (!dragging) return;
+      dragging = false;
+      el.classList.remove("cp-ask-avatar-float-dragging");
+      try {
+        localStorage.setItem(ASK_AVATAR_POS_KEY, JSON.stringify({
+          x: parseFloat(el.style.left) || 0,
+          y: parseFloat(el.style.top) || 0,
+        }));
+      } catch (_err) {}
+      // A drag that never actually moved is a click -- let it fall through
+      // to whatever a click on the avatar should do (nothing, today), not
+      // get treated as an accidental drag-cancel.
+      if (moved) event.preventDefault();
+    };
+    el.addEventListener("pointerup", endDrag);
+    el.addEventListener("pointercancel", endDrag);
+
+    window.addEventListener("resize", () => {
+      const pos = clampAvatarPos(parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0, el.offsetWidth || size);
+      el.style.left = `${pos.x}px`;
+      el.style.top = `${pos.y}px`;
+    });
   }
 
   function installAskCostPilot() {
     if (document.getElementById("cpAskDrawer")) return;
     const root = document.createElement("div");
     root.innerHTML = `
+      <div class="cp-ask-avatar-float" id="cpAskAvatarFloat" data-state="idle" hidden>
+        <span class="cp-ask-avatar-ring"></span>
+        <img class="cp-ask-avatar-img" src="/assets/ask-costpilot-avatar.png" alt="CostPilot" width="256" height="256" />
+      </div>
       <div class="cp-ask-backdrop" id="cpAskBackdrop" hidden></div>
       <aside class="cp-ask-drawer" id="cpAskDrawer" aria-hidden="true" aria-labelledby="cpAskTitle">
         <div class="cp-ask-resize-handle" id="cpAskResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize Ask CostPilot panel"></div>
         <header class="cp-ask-header">
-          <div class="cp-ask-header-left">
-            <div class="cp-ask-avatar" id="cpAskAvatar" data-state="idle">
-              <span class="cp-ask-avatar-ring"></span>
-              <img class="cp-ask-avatar-img" src="/assets/ask-costpilot-avatar.png" alt="" aria-hidden="true" width="256" height="256" />
-            </div>
-            <div>
-              <span class="cp-ask-kicker">Workspace intelligence</span>
-              <h2 id="cpAskTitle">Ask CostPilot</h2>
-              <p>Answers calculated from <strong id="cpAskWorkspaceName">this workspace</strong>.</p>
-            </div>
+          <div>
+            <span class="cp-ask-kicker">Workspace intelligence</span>
+            <h2 id="cpAskTitle">Ask CostPilot</h2>
+            <p>Answers calculated from <strong id="cpAskWorkspaceName">this workspace</strong>.</p>
           </div>
           <div class="cp-ask-header-actions">
             <button type="button" class="cp-ask-clear" id="cpAskClear">Clear chat</button>
@@ -505,6 +577,8 @@
     drawer.setAttribute("aria-hidden", "false");
     backdrop.hidden = false;
     document.body.classList.add("cp-ask-open");
+    initAskAvatarFloatDrag();
+    document.getElementById("cpAskAvatarFloat")?.removeAttribute("hidden");
     refreshGlobalAskExperience();
     setTimeout(() => document.getElementById("cpAskInput")?.focus(), 30);
   }
@@ -575,6 +649,7 @@
     // toggle or the tab being backgrounded.
     if (typeof _askRecording !== "undefined" && _askRecording) _askMediaRecorder?.stop();
     if (typeof stopAskSpeaking === "function") stopAskSpeaking();
+    document.getElementById("cpAskAvatarFloat")?.setAttribute("hidden", "");
     resumeWakeWordListenerIfEnabled();
   }
 
