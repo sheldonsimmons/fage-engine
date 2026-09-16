@@ -153,6 +153,8 @@ def list_audit_events(
     limit: int = 50,
     workspace_id: str = None,
     work_user_id: Optional[int] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
     db: Session = Depends(get_db),
 ):
     """Return the most recent audit events, newest first.
@@ -160,9 +162,18 @@ def list_audit_events(
     work_user_id narrows to one person's full history -- callers filtering
     to a single user (the Users page) may need more than the global feed's
     reasonable default, so the cap only rises when this filter is present.
+    date_from/date_to match the same optional-datetime convention already
+    used by routes_reports.py.
     """
     effective_limit = min(limit, 200) if work_user_id is not None else limit
-    return get_audit_events(db, limit=effective_limit, workspace_id=workspace_id, work_user_id=work_user_id)
+    return get_audit_events(
+        db,
+        limit=effective_limit,
+        workspace_id=workspace_id,
+        work_user_id=work_user_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 class WorkUserSearchResult(BaseModel):

@@ -358,11 +358,44 @@ function usClearSelection() {
   usOpenRationaleId = null;
 }
 
+// Returns {date_from, date_to} ISO strings, or {} for "All time" -- read
+// from the range select/date inputs rather than passed in, since the range
+// control is shared across whichever user is currently selected.
+function usComputeDateRange() {
+  const select = document.getElementById("usRangeSelect");
+  const value = select ? select.value : "30";
+
+  if (value === "custom") {
+    const fromEl = document.getElementById("usDateFrom");
+    const toEl = document.getElementById("usDateTo");
+    const params = {};
+    if (fromEl && fromEl.value) params.date_from = new Date(`${fromEl.value}T00:00:00`).toISOString();
+    if (toEl && toEl.value) params.date_to = new Date(`${toEl.value}T23:59:59`).toISOString();
+    return params;
+  }
+
+  const days = parseInt(value, 10);
+  if (!days) return {}; // "All time"
+  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return { date_from: from.toISOString() };
+}
+
+function usOnRangeChange() {
+  const select = document.getElementById("usRangeSelect");
+  const customWrap = document.getElementById("usCustomRange");
+  if (customWrap) customWrap.style.display = select && select.value === "custom" ? "inline-flex" : "none";
+  if (usSelectedUser) usLoadActivity(usSelectedUser.id);
+}
+
 async function usLoadActivity(workUserId) {
   const tbody = document.getElementById("auditTableBody");
   tbody.innerHTML = '<div class="us-placeholder">Loading activity…</div>';
   try {
-    const path = workspaceScopedApiPath(`/api/audit?work_user_id=${workUserId}&limit=200`);
+    const range = usComputeDateRange();
+    const params = new URLSearchParams({ work_user_id: workUserId, limit: "200" });
+    if (range.date_from) params.set("date_from", range.date_from);
+    if (range.date_to) params.set("date_to", range.date_to);
+    const path = workspaceScopedApiPath(`/api/audit?${params.toString()}`);
     const events = await apiGet(path);
     usRenderTable(events);
   } catch (err) {

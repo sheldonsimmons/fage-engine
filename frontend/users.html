@@ -61,6 +61,13 @@
     }
     .us-activity-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 0; }
     .us-placeholder { padding: 40px 0; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    .us-range-controls { display: flex; align-items: center; gap: 8px; }
+    .us-range-controls select, .us-range-controls input[type="date"] {
+      background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-primary);
+      font-family: var(--font-sans); font-size: 12px; padding: 6px 10px; border-radius: 6px;
+    }
+    .us-custom-range { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -90,6 +97,20 @@
         <div id="usActivitySection" style="display:none">
           <div class="us-activity-head">
             <h2>AI Activity</h2>
+            <div class="us-range-controls">
+              <select id="usRangeSelect" onchange="usOnRangeChange()">
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="0">All time</option>
+                <option value="custom">Custom range…</option>
+              </select>
+              <span id="usCustomRange" class="us-custom-range" style="display:none">
+                <input type="date" id="usDateFrom" onchange="usOnRangeChange()" />
+                <span>to</span>
+                <input type="date" id="usDateTo" onchange="usOnRangeChange()" />
+              </span>
+            </div>
           </div>
           <div id="auditTableBody" class="audit-timeline"></div>
         </div>
@@ -99,7 +120,7 @@
 
   <script src="js/api.js"></script>
   <script src="js/tier-utils.js"></script>
-  <script src="js/user-activity.js?v=20260916a"></script>
+  <script src="js/user-activity.js?v=20260916b"></script>
   <script src="/js/left-nav.js?v=20260913l-workspace-mismatch-fix"></script>
 </body>
 </html>

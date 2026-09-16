@@ -466,12 +466,23 @@ def write_audit_event(
     }
 
 
-def get_audit_events(db: Session, limit: int = 50, workspace_id: str = None, work_user_id: int = None) -> list:
+def get_audit_events(
+    db: Session,
+    limit: int = 50,
+    workspace_id: str = None,
+    work_user_id: int = None,
+    date_from=None,
+    date_to=None,
+) -> list:
     q = db.query(AuditEvent)
     if workspace_id:
         q = q.filter(workspace_filter(AuditEvent, workspace_id))
     if work_user_id is not None:
         q = q.filter(AuditEvent.work_user_id == work_user_id)
+    if date_from is not None:
+        q = q.filter(AuditEvent.timestamp >= date_from)
+    if date_to is not None:
+        q = q.filter(AuditEvent.timestamp <= date_to)
     events = q.order_by(AuditEvent.timestamp.desc()).limit(limit).all()
     return [_serialize(e) for e in events]
 
