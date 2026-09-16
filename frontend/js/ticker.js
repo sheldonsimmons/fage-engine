@@ -224,11 +224,21 @@
 
     function advance() {
       if (paused || facts.length < 2) return;
+      // Previously disabled auto-rotation ENTIRELY when the OS prefers
+      // reduced motion -- confirmed live 2026-09-16 that's what was
+      // actually stuck: the user's real machine has that setting on, so
+      // every one of my own tests (headless browsers default to "no
+      // preference") looked correct while their real browser never
+      // advanced past the first fact, permanently, no amount of
+      // refreshing would ever fix it. That reading was too strict --
+      // WCAG 2.2.2 asks for a way to pause/stop auto-updating content
+      // (the action button and focus already provide that), not for the
+      // content to stop updating outright. Content still rotates either
+      // way now; only the fade animation itself is skipped for reduced
+      // motion, an instant swap instead of a cross-fade.
       if (prefersReducedMotion) {
-        // WCAG 2.2.2 -- an auto-advancing strip needs the reader's ability
-        // to stop it. Simplest honest compliance: don't auto-advance at
-        // all when the OS says to minimize motion, rather than just
-        // removing the fade and still cycling underneath them.
+        index = (index + 1) % facts.length;
+        render(index);
         return;
       }
       textEl.classList.add("cp-ticker-fading");
