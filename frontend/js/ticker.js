@@ -242,17 +242,21 @@
     render(0);
     timer = setInterval(advance, ROTATE_MS);
 
-    // Pausing on hover over the WHOLE strip (rootEl) sounded right but
-    // wasn't, in practice -- confirmed live 2026-09-16: the strip spans
-    // nearly the full page width right below the nav, exactly where a
-    // cursor often just happens to be resting during normal reading, so
-    // it read as "this never rotates" even though the timer was firing
-    // correctly the entire time. Scoped to just the text and action
-    // button -- still pausable on purpose (reading a longer fact,
-    // reaching for "Ask why"), not paused by incidental proximity.
+    // Scoping hover-pause to the text (previous fix, still scoped away
+    // from the whole strip) turned out to have the identical problem one
+    // level down: confirmed live 2026-09-16 with the user actively
+    // watching the tab, focused, having just hard-refreshed -- the one
+    // remaining explanation was that deliberately watching text IS
+    // hovering it, so "pause while reading" and "paused the entire time
+    // someone is looking at it" are the same thing here, not two
+    // different behaviors. Text no longer pauses on mouseenter at all.
+    // The action button still does -- it's a small, deliberately-aimed-at
+    // target, so hovering it is a real signal, not incidental proximity
+    // from reading. Keyboard focus still pauses both, since tabbing to an
+    // element is inherently deliberate, never incidental.
+    actionEl.addEventListener("mouseenter", () => { paused = true; });
+    actionEl.addEventListener("mouseleave", () => { paused = false; });
     [textEl, actionEl].forEach(el => {
-      el.addEventListener("mouseenter", () => { paused = true; });
-      el.addEventListener("mouseleave", () => { paused = false; });
       el.addEventListener("focusin", () => { paused = true; });
       el.addEventListener("focusout", () => { paused = false; });
     });
