@@ -329,8 +329,16 @@
                 <circle class="cp-ask-avatar-beard" cx="20" cy="21" r="15"/>
                 <circle class="cp-ask-avatar-skin" cx="20" cy="17.5" r="12.6"/>
                 <ellipse class="cp-ask-avatar-shine" cx="15.8" cy="9.6" rx="5.2" ry="2.4"/>
-                <ellipse class="cp-ask-avatar-eye" cx="14.8" cy="17" rx="1.5" ry="1.8"/>
-                <ellipse class="cp-ask-avatar-eye" cx="25.2" cy="17" rx="1.5" ry="1.8"/>
+                <path class="cp-ask-avatar-brow cp-ask-avatar-brow-l" d="M12.2,13.6 Q14.8,12.2 17.2,13.4"/>
+                <path class="cp-ask-avatar-brow cp-ask-avatar-brow-r" d="M22.8,13.4 Q25.2,12.2 27.8,13.6"/>
+                <g class="cp-ask-avatar-eye cp-ask-avatar-eye-l">
+                  <ellipse class="cp-ask-avatar-eye-white" cx="14.8" cy="17.2" rx="2.1" ry="1.9"/>
+                  <circle class="cp-ask-avatar-pupil" cx="14.8" cy="17.2" r="1.05"/>
+                </g>
+                <g class="cp-ask-avatar-eye cp-ask-avatar-eye-r">
+                  <ellipse class="cp-ask-avatar-eye-white" cx="25.2" cy="17.2" rx="2.1" ry="1.9"/>
+                  <circle class="cp-ask-avatar-pupil" cx="25.2" cy="17.2" r="1.05"/>
+                </g>
                 <path class="cp-ask-avatar-mouth-closed" d="M16.5,24.6 Q20,26.4 23.5,24.6"/>
                 <ellipse class="cp-ask-avatar-mouth-open" cx="20" cy="25.5" rx="3" ry="2.3"/>
               </svg>

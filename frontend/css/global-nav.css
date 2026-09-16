@@ -392,57 +392,124 @@ header.header .header-sub,
   transition: stroke .25s ease, stroke-width .25s ease;
 }
 
-.cp-ask-avatar-beard { fill: #241a14; }
-.cp-ask-avatar-skin  { fill: #8a5a3c; }
-.cp-ask-avatar-shine { fill: #b07b52; opacity: .5; }
-.cp-ask-avatar-eye   { fill: #1a120c; }
+/* Skin/beard/eye-white colors are literal, not theme tokens -- this app has
+   no light theme today (confirmed: no data-theme/prefers-color-scheme rules
+   exist anywhere in this codebase), so there is nothing to switch between
+   yet. Chosen to hold up against a light ground too, if that ever changes:
+   nothing here depends on the dark page background for contrast. */
+.cp-ask-avatar-beard      { fill: #2a1d15; }
+.cp-ask-avatar-skin       { fill: #9c6b47; }
+.cp-ask-avatar-shine      { fill: #c08a5c; opacity: .4; }
+.cp-ask-avatar-eye-white  { fill: #f3e8da; }
+.cp-ask-avatar-pupil      { fill: #20140c; transition: transform .3s ease; transform-box: fill-box; transform-origin: center; }
+.cp-ask-avatar-eye        { transform-box: fill-box; transform-origin: center; }
+.cp-ask-avatar-brow {
+  fill: none;
+  stroke: #1c130d;
+  stroke-linecap: round;
+  stroke-width: 1.5px;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform .3s ease;
+}
 
 .cp-ask-avatar-mouth-closed {
   fill: none;
-  stroke: #3a281c;
+  stroke: #20140c;
   stroke-linecap: round;
   stroke-width: 1.3px;
-  transition: opacity .15s ease;
+  transition: opacity .15s ease, d .2s ease;
 }
 
 .cp-ask-avatar-mouth-open {
-  fill: #3a281c;
+  fill: #20140c;
   opacity: 0;
   transition: opacity .15s ease;
 }
 
+/* Every state carries its own continuous, visible motion -- a character
+   that's idling, not a static icon with a colored ring swapped under it.
+   Each state's animation list below IS its life motion. */
+
+/* idle -- slow organic sway + breathing + a blink frequent enough to read
+   as alive within the first couple seconds, plus an occasional glance. */
 .cp-ask-avatar[data-state="idle"] {
-  animation: cp-ask-avatar-breathe 3.6s ease-in-out infinite;
+  animation: cp-ask-avatar-sway 3.2s ease-in-out infinite, cp-ask-avatar-breathe 3.2s ease-in-out infinite;
+}
+.cp-ask-avatar[data-state="idle"] .cp-ask-avatar-eye {
+  animation: cp-ask-avatar-blink 3.4s ease-in-out infinite;
+}
+.cp-ask-avatar[data-state="idle"] .cp-ask-avatar-pupil {
+  animation: cp-ask-avatar-glance 6.8s ease-in-out infinite;
 }
 
+/* listening -- alert: ring pulses, quicker sway, raised brows, steadier gaze */
 .cp-ask-avatar[data-state="listening"] .cp-ask-avatar-ring {
   stroke: var(--accent, #60a5fa);
   stroke-width: 2px;
 }
 .cp-ask-avatar[data-state="listening"] {
-  animation: cp-ask-avatar-listen-pulse 1.4s ease-in-out infinite;
+  animation: cp-ask-avatar-listen-pulse 1.5s ease-in-out infinite, cp-ask-avatar-sway 2.1s ease-in-out infinite;
+}
+.cp-ask-avatar[data-state="listening"] .cp-ask-avatar-brow {
+  transform: translateY(-1px);
+}
+.cp-ask-avatar[data-state="listening"] .cp-ask-avatar-eye {
+  animation: cp-ask-avatar-blink-slow 6s ease-in-out infinite;
 }
 
+/* thinking -- furrowed/asymmetric brow, gaze shifted up and away, mouth
+   pursed flat; the continuous head tilt itself is the life motion here. */
 .cp-ask-avatar[data-state="thinking"] .cp-ask-avatar-ring {
   stroke: var(--accent-yellow, #d29922);
   stroke-width: 2px;
 }
 .cp-ask-avatar[data-state="thinking"] {
-  animation: cp-ask-avatar-tilt 1.8s ease-in-out infinite;
+  animation: cp-ask-avatar-tilt 2.2s ease-in-out infinite;
 }
+.cp-ask-avatar[data-state="thinking"] .cp-ask-avatar-brow-l { transform: translateY(.6px) rotate(-4deg); }
+.cp-ask-avatar[data-state="thinking"] .cp-ask-avatar-brow-r { transform: translateY(-.4px) rotate(2deg); }
+.cp-ask-avatar[data-state="thinking"] .cp-ask-avatar-pupil  { transform: translate(1.1px, -1.1px); }
+.cp-ask-avatar[data-state="thinking"] .cp-ask-avatar-mouth-closed { d: path("M17,25.6 Q20,24.8 23,25.6"); }
 
+/* speaking -- mouth flaps and the whole head nods with it, in sync */
 .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-ring {
   stroke: var(--accent-green, #3fb950);
   stroke-width: 2px;
 }
 .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-closed { opacity: 0; }
 .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-open {
-  animation: cp-ask-avatar-talk .36s ease-in-out infinite;
+  animation: cp-ask-avatar-talk .32s ease-in-out infinite;
+}
+.cp-ask-avatar[data-state="speaking"] {
+  animation: cp-ask-avatar-nod .32s ease-in-out infinite;
+}
+
+@keyframes cp-ask-avatar-sway {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-1.4px) rotate(-1.5deg); }
 }
 
 @keyframes cp-ask-avatar-breathe {
   0%, 100% { opacity: 1; }
-  50%      { opacity: .82; }
+  50%      { opacity: .88; }
+}
+
+@keyframes cp-ask-avatar-blink {
+  0%, 88%, 100% { transform: scaleY(1); }
+  92%           { transform: scaleY(.1); }
+}
+
+@keyframes cp-ask-avatar-blink-slow {
+  0%, 94%, 100% { transform: scaleY(1); }
+  97%           { transform: scaleY(.2); }
+}
+
+@keyframes cp-ask-avatar-glance {
+  0%, 100%, 45% { transform: translateX(0); }
+  50%, 58%      { transform: translateX(.6px); }
+  63%           { transform: translateX(-.5px); }
+  70%           { transform: translateX(0); }
 }
 
 @keyframes cp-ask-avatar-listen-pulse {
@@ -452,7 +519,7 @@ header.header .header-sub,
 
 @keyframes cp-ask-avatar-tilt {
   0%, 100% { transform: rotate(0deg); }
-  50%      { transform: rotate(-5deg); }
+  50%      { transform: rotate(-6deg); }
 }
 
 @keyframes cp-ask-avatar-talk {
@@ -460,16 +527,28 @@ header.header .header-sub,
   50%      { opacity: 1; }
 }
 
+@keyframes cp-ask-avatar-nod {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(1px); }
+}
+
+/* Reduced motion: every animation is stripped, but each state's static
+   expression (brow angle, gaze, mouth shape/openness, ring color) is kept
+   so the state is still readable at a glance -- just not moving. */
 @media (prefers-reduced-motion: reduce) {
   .cp-ask-avatar,
-  .cp-ask-avatar[data-state] {
+  .cp-ask-avatar[data-state],
+  .cp-ask-avatar[data-state] .cp-ask-avatar-eye,
+  .cp-ask-avatar[data-state] .cp-ask-avatar-pupil,
+  .cp-ask-avatar[data-state] .cp-ask-avatar-mouth-open {
     animation: none;
   }
   .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-open {
-    animation: none;
     opacity: 1;
   }
-  .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-closed { opacity: 0; }
+  .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-closed {
+    opacity: 0;
+  }
 }
 
 .cp-ask-clear {
