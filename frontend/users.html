@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CostPilot — Users</title>
+  <link rel="icon" type="image/png" href="/assets/costpilot-favicon.png" />
+  <link rel="stylesheet" href="css/styles.css?v=20260913i-footer-savings-fix" />
+  <link rel="stylesheet" href="css/tokens.css?v=20260821-dark-theme" />
+  <link rel="stylesheet" href="css/left-nav.css?v=20260810a" />
+  <style>
+    body { margin: 0; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); }
+    .us-wrap { max-width: 980px; margin: 0 auto; padding: 28px 28px 60px; }
+    .us-header { margin-bottom: 22px; }
+    .us-header h1 { font-size: 24px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 4px; }
+    .us-header p { font-size: 13px; color: var(--text-muted); margin: 0; }
+
+    /* Search box + autocomplete dropdown */
+    .us-search-wrap { position: relative; max-width: 480px; }
+    .us-search {
+      width: 100%; box-sizing: border-box; background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; font-size: 13.5px; color: var(--text-primary);
+      font-family: var(--font-sans);
+    }
+    .us-search:focus { outline: none; border-color: var(--accent); }
+    .us-results {
+      position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 50;
+      background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+      max-height: 280px; overflow-y: auto; box-shadow: 0 12px 32px rgba(0,0,0,.45);
+      display: none;
+    }
+    .us-results.open { display: block; }
+    .us-result-row {
+      display: flex; flex-direction: column; gap: 1px; padding: 9px 14px; cursor: pointer;
+      border-bottom: 1px solid var(--border);
+    }
+    .us-result-row:last-child { border-bottom: none; }
+    .us-result-row:hover { background: rgba(88,166,255,.08); }
+    .us-result-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .us-result-meta { font-size: 11px; color: var(--text-muted); }
+    .us-empty, .us-loading { padding: 10px 14px; font-size: 12px; color: var(--text-muted); }
+
+    /* Selected user card */
+    .us-selected {
+      display: none; align-items: center; justify-content: space-between; gap: 14px;
+      margin-top: 18px; padding: 14px 18px; background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .us-selected.open { display: flex; }
+    .us-selected-name { font-size: 15px; font-weight: 650; }
+    .us-selected-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .us-clear-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+    }
+    .us-clear-btn:hover { color: var(--text-primary); border-color: var(--accent); }
+
+    .us-activity-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 26px 0 10px;
+    }
+    .us-activity-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 0; }
+    .us-placeholder { padding: 40px 0; text-align: center; color: var(--text-muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="cp-app-shell">
+    <aside id="cpLeftNavMount"></aside>
+
+    <div class="cp-app-main">
+      <div class="us-wrap">
+        <div class="us-header">
+          <h1>Users</h1>
+          <p>Search for a person and drill into their full AI request history — the same decision detail as the AI Activity timeline, scoped to one user.</p>
+        </div>
+
+        <div class="us-search-wrap">
+          <input type="text" id="usSearchInput" class="us-search" placeholder="Search by name or email…" autocomplete="off" />
+          <div id="usResults" class="us-results"></div>
+        </div>
+
+        <div id="usSelected" class="us-selected">
+          <div>
+            <div class="us-selected-name" id="usSelectedName"></div>
+            <div class="us-selected-meta" id="usSelectedMeta"></div>
+          </div>
+          <button type="button" class="us-clear-btn" onclick="usClearSelection()">Change user</button>
+        </div>
+
+        <div id="usActivitySection" style="display:none">
+          <div class="us-activity-head">
+            <h2>AI Activity</h2>
+          </div>
+          <div id="auditTableBody" class="audit-timeline"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/tier-utils.js"></script>
+  <script src="js/user-activity.js?v=20260916a"></script>
+  <script src="/js/left-nav.js?v=20260913l-workspace-mismatch-fix"></script>
+</body>
+</html>

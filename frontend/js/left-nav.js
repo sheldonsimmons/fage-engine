@@ -25,6 +25,7 @@
     { label: "Home", href: "/index.html", icon: "home" },
     { label: "Executive Dashboard", href: "/cockpit/", icon: "dashboard" },
     { label: "AI Activity", href: "/operate.html", icon: "pulse" },
+    { label: "Users", href: "/users.html", icon: "user" },
     { label: "Ask CostPilot", href: "#", icon: "ask" },
     { label: "Business Profiles", href: "/business-profile.html", icon: "building" },
     { label: "Reports", href: "/reports.html", icon: "doc" },
@@ -60,6 +61,7 @@
     gear: '<circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.4 4.6l-1.4 1.4M6 12.6l-1.4 1.4M15.4 15.4l-1.4-1.4M6 7.4L4.6 6"/>',
     briefcase: '<rect x="2.5" y="6.5" width="15" height="10" rx="1.5"/><path d="M7 6.5V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 13 5v1.5M2.5 11h15"/>',
     layers: '<path d="M10 2.5 17 6.5 10 10.5 3 6.5z"/><path d="M3 10.5 10 14.5 17 10.5"/><path d="M3 14 10 18 17 14"/>',
+    user: '<circle cx="10" cy="6.5" r="3.5"/><path d="M3.5 17c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/>',
   };
 
   function svgIcon(name) {

@@ -11,6 +11,7 @@ import {
   Layers,
   Target,
   Settings,
+  Users,
   type LucideIcon,
 } from "lucide-react"
 
@@ -27,6 +28,7 @@ const ICONS: Record<string, LucideIcon> = {
   home: Home,
   dashboard: LayoutDashboard,
   pulse: Activity,
+  user: Users,
   ask: Sparkles,
   building: Building2,
   doc: FileBarChart,
@@ -44,6 +46,7 @@ const FALLBACK_ITEMS: NavItemData[] = [
   { label: "Home", href: "/index.html", icon: "home" },
   { label: "Executive Dashboard", href: "/cockpit/", icon: "dashboard" },
   { label: "AI Activity", href: "/operate.html", icon: "pulse" },
+  { label: "Users", href: "/users.html", icon: "user" },
   { label: "Ask CostPilot", href: "#", icon: "ask" },
   { label: "Business Profiles", href: "/business-profile.html", icon: "building" },
   { label: "Reports", href: "/reports.html", icon: "doc" },

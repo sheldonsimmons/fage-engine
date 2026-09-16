@@ -152,10 +152,49 @@ def acknowledge_blocked_events(
 def list_audit_events(
     limit: int = 50,
     workspace_id: str = None,
+    work_user_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    """Return the most recent audit events, newest first."""
-    return get_audit_events(db, limit=limit, workspace_id=workspace_id)
+    """Return the most recent audit events, newest first.
+
+    work_user_id narrows to one person's full history -- callers filtering
+    to a single user (the Users page) may need more than the global feed's
+    reasonable default, so the cap only rises when this filter is present.
+    """
+    effective_limit = min(limit, 200) if work_user_id is not None else limit
+    return get_audit_events(db, limit=effective_limit, workspace_id=workspace_id, work_user_id=work_user_id)
+
+
+class WorkUserSearchResult(BaseModel):
+    id: int
+    name: str
+    email: Optional[str] = None
+    source_platform: str
+
+
+@router.get("/users", response_model=List[WorkUserSearchResult])
+def search_work_users(
+    q: str = "",
+    workspace_id: str = None,
+    db: Session = Depends(get_db),
+):
+    """Search this workspace's human identities by name or email, for the Users page's picker."""
+    from database.models import WorkUser
+
+    query = db.query(WorkUser)
+    if workspace_id:
+        query = query.filter(WorkUser.workspace_id == workspace_id)
+    term = (q or "").strip()
+    if term:
+        like = f"%{term}%"
+        query = query.filter(
+            (WorkUser.name.ilike(like)) | (WorkUser.email.ilike(like))
+        )
+    results = query.order_by(WorkUser.name.asc()).limit(20).all()
+    return [
+        WorkUserSearchResult(id=u.id, name=u.name, email=u.email, source_platform=u.source_platform)
+        for u in results
+    ]
 
 
 def _line_matches_workspace(record: dict, workspace_id: str) -> bool:
