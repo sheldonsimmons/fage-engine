@@ -197,7 +197,10 @@ class TranscribeResponse(BaseModel):
 
 class SpeakRequest(BaseModel):
     text: str = Field(min_length=1)
-    voice: str = "alloy"
+    # "onyx" -- OpenAI tts-1's clearly male-register voice -- to match the
+    # avatar (a male portrait). "alloy" (the previous default) reads
+    # female/neutral, confirmed live as a mismatch once the avatar shipped.
+    voice: str = "onyx"
 
 
 def _openai_client(timeout: float):
@@ -333,7 +336,7 @@ def speak(body: SpeakRequest):
     try:
         response = client.audio.speech.create(
             model="tts-1",
-            voice=body.voice or "alloy",
+            voice=body.voice or "onyx",
             input=text,
             response_format="mp3",
         )
