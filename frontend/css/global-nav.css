@@ -360,6 +360,118 @@ header.header .header-sub,
   gap: 8px;
 }
 
+/* ── Ask CostPilot avatar ─────────────────────────────────────────────────
+   Small, persistent presence in the drawer header -- reacts to both typed
+   and voice questions. States mirror real state already tracked in
+   global-nav.js (recording, the thinking-cycle poll, TTS playback), driven
+   entirely off #cpAskAvatar's [data-state] attribute via setAskAvatarState().
+   Ring color alone carries the state under reduced motion; the animations
+   below are additive polish, never the only signal. */
+.cp-ask-header-left {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.cp-ask-avatar {
+  flex: 0 0 auto;
+  height: 40px;
+  width: 40px;
+}
+
+.cp-ask-avatar svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.cp-ask-avatar-ring {
+  fill: none;
+  stroke: var(--border, #334155);
+  stroke-width: 1.4px;
+  transition: stroke .25s ease, stroke-width .25s ease;
+}
+
+.cp-ask-avatar-beard { fill: #241a14; }
+.cp-ask-avatar-skin  { fill: #8a5a3c; }
+.cp-ask-avatar-shine { fill: #b07b52; opacity: .5; }
+.cp-ask-avatar-eye   { fill: #1a120c; }
+
+.cp-ask-avatar-mouth-closed {
+  fill: none;
+  stroke: #3a281c;
+  stroke-linecap: round;
+  stroke-width: 1.3px;
+  transition: opacity .15s ease;
+}
+
+.cp-ask-avatar-mouth-open {
+  fill: #3a281c;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.cp-ask-avatar[data-state="idle"] {
+  animation: cp-ask-avatar-breathe 3.6s ease-in-out infinite;
+}
+
+.cp-ask-avatar[data-state="listening"] .cp-ask-avatar-ring {
+  stroke: var(--accent, #60a5fa);
+  stroke-width: 2px;
+}
+.cp-ask-avatar[data-state="listening"] {
+  animation: cp-ask-avatar-listen-pulse 1.4s ease-in-out infinite;
+}
+
+.cp-ask-avatar[data-state="thinking"] .cp-ask-avatar-ring {
+  stroke: var(--accent-yellow, #d29922);
+  stroke-width: 2px;
+}
+.cp-ask-avatar[data-state="thinking"] {
+  animation: cp-ask-avatar-tilt 1.8s ease-in-out infinite;
+}
+
+.cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-ring {
+  stroke: var(--accent-green, #3fb950);
+  stroke-width: 2px;
+}
+.cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-closed { opacity: 0; }
+.cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-open {
+  animation: cp-ask-avatar-talk .36s ease-in-out infinite;
+}
+
+@keyframes cp-ask-avatar-breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .82; }
+}
+
+@keyframes cp-ask-avatar-listen-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 color-mix(in srgb, var(--accent, #60a5fa) 45%, transparent)); }
+  50%      { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent, #60a5fa) 45%, transparent)); }
+}
+
+@keyframes cp-ask-avatar-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-5deg); }
+}
+
+@keyframes cp-ask-avatar-talk {
+  0%, 100% { opacity: .15; }
+  50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-ask-avatar,
+  .cp-ask-avatar[data-state] {
+    animation: none;
+  }
+  .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-open {
+    animation: none;
+    opacity: 1;
+  }
+  .cp-ask-avatar[data-state="speaking"] .cp-ask-avatar-mouth-closed { opacity: 0; }
+}
+
 .cp-ask-clear {
   background: transparent;
   border: 1px solid var(--border, #334155);

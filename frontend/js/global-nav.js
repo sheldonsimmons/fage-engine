@@ -304,6 +304,16 @@
     } catch (_error) {}
   }
 
+  // Drives the small persistent avatar in the Ask CostPilot drawer header.
+  // Every state here already corresponds to a real thing already happening
+  // (recording, a thinking-cycle poll, TTS playback) -- this never invents
+  // new state, just gives existing state a face. Typed and voice questions
+  // both animate it; only voice questions also get spoken audio (see
+  // speakAskAnswer's own comment on that asymmetry).
+  function setAskAvatarState(state) {
+    document.getElementById("cpAskAvatar")?.setAttribute("data-state", state);
+  }
+
   function installAskCostPilot() {
     if (document.getElementById("cpAskDrawer")) return;
     const root = document.createElement("div");
@@ -312,10 +322,24 @@
       <aside class="cp-ask-drawer" id="cpAskDrawer" aria-hidden="true" aria-labelledby="cpAskTitle">
         <div class="cp-ask-resize-handle" id="cpAskResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize Ask CostPilot panel"></div>
         <header class="cp-ask-header">
-          <div>
-            <span class="cp-ask-kicker">Workspace intelligence</span>
-            <h2 id="cpAskTitle">Ask CostPilot</h2>
-            <p>Answers calculated from <strong id="cpAskWorkspaceName">this workspace</strong>.</p>
+          <div class="cp-ask-header-left">
+            <div class="cp-ask-avatar" id="cpAskAvatar" data-state="idle" aria-hidden="true">
+              <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                <circle class="cp-ask-avatar-ring" cx="20" cy="20" r="19"/>
+                <circle class="cp-ask-avatar-beard" cx="20" cy="21" r="15"/>
+                <circle class="cp-ask-avatar-skin" cx="20" cy="17.5" r="12.6"/>
+                <ellipse class="cp-ask-avatar-shine" cx="15.8" cy="9.6" rx="5.2" ry="2.4"/>
+                <ellipse class="cp-ask-avatar-eye" cx="14.8" cy="17" rx="1.5" ry="1.8"/>
+                <ellipse class="cp-ask-avatar-eye" cx="25.2" cy="17" rx="1.5" ry="1.8"/>
+                <path class="cp-ask-avatar-mouth-closed" d="M16.5,24.6 Q20,26.4 23.5,24.6"/>
+                <ellipse class="cp-ask-avatar-mouth-open" cx="20" cy="25.5" rx="3" ry="2.3"/>
+              </svg>
+            </div>
+            <div>
+              <span class="cp-ask-kicker">Workspace intelligence</span>
+              <h2 id="cpAskTitle">Ask CostPilot</h2>
+              <p>Answers calculated from <strong id="cpAskWorkspaceName">this workspace</strong>.</p>
+            </div>
           </div>
           <div class="cp-ask-header-actions">
             <button type="button" class="cp-ask-clear" id="cpAskClear">Clear chat</button>
@@ -1036,10 +1060,12 @@
         stream.getTracks().forEach((track) => track.stop());
         _askRecording = false;
         document.getElementById("cpAskMic")?.classList.remove("recording");
+        setAskAvatarState("thinking");
         transcribeAskRecording().finally(resumeWakeWordListenerIfEnabled);
       };
       _askMediaRecorder.start();
       _askRecording = true;
+      setAskAvatarState("listening");
       document.getElementById("cpAskMic")?.classList.add("recording");
       if (_wakeAutoStopArmed) {
         _wakeAutoStopArmed = false;
@@ -1076,6 +1102,7 @@
       if (autoSubmit) {
         submitGlobalAsk();
       } else {
+        setAskAvatarState("idle");
         askVoiceStatus(
           lowConfidence
             ? "Not fully sure I caught that — check the text below before sending."
@@ -1086,6 +1113,7 @@
     } catch (err) {
       _wakeAutoSubmitArmed = false;
       _askPendingVoiceMeta = null;
+      setAskAvatarState("idle");
       askVoiceStatus(err.message || "Could not transcribe that clip. Try typing instead.", "error");
     }
   }
@@ -1123,17 +1151,21 @@
         if (continueConversation && !_askRecording) {
           _wakeAutoStopArmed = true;
           _wakeAutoSubmitArmed = true;
+          setAskAvatarState("listening");
           askVoiceStatus("Your turn — listening…", "listening");
           toggleAskVoiceRecording();
         } else {
+          setAskAvatarState("idle");
           askVoiceStatus("");
           resumeWakeWordListenerIfEnabled();
         }
       };
+      setAskAvatarState("speaking");
       askVoiceStatus("Speaking…", "listening");
       renderAskStopSpeakingControl(true);
       await _askCurrentAudio.play();
     } catch (err) {
+      setAskAvatarState("idle");
       askVoiceStatus("Couldn't play that answer aloud.", "error");
       resumeWakeWordListenerIfEnabled();
     } finally {
@@ -1146,6 +1178,7 @@
       _askCurrentAudio.pause();
       _askCurrentAudio = null;
     }
+    setAskAvatarState("idle");
     askVoiceStatus("");
     renderAskStopSpeakingControl(false);
   }
@@ -1188,6 +1221,7 @@
     send.textContent = "Checking…";
     const pending = addAskMessage("assistant", `<div class="cp-ask-thinking"><span class="cp-ask-thinking-text">Calculating from governed activity…</span></div>`);
     const stopThinking = startAskThinkingCycle(pending.querySelector(".cp-ask-thinking-text"));
+    setAskAvatarState("thinking");
     const history = readAskStorage("history", []);
     const context = readAskStorage("context", null);
     try {
@@ -1222,9 +1256,15 @@
         // requiring the wake phrase again for an answer it's expecting.
         const continueConversation = /\?\s*$/.test(data.answer.trim());
         speakAskAnswer(data.answer, pending.querySelector("[data-ask-speak]"), { continueConversation });
+      } else {
+        // Typed answers stay silent (see speakAskAnswer's own comment on
+        // that asymmetry) -- avatar still needs to settle back down since
+        // nothing else will move it out of "thinking".
+        setAskAvatarState("idle");
       }
     } catch (error) {
       stopThinking();
+      setAskAvatarState("idle");
       const statusMessage = /503/.test(error.message || "")
         ? "The analytics service is temporarily unavailable. No answer was generated."
         : error.message || "CostPilot could not safely calculate this answer.";
