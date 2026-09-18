@@ -364,7 +364,18 @@ def _account_json(account: WorkAccount) -> dict:
     }
 
 
-def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> dict:
+def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True, precomputed: dict = None) -> dict:
+    """
+    precomputed, when given, comes from _batch_work_item_stats() -- a
+    caller building a list of many WorkItems at once (list_work_items,
+    work_item_summary) calls that ONCE for every item's id up front,
+    instead of this function running ~15 separate queries per item on
+    its own. Confirmed live: those two endpoints were timing out (30s,
+    HTTP 503) for any workspace with enough WorkItems, entirely from this
+    per-item query fan-out. Single-item callers are unaffected -- they
+    pass no precomputed dict, and every query below runs exactly as
+    before.
+    """
     spend_usd = 0.0
     spend_month_usd = 0.0
     request_count = 0
@@ -378,7 +389,23 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
     activity_platforms = []
     agent_team = []
     user_team = []
-    if include_stats:
+    origin_rows = []
+    if include_stats and precomputed is not None:
+        request_count = precomputed["request_count"]
+        input_tokens = precomputed["input_tokens"]
+        output_tokens = precomputed["output_tokens"]
+        tokens_saved = precomputed["tokens_saved"]
+        spend_usd = precomputed["spend_usd"]
+        last_activity_at = precomputed["last_activity_at"]
+        spend_month_usd = precomputed["spend_month_usd"]
+        agent_rows = precomputed["agent_rows"]
+        risk_event_count = precomputed["risk_event_count"]
+        model_tiers = precomputed["model_tiers"]
+        activity_platforms = precomputed["activity_platforms"]
+        agent_team = precomputed["agent_team"]
+        user_team = precomputed["user_team"]
+        origin_rows = precomputed["origin_rows"]
+    elif include_stats:
         month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         request_count, input_tokens, output_tokens, tokens_saved, spend_usd, last_activity_at = (
             db.query(
@@ -401,14 +428,17 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
             .scalar()
             or 0.0
         )
-        agent_rows = (
-            db.query(RegisteredAgent.id, RegisteredAgent.name)
-            .join(TokenTransaction, TokenTransaction.agent_id == RegisteredAgent.id)
-            .filter(TokenTransaction.work_item_id == item.id)
-            .distinct()
-            .order_by(RegisteredAgent.name)
-            .all()
-        )
+        agent_rows = [
+            {"id": row.id, "name": row.name}
+            for row in (
+                db.query(RegisteredAgent.id, RegisteredAgent.name)
+                .join(TokenTransaction, TokenTransaction.agent_id == RegisteredAgent.id)
+                .filter(TokenTransaction.work_item_id == item.id)
+                .distinct()
+                .order_by(RegisteredAgent.name)
+                .all()
+            )
+        ]
         risk_event_count = (
             db.query(func.count(AuditEvent.id))
             .filter(
@@ -455,28 +485,29 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         key=lambda link: (not bool(link.is_primary), link.source_platform, link.source_record_type or "", link.source_record_name or link.source_record_id),
     )
     context = business_context_json(item)
-    origin_rows = (
-        db.query(
-            TokenTransaction.origin_record_id,
-            TokenTransaction.origin_record_type,
-            TokenTransaction.origin_record_name,
-            func.count(TokenTransaction.id),
-            func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
-            func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
-            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
-            func.max(TokenTransaction.timestamp),
+    if precomputed is None:
+        origin_rows = (
+            db.query(
+                TokenTransaction.origin_record_id,
+                TokenTransaction.origin_record_type,
+                TokenTransaction.origin_record_name,
+                func.count(TokenTransaction.id),
+                func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+                func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+                func.max(TokenTransaction.timestamp),
+            )
+            .filter(
+                TokenTransaction.work_item_id == item.id,
+                TokenTransaction.origin_record_id.isnot(None),
+            )
+            .group_by(
+                TokenTransaction.origin_record_id,
+                TokenTransaction.origin_record_type,
+                TokenTransaction.origin_record_name,
+            )
+            .all()
         )
-        .filter(
-            TokenTransaction.work_item_id == item.id,
-            TokenTransaction.origin_record_id.isnot(None),
-        )
-        .group_by(
-            TokenTransaction.origin_record_id,
-            TokenTransaction.origin_record_type,
-            TokenTransaction.origin_record_name,
-        )
-        .all()
-    )
     origin_by_id = {
         str(row[0]): {
             "source_record_id": row[0],
@@ -536,7 +567,7 @@ def _work_item_json(item: WorkItem, db: Session, include_stats: bool = True) -> 
         "tokens_saved": int(tokens_saved or 0),
         "total_tokens": int(input_tokens or 0) + int(output_tokens or 0),
         "agent_count": len(agent_rows),
-        "agents": [{"id": row.id, "name": row.name} for row in agent_rows],
+        "agents": agent_rows,  # already [{"id":, "name":}, ...] -- see both branches above
         "risk_event_count": int(risk_event_count or 0),
         "model_tiers": model_tiers,
         "activity_platforms": activity_platforms,
@@ -726,6 +757,355 @@ def _project_user_rows(item: WorkItem, db: Session) -> list[dict]:
             "assigned_at": assignment.assigned_at.isoformat() if assignment and assignment.assigned_at else None,
         })
     return rows
+
+
+def _batch_project_agent_rows(item_ids: list[int], db: Session) -> dict[int, list[dict]]:
+    """
+    Same output shape as _project_agent_rows(), for every item in
+    item_ids at once -- (work_item_id, agent_id) grouped queries instead
+    of a fresh query per (item, agent) pair. See _batch_work_item_stats().
+    """
+    if not item_ids:
+        return {}
+
+    assigned_by_item: dict[int, dict[int, WorkItemAgent]] = {wid: {} for wid in item_ids}
+    for assignment in (
+        db.query(WorkItemAgent)
+        .filter(WorkItemAgent.work_item_id.in_(item_ids))
+        .order_by(WorkItemAgent.assigned_at, WorkItemAgent.id)
+        .all()
+    ):
+        assigned_by_item[assignment.work_item_id][assignment.agent_id] = assignment
+
+    observed_by_item: dict[int, set] = {wid: set() for wid in item_ids}
+    for wid, agent_id in (
+        db.query(TokenTransaction.work_item_id, TokenTransaction.agent_id)
+        .filter(TokenTransaction.work_item_id.in_(item_ids), TokenTransaction.agent_id.isnot(None))
+        .distinct()
+        .all()
+    ):
+        observed_by_item[wid].add(agent_id)
+
+    agent_ids_by_item = {
+        wid: set(assigned_by_item[wid]) | observed_by_item[wid] for wid in item_ids
+    }
+    all_agent_ids = set().union(*agent_ids_by_item.values()) if item_ids else set()
+    if not all_agent_ids:
+        return {wid: [] for wid in item_ids}
+
+    agents = {
+        agent.id: agent
+        for agent in db.query(RegisteredAgent).filter(RegisteredAgent.id.in_(all_agent_ids)).all()
+    }
+
+    tx_stats: dict[tuple, tuple] = {}
+    for wid, agent_id, call_count, tokens_saved, spend_usd, last_activity_at in (
+        db.query(
+            TokenTransaction.work_item_id, TokenTransaction.agent_id,
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.max(TokenTransaction.timestamp),
+        )
+        .filter(TokenTransaction.work_item_id.in_(item_ids), TokenTransaction.agent_id.in_(all_agent_ids))
+        .group_by(TokenTransaction.work_item_id, TokenTransaction.agent_id)
+        .all()
+    ):
+        tx_stats[(wid, agent_id)] = (call_count, tokens_saved, spend_usd, last_activity_at)
+
+    risk_by_pair: dict[tuple, int] = {}
+    for wid, agent_id, risk_count in (
+        db.query(AuditEvent.work_item_id, AuditEvent.agent_id, func.count(AuditEvent.id))
+        .filter(
+            AuditEvent.work_item_id.in_(item_ids),
+            AuditEvent.agent_id.in_(all_agent_ids),
+            func.lower(func.coalesce(AuditEvent.risk_level, "low")).in_(("medium", "high", "critical")),
+        )
+        .group_by(AuditEvent.work_item_id, AuditEvent.agent_id)
+        .all()
+    ):
+        risk_by_pair[(wid, agent_id)] = risk_count
+
+    tiers_by_pair: dict[tuple, list] = {}
+    for wid, agent_id, tier in (
+        db.query(TokenTransaction.work_item_id, TokenTransaction.agent_id, TokenTransaction.model_tier)
+        .filter(
+            TokenTransaction.work_item_id.in_(item_ids),
+            TokenTransaction.agent_id.in_(all_agent_ids),
+            TokenTransaction.model_tier.isnot(None),
+        )
+        .distinct()
+        .all()
+    ):
+        tiers_by_pair.setdefault((wid, agent_id), []).append(tier)
+
+    result: dict[int, list[dict]] = {}
+    for wid in item_ids:
+        rows = []
+        agent_ids = agent_ids_by_item[wid]
+        for agent_id in sorted(agent_ids, key=lambda value: (agents.get(value).name if agents.get(value) else "")):
+            agent = agents.get(agent_id)
+            if not agent:
+                continue
+            call_count, tokens_saved, spend_usd, last_activity_at = tx_stats.get((wid, agent_id), (0, 0, 0.0, None))
+            assignment = assigned_by_item[wid].get(agent_id)
+            rows.append({
+                "agent_id": agent.id,
+                "name": agent.name,
+                "display_name": display_agent_name(agent.name, agent.department, agent.source_platform),
+                "department": display_department(agent.department),
+                "source_platform": agent.source_platform,
+                "role": assignment.role if assignment else None,
+                "assignment_status": "assigned" if assignment else "unexpected",
+                "usage_status": "used" if int(call_count or 0) > 0 else "never_used",
+                "call_count": int(call_count or 0),
+                "tokens_saved": int(tokens_saved or 0),
+                "spend_usd": round(float(spend_usd or 0.0), 6),
+                "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
+                "risk_event_count": int(risk_by_pair.get((wid, agent_id), 0)),
+                "model_tiers": sorted(tiers_by_pair.get((wid, agent_id), [])),
+                "assigned_at": assignment.assigned_at.isoformat() if assignment and assignment.assigned_at else None,
+            })
+        result[wid] = rows
+    return result
+
+
+def _batch_project_user_rows(item_ids: list[int], db: Session) -> dict[int, list[dict]]:
+    """Same output shape as _project_user_rows(), for every item in item_ids at once."""
+    if not item_ids:
+        return {}
+
+    assigned_by_item: dict[int, dict[int, WorkItemUser]] = {wid: {} for wid in item_ids}
+    for assignment in (
+        db.query(WorkItemUser)
+        .filter(WorkItemUser.work_item_id.in_(item_ids))
+        .order_by(WorkItemUser.assigned_at, WorkItemUser.id)
+        .all()
+    ):
+        assigned_by_item[assignment.work_item_id][assignment.work_user_id] = assignment
+
+    observed_by_item: dict[int, set] = {wid: set() for wid in item_ids}
+    for wid, user_id in (
+        db.query(TokenTransaction.work_item_id, TokenTransaction.work_user_id)
+        .filter(TokenTransaction.work_item_id.in_(item_ids), TokenTransaction.work_user_id.isnot(None))
+        .distinct()
+        .all()
+    ):
+        observed_by_item[wid].add(user_id)
+
+    user_ids_by_item = {
+        wid: set(assigned_by_item[wid]) | observed_by_item[wid] for wid in item_ids
+    }
+    all_user_ids = set().union(*user_ids_by_item.values()) if item_ids else set()
+    if not all_user_ids:
+        return {wid: [] for wid in item_ids}
+
+    users = {
+        user.id: user
+        for user in db.query(WorkUser).filter(WorkUser.id.in_(all_user_ids)).all()
+    }
+
+    tx_stats: dict[tuple, tuple] = {}
+    for wid, user_id, call_count, input_tokens, output_tokens, tokens_saved, spend_usd, last_activity_at in (
+        db.query(
+            TokenTransaction.work_item_id, TokenTransaction.work_user_id,
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.max(TokenTransaction.timestamp),
+        )
+        .filter(TokenTransaction.work_item_id.in_(item_ids), TokenTransaction.work_user_id.in_(all_user_ids))
+        .group_by(TokenTransaction.work_item_id, TokenTransaction.work_user_id)
+        .all()
+    ):
+        tx_stats[(wid, user_id)] = (call_count, input_tokens, output_tokens, tokens_saved, spend_usd, last_activity_at)
+
+    agent_count_by_pair: dict[tuple, int] = {}
+    for wid, user_id, agent_count in (
+        db.query(
+            TokenTransaction.work_item_id, TokenTransaction.work_user_id,
+            func.count(func.distinct(TokenTransaction.agent_id)),
+        )
+        .filter(
+            TokenTransaction.work_item_id.in_(item_ids),
+            TokenTransaction.work_user_id.in_(all_user_ids),
+            TokenTransaction.agent_id.isnot(None),
+        )
+        .group_by(TokenTransaction.work_item_id, TokenTransaction.work_user_id)
+        .all()
+    ):
+        agent_count_by_pair[(wid, user_id)] = agent_count
+
+    result: dict[int, list[dict]] = {}
+    for wid in item_ids:
+        rows = []
+        user_ids = user_ids_by_item[wid]
+        for user_id in sorted(user_ids, key=lambda value: (users.get(value).name if users.get(value) else "")):
+            user = users.get(user_id)
+            if not user:
+                continue
+            call_count, input_tokens, output_tokens, tokens_saved, spend_usd, last_activity_at = tx_stats.get(
+                (wid, user_id), (0, 0, 0, 0, 0.0, None)
+            )
+            assignment = assigned_by_item[wid].get(user_id)
+            rows.append({
+                "user_id": user.id,
+                "external_id": user.external_id,
+                "name": user.name,
+                "email": user.email,
+                "source_platform": user.source_platform,
+                "role": assignment.role if assignment else None,
+                "membership_status": assignment.status if assignment else None,
+                "can_use_ai": assignment.can_use_ai if assignment else None,
+                "assignment_status": "assigned" if assignment else "unexpected",
+                "usage_status": "used" if int(call_count or 0) > 0 else "never_used",
+                "call_count": int(call_count or 0),
+                "input_tokens": int(input_tokens or 0),
+                "output_tokens": int(output_tokens or 0),
+                "total_tokens": int(input_tokens or 0) + int(output_tokens or 0),
+                "tokens_saved": int(tokens_saved or 0),
+                "spend_usd": round(float(spend_usd or 0.0), 6),
+                "agent_count": int(agent_count_by_pair.get((wid, user_id), 0)),
+                "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
+                "assigned_at": assignment.assigned_at.isoformat() if assignment and assignment.assigned_at else None,
+            })
+        result[wid] = rows
+    return result
+
+
+def _batch_work_item_stats(item_ids: list[int], db: Session) -> dict[int, dict]:
+    """
+    Computes everything _work_item_json()'s include_stats block (plus
+    origin_rows, which runs unconditionally) needs, for many WorkItems at
+    once via GROUP BY work_item_id queries -- see _work_item_json's own
+    docstring for why. Returns a dict keyed by work_item_id; a missing
+    key never happens for an id actually passed in (every id gets a
+    zeroed-out default entry), so callers can always do
+    stats.get(item.id) safely.
+    """
+    if not item_ids:
+        return {}
+
+    stats = {wid: {
+        "request_count": 0, "input_tokens": 0, "output_tokens": 0,
+        "tokens_saved": 0, "spend_usd": 0.0, "last_activity_at": None,
+        "spend_month_usd": 0.0, "agent_rows": [], "risk_event_count": 0,
+        "model_tiers": [], "activity_platforms": [], "agent_team": [],
+        "user_team": [], "origin_rows": [],
+    } for wid in item_ids}
+
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    for wid, count, in_tok, out_tok, saved, spend, last_at in (
+        db.query(
+            TokenTransaction.work_item_id,
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.tokens_saved), 0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.max(TokenTransaction.timestamp),
+        )
+        .filter(TokenTransaction.work_item_id.in_(item_ids))
+        .group_by(TokenTransaction.work_item_id)
+        .all()
+    ):
+        stats[wid].update({
+            "request_count": int(count or 0), "input_tokens": int(in_tok or 0),
+            "output_tokens": int(out_tok or 0), "tokens_saved": int(saved or 0),
+            "spend_usd": float(spend or 0.0), "last_activity_at": last_at,
+        })
+
+    for wid, spend in (
+        db.query(TokenTransaction.work_item_id, func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0))
+        .filter(TokenTransaction.work_item_id.in_(item_ids), TokenTransaction.timestamp >= month_start)
+        .group_by(TokenTransaction.work_item_id)
+        .all()
+    ):
+        stats[wid]["spend_month_usd"] = float(spend or 0.0)
+
+    agent_rows_by_item: dict[int, list] = {}
+    for wid, agent_id, agent_name in (
+        db.query(TokenTransaction.work_item_id, RegisteredAgent.id, RegisteredAgent.name)
+        .join(RegisteredAgent, TokenTransaction.agent_id == RegisteredAgent.id)
+        .filter(TokenTransaction.work_item_id.in_(item_ids))
+        .distinct()
+        .all()
+    ):
+        agent_rows_by_item.setdefault(wid, []).append({"id": agent_id, "name": agent_name})
+    for wid, rows in agent_rows_by_item.items():
+        stats[wid]["agent_rows"] = sorted(rows, key=lambda r: r["name"] or "")
+
+    for wid, count in (
+        db.query(AuditEvent.work_item_id, func.count(AuditEvent.id))
+        .filter(
+            AuditEvent.work_item_id.in_(item_ids),
+            func.lower(func.coalesce(AuditEvent.risk_level, "low")).in_(("medium", "high", "critical")),
+        )
+        .group_by(AuditEvent.work_item_id)
+        .all()
+    ):
+        stats[wid]["risk_event_count"] = int(count or 0)
+
+    tiers_by_item: dict[int, list] = {}
+    for wid, tier in (
+        db.query(TokenTransaction.work_item_id, TokenTransaction.model_tier)
+        .filter(TokenTransaction.work_item_id.in_(item_ids), TokenTransaction.model_tier.isnot(None))
+        .distinct()
+        .all()
+    ):
+        tiers_by_item.setdefault(wid, []).append(tier)
+    for wid, tiers in tiers_by_item.items():
+        stats[wid]["model_tiers"] = sorted(tiers)
+
+    platforms_by_item: dict[int, list] = {}
+    for wid, platform in (
+        db.query(TokenTransaction.work_item_id, TokenTransaction.source_platform)
+        .filter(
+            TokenTransaction.work_item_id.in_(item_ids),
+            TokenTransaction.source_platform.isnot(None),
+            TokenTransaction.source_platform != "",
+        )
+        .distinct()
+        .all()
+    ):
+        platforms_by_item.setdefault(wid, []).append(platform)
+    for wid, platforms in platforms_by_item.items():
+        stats[wid]["activity_platforms"] = sorted(platforms)
+
+    origin_by_item: dict[int, list] = {}
+    for row in (
+        db.query(
+            TokenTransaction.work_item_id,
+            TokenTransaction.origin_record_id,
+            TokenTransaction.origin_record_type,
+            TokenTransaction.origin_record_name,
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(TokenTransaction.input_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.output_tokens), 0),
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.max(TokenTransaction.timestamp),
+        )
+        .filter(TokenTransaction.work_item_id.in_(item_ids), TokenTransaction.origin_record_id.isnot(None))
+        .group_by(
+            TokenTransaction.work_item_id, TokenTransaction.origin_record_id,
+            TokenTransaction.origin_record_type, TokenTransaction.origin_record_name,
+        )
+        .all()
+    ):
+        origin_by_item.setdefault(row[0], []).append(row[1:])
+    for wid, rows in origin_by_item.items():
+        stats[wid]["origin_rows"] = rows
+
+    agent_team_by_item = _batch_project_agent_rows(item_ids, db)
+    user_team_by_item = _batch_project_user_rows(item_ids, db)
+    for wid in item_ids:
+        stats[wid]["agent_team"] = agent_team_by_item.get(wid, [])
+        stats[wid]["user_team"] = user_team_by_item.get(wid, [])
+
+    return stats
 
 
 def resolve_work_item(db: Session, identifier: str, workspace_id: Optional[str] = None) -> Optional[WorkItem]:
@@ -1372,7 +1752,8 @@ def list_work_items(
     if ctx and ctx.department_scope:
         query = query.filter(_work_item_dept_clause(ctx.department_scope))
     items = query.order_by(WorkItem.status, WorkItem.name).all()
-    return [_work_item_json(item, db) for item in items]
+    stats = _batch_work_item_stats([item.id for item in items], db)
+    return [_work_item_json(item, db, precomputed=stats.get(item.id)) for item in items]
 
 
 @router.get("/summary")
@@ -1413,7 +1794,8 @@ def work_item_summary(
             or 0.0
         )
 
-    item_rows = [_work_item_json(item, db) for item in items]
+    stats = _batch_work_item_stats(item_ids, db)
+    item_rows = [_work_item_json(item, db, precomputed=stats.get(item.id)) for item in items]
     attention = []
     for item in item_rows:
         budget = item.get("monthly_ai_budget")
