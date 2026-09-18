@@ -5021,13 +5021,21 @@ appeared in their question."""
         # (not e.g. a phone/small-screen typed session) since it's the TTS
         # constraint, not screen width, that makes a table actively wrong
         # rather than merely suboptimal.
+        #
+        # First version of this instruction also capped the answer to 3-4
+        # sentences and 1-3 figures -- overcorrected: confirmed live, you
+        # explicitly preferred the earlier full-detail answers (all ranked
+        # rows, exact figures) and only objected to the raw "|---|---|"
+        # table syntax, not the amount of information. The constraint is
+        # narrowed to just the unreadable/unspeakable table markup itself.
         instructions += """
 This question came from a voice-only interface: your answer text is BOTH shown on a small
-phone screen AND read aloud through text-to-speech. Never use markdown tables, code blocks, or
-more than a couple of short bullet points -- speak the numbers in plain sentences instead (e.g.
-"Xander Freight Systems leads with 15 work items touched, followed by Goldleaf Jewelers also at
-15" rather than a ranked table). Keep the whole answer to at most 3-4 short sentences, naming
-only the 1-3 figures that actually matter for the question asked, not a full ranked breakdown."""
+phone screen AND read aloud through text-to-speech. Never use a markdown table (pipe/dash
+syntax) or a code block -- read as raw text on a phone or spoken aloud, that syntax itself is
+unreadable and meaningless. Everything else about your answer is unchanged: still name every
+item and figure you would in a full written answer (e.g. every ranked row, not just the top
+one or two) -- just say them as plain sentences or a simple dash/numbered list instead of a
+table, the way you'd naturally read a ranked list out loud to someone."""
 
     try:
         import anthropic
