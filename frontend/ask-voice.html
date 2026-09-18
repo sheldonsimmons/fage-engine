@@ -24,8 +24,30 @@
     display: flex; flex-direction: column; align-items: center; justify-content: space-between;
     min-height: 100dvh; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
   }
-  header { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; opacity: 0.9; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; max-width: 420px; font-weight: 600; font-size: 15px; opacity: 0.9;
+  }
+  header .brand { display: flex; align-items: center; gap: 8px; }
   header img { height: 22px; width: auto; }
+
+  /* Confirmed live 2026-09-18: this page had no workspace switcher at
+     all -- it silently defaulted to a hardcoded fallback workspace
+     (FALLBACK_WORKSPACE_ID below), so a question about a platform
+     connected in a DIFFERENT workspace (e.g. Salesforce, active under
+     "Production"/"default" but never finished connecting under the
+     fallback "Simulated" workspace) got an accurate but confusing
+     "not connected" answer with no way to tell from this page that a
+     different workspace even existed. Small and unobtrusive by design,
+     matching this page's own minimal aesthetic -- not the full labeled
+     dropdown left-nav.js/global-nav.js use on desktop. */
+  #workspaceSwitcher {
+    font-size: 11px; font-weight: 600; color: #cbd5e1;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 999px; padding: 5px 10px; max-width: 150px;
+    -webkit-appearance: none; appearance: none;
+  }
+  #workspaceSwitcher:disabled { opacity: 0.5; }
 
   /* Mobile-only: above this width, hide the mic UI and show a desktop
      notice instead -- this page is deliberately not meant to be used
@@ -221,8 +243,13 @@
 <body>
 
 <header>
-  <img src="/assets/costpilot-logo-transparent.svg" alt="" />
-  Ask CostPilot
+  <span class="brand">
+    <img src="/assets/costpilot-logo-transparent.svg" alt="" />
+    Ask CostPilot
+  </span>
+  <select id="workspaceSwitcher" aria-label="Active CostPilot workspace" disabled>
+    <option>Loading…</option>
+  </select>
 </header>
 
 <div id="desktopNotice">
@@ -318,6 +345,59 @@
 
   function getWorkspaceId() {
     return resolvedWorkspaceId || cachedWorkspaceId();
+  }
+
+  // Same fallback pair + "no saved choice -> default, not options[0]" logic
+  // as left-nav.js's populateWorkspaceSwitcher() -- kept consistent so this
+  // page and the rest of the app never disagree about which workspace is
+  // active for the same browser. Call after resolveWorkspaceId() so the
+  // dropdown's initial selection matches whatever question-answering is
+  // actually about to use.
+  async function populateWorkspaceSwitcher() {
+    const select = document.getElementById("workspaceSwitcher");
+    if (!select) return;
+    const fallback = [
+      { id: "4BE43240A6674314", label: "Production" },
+      { id: "SIM-HISTORICAL-2Y", label: "Simulated" },
+    ];
+    let options = fallback;
+    try {
+      const response = await fetch("/api/workspaces");
+      if (response.ok) {
+        const data = await response.json();
+        const fetched = (data.workspaces || []).map((w) => ({ id: w.workspace_id, label: w.name }));
+        if (fetched.length) options = fetched;
+      }
+    } catch (e) {
+      // fall back silently, same as resolveWorkspaceId()
+    }
+    const activeId = getWorkspaceId() || FALLBACK_WORKSPACE_ID;
+    if (!options.some((o) => o.id === activeId)) {
+      options = [{ id: activeId, label: localStorage.getItem("cp_workspace_name") || "Current workspace" }, ...options];
+    }
+    select.innerHTML = options.map((o) => `<option value="${o.id}"${o.id === activeId ? " selected" : ""}>${o.label}</option>`).join("");
+    select.disabled = false;
+    select.addEventListener("change", (event) => {
+      const chosen = options.find((o) => o.id === event.target.value);
+      if (!chosen) return;
+      resolvedWorkspaceId = chosen.id;
+      try {
+        localStorage.setItem("cp_workspace_id", chosen.id);
+        localStorage.setItem("cp_workspace_name", chosen.label);
+      } catch (e) {}
+      // Switching mid-conversation would otherwise silently mix follow-up
+      // context (department/agent/period resolved against the OLD
+      // workspace) into questions now meant for a different one -- clear
+      // the slate the same way a manual mic tap already does for a fresh
+      // exchange, per startRecording()'s own "should clear the old one"
+      // comment just below.
+      conversationHistory = [];
+      lastConversationContext = null;
+      answerEl.classList.remove("visible");
+      transcriptEl.classList.remove("visible");
+      setError("");
+      setStatus(`Switched to ${chosen.label} — tap to ask a question`);
+    });
   }
 
   let mediaRecorder = null;
@@ -855,7 +935,7 @@
     if (rejectBtn) resolveAskProposal(rejectBtn.dataset.askRejectId, rejectBtn, "reject");
   });
 
-  resolveWorkspaceId();
+  resolveWorkspaceId().then(populateWorkspaceSwitcher);
   startSuggestionRotation();
 })();
 </script>
