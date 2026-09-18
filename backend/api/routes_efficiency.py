@@ -4842,6 +4842,13 @@ def _ask_costpilot_agent(
     instructions = """You are CostPilot's usage analyst. Answer the user's question about their
 attributed AI spend and usage by calling tools to retrieve real numbers — never state a figure
 you did not retrieve from a tool in this conversation.
+When your answer has several rows of comparable data (a ranking, a breakdown across departments/
+agents/models/accounts, anything with more than 3-4 items each carrying more than one figure),
+format it as a markdown table rather than a run-on paragraph of names and numbers -- every
+surface this answer can render on turns a markdown table into a real, easy-to-scan table (the
+dashboard drawer) or a clean per-row spoken sentence (voice), so there is no format where a
+table is worse than prose for that shape of data. A short answer with only one or two figures
+should stay plain sentences -- a table is for genuinely tabular, multi-row data, not decoration.
 Call get_usage_report for totals, rankings, or "how much/who/what" questions. Its result has
 separate top_people and top_accounts lists — "account" means a business/customer entity (e.g.
 a company record in Salesforce), "people" means individual human users. These are never the
@@ -5007,35 +5014,19 @@ you matched (its real name/label as returned by the tool), always use that resol
 title and answer -- never echo the user's literal misheard wording back at them just because it
 appeared in their question."""
 
-    if request.modality == "voice":
-        # Confirmed live 2026-09-18: a ranking question on the phone-only
-        # voice page (frontend/ask-voice.html) came back as a full markdown
-        # pipe table -- fine for the desktop drawer (which renders
-        # markdown), unreadable as raw "| Rank | Account | ... |" text on a
-        # phone screen, and the same answer text is also sent verbatim to
-        # TTS (/api/ask-voice/speak) where a table has no sensible spoken
-        # reading at all. request.modality was already threaded through
-        # end to end (AskCostPilotRequest, the request body, AskInteraction
-        # logging) but never actually reached the model -- purely
-        # observational until now. Scoped to modality=="voice" specifically
-        # (not e.g. a phone/small-screen typed session) since it's the TTS
-        # constraint, not screen width, that makes a table actively wrong
-        # rather than merely suboptimal.
-        #
-        # First version of this instruction also capped the answer to 3-4
-        # sentences and 1-3 figures -- overcorrected: confirmed live, you
-        # explicitly preferred the earlier full-detail answers (all ranked
-        # rows, exact figures) and only objected to the raw "|---|---|"
-        # table syntax, not the amount of information. The constraint is
-        # narrowed to just the unreadable/unspeakable table markup itself.
-        instructions += """
-This question came from a voice-only interface: your answer text is BOTH shown on a small
-phone screen AND read aloud through text-to-speech. Never use a markdown table (pipe/dash
-syntax) or a code block -- read as raw text on a phone or spoken aloud, that syntax itself is
-unreadable and meaningless. Everything else about your answer is unchanged: still name every
-item and figure you would in a full written answer (e.g. every ranked row, not just the top
-one or two) -- just say them as plain sentences or a simple dash/numbered list instead of a
-table, the way you'd naturally read a ranked list out loud to someone."""
+    # No modality-conditional instruction here on purpose (an earlier
+    # version of this code added one telling the model to never emit a
+    # markdown table for modality=="voice"): the real gap was never the
+    # model's own output, it was that frontend/ask-voice.html displayed
+    # the raw answer text with only a crude bold/bullet strip (no table
+    # rendering) while the desktop drawer's renderAskMarkdown() already
+    # turns the exact same markdown table syntax into a real <table>, and
+    # /api/ask-voice/speak's own _markdown_table_to_speech() already
+    # converts a table into per-row spoken sentences before TTS. Confirmed
+    # directly: you preferred the original full-detail table answers and
+    # only objected to seeing raw "|---|---|" characters on screen -- the
+    # actual fix belongs in ask-voice.html's rendering, not in suppressing
+    # a format the other two surfaces already handle correctly.
 
     try:
         import anthropic

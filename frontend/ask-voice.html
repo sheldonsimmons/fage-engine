@@ -75,7 +75,21 @@
     font-size: 15px; line-height: 1.5; display: none;
   }
   #transcript { background: rgba(255,255,255,0.06); color: #cbd5e1; font-style: italic; }
-  #answer { background: #ffffff; color: var(--ink); white-space: pre-line; }
+  #answer { background: #ffffff; color: var(--ink); }
+  #answer p { margin: 0 0 10px; }
+  #answer p:last-child { margin-bottom: 0; }
+  #answer ul, #answer ol { margin: 0 0 10px; padding-left: 20px; }
+  #answer strong { font-weight: 700; }
+  #answer code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  #answer table.ask-markdown-table {
+    width: 100%; margin: 6px 0 12px; border-collapse: collapse; font-size: 13px;
+  }
+  #answer table.ask-markdown-table th, #answer table.ask-markdown-table td {
+    padding: 6px 8px; border: 1px solid #e2e8f0; text-align: left;
+  }
+  #answer table.ask-markdown-table th {
+    background: #f8fafc; color: #667085; font-size: 11px; letter-spacing: .03em; text-transform: uppercase;
+  }
   #answer.visible, #transcript.visible { display: block; }
 
   #stopSpeaking {
@@ -164,6 +178,13 @@
      permission for the rest of the page's life. -->
 <audio id="voicePlayer" playsinline></audio>
 
+<!-- Shared markdown renderer (askRenderEscapeHtml/renderAskMarkdown) --
+     the same one the desktop drawer uses, per that file's own docstring:
+     "Keep that rendering logic here, once, so the two UIs can't silently
+     drift apart again." Loading it here instead of hand-rolling a third
+     copy is what makes a markdown table (or heading/list/bold/code) show
+     up as real HTML on this page too, not just raw "**"/"|" characters. -->
+<script src="/js/ask-costpilot-render.js"></script>
 <script>
 (function () {
   const micButton = document.getElementById("micButton");
@@ -250,17 +271,6 @@
       if (Number.isInteger(value) && value > 0) normalized[key] = value;
     });
     return Object.keys(normalized).length ? normalized : null;
-  }
-
-  // Text-fallback display only -- speech playback already goes through
-  // the backend's own markdown-to-speech cleanup (routes_ask_voice.py);
-  // this just keeps the on-screen answer readable instead of showing
-  // literal "**bold**"/numbered-list markdown syntax.
-  function stripMarkdown(text) {
-    return (text || "")
-      .replace(/\*\*(.+?)\*\*/g, "$1")
-      .replace(/^[ \t]*[-*]\s+/gm, "• ")
-      .replace(/\n{2,}/g, "\n\n");
   }
 
   function setStatus(text) { statusText.textContent = text || ""; }
@@ -450,7 +460,7 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Ask CostPilot could not answer that.");
-      answerEl.textContent = stripMarkdown(data.answer);
+      answerEl.innerHTML = renderAskMarkdown(data.answer);
       answerEl.classList.add("visible");
       conversationHistory.push({ role: "user", content: question });
       conversationHistory.push({ role: "assistant", content: data.answer || "" });
