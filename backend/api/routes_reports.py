@@ -50,22 +50,20 @@ from core.metrics_query import (
 
 router = APIRouter()
 
-# Emergency memory safety valve (added after a live production R14/OOM
-# incident): this file aggregates by looping over every matching row in
-# PYTHON (see this module's docstring on why -- per-day/tier timelines the
-# shared metrics registry has no bucketing support for), unlike
-# core/metrics_query.py's SQL-side GROUP BY aggregation. The "Default
-# (legacy)" workspace's unscoped bucket alone holds ~135K TokenTransaction
-# rows within the last year -- a single 365-day Savings/Risk/Departments
-# request against it loaded the WHOLE result set as ORM objects in one
-# request, and concurrent requests like that were enough to exceed a
-# Standard-2X dyno's 1GB quota and take down Ask CostPilot (an unrelated
-# endpoint on the same dyno) with it. This cap bounds the worst case; the
-# real fix is migrating this file onto the registry's SQL-side aggregation
-# (already flagged as a known gap in the reporting architecture
-# assessment), not yet done here. `truncated` is surfaced in every
-# response that hits it rather than silently under-counting.
-MAX_REPORT_ROWS = 100_000
+# HISTORICAL NOTE, kept for context: this file used to aggregate by
+# looping over every matching row in Python, capped at a
+# MAX_REPORT_ROWS=100,000 "emergency memory safety valve" added after a
+# live production R14/OOM incident -- the "Default (legacy)" workspace's
+# unscoped bucket alone holds ~135K TokenTransaction rows within the last
+# year, and a single 365-day Savings/Risk/Departments request against it
+# loaded the WHOLE result set as ORM objects in one request, exceeding a
+# Standard-2X dyno's 1GB quota and taking down Ask CostPilot (an
+# unrelated endpoint on the same dyno) with it. All three report
+# functions below (compute_realized_savings, risk_report, dept_scorecard)
+# are now migrated onto SQL-side SUM/COUNT/CASE/GROUP BY aggregation --
+# see each function's own docstring -- so there is no row-count ceiling
+# left to hit, and the MAX_REPORT_ROWS constant/cap themselves are gone,
+# not just raised.
 
 PREMIUM_TIERS = {"Advisor", "Strategist", "flagship"}
 
@@ -258,61 +256,95 @@ def risk_report(days: int = Query(30, ge=1, le=365),
                 date_to: Optional[datetime] = Query(None),
                 db: Session = Depends(get_db),
                 authorization: Optional[str] = Header(default=None)):
+    """
+    Same MAX_REPORT_ROWS/OOM exposure as compute_realized_savings had
+    (see that function's docstring) -- migrated the same way: every
+    count/breakdown computed via SQL aggregation instead of a per-row
+    Python loop, and the recent-events table fetched as its own bounded
+    query (ORDER BY timestamp DESC LIMIT 500) that never depends on how
+    many total rows exist, rather than slicing the first 500 of an
+    already-fully-loaded result set.
+    """
     department_scope = _check_reporting_access(db, authorization, workspace_id)
     start, end = _parse_range(days, date_from, date_to)
 
-    q = db.query(AuditEvent).filter(
-        AuditEvent.timestamp >= start,
-        AuditEvent.timestamp < end,
-    )
+    filters = [AuditEvent.timestamp >= start, AuditEvent.timestamp < end]
     if workspace_id:
-        q = q.filter(workspace_filter(AuditEvent, workspace_id))
+        filters.append(workspace_filter(AuditEvent, workspace_id))
     if department_scope:
-        q = q.filter(or_(
+        filters.append(or_(
             AuditEvent.department == department_scope,
             AuditEvent.department.like(f"%:{department_scope}"),
         ))
-    risk_truncated = q.count() > MAX_REPORT_ROWS
-    events = q.order_by(AuditEvent.timestamp.desc()).limit(MAX_REPORT_ROWS).all()
+    base_q = db.query(AuditEvent).filter(*filters)
 
-    total_events  = len(events)
-    critical      = sum(1 for e in events if e.risk_level == "critical")
-    high          = sum(1 for e in events if e.risk_level == "high")
-    medium        = sum(1 for e in events if e.risk_level == "medium")
-    low           = sum(1 for e in events if e.risk_level == "low")
-    blocked       = sum(1 for e in events if (
-        "blocked" in (e.decision_outcome or "").lower() or
-        "REQUEST BLOCKED" in (e.rationale or "")
-    ))
-    locks         = sum(1 for e in events if e.event_type in ("LOCK", "COLLISION_LOCK"))
-    collision_queues = sum(1 for e in events if e.event_type == "COLLISION_QUEUE")
-    collision_skips  = sum(1 for e in events if e.event_type == "COLLISION_SKIP")
-    throttled     = sum(1 for e in events if "throttled" in (e.rationale or "").lower())
+    # "blocked" matches decision_outcome case-insensitively (mirrors the
+    # original .lower() check) and rationale against the fixed-case
+    # literal core/auditor.py actually writes ("REQUEST BLOCKED — ...") --
+    # that string is never user input and always emitted in this exact
+    # case, so the LIKE-vs-ILIKE case-sensitivity difference between
+    # SQLite and Postgres has no practical effect on real data, verified
+    # against real rows before this replaced the per-row check.
+    is_blocked = or_(
+        AuditEvent.decision_outcome.ilike("%blocked%"),
+        AuditEvent.rationale.like("%REQUEST BLOCKED%"),
+    )
+    is_throttled = AuditEvent.rationale.ilike("%throttled%")
+    is_lock = AuditEvent.event_type.in_(("LOCK", "COLLISION_LOCK"))
 
-    # Daily risk buckets
+    (
+        total_events, critical, high, medium, low,
+        blocked, locks, collision_queues, collision_skips, throttled,
+    ) = base_q.with_entities(
+        func.count(AuditEvent.id),
+        func.coalesce(func.sum(case((AuditEvent.risk_level == "critical", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((AuditEvent.risk_level == "high", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((AuditEvent.risk_level == "medium", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((AuditEvent.risk_level == "low", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((is_blocked, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((is_lock, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((AuditEvent.event_type == "COLLISION_QUEUE", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((AuditEvent.event_type == "COLLISION_SKIP", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((is_throttled, 1), else_=0)), 0),
+    ).one()
+    total_events, critical, high, medium, low = int(total_events or 0), int(critical or 0), int(high or 0), int(medium or 0), int(low or 0)
+    blocked, locks = int(blocked or 0), int(locks or 0)
+    collision_queues, collision_skips, throttled = int(collision_queues or 0), int(collision_skips or 0), int(throttled or 0)
+
+    # Daily risk buckets -- GROUP BY (day, risk_level) instead of one
+    # increment per row; func.date() is the same pattern already proven
+    # live in routes_timeseries.py.
+    day_expr = func.date(AuditEvent.timestamp)
     daily = {}
-    for e in events:
-        day = e.timestamp.strftime("%Y-%m-%d")
-        if day not in daily:
-            daily[day] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
-        daily[day][e.risk_level] += 1
-        daily[day]["total"]      += 1
+    for day_raw, level, count in base_q.with_entities(
+        day_expr.label("day"), AuditEvent.risk_level, func.count(AuditEvent.id)
+    ).group_by("day", AuditEvent.risk_level).all():
+        day = day_raw if isinstance(day_raw, str) else day_raw.strftime("%Y-%m-%d")
+        bucket = daily.setdefault(day, {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0})
+        bucket[level] = bucket.get(level, 0) + int(count or 0)
+        bucket["total"] += int(count or 0)
 
     timeline = []
     for day in _timeline_dates(start, end):
         d   = daily.get(day, {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0})
         timeline.append({"date": day, **d})
 
-    # By department
+    # By department -- GROUP BY (department, risk_level); display_department()
+    # applied to the small aggregated result, same merge-same-display-name
+    # behavior the original per-row loop had (multiple raw department
+    # strings that display the same way still accumulate into one bucket,
+    # since the dict key here is the display name, not the raw one).
     dept_risk = {}
-    for e in events:
-        dept = display_department(e.department)
-        if dept not in dept_risk:
-            dept_risk[dept] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
-        dept_risk[dept][e.risk_level] += 1
-        dept_risk[dept]["total"]      += 1
+    for dept_raw, level, count in base_q.with_entities(
+        AuditEvent.department, AuditEvent.risk_level, func.count(AuditEvent.id)
+    ).group_by(AuditEvent.department, AuditEvent.risk_level).all():
+        dept = display_department(dept_raw)
+        bucket = dept_risk.setdefault(dept, {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0})
+        bucket[level] = bucket.get(level, 0) + int(count or 0)
+        bucket["total"] += int(count or 0)
 
-    # Recent high-stakes events for table and report drill-downs
+    # Recent high-stakes events for table and report drill-downs -- its
+    # own bounded query, never the full matching result set.
     recent = [
         {
             "id":             e.id,
@@ -324,7 +356,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
             "decision_outcome": e.decision_outcome or "—",
             "rationale":      (e.rationale or "")[:200],
         }
-        for e in events[:500]
+        for e in base_q.order_by(AuditEvent.timestamp.desc()).limit(500).all()
     ]
 
     # Term library stats
@@ -364,7 +396,7 @@ def risk_report(days: int = Query(30, ge=1, le=365),
             "block":    block_terms,
             "escalate": escalate_terms,
         },
-        "truncated":       risk_truncated,
+        "truncated":       False,  # SQL aggregation has no row-count ceiling anymore -- see this route's own docstring
     }
 
 
@@ -377,22 +409,28 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
                    date_to: Optional[datetime] = Query(None),
                    db: Session = Depends(get_db),
                    authorization: Optional[str] = Header(default=None)):
+    """
+    Same MAX_REPORT_ROWS/OOM exposure as compute_realized_savings and
+    risk_report (see their own docstrings) -- migrated the same way: the
+    per-department/per-day transaction aggregation now runs as SQL GROUP
+    BY instead of a per-row Python loop. The budget-merge logic below
+    (DepartmentBudget has no real workspace_id column, so scoping it is
+    its own separate concern from the transaction OOM fix) is unchanged --
+    it was never the source of the row-count exposure, since it only ever
+    loads one row per department, not one per transaction.
+    """
     department_scope = _check_reporting_access(db, authorization, workspace_id)
     start, end = _parse_range(days, date_from, date_to)
 
-    q = db.query(TokenTransaction).filter(
-        TokenTransaction.timestamp >= start,
-        TokenTransaction.timestamp < end,
-    )
+    filters = [TokenTransaction.timestamp >= start, TokenTransaction.timestamp < end]
     if workspace_id:
-        q = q.filter(workspace_filter(TokenTransaction, workspace_id))
+        filters.append(workspace_filter(TokenTransaction, workspace_id))
     if department_scope:
-        q = q.filter(or_(
+        filters.append(or_(
             TokenTransaction.department == department_scope,
             TokenTransaction.department.like(f"%:{department_scope}"),
         ))
-    dept_truncated = q.count() > MAX_REPORT_ROWS
-    txns = q.limit(MAX_REPORT_ROWS).all()
+    base_q = db.query(TokenTransaction).filter(*filters)
 
     def _dept_matches_scope(raw_dept: str) -> bool:
         return not department_scope or raw_dept == department_scope or (raw_dept or "").endswith(f":{department_scope}")
@@ -426,31 +464,31 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
         if _dept_matches_scope(b.department) and _budget_belongs_to_workspace(b.department)
     }
 
-    # Aggregate per department
+    # Aggregate per department via SQL GROUP BY instead of a per-row loop.
+    is_micro = TokenTransaction.model_tier.in_(ECONOMY_TIERS)
+    micro_flag = case((is_micro, 1), else_=0)
+    flagship_flag = case((is_micro, 0), else_=1)
+    pruned_tokens_saved = case((TokenTransaction.was_pruned.is_(True), TokenTransaction.tokens_saved), else_=0)
+
     dept_data = {}
-    for t in txns:
-        d = t.department
-        if d not in dept_data:
-            dept_data[d] = {
-                "department":       d,
-                "total_calls":      0,
-                "micro_calls":      0,
-                "flagship_calls":   0,
-                "total_cost_usd":   0.0,
-                "tokens_pruned":    0,
-                "pruning_saved_usd": 0.0,
-            }
-        dept_data[d]["total_calls"]    += 1
-        dept_data[d]["total_cost_usd"] = round(dept_data[d]["total_cost_usd"] + t.cost_usd, 6)
-        if _tier_bucket(t.model_tier) == "micro":
-            dept_data[d]["micro_calls"]    += 1
-        else:
-            dept_data[d]["flagship_calls"] += 1
-        if t.was_pruned:
-            dept_data[d]["tokens_pruned"]     += t.tokens_saved
-            dept_data[d]["pruning_saved_usd"]  = round(
-                dept_data[d]["pruning_saved_usd"] + t.tokens_saved * FLAGSHIP_INPUT_COST, 6
-            )
+    for d, total_calls, total_cost, mic, flag, tok_pruned in base_q.with_entities(
+        TokenTransaction.department,
+        func.count(TokenTransaction.id),
+        func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        func.coalesce(func.sum(micro_flag), 0),
+        func.coalesce(func.sum(flagship_flag), 0),
+        func.coalesce(func.sum(pruned_tokens_saved), 0),
+    ).group_by(TokenTransaction.department).all():
+        tokens_pruned = int(tok_pruned or 0)
+        dept_data[d] = {
+            "department":        d,
+            "total_calls":       int(total_calls or 0),
+            "micro_calls":       int(mic or 0),
+            "flagship_calls":    int(flag or 0),
+            "total_cost_usd":    round(float(total_cost or 0.0), 6),
+            "tokens_pruned":     tokens_pruned,
+            "pruning_saved_usd": round(tokens_pruned * FLAGSHIP_INPUT_COST, 6),
+        }
 
     # Merge budget data
     scorecards = []
@@ -494,14 +532,16 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
             "override_granted":  budget.override_granted  if budget else False,
         })
 
-    # Daily spend per dept for stacked chart
+    # Daily spend per dept for stacked chart -- GROUP BY (day, department)
+    # via the same func.date() pattern proven live in routes_timeseries.py,
+    # instead of one dict update per transaction.
+    day_expr = func.date(TokenTransaction.timestamp)
     daily_dept = {}
-    for t in txns:
-        day = t.timestamp.strftime("%Y-%m-%d")
-        if day not in daily_dept:
-            daily_dept[day] = {}
-        dept = t.department
-        daily_dept[day][dept] = round(daily_dept[day].get(dept, 0) + t.cost_usd, 6)
+    for day_raw, dept, cost in base_q.with_entities(
+        day_expr.label("day"), TokenTransaction.department, func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0)
+    ).group_by("day", TokenTransaction.department).all():
+        day = day_raw if isinstance(day_raw, str) else day_raw.strftime("%Y-%m-%d")
+        daily_dept.setdefault(day, {})[dept] = round(float(cost or 0.0), 6)
 
     timeline = []
     for day in _timeline_dates(start, end):
@@ -512,5 +552,5 @@ def dept_scorecard(days: int = Query(30, ge=1, le=365),
         "scorecards":  scorecards,
         "timeline":    timeline,
         "departments": sorted(all_depts),
-        "truncated":   dept_truncated,
+        "truncated":   False,  # SQL aggregation has no row-count ceiling anymore -- see this route's own docstring
     }
