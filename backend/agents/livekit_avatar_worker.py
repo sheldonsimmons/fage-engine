@@ -253,4 +253,21 @@ if __name__ == "__main__":
         # first call after each boot/idle stretch for a dyno that isn't
         # permanently over its memory limit.
         num_idle_processes=0,
+        # WorkerOptions' production default load_threshold is 0.7 -- the
+        # worker self-reports "unavailable" to LiveKit's server above
+        # that, and an unavailable worker is offered zero jobs. Confirmed
+        # live via a controlled test (minted a token, joined the room
+        # directly, confirmed via the LiveKit API that a real dispatch +
+        # job was created for it): no worker ever claimed that job, and
+        # this dyno's own logs show it repeatedly self-reporting load
+        # 0.7-0.98 and "marking as unavailable" seconds after every
+        # single boot, with no real call in progress -- explaining every
+        # prior "wrong workspace" / "no data" report: the worker was
+        # simply never being offered the room at all. 0.7 is sized for
+        # real multi-tenant concurrency; this dyno runs the FastAPI app,
+        # the MCP server, and this worker together for single-user pilot
+        # traffic, so ordinary baseline CPU load trips it constantly.
+        # 0.95 keeps a true-overload safety net without starving normal
+        # operation of job offers.
+        load_threshold=0.95,
     ))
