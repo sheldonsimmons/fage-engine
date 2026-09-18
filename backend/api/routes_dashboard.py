@@ -94,6 +94,33 @@ def _check_reporting_access(
     return ctx.department_scope if ctx else None
 
 
+@router.get("/priority-signals")
+def get_priority_signals_endpoint(
+    workspace_id: str | None = Query(None),
+    days: int = Query(7, ge=1, le=90),
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Standalone read of the same trusted, pre-ranked signal computation
+    Ask CostPilot's agent loop already uses (get_priority_signals tool)
+    and the deterministic "what should I be paying attention to?" branch
+    in routes_efficiency.py already calls -- exposed as its own endpoint
+    so the app shell can show a lightweight "what needs attention"
+    badge/banner on page load without going through the Ask flow at all.
+    """
+    department_scope = _check_reporting_access(db, authorization, workspace_id)
+    from api.ask_costpilot_tools import run_get_priority_signals
+
+    priority = run_get_priority_signals(
+        db, workspace_id, days=days, department_scope=department_scope,
+    )
+    return {
+        "signals": priority.get("signals") or [],
+        "period_days": priority.get("period_days", days),
+    }
+
+
 @router.get("")
 def get_dashboard(
     workspace_id: str | None = Query(None),

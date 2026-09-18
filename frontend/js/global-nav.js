@@ -257,6 +257,30 @@
     });
 
     updateStatus(nav);
+    populateAttentionBadge(nav);
+  }
+
+  async function populateAttentionBadge(nav) {
+    const askButton = nav.querySelector("#cpGlobalAsk");
+    if (!askButton) return;
+    const workspace = activeWorkspace();
+    try {
+      const response = await fetch(`/api/dashboard/priority-signals?workspace_id=${encodeURIComponent(workspace.id)}&days=7`);
+      if (!response.ok) return;
+      const data = await response.json();
+      const signals = data.signals || [];
+      if (!signals.length) return;
+      const dot = document.createElement("span");
+      dot.className = "cp-global-nav__attention-dot";
+      dot.setAttribute("aria-hidden", "true");
+      askButton.appendChild(dot);
+      const top = signals[0];
+      const summary = top.detail || top.label || "Needs attention";
+      const suffix = signals.length > 1 ? ` (+${signals.length - 1} more)` : "";
+      askButton.title = `${summary}${suffix}`;
+    } catch (_err) {
+      // no badge if the check fails -- never block nav rendering on this
+    }
   }
 
   function readSession(key, fallback) {

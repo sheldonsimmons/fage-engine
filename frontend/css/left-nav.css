@@ -41,6 +41,13 @@
 }
 .cp-left-nav__icon { flex: 0 0 auto; opacity: 0.9; }
 
+.cp-left-nav__link { position: relative; }
+.cp-left-nav__attention-dot {
+  position: absolute; top: 6px; left: 22px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #e5484d; border: 1.5px solid var(--bg-panel, #0d1117);
+}
+
 .cp-left-nav__footer {
   border-top: 1px solid var(--border);
   margin-top: 12px;

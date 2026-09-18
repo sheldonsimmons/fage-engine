@@ -159,6 +159,29 @@
     });
   }
 
+  async function populateAttentionBadge() {
+    const askLink = document.getElementById("cpLeftNavAsk");
+    if (!askLink) return;
+    const workspaceId = localStorage.getItem("cp_workspace_id") || "default";
+    try {
+      const response = await fetch(`/api/dashboard/priority-signals?workspace_id=${encodeURIComponent(workspaceId)}&days=7`);
+      if (!response.ok) return;
+      const data = await response.json();
+      const signals = data.signals || [];
+      if (!signals.length) return;
+      const dot = document.createElement("span");
+      dot.className = "cp-left-nav__attention-dot";
+      dot.setAttribute("aria-hidden", "true");
+      askLink.appendChild(dot);
+      const top = signals[0];
+      const summary = top.detail || top.label || "Needs attention";
+      const suffix = signals.length > 1 ? ` (+${signals.length - 1} more)` : "";
+      askLink.title = `${summary}${suffix}`;
+    } catch (_err) {
+      // no badge if the check fails -- never block nav rendering on this
+    }
+  }
+
   async function build() {
     const mount = document.getElementById("cpLeftNavMount");
     if (!mount) return;
@@ -191,6 +214,8 @@
       }
       document.getElementById("cpGlobalAsk")?.click();
     });
+
+    populateAttentionBadge();
   }
 
   if (document.readyState === "loading") {

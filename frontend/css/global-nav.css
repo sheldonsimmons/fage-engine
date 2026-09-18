@@ -126,7 +126,14 @@ header.header .header-sub,
   color: var(--text-primary);
 }
 
+.cp-global-nav__attention-dot {
+  position: absolute; top: -3px; right: -3px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #e5484d; border: 1.5px solid var(--bg-panel, #0d1117);
+}
+
 .cp-global-nav__ask {
+  position: relative;
   align-items: center;
   background: color-mix(in srgb, var(--accent, #3b82f6) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent, #3b82f6) 45%, transparent);
