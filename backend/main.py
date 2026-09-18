@@ -195,9 +195,27 @@ class CSPMiddleware(BaseHTTPMiddleware):
             "media-src 'self' blob:; "
             "font-src 'self' data: https://cdn.jsdelivr.net;"
         )
-        # Prevent HTML files from being cached so updates are picked up immediately
+        # Prevent HTML files from being cached so updates are picked up
+        # immediately -- and, critically, the JS/CSS those HTML files
+        # reference too. HTML-only no-cache looks complete but isn't: every
+        # HTML page here always reloads fresh, but a <script src="/js/...">
+        # or <link rel="stylesheet"> it references is a separate cached
+        # resource with no cache-busting query string or filename
+        # versioning anywhere in this app, so a browser that already has an
+        # old copy of that JS/CSS file keeps silently running it after a
+        # deploy -- the HTML looks current, nothing in the page looks
+        # broken, and a fix that lives entirely inside the JS file (as most
+        # do) never actually reaches the browser until a hard refresh.
+        # Confirmed live 2026-09-18: a fix to frontend/js/ask-costpilot-
+        # render.js was deployed, verified live via curl, and still didn't
+        # show up in the browser -- this app's own JS/CSS had never been
+        # covered by the no-cache policy its own comment claims to provide.
         content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type:
+        if (
+            "text/html" in content_type
+            or "javascript" in content_type
+            or "text/css" in content_type
+        ):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
         return response
