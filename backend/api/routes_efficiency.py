@@ -4426,6 +4426,51 @@ def _ask_agent_final_payload(
             _add_outcome_row("ai_spend_on_won_opportunities_usd", "AI spend on won deals", "tracked AI spend", lambda v: f"${v:,.6f}")
             _add_outcome_row("ai_touched_work_items", "AI-touched work items", "touched by AI this period", lambda v: f"{int(v):,}")
             primary_breakdowns[tool_name] = rows
+        elif tool_name == "get_cost_per_outcome" and result.get("cost_per_successful_outcome_usd") is not None:
+            # Same flat-dict gap as get_account_outcomes above, confirmed
+            # live the same way: "what's our cost per successful outcome"
+            # cited spend/count/ratio numbers with evidence=[] every time.
+            subject = result.get("account") or (result.get("context_type") or "").replace("_", " ").title() or "This scope"
+            rows = [{
+                "label": f"{subject} — cost per successful outcome",
+                "value": f"${result['cost_per_successful_outcome_usd']:,.6f}",
+                "metric_label": f"{result.get('evidence_label', 'estimated').title()} — {result.get('successful_outcomes', 0)} successful outcomes",
+                "filter_name": "account" if result.get("account") else None,
+                "filter_value": result.get("account"),
+            }]
+            if result.get("ai_spend_on_successful_outcomes_usd"):
+                rows.append({
+                    "label": f"{subject} — AI spend on successful outcomes",
+                    "value": f"${result['ai_spend_on_successful_outcomes_usd']:,.6f}",
+                    "metric_label": "tracked AI spend",
+                    "filter_name": "account" if result.get("account") else None,
+                    "filter_value": result.get("account"),
+                })
+            primary_breakdowns[tool_name] = rows
+        elif tool_name == "get_decision_history" and result.get("decisions"):
+            # Same gap, different shape: this tool's rows have no "id" the
+            # model could ever cite (governed_request_id is often null on
+            # older rows), and the generic _pool() helper never ran for it
+            # at all -- confirmed live: a "what budget decisions have been
+            # made" answer that described specific routing decisions in
+            # prose had zero evidence from this tool, only from whichever
+            # other tool happened to also run in the same turn.
+            rows = []
+            for decision in result["decisions"][:5]:
+                label_bits = [decision.get("selected_model_tier") or decision.get("event_type") or "Decision"]
+                if decision.get("department"):
+                    label_bits.append(decision["department"])
+                pool_key = decision.get("governed_request_id") or f"decision:{decision.get('timestamp')}:{label_bits}"
+                item = {
+                    "label": " — ".join(str(b) for b in label_bits if b),
+                    "value": str(decision.get("decision_outcome") or decision.get("rationale") or "—")[:160],
+                    "metric_label": decision.get("timestamp") or "",
+                    "filter_name": "agent_id" if decision.get("agent_name") else None,
+                    "filter_value": decision.get("agent_name"),
+                }
+                evidence_pool[str(pool_key)] = item
+                rows.append(item)
+            primary_breakdowns[tool_name] = rows
 
     # The model already tells us which facts it actually used — trust that
     # instead of guessing which dimension is relevant. Falls back to the

@@ -1954,6 +1954,82 @@ def test_agent_final_payload_account_outcomes_gets_fallback_evidence():
     assert not any("pipeline value" in label for label in labels)
 
 
+def test_agent_final_payload_cost_per_outcome_gets_fallback_evidence():
+    """Same class of bug as get_account_outcomes: confirmed live via a real question."""
+    tool_call_log = [(
+        "get_cost_per_outcome", {"context_type": None, "entity_name": None},
+        {
+            "period": {"label": "This quarter"},
+            "summary": {"live_count": 191, "simulation_count": 0},
+            "data_scope": "live",
+            "context_type": None,
+            "account": None,
+            "ai_spend_on_successful_outcomes_usd": 0.009135,
+            "successful_outcomes": 40,
+            "outcomes_with_known_data": 191,
+            "cost_per_successful_outcome_usd": 0.000228,
+            "evidence_label": "meaningful",
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="What is our cost per successful outcome?"),
+        db=None,
+        final_args={"title": "Cost per outcome", "answer": "About $0.000228 per successful outcome.", "evidence_ids": []},
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    labels = [row["label"] for row in payload["evidence"]]
+    assert any("cost per successful outcome" in label for label in labels)
+    assert any("AI spend on successful outcomes" in label for label in labels)
+
+
+def test_agent_final_payload_decision_history_gets_fallback_evidence():
+    """
+    Confirmed live: a "what budget decisions have been made" answer
+    described specific routing decisions in prose but had zero evidence
+    from get_decision_history -- only from a second tool call
+    (get_budget_status) in the same turn.
+    """
+    tool_call_log = [(
+        "get_decision_history", {"keyword": "budget", "event_type": "", "limit": 10},
+        {
+            "period": {"label": "Recent"},
+            "summary": {"live_count": 2, "simulation_count": 0},
+            "data_scope": "live",
+            "decisions": [
+                {
+                    "timestamp": "2026-09-18T00:00:00",
+                    "department": "Sales",
+                    "agent_name": "CostPilot Agent",
+                    "selected_model_tier": "Scout",
+                    "event_type": "ROUTING",
+                    "decision_outcome": "Scout model used — $0.0004",
+                    "governed_request_id": "req-1",
+                },
+                {
+                    "timestamp": "2026-09-17T00:00:00",
+                    "department": "Sales",
+                    "agent_name": "CostPilot Agent",
+                    "selected_model_tier": "Advisor",
+                    "event_type": "ROUTING",
+                    "decision_outcome": "Advisor model used — $0.006",
+                    "governed_request_id": "req-2",
+                },
+            ],
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="What decisions have been made about our AI budget recently?"),
+        db=None,
+        final_args={"title": "Recent decisions", "answer": "Scout and Advisor were both selected recently.", "evidence_ids": []},
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    labels = [row["label"] for row in payload["evidence"]]
+    assert any("Scout" in label for label in labels)
+    assert any("Advisor" in label for label in labels)
+
+
 def test_agent_final_payload_builds_evidence_from_cited_ids():
     tool_call_log = [(
         "get_usage_report", {},
