@@ -36,12 +36,18 @@ from mcp.server.fastmcp import FastMCP
 # processes happen to run on the same machine).
 ASK_COSTPILOT_BASE_URL = os.getenv("ASK_COSTPILOT_BASE_URL", "http://localhost:8000")
 
-# The workspace this voice agent answers questions about by default --
-# set per deployment (e.g. one avatar instance per real customer
-# workspace) rather than asked of the LLM, since a voice conversation
-# has no natural place for a workspace_id to come from otherwise. A
-# later multi-workspace version could resolve this from LiveKit room
-# metadata instead of a fixed env var.
+# Last-resort fallback only -- confirmed live 2026-09-19 that relying on
+# this as the ONLY source of workspace_id is a real bug, not just a v1
+# simplification: the browser's actual workspace (whatever the person is
+# really looking at, switchable via the workspace dropdown) was never
+# threaded through the room at all, so the avatar silently answered from
+# whatever this env var happened to be set to -- unrelated to, and
+# sometimes emptier than, the workspace the person actually meant.
+# agents/livekit_avatar_worker.py now resolves the real workspace_id from
+# the LiveKit room name (encoded there at token-mint time, see
+# api/routes_livekit.py) and passes it as a real tool argument on every
+# call -- this env var is now only a fallback for local/manual testing of
+# this MCP server on its own, outside a real room.
 ASK_COSTPILOT_MCP_DEFAULT_WORKSPACE_ID = os.getenv("ASK_COSTPILOT_MCP_WORKSPACE_ID", "")
 
 mcp = FastMCP(
@@ -52,7 +58,7 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-async def ask_costpilot(question: str) -> str:
+async def ask_costpilot(question: str, workspace_id: str = "") -> str:
     """
     Ask CostPilot's real, governed-data answer engine a question about AI
     spend, usage, budgets, agents, departments, accounts, or business
@@ -61,12 +67,16 @@ async def ask_costpilot(question: str) -> str:
     data yourself; always call this tool and speak back exactly what it
     says, in your own natural spoken phrasing, without inventing,
     rounding, or adding any figure this tool did not return.
+
+    workspace_id: always pass the exact workspace_id given in your system
+    instructions for this conversation -- never omit it and never guess
+    a different one.
     """
-    if not ASK_COSTPILOT_MCP_DEFAULT_WORKSPACE_ID:
+    resolved_workspace_id = workspace_id or ASK_COSTPILOT_MCP_DEFAULT_WORKSPACE_ID
+    if not resolved_workspace_id:
         return (
-            "CostPilot isn't configured with a workspace for this voice session yet "
-            "(ASK_COSTPILOT_MCP_WORKSPACE_ID is unset) -- tell the person asking that "
-            "this avatar isn't fully set up rather than guessing an answer."
+            "CostPilot isn't configured with a workspace for this voice session yet -- "
+            "tell the person asking that this avatar isn't fully set up rather than guessing an answer."
         )
     try:
         async with httpx.AsyncClient(timeout=25.0) as client:
@@ -74,7 +84,7 @@ async def ask_costpilot(question: str) -> str:
                 f"{ASK_COSTPILOT_BASE_URL}/api/reports/bot-efficiency/ask",
                 json={
                     "question": question,
-                    "workspace_id": ASK_COSTPILOT_MCP_DEFAULT_WORKSPACE_ID,
+                    "workspace_id": resolved_workspace_id,
                     "modality": "voice",
                 },
             )

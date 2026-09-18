@@ -380,13 +380,13 @@ header.header .header-sub,
    motion; the animations below are additive polish, never the only
    signal. */
 .cp-ask-avatar-float {
-  border-radius: 50%;
-  cursor: grab;
+  border-radius: 22px;
+  cursor: pointer;
   filter: drop-shadow(0 10px 28px rgba(0,0,0,.45));
-  height: 108px;
+  height: 260px;
   position: fixed;
   touch-action: none;
-  width: 108px;
+  width: 260px;
   z-index: 2100;
 }
 .cp-ask-avatar-float[hidden] { display: none; }
@@ -397,7 +397,7 @@ header.header .header-sub,
 .cp-ask-avatar-float-dragging .cp-ask-avatar-img { animation: none !important; }
 
 .cp-ask-avatar-img {
-  border-radius: 50%;
+  border-radius: 22px;
   display: block;
   height: 100%;
   object-fit: cover;
@@ -408,7 +408,7 @@ header.header .header-sub,
 
 .cp-ask-avatar-ring {
   border: 3px solid var(--border, #334155);
-  border-radius: 50%;
+  border-radius: 26px;
   box-sizing: border-box;
   display: block;
   inset: -5px;
@@ -422,49 +422,66 @@ header.header .header-sub,
    this codebase) -- var() with a dark-mode fallback is future-proofing,
    not something currently exercised. */
 
-/* Every state carries its own continuous, visible motion on the portrait
-   itself -- a character that's idling, not a static photo with a colored
-   ring swapped under it. A single static image can't lip-sync, so
-   "speaking" leans on a pronounced pulse/glow timed with the ring instead
-   of mouth movement -- a short talking-loop video clip, swapped in for
-   cp-ask-avatar-img only while state="speaking", is the natural next step
-   if this needs to go further. */
+/* State is now shown ONLY via the ring color + a couple of subtle,
+   glow-only effects on the float container -- never a transform/filter
+   animation on .cp-ask-avatar-img itself. That img-targeting motion
+   (sway/breathe/tilt/talk-pulse) was designed for a static portrait that
+   needed fake life; now .cp-ask-avatar-img is a real Simli video with
+   its own real motion, and stacking a CSS transform loop on top of that
+   reads as distracting throbbing/jitter rather than character, per
+   direct live feedback removing it. The window itself stays still. */
 
-/* idle -- slow, subtle organic sway + breathing */
-.cp-ask-avatar-float[data-state="idle"] .cp-ask-avatar-img {
-  animation: cp-ask-avatar-sway 3.6s ease-in-out infinite, cp-ask-avatar-breathe 3.6s ease-in-out infinite;
-}
-
-/* listening -- alert lean-in, ring pulses blue */
+/* listening -- ring pulses blue */
 .cp-ask-avatar-float[data-state="listening"] .cp-ask-avatar-ring {
   border-color: var(--accent, #60a5fa);
 }
-.cp-ask-avatar-float[data-state="listening"] {
-  animation: cp-ask-avatar-listen-pulse 1.5s ease-in-out infinite;
-}
-.cp-ask-avatar-float[data-state="listening"] .cp-ask-avatar-img {
-  animation: cp-ask-avatar-sway 2s ease-in-out infinite;
-}
 
-/* thinking -- continuous head tilt is the life motion, ring pulses amber */
+/* thinking -- ring pulses amber */
 .cp-ask-avatar-float[data-state="thinking"] .cp-ask-avatar-ring {
   border-color: var(--accent-yellow, #d29922);
 }
-.cp-ask-avatar-float[data-state="thinking"] .cp-ask-avatar-img {
-  animation: cp-ask-avatar-tilt 2.2s ease-in-out infinite;
-}
 
-/* speaking -- the big, obvious "this is talking" state: ring pulses green
-   with a wide glow, portrait pulses noticeably larger + brighter, and a
-   quick wobble keeps it from reading as a simple metronome beat. */
+/* speaking -- ring turns green, no motion */
 .cp-ask-avatar-float[data-state="speaking"] .cp-ask-avatar-ring {
   border-color: var(--accent-green, #3fb950);
 }
-.cp-ask-avatar-float[data-state="speaking"] {
-  animation: cp-ask-avatar-speak-glow .34s ease-in-out infinite;
+
+/* Live video call in progress / connecting -- independent of the
+   idle/listening/thinking/speaking states above (which still drive the
+   ring color moment-to-moment once connected), this is the coarser
+   "is a call even happening" signal: a steady accent border while
+   dialing, a small red dot once live, so the avatar reads as "tap to
+   end" at a glance instead of "tap to start" again. Explicitly no
+   animation anywhere here -- per direct feedback, the window stays
+   still; only the ring color changes. */
+.cp-ask-avatar-connecting { cursor: wait; }
+.cp-ask-avatar-connecting .cp-ask-avatar-ring {
+  border-color: var(--accent, #60a5fa);
 }
-.cp-ask-avatar-float[data-state="speaking"] .cp-ask-avatar-img {
-  animation: cp-ask-avatar-talk-pulse .34s ease-in-out infinite;
+.cp-ask-avatar-live::after {
+  content: "";
+  position: absolute; top: 10px; right: 10px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #e5484d; border: 2px solid rgba(0,0,0,.5);
+}
+
+/* No static portrait fallback -- the video element itself IS the
+   avatar now. Before a call connects (or after one ends) it has no
+   stream, so it would otherwise just be an empty black rectangle;
+   this gives that empty state a real, legible "tap to start" label
+   instead of looking broken. Hidden the instant a call is live or
+   connecting, since the real video/spinner state takes over then. */
+video#cpAskAvatarVideo,
+video#avatarVideo {
+  background: var(--bg-panel, #161b22);
+}
+.cp-ask-avatar-float:not(.cp-ask-avatar-live):not(.cp-ask-avatar-connecting)::before {
+  content: "Tap to talk live";
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 20px; box-sizing: border-box;
+  color: var(--text-muted, #9aa7b8); font-size: 13px; font-weight: 600;
+  pointer-events: none;
 }
 
 @keyframes cp-ask-avatar-sway {
@@ -508,7 +525,7 @@ header.header .header-sub,
 }
 
 @media (max-width: 560px) {
-  .cp-ask-avatar-float { height: 84px; width: 84px; }
+  .cp-ask-avatar-float { height: 170px; width: 170px; }
 }
 
 .cp-ask-clear {
@@ -527,6 +544,13 @@ header.header .header-sub,
   border-color: var(--accent, #60a5fa);
   color: var(--text-primary, #e5edf7);
 }
+
+#cpAskLiveToggle.live {
+  background: rgba(208,59,59,0.12);
+  border-color: rgba(208,59,59,0.4);
+  color: #fca5a5;
+}
+#cpAskLiveToggle:disabled { opacity: 0.5; cursor: default; }
 
 .cp-ask-kicker {
   color: var(--accent, #60a5fa);

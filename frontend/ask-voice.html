@@ -78,41 +78,55 @@
      already has. See that file's own comments for the full state-design
      reasoning; only the selector root and position/cursor rules differ. */
   #micButton {
-    width: 128px; height: 128px; border-radius: 50%; border: none;
+    width: 260px; height: 260px; border-radius: 22px; border: none;
     background: transparent; padding: 0; position: relative;
     cursor: pointer; -webkit-tap-highlight-color: transparent;
     filter: drop-shadow(0 10px 28px rgba(0,0,0,.45));
     transition: transform 0.15s ease;
+    max-width: 80vw; max-height: 80vw;
   }
   #micButton:active { transform: scale(0.96); }
   #micButton:disabled { cursor: default; }
 
   #micButton .cp-ask-avatar-img {
-    width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+    width: 100%; height: 100%; border-radius: 22px; object-fit: cover;
     object-position: center 18%; display: block;
     transition: transform .2s ease, filter .2s ease;
   }
   #micButton .cp-ask-avatar-ring {
-    position: absolute; inset: -5px; border-radius: 50%;
+    position: absolute; inset: -5px; border-radius: 26px;
     border: 3px solid rgba(255,255,255,0.25); box-sizing: border-box;
     pointer-events: none; transition: border-color .25s ease;
   }
-
-  /* idle -- slow, subtle organic sway + breathing */
-  #micButton[data-state="idle"] .cp-ask-avatar-img {
-    animation: cp-ask-avatar-sway 3.6s ease-in-out infinite, cp-ask-avatar-breathe 3.6s ease-in-out infinite;
+  #micButton.live-connecting .cp-ask-avatar-ring {
+    border-color: var(--accent);
   }
-  /* listening -- alert lean-in, ring pulses blue */
+  #micButton.live-active::after {
+    content: ""; position: absolute; top: 10px; right: 10px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #e5484d; border: 2px solid rgba(0,0,0,.5);
+  }
+  /* No static portrait fallback -- the video element IS the avatar now.
+     Empty (no call yet / call ended) shows a real label instead of a
+     blank black box; hidden once a call is connecting or live. */
+  #micButton:not(.live-active):not(.live-connecting)::before {
+    content: attr(data-idle-label);
+    position: absolute; inset: 0; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 20px; box-sizing: border-box;
+    color: #9aa7b8; font-size: 14px; font-weight: 600;
+    pointer-events: none;
+  }
+
+  /* State is shown ONLY via ring color -- no transform/filter animation
+     on .cp-ask-avatar-img. That motion was built for a static portrait
+     that needed fake life; .cp-ask-avatar-img is a real Simli video now
+     with its own real motion, and stacking a CSS animation loop on top
+     read as throbbing/jitter, not character, per direct live feedback.
+     The window stays still; only the ring color changes. */
   #micButton[data-state="listening"] .cp-ask-avatar-ring { border-color: var(--accent); }
-  #micButton[data-state="listening"] { animation: cp-ask-avatar-listen-pulse 1.5s ease-in-out infinite; }
-  #micButton[data-state="listening"] .cp-ask-avatar-img { animation: cp-ask-avatar-sway 2s ease-in-out infinite; }
-  /* thinking -- continuous head tilt, ring pulses amber */
   #micButton[data-state="thinking"] .cp-ask-avatar-ring { border-color: #d29922; }
-  #micButton[data-state="thinking"] .cp-ask-avatar-img { animation: cp-ask-avatar-tilt 2.2s ease-in-out infinite; }
-  /* speaking -- ring pulses green, portrait pulses larger + brighter */
   #micButton[data-state="speaking"] .cp-ask-avatar-ring { border-color: #3fb950; }
-  #micButton[data-state="speaking"] { animation: cp-ask-avatar-speak-glow .34s ease-in-out infinite; }
-  #micButton[data-state="speaking"] .cp-ask-avatar-img { animation: cp-ask-avatar-talk-pulse .34s ease-in-out infinite; }
 
   @keyframes cp-ask-avatar-sway {
     0%, 100% { transform: translateY(0) rotate(0deg); }
@@ -235,6 +249,36 @@
 
   #errorText { color: #fca5a5; font-size: 13px; text-align: center; min-height: 16px; }
 
+  /* Real-time video avatar (agents/livekit_avatar_worker.py) is the
+     primary tap action on #micButton now -- the original tap-to-ask
+     flow (VAD auto-listen, transcribe, proposal cards, etc.) is fully
+     intact and reachable via #modeSwitchLink below, just no longer the
+     default. #avatarVideo shares the idle image's exact sizing/ring via
+     the same .cp-ask-avatar-img class; only one of the two is ever
+     visible at a time (toggled via [hidden], not display, so it plays
+     nicely with the existing state CSS). */
+  #modeSwitchLink {
+    margin-top: 10px; background: transparent; border: none;
+    color: #98add9; font-size: 12.5px; text-decoration: underline;
+    cursor: pointer; padding: 6px;
+  }
+  #modeSwitchLink:disabled { opacity: 0.5; cursor: default; }
+  video#avatarVideo { background: #000; }
+
+  /* Only shown when the browser actually blocked audio playback (see
+     ask-costpilot-livekit-avatar.js's onAudioBlocked) -- a real, common
+     iOS Safari outcome for a video call started from an async chain a
+     few awaits removed from the original tap. A fresh tap here calls
+     retryAudio() specifically, never the main avatar button, which would
+     end the call instead of fixing the sound. */
+  #audioUnlockButton {
+    display: none; margin-top: 8px;
+    background: rgba(210,153,34,0.15); border: 1px solid rgba(210,153,34,0.4);
+    color: #f0c869; padding: 8px 16px; border-radius: 999px; font-size: 13px;
+    font-weight: 600; cursor: pointer;
+  }
+  #audioUnlockButton.visible { display: inline-flex; }
+
   footer { font-size: 12px; color: #64748b; text-align: center; }
 
   .scroll-area { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; overflow-y: auto; flex: 1; padding: 24px 0; }
@@ -260,13 +304,15 @@
 <div id="app">
   <div class="scroll-area">
     <div class="mic-wrap">
-      <button id="micButton" type="button" aria-label="Tap to ask CostPilot a question" data-state="idle">
+      <button id="micButton" type="button" aria-label="Tap to ask CostPilot a question" data-state="idle" data-idle-label="Tap to talk live, face-to-face">
         <span class="cp-ask-avatar-ring"></span>
-        <img class="cp-ask-avatar-img" src="/assets/ask-costpilot-avatar.png" alt="" width="256" height="256" />
+        <video id="avatarVideo" class="cp-ask-avatar-img" autoplay playsinline></video>
       </button>
-      <div id="statusText">Tap to ask a question</div>
+      <div id="statusText">Tap the avatar to talk live, face-to-face</div>
       <button id="cancelButton" type="button">✕ Cancel</button>
       <div id="errorText"></div>
+      <button id="audioUnlockButton" type="button">🔇 Tap for sound</button>
+      <button id="modeSwitchLink" type="button">Prefer a quick tap-to-ask question instead?</button>
     </div>
 
     <button id="suggestionRotator" type="button" aria-label="Ask this question"></button>
@@ -296,6 +342,13 @@
      copy is what makes a markdown table (or heading/list/bold/code) show
      up as real HTML on this page too, not just raw "**"/"|" characters. -->
 <script src="/js/ask-costpilot-render.js"></script>
+<!-- Real-time video avatar (opt-in "Talk live" mode) -- pinned exact
+     version per this app's CDN convention. Loaded from jsdelivr, already
+     an allowed script-src host; the WebSocket it opens to LiveKit's own
+     servers needs connect-src covered separately (see main.py's
+     CSPMiddleware). -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.22.3/dist/livekit-client.umd.min.js"></script>
+<script src="/js/ask-costpilot-livekit-avatar.js"></script>
 <script>
 (function () {
   const micButton = document.getElementById("micButton");
@@ -306,6 +359,14 @@
   const stopSpeakingBtn = document.getElementById("stopSpeaking");
   const cancelButton = document.getElementById("cancelButton");
   const suggestionRotator = document.getElementById("suggestionRotator");
+  const avatarVideo = document.getElementById("avatarVideo");
+  const modeSwitchLink = document.getElementById("modeSwitchLink");
+  const audioUnlockButton = document.getElementById("audioUnlockButton");
+  // "live" (default): tapping the avatar starts/ends a real-time video
+  // call. "quick": tapping it uses the original tap-to-ask flow (VAD
+  // auto-listen, transcribe, proposal cards, etc.) -- fully intact,
+  // reached via modeSwitchLink rather than removed.
+  let primaryMode = "live";
 
   // Same hardcoded fallback pair global-nav.js's own workspace switcher
   // uses when GET /api/workspaces hasn't resolved -- "Simulated" is the
@@ -879,6 +940,10 @@
   }
 
   micButton.addEventListener("click", () => {
+    if (primaryMode === "live") {
+      toggleLiveAvatar();
+      return;
+    }
     if (busy) return;
     if (recording) stopRecording();
     else startRecording();
@@ -933,6 +998,85 @@
     if (confirmBtn) { resolveAskProposal(confirmBtn.dataset.askConfirmId, confirmBtn, "confirm"); return; }
     const rejectBtn = event.target.closest("[data-ask-reject-id]");
     if (rejectBtn) resolveAskProposal(rejectBtn.dataset.askRejectId, rejectBtn, "reject");
+  });
+
+  // Real-time video avatar is the primary tap action on #micButton
+  // (see micButton's click handler above) -- the original tap-to-ask
+  // flow (see this page's own VAD/proposal-card work) is fully intact,
+  // just reached via modeSwitchLink below instead of being the default.
+  const liveAvatarConnection = window.createAskCostpilotAvatarConnection?.({
+    videoEl: avatarVideo,
+    onState: setAvatarState,
+    onError: (err) => setError(err.message || "Live avatar call failed."),
+    // The avatar only ever SPEAKS an answer -- this puts it on screen
+    // too, same as a typed/quick-mode question's answer, so a live call
+    // isn't a visually silent special case on this page either.
+    onAnswer: (data) => {
+      answerEl.innerHTML = renderAskMarkdown(data.answer) + renderAskProposalCard(data.proposal);
+      answerEl.classList.add("visible");
+    },
+    // iOS Safari most often blocks this call's audio, not desktop --
+    // see ask-costpilot-livekit-avatar.js's own comment on why the main
+    // avatar tap (which means "end call" once connected) can't also be
+    // the fix for this.
+    onAudioBlocked: () => audioUnlockButton.classList.add("visible"),
+  });
+
+  audioUnlockButton.addEventListener("click", async () => {
+    await liveAvatarConnection?.retryAudio();
+    audioUnlockButton.classList.remove("visible");
+  });
+
+  function setLiveAvatarUI(isLive) {
+    micButton.classList.toggle("live-active", isLive);
+    modeSwitchLink.hidden = isLive;
+    if (!isLive) audioUnlockButton.classList.remove("visible");
+    suggestionRotator.classList.toggle("visible", !isLive && isIdle());
+    if (isLive) {
+      stopSpeaking();
+      stopSuggestionRotation();
+      setStatus("Live call connected — just talk. Tap the avatar to end.");
+    } else {
+      setStatus(primaryMode === "live" ? "Tap the avatar to talk live, face-to-face" : "Tap to ask a question");
+      refreshSuggestionState();
+    }
+  }
+
+  async function toggleLiveAvatar() {
+    if (!liveAvatarConnection) {
+      setError("Live avatar isn't available on this page (script failed to load).");
+      return;
+    }
+    if (liveAvatarConnection.isConnected()) {
+      liveAvatarConnection.disconnect();
+      setLiveAvatarUI(false);
+      return;
+    }
+    if (recording || busy) return; // don't start a live call mid-question
+    micButton.classList.add("live-connecting");
+    micButton.disabled = true;
+    setLiveAvatarUI(true);
+    await liveAvatarConnection.connect();
+    micButton.classList.remove("live-connecting");
+    micButton.disabled = false;
+    if (!liveAvatarConnection.isConnected()) setLiveAvatarUI(false); // connect() failed
+  }
+
+  // Small text link, not a competing button -- switches which action
+  // tapping the avatar performs. Ends whichever mode is currently
+  // active before switching, so the two flows can never run at once.
+  modeSwitchLink?.addEventListener("click", () => {
+    if (liveAvatarConnection?.isConnected()) {
+      liveAvatarConnection.disconnect();
+      setLiveAvatarUI(false);
+    }
+    if (recording) stopRecording();
+    primaryMode = primaryMode === "live" ? "quick" : "live";
+    modeSwitchLink.textContent = primaryMode === "live"
+      ? "Prefer a quick tap-to-ask question instead?"
+      : "Prefer to talk live, face-to-face instead?";
+    micButton.dataset.idleLabel = primaryMode === "live" ? "Tap to talk live, face-to-face" : "Tap to ask a question";
+    setStatus(primaryMode === "live" ? "Tap the avatar to talk live, face-to-face" : "Tap to ask a question");
   });
 
   resolveWorkspaceId().then(populateWorkspaceSwitcher);

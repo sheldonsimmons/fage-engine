@@ -11,6 +11,7 @@ caller doesn't belong to.
 """
 
 import os
+import re
 import uuid
 from typing import Optional
 
@@ -47,6 +48,15 @@ def create_livekit_token(
     dispatch system. Soft-mode-gated the same way every other endpoint in
     this codebase is (see core/auth.py's AUTH_ENFORCEMENT_ENABLED
     docstring) -- a no-op today, real once enforcement is turned on.
+
+    The requested workspace_id is encoded into the room name itself
+    (ask-costpilot__<workspace_id>__<random>) -- confirmed live 2026-09-19
+    this was a real gap, not just a v1 simplification: without it, the
+    LiveKit voice agent had no way to know which workspace the browser
+    was actually looking at, and silently answered from whatever a fixed
+    env var happened to be set to instead, sometimes a workspace with far
+    less data than the one the person meant. agents/livekit_avatar_worker.py
+    parses this back out of ctx.room.name.
     """
     if body.workspace_id:
         check_membership(db, authorization, body.workspace_id, "use_ask_costpilot")
@@ -62,7 +72,12 @@ def create_livekit_token(
 
     from livekit import api
 
-    room_name = f"ask-costpilot-{uuid.uuid4().hex[:12]}"
+    # Alphanumeric + hyphen only, matching every real workspace_id format
+    # seen in this app ("default", "SIM-HISTORICAL-2Y", "4BE43240A6674314")
+    # -- keeps "__" unambiguous as the room-name delimiter regardless of
+    # what a workspace_id contains.
+    safe_workspace_id = re.sub(r"[^A-Za-z0-9-]", "", body.workspace_id or "default") or "default"
+    room_name = f"ask-costpilot__{safe_workspace_id}__{uuid.uuid4().hex[:8]}"
     participant_identity = f"user-{uuid.uuid4().hex[:8]}"
     token = (
         api.AccessToken(api_key, api_secret)

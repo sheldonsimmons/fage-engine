@@ -28,9 +28,13 @@ Required environment (see .env.example):
                                process host if run alongside this worker)
 """
 
+import asyncio
+import json
 import logging
 import os
+import re
 
+import httpx
 from dotenv import load_dotenv
 from livekit.agents import (
     Agent,
@@ -58,12 +62,46 @@ load_dotenv(override=True)
 REALTIME_VOICE = os.getenv("ASK_COSTPILOT_AVATAR_VOICE", "marin")
 
 ASK_COSTPILOT_MCP_URL = os.getenv("ASK_COSTPILOT_MCP_URL", "http://127.0.0.1:8100/mcp")
+# Same base URL agents/ask_costpilot_mcp_server.py uses -- this worker
+# makes its own direct call to the real /ask endpoint (see
+# _publish_full_answer below) purely to capture the FULL structured
+# response (evidence, tables, proposal cards) for the browser's screen;
+# the MCP tool call already asked the same question for the spoken
+# answer, so this is a second, cheap, read-only call, not a different
+# source of truth.
+ASK_COSTPILOT_BASE_URL = os.getenv("ASK_COSTPILOT_BASE_URL", "http://localhost:8000")
 
-AVATAR_INSTRUCTIONS = """You are CostPilot's voice avatar -- a spoken, face-to-face version of Ask
+# Matches the room-naming scheme api/routes_livekit.py's create_livekit_token
+# mints: "ask-costpilot__<workspace_id>__<random>". Parsing it back out of
+# the room name (rather than a fixed env var) is what lets this agent
+# answer from whichever workspace the browser that started the call was
+# actually looking at -- confirmed live 2026-09-19 the fixed-env-var
+# version was a real bug: the avatar silently answered from an unrelated,
+# sometimes far emptier workspace than the one the person meant.
+_ROOM_WORKSPACE_RE = re.compile(r"^ask-costpilot__([A-Za-z0-9-]+)__")
+
+
+def _workspace_id_from_room_name(room_name: str) -> str:
+    match = _ROOM_WORKSPACE_RE.match(room_name or "")
+    return match.group(1) if match else ""
+
+
+def _build_avatar_instructions(workspace_id: str) -> str:
+    workspace_clause = (
+        f'The CostPilot workspace_id for this conversation is exactly "{workspace_id}" -- '
+        f"always pass workspace_id=\"{workspace_id}\" on every ask_costpilot call, never omit "
+        "it and never use a different value, even if the person names a different workspace out "
+        "loud (tell them you can't switch workspaces mid-call instead)."
+        if workspace_id
+        else "This conversation's room didn't specify a workspace_id -- ask_costpilot will say "
+        "so plainly if asked a data question; don't guess a workspace."
+    )
+    return f"""You are CostPilot's voice avatar -- a spoken, face-to-face version of Ask
 CostPilot. You have exactly one source of truth: the ask_costpilot tool. Every fact, figure, or
 claim about spend, budgets, agents, departments, accounts, or business outcomes must come from
 calling that tool -- never answer a data question from your own knowledge, and never estimate,
 round differently, or restate a number in a way that changes it.
+{workspace_clause}
 Call ask_costpilot with the person's question close to verbatim. When it returns an answer, speak
 it back in your own natural spoken phrasing -- CostPilot's own answer already contains the real,
 checked numbers; your job is to say them naturally out loud, not to recompute or embellish them.
@@ -74,12 +112,73 @@ do", technical questions about the product), you may answer conversationally wit
 tool."""
 
 
+async def _publish_full_answer(ctx: JobContext, workspace_id: str, question: str) -> None:
+    """
+    Confirmed live 2026-09-19: talking to the avatar produced a spoken
+    answer with NOTHING shown on screen at all -- no evidence, no table,
+    no proposal card, none of the visual grounding every other Ask
+    CostPilot surface has. The MCP tool's own return value is a
+    spoken-friendly string only (see ask_costpilot_mcp_server.py's own
+    docstring on why -- it's meant for a voice model to say aloud, not
+    for structured rendering). Rather than change that contract, this
+    makes its own direct call to the real endpoint for the full JSON
+    (title/evidence/table/proposal), then pushes it to the browser over
+    the room's data channel -- the frontend (ask-costpilot-livekit-
+    avatar.js's onAnswer callback) renders it with the exact same
+    renderAskAnswerCard() a typed question already uses, so a live-call
+    answer looks like every other Ask CostPilot answer, not a special case.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            response = await client.post(
+                f"{ASK_COSTPILOT_BASE_URL}/api/reports/bot-efficiency/ask",
+                json={"question": question, "workspace_id": workspace_id, "modality": "voice"},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        logger.warning("Couldn't fetch the full answer to publish to the room: %s", exc)
+        return
+    try:
+        await ctx.room.local_participant.publish_data(
+            json.dumps(data).encode("utf-8"), topic="ask-costpilot-answer",
+        )
+    except Exception as exc:
+        logger.warning("Couldn't publish the full answer to the room: %s", exc)
+
+
+def _register_answer_publisher(ctx: JobContext, session: AgentSession, workspace_id: str) -> None:
+    def on_function_tools_executed(event) -> None:
+        calls_by_id = {call.call_id: call for call in event.function_calls}
+        for output in event.function_call_outputs:
+            call = calls_by_id.get(output.call_id)
+            if not call or "ask_costpilot" not in call.name:
+                continue
+            try:
+                question = json.loads(call.arguments or "{}").get("question", "")
+            except (TypeError, ValueError):
+                question = ""
+            if not question:
+                continue
+            asyncio.create_task(_publish_full_answer(ctx, workspace_id, question))
+
+    session.on("function_tools_executed", on_function_tools_executed)
+
+
 async def entrypoint(ctx: JobContext):
     simli_api_key = os.getenv("SIMLI_API_KEY")
     simli_face_id = os.getenv("SIMLI_FACE_ID")
     if not simli_api_key or not simli_face_id:
         raise RuntimeError(
             "SIMLI_API_KEY and SIMLI_FACE_ID must both be set -- see this module's docstring."
+        )
+
+    workspace_id = _workspace_id_from_room_name(ctx.room.name)
+    if not workspace_id:
+        logger.warning(
+            "Room %r didn't encode a workspace_id (ask-costpilot__<id>__<random>) -- "
+            "ask_costpilot will fall back to ASK_COSTPILOT_MCP_WORKSPACE_ID, if set.",
+            ctx.room.name,
         )
 
     session = AgentSession(
@@ -93,10 +192,11 @@ async def entrypoint(ctx: JobContext):
         ),
     )
     await simli_avatar.start(session, room=ctx.room)
+    _register_answer_publisher(ctx, session, workspace_id)
 
     await session.start(
         agent=Agent(
-            instructions=AVATAR_INSTRUCTIONS,
+            instructions=_build_avatar_instructions(workspace_id),
             # mcp_servers= is deprecated (confirmed live: logs a
             # DeprecationWarning) in favor of wrapping the MCP server in a
             # Toolset and passing it through tools= instead.

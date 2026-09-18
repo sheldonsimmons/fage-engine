@@ -191,7 +191,15 @@ class CSPMiddleware(BaseHTTPMiddleware):
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; "
-            "connect-src 'self'; "
+            # The real-time video avatar (agents/livekit_avatar_worker.py)
+            # needs the browser to open a WebSocket straight to LiveKit's
+            # own servers -- 'self' alone silently blocks that connection
+            # (a CSP violation, not an obvious network error) since it
+            # never touches this app's own backend. Wildcarded to
+            # *.livekit.cloud rather than this one project's specific
+            # subdomain so it isn't a one-line CSP edit every time the
+            # LiveKit project changes.
+            "connect-src 'self' wss://*.livekit.cloud https://*.livekit.cloud; "
             "media-src 'self' blob:; "
             "font-src 'self' data: https://cdn.jsdelivr.net;"
         )

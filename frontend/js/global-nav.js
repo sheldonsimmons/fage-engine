@@ -338,6 +338,94 @@
     document.getElementById("cpAskAvatarFloat")?.setAttribute("data-state", state);
   }
 
+  // Real-time video avatar ("Live avatar" toggle in the drawer header) --
+  // additive alongside the existing image avatar + typed/voice flow above,
+  // not a replacement. global-nav.js loads on most pages in this app, so
+  // LiveKit's client library (~150KB) is lazy-loaded here on first use
+  // instead of a <script> tag added to every one of those pages.
+  function loadScriptOnce(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`Couldn't load ${src}.`));
+      document.head.appendChild(script);
+    });
+  }
+
+  let _liveKitScriptPromise = null;
+  function loadLiveKitClient() {
+    if (window.LivekitClient && window.createAskCostpilotAvatarConnection) return Promise.resolve();
+    if (_liveKitScriptPromise) return _liveKitScriptPromise;
+    // ask-costpilot-livekit-avatar.js is small (no third-party library of
+    // its own), but it calls createAskCostpilotAvatarConnection() which
+    // needs LivekitClient already on window -- loaded second, in order,
+    // rather than in parallel.
+    _liveKitScriptPromise = loadScriptOnce("https://cdn.jsdelivr.net/npm/livekit-client@2.22.3/dist/livekit-client.umd.min.js")
+      .then(() => loadScriptOnce("/js/ask-costpilot-livekit-avatar.js"))
+      .catch((err) => { _liveKitScriptPromise = null; throw err; });
+    return _liveKitScriptPromise;
+  }
+
+  let _askLiveAvatarConnection = null;
+
+  // The avatar itself is the tap target now -- no separate "Live avatar"
+  // button. Tap once to start a live face-to-face call, tap again (or
+  // tap while connected) to end it. The typed/voice question flow the
+  // drawer already had is untouched and still fully reachable through
+  // the composer below -- this only changes what tapping the avatar
+  // portrait itself does, from nothing to "start talking live."
+  async function toggleAskLiveAvatar() {
+    const floatEl = document.getElementById("cpAskAvatarFloat");
+    const avatarVideo = document.getElementById("cpAskAvatarVideo");
+    if (_askLiveAvatarConnection?.isConnected()) {
+      _askLiveAvatarConnection.disconnect();
+      floatEl?.classList.remove("cp-ask-avatar-live");
+      return;
+    }
+    floatEl?.classList.add("cp-ask-avatar-connecting");
+    try {
+      await loadLiveKitClient();
+      if (!_askLiveAvatarConnection) {
+        _askLiveAvatarConnection = createAskCostpilotAvatarConnection({
+          videoEl: avatarVideo,
+          onState: setAskAvatarState,
+          onError: (err) => addAskMessage?.("assistant", `<p>${escapeHtml(err.message || "Live avatar call failed.")}</p>`),
+          // The avatar only ever SPEAKS an answer -- this is what puts it
+          // on screen too, the same way a typed question's answer
+          // renders, so a live call isn't a visually silent special case.
+          onAnswer: (data) => {
+            const node = addAskMessage("assistant", renderAskAnswerCard(data));
+            bindGlobalAskDrills(node);
+            appendAskSpeakControl(node, data.answer || "");
+          },
+          // iOS Safari most often blocks this call's audio, not desktop
+          // -- but the browser running this drawer could still be one.
+          // A dedicated retry button in the chat panel, not the main
+          // avatar tap (which means "end call" once connected, so
+          // reusing it here would hang up instead of fixing the sound).
+          onAudioBlocked: () => {
+            const node = addAskMessage(
+              "assistant",
+              '<p>🔇 Your browser blocked audio playback. <button type="button" class="cp-ask-supporting" id="cpAskAudioUnlock">Tap to enable sound</button></p>',
+            );
+            node.querySelector("#cpAskAudioUnlock")?.addEventListener("click", () => {
+              _askLiveAvatarConnection?.retryAudio();
+            });
+          },
+        });
+      }
+      floatEl?.removeAttribute("hidden");
+      await _askLiveAvatarConnection.connect();
+      floatEl?.classList.toggle("cp-ask-avatar-live", _askLiveAvatarConnection.isConnected());
+    } catch (_err) {
+      // onError above already surfaced this in the chat -- nothing
+      // further to show here, the idle placeholder (CSS) covers it.
+    } finally {
+      floatEl?.classList.remove("cp-ask-avatar-connecting");
+    }
+  }
+
   // Drag-to-reposition for the floating avatar panel. Position persists
   // per browser (localStorage), constrained to stay fully on-screen even
   // after a resize. Click-through to the pointerdown/move/up chain does
@@ -411,6 +499,16 @@
     };
     el.addEventListener("pointerup", endDrag);
     el.addEventListener("pointercancel", endDrag);
+    // A real tap (endDrag above left it un-prevented) now starts/ends a
+    // live avatar call -- the avatar itself is the primary entry point,
+    // no separate button.
+    el.addEventListener("click", () => toggleAskLiveAvatar());
+    el.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleAskLiveAvatar();
+      }
+    });
 
     window.addEventListener("resize", () => {
       const pos = clampAvatarPos(parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0, el.offsetWidth || size);
@@ -423,9 +521,10 @@
     if (document.getElementById("cpAskDrawer")) return;
     const root = document.createElement("div");
     root.innerHTML = `
-      <div class="cp-ask-avatar-float" id="cpAskAvatarFloat" data-state="idle" hidden>
+      <div class="cp-ask-avatar-float" id="cpAskAvatarFloat" data-state="idle" hidden
+        role="button" tabindex="0" aria-label="Talk to CostPilot live, face-to-face">
         <span class="cp-ask-avatar-ring"></span>
-        <img class="cp-ask-avatar-img" src="/assets/ask-costpilot-avatar.png" alt="CostPilot" width="256" height="256" />
+        <video class="cp-ask-avatar-img" id="cpAskAvatarVideo" autoplay playsinline></video>
       </div>
       <div class="cp-ask-backdrop" id="cpAskBackdrop" hidden></div>
       <aside class="cp-ask-drawer" id="cpAskDrawer" aria-hidden="true" aria-labelledby="cpAskTitle">
