@@ -11,3 +11,16 @@ presidio-analyzer>=2.2.0
 presidio-anonymizer>=2.2.0
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 psycopg2-binary>=2.9.9
+
+# Real-time video avatar (agents/livekit_avatar_worker.py,
+# agents/ask_costpilot_mcp_server.py). Confirmed live 2026-09-18: this
+# repo has a Heroku Python buildpack root requirements.txt (this file)
+# that's a SEPARATE, drifting-out-of-sync copy of backend/requirements.txt
+# -- the buildpack installs from here, not from backend/, so an addition
+# only made in backend/requirements.txt silently never reaches
+# production ("ModuleNotFoundError: No module named 'livekit'" on a
+# route that imports it live, with no build-time failure at all, since
+# the OLD dependency set still installs fine on its own).
+mcp>=1.24.0,<2
+livekit-agents[openai,silero,mcp]>=1.8.2
+livekit-plugins-simli>=1.8.2
