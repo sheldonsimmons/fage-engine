@@ -568,6 +568,41 @@ TOOL_SCHEMAS = [
     },
     {
         "type": "function",
+        "name": "propose_agent_mode_change",
+        "description": (
+            "Propose moving an agent between Observe (track only, no "
+            "enforcement) and Control (CostPilot actively enforces routing, "
+            "budgets, and policy for this agent) -- see the Observe -> "
+            "Optimize -> Control adoption model. This does NOT change "
+            "anything yet -- it creates a proposal a human must explicitly "
+            "confirm. Only call this when the user has clearly asked to "
+            "change an agent's mode, or has explicitly accepted a "
+            "recommendation you just made to do so -- never speculatively."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "description": "The exact or partial agent name the user named, e.g. 'SupportBot-Alpha'.",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["observe", "control"],
+                    "description": "The proposed new mode.",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "A short, plain-English reason for this change, grounded in data already retrieved this conversation.",
+                },
+            },
+            "required": ["agent_name", "mode", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "measure_budget_cap_outcome",
         "description": (
             "Measure whether an already-executed budget-cap change actually worked -- "
@@ -1592,6 +1627,80 @@ def run_propose_budget_cap_change(
     return {"found": True, "proposal": serialize_proposal(proposal), "simulation": simulation_result}
 
 
+def run_propose_agent_mode_change(
+    db, workspace_id: Optional[str], agent_name: str, mode: str, reason: str,
+    department_scope: Optional[str] = None, user_id: Optional[int] = None,
+) -> dict:
+    """
+    Second action_type on the Action Proposals scaffold (see
+    core/action_proposals.py's own docstring on why this should be one
+    function + one dict entry, not a new confirm/reject flow). Mirrors
+    run_propose_budget_cap_change's shape exactly: resolve the named
+    target, never mutate anything here, just create the proposal a human
+    confirms via POST /api/ask/actions/{id}/confirm.
+
+    department_scope enforcement matches every other Phase 2 tool: a
+    scoped user can only propose a change for an agent in their own
+    department, even if they name one elsewhere.
+    """
+    from database.models import RegisteredAgent
+    from sqlalchemy import or_
+    from core.workspace_scope import workspace_filter
+    from core.action_proposals import create_proposal, serialize_proposal
+
+    normalized_mode = (mode or "").strip().lower()
+    if normalized_mode not in ("observe", "control"):
+        return {"found": False, "message": "mode must be 'observe' or 'control'."}
+
+    name = (agent_name or "").strip()
+    query = db.query(RegisteredAgent)
+    scope = workspace_filter(RegisteredAgent, workspace_id)
+    if scope is not None:
+        query = query.filter(scope)
+    if department_scope:
+        query = query.filter(or_(
+            RegisteredAgent.department == department_scope,
+            RegisteredAgent.department.like(f"%:{department_scope}"),
+        ))
+    matches = query.filter(RegisteredAgent.name.ilike(f"%{name}%")).all() if name else []
+    if not matches:
+        return {"found": False, "message": f"No agent found matching '{name}'."}
+    if len(matches) > 1:
+        return {
+            "found": False,
+            "ambiguous": True,
+            "message": f"Multiple agents match '{name}': " + ", ".join(a.name for a in matches[:5]),
+        }
+    agent = matches[0]
+
+    current_mode = agent.mode or "observe"
+    if current_mode == normalized_mode:
+        return {"found": True, "unchanged": True, "message": f"'{agent.name}' is already in {normalized_mode} mode."}
+
+    proposal = create_proposal(
+        db,
+        workspace_id=workspace_id, department=agent.department,
+        action_type="AGENT_MODE_SET", target_type="agent", target_id=str(agent.id),
+        current_value={"mode": current_mode},
+        proposed_value={"mode": normalized_mode},
+        reason=reason or "",
+        estimated_impact={
+            "label": "Estimated",
+            "note": (
+                "Moving to Control activates real enforcement (routing, "
+                "budgets, policy) for this agent -- it does not itself "
+                "change spend, only what CostPilot is allowed to act on."
+                if normalized_mode == "control"
+                else "Moving to Observe stops enforcement for this agent -- it reverts to tracking only."
+            ),
+        },
+        risk_level="medium" if normalized_mode == "control" else "low",
+        required_permission="enable_agent_control",
+        user_id=user_id,
+    )
+    return {"found": True, "proposal": serialize_proposal(proposal)}
+
+
 def _simulate_cap_change(budget_row: dict, new_cap_usd: float) -> dict:
     """
     Shared by run_simulate_budget_cap_change (read-only what-if) and
@@ -1693,4 +1802,5 @@ EXECUTORS = {
     "propose_budget_cap_change": run_propose_budget_cap_change,
     "simulate_budget_cap_change": run_simulate_budget_cap_change,
     "measure_budget_cap_outcome": run_measure_budget_cap_outcome,
+    "propose_agent_mode_change": run_propose_agent_mode_change,
 }

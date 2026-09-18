@@ -479,16 +479,14 @@ def set_agent_mode(
     an explicit admin action -- moving an agent into "control" must never
     happen silently. See docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md step 9.
     """
-    normalized = (req.mode or "").strip().lower()
-    if normalized not in ("observe", "control"):
-        raise HTTPException(status_code=422, detail="mode must be 'observe' or 'control'.")
-    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _agent_scoped_or_404(db, agent_id, workspace_id)
     _check_agent_permission(db, authorization, workspace_id, "enable_agent_control")
-    agent.mode = normalized
-    db.commit()
-    db.refresh(agent)
-    from core.agentlake import _serialize
-    return _serialize(agent)
+    from core.agentlake import set_agent_mode
+    try:
+        return set_agent_mode(db, agent_id, req.mode)
+    except ValueError as e:
+        status_code = 404 if "not found" in str(e) else 422
+        raise HTTPException(status_code=status_code, detail=str(e))
 
 
 @router.patch("/{agent_id}/name", response_model=AgentStatus)

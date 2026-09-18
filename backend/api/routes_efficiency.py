@@ -3948,11 +3948,13 @@ def _ask_run_agent_tool(
     over whatever the model itself chose to filter by, so a department-
     scoped user can't ask their way into another department's numbers by
     naming it explicitly. Corrected count (capability assessment found
-    this docstring undercounting its own coverage): 10 of 12 data tools
+    this docstring undercounting its own coverage): 11 of 13 data tools
     are scoped this way today -- get_usage_report, get_change_drivers,
     get_budget_status, get_agent_adoption, get_account_outcomes,
     get_cost_per_outcome, query_metrics, get_priority_signals,
-    get_decision_history, and the three budget-cap-change tools. Only
+    get_decision_history, the three budget-cap-change tools, and
+    propose_agent_mode_change (the second Action Proposal action_type,
+    added to prove that scaffold generalizes past budget caps). Only
     get_product_help and get_data_coverage are unscoped, and deliberately
     so -- both are static/meta lookups with no per-tenant data to leak.
     """
@@ -4049,6 +4051,15 @@ def _ask_run_agent_tool(
             db, request.workspace_id,
             department=args.get("department") or "",
             department_scope=department_scope,
+        )
+    if name == "propose_agent_mode_change":
+        return executor(
+            db, request.workspace_id,
+            agent_name=args.get("agent_name") or "",
+            mode=args.get("mode") or "",
+            reason=args.get("reason") or "",
+            department_scope=department_scope,
+            user_id=user_id,
         )
     return {"error": f"unhandled tool: {name}"}
 

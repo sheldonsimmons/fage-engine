@@ -210,6 +210,29 @@ def get_agent(db: Session, agent_id: int):
     return _serialize(a) if a else None
 
 
+def set_agent_mode(db: Session, agent_id: int, mode: str) -> dict:
+    """
+    Set an agent's Observe/Control mode -- the actual mutation, shared by
+    the PATCH /{agent_id}/mode route and the AGENT_MODE_SET action
+    proposal executor (core/action_proposals.py), so there's exactly one
+    place this ever happens rather than two copies of the same two-line
+    mutation drifting apart. Moving an agent into "control" must never
+    happen silently -- see docs/COSTPILOT_AGENT_MODE_LIFECYCLE.md step 9 --
+    so both callers require their own explicit human confirmation step
+    before reaching here; this function itself does not check permission.
+    """
+    normalized = (mode or "").strip().lower()
+    if normalized not in ("observe", "control"):
+        raise ValueError("mode must be 'observe' or 'control'.")
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+    agent.mode = normalized
+    db.commit()
+    db.refresh(agent)
+    return _serialize(agent)
+
+
 def claim_record(db: Session, agent_id: int, table: str, record_id: int) -> dict:
     """
     Traffic Cop — an agent declares intent to write a specific record.

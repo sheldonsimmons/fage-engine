@@ -98,8 +98,22 @@ def _execute_budget_cap_set(db: Session, proposal: ActionProposal) -> dict:
     return set_cap(db, proposal.target_id, float(proposed["new_cap_usd"]))
 
 
+def _execute_agent_mode_set(db: Session, proposal: ActionProposal) -> dict:
+    """
+    Second action_type on this scaffold (Permissioned Actions, proving out
+    the "one function + one dict entry" extension path the module
+    docstring promises). target_id is the agent's integer id, stored as a
+    string like every other ActionProposal.target_id.
+    """
+    from core.agentlake import set_agent_mode
+
+    proposed = json.loads(proposal.proposed_value)
+    return set_agent_mode(db, int(proposal.target_id), proposed["mode"])
+
+
 EXECUTORS = {
     "BUDGET_CAP_SET": _execute_budget_cap_set,
+    "AGENT_MODE_SET": _execute_agent_mode_set,
 }
 
 
