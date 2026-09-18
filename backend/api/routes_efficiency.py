@@ -4261,6 +4261,28 @@ def _ask_agent_final_payload(
     live_requests = 0
     simulator_requests = 0
 
+    # conversation_context (P1, capability assessment): the agent-loop path
+    # previously returned no conversation_context at all, unlike the
+    # deterministic path -- a real gap, not incidental, since a follow-up
+    # question after an agent-loop answer had nothing structured to
+    # resolve against (the model only had its own prior prose to re-read),
+    # AND the frontend was silently re-serving the PREVIOUS turn's now-
+    # stale context object as a side effect of that absence
+    # (frontend/js/global-nav.js's own fallback:
+    # writeAskStorage("context", data.conversation_context || context)).
+    # Built from the same tool_call_log this function already walks for
+    # period/data_scope below, "last tool call wins" (same rule already
+    # used everywhere else in this function) -- deliberately partial
+    # rather than a bespoke 1:1 mapping for all 13 tools; every field
+    # left None here is strictly no worse than the previous status quo.
+    ctx_days = None
+    ctx_period_key = None
+    ctx_metric = None
+    ctx_department = None
+    ctx_result_limit = None
+    ctx_subject_name = None
+    ctx_subject_value = None
+
     # Build a pool of every candidate evidence row across every tool call —
     # not what gets shown, just what's *available* to cite. Keyed by the
     # exact raw "id" string the model actually sees in each tool's JSON
@@ -4318,7 +4340,7 @@ def _ask_agent_final_payload(
             built.append(item)
         return built
 
-    for tool_name, _args, result in tool_call_log:
+    for tool_name, call_args, result in tool_call_log:
         # Later tool calls' period/scope win, since they're closer to what the
         # final answer is actually about — but any tool result is better than
         # none, so only overwrite with a real value.
@@ -4327,6 +4349,24 @@ def _ask_agent_final_payload(
         summary = result.get("summary") or {}
         live_requests = int(summary.get("live_count") or 0) or live_requests
         simulator_requests = int(summary.get("simulation_count") or 0) or simulator_requests
+
+        # conversation_context fields -- same "last call wins" rule, read
+        # straight off whatever args this particular tool actually took
+        # (they don't all share field names, so each is checked rather
+        # than assumed present).
+        if call_args.get("days") is not None:
+            ctx_days = call_args.get("days")
+        if call_args.get("period_key"):
+            ctx_period_key = call_args.get("period_key")
+        if call_args.get("metric"):
+            ctx_metric = call_args.get("metric")
+        if call_args.get("department"):
+            ctx_department = call_args.get("department")
+        if call_args.get("limit") is not None:
+            ctx_result_limit = call_args.get("limit")
+        for field_name in ("entity_name", "account_name", "agent_name", "model_name"):
+            if call_args.get(field_name):
+                ctx_subject_name, ctx_subject_value = field_name, call_args.get(field_name)
 
         if tool_name == "get_usage_report":
             people = _pool("people", result.get("top_people"), "spend_usd", "user_external_id")
@@ -4428,6 +4468,30 @@ def _ask_agent_final_payload(
             subject=suggestion_subject,
             asked_question=request.question,
         ),
+        # See this function's own comment above (near ctx_days) for why
+        # this exists now -- same AskCostPilotContext shape the
+        # deterministic path emits, deliberately partial (entity/direction/
+        # comparison_key/usage_status/usage_threshold/model_tier are left
+        # None here rather than guessed from a tool-args shape that was
+        # never designed to carry them).
+        "conversation_context": {
+            "intent": suggestion_category or None,
+            "entity": None,
+            "metric": ctx_metric,
+            "direction": None,
+            "days": ctx_days,
+            "result_limit": ctx_result_limit,
+            "source_platform": None,
+            "subject_entity": suggestion_subject,
+            "subject_filter_name": ctx_subject_name or ("department" if ctx_department else None),
+            "subject_filter_value": ctx_subject_value or ctx_department,
+            "model_tier": None,
+            "period_key": ctx_period_key,
+            "comparison_key": None,
+            "usage_status": None,
+            "usage_threshold": None,
+            "budget_scope": ctx_department if suggestion_category == "budget" else None,
+        },
     }
 
     # Action Proposals slice 1: any tool result carrying a "proposal" key

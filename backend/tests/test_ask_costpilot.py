@@ -1867,6 +1867,57 @@ def test_agent_final_payload_rejects_answer_with_no_tool_calls():
     assert payload is None
 
 
+def test_agent_final_payload_includes_conversation_context_from_tool_args():
+    """
+    Capability assessment, P1: the agent-loop path previously returned no
+    conversation_context at all, unlike the deterministic path -- a
+    follow-up after an agent-loop answer had nothing structured to
+    resolve against. Built from the tool's own call args, last tool wins.
+    """
+    tool_call_log = [(
+        "get_budget_status", {"department": "Support"},
+        {
+            "period": {"label": "This month"},
+            "summary": {"live_count": 3, "simulation_count": 0},
+            "data_scope": "live",
+            "departments": [{"id": "Support", "label": "Support", "used_pct": 82.0}],
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="Is Support close to its budget cap?"),
+        db=None,
+        final_args={"title": "Support budget", "answer": "Support is at 82% of its cap.", "evidence_ids": ["Support"]},
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    context = payload["conversation_context"]
+    assert context["budget_scope"] == "Support"
+    assert context["subject_filter_name"] == "department"
+    assert context["subject_filter_value"] == "Support"
+    assert context["intent"] == "budget"
+
+
+def test_agent_final_payload_conversation_context_prefers_named_subject_over_department():
+    tool_call_log = [(
+        "get_account_outcomes", {"account_name": "Acme Corp", "department": "Sales"},
+        {
+            "period": {"label": "This month"},
+            "summary": {"live_count": 1, "simulation_count": 0},
+            "data_scope": "live",
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="How is Acme Corp doing?"),
+        db=None,
+        final_args={"title": "Acme Corp", "answer": "Acme Corp closed one deal.", "evidence_ids": []},
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    context = payload["conversation_context"]
+    assert context["subject_filter_name"] == "account_name"
+    assert context["subject_filter_value"] == "Acme Corp"
+
+
 def test_agent_final_payload_builds_evidence_from_cited_ids():
     tool_call_log = [(
         "get_usage_report", {},
