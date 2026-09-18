@@ -8587,7 +8587,19 @@ def _ask_costpilot_answer(
     # budget_scope answer is already clear, self-contained prose; skipping
     # narration for the whole intent removes this failure mode instead of
     # chasing it scope by scope.
-    if assistant_mode == "deterministic_period_contract" or intent == "budget":
+    # Same reasoning as the budget_scope case just above, for the
+    # markdown table the intent=="ranking" branch now builds directly
+    # (see that branch's own comment): confirmed live 2026-09-19 that
+    # even a strengthened "you MUST keep this table intact" narration
+    # instruction was still followed inconsistently -- 2 of 4 identical
+    # repeated asks came back as a flattened paragraph anyway, with the
+    # real 5-row table dissolved despite an explicit prompt not to.
+    # "|---|---|" is the literal separator this codebase's own table
+    # builder always emits, so this only ever skips narration for an
+    # answer that really does already contain a genuine table, not any
+    # answer that merely mentions the word "table".
+    answer_has_table = "|---|---|" in (payload.get("answer") or "")
+    if assistant_mode == "deterministic_period_contract" or intent == "budget" or answer_has_table:
         narrated_title, narrated_answer, narrated = (
             payload["title"], payload["answer"], False
         )
