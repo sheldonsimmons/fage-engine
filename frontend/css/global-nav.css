@@ -644,6 +644,23 @@ header.header .header-sub,
   padding: 16px;
 }
 
+/* "Show that as a chart" inline reply -- a plain image (askReportChartImg
+   already rasterizes to a data-URL PNG, same as the report-preview flow),
+   just wrapped in the chat's own card chrome so it reads as an assistant
+   message, not a stray image. */
+.cp-ask-inline-chart {
+  background: var(--bg-card, #182231);
+  border: 1px solid var(--border, #334155);
+  border-radius: 10px;
+  padding: 10px;
+}
+.cp-ask-inline-chart img {
+  background: #fff; /* charts render on a white ground regardless of app theme -- see askReportChartImg's own comment */
+  border-radius: 6px;
+  display: block;
+  max-width: 100%;
+}
+
 .cp-ask-answer-head {
   align-items: center;
   display: flex;

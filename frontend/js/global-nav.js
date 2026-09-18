@@ -1291,6 +1291,30 @@
     const pinnedFilter = pinnedFilterName ? { name: pinnedFilterName, value: pinnedFilterValue } : null;
     addAskMessage("user", `<p>${escapeHtml(question)}</p>`);
     input.value = "";
+
+    // "Show that as a chart" -- a real chat follow-up, not a new question:
+    // no Ask CostPilot answer needs computing, so this never hits the
+    // /ask endpoint at all. Replays the PRIOR answer's own tool call at
+    // chart scale via the exact same /ask/report-data path "Generate
+    // report" already uses (askRenderInlineChartReply, js/ask-costpilot-
+    // render.js), then renders the chart directly as the next chat
+    // message. Checked before the normal send flow so it short-circuits
+    // cleanly rather than needing a special case inside it.
+    if (typeof askDetectChartFollowUp === "function" && askDetectChartFollowUp(question)) {
+      send.disabled = true;
+      const pendingChart = addAskMessage("assistant", `<div class="cp-ask-thinking"><span class="cp-ask-thinking-text">Building that chart…</span></div>`);
+      try {
+        const chartHtml = await askRenderInlineChartReply(window._askLastAnswerData);
+        pendingChart.innerHTML = chartHtml || `<p>I couldn't turn that last answer into a chart -- it may not have a ranked list to plot.</p>`;
+      } catch (_err) {
+        pendingChart.innerHTML = `<p>I couldn't turn that last answer into a chart -- it may not have a ranked list to plot.</p>`;
+      } finally {
+        send.disabled = false;
+        input.focus();
+      }
+      return;
+    }
+
     send.disabled = true;
     send.textContent = "Checking…";
     const pending = addAskMessage("assistant", `<div class="cp-ask-thinking"><span class="cp-ask-thinking-text">Calculating from governed activity…</span></div>`);

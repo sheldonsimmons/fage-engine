@@ -1041,11 +1041,19 @@ async function fetchAskReportData(step, isRefinement) {
   return (await response.json()).result;
 }
 
-async function generateAskReport(cardId, title, data) {
+// Shared by generateAskReport and the inline "show that as a chart" chat
+// follow-up (askRenderInlineChartReply) -- both need the same "which tool
+// call actually produced this answer, replayable at report scale" step,
+// they just do different things with the replayed result afterward.
+function askResolveReplayStep(data) {
   const lastDataStep = data && Array.isArray(data.query_plan)
     ? [...data.query_plan].reverse().find(step => step.status === "ok" && ASK_REPORT_REPLAYABLE_TOOLS.has(step.tool))
     : null;
-  const step = lastDataStep || (data ? askReportSyntheticStep(data) : null);
+  return lastDataStep || (data ? askReportSyntheticStep(data) : null);
+}
+
+async function generateAskReport(cardId, title, data) {
+  const step = askResolveReplayStep(data);
   if (!data || !step) {
     printSection(cardId, title); // nothing worth replaying (a help/product/decision-style answer) -- print the card as-is
     return;
@@ -1056,6 +1064,50 @@ async function generateAskReport(cardId, title, data) {
   } catch (_err) {
     printSection(cardId, title); // fetch/build failed -- still strictly better than no report at all
   }
+}
+
+// ── Inline "show that as a chart" chat follow-up ────────────────────────────
+// Distinct from the report-preview's own "add a chart" refinement above
+// (askReportParseRefinement) -- that one edits an already-open report
+// preview. This handles the plain conversational ask ("show me that as a
+// chart") as a normal chat turn: no new Ask CostPilot question is sent to
+// the backend at all, since nothing new needs answering -- the prior
+// answer's own tool call is replayed at chart scale via the exact same
+// /ask/report-data endpoint "Generate report" already uses, and the
+// resulting bars/doughnut render directly in the conversation.
+function askDetectChartFollowUp(question) {
+  const text = (question || "").toLowerCase();
+  if (!/\b(chart|graph|plot|visuali[sz]e)\b/.test(text)) return false;
+  // "this" alone is too common in a brand-new, self-contained question
+  // ("show me this month's spend as a chart") to treat as a reference to
+  // the prior answer -- same "this <time-noun>" false-positive the
+  // backend's _ask_is_follow_up needed to guard against. "that/it/those/
+  // them" have no such fresh-question reading, so they're safe as bare
+  // matches.
+  return /\b(that|it|those|them)\b/.test(text)
+    || /\bthis\b(?!\s+(month|week|quarter|year|period|time))/.test(text);
+}
+
+// Returns an HTML string for a chat message bubble, or null when there's
+// nothing chartable (categorical data, a help/product-style prior answer,
+// or the replay/chart itself failed) -- callers fall back to a plain
+// "can't chart that" message rather than a silent no-op, so a user who
+// asks for a chart always gets a visible answer either way.
+async function askRenderInlineChartReply(priorData) {
+  const step = askResolveReplayStep(priorData);
+  if (!step) return null;
+  let result;
+  try {
+    result = await fetchAskReportData(step);
+  } catch (_err) {
+    return null;
+  }
+  const extracted = askReportRowsFromResult(step.tool, result);
+  if (!extracted || !Array.isArray(extracted.rows) || extracted.rows.length < 2) return null;
+  const chartType = askReportPickChartType(step.tool, extracted.rows, extracted.valueFormat);
+  const img = askReportChartImg(extracted.rows, extracted.metricLabel, extracted.valueFormat, true, chartType);
+  if (!img) return null;
+  return `<div class="cp-ask-inline-chart">${img}</div>`;
 }
 
 // ── Phase 3: conversational report refinement ───────────────────────────────
@@ -1200,6 +1252,12 @@ function showAskReportPreview(cardId, title, data, step, result) {
 function renderAskAnswerCard(data) {
   const cardId = `cp-ask-answer-${++_askAnswerCardSeq}`;
   _askAnswerDataByCardId.set(cardId, data);
+  // Tracks the single most recent answer, for the "show that as a chart"
+  // follow-up (askDetectChartFollowUp/askRenderInlineChartReply below) --
+  // that phrasing always means "the answer I just got," never a specific
+  // older card, so a simple last-write-wins pointer is the right model
+  // here (no need to track which card is "focused" in the UI).
+  window._askLastAnswerData = data;
   const provenance = data.data_provenance || {};
   const liveRequests = Number(provenance.live_requests || 0);
   const simulatorRequests = Number(provenance.simulator_requests || 0);
