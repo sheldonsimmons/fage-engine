@@ -3947,14 +3947,14 @@ def _ask_run_agent_tool(
     tool below that takes a department/entity filter -- it always wins
     over whatever the model itself chose to filter by, so a department-
     scoped user can't ask their way into another department's numbers by
-    naming it explicitly. Corrected count (capability assessment found
-    this docstring undercounting its own coverage): 11 of 13 data tools
-    are scoped this way today -- get_usage_report, get_change_drivers,
-    get_budget_status, get_agent_adoption, get_account_outcomes,
-    get_cost_per_outcome, query_metrics, get_priority_signals,
-    get_decision_history, the three budget-cap-change tools, and
-    propose_agent_mode_change (the second Action Proposal action_type,
-    added to prove that scaffold generalizes past budget caps). Only
+    naming it explicitly. 15 of 17 data tools are scoped this way today --
+    get_usage_report, get_change_drivers, get_budget_status,
+    get_agent_adoption, get_account_outcomes, get_cost_per_outcome,
+    query_metrics, get_priority_signals, get_decision_history, the three
+    budget-cap-change tools, and the three agent-mutation Action Proposal
+    tools (propose_agent_mode_change, propose_agent_tier_bounds_change,
+    propose_agent_allowed_providers_change -- action_types two through
+    four on the scaffold, proving it generalizes past budget caps). Only
     get_product_help and get_data_coverage are unscoped, and deliberately
     so -- both are static/meta lookups with no per-tenant data to leak.
     """
@@ -4057,6 +4057,25 @@ def _ask_run_agent_tool(
             db, request.workspace_id,
             agent_name=args.get("agent_name") or "",
             mode=args.get("mode") or "",
+            reason=args.get("reason") or "",
+            department_scope=department_scope,
+            user_id=user_id,
+        )
+    if name == "propose_agent_tier_bounds_change":
+        return executor(
+            db, request.workspace_id,
+            agent_name=args.get("agent_name") or "",
+            min_tier=int(args.get("min_tier") or 1),
+            max_tier=int(args.get("max_tier") or 4),
+            reason=args.get("reason") or "",
+            department_scope=department_scope,
+            user_id=user_id,
+        )
+    if name == "propose_agent_allowed_providers_change":
+        return executor(
+            db, request.workspace_id,
+            agent_name=args.get("agent_name") or "",
+            allowed_providers=list(args.get("allowed_providers") or []),
             reason=args.get("reason") or "",
             department_scope=department_scope,
             user_id=user_id,

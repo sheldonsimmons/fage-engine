@@ -419,17 +419,14 @@ def set_tier_bounds(
     authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db),
 ):
     """Set the min/max routing tier for an agent. Clamps future routing decisions."""
-    if not (1 <= req.min_tier <= 4) or not (1 <= req.max_tier <= 4):
-        raise HTTPException(status_code=422, detail="Tier values must be between 1 and 4.")
-    if req.min_tier > req.max_tier:
-        raise HTTPException(status_code=422, detail="min_tier cannot exceed max_tier.")
-    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _agent_scoped_or_404(db, agent_id, workspace_id)
     _check_agent_permission(db, authorization, workspace_id)
-    agent.min_tier = req.min_tier
-    agent.max_tier = req.max_tier
-    db.commit()
-    db.refresh(agent)
-    return agent
+    from core.agentlake import set_agent_tier_bounds
+    try:
+        return set_agent_tier_bounds(db, agent_id, req.min_tier, req.max_tier)
+    except ValueError as e:
+        status_code = 404 if "not found" in str(e) else 422
+        raise HTTPException(status_code=status_code, detail=str(e))
 
 
 @router.patch("/{agent_id}/allowed-providers")
@@ -445,13 +442,14 @@ def set_allowed_providers(
     since a real request is never hard-blocked by a policy misconfiguration
     (see core/router.py's _apply_provider_policy()).
     """
-    agent = _agent_scoped_or_404(db, agent_id, workspace_id)
+    _agent_scoped_or_404(db, agent_id, workspace_id)
     _check_agent_permission(db, authorization, workspace_id)
-    cleaned = [p.strip() for p in (req.allowed_providers or []) if p and p.strip()]
-    agent.allowed_providers = cleaned
-    db.commit()
-    db.refresh(agent)
-    return {"id": agent.id, "allowed_providers": agent.allowed_providers}
+    from core.agentlake import set_agent_allowed_providers
+    try:
+        return set_agent_allowed_providers(db, agent_id, req.allowed_providers)
+    except ValueError as e:
+        status_code = 404 if "not found" in str(e) else 422
+        raise HTTPException(status_code=status_code, detail=str(e))
 
 
 @router.patch("/{agent_id}/pruning")

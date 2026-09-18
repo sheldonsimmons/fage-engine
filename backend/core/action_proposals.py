@@ -111,9 +111,25 @@ def _execute_agent_mode_set(db: Session, proposal: ActionProposal) -> dict:
     return set_agent_mode(db, int(proposal.target_id), proposed["mode"])
 
 
+def _execute_agent_tier_bounds_set(db: Session, proposal: ActionProposal) -> dict:
+    from core.agentlake import set_agent_tier_bounds
+
+    proposed = json.loads(proposal.proposed_value)
+    return set_agent_tier_bounds(db, int(proposal.target_id), int(proposed["min_tier"]), int(proposed["max_tier"]))
+
+
+def _execute_agent_allowed_providers_set(db: Session, proposal: ActionProposal) -> dict:
+    from core.agentlake import set_agent_allowed_providers
+
+    proposed = json.loads(proposal.proposed_value)
+    return set_agent_allowed_providers(db, int(proposal.target_id), proposed["allowed_providers"])
+
+
 EXECUTORS = {
     "BUDGET_CAP_SET": _execute_budget_cap_set,
     "AGENT_MODE_SET": _execute_agent_mode_set,
+    "AGENT_TIER_BOUNDS_SET": _execute_agent_tier_bounds_set,
+    "AGENT_ALLOWED_PROVIDERS_SET": _execute_agent_allowed_providers_set,
 }
 
 

@@ -233,6 +233,46 @@ def set_agent_mode(db: Session, agent_id: int, mode: str) -> dict:
     return _serialize(agent)
 
 
+def set_agent_tier_bounds(db: Session, agent_id: int, min_tier: int, max_tier: int) -> dict:
+    """
+    Set an agent's min/max routing tier -- the actual mutation, shared by
+    the PATCH /{agent_id}/tier-bounds route and the AGENT_TIER_BOUNDS_SET
+    action proposal executor (core/action_proposals.py), same
+    one-mutation-one-place reasoning as set_agent_mode above.
+    """
+    if not (1 <= min_tier <= 4) or not (1 <= max_tier <= 4):
+        raise ValueError("Tier values must be between 1 and 4.")
+    if min_tier > max_tier:
+        raise ValueError("min_tier cannot exceed max_tier.")
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+    agent.min_tier = min_tier
+    agent.max_tier = max_tier
+    db.commit()
+    db.refresh(agent)
+    return _serialize(agent)
+
+
+def set_agent_allowed_providers(db: Session, agent_id: int, allowed_providers: list) -> dict:
+    """
+    Restrict which ModelRegistry.provider values an agent's routing may
+    use -- the actual mutation, shared by the PATCH
+    /{agent_id}/allowed-providers route and the
+    AGENT_ALLOWED_PROVIDERS_SET action proposal executor. An empty list
+    is a deliberate "no providers allowed" restriction, not "clear the
+    restriction" -- same contract as the route (see AllowedProvidersRequest).
+    """
+    agent = db.query(RegisteredAgent).filter_by(id=agent_id).first()
+    if not agent:
+        raise ValueError(f"Agent ID {agent_id} not found.")
+    cleaned = [p.strip() for p in (allowed_providers or []) if p and p.strip()]
+    agent.allowed_providers = cleaned
+    db.commit()
+    db.refresh(agent)
+    return _serialize(agent)
+
+
 def claim_record(db: Session, agent_id: int, table: str, record_id: int) -> dict:
     """
     Traffic Cop — an agent declares intent to write a specific record.

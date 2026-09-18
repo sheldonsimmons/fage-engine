@@ -603,6 +603,78 @@ TOOL_SCHEMAS = [
     },
     {
         "type": "function",
+        "name": "propose_agent_tier_bounds_change",
+        "description": (
+            "Propose changing which model tiers (1=cheapest/fastest through "
+            "4=most capable) an agent's routing is allowed to use. This does "
+            "NOT change anything yet -- it creates a proposal a human must "
+            "explicitly confirm. Only call this when the user has clearly "
+            "asked to change an agent's tier bounds (e.g. 'cap SupportBot to "
+            "Scout and Advisor only'), or has explicitly accepted a "
+            "recommendation you just made to do so -- never speculatively."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "description": "The exact or partial agent name the user named, e.g. 'SupportBot-Alpha'.",
+                },
+                "min_tier": {
+                    "type": "integer",
+                    "description": "The proposed minimum routing tier, 1-4 (1=Scout through 4=most capable).",
+                },
+                "max_tier": {
+                    "type": "integer",
+                    "description": "The proposed maximum routing tier, 1-4. Must be >= min_tier.",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "A short, plain-English reason for this change, grounded in data already retrieved this conversation.",
+                },
+            },
+            "required": ["agent_name", "min_tier", "max_tier", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "propose_agent_allowed_providers_change",
+        "description": (
+            "Propose restricting which model providers (e.g. 'openai', "
+            "'anthropic') an agent's routing may use. This does NOT change "
+            "anything yet -- it creates a proposal a human must explicitly "
+            "confirm. Only call this when the user has clearly asked to "
+            "restrict an agent's providers, or has explicitly accepted a "
+            "recommendation you just made to do so -- never speculatively. "
+            "An empty providers list is a deliberate 'block all providers' "
+            "proposal, not a way to clear an existing restriction."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "description": "The exact or partial agent name the user named, e.g. 'SupportBot-Alpha'.",
+                },
+                "allowed_providers": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "The proposed list of allowed provider names, e.g. ['openai']. Empty list restricts to no providers.",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "A short, plain-English reason for this change, grounded in data already retrieved this conversation.",
+                },
+            },
+            "required": ["agent_name", "allowed_providers", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "measure_budget_cap_outcome",
         "description": (
             "Measure whether an already-executed budget-cap change actually worked -- "
@@ -1701,6 +1773,126 @@ def run_propose_agent_mode_change(
     return {"found": True, "proposal": serialize_proposal(proposal)}
 
 
+def _resolve_agent_for_proposal(db, workspace_id, agent_name, department_scope):
+    """
+    Shared agent-name resolution for the tier-bounds/allowed-providers
+    proposal tools -- identical matching logic to
+    run_propose_agent_mode_change (fuzzy ilike, workspace + department
+    scoped, not-found/ambiguous both reported plainly). Returns
+    (agent, error_dict) where exactly one is None.
+    """
+    from database.models import RegisteredAgent
+    from sqlalchemy import or_
+    from core.workspace_scope import workspace_filter
+
+    name = (agent_name or "").strip()
+    query = db.query(RegisteredAgent)
+    scope = workspace_filter(RegisteredAgent, workspace_id)
+    if scope is not None:
+        query = query.filter(scope)
+    if department_scope:
+        query = query.filter(or_(
+            RegisteredAgent.department == department_scope,
+            RegisteredAgent.department.like(f"%:{department_scope}"),
+        ))
+    matches = query.filter(RegisteredAgent.name.ilike(f"%{name}%")).all() if name else []
+    if not matches:
+        return None, {"found": False, "message": f"No agent found matching '{name}'."}
+    if len(matches) > 1:
+        return None, {
+            "found": False,
+            "ambiguous": True,
+            "message": f"Multiple agents match '{name}': " + ", ".join(a.name for a in matches[:5]),
+        }
+    return matches[0], None
+
+
+def run_propose_agent_tier_bounds_change(
+    db, workspace_id: Optional[str], agent_name: str, min_tier: int, max_tier: int, reason: str,
+    department_scope: Optional[str] = None, user_id: Optional[int] = None,
+) -> dict:
+    """
+    Third action_type on the Action Proposals scaffold. Same shape as
+    run_propose_agent_mode_change: resolve the named agent, validate,
+    create the proposal, never mutate directly.
+    """
+    from core.action_proposals import create_proposal, serialize_proposal
+
+    if not (1 <= min_tier <= 4) or not (1 <= max_tier <= 4):
+        return {"found": False, "message": "Tier values must be between 1 and 4."}
+    if min_tier > max_tier:
+        return {"found": False, "message": "min_tier cannot exceed max_tier."}
+
+    agent, error = _resolve_agent_for_proposal(db, workspace_id, agent_name, department_scope)
+    if error:
+        return error
+
+    current_min = agent.min_tier if agent.min_tier is not None else 1
+    current_max = agent.max_tier if agent.max_tier is not None else 4
+    if current_min == min_tier and current_max == max_tier:
+        return {"found": True, "unchanged": True, "message": f"'{agent.name}' is already bounded to tiers {min_tier}-{max_tier}."}
+
+    proposal = create_proposal(
+        db,
+        workspace_id=workspace_id, department=agent.department,
+        action_type="AGENT_TIER_BOUNDS_SET", target_type="agent", target_id=str(agent.id),
+        current_value={"min_tier": current_min, "max_tier": current_max},
+        proposed_value={"min_tier": min_tier, "max_tier": max_tier},
+        reason=reason or "",
+        estimated_impact={
+            "label": "Estimated",
+            "note": "Clamps which model tiers this agent's future requests may be routed to -- does not change past spend.",
+        },
+        risk_level="medium" if max_tier < current_max else "low",
+        required_permission="manage_agents",
+        user_id=user_id,
+    )
+    return {"found": True, "proposal": serialize_proposal(proposal)}
+
+
+def run_propose_agent_allowed_providers_change(
+    db, workspace_id: Optional[str], agent_name: str, allowed_providers: list, reason: str,
+    department_scope: Optional[str] = None, user_id: Optional[int] = None,
+) -> dict:
+    """
+    Fourth action_type on the Action Proposals scaffold. An empty list is
+    a deliberate "restrict to nothing" proposal, not a no-op -- same
+    contract as the underlying PATCH route/core.agentlake function.
+    """
+    from core.action_proposals import create_proposal, serialize_proposal
+
+    agent, error = _resolve_agent_for_proposal(db, workspace_id, agent_name, department_scope)
+    if error:
+        return error
+
+    cleaned = [p.strip() for p in (allowed_providers or []) if p and p.strip()]
+    current = agent.allowed_providers or []
+    if sorted(current) == sorted(cleaned):
+        return {"found": True, "unchanged": True, "message": f"'{agent.name}' is already restricted to {cleaned or 'no restriction'}."}
+
+    proposal = create_proposal(
+        db,
+        workspace_id=workspace_id, department=agent.department,
+        action_type="AGENT_ALLOWED_PROVIDERS_SET", target_type="agent", target_id=str(agent.id),
+        current_value={"allowed_providers": current},
+        proposed_value={"allowed_providers": cleaned},
+        reason=reason or "",
+        estimated_impact={
+            "label": "Estimated",
+            "note": (
+                "An empty list blocks all routing providers for this agent -- routing falls back to "
+                "whatever the tier lookup picks anyway, noted in the audit trail."
+                if not cleaned
+                else f"Restricts this agent's routing to: {', '.join(cleaned)}."
+            ),
+        },
+        risk_level="medium" if not cleaned else "low",
+        required_permission="manage_agents",
+        user_id=user_id,
+    )
+    return {"found": True, "proposal": serialize_proposal(proposal)}
+
+
 def _simulate_cap_change(budget_row: dict, new_cap_usd: float) -> dict:
     """
     Shared by run_simulate_budget_cap_change (read-only what-if) and
@@ -1803,4 +1995,6 @@ EXECUTORS = {
     "simulate_budget_cap_change": run_simulate_budget_cap_change,
     "measure_budget_cap_outcome": run_measure_budget_cap_outcome,
     "propose_agent_mode_change": run_propose_agent_mode_change,
+    "propose_agent_tier_bounds_change": run_propose_agent_tier_bounds_change,
+    "propose_agent_allowed_providers_change": run_propose_agent_allowed_providers_change,
 }
