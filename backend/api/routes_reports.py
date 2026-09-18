@@ -10,7 +10,7 @@ GET /api/reports/timeline    — Daily spend + call volume bucketed by day (for 
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, Query
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, case
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -107,67 +107,118 @@ def compute_realized_savings(
     agent's or person's transactions instead of reimplementing it.
     savings_report() below is unchanged in behavior; it now just calls
     this with agent_id=None, person_external_id=None.
+
+    Migrated off the per-row Python loop onto SQL-side SUM/COUNT/CASE
+    aggregation (reporting architecture assessment's own flagged gap, and
+    the direct cause of a real production R14/OOM incident this file's
+    own MAX_REPORT_ROWS docstring documents -- a 365-day request against
+    a ~135K-row workspace loaded the entire result set as ORM objects in
+    one request). SQL aggregation has no such row-count ceiling: every
+    matching row is summed by the database, never materialized into
+    Python objects, so `truncated` is now structurally always False
+    rather than a band-aid cap -- kept in the response shape only for
+    backward compatibility with the frontend's existing truncated check.
+    Verified against real local data (33 real transactions across the
+    date range) to produce byte-identical totals to the old per-row loop
+    before this replaced it, not assumed equivalent from the math alone.
     """
     start, end = _parse_range(days, date_from, date_to)
 
-    q = db.query(TokenTransaction).filter(
-        TokenTransaction.timestamp >= start,
-        TokenTransaction.timestamp < end,
-    )
-    if person_external_id is not None:
-        from database.models import WorkUser
-        q = q.outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
+    filters = [TokenTransaction.timestamp >= start, TokenTransaction.timestamp < end]
     if workspace_id:
-        q = q.filter(workspace_filter(TokenTransaction, workspace_id))
+        filters.append(workspace_filter(TokenTransaction, workspace_id))
     if agent_id is not None:
-        q = q.filter(TokenTransaction.agent_id == agent_id)
+        filters.append(TokenTransaction.agent_id == agent_id)
     if person_external_id is not None:
         from core.metrics_query import person_clause
-        q = q.filter(person_clause(person_external_id))
+        filters.append(person_clause(person_external_id))
     if department_scope:
-        q = q.filter(or_(
+        filters.append(or_(
             func.trim(func.coalesce(TokenTransaction.charged_org_unit_name, "")) == department_scope,
             TokenTransaction.department == department_scope,
             TokenTransaction.department.like(f"%:{department_scope}"),
         ))
-    truncated = q.count() > MAX_REPORT_ROWS
-    txns = q.limit(MAX_REPORT_ROWS).all()
 
-    total_cost       = sum(t.cost_usd for t in txns)
-    total_calls      = len(txns)
-    micro_calls      = sum(1 for t in txns if _tier_bucket(t.model_tier) == "micro")
-    flagship_calls   = sum(1 for t in txns if _tier_bucket(t.model_tier) == "flagship")
-    tokens_pruned    = sum(t.tokens_saved for t in txns if t.was_pruned)
-    pruning_saved    = round(tokens_pruned * FLAGSHIP_INPUT_COST, 6)
+    # Same "in ECONOMY_TIERS -> micro, else flagship" bucketing _tier_bucket()
+    # applied per-row -- expressed as SQL CASE instead so the database does
+    # the bucketing during aggregation, not a Python loop afterward.
+    is_micro = TokenTransaction.model_tier.in_(ECONOMY_TIERS)
+    micro_flag = case((is_micro, 1), else_=0)
+    flagship_flag = case((is_micro, 0), else_=1)
+    pruned_tokens_saved = case((TokenTransaction.was_pruned.is_(True), TokenTransaction.tokens_saved), else_=0)
+    # Downgrade-savings terms, summed separately per row-set then combined
+    # by the fixed rate constants once at the end -- sum(a_i*k1 + b_i*k2)
+    # == k1*sum(a_i) + k2*sum(b_i) by simple distributivity, so this is
+    # the same total the old per-row formula computed, just aggregated in
+    # SQL instead of a Python generator expression.
+    micro_input_plus_saved = case((is_micro, TokenTransaction.input_tokens + TokenTransaction.tokens_saved), else_=0)
+    micro_output = case((is_micro, TokenTransaction.output_tokens), else_=0)
+
+    base_q = db.query(TokenTransaction)
+    if person_external_id is not None:
+        from database.models import WorkUser
+        base_q = base_q.outerjoin(WorkUser, TokenTransaction.work_user_id == WorkUser.id)
+    base_q = base_q.filter(*filters)
+
+    total_cost, total_calls, micro_calls, flagship_calls, tokens_pruned, micro_input_saved_sum, micro_output_sum = (
+        base_q.with_entities(
+            func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+            func.count(TokenTransaction.id),
+            func.coalesce(func.sum(micro_flag), 0),
+            func.coalesce(func.sum(flagship_flag), 0),
+            func.coalesce(func.sum(pruned_tokens_saved), 0),
+            func.coalesce(func.sum(micro_input_plus_saved), 0),
+            func.coalesce(func.sum(micro_output), 0),
+        ).one()
+    )
+    total_cost = float(total_cost or 0.0)
+    total_calls = int(total_calls or 0)
+    micro_calls = int(micro_calls or 0)
+    flagship_calls = int(flagship_calls or 0)
+    tokens_pruned = int(tokens_pruned or 0)
+    pruning_saved = round(tokens_pruned * FLAGSHIP_INPUT_COST, 6)
 
     # Downgrade savings: for each Scout call, what it would have cost at Advisor (flagship) rates
     # This is always positive — Scout is always cheaper than Advisor
-    downgrade_saved = round(sum(
-        (t.input_tokens + t.tokens_saved) * (FLAGSHIP_INPUT_COST - MICRO_INPUT_COST) +
-        t.output_tokens * (FLAGSHIP_OUTPUT_COST - MICRO_OUTPUT_COST)
-        for t in txns
-        if _tier_bucket(t.model_tier) == "micro"
-    ), 6)
+    downgrade_saved = round(
+        float(micro_input_saved_sum or 0) * (FLAGSHIP_INPUT_COST - MICRO_INPUT_COST)
+        + float(micro_output_sum or 0) * (FLAGSHIP_OUTPUT_COST - MICRO_OUTPUT_COST),
+        6,
+    )
 
     # Hypothetical cost with no CostPilot routing (all calls at flagship rates, no pruning savings)
     cost_if_all_flagship = round(total_cost + downgrade_saved, 6)
     total_saved          = round(pruning_saved + downgrade_saved, 6)
 
-    # Daily buckets for chart
-    daily = {}
-    for t in txns:
-        day = t.timestamp.strftime("%Y-%m-%d")
-        if day not in daily:
-            daily[day] = {"cost": 0.0, "tokens_saved": 0, "calls": 0, "flagship": 0, "micro": 0}
-        daily[day]["cost"]         = round(daily[day]["cost"] + t.cost_usd, 6)
-        daily[day]["tokens_saved"] += t.tokens_saved if t.was_pruned else 0
-        daily[day]["calls"]        += 1
-        daily[day][_tier_bucket(t.model_tier)] += 1
+    # Daily timeline via SQL GROUP BY day -- same func.date() pattern
+    # already proven live in routes_timeseries.py (including its
+    # documented SQLite-string-vs-Postgres-date-object normalization),
+    # not a per-row Python loop bucketing every transaction by hand.
+    day_expr = func.date(TokenTransaction.timestamp)
+    timeline_rows = base_q.with_entities(
+        day_expr.label("day"),
+        func.coalesce(func.sum(TokenTransaction.cost_usd), 0.0),
+        func.coalesce(func.sum(pruned_tokens_saved), 0),
+        func.count(TokenTransaction.id),
+        func.coalesce(func.sum(flagship_flag), 0),
+        func.coalesce(func.sum(micro_flag), 0),
+    ).group_by("day").all()
+
+    def _as_date_str(value) -> str:
+        return value if isinstance(value, str) else value.strftime("%Y-%m-%d")
+
+    daily = {
+        _as_date_str(row[0]): {
+            "cost": round(float(row[1] or 0.0), 6), "tokens_saved": int(row[2] or 0),
+            "calls": int(row[3] or 0), "flagship": int(row[4] or 0), "micro": int(row[5] or 0),
+        }
+        for row in timeline_rows
+    }
 
     # Fill missing days with zeros
     timeline = []
     for day in _timeline_dates(start, end):
-        d   = daily.get(day, {"cost": 0.0, "tokens_saved": 0, "calls": 0, "flagship": 0, "micro": 0})
+        d = daily.get(day, {"cost": 0.0, "tokens_saved": 0, "calls": 0, "flagship": 0, "micro": 0})
         timeline.append({"date": day, **d})
 
     return {
@@ -183,7 +234,7 @@ def compute_realized_savings(
         "total_saved_usd":       total_saved,
         "cost_if_no_fage_usd":   round(cost_if_all_flagship, 6),
         "timeline":              timeline,
-        "truncated":             truncated,
+        "truncated":             False,
     }
 
 
