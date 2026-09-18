@@ -223,10 +223,24 @@ async def entrypoint(ctx: JobContext):
     )
 
 
+AVATAR_AGENT_NAME = "ask-costpilot-avatar"
+
+
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(
         entrypoint_fnc=entrypoint,
         worker_type=WorkerType.ROOM,
+        # Confirmed live: with agent_name unset (pure "automatic dispatch"),
+        # this worker registered with LiveKit Cloud successfully every
+        # time, but never once received a "received job request" log for
+        # any room the browser actually joined -- LiveKit Cloud projects
+        # route jobs via explicit dispatch, which requires the worker to
+        # register under a name AND the room's token to request that name
+        # (see api/routes_livekit.py's RoomAgentDispatch). Without both
+        # halves, the server never offers this worker anything to do, no
+        # matter how much memory or CPU it has -- this was never a
+        # resource problem.
+        agent_name=AVATAR_AGENT_NAME,
         # livekit-agents keeps this many full pre-warmed Python processes
         # (each with the openai/simli plugins already loaded) on standby
         # in production so a job never waits on cold-start -- its default

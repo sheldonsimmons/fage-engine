@@ -84,6 +84,15 @@ def create_livekit_token(
         .with_identity(participant_identity)
         .with_name("Ask CostPilot user")
         .with_grants(api.VideoGrants(room_join=True, room=room_name))
+        # LiveKit Cloud routes jobs via explicit dispatch -- confirmed
+        # live that without this, agents/livekit_avatar_worker.py's
+        # worker registered fine but was never once offered a job for
+        # any room a browser actually joined (no "received job request"
+        # log, ever). "ask-costpilot-avatar" must match that worker's
+        # own agent_name exactly.
+        .with_room_config(api.RoomConfiguration(
+            agents=[api.RoomAgentDispatch(agent_name="ask-costpilot-avatar")],
+        ))
         .to_jwt()
     )
     return LiveKitTokenResponse(token=token, url=livekit_url, room=room_name)
