@@ -240,6 +240,16 @@ async def transcribe(audio: UploadFile = File(...)):
             model="whisper-1",
             file=(audio.filename or "clip.webm", io.BytesIO(raw), audio.content_type or "audio/webm"),
             response_format="verbose_json",
+            # Without this, Whisper auto-detects the spoken language --
+            # confirmed live 2026-09-19: a real English question got
+            # mis-detected, and everything downstream (transcript, the
+            # LLM's answer, the spoken TTS reply) followed that instead
+            # of staying English. Every other surface in this app (UI
+            # copy, CostPilot's own answers, prompts) is English-only, so
+            # there's no case where a different detected language would
+            # be correct -- pinning it removes the misdetection entirely
+            # rather than only reducing how often it happens.
+            language="en",
             # Whisper's prompt param biases word choice toward vocabulary it
             # contains -- it does not add facts or context, just spelling
             # preference among acoustically similar candidates. Without this,
