@@ -195,7 +195,13 @@ async def entrypoint(ctx: JobContext):
             # noisy/short utterance and then reply in that language for
             # the rest of the call, on top of the instructions-level
             # English directive below.
-            input_audio_transcription=InputAudioTranscription(language="en"),
+            # Confirmed live: passing `language` alone made the Realtime
+            # API reject the whole session ("Missing required parameter:
+            # 'session.audio.input.transcription.model'") -- once
+            # `language` is set, `model` becomes required too.
+            input_audio_transcription=InputAudioTranscription(
+                model="gpt-4o-mini-transcribe", language="en",
+            ),
         ),
     )
 
