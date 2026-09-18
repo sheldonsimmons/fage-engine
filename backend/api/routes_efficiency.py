@@ -3927,13 +3927,15 @@ drove, caused, produced, or was responsible for a dollar amount or business resu
 a business outcome occurring on the same work item is not evidence that one caused the other.
 If an outcome's freshness is "potentially_stale" or "unavailable", say so rather than presenting it
 as current.
-If the evidence has several rows of comparable data (a ranking, a breakdown across departments/
-agents/models/accounts/work items, anything with more than 3-4 items each carrying more than one
-figure), format your answer as a markdown table rather than a run-on paragraph of names and
-numbers -- every surface this answer can render on turns a markdown table into a real, easy-to-scan
-table (the dashboard drawer and the mobile voice page) or a clean per-row spoken sentence (voice
-text-to-speech), so there is no format where a table is worse than prose for that shape of data. A
-short answer with only one or two figures should stay plain sentences.
+If deterministic_answer already contains a markdown table (a block of lines starting with "|"),
+your rewrite MUST keep that table intact, in the same table form, with every row and figure
+unchanged -- copy it into your answer rather than dissolving it back into a paragraph of names and
+numbers. This is not a style preference: confirmed live, asking for a table "when it's a good fit"
+was followed inconsistently even with a real table already sitting in the source facts, which is a
+worse outcome than never asking at all (a table that already exists needs to survive a rewrite, not
+be invented by one). If evidence has several rows of comparable data but deterministic_answer has no
+table yet, then do format your answer as one, the same way -- a short answer with only one or two
+figures should still stay plain sentences either way.
 If the deterministic_answer states a requested period's spend AND a separate current-calendar-month
 budget-cap usage as two distinct statements (e.g. "spend across the requested period was $X.
 Separately, this calendar month's budget is $Y, with $Z used so far"), keep them as two distinct
@@ -8229,6 +8231,24 @@ def _ask_costpilot_answer(
                     f"{ranked[0].get('label') or 'Unknown'} is first at {value}."
                     f"{ranking_comparison_sentence}"
                 )
+                if available > 1:
+                    # Built as a real markdown table here, in the
+                    # deterministic layer, rather than left to the LLM
+                    # narration pass's own judgment -- confirmed live
+                    # 2026-09-19 that even with an explicit "prefer a table
+                    # for multi-row data" instruction, the narrator still
+                    # chose a run-on paragraph on repeated identical asks
+                    # (non-deterministic, so "usually right" isn't good
+                    # enough here). A table that already exists before
+                    # narration only needs to survive a rewrite, not be
+                    # invented by one -- a much more reliable ask, backed by
+                    # the explicit "preserve any existing table" instruction
+                    # in _ask_grounded_narrative below.
+                    table_lines = [f"| {entity_label} | {metric_label.title()} |", "|---|---|"]
+                    for row in ranked[:available]:
+                        row_value, _ = _ask_metric_value(metric, _ask_row_metric(row, metric))
+                        table_lines.append(f"| {row.get('label') or 'Unknown'} | {row_value} |")
+                    answer += "\n\n" + "\n".join(table_lines)
             else:
                 answer = (
                     f"{ranked[0].get('label') or 'Unknown'} had the "
