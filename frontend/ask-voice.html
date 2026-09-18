@@ -146,6 +146,38 @@
   #answer table.ask-markdown-table th {
     background: #f8fafc; color: #667085; font-size: 11px; letter-spacing: .03em; text-transform: uppercase;
   }
+
+  /* Proposal card (renderAskProposalCard, from the shared ask-costpilot-
+     render.js) -- ported from the desktop drawer's .cp-ask-proposal* rules
+     in frontend/css/global-nav.css, re-themed for this page's light
+     #answer background instead of the drawer's dark panel. Without this,
+     a real ActionProposal created by the agent loop (visible in
+     data.proposal on the response) had nowhere to render on this page at
+     all -- confirmed live: the answer text described the proposal in
+     prose, but no card, and no way to confirm/reject it, ever appeared. */
+  #answer section { margin-top: 12px; }
+  #answer section h4 { margin: 0 0 8px; font-size: 13px; color: var(--ink-muted); }
+  #answer .cp-ask-proposal {
+    display: grid; gap: 6px; padding: 12px;
+    border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc;
+  }
+  #answer .cp-ask-proposal span { color: var(--ink-muted); font-size: 13px; line-height: 1.45; }
+  #answer .cp-ask-proposal-actions { display: flex; gap: 8px; margin-top: 6px; }
+  #answer .cp-ask-proposal-actions .cp-ask-supporting {
+    flex: 1; text-align: center; color: #fff; background: var(--accent);
+    border: 1px solid var(--accent); border-radius: 6px; padding: 9px 10px;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  #answer .cp-ask-proposal-actions button:not(.cp-ask-supporting) {
+    flex: 1; padding: 9px 10px; color: var(--ink-muted); background: transparent;
+    border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;
+    font-size: 12px; font-weight: 700;
+  }
+  #answer .cp-ask-proposal-actions button:disabled { opacity: .5; cursor: default; }
+  #answer .cp-ask-error {
+    margin-top: 8px; padding: 8px 10px; font-size: 12px;
+    background: rgba(220,38,38,.08); border-left: 3px solid #dc2626; color: #991b1b;
+  }
   #answer.visible, #transcript.visible { display: block; }
 
   #stopSpeaking {
@@ -516,7 +548,7 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Ask CostPilot could not answer that.");
-      answerEl.innerHTML = renderAskMarkdown(data.answer);
+      answerEl.innerHTML = renderAskMarkdown(data.answer) + renderAskProposalCard(data.proposal);
       answerEl.classList.add("visible");
       conversationHistory.push({ role: "user", content: question });
       conversationHistory.push({ role: "assistant", content: data.answer || "" });
@@ -785,6 +817,42 @@
     if (!recording) return;
     cancelledRecording = true;
     stopRecording();
+  });
+
+  // Confirm/Cancel on a rendered proposal card -- same postAskAction/
+  // resolveAskProposal shape global-nav.js's drawer already uses, ported
+  // here since this page renders its own answer card independently.
+  async function postAskAction(path) {
+    const token = localStorage.getItem("cp_auth_token");
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(path, { method: "POST", headers });
+  }
+
+  async function resolveAskProposal(id, buttonEl, action) {
+    const section = buttonEl.closest("section");
+    if (!section) return;
+    const buttons = section.querySelectorAll("button");
+    buttons.forEach((btn) => { btn.disabled = true; });
+    try {
+      const response = await postAskAction(`/api/ask/actions/${id}/${action}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`);
+      section.outerHTML = renderAskProposalCard(action === "confirm" ? data.proposal : data);
+    } catch (error) {
+      section.insertAdjacentHTML(
+        "beforeend",
+        `<div class="cp-ask-error"><span>${askRenderEscapeHtml(error.message || "This action could not be completed.")}</span></div>`,
+      );
+      buttons.forEach((btn) => { btn.disabled = false; });
+    }
+  }
+
+  answerEl.addEventListener("click", (event) => {
+    const confirmBtn = event.target.closest("[data-ask-confirm-id]");
+    if (confirmBtn) { resolveAskProposal(confirmBtn.dataset.askConfirmId, confirmBtn, "confirm"); return; }
+    const rejectBtn = event.target.closest("[data-ask-reject-id]");
+    if (rejectBtn) resolveAskProposal(rejectBtn.dataset.askRejectId, rejectBtn, "reject");
   });
 
   resolveWorkspaceId();
