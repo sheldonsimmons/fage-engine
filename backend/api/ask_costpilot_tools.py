@@ -24,7 +24,12 @@ TOOL_SCHEMAS = [
         "description": (
             "Get attributed AI spend/usage totals and breakdowns (by person, agent, "
             "department, context, platform, model) for a date range. This is the "
-            "primary lookup for 'how much', 'who', 'what', and ranking questions."
+            "primary lookup for 'how much', 'who', 'what', and ranking-by-spend "
+            "questions. Do NOT use this for a question about proximity to a "
+            "budget cap ('closest to going over budget', 'nearest its limit') -- "
+            "raw spend rank and %-of-cap rank are different orderings of the same "
+            "departments (a department can be highest-spend and nowhere near its "
+            "own, much larger, cap). Use get_budget_status for those instead."
         ),
         "strict": True,
         "parameters": {
@@ -162,7 +167,12 @@ TOOL_SCHEMAS = [
         "name": "get_budget_status",
         "description": (
             "Get monthly AI budget caps, current spend, and remaining budget per "
-            "department. Use for budget, throttle, and 'on track' questions."
+            "department, including each department's % of its own cap used -- the "
+            "correct way to rank departments by budget proximity. Use for budget, "
+            "throttle, 'on track', and ANY 'which department is closest/nearest to "
+            "going over budget or its cap/limit' question -- that ranking is by "
+            "%-of-cap, never by raw spend amount (get_usage_report's ranking), "
+            "since a high spender can have a large cap and not be close at all."
         ),
         "strict": True,
         "parameters": {

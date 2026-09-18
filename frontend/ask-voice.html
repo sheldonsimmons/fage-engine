@@ -359,14 +359,24 @@
     refreshSuggestionState();
   }
 
-  // Called synchronously from the tap that starts recording, before any
-  // await -- playing (and immediately pausing) a real, silent clip here
-  // is what tells iOS Safari this element is allowed to play audio later
-  // from JS, even after the async transcribe/ask chain that follows.
+  // Called from the tap that starts recording, before getUserMedia --
+  // playing (and immediately pausing) a real, silent clip here is what
+  // tells iOS Safari this element is allowed to play audio later from JS,
+  // even after the async transcribe/ask chain that follows. Returns the
+  // play() promise so the caller can await it finishing (or failing)
+  // BEFORE requesting mic access: getUserMedia's own native permission
+  // prompt is a second, separate piece of browser chrome, and on a page's
+  // very first mic tap (no permission granted yet) that prompt can appear
+  // before this fire-and-forget play() has actually started -- confirmed
+  // live 2026-09-18, first-ever mic tap in a fresh session got "browser
+  // blocked audio playback" on the very first answer, self-recovering
+  // only because the SECOND mic tap unlocks from a gesture with no
+  // pending permission prompt racing it. Awaiting here removes the race
+  // instead of relying on the documented one-retry recovery.
   function unlockAudioPlayback() {
-    if (audioUnlocked) return;
+    if (audioUnlocked) return Promise.resolve();
     voicePlayer.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
-    voicePlayer.play().then(() => { voicePlayer.pause(); audioUnlocked = true; }).catch(() => {});
+    return voicePlayer.play().then(() => { voicePlayer.pause(); audioUnlocked = true; }).catch(() => {});
   }
 
   async function speak(text) {
@@ -506,7 +516,7 @@
   let autoListenTimedOut = false;
 
   async function startRecording(isAutoListen = false) {
-    unlockAudioPlayback();
+    await unlockAudioPlayback();
     setError("");
     // Confirmed live (reported as "the response disappears and I can't
     // view it" on mobile): this used to clear both regardless of why

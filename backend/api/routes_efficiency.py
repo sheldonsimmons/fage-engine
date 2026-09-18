@@ -5007,6 +5007,28 @@ you matched (its real name/label as returned by the tool), always use that resol
 title and answer -- never echo the user's literal misheard wording back at them just because it
 appeared in their question."""
 
+    if request.modality == "voice":
+        # Confirmed live 2026-09-18: a ranking question on the phone-only
+        # voice page (frontend/ask-voice.html) came back as a full markdown
+        # pipe table -- fine for the desktop drawer (which renders
+        # markdown), unreadable as raw "| Rank | Account | ... |" text on a
+        # phone screen, and the same answer text is also sent verbatim to
+        # TTS (/api/ask-voice/speak) where a table has no sensible spoken
+        # reading at all. request.modality was already threaded through
+        # end to end (AskCostPilotRequest, the request body, AskInteraction
+        # logging) but never actually reached the model -- purely
+        # observational until now. Scoped to modality=="voice" specifically
+        # (not e.g. a phone/small-screen typed session) since it's the TTS
+        # constraint, not screen width, that makes a table actively wrong
+        # rather than merely suboptimal.
+        instructions += """
+This question came from a voice-only interface: your answer text is BOTH shown on a small
+phone screen AND read aloud through text-to-speech. Never use markdown tables, code blocks, or
+more than a couple of short bullet points -- speak the numbers in plain sentences instead (e.g.
+"Xander Freight Systems leads with 15 work items touched, followed by Goldleaf Jewelers also at
+15" rather than a ranked table). Keep the whole answer to at most 3-4 short sentences, naming
+only the 1-3 figures that actually matter for the question asked, not a full ranked breakdown."""
+
     try:
         import anthropic
 
