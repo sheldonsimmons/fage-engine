@@ -581,7 +581,17 @@
   // captured and transcribed. A manually-tapped recording (the user
   // deliberately pressed the mic) has no timeout -- only the automatic
   // restart after an answer does.
-  const AUTO_LISTEN_TIMEOUT_MS = 7000;
+  //
+  // Raised from 7000: this is a flat timer from the moment auto-listen
+  // starts, not silence detection -- there's no logic here that resets
+  // the clock once the user starts talking, so the ENTIRE recording
+  // (not just a "still waiting" prompt) gets discarded the instant it
+  // fires, with nothing ever sent to transcribe. Reported live as
+  // "didn't hear a follow-up" -- 7s is barely enough time to notice the
+  // answer finished, realize it's your turn, and finish a real spoken
+  // question, let alone start one. 15s gives real thinking + speaking
+  // room while still not turning into an indefinite hot mic.
+  const AUTO_LISTEN_TIMEOUT_MS = 15000;
   let autoListenTimeoutId = null;
   let autoListenTimedOut = false;
 
