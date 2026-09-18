@@ -594,6 +594,32 @@ def _ask_intent(question: str, default_days: int) -> dict:
     elif asks_about_product:
         intent = "product"
         entity = "overview"
+    elif re.search(
+        r"\b(?:create|make|set up|start|open|submit)\s+(?:a|the|my|an)?\s*proposal\b"
+        r"|\bpropose\s+(?:something|a change|an action)\b",
+        text,
+    ) and not any(term in text for term in (
+        # A vague "create a proposal for me" with no agent named and no
+        # action specified has nowhere real to go -- none of the three
+        # propose_agent_*_change tools can run without an agent_name, and
+        # propose_budget_cap_change needs a department + new cap. Confirmed
+        # live 2026-09-18: this fell through the regex classifier all the
+        # way to intent="overview" (a company-wide spend total, the
+        # generic fallback with no proposal-awareness at all), which the
+        # LLM narration pass then dressed up into something that read like
+        # it had looked up an agent -- confusing, and not grounded in any
+        # real tool call, since none ran. Routes to a real clarifying
+        # question instead. Only fires when the question ALSO lacks any of
+        # the words a specific, actionable propose request would contain
+        # (an agent, a mode, a tier/provider noun, or budget/cap language)
+        # -- "propose moving SupportBot-Alpha to Control mode" still goes
+        # straight to the agent loop's real propose_agent_mode_change tool,
+        # unaffected by this branch.
+        "agent", "bot", "budget", "cap", "tier", "provider",
+        "control mode", "observe mode", "control", "observe",
+    )):
+        intent = "propose_clarification"
+        entity = "overview"
     elif any(term in text for term in (
         "connection healthy", "connections healthy", "platform connections",
         "connection issue", "connection issues", "connections having issues",
@@ -1728,6 +1754,16 @@ def _resolve_ask_intent(request: AskCostPilotRequest) -> tuple[dict, str]:
         return fallback, "capability_help"
     if fallback["intent"] == "product":
         return fallback, "costpilot_knowledge"
+    if fallback["intent"] == "propose_clarification":
+        # Same reasoning as help/product just above -- this is a confident,
+        # narrow phrasing match (a vague "create a proposal" with no
+        # agent/department or action named). The OpenAI planner below has
+        # no clarification-shaped intent to select and would only replace
+        # this with a worse guess -- this is exactly the deterministic
+        # path this whole branch exists to reach when the agent loop (the
+        # primary path, which would otherwise ask this same question back
+        # itself) has a transient failure and falls back here.
+        return fallback, "deterministic_propose_clarification"
     if fallback.get("canonical_intent"):
         return fallback, "canonical_intent"
     # Adoption-status questions have an exact deterministic meaning and must
@@ -3192,6 +3228,76 @@ def _ask_contract_failure_response(
             "direction": parsed.get("direction") or "desc",
             "result_limit": int(parsed.get("result_limit") or 5),
         },
+        "read_only": True,
+    }
+
+
+def _ask_propose_clarification_response(
+    request: AskCostPilotRequest,
+    parsed: dict,
+    assistant_mode: str,
+) -> dict:
+    """
+    A vague "create a proposal for me" (no agent, no action specified) --
+    none of the four real propose_* actions (agent mode, tier bounds,
+    allowed providers, budget cap) can run without knowing which one and
+    on what target, and this deterministic fallback has no database
+    access to guess an agent/department name even if it wanted to. Asks
+    the real question back instead of the previous behavior (silently
+    falling through to intent="overview", a company-wide spend total the
+    LLM narration pass then dressed up into something that read like it
+    had looked something up, with no real tool call behind it at all).
+    """
+    return {
+        "question": request.question.strip(),
+        "title": "What would you like to propose?",
+        "answer": (
+            "I can propose four kinds of changes -- each creates a pending "
+            "proposal a person then confirms, nothing takes effect "
+            "immediately: moving an agent between Observe and Control mode, "
+            "restricting which model tiers an agent can route to, "
+            "restricting which model providers an agent can use, or "
+            "changing a department's monthly budget cap. Which agent (or "
+            "department, for a budget change), and what would you like to "
+            "change?"
+        ),
+        "intent": "clarification",
+        "entity": "overview",
+        "metric": "request_count",
+        "period": {},
+        "filters": {},
+        "summary": {},
+        "evidence": [],
+        "recommendations": [],
+        "measurement_note": "No proposal was created -- this only asks what you'd like to propose.",
+        "calculation": {
+            "metric": "propose_clarification",
+            "formula": "No calculation -- the question named no agent/department or action to propose.",
+            "row_count": 0,
+            "period_label": None,
+        },
+        "calculation_source": "Ask CostPilot",
+        "data_provenance": {
+            "scope": "clarification_required",
+            "live_requests": 0,
+            "simulator_requests": 0,
+            "active_filters": {},
+            "period_label": None,
+        },
+        "assistant_mode": assistant_mode,
+        "interpreted_as": "A proposal request with no agent/department or action named",
+        "interpreted_intent": parsed,
+        "contract_status": "passed",
+        "conversation_context": {
+            "intent": "propose_clarification",
+            "entity": "overview",
+        },
+        "suggested_questions": [
+            "Move SupportBot-Alpha to Control mode.",
+            "Cap SupportBot-Alpha to Scout and Advisor tiers only.",
+            "Propose raising Engineering's budget cap.",
+        ],
+        "report_action": None,
         "read_only": True,
     }
 
@@ -5521,6 +5627,8 @@ def _ask_costpilot_answer(
         return _ask_decision_response(request, parsed, db, assistant_mode)
     if parsed.get("intent") == "unsupported_period":
         return _ask_unsupported_period_response(parsed.get("named_month") or "that period")
+    if parsed.get("intent") == "propose_clarification":
+        return _ask_propose_clarification_response(request, parsed, assistant_mode)
 
     reporting_filters = _ask_reporting_filters(request, parsed)
     if department_scope:
