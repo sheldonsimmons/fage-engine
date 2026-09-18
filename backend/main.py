@@ -373,6 +373,13 @@ app.include_router(routes_voice.router, prefix="/api/voice", tags=["Voice Guard"
 from api import routes_ask_voice
 app.include_router(routes_ask_voice.router, prefix="/api/ask-voice", tags=["Ask CostPilot Voice"])
 
+# Real-time video avatar (agents/livekit_avatar_worker.py) -- mints
+# LiveKit room tokens only; the actual voice/video agent runs as its own
+# separate, continuously-running Heroku process (Procfile's
+# `livekit-avatar`), not inside this web app.
+from api import routes_livekit
+app.include_router(routes_livekit.router, prefix="/api/livekit", tags=["Ask CostPilot Avatar"])
+
 # Routing Rules — user-configurable token threshold + complexity keywords
 from api import routes_routing_config
 app.include_router(routes_routing_config.router, prefix="/api/routing-config", tags=["Routing Config"])
