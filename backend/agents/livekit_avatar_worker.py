@@ -46,6 +46,7 @@ from livekit.agents import (
     mcp,
 )
 from livekit.plugins import openai, simli
+from openai.types.beta.realtime.session import InputAudioTranscription
 
 logger = logging.getLogger("costpilot-livekit-avatar")
 logger.setLevel(logging.INFO)
@@ -101,6 +102,10 @@ CostPilot. You have exactly one source of truth: the ask_costpilot tool. Every f
 claim about spend, budgets, agents, departments, accounts, or business outcomes must come from
 calling that tool -- never answer a data question from your own knowledge, and never estimate,
 round differently, or restate a number in a way that changes it.
+Always speak in English, regardless of what language the person talks to you in -- never switch
+languages to match them, and never let it drift partway through a call. This app's whole UI and
+every other surface's answers are English-only, so a non-English reply here has nowhere correct
+to go.
 {workspace_clause}
 Call ask_costpilot with the person's question close to verbatim. When it returns an answer, speak
 it back in your own natural spoken phrasing -- CostPilot's own answer already contains the real,
@@ -182,7 +187,16 @@ async def entrypoint(ctx: JobContext):
         )
 
     session = AgentSession(
-        llm=openai.realtime.RealtimeModel(voice=REALTIME_VOICE),
+        llm=openai.realtime.RealtimeModel(
+            voice=REALTIME_VOICE,
+            # Pins the input-side transcription language the same way
+            # routes_ask_voice.py's Whisper call already does -- without
+            # this the model can mis-detect the caller's language on a
+            # noisy/short utterance and then reply in that language for
+            # the rest of the call, on top of the instructions-level
+            # English directive below.
+            input_audio_transcription=InputAudioTranscription(language="en"),
+        ),
     )
 
     simli_avatar = simli.AvatarSession(
