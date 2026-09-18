@@ -1918,6 +1918,42 @@ def test_agent_final_payload_conversation_context_prefers_named_subject_over_dep
     assert context["subject_filter_value"] == "Acme Corp"
 
 
+def test_agent_final_payload_account_outcomes_gets_fallback_evidence():
+    """
+    Confirmed live (2026-09-18): an account-outcomes answer cited real
+    numbers with evidence=[] every time, since get_account_outcomes
+    returns one flat dict, not the list-of-rows shape the evidence pool
+    otherwise expects, so nothing ever landed in the fallback breakdown.
+    """
+    tool_call_log = [(
+        "get_account_outcomes", {"entity_name": "Acme Corp"},
+        {
+            "period": {"label": "This month"},
+            "summary": {"live_count": 2, "simulation_count": 0},
+            "data_scope": "live",
+            "found": True,
+            "entity_name": "Acme Corp",
+            "outcome_coverage_pct": 50.0,
+            "pipeline_value_usd": 0.0,
+            "closed_won_value_usd": 0.0,
+            "ai_spend_on_won_opportunities_usd": 0.0,
+            "ai_touched_work_items": 2,
+        },
+    )]
+    payload = _ask_agent_final_payload(
+        AskCostPilotRequest(question="How is Acme Corp doing?"),
+        db=None,
+        final_args={"title": "Acme Corp", "answer": "Acme Corp has 50% outcome coverage.", "evidence_ids": []},
+        tool_call_log=tool_call_log,
+    )
+    assert payload is not None
+    labels = [row["label"] for row in payload["evidence"]]
+    assert any("outcome coverage" in label for label in labels)
+    assert any("AI-touched work items" in label for label in labels)
+    # Zero-valued metrics are noise, not evidence -- confirm they're skipped.
+    assert not any("pipeline value" in label for label in labels)
+
+
 def test_agent_final_payload_builds_evidence_from_cited_ids():
     tool_call_log = [(
         "get_usage_report", {},

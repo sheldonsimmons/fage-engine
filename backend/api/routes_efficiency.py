@@ -4399,6 +4399,33 @@ def _ask_agent_final_payload(
             primary_breakdowns[tool_name] = _pool(
                 "adoption", result.get("agents"), "status", "agent_id"
             )
+        elif tool_name == "get_account_outcomes" and result.get("found"):
+            # Confirmed live (2026-09-18): an account-outcomes answer cited
+            # real numbers (spend, coverage) with evidence=[] every time --
+            # this tool's result is one flat dict, not the list-of-rows
+            # shape _pool() expects, so it never got wired into the
+            # breakdown fallback at all when evidence_ids don't resolve to
+            # anything (the model can't cite ids that were never in a
+            # list it could see). Hand-built rows from the same result
+            # dict already used for the answer, so the fallback below has
+            # something real to show instead of nothing.
+            subject = result.get("entity_name") or "This scope"
+            rows = []
+            def _add_outcome_row(key, label, note, fmt):
+                value = result.get(key)
+                if value is None or value == 0:
+                    return
+                rows.append({
+                    "label": f"{subject} — {label}", "value": fmt(value), "metric_label": note,
+                    "filter_name": "entity_name" if result.get("entity_name") else None,
+                    "filter_value": result.get("entity_name"),
+                })
+            _add_outcome_row("outcome_coverage_pct", "outcome coverage", "of AI-touched work has a known outcome", lambda v: f"{v:.1f}%")
+            _add_outcome_row("pipeline_value_usd", "open pipeline value", "open Opportunity value", lambda v: f"${v:,.2f}")
+            _add_outcome_row("closed_won_value_usd", "closed-won value", "won Opportunity value", lambda v: f"${v:,.2f}")
+            _add_outcome_row("ai_spend_on_won_opportunities_usd", "AI spend on won deals", "tracked AI spend", lambda v: f"${v:,.6f}")
+            _add_outcome_row("ai_touched_work_items", "AI-touched work items", "touched by AI this period", lambda v: f"{int(v):,}")
+            primary_breakdowns[tool_name] = rows
 
     # The model already tells us which facts it actually used — trust that
     # instead of guessing which dimension is relevant. Falls back to the
