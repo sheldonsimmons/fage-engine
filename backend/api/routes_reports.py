@@ -65,13 +65,6 @@ router = APIRouter()
 # left to hit, and the MAX_REPORT_ROWS constant/cap themselves are gone,
 # not just raised.
 
-PREMIUM_TIERS = {"Advisor", "Strategist", "flagship"}
-
-def _tier_bucket(tier: str) -> str:
-    """Normalize Scout/Analyst/micro → 'micro', Advisor/Strategist/flagship → 'flagship'."""
-    return "micro" if tier in ECONOMY_TIERS else "flagship"
-
-
 def _parse_range(days: int, date_from: Optional[datetime] = None, date_to: Optional[datetime] = None):
     end = date_to or datetime.utcnow()
     start = date_from or (end - timedelta(days=days))
@@ -137,9 +130,9 @@ def compute_realized_savings(
             TokenTransaction.department.like(f"%:{department_scope}"),
         ))
 
-    # Same "in ECONOMY_TIERS -> micro, else flagship" bucketing _tier_bucket()
-    # applied per-row -- expressed as SQL CASE instead so the database does
-    # the bucketing during aggregation, not a Python loop afterward.
+    # The old per-row loop's "in ECONOMY_TIERS -> micro, else flagship"
+    # bucketing, expressed as SQL CASE instead so the database does the
+    # bucketing during aggregation, not a Python loop afterward.
     is_micro = TokenTransaction.model_tier.in_(ECONOMY_TIERS)
     micro_flag = case((is_micro, 1), else_=0)
     flagship_flag = case((is_micro, 0), else_=1)
