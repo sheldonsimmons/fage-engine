@@ -224,4 +224,16 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, worker_type=WorkerType.ROOM))
+    cli.run_app(WorkerOptions(
+        entrypoint_fnc=entrypoint,
+        worker_type=WorkerType.ROOM,
+        # livekit-agents keeps this many full pre-warmed Python processes
+        # (each with the openai/simli plugins already loaded) on standby
+        # in production so a job never waits on cold-start -- its default
+        # of 4 is sized for real concurrent traffic, not a single-user
+        # pilot, and confirmed live to be what pushed a 512MB dyno to
+        # 125%+ memory at idle (Error R14) before a single call ever
+        # connected. 1 keeps one process warm for instant pickup without
+        # paying for three more nobody is using yet.
+        num_idle_processes=1,
+    ))
