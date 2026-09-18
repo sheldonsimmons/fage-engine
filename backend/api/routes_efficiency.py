@@ -3821,6 +3821,13 @@ drove, caused, produced, or was responsible for a dollar amount or business resu
 a business outcome occurring on the same work item is not evidence that one caused the other.
 If an outcome's freshness is "potentially_stale" or "unavailable", say so rather than presenting it
 as current.
+If the evidence has several rows of comparable data (a ranking, a breakdown across departments/
+agents/models/accounts/work items, anything with more than 3-4 items each carrying more than one
+figure), format your answer as a markdown table rather than a run-on paragraph of names and
+numbers -- every surface this answer can render on turns a markdown table into a real, easy-to-scan
+table (the dashboard drawer and the mobile voice page) or a clean per-row spoken sentence (voice
+text-to-speech), so there is no format where a table is worse than prose for that shape of data. A
+short answer with only one or two figures should stay plain sentences.
 If the deterministic_answer states a requested period's spend AND a separate current-calendar-month
 budget-cap usage as two distinct statements (e.g. "spend across the requested period was $X.
 Separately, this calendar month's budget is $Y, with $Z used so far"), keep them as two distinct

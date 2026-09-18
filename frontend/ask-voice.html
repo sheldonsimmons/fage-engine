@@ -582,18 +582,93 @@
   // deliberately pressed the mic) has no timeout -- only the automatic
   // restart after an answer does.
   //
-  // Raised from 7000: this is a flat timer from the moment auto-listen
-  // starts, not silence detection -- there's no logic here that resets
-  // the clock once the user starts talking, so the ENTIRE recording
-  // (not just a "still waiting" prompt) gets discarded the instant it
-  // fires, with nothing ever sent to transcribe. Reported live as
-  // "didn't hear a follow-up" -- 7s is barely enough time to notice the
-  // answer finished, realize it's your turn, and finish a real spoken
-  // question, let alone start one. 15s gives real thinking + speaking
-  // room while still not turning into an indefinite hot mic.
-  const AUTO_LISTEN_TIMEOUT_MS = 15000;
+  // Replaced the original flat 7s timer (then 15s) with real silence
+  // detection below (startVAD/stopVAD) -- a flat timer from the moment
+  // auto-listen starts has no way to tell "still waiting for the user to
+  // start talking" apart from "user is two sentences into a real
+  // question," so it either cuts a real question off mid-sentence or
+  // (raised generously) makes someone wait through a long fixed window
+  // even for a one-word follow-up. AUTO_LISTEN_GIVE_UP_MS below now only
+  // covers "never said anything at all" -- once real speech is detected,
+  // VAD_SILENCE_MS (a short quiet-after-talking window) decides when
+  // they're actually done, and VAD_MAX_RECORDING_MS is a hard safety cap
+  // for continuous background noise that never goes quiet.
+  const AUTO_LISTEN_GIVE_UP_MS = 15000;
   let autoListenTimeoutId = null;
   let autoListenTimedOut = false;
+
+  // Real voice-activity detection via the Web Audio API instead of a
+  // flat timer -- samples the mic stream's live amplitude (RMS) many
+  // times a second; a level above VAD_SPEECH_THRESHOLD counts as speech
+  // and (re)starts a VAD_SILENCE_MS countdown, so the countdown keeps
+  // getting pushed back for as long as the user keeps talking and only
+  // actually fires once they've been quiet for that long -- the stop
+  // point tracks the real end of the question instead of a guess made
+  // before anyone said anything. VAD_SPEECH_THRESHOLD is a reasonable
+  // default for typical phone mic gain/ambient noise, not something
+  // tunable from real device testing in this environment -- if it proves
+  // too sensitive (stops early on breath/pause) or not sensitive enough
+  // (never detects speech at all) on real devices, this is the constant
+  // to adjust first.
+  const VAD_SPEECH_THRESHOLD = 0.02;
+  const VAD_SILENCE_MS = 1800;
+  const VAD_MAX_RECORDING_MS = 30000;
+  let vadAudioContext = null;
+  let vadAnalyser = null;
+  let vadRafId = null;
+  let vadSilenceTimeoutId = null;
+  let vadMaxRecordingTimeoutId = null;
+  let vadHeardSpeech = false;
+
+  function startVAD(stream) {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return; // no VAD support -- AUTO_LISTEN_GIVE_UP_MS alone still bounds the recording
+    try {
+      vadAudioContext = new AudioContextCtor();
+      const source = vadAudioContext.createMediaStreamSource(stream);
+      vadAnalyser = vadAudioContext.createAnalyser();
+      vadAnalyser.fftSize = 512;
+      source.connect(vadAnalyser);
+      const buffer = new Uint8Array(vadAnalyser.frequencyBinCount);
+      vadHeardSpeech = false;
+
+      const tick = () => {
+        vadAnalyser.getByteTimeDomainData(buffer);
+        let sumSquares = 0;
+        for (let i = 0; i < buffer.length; i++) {
+          const v = (buffer[i] - 128) / 128;
+          sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / buffer.length);
+        if (rms > VAD_SPEECH_THRESHOLD) {
+          vadHeardSpeech = true;
+          clearTimeout(vadSilenceTimeoutId);
+          vadSilenceTimeoutId = setTimeout(() => {
+            if (recording) stopRecording();
+          }, VAD_SILENCE_MS);
+        }
+        vadRafId = requestAnimationFrame(tick);
+      };
+      tick();
+      vadMaxRecordingTimeoutId = setTimeout(() => {
+        if (recording) stopRecording();
+      }, VAD_MAX_RECORDING_MS);
+    } catch (e) {
+      stopVAD(); // feature-detected above, but some browsers still throw on construction -- fall back silently
+    }
+  }
+
+  function stopVAD() {
+    if (vadRafId) cancelAnimationFrame(vadRafId);
+    vadRafId = null;
+    clearTimeout(vadSilenceTimeoutId);
+    vadSilenceTimeoutId = null;
+    clearTimeout(vadMaxRecordingTimeoutId);
+    vadMaxRecordingTimeoutId = null;
+    if (vadAudioContext) { vadAudioContext.close().catch(() => {}); }
+    vadAudioContext = null;
+    vadAnalyser = null;
+  }
 
   async function startRecording(isAutoListen = false) {
     await unlockAudioPlayback();
@@ -626,6 +701,7 @@
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
       mediaRecorder.onstop = () => {
         clearTimeout(autoListenTimeoutId);
+        stopVAD();
         stream.getTracks().forEach((t) => t.stop());
         recording = false;
         cancelButton.classList.remove("visible");
@@ -666,12 +742,18 @@
       cancelButton.classList.add("visible");
       if (isAutoListen) {
         setStatus("Listening for a follow-up… (tap to send, or Cancel)");
+        startVAD(stream);
         autoListenTimeoutId = setTimeout(() => {
-          if (!recording) return;
+          // If real speech was ever detected, VAD's own silence timer (or
+          // its max-recording safety cap) owns the stop decision from here
+          // -- this give-up timer is only for "never said anything at
+          // all," so it backs off once vadHeardSpeech flips true instead
+          // of still cutting off a real, still-in-progress answer.
+          if (!recording || vadHeardSpeech) return;
           cancelledRecording = true;
           autoListenTimedOut = true;
           stopRecording();
-        }, AUTO_LISTEN_TIMEOUT_MS);
+        }, AUTO_LISTEN_GIVE_UP_MS);
       } else {
         setStatus("Listening… tap the mic to send, or Cancel to discard");
       }
