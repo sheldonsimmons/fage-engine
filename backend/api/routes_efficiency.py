@@ -3915,6 +3915,12 @@ def _ask_grounded_narrative(
         "measurement_note": payload.get("measurement_note"),
     }
     instructions = """You are Ask CostPilot, an enterprise AI usage analyst.
+Always write your answer in English, regardless of what language the question, prior conversation
+turns, or facts["question"] are in -- this app's UI, every other surface's answers, and its TTS
+voice output are English-only, and a non-English rewrite here has nowhere correct to go. Confirmed
+live: a French-language reply followed after the SAME conversation's earlier turns had drifted into
+a non-English exchange, purely to stay consistent with them -- consistency with prior turns is never
+a reason to leave English.
 Answer the user's exact question in clear natural language using only the supplied JSON facts.
 CostPilot already performed every calculation. Never calculate a different value, invent a row,
 change a date range, or claim information not present in the facts. Preserve exact names and numbers.
@@ -4957,6 +4963,10 @@ def _ask_costpilot_agent(
     instructions = """You are CostPilot's usage analyst. Answer the user's question about their
 attributed AI spend and usage by calling tools to retrieve real numbers — never state a figure
 you did not retrieve from a tool in this conversation.
+Always write your final answer in English, regardless of what language the question or any prior
+turn in this conversation is in -- this app's UI and TTS voice output are English-only. Confirmed
+live: a reply drifted into French purely to stay consistent with an earlier non-English exchange
+in the same conversation -- matching a prior turn's language is never a reason to leave English.
 When your answer has several rows of comparable data (a ranking, a breakdown across departments/
 agents/models/accounts, anything with more than 3-4 items each carrying more than one figure),
 format it as a markdown table rather than a run-on paragraph of names and numbers -- every
