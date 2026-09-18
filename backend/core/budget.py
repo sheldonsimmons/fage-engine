@@ -327,9 +327,23 @@ def get_all_budgets(db: Session, workspace_id: str | None = None) -> list:
     return [_enrich(b) for b in budgets]
 
 
-def get_budget(db: Session, department: str):
-    """Return budget status for a single department, or None if not found."""
-    b = db.query(DepartmentBudget).filter_by(department=department).first()
+def get_budget(db: Session, department: str, workspace_id: str | None = None):
+    """
+    Return budget status for a single department, or None if not found.
+
+    workspace_id is optional only for backward compatibility with any
+    future internal caller that already knows it's looking at one
+    workspace's row -- api/routes_budget.py's own GET route always passes
+    it (security fix: this endpoint previously took no workspace_id at
+    all, so a caller who knew any department name could read another
+    tenant's budget by department name alone, matching the same class of
+    gap get_all_budgets() already closed above). Same "default" bucket
+    convention as get_all_budgets when omitted.
+    """
+    query = db.query(DepartmentBudget).filter_by(department=department)
+    if workspace_id:
+        query = query.filter(DepartmentBudget.workspace_id == workspace_id)
+    b = query.first()
     if b and reconcile_throttle_state(b):
         db.commit()
     return _enrich(b) if b else None

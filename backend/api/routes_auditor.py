@@ -11,7 +11,7 @@ POST /api/audit/acknowledge-blocked — mark blocked events reviewed
 import json
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -21,9 +21,28 @@ from database.db import get_db
 from database.models import AuditEvent, AuditReviewState
 from core.workspace_scope import workspace_filter
 from core.auditor import get_audit_events, get_audit_event, export_jsonl_path
+from core.auth import check_membership
 import os
 
 router = APIRouter()
+
+
+def _check_auditor_access(
+    db: Session, authorization: Optional[str], workspace_id: Optional[str], permission: str = "view_reports",
+):
+    """
+    Security fix: this entire file (the AI Activity/audit log page, and
+    the Users page's per-person drill-down) had no membership check of
+    any kind, including on /export -- the single highest-blast-radius
+    endpoint in the app (capability assessment flagged this as one of
+    four routers with zero auth surface, worse than a missing department
+    filter). Soft-mode gated like every other retrofitted route; returns
+    the resolved TenantContext (or None) so callers can apply
+    department_scope to their query.
+    """
+    if not workspace_id:
+        return None
+    return check_membership(db, authorization, workspace_id, permission)
 
 
 class AuditEventSummary(BaseModel):
@@ -115,8 +134,10 @@ def _blocked_review_status(db: Session, workspace_id: Optional[str] = None) -> d
 def get_blocked_review_status(
     workspace_id: Optional[str] = None,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Return historical and still-unreviewed blocked-request counts."""
+    _check_auditor_access(db, authorization, workspace_id)
     return _blocked_review_status(db, workspace_id)
 
 
@@ -124,8 +145,10 @@ def get_blocked_review_status(
 def acknowledge_blocked_events(
     payload: BlockedReviewRequest,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Acknowledge blocked events without modifying or deleting audit records."""
+    _check_auditor_access(db, authorization, payload.workspace_id, "manage_governance")
     scope_key = _review_scope(payload.workspace_id)
     blocked_query = _blocked_query(db, payload.workspace_id)
     latest_blocked_event_id = int(
@@ -156,6 +179,7 @@ def list_audit_events(
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Return the most recent audit events, newest first.
 
@@ -165,6 +189,7 @@ def list_audit_events(
     date_from/date_to match the same optional-datetime convention already
     used by routes_reports.py.
     """
+    ctx = _check_auditor_access(db, authorization, workspace_id)
     effective_limit = min(limit, 200) if work_user_id is not None else limit
     return get_audit_events(
         db,
@@ -173,6 +198,7 @@ def list_audit_events(
         work_user_id=work_user_id,
         date_from=date_from,
         date_to=date_to,
+        department_scope=ctx.department_scope if ctx else None,
     )
 
 
@@ -188,8 +214,20 @@ def search_work_users(
     q: str = "",
     workspace_id: str = None,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
-    """Search this workspace's human identities by name or email, for the Users page's picker."""
+    """
+    Search this workspace's human identities by name or email, for the
+    Users page's picker.
+
+    Membership-checked like every other route in this file; WorkUser has
+    no direct department string column (only primary_org_unit_id), so
+    department_scope isn't applied to this search itself -- a department-
+    scoped caller can still find a person outside their department here,
+    though list_audit_events above (the actual activity data) is scoped.
+    Flagged as a known follow-up, not silently ignored.
+    """
+    _check_auditor_access(db, authorization, workspace_id)
     from database.models import WorkUser
 
     query = db.query(WorkUser)
@@ -225,7 +263,11 @@ def _line_matches_workspace(record: dict, workspace_id: str) -> bool:
 
 
 @router.get("/export")
-def export_audit_log(workspace_id: str, db: Session = Depends(get_db)):
+def export_audit_log(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
     """
     Download this workspace's slice of the append-only JSONL audit file.
 
@@ -236,7 +278,13 @@ def export_audit_log(workspace_id: str, db: Session = Depends(get_db)):
     and filters it line by line rather than a single indexed query; for
     the file sizes an audit log realistically reaches, that's an
     acceptable cost for closing a full unscoped data-export path.
+
+    Gated behind "export_data", not "view_reports" -- per core/rbac.py's
+    own docstring, export_data is deliberately restricted to
+    workspace_admin because this is one of the two most severe findings
+    in the original security audit (raw prompt-payload export).
     """
+    _check_auditor_access(db, authorization, workspace_id, "export_data")
     path = export_jsonl_path()
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="No audit log file found yet. Run some routing operations first.")
@@ -261,7 +309,12 @@ def export_audit_log(workspace_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{event_id}", response_model=AuditEventDetail)
-def get_event_detail(event_id: int, workspace_id: str, db: Session = Depends(get_db)):
+def get_event_detail(
+    event_id: int,
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
     """
     Return full detail for a single audit event including rationale and
     context snapshot.
@@ -269,13 +322,30 @@ def get_event_detail(event_id: int, workspace_id: str, db: Session = Depends(get
     workspace_id is required, not optional: event_id is a bare sequential
     integer PK, previously readable by anyone regardless of which
     workspace it belonged to (security audit finding). Scoped the same
-    way every other AuditEvent query in this file already is.
+    way every other AuditEvent query in this file already is. Also now
+    membership-checked and department_scope-restricted like the rest of
+    this file (capability assessment, P0); a real department-scoped
+    caller gets a 404 for another department's event, same as an unknown
+    id, rather than a 403 that would confirm the event exists.
+
+    This does not yet separately gate raw_payload/prompt_payload behind
+    "view_prompts" (core/rbac.py reserves that permission specifically
+    for raw-payload exposure) -- doing so would need to split this
+    endpoint's response rather than block it outright, since the same
+    endpoint also serves the ordinary rationale/context view every
+    Decision Timeline and Users-page drill-down depends on. Flagged as a
+    known follow-up, not silently ignored.
     """
+    ctx = _check_auditor_access(db, authorization, workspace_id)
     event = db.query(AuditEvent).filter(
         AuditEvent.id == event_id,
         workspace_filter(AuditEvent, workspace_id),
     ).first()
     if not event:
         raise HTTPException(status_code=404, detail=f"Audit event {event_id} not found.")
+    if ctx and ctx.department_scope:
+        scoped_values = {ctx.department_scope, f"{workspace_id}:{ctx.department_scope}"}
+        if (event.department or "") not in scoped_values:
+            raise HTTPException(status_code=404, detail=f"Audit event {event_id} not found.")
     result = get_audit_event(db, event_id)
     return result

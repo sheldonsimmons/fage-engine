@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, case, func, literal, or_
 from sqlalchemy.exc import IntegrityError
@@ -32,6 +32,7 @@ from database.models import (
 from core.agentlake import display_agent_name, display_department, infer_platform
 from core.model_provider import load_provider_registry, resolve_provider
 from core.workspace_scope import workspace_filter
+from core.auth import check_membership
 from core.business_context import (
     BUSINESS_CONTEXT_TEMPLATES,
     business_context_json,
@@ -40,6 +41,31 @@ from core.business_context import (
 
 
 router = APIRouter()
+
+
+def _check_work_items_access(
+    db: Session, authorization: Optional[str], workspace_id: Optional[str], permission: str = "view_reports",
+):
+    """
+    Security fix: this file (3,400+ lines -- Work Attribution's project/
+    account/user listing and reporting endpoints) had no core.auth import
+    and no membership check anywhere in it (capability assessment, P0 --
+    one of four routers flagged with zero auth surface at all, not merely
+    a missing department filter). Soft-mode gated like every other
+    retrofitted route; returns the resolved TenantContext (or None) so
+    callers can apply department_scope to their own query.
+    """
+    if not workspace_id:
+        return None
+    return check_membership(db, authorization, workspace_id, permission)
+
+
+def _work_item_dept_clause(department_scope: str):
+    """Same tolerant match ask_costpilot_tools.py's account-outcomes tool already uses for WorkItem.department."""
+    return or_(
+        WorkItem.department == department_scope,
+        WorkItem.department.like(f"%:{department_scope}"),
+    )
 
 # project_activity_reporting()'s short-TTL cache -- see its docstring.
 # Module-level and process-wide (matches core/budget.py's identical
@@ -1334,13 +1360,17 @@ def list_work_items(
     status: Optional[str] = Query(None),
     workspace_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
+    ctx = _check_work_items_access(db, authorization, workspace_id)
     query = db.query(WorkItem)
     if status:
         _validate_status(status)
         query = query.filter(WorkItem.status == status)
     if workspace_id:
         query = query.filter(WorkItem.workspace_id == workspace_id)
+    if ctx and ctx.department_scope:
+        query = query.filter(_work_item_dept_clause(ctx.department_scope))
     items = query.order_by(WorkItem.status, WorkItem.name).all()
     return [_work_item_json(item, db) for item in items]
 
@@ -1349,7 +1379,9 @@ def list_work_items(
 def work_item_summary(
     workspace_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
+    ctx = _check_work_items_access(db, authorization, workspace_id)
     item_query = db.query(WorkItem)
     transaction_query = db.query(TokenTransaction)
     if workspace_id:
@@ -1357,6 +1389,12 @@ def work_item_summary(
         transaction_query = transaction_query.filter(
             workspace_filter(TokenTransaction, workspace_id)
         )
+    if ctx and ctx.department_scope:
+        item_query = item_query.filter(_work_item_dept_clause(ctx.department_scope))
+        transaction_query = transaction_query.filter(or_(
+            TokenTransaction.department == ctx.department_scope,
+            TokenTransaction.department.like(f"%:{ctx.department_scope}"),
+        ))
 
     items = item_query.all()
     item_ids = [item.id for item in items]
@@ -1431,8 +1469,10 @@ def business_context_reporting(
     days: int = Query(30, ge=1, le=730),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Executive-safe parent totals and origin contributions counted once."""
+    ctx = _check_work_items_access(db, authorization, workspace_id)
     cutoff = datetime.utcnow() - timedelta(days=days)
     item_query = db.query(WorkItem).filter(
         WorkItem.status != "archived",
@@ -1440,6 +1480,8 @@ def business_context_reporting(
     )
     if workspace_id:
         item_query = item_query.filter(WorkItem.workspace_id == workspace_id)
+    if ctx and ctx.department_scope:
+        item_query = item_query.filter(_work_item_dept_clause(ctx.department_scope))
     items = item_query.all()
     item_by_id = {item.id: item for item in items}
     item_ids = list(item_by_id)
@@ -1449,6 +1491,15 @@ def business_context_reporting(
     if workspace_id:
         tx_filters.append(workspace_filter(TokenTransaction, workspace_id))
         audit_filters.append(workspace_filter(AuditEvent, workspace_id))
+    if ctx and ctx.department_scope:
+        tx_filters.append(or_(
+            TokenTransaction.department == ctx.department_scope,
+            TokenTransaction.department.like(f"%:{ctx.department_scope}"),
+        ))
+        audit_filters.append(or_(
+            AuditEvent.department == ctx.department_scope,
+            AuditEvent.department.like(f"%:{ctx.department_scope}"),
+        ))
 
     total_calls, total_input, total_output, total_saved, total_spend = (
         db.query(
@@ -2732,8 +2783,21 @@ def organizational_usage_reporting(
     days: int = Query(30, ge=1, le=365),
     charged_unit: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
-    """Company to organizational-unit drill-down, with each transaction counted once."""
+    """
+    Company to organizational-unit drill-down, with each transaction counted once.
+
+    Security fix: charged_unit was entirely client-controlled with no
+    relation to authorization (capability assessment, P0) -- a caller
+    could request any department's rollup for a known workspace_id. A
+    real department-scoped caller's charged_unit is now forced to their
+    own department, overriding whatever they passed, same convention
+    query_metrics already uses for its own charged_unit filter.
+    """
+    ctx = _check_work_items_access(db, authorization, workspace_id)
+    if ctx and ctx.department_scope:
+        charged_unit = ctx.department_scope
     period_end = date_to or datetime.utcnow()
     period_start = date_from or (period_end - timedelta(days=days))
     if period_start >= period_end:

@@ -169,8 +169,26 @@ def deregister(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+def _agent_department_scope_matches(department: Optional[str], workspace_id: Optional[str], department_scope: str) -> bool:
+    """
+    Shared department_scope match for RegisteredAgent rows -- mirrors the
+    exact convention already used by ask_costpilot_tools.py's agent-
+    adoption tool (RegisteredAgent.department == "{workspace_id}:{dept}"),
+    with a fallback to a bare unprefixed match for legacy rows.
+    """
+    if not department:
+        return False
+    if workspace_id and department == f"{workspace_id}:{department_scope}":
+        return True
+    return department == department_scope
+
+
 @router.get("/spend")
-def agent_spend_summary(workspace_id: str = None, db: Session = Depends(get_db)):
+def agent_spend_summary(
+    workspace_id: str = None,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
     """
     Per-agent spend summary — aggregates TokenTransaction by agent_id.
     Returns every registered agent with their total cost, token counts,
@@ -186,8 +204,14 @@ def agent_spend_summary(workspace_id: str = None, db: Session = Depends(get_db))
     convention for this exact table -- using a different filter here
     would just create a second, differently-scoped definition of
     "this workspace's agents."
+
+    Security fix: this file had no membership check on any GET route at
+    all (capability assessment, P0) -- soft-mode gated like every other
+    retrofitted route, but a real department-scoped caller's results are
+    always filtered to their own department's agents, unconditionally.
     """
     from database.models import RegisteredAgent
+    ctx = check_membership(db, authorization, workspace_id or "default", "view_agents") if workspace_id else None
 
     TIER_ORDER = {"Strategist": 4, "Advisor": 3, "flagship": 3,
                   "Analyst": 2, "Scout": 1, "micro": 1}
@@ -203,6 +227,8 @@ def agent_spend_summary(workspace_id: str = None, db: Session = Depends(get_db))
         from core.agentlake import workspace_agent_filter
         query = query.filter(workspace_agent_filter(db, workspace_id))
     agents = query.all()
+    if ctx and ctx.department_scope:
+        agents = [a for a in agents if _agent_department_scope_matches(a.department, workspace_id, ctx.department_scope)]
 
     results = []
     for agent in agents:
@@ -253,9 +279,20 @@ def get_agents(
     include_archived: bool = False,
     workspace_id: str = None,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ):
-    """List registered agents. Pass ?include_archived=true to include archived agents."""
-    return list_agents(db, include_archived=include_archived, workspace_id=workspace_id)
+    """
+    List registered agents. Pass ?include_archived=true to include archived agents.
+
+    Security fix: no membership check existed on this route at all
+    (capability assessment, P0). Soft-mode gated; a real department-
+    scoped caller's results are always filtered to their own department.
+    """
+    ctx = check_membership(db, authorization, workspace_id or "default", "view_agents") if workspace_id else None
+    agents = list_agents(db, include_archived=include_archived, workspace_id=workspace_id)
+    if ctx and ctx.department_scope:
+        agents = [a for a in agents if _agent_department_scope_matches(a.get("department"), workspace_id, ctx.department_scope)]
+    return agents
 
 
 @router.patch("/department-tier-bounds")
@@ -309,8 +346,23 @@ def set_department_tier_bounds(
 
 
 @router.get("/{agent_id}", response_model=AgentStatus)
-def get_single_agent(agent_id: int, workspace_id: Optional[str] = None, db: Session = Depends(get_db)):
-    _agent_scoped_or_404(db, agent_id, workspace_id)  # raises 404 on cross-tenant mismatch
+def get_single_agent(
+    agent_id: int,
+    workspace_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Security fix: no membership check existed on this route (capability
+    assessment, P0). _agent_scoped_or_404 already enforces workspace_id;
+    this adds department_scope on top of it, 404ing the same way as an
+    unknown id rather than leaking that a different department's agent
+    exists.
+    """
+    agent = _agent_scoped_or_404(db, agent_id, workspace_id)  # raises 404 on cross-tenant mismatch
+    ctx = check_membership(db, authorization, workspace_id or "default", "view_agents") if workspace_id else None
+    if ctx and ctx.department_scope and not _agent_department_scope_matches(agent.department, workspace_id, ctx.department_scope):
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")
     result = get_agent(db, agent_id)
     if not result:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found.")

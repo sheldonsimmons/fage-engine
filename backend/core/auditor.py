@@ -473,10 +473,24 @@ def get_audit_events(
     work_user_id: int = None,
     date_from=None,
     date_to=None,
+    department_scope: str = None,
 ) -> list:
+    """
+    department_scope, when given, restricts to one department's events --
+    security fix: this file had no department scoping at all until this
+    pass (capability assessment, P0), only optional workspace_id
+    filtering. Matches AuditEvent.department directly (unprefixed rows)
+    or the "{workspace_id}:{department}" convention every other scoped
+    table in this app uses.
+    """
     q = db.query(AuditEvent)
     if workspace_id:
         q = q.filter(workspace_filter(AuditEvent, workspace_id))
+    if department_scope:
+        scoped_values = [department_scope]
+        if workspace_id:
+            scoped_values.append(f"{workspace_id}:{department_scope}")
+        q = q.filter(AuditEvent.department.in_(scoped_values))
     if work_user_id is not None:
         q = q.filter(AuditEvent.work_user_id == work_user_id)
     if date_from is not None:

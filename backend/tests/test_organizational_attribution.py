@@ -94,6 +94,7 @@ def test_organizational_report_does_not_sum_dimensions_into_company_total():
         days=30,
         charged_unit=None,
         db=db,
+        authorization=None,
     )
 
     assert report["company"]["request_count"] == 1

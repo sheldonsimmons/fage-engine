@@ -71,15 +71,50 @@ class SetRawLoggingRequest(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[BudgetStatus])
-def list_budgets(workspace_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    """Return real-time budget status for all departments in one workspace."""
-    return get_all_budgets(db, workspace_id)
+def list_budgets(
+    workspace_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Return real-time budget status for all departments in one workspace.
+
+    Security fix: this route previously ran with no membership check at
+    all -- add auth/RBAC to Budgets GET routes was flagged P0 in the
+    capability assessment. Soft-mode gated like every other retrofitted
+    route (see core/auth.py's AUTH_ENFORCEMENT_ENABLED docstring): a
+    missing/invalid session still passes through unscoped today, but a
+    real department-scoped caller's results are always filtered to their
+    own department, unconditionally.
+    """
+    ctx = check_membership(db, authorization, workspace_id or "default", "view_reports")
+    budgets = get_all_budgets(db, workspace_id)
+    if ctx and ctx.department_scope:
+        budgets = [b for b in budgets if b["department"] == ctx.department_scope]
+    return budgets
 
 
 @router.get("/{department}", response_model=BudgetStatus)
-def dept_budget(department: str, db: Session = Depends(get_db)):
-    """Return budget status for a single department."""
-    result = get_budget(db, department)
+def dept_budget(
+    department: str,
+    workspace_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Return budget status for a single department.
+
+    Security fix: this route previously took no workspace_id at all --
+    department name alone was the entire query key, so any caller who
+    knew or guessed a department name could read another tenant's budget.
+    Now workspace-scoped like every other budget lookup, and a real
+    department-scoped caller can never read a department that isn't
+    their own, regardless of what they ask for.
+    """
+    ctx = check_membership(db, authorization, workspace_id or "default", "view_reports")
+    if ctx and ctx.department_scope and ctx.department_scope != department:
+        raise HTTPException(status_code=403, detail="No access to this department's budget.")
+    result = get_budget(db, department, workspace_id)
     if not result:
         raise HTTPException(status_code=404, detail=f"Department '{department}' not found.")
     return result

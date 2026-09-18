@@ -1452,6 +1452,25 @@ def _ask_is_follow_up(question: str) -> bool:
         return True
     if re.search(r"\bthe\s+two\b|\bboth\s+of\s+them\b|\beither\s+of\s+them\b", text):
         return True
+    # "it"/"this"/"one" alone are far too common in brand-new, self-
+    # contained questions ("spend THIS month", "top ONE department") to
+    # add as bare pronoun matches like the block above -- that would
+    # misclassify most date-scoped questions as follow-ups. These are
+    # narrow phrase patterns instead, targeting the specific referential
+    # shapes confirmed missing in the capability assessment: an ordinal
+    # callback ("tell me about the first one"), "this <noun>" naming a
+    # prior subject by type rather than repeating its name ("why are we
+    # using this model"), and "it" as a stand-in for a just-named entity
+    # ("what WorkItems did it touch").
+    if re.search(
+        r"\bthe\s+(?:first|second|third|fourth|fifth|last|next)\s+one\b|"
+        r"\bthis\s+(?:model|agent|department|account|vendor|provider|platform|person)\b|"
+        r"\b(?:what|which|how much|how many)\b[^.?!]{0,40}\bdid\s+it\b|"
+        r"\bdid\s+it\s+touch\b|\bis\s+it\s+used\s+for\b|"
+        r"\b(?:why|how)\s+(?:are|is)\s+we\s+using\s+it\b",
+        text,
+    ):
+        return True
     if re.match(
         r"^(?:and|also|then|instead|what about|how about|"
         r"only\s+show|narrow|filter|sort|order|reorder|drill\s+down)\b",
@@ -3924,12 +3943,18 @@ def _ask_run_agent_tool(
     department_scope: Optional[str] = None, user_id: Optional[int] = None,
 ) -> dict:
     """
-    department_scope (Phase 2 slice 1): when present, forced onto the 3
-    tools below that support a department filter today -- it always wins
+    department_scope (Phase 2 slice 1): when present, forced onto every
+    tool below that takes a department/entity filter -- it always wins
     over whatever the model itself chose to filter by, so a department-
     scoped user can't ask their way into another department's numbers by
-    naming it explicitly. The other 5 tools are not scoped yet (see
-    ask_costpilot's docstring for the full list).
+    naming it explicitly. Corrected count (capability assessment found
+    this docstring undercounting its own coverage): 10 of 12 data tools
+    are scoped this way today -- get_usage_report, get_change_drivers,
+    get_budget_status, get_agent_adoption, get_account_outcomes,
+    get_cost_per_outcome, query_metrics, get_priority_signals,
+    get_decision_history, and the three budget-cap-change tools. Only
+    get_product_help and get_data_coverage are unscoped, and deliberately
+    so -- both are static/meta lookups with no per-tenant data to leak.
     """
     from api.ask_costpilot_tools import EXECUTORS
 
