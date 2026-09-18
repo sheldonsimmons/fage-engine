@@ -233,7 +233,10 @@ if __name__ == "__main__":
         # of 4 is sized for real concurrent traffic, not a single-user
         # pilot, and confirmed live to be what pushed a 512MB dyno to
         # 125%+ memory at idle (Error R14) before a single call ever
-        # connected. 1 keeps one process warm for instant pickup without
-        # paying for three more nobody is using yet.
-        num_idle_processes=1,
+        # connected. Dropping to 1 (confirmed live: 650MB -> 528MB) still
+        # left the dyno just over quota -- 0 removes the standby process
+        # entirely, trading a few seconds of cold-start latency on the
+        # first call after each boot/idle stretch for a dyno that isn't
+        # permanently over its memory limit.
+        num_idle_processes=0,
     ))
