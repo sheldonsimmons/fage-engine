@@ -390,7 +390,16 @@
         _askLiveAvatarConnection = createAskCostpilotAvatarConnection({
           videoEl: avatarVideo,
           onState: setAskAvatarState,
-          onError: (err) => addAskMessage?.("assistant", `<p>${escapeHtml(err.message || "Live avatar call failed.")}</p>`),
+          onError: (err) => {
+            addAskMessage?.("assistant", `<p>${escapeHtml(err.message || "Live avatar call failed.")}</p>`);
+            // This connection also fires onError on a normal disconnect
+            // (see ask-costpilot-livekit-avatar.js's RoomEvent.Disconnected
+            // handler) -- if "Hey CostPilot" is what started this call,
+            // its wake-word listener was paused for the whole call and
+            // needs to resume now that it's actually over. A no-op when
+            // the wake word isn't enabled or wasn't what triggered this.
+            resumeWakeWordListenerIfEnabled();
+          },
           // The avatar only ever SPEAKS an answer -- this is what puts it
           // on screen too, the same way a typed question's answer
           // renders, so a live call isn't a visually silent special case.
@@ -1038,7 +1047,6 @@
   let _wakeVisibilityBound = false;
   let _wakeAutoStopArmed = false;
   let _wakeAutoSubmitArmed = false;
-  const WAKE_GREETINGS = ["What's up?", "How can I help?", "Yes?", "I'm listening.", "Go ahead."];
 
   function wakeWordSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -1128,15 +1136,23 @@
     // A tight exact-phrase match was missing real, audible attempts.
     if (!/\bhey\b[\s,]{0,15}cost[\s-]{0,3}pilot\b/i.test(transcript)) return;
     _wakeTriggerInFlight = true;
+    // Stays paused for the whole call, not just this trigger instant --
+    // the live avatar call uses the mic continuously via LiveKit, and
+    // this browser-side SpeechRecognition listener would otherwise
+    // fight it for the same microphone and keep re-hearing "hey
+    // CostPilot" mid-conversation. Resumed from toggleAskLiveAvatar's
+    // own onError handler once the call actually ends (that handler
+    // fires on every disconnect, not just real errors).
     pauseWakeWordListener();
     openAskCostPilot();
-    // A real conversational acknowledgment, not a silent jump straight to
-    // recording -- reuses the exact same "answer ended with a question,
-    // keep listening" mechanism built for follow-up turns (continueConversation),
-    // since a greeting is itself just a very short question awaiting a reply.
-    const greeting = WAKE_GREETINGS[Math.floor(Math.random() * WAKE_GREETINGS.length)];
-    addAskMessage("assistant", `<p>${escapeHtml(greeting)}</p>`);
-    speakAskAnswer(greeting, null, { continueConversation: true });
+    // Launches the same real-time video avatar the drawer's own avatar
+    // tap starts -- confirmed live 2026-09-19 that before this, "hey
+    // CostPilot" opened the drawer and answered with the OLD
+    // transcribe/ask/speak turn flow's voice, a completely different,
+    // older pipeline nothing else in this session's avatar work ever
+    // touched, which is why it kept sounding like "the old avatar" no
+    // matter what got fixed on the LiveKit side.
+    toggleAskLiveAvatar();
   }
 
   // Push-to-talk (manual mic click) intentionally requires a second click
