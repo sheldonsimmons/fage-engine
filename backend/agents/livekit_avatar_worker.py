@@ -222,7 +222,25 @@ async def entrypoint(ctx: JobContext):
             # Toolset and passing it through tools= instead.
             tools=[mcp.MCPToolset(
                 id="ask-costpilot",
-                mcp_server=mcp.MCPServerHTTP(url=ASK_COSTPILOT_MCP_URL),
+                mcp_server=mcp.MCPServerHTTP(
+                    url=ASK_COSTPILOT_MCP_URL,
+                    # Confirmed live via the worker's own traceback: a
+                    # real ask_costpilot call was cancelled with
+                    # "deadline exceeded" inside the MCP client's own
+                    # request handling, well before our httpx call to
+                    # /ask (which has its own 25s timeout, see
+                    # ask_costpilot_mcp_server.py) could return -- the
+                    # agent_tool_loop path this app already logs taking
+                    # 10-17s for real questions blows straight through
+                    # MCPServerHTTP's 5-second defaults for both
+                    # `timeout` and `client_session_timeout_seconds`,
+                    # so the realtime model gave up and told the person
+                    # it "couldn't find the data" even though the real
+                    # answer was still being computed. 30s covers the
+                    # slowest real calls with headroom.
+                    timeout=30,
+                    client_session_timeout_seconds=30,
+                ),
             )],
         ),
         room=ctx.room,
