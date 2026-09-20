@@ -366,15 +366,20 @@ function handleAskBriefingButtonClick(event) {
       // ...) -- openSupportBriefingReport only exists there. Confirmed
       // live 2026-09-13: this used to just alert "available from the
       // Reports page," leaving the user to go find and re-trigger it
-      // themselves. Navigate to reports.html with the same params instead
-      // -- its own DOMContentLoaded handler picks up open_briefing=1 and
-      // opens the real report automatically, same pattern the
-      // business_impact branch below already uses for its own deep link.
+      // themselves. Deep-link to reports.html with the same params
+      // instead -- its own DOMContentLoaded handler picks up
+      // open_briefing=1 and opens the real report automatically, same
+      // pattern the business_impact branch below already uses for its
+      // own deep link. Opened in a new tab, not navigated in place --
+      // confirmed live 2026-09-20 that navigating this same tab away
+      // silently killed an in-progress LiveKit avatar call (WebRTC
+      // connections don't survive a page unload); a new tab leaves
+      // whatever's already open here running untouched.
       const qs = new URLSearchParams({ open_briefing: "1", days: String(Number(params.days) || 30) });
       if (params.department) qs.set("department", params.department);
       const workspaceId = localStorage.getItem("cp_workspace_id");
       if (workspaceId) qs.set("workspace_id", workspaceId);
-      window.location.href = `/reports.html?${qs.toString()}`;
+      window.open(`/reports.html?${qs.toString()}`, "_blank");
       return true;
     }
     // params.department is genuinely absent (not just falsy) for the
@@ -393,13 +398,15 @@ function handleAskBriefingButtonClick(event) {
     // No on-screen preview modal exists for Business Impact today (unlike
     // Cost Briefing) -- reports.html already restores tab state from its
     // own ?tab= URL param (used by every other Ask CostPilot "View
-    // activity" drill link, see askDrillUrl()), so navigating straight
-    // there is the lowest-risk way to land on this report rather than
-    // building a second, parallel modal system just for this one link.
+    // activity" drill link, see askDrillUrl()), so deep-linking there is
+    // the lowest-risk way to land on this report rather than building a
+    // second, parallel modal system just for this one link. New tab, not
+    // in-place navigation -- see the support_briefing branch above for
+    // why (kills an in-progress live avatar call otherwise).
     const qs = new URLSearchParams({ tab: "impact" });
     const workspaceId = localStorage.getItem("cp_workspace_id");
     if (workspaceId) qs.set("workspace_id", workspaceId);
-    window.location.href = `/reports.html?${qs.toString()}`;
+    window.open(`/reports.html?${qs.toString()}`, "_blank");
     return true;
   }
   if (reportId === "risk") {
@@ -410,13 +417,14 @@ function handleAskBriefingButtonClick(event) {
     // handler picks up risk_event_type/risk_days and calls
     // applyRiskDrilldown() once the tab's data has loaded, same
     // deep-link-then-apply-on-load pattern open_briefing=1 already uses
-    // for the Cost Briefing report.
+    // for the Cost Briefing report. New tab, not in-place navigation --
+    // see the support_briefing branch above for why.
     const qs = new URLSearchParams({ tab: "risk" });
     if (params.event_type) qs.set("risk_event_type", params.event_type);
     if (params.days) qs.set("risk_days", String(params.days));
     const workspaceId = localStorage.getItem("cp_workspace_id");
     if (workspaceId) qs.set("workspace_id", workspaceId);
-    window.location.href = `/reports.html?${qs.toString()}`;
+    window.open(`/reports.html?${qs.toString()}`, "_blank");
     return true;
   }
   return false;
