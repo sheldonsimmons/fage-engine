@@ -271,8 +271,21 @@ async def entrypoint(ctx: JobContext):
         # extra, just never wired up) instead of the Realtime API's own
         # server-side turn detection -- see the long comment above for
         # why this is the actual fix, not another tuning pass.
-        vad=silero.VAD.load(),
+        #
+        # min_speech_duration/min_interruption_duration raised from their
+        # defaults (0.05s / 0.5s) -- confirmed live even under local VAD,
+        # the greeting still got falsely interrupted with nothing for a
+        # muted mic to have picked up, consistent with a brief noise
+        # blip or Simli-relay artifact being enough to clear both
+        # thresholds. This is a real, scoped VAD-sensitivity knob (unlike
+        # every earlier interruption-tuning attempt above, which was
+        # fighting the unrelated, broken server-side truncation
+        # mechanism) -- requiring a full second of detected speech before
+        # treating it as a real interruption should filter out brief
+        # blips while still letting a genuine "wait, stop" through.
+        vad=silero.VAD.load(min_speech_duration=0.2),
         turn_detection="vad",
+        min_interruption_duration=1.0,
     )
 
     simli_avatar = simli.AvatarSession(
