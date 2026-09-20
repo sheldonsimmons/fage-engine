@@ -426,7 +426,19 @@
       }
       floatEl?.removeAttribute("hidden");
       await _askLiveAvatarConnection.connect();
-      floatEl?.classList.toggle("cp-ask-avatar-live", _askLiveAvatarConnection.isConnected());
+      const isLive = _askLiveAvatarConnection.isConnected();
+      floatEl?.classList.toggle("cp-ask-avatar-live", isLive);
+      // Text-only, not spoken -- the backend's own spoken greeting was
+      // dropped (confirmed live 2026-09-20: an explicit generate_reply()
+      // on a RealtimeModel is always interruptible by LiveKit's own
+      // separate interruption layer, independent of any turn_detection
+      // tuning, so it kept getting cut off with no reliable fix
+      // available short of a bigger local-VAD rework) -- this just
+      // confirms the call actually connected without relying on audio
+      // that might never be heard.
+      if (isLive) {
+        addAskMessage("assistant", "<p>CostPilot is ready — ask about your AI spend, budgets, or usage.</p>");
+      }
     } catch (_err) {
       // onError above already surfaced this in the chat -- nothing
       // further to show here, the idle placeholder (CSS) covers it.

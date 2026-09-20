@@ -1059,7 +1059,16 @@
     await liveAvatarConnection.connect();
     micButton.classList.remove("live-connecting");
     micButton.disabled = false;
-    if (!liveAvatarConnection.isConnected()) setLiveAvatarUI(false); // connect() failed
+    if (!liveAvatarConnection.isConnected()) {
+      setLiveAvatarUI(false); // connect() failed
+    } else {
+      // Text-only, not spoken -- see global-nav.js's toggleAskLiveAvatar
+      // for why the backend's spoken greeting was dropped (always
+      // interruptible on a RealtimeModel, no reliable fix short of a
+      // bigger local-VAD rework).
+      answerEl.innerHTML = renderAskMarkdown("CostPilot is ready — ask about your AI spend, budgets, or usage.");
+      answerEl.classList.add("visible");
+    }
   }
 
   // Small text link, not a competing button -- switches which action

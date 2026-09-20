@@ -308,48 +308,21 @@ async def entrypoint(ctx: JobContext):
         room=ctx.room,
     )
 
-    # Realtime models don't speak first on their own -- a person joining
-    # this call previously had no signal the avatar was even live besides
-    # the video appearing, confirmed live to read as "did it hear me?"
-    # tool_choice="none" keeps this one reply from calling ask_costpilot
-    # (there's no real question to answer yet).
-    #
-    # allow_interruptions=False was tried here first (to stop the
-    # greeting getting cut off, see the turn_detection comment above) but
-    # confirmed live it's silently rejected for a RealtimeModel: "the
-    # RealtimeModel uses a server-side turn detection, allow_interruptions
-    # cannot be False when using VoiceAgent.generate_reply(), disable
-    # turn_detection in the RealtimeModel and use VAD on the
-    # AgentTask/VoiceAgent instead" -- doing that would mean running our
-    # own local VAD instead of the Realtime API's, a much bigger change
-    # than a one-sentence greeting justifies. Relying instead on the
-    # semantic_vad + eagerness="low" turn_detection above (added for the
-    # same underlying false-interruption bug, just triggering mid-answer
-    # instead of at call start) to make a false trigger here rare enough
-    # not to matter.
-    # Confirmed live 2026-09-20: the greeting still isn't consistently
-    # heard even after removing the invalid allow_interruptions param and
-    # switching to semantic_vad -- rather than guess at a third fix
-    # blind, this logs the SpeechHandle's own outcome (done/interrupted/
-    # exception) so the next real test gives direct proof of what
-    # actually happens to this call instead of more speculation.
-    try:
-        greeting_handle = await session.generate_reply(
-            instructions=(
-                "Greet the person warmly in one short sentence. Say the word \"CostPilot\" out loud "
-                "as part of the greeting itself (e.g. \"Hi, I'm CostPilot\" or \"You've got CostPilot\") "
-                "-- don't just imply who you are, actually say the name -- and invite them to ask "
-                "about their AI spend, budgets, or usage. Do not call any tool."
-            ),
-            tool_choice="none",
-        )
-        await greeting_handle.wait_for_playout()
-        logger.info(
-            "greeting speech handle finished: interrupted=%s exception=%s",
-            greeting_handle.interrupted, greeting_handle.exception,
-        )
-    except Exception:
-        logger.exception("greeting generate_reply raised")
+    # A spoken greeting was tried here (session.generate_reply(...)) and
+    # dropped for good after three separate attempts confirmed live it
+    # can't reliably be heard: allow_interruptions=False is silently
+    # rejected for a RealtimeModel ("disable turn_detection... and use
+    # VAD on the AgentTask/VoiceAgent instead" -- a much bigger rework
+    # than a one-sentence greeting justifies), switching to semantic_vad
+    # didn't stop it either, and direct SpeechHandle logging confirmed
+    # (2026-09-20) it was reaching interrupted=True every time -- an
+    # explicit generate_reply() call on this model is always
+    # interruptible by LiveKit's own separate interruption layer,
+    # independent of any turn_detection tuning on the model itself. The
+    # frontend now shows a text-only "CostPilot is ready" message on
+    # connect instead (see global-nav.js's toggleAskLiveAvatar /
+    # ask-voice.html's toggleLiveAvatar) -- confirms the call connected
+    # without depending on audio that might never actually play.
 
 
 AVATAR_AGENT_NAME = "ask-costpilot-avatar"
