@@ -24,9 +24,39 @@
 function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswer, onAudioBlocked }) {
   let room = null;
   let connected = false;
+  let micEnabled = false;
+  let micFallbackTimer = null;
 
   function setState(state) {
     if (typeof onState === "function") onState(state);
+  }
+
+  // Deferred until the backend's own "greeting done" signal (or a
+  // fallback timeout) instead of being enabled the instant the room
+  // connects -- confirmed live 2026-09-20: the spoken greeting kept
+  // getting self-interrupted, and the most likely real-world cause is
+  // the greeting playing through speakers and bleeding back into the
+  // mic (no headphones), which the system correctly reads as the
+  // person interrupting it. Publishing no mic track at all until the
+  // greeting is actually done removes that path entirely, without
+  // dropping the greeting like the first attempt at this fix did.
+  async function enableMicrophone() {
+    if (micEnabled || !room) return;
+    micEnabled = true;
+    if (micFallbackTimer) {
+      clearTimeout(micFallbackTimer);
+      micFallbackTimer = null;
+    }
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true);
+      console.info("[Ask CostPilot avatar] microphone enabled");
+    } catch (micErr) {
+      console.warn("[Ask CostPilot avatar] microphone enable failed (call still connected):", micErr);
+      onError?.(new Error(
+        "Connected, but couldn't access your microphone — the avatar can't hear you. " +
+        "Check mic permissions and try again."
+      ));
+    }
   }
 
   async function connect() {
@@ -104,6 +134,10 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
       // onAnswer is the host page's hook to render it the normal way
       // (renderAskAnswerCard) instead of leaving the screen blank.
       room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+        if (topic === "ask-costpilot-greeting-done") {
+          enableMicrophone();
+          return;
+        }
         if (topic !== "ask-costpilot-answer") return;
         try {
           const data = JSON.parse(new TextDecoder().decode(payload));
@@ -130,21 +164,14 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
       } catch (audioErr) {
         console.warn("[Ask CostPilot avatar] startAudio() blocked, will retry on next tap:", audioErr);
       }
-      // Isolated from the room-connect try/catch on purpose: a failure
-      // here (no mic device, permission denied, another app has it
-      // exclusively) should degrade to "you can hear/see the avatar but
-      // it can't hear you," not tear down a room connection that
-      // otherwise succeeded.
-      try {
-        await room.localParticipant.setMicrophoneEnabled(true);
-        console.info("[Ask CostPilot avatar] microphone enabled");
-      } catch (micErr) {
-        console.warn("[Ask CostPilot avatar] microphone enable failed (call still connected):", micErr);
-        onError?.(new Error(
-          "Connected, but couldn't access your microphone — the avatar can't hear you. " +
-          "Check mic permissions and try again."
-        ));
-      }
+      // Mic stays off until the backend's "greeting done" data message
+      // arrives (see the DataReceived handler above) so the spoken
+      // greeting has nothing to self-interrupt on. Fallback timeout
+      // covers a greeting that fails, times out, or never fires (older
+      // deploys, a Simli/OpenAI hiccup) -- the call must still become
+      // usable even then, just without the mute benefit for those few
+      // seconds.
+      micFallbackTimer = setTimeout(enableMicrophone, 6000);
     } catch (err) {
       console.error("[Ask CostPilot avatar] connect failed:", err);
       connected = false;
@@ -156,6 +183,11 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
   }
 
   function disconnect() {
+    if (micFallbackTimer) {
+      clearTimeout(micFallbackTimer);
+      micFallbackTimer = null;
+    }
+    micEnabled = false;
     if (room) {
       room.disconnect();
       room = null;

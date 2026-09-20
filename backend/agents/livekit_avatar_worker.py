@@ -308,21 +308,45 @@ async def entrypoint(ctx: JobContext):
         room=ctx.room,
     )
 
-    # A spoken greeting was tried here (session.generate_reply(...)) and
-    # dropped for good after three separate attempts confirmed live it
-    # can't reliably be heard: allow_interruptions=False is silently
-    # rejected for a RealtimeModel ("disable turn_detection... and use
-    # VAD on the AgentTask/VoiceAgent instead" -- a much bigger rework
-    # than a one-sentence greeting justifies), switching to semantic_vad
-    # didn't stop it either, and direct SpeechHandle logging confirmed
-    # (2026-09-20) it was reaching interrupted=True every time -- an
-    # explicit generate_reply() call on this model is always
-    # interruptible by LiveKit's own separate interruption layer,
-    # independent of any turn_detection tuning on the model itself. The
-    # frontend now shows a text-only "CostPilot is ready" message on
-    # connect instead (see global-nav.js's toggleAskLiveAvatar /
-    # ask-voice.html's toggleLiveAvatar) -- confirms the call connected
-    # without depending on audio that might never actually play.
+    # Three earlier attempts to stop the greeting self-interrupting all
+    # failed (allow_interruptions=False silently rejected for a
+    # RealtimeModel; semantic_vad alone didn't stop it either) --
+    # SpeechHandle logging confirmed interrupted=True every time. Most
+    # likely real cause: the greeting audio plays through the person's
+    # speakers and bleeds back into their own mic (no headphones),
+    # which the system correctly reads as them interrupting it. Rather
+    # than the local-VAD rework the SDK suggests, the frontend now keeps
+    # the person's mic unpublished until this exact moment (see
+    # ask-costpilot-livekit-avatar.js's enableMicrophone) -- with
+    # nothing for the room to pick up as "user talking," there's nothing
+    # left to falsely trigger a self-interruption on.
+    try:
+        greeting_handle = await session.generate_reply(
+            instructions=(
+                "Greet the person warmly in one short sentence. Say the word \"CostPilot\" out loud "
+                "as part of the greeting itself (e.g. \"Hi, I'm CostPilot\" or \"You've got CostPilot\") "
+                "-- don't just imply who you are, actually say the name -- and invite them to ask "
+                "about their AI spend, budgets, or usage. Do not call any tool."
+            ),
+            tool_choice="none",
+        )
+        await greeting_handle.wait_for_playout()
+        logger.info(
+            "greeting speech handle finished: interrupted=%s exception=%s",
+            greeting_handle.interrupted, greeting_handle.exception,
+        )
+    except Exception:
+        logger.exception("greeting generate_reply raised")
+    finally:
+        # Always signal the frontend to enable the mic, greeting success
+        # or not -- a failed/interrupted greeting must never leave the
+        # person permanently unable to talk to the avatar.
+        try:
+            await ctx.room.local_participant.publish_data(
+                b"{}", topic="ask-costpilot-greeting-done",
+            )
+        except Exception:
+            logger.exception("couldn't publish greeting-done signal")
 
 
 AVATAR_AGENT_NAME = "ask-costpilot-avatar"
