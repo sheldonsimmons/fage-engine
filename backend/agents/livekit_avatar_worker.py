@@ -46,7 +46,7 @@ from livekit.agents import (
     mcp,
 )
 from livekit.plugins import openai, simli
-from openai.types.beta.realtime.session import InputAudioTranscription
+from openai.types.beta.realtime.session import InputAudioTranscription, TurnDetection
 
 logger = logging.getLogger("costpilot-livekit-avatar")
 logger.setLevel(logging.INFO)
@@ -211,6 +211,23 @@ async def entrypoint(ctx: JobContext):
             input_audio_transcription=InputAudioTranscription(
                 model="gpt-4o-mini-transcribe", language="en",
             ),
+            # Confirmed live 2026-09-20: a long "compare X and Y, provide
+            # a report" answer got cut off mid-response --
+            # "OpenAI Realtime API returned an error: RealtimeError(
+            # message='Audio content of 7700ms is already shorter than
+            # 14079ms')" immediately followed by "speech not done in
+            # time after interruption, cancelling the speech
+            # arbitrarily." The default server_vad turn detector is
+            # amplitude-based and trigger-happy on a live server-side
+            # session with no local echo cancellation, and a false
+            # mid-sentence interruption on a long answer desyncs the
+            # server's and client's idea of how much audio actually
+            # played -- the same underlying class of bug that cut off
+            # the greeting, just mid-answer instead of at call start.
+            # semantic_vad waits for an actual pause in meaning rather
+            # than a brief amplitude dip, which is far less prone to
+            # firing on room noise mid-sentence.
+            turn_detection=TurnDetection(type="semantic_vad", eagerness="low"),
         ),
     )
 
