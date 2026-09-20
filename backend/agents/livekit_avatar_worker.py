@@ -259,13 +259,22 @@ async def entrypoint(ctx: JobContext):
     # this call previously had no signal the avatar was even live besides
     # the video appearing, confirmed live to read as "did it hear me?"
     # tool_choice="none" keeps this one reply from calling ask_costpilot
-    # (there's no real question to answer yet).
+    # (there's no real question to answer yet). allow_interruptions=False
+    # -- confirmed live via this worker's own logs that the greeting was
+    # starting to play and then getting cleared almost immediately
+    # ("didn't receive playback finished event after clear buffer,
+    # marking playout as done arbitrarily"), consistent with the
+    # realtime model's own turn-detection mistaking room noise for the
+    # person starting to talk right as the call connects and cutting the
+    # greeting off before it was ever heard. A one-sentence greeting has
+    # nothing worth interrupting anyway.
     await session.generate_reply(
         instructions=(
             "Greet the person warmly in one short sentence as CostPilot's live voice avatar, "
             "and invite them to ask about their AI spend, budgets, or usage. Do not call any tool."
         ),
         tool_choice="none",
+        allow_interruptions=False,
     )
 
 
