@@ -45,8 +45,8 @@ from livekit.agents import (
     cli,
     mcp,
 )
-from livekit.plugins import openai, simli
-from openai.types.beta.realtime.session import InputAudioTranscription, TurnDetection
+from livekit.plugins import openai, silero, simli
+from openai.types.beta.realtime.session import InputAudioTranscription
 
 logger = logging.getLogger("costpilot-livekit-avatar")
 logger.setLevel(logging.INFO)
@@ -237,40 +237,42 @@ async def entrypoint(ctx: JobContext):
             input_audio_transcription=InputAudioTranscription(
                 model="gpt-4o-mini-transcribe", language="en",
             ),
-            # Confirmed live 2026-09-20: a long "compare X and Y, provide
-            # a report" answer got cut off mid-response --
-            # "OpenAI Realtime API returned an error: RealtimeError(
-            # message='Audio content of 7700ms is already shorter than
-            # 14079ms')" immediately followed by "speech not done in
-            # time after interruption, cancelling the speech
-            # arbitrarily." The default server_vad turn detector is
-            # amplitude-based and trigger-happy on a live server-side
-            # session with no local echo cancellation, and a false
-            # mid-sentence interruption on a long answer desyncs the
-            # server's and client's idea of how much audio actually
-            # played -- the same underlying class of bug that cut off
-            # the greeting, just mid-answer instead of at call start.
-            # semantic_vad waits for an actual pause in meaning rather
-            # than a brief amplitude dip, which is far less prone to
-            # firing on room noise mid-sentence -- confirmed live this
-            # alone wasn't enough, though: the exact same "Audio content
-            # of Xms is already shorter than Yms" / "speech not done in
-            # time after interruption, cancelling the speech arbitrarily"
-            # error recurred (2026-09-20 13:22) even with semantic_vad
-            # active. interrupt_response=False is the actual server-side
-            # OpenAI Realtime session setting for this (distinct from
-            # generate_reply's allow_interruptions, which the SDK
-            # rejects for a RealtimeModel -- see the greeting comment
-            # below) -- it stops user speech from interrupting the
-            # model's current response at all, removing the race
-            # entirely instead of just making it rarer. Trade-off: no
-            # barge-in while the avatar is mid-answer, only once it's
-            # done -- an acceptable cost against a bug that kept
-            # actually breaking real answers.
-            turn_detection=TurnDetection(
-                type="semantic_vad", eagerness="low", interrupt_response=False,
-            ),
+            # NOT passing turn_detection here at all (root-caused and
+            # fixed 2026-09-20, see below) -- every earlier attempt to
+            # fix this by tuning the Realtime API's OWN server-side turn
+            # detection (server_vad -> semantic_vad, interrupt_response
+            # =False) only changed when it decided a person interrupted
+            # the model, never the actual bug: whenever an interruption
+            # happens, the SDK tells OpenAI's server how much audio it
+            # locally believes it already played (audio_end_ms), and
+            # that estimate doesn't account for the extra latency Simli's
+            # avatar adds by relaying the model's audio through its own
+            # service before it reaches the room. That mismatch compounds
+            # over a call (confirmed live: grew from under a second to
+            # nearly a minute across one session) until OpenAI rejects
+            # the truncate request outright ("Audio content of Xms is
+            # already shorter than Yms"), which cascades into "speech
+            # not done in time after interruption, cancelling the speech
+            # arbitrarily" -- killing a real, correct answer mid-sentence.
+            # No amount of server-side VAD tuning touches this; it's
+            # wrong regardless of when the interruption fires.
+            #
+            # The real fix: leaving this NOT_GIVEN keeps
+            # can_disable_turn_detection=True on the model's reported
+            # capabilities (see the installed livekit-plugins-openai
+            # source, realtime_model.py), which lets AgentSession's own
+            # vad=/turn_detection="vad" below fully take over turn-taking
+            # instead of the Realtime API's server-side turn detection --
+            # removing the audio_end_ms/truncate mechanism, and this bug
+            # class, entirely.
         ),
+        # Local VAD-based turn detection (silero, already an installed
+        # dependency via requirements.txt's livekit-agents[...,silero,...]
+        # extra, just never wired up) instead of the Realtime API's own
+        # server-side turn detection -- see the long comment above for
+        # why this is the actual fix, not another tuning pass.
+        vad=silero.VAD.load(),
+        turn_detection="vad",
     )
 
     simli_avatar = simli.AvatarSession(
@@ -316,16 +318,15 @@ async def entrypoint(ctx: JobContext):
 
     # Three earlier attempts to stop the greeting self-interrupting all
     # failed (allow_interruptions=False silently rejected for a
-    # RealtimeModel; semantic_vad alone didn't stop it either) --
-    # SpeechHandle logging confirmed interrupted=True every time. Most
-    # likely real cause: the greeting audio plays through the person's
-    # speakers and bleeds back into their own mic (no headphones),
-    # which the system correctly reads as them interrupting it. Rather
-    # than the local-VAD rework the SDK suggests, the frontend now keeps
-    # the person's mic unpublished until this exact moment (see
-    # ask-costpilot-livekit-avatar.js's enableMicrophone) -- with
-    # nothing for the room to pick up as "user talking," there's nothing
-    # left to falsely trigger a self-interruption on.
+    # RealtimeModel; semantic_vad alone didn't stop it either) -- root-
+    # caused 2026-09-20 to the same audio_end_ms/Simli-relay-latency
+    # mismatch documented on the AgentSession construction above, now
+    # fixed there with local VAD-based turn detection. The frontend's
+    # own mic-stays-unpublished-until-greeting-done mechanism (see
+    # ask-costpilot-livekit-avatar.js's enableMicrophone) stays in place
+    # regardless, as a second layer -- it costs nothing and remains a
+    # real mitigation for actual background noise, distinct from the
+    # SDK-level bug this fixes.
     try:
         greeting_handle = await session.generate_reply(
             instructions=(
