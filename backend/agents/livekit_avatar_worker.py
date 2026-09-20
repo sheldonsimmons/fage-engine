@@ -327,15 +327,29 @@ async def entrypoint(ctx: JobContext):
     # same underlying false-interruption bug, just triggering mid-answer
     # instead of at call start) to make a false trigger here rare enough
     # not to matter.
-    await session.generate_reply(
-        instructions=(
-            "Greet the person warmly in one short sentence. Say the word \"CostPilot\" out loud "
-            "as part of the greeting itself (e.g. \"Hi, I'm CostPilot\" or \"You've got CostPilot\") "
-            "-- don't just imply who you are, actually say the name -- and invite them to ask "
-            "about their AI spend, budgets, or usage. Do not call any tool."
-        ),
-        tool_choice="none",
-    )
+    # Confirmed live 2026-09-20: the greeting still isn't consistently
+    # heard even after removing the invalid allow_interruptions param and
+    # switching to semantic_vad -- rather than guess at a third fix
+    # blind, this logs the SpeechHandle's own outcome (done/interrupted/
+    # exception) so the next real test gives direct proof of what
+    # actually happens to this call instead of more speculation.
+    try:
+        greeting_handle = await session.generate_reply(
+            instructions=(
+                "Greet the person warmly in one short sentence. Say the word \"CostPilot\" out loud "
+                "as part of the greeting itself (e.g. \"Hi, I'm CostPilot\" or \"You've got CostPilot\") "
+                "-- don't just imply who you are, actually say the name -- and invite them to ask "
+                "about their AI spend, budgets, or usage. Do not call any tool."
+            ),
+            tool_choice="none",
+        )
+        await greeting_handle.wait_for_playout()
+        logger.info(
+            "greeting speech handle finished: interrupted=%s exception=%s",
+            greeting_handle.interrupted, greeting_handle.exception,
+        )
+    except Exception:
+        logger.exception("greeting generate_reply raised")
 
 
 AVATAR_AGENT_NAME = "ask-costpilot-avatar"
