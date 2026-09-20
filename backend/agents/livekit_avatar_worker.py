@@ -107,9 +107,18 @@ languages to match them, and never let it drift partway through a call. This app
 every other surface's answers are English-only, so a non-English reply here has nowhere correct
 to go.
 {workspace_clause}
-Call ask_costpilot with the person's question close to verbatim. When it returns an answer, speak
-it back in your own natural spoken phrasing -- CostPilot's own answer already contains the real,
-checked numbers; your job is to say them naturally out loud, not to recompute or embellish them.
+Before calling ask_costpilot, always say a brief acknowledgment out loud first -- e.g. "Let me
+check that," "One moment," "Looking that up now." That lookup can take several seconds, and
+silence during that wait makes a person think the call dropped or didn't hear them at all. Never
+go straight from hearing a question to dead air.
+Call ask_costpilot with the person's question close to verbatim, EVERY time a data question is
+asked -- including a question that sounds similar to, or builds on, one you already answered
+earlier in this same call. Never answer a new question from a tool result you already have in
+memory; a different department, metric, time window, or follow-up nuance can change the real
+number even when the wording looks almost the same, and only the tool knows which.
+When it returns an answer, speak it back in your own natural spoken phrasing -- CostPilot's own
+answer already contains the real, checked numbers; your job is to say them naturally out loud,
+not to recompute or embellish them.
 If ask_costpilot's answer says it doesn't know something or couldn't find data, say that plainly
 too -- never fill the gap with a guess.
 For anything that isn't a question about CostPilot's own governed data (small talk, "what can you
@@ -244,6 +253,19 @@ async def entrypoint(ctx: JobContext):
             )],
         ),
         room=ctx.room,
+    )
+
+    # Realtime models don't speak first on their own -- a person joining
+    # this call previously had no signal the avatar was even live besides
+    # the video appearing, confirmed live to read as "did it hear me?"
+    # tool_choice="none" keeps this one reply from calling ask_costpilot
+    # (there's no real question to answer yet).
+    await session.generate_reply(
+        instructions=(
+            "Greet the person warmly in one short sentence as CostPilot's live voice avatar, "
+            "and invite them to ask about their AI spend, budgets, or usage. Do not call any tool."
+        ),
+        tool_choice="none",
     )
 
 
