@@ -369,11 +369,17 @@ if __name__ == "__main__":
         # 0.7-0.98 and "marking as unavailable" seconds after every
         # single boot, with no real call in progress -- explaining every
         # prior "wrong workspace" / "no data" report: the worker was
-        # simply never being offered the room at all. 0.7 is sized for
-        # real multi-tenant concurrency; this dyno runs the FastAPI app,
-        # the MCP server, and this worker together for single-user pilot
-        # traffic, so ordinary baseline CPU load trips it constantly.
-        # 0.95 keeps a true-overload safety net without starving normal
-        # operation of job offers.
-        load_threshold=0.95,
+        # simply never being offered the room at all. Raising this to
+        # 0.95 helped but confirmed live 2026-09-20 it still wasn't
+        # enough -- the worker's self-reported load hit 0.99-1.93 at
+        # idle (this default load calc appears to sum CPU across cores
+        # on this dyno, so >1.0 is a normal reading here, not overload)
+        # and got stuck "unavailable" long enough to silently drop two
+        # separate real connection attempts in a row. This dyno runs
+        # the FastAPI app, the MCP server, and this worker together for
+        # single-user pilot traffic, where a dropped call is a much
+        # worse failure than a slow one -- removing the ceiling
+        # entirely rather than continuing to guess at a number high
+        # enough to never trip it.
+        load_threshold=float("inf"),
     ))
