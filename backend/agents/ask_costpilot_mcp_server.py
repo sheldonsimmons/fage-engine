@@ -101,6 +101,23 @@ async def ask_costpilot(question: str, workspace_id: str = "") -> str:
     instructions for this conversation -- never omit it and never guess
     a different one.
     """
+    # Confirmed live (2026-09-20): a mid-call interruption cut off the
+    # realtime model's own function-call argument stream mid-token --
+    # "raw_arguments": "{  \n  \"question\":" with nothing after it --
+    # and the SDK's own JSON repair silently turned that into
+    # question="". Calling the real backend with an empty question
+    # doesn't error; it resolves to some generic/unrelated default
+    # answer, which the model then spoke as if it were a real answer to
+    # whatever was actually asked -- "bad data compared to the data
+    # given." Catching it here, before it ever reaches the backend, so
+    # a broken function call produces an honest "didn't catch that"
+    # instead of a confidently wrong answer.
+    if not question or not question.strip():
+        return (
+            "The question didn't come through clearly (a technical glitch, not something the "
+            "person said) -- ask them to repeat the question rather than guessing what they meant."
+        )
+
     resolved_workspace_id = workspace_id or ASK_COSTPILOT_MCP_DEFAULT_WORKSPACE_ID
     if not resolved_workspace_id:
         return (
