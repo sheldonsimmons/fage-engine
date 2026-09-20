@@ -117,14 +117,19 @@ earlier in this same call. Never answer a new question from a tool result you al
 memory; a different department, metric, time window, or follow-up nuance can change the real
 number even when the wording looks almost the same, and only the tool knows which.
 When it returns an answer, speak it back in your own natural spoken phrasing -- CostPilot's own
-answer already contains the real, checked numbers; your job is to say them naturally out loud,
-not to recompute, embellish, or broaden them. Confirmed live: asked to "compare Finance and
-Engineering and create a report," the tool correctly returned a two-department comparison, but
-the spoken answer turned into a wider-ranging report covering more than what was actually asked
-or returned -- a person saying "report" or "give me the full picture" is describing HOW they want
-the same answer delivered (thoroughly, out loud), not asking for extra data beyond what
-ask_costpilot returned. Stick to exactly what the tool gave you, no matter how the question is
-phrased.
+answer already contains the real, checked numbers; your job is to say them naturally out loud, not
+to recompute or invent anything. Answer exactly what was asked first, using exactly the figures
+ask_costpilot returned -- confirmed live: asked to "compare Finance and Engineering and create a
+report," the tool correctly returned a two-department comparison, but the spoken answer turned
+into a wider-ranging report covering more than what was actually asked or returned. A person
+saying "report" or "give me the full picture" is asking for that same answer delivered thoroughly,
+not for you to broaden or pad it with unrequested detail.
+Once the actual question is answered, you may add ONE brief, clearly-flagged follow-up
+observation if it's genuinely relevant and useful -- e.g. "for context, that's higher than most
+other departments this month" or "worth noting, Engineering is close to its cap too" -- but ONLY
+if it comes from calling ask_costpilot again (or a value already in an earlier tool result this
+call), never a number you're inferring or guessing. Never let that addition replace, overshadow,
+or get spoken before the direct answer itself.
 If ask_costpilot's answer says it doesn't know something or couldn't find data, say that plainly
 too -- never fill the gap with a guess.
 For anything that isn't a question about CostPilot's own governed data (small talk, "what can you
@@ -282,22 +287,27 @@ async def entrypoint(ctx: JobContext):
     # this call previously had no signal the avatar was even live besides
     # the video appearing, confirmed live to read as "did it hear me?"
     # tool_choice="none" keeps this one reply from calling ask_costpilot
-    # (there's no real question to answer yet). allow_interruptions=False
-    # -- confirmed live via this worker's own logs that the greeting was
-    # starting to play and then getting cleared almost immediately
-    # ("didn't receive playback finished event after clear buffer,
-    # marking playout as done arbitrarily"), consistent with the
-    # realtime model's own turn-detection mistaking room noise for the
-    # person starting to talk right as the call connects and cutting the
-    # greeting off before it was ever heard. A one-sentence greeting has
-    # nothing worth interrupting anyway.
+    # (there's no real question to answer yet).
+    #
+    # allow_interruptions=False was tried here first (to stop the
+    # greeting getting cut off, see the turn_detection comment above) but
+    # confirmed live it's silently rejected for a RealtimeModel: "the
+    # RealtimeModel uses a server-side turn detection, allow_interruptions
+    # cannot be False when using VoiceAgent.generate_reply(), disable
+    # turn_detection in the RealtimeModel and use VAD on the
+    # AgentTask/VoiceAgent instead" -- doing that would mean running our
+    # own local VAD instead of the Realtime API's, a much bigger change
+    # than a one-sentence greeting justifies. Relying instead on the
+    # semantic_vad + eagerness="low" turn_detection above (added for the
+    # same underlying false-interruption bug, just triggering mid-answer
+    # instead of at call start) to make a false trigger here rare enough
+    # not to matter.
     await session.generate_reply(
         instructions=(
             "Greet the person warmly in one short sentence as CostPilot's live voice avatar, "
             "and invite them to ask about their AI spend, budgets, or usage. Do not call any tool."
         ),
         tool_choice="none",
-        allow_interruptions=False,
     )
 
 
