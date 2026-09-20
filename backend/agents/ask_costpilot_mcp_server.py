@@ -24,6 +24,8 @@ MCPServerHTTP client at this same host:port.
 """
 
 import os
+import re
+import time
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -56,6 +58,33 @@ mcp = FastMCP(
     port=int(os.getenv("ASK_COSTPILOT_MCP_PORT", "8100")),
 )
 
+# Confirmed live, repeatedly, even with an explicit "call this tool exactly
+# once per question, never reword and retry" instruction in
+# livekit_avatar_worker.py's own system prompt: the realtime model still
+# calls this tool more than once for what is, character-for-character, the
+# exact same question a few seconds apart (e.g. "What are the top 5 things
+# I should be paying attention to right now?" called twice, 15s apart,
+# landing on two different backend code paths with two different answers)
+# -- the spoken reply then blends both, producing a reply that contradicts
+# its own numbers. Prompt wording alone can't close this out; it's LLM
+# non-determinism, not a compliance gap. This doesn't stop the duplicate
+# call (that's a realtime-model behavior outside this server's control),
+# but it does guarantee every duplicate call for the literal same question
+# gets the literal same answer back, so two calls can no longer disagree
+# with each other even when the model makes both anyway. Short TTL: long
+# enough to cover the gap between observed duplicate calls, short enough
+# that a genuinely repeated question later in a multi-minute call (data
+# may have changed) doesn't serve stale numbers.
+_ANSWER_CACHE_TTL_SECONDS = 60.0
+_answer_cache: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+def _normalize_question(question: str) -> str:
+    # Collapses whitespace/punctuation/case noise ("...for the year" vs
+    # "...for the year.") so trivially-reworded duplicates still hit the
+    # same cache key, without trying to catch genuinely different phrasing.
+    return re.sub(r"[^a-z0-9]+", " ", question.lower()).strip()
+
 
 @mcp.tool()
 async def ask_costpilot(question: str, workspace_id: str = "") -> str:
@@ -78,6 +107,12 @@ async def ask_costpilot(question: str, workspace_id: str = "") -> str:
             "CostPilot isn't configured with a workspace for this voice session yet -- "
             "tell the person asking that this avatar isn't fully set up rather than guessing an answer."
         )
+
+    cache_key = (resolved_workspace_id, _normalize_question(question))
+    cached = _answer_cache.get(cache_key)
+    if cached and (time.monotonic() - cached[0]) < _ANSWER_CACHE_TTL_SECONDS:
+        return cached[1]
+
     try:
         async with httpx.AsyncClient(timeout=25.0) as client:
             response = await client.post(
@@ -95,6 +130,7 @@ async def ask_costpilot(question: str, workspace_id: str = "") -> str:
     answer = data.get("answer")
     if not answer:
         return "CostPilot returned no answer for that question -- say so plainly, don't guess a number."
+    _answer_cache[cache_key] = (time.monotonic(), answer)
     return answer
 
 
