@@ -237,8 +237,24 @@ async def entrypoint(ctx: JobContext):
             # the greeting, just mid-answer instead of at call start.
             # semantic_vad waits for an actual pause in meaning rather
             # than a brief amplitude dip, which is far less prone to
-            # firing on room noise mid-sentence.
-            turn_detection=TurnDetection(type="semantic_vad", eagerness="low"),
+            # firing on room noise mid-sentence -- confirmed live this
+            # alone wasn't enough, though: the exact same "Audio content
+            # of Xms is already shorter than Yms" / "speech not done in
+            # time after interruption, cancelling the speech arbitrarily"
+            # error recurred (2026-09-20 13:22) even with semantic_vad
+            # active. interrupt_response=False is the actual server-side
+            # OpenAI Realtime session setting for this (distinct from
+            # generate_reply's allow_interruptions, which the SDK
+            # rejects for a RealtimeModel -- see the greeting comment
+            # below) -- it stops user speech from interrupting the
+            # model's current response at all, removing the race
+            # entirely instead of just making it rarer. Trade-off: no
+            # barge-in while the avatar is mid-answer, only once it's
+            # done -- an acceptable cost against a bug that kept
+            # actually breaking real answers.
+            turn_detection=TurnDetection(
+                type="semantic_vad", eagerness="low", interrupt_response=False,
+            ),
         ),
     )
 
@@ -304,8 +320,10 @@ async def entrypoint(ctx: JobContext):
     # not to matter.
     await session.generate_reply(
         instructions=(
-            "Greet the person warmly in one short sentence as CostPilot's live voice avatar, "
-            "and invite them to ask about their AI spend, budgets, or usage. Do not call any tool."
+            "Greet the person warmly in one short sentence. Say the word \"CostPilot\" out loud "
+            "as part of the greeting itself (e.g. \"Hi, I'm CostPilot\" or \"You've got CostPilot\") "
+            "-- don't just imply who you are, actually say the name -- and invite them to ask "
+            "about their AI spend, budgets, or usage. Do not call any tool."
         ),
         tool_choice="none",
     )
