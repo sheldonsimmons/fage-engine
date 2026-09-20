@@ -375,12 +375,35 @@
   // drawer already had is untouched and still fully reachable through
   // the composer below -- this only changes what tapping the avatar
   // portrait itself does, from nothing to "start talking live."
+  // Direct request: background noise (a TV, other people, the avatar's
+  // own speaker output bleeding into the mic on a non-headphone setup)
+  // was getting picked up as the person interrupting the avatar
+  // mid-answer -- confirmed live 2026-09-20, recurring throughout calls,
+  // not just at the start (same underlying failure as the greeting
+  // cutoff). Manual mute puts that under the person's own control
+  // instead of depending on VAD tuning to get it right every time.
+  function setAskLiveAvatarMuteUI(muted) {
+    const btn = document.getElementById("cpAskMuteToggle");
+    if (!btn) return;
+    btn.textContent = muted ? "🔇 Unmute" : "🎤 Mute";
+    btn.setAttribute("aria-pressed", String(muted));
+    btn.classList.toggle("cp-ask-mute-active", muted);
+  }
+
+  function toggleAskLiveAvatarMute() {
+    if (!_askLiveAvatarConnection?.isConnected()) return;
+    const nextMuted = !_askLiveAvatarConnection.isMuted();
+    _askLiveAvatarConnection.setMuted(nextMuted);
+    setAskLiveAvatarMuteUI(nextMuted);
+  }
+
   async function toggleAskLiveAvatar() {
     const floatEl = document.getElementById("cpAskAvatarFloat");
     const avatarVideo = document.getElementById("cpAskAvatarVideo");
     if (_askLiveAvatarConnection?.isConnected()) {
       _askLiveAvatarConnection.disconnect();
       floatEl?.classList.remove("cp-ask-avatar-live");
+      document.getElementById("cpAskMuteToggle")?.setAttribute("hidden", "");
       return;
     }
     floatEl?.classList.add("cp-ask-avatar-connecting");
@@ -399,6 +422,7 @@
             // needs to resume now that it's actually over. A no-op when
             // the wake word isn't enabled or wasn't what triggered this.
             resumeWakeWordListenerIfEnabled();
+            document.getElementById("cpAskMuteToggle")?.setAttribute("hidden", "");
           },
           // The avatar only ever SPEAKS an answer -- this is what puts it
           // on screen too, the same way a typed question's answer
@@ -428,16 +452,14 @@
       await _askLiveAvatarConnection.connect();
       const isLive = _askLiveAvatarConnection.isConnected();
       floatEl?.classList.toggle("cp-ask-avatar-live", isLive);
-      // Text-only, not spoken -- the backend's own spoken greeting was
-      // dropped (confirmed live 2026-09-20: an explicit generate_reply()
-      // on a RealtimeModel is always interruptible by LiveKit's own
-      // separate interruption layer, independent of any turn_detection
-      // tuning, so it kept getting cut off with no reliable fix
-      // available short of a bigger local-VAD rework) -- this just
-      // confirms the call actually connected without relying on audio
-      // that might never be heard.
+      // Text-only confirmation that the call connected -- kept even
+      // after the spoken greeting was restored (mic now stays off until
+      // the greeting finishes, see ask-costpilot-livekit-avatar.js),
+      // since it's a useful signal on its own and costs nothing to show.
       if (isLive) {
         addAskMessage("assistant", "<p>CostPilot is ready — ask about your AI spend, budgets, or usage.</p>");
+        document.getElementById("cpAskMuteToggle")?.removeAttribute("hidden");
+        setAskLiveAvatarMuteUI(false);
       }
     } catch (_err) {
       // onError above already surfaced this in the chat -- nothing
@@ -557,6 +579,8 @@
             <p>Answers calculated from <strong id="cpAskWorkspaceName">this workspace</strong>.</p>
           </div>
           <div class="cp-ask-header-actions">
+            <button type="button" class="cp-ask-mute" id="cpAskMuteToggle" hidden
+              aria-pressed="false" aria-label="Mute your microphone">🎤 Mute</button>
             <button type="button" class="cp-ask-clear" id="cpAskClear">Clear chat</button>
             <button type="button" class="cp-ask-close" id="cpAskClose" aria-label="Close Ask CostPilot">×</button>
           </div>
@@ -606,6 +630,7 @@
     document.getElementById("cpAskBackdrop").addEventListener("click", closeAskCostPilot);
     document.getElementById("cpAskClose").addEventListener("click", closeAskCostPilot);
     document.getElementById("cpAskClear").addEventListener("click", clearGlobalAskConversation);
+    document.getElementById("cpAskMuteToggle").addEventListener("click", toggleAskLiveAvatarMute);
     document.getElementById("cpAskForm").addEventListener("submit", submitGlobalAsk);
     document.getElementById("cpAskInput").addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {

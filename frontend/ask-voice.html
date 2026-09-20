@@ -279,6 +279,20 @@
   }
   #audioUnlockButton.visible { display: inline-flex; }
 
+  /* Direct request: background noise getting picked up as the person
+     interrupting the avatar mid-answer, same failure mode as the
+     greeting cutoff -- manual mute puts that under the person's own
+     control instead of depending on VAD tuning alone. */
+  #liveMuteButton {
+    margin-top: 8px;
+    background: transparent; border: 1px solid #334155;
+    color: #9aa7b8; padding: 8px 16px; border-radius: 999px; font-size: 13px;
+    font-weight: 600; cursor: pointer;
+  }
+  #liveMuteButton[aria-pressed="true"] {
+    background: rgba(208,59,59,0.12); border-color: rgba(208,59,59,0.4); color: #fca5a5;
+  }
+
   footer { font-size: 12px; color: #64748b; text-align: center; }
 
   .scroll-area { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; overflow-y: auto; flex: 1; padding: 24px 0; }
@@ -312,6 +326,7 @@
       <button id="cancelButton" type="button">✕ Cancel</button>
       <div id="errorText"></div>
       <button id="audioUnlockButton" type="button">🔇 Tap for sound</button>
+      <button id="liveMuteButton" type="button" hidden aria-pressed="false" aria-label="Mute your microphone">🎤 Mute</button>
       <button id="modeSwitchLink" type="button">Prefer a quick tap-to-ask question instead?</button>
     </div>
 
@@ -362,6 +377,7 @@
   const avatarVideo = document.getElementById("avatarVideo");
   const modeSwitchLink = document.getElementById("modeSwitchLink");
   const audioUnlockButton = document.getElementById("audioUnlockButton");
+  const liveMuteButton = document.getElementById("liveMuteButton");
   // "live" (default): tapping the avatar starts/ends a real-time video
   // call. "quick": tapping it uses the original tap-to-ask flow (VAD
   // auto-listen, transcribe, proposal cards, etc.) -- fully intact,
@@ -1007,7 +1023,10 @@
   const liveAvatarConnection = window.createAskCostpilotAvatarConnection?.({
     videoEl: avatarVideo,
     onState: setAvatarState,
-    onError: (err) => setError(err.message || "Live avatar call failed."),
+    onError: (err) => {
+      setError(err.message || "Live avatar call failed.");
+      liveMuteButton.setAttribute("hidden", "");
+    },
     // The avatar only ever SPEAKS an answer -- this puts it on screen
     // too, same as a typed/quick-mode question's answer, so a live call
     // isn't a visually silent special case on this page either.
@@ -1030,7 +1049,10 @@
   function setLiveAvatarUI(isLive) {
     micButton.classList.toggle("live-active", isLive);
     modeSwitchLink.hidden = isLive;
-    if (!isLive) audioUnlockButton.classList.remove("visible");
+    if (!isLive) {
+      audioUnlockButton.classList.remove("visible");
+      liveMuteButton.setAttribute("hidden", "");
+    }
     suggestionRotator.classList.toggle("visible", !isLive && isIdle());
     if (isLive) {
       stopSpeaking();
@@ -1062,14 +1084,27 @@
     if (!liveAvatarConnection.isConnected()) {
       setLiveAvatarUI(false); // connect() failed
     } else {
-      // Text-only, not spoken -- see global-nav.js's toggleAskLiveAvatar
-      // for why the backend's spoken greeting was dropped (always
-      // interruptible on a RealtimeModel, no reliable fix short of a
-      // bigger local-VAD rework).
+      // Text-only confirmation the call connected -- kept even with the
+      // spoken greeting restored (mic stays off until it finishes, see
+      // ask-costpilot-livekit-avatar.js), since it costs nothing to show.
       answerEl.innerHTML = renderAskMarkdown("CostPilot is ready — ask about your AI spend, budgets, or usage.");
       answerEl.classList.add("visible");
+      liveMuteButton.removeAttribute("hidden");
+      setLiveMuteUI(false);
     }
   }
+
+  function setLiveMuteUI(muted) {
+    liveMuteButton.textContent = muted ? "🔇 Unmute" : "🎤 Mute";
+    liveMuteButton.setAttribute("aria-pressed", String(muted));
+  }
+
+  liveMuteButton.addEventListener("click", () => {
+    if (!liveAvatarConnection?.isConnected()) return;
+    const nextMuted = !liveAvatarConnection.isMuted();
+    liveAvatarConnection.setMuted(nextMuted);
+    setLiveMuteUI(nextMuted);
+  });
 
   // Small text link, not a competing button -- switches which action
   // tapping the avatar performs. Ends whichever mode is currently

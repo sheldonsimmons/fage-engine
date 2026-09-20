@@ -26,6 +26,7 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
   let connected = false;
   let micEnabled = false;
   let micFallbackTimer = null;
+  let manuallyMuted = false;
 
   function setState(state) {
     if (typeof onState === "function") onState(state);
@@ -41,7 +42,7 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
   // greeting is actually done removes that path entirely, without
   // dropping the greeting like the first attempt at this fix did.
   async function enableMicrophone() {
-    if (micEnabled || !room) return;
+    if (micEnabled || !room || manuallyMuted) return;
     micEnabled = true;
     if (micFallbackTimer) {
       clearTimeout(micFallbackTimer);
@@ -57,6 +58,37 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
         "Check mic permissions and try again."
       ));
     }
+  }
+
+  // Manual push-to-mute -- direct request: background noise (a TV, other
+  // people talking, the avatar's own speaker output bleeding into the
+  // mic on a non-headphone setup) was getting picked up as the person
+  // interrupting the avatar mid-answer, the same failure mode as the
+  // greeting cutoff but recurring throughout a call, not just at the
+  // start. Unlike enableMicrophone's one-time startup gate, this is an
+  // explicit, ongoing choice the person controls -- setMicrophoneEnabled
+  // publishes/unpublishes the mic track either way, so it works whether
+  // called before or after the greeting-gated mic has ever turned on.
+  async function setMuted(muted) {
+    manuallyMuted = muted;
+    if (micFallbackTimer && muted) {
+      // Don't let the startup fallback timer re-enable the mic out from
+      // under an explicit mute requested before the greeting finished.
+      clearTimeout(micFallbackTimer);
+      micFallbackTimer = null;
+    }
+    if (!room) return;
+    micEnabled = !muted;
+    try {
+      await room.localParticipant.setMicrophoneEnabled(!muted);
+      console.info("[Ask CostPilot avatar] microphone", muted ? "muted" : "unmuted");
+    } catch (micErr) {
+      console.warn("[Ask CostPilot avatar] setMuted failed:", micErr);
+    }
+  }
+
+  function isMuted() {
+    return manuallyMuted;
   }
 
   async function connect() {
@@ -188,6 +220,7 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
       micFallbackTimer = null;
     }
     micEnabled = false;
+    manuallyMuted = false;
     if (room) {
       room.disconnect();
       room = null;
@@ -215,5 +248,5 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
     }
   }
 
-  return { connect, disconnect, isConnected, retryAudio };
+  return { connect, disconnect, isConnected, retryAudio, setMuted, isMuted };
 }

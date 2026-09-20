@@ -545,6 +545,27 @@ video#avatarVideo {
   color: var(--text-primary, #e5edf7);
 }
 
+.cp-ask-mute {
+  background: transparent;
+  border: 1px solid var(--border, #334155);
+  border-radius: 999px;
+  color: var(--text-muted, #9aa7b8);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 7px 10px;
+}
+.cp-ask-mute:hover,
+.cp-ask-mute:focus-visible {
+  border-color: var(--accent, #60a5fa);
+  color: var(--text-primary, #e5edf7);
+}
+.cp-ask-mute-active {
+  background: rgba(208,59,59,0.12);
+  border-color: rgba(208,59,59,0.4);
+  color: #fca5a5;
+}
+
 #cpAskLiveToggle.live {
   background: rgba(208,59,59,0.12);
   border-color: rgba(208,59,59,0.4);
