@@ -397,6 +397,22 @@
     setAskLiveAvatarMuteUI(nextMuted);
   }
 
+  // Direct request: the known mid-call interruption bug (see
+  // ask-costpilot-livekit-avatar.js's own notes) compounds the longer a
+  // single call runs -- confirmed live the truncation mismatch grows
+  // from under a second to nearly a minute over the course of one call.
+  // Ending and starting a fresh call every few questions avoids that
+  // drift entirely, so this collapses "tap to end, wait, tap to start
+  // again" into one action instead of two.
+  async function restartAskLiveAvatar() {
+    if (_askLiveAvatarConnection?.isConnected()) {
+      _askLiveAvatarConnection.disconnect();
+      document.getElementById("cpAskAvatarFloat")?.classList.remove("cp-ask-avatar-live");
+      document.getElementById("cpAskMuteToggle")?.setAttribute("hidden", "");
+    }
+    await toggleAskLiveAvatar();
+  }
+
   async function toggleAskLiveAvatar() {
     const floatEl = document.getElementById("cpAskAvatarFloat");
     const avatarVideo = document.getElementById("cpAskAvatarVideo");
@@ -404,6 +420,7 @@
       _askLiveAvatarConnection.disconnect();
       floatEl?.classList.remove("cp-ask-avatar-live");
       document.getElementById("cpAskMuteToggle")?.setAttribute("hidden", "");
+      document.getElementById("cpAskRestartCall")?.setAttribute("hidden", "");
       return;
     }
     floatEl?.classList.add("cp-ask-avatar-connecting");
@@ -423,6 +440,7 @@
             // the wake word isn't enabled or wasn't what triggered this.
             resumeWakeWordListenerIfEnabled();
             document.getElementById("cpAskMuteToggle")?.setAttribute("hidden", "");
+            document.getElementById("cpAskRestartCall")?.setAttribute("hidden", "");
           },
           // The avatar only ever SPEAKS an answer -- this is what puts it
           // on screen too, the same way a typed question's answer
@@ -459,6 +477,7 @@
       if (isLive) {
         addAskMessage("assistant", "<p>CostPilot is ready — ask about your AI spend, budgets, or usage.</p>");
         document.getElementById("cpAskMuteToggle")?.removeAttribute("hidden");
+        document.getElementById("cpAskRestartCall")?.removeAttribute("hidden");
         setAskLiveAvatarMuteUI(false);
       }
     } catch (_err) {
@@ -581,6 +600,8 @@
           <div class="cp-ask-header-actions">
             <button type="button" class="cp-ask-mute" id="cpAskMuteToggle" hidden
               aria-pressed="false" aria-label="Mute your microphone">🎤 Mute</button>
+            <button type="button" class="cp-ask-mute" id="cpAskRestartCall" hidden
+              aria-label="End this call and start a fresh one">🔄 New call</button>
             <button type="button" class="cp-ask-clear" id="cpAskClear">Clear chat</button>
             <button type="button" class="cp-ask-close" id="cpAskClose" aria-label="Close Ask CostPilot">×</button>
           </div>
@@ -631,6 +652,7 @@
     document.getElementById("cpAskClose").addEventListener("click", closeAskCostPilot);
     document.getElementById("cpAskClear").addEventListener("click", clearGlobalAskConversation);
     document.getElementById("cpAskMuteToggle").addEventListener("click", toggleAskLiveAvatarMute);
+    document.getElementById("cpAskRestartCall").addEventListener("click", restartAskLiveAvatar);
     document.getElementById("cpAskForm").addEventListener("submit", submitGlobalAsk);
     document.getElementById("cpAskInput").addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
