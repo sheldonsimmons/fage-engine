@@ -368,6 +368,22 @@ def write_audit_event(
     )
     now = datetime.utcnow()
 
+    # workspace_id normally comes from attribution (governed-request callers
+    # resolve real organizational_attribution and always pass it) -- but
+    # several governance-action callers (routes_action_proposals.py's
+    # propose/confirm/reject, routes_budget.py's direct cap/override edits)
+    # never pass attribution at all, only a workspace-prefixed department
+    # string ("WORKSPACE_ID:Department", the same convention every reader
+    # elsewhere already assumes via `department.split(":")[-1]`). Without
+    # this fallback those events got workspace_id=NULL and were invisible
+    # to every workspace-scoped query -- confirmed live: a real, applied
+    # Legal budget-cap change and every propose/confirm/reject on Ask
+    # CostPilot's own governance-action flow silently vanished from
+    # get_decision_history and the audit log's own workspace filter.
+    resolved_workspace_id = attribution.get("workspace_id") or (
+        department.split(":", 1)[0] if department and ":" in department else None
+    )
+
     event = AuditEvent(
         governed_request_id = governed_request_id,
         event_type       = event_type,
@@ -383,7 +399,7 @@ def write_audit_event(
         actor_source_platform = work_user.source_platform if work_user else None,
         user_id          = user_id,
         proposal_id      = proposal_id,
-        workspace_id       = attribution.get("workspace_id"),
+        workspace_id       = resolved_workspace_id,
         actor_org_unit_id  = attribution.get("actor_org_unit_id"),
         actor_org_unit_name = attribution.get("actor_org_unit_name"),
         agent_org_unit_id  = attribution.get("agent_org_unit_id"),

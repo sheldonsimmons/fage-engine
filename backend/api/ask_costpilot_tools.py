@@ -1629,25 +1629,91 @@ def run_get_decision_history(
             .filter(RegisteredAgent.id.in_(agent_ids_present)).all()
         )
 
+    decisions = [
+        {
+            "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+            "department": str(row.department or "Unassigned").split(":")[-1],
+            "agent_name": agent_names.get(row.agent_id),
+            "actor_name": row.actor_name,
+            "actor_email": row.actor_email,
+            "selected_model_name": row.selected_model_name,
+            "selected_model_tier": row.selected_model_tier,
+            "event_type": row.event_type,
+            "decision_outcome": row.decision_outcome,
+            "risk_level": row.risk_level,
+            "rationale": row.rationale,
+            "governed_request_id": row.governed_request_id,
+        }
+        for row in rows
+    ]
+
+    if budget_cap_only:
+        # Ask CostPilot's own propose/confirm/reject flow (routes_action_
+        # proposals.py) writes a GOVERNANCE AuditEvent at every step and is
+        # already covered by the query above via proposal_id -- but a
+        # proposal that's still awaiting_confirmation, or one written before
+        # a workspace_id attribution bug in write_audit_event was fixed, has
+        # no discoverable AuditEvent trail at all even though the real
+        # ActionProposal row exists with a correct workspace_id. Confirmed
+        # live: "show me recent budget cap decisions" reported nothing even
+        # though 5 real cap-increase proposals sat unresolved for days.
+        # Query ActionProposal directly and only add rows not already
+        # represented above (matched by proposal_id) to avoid double-
+        # reporting a proposal that already has its own confirm/reject
+        # AuditEvent row.
+        from database.models import ActionProposal
+
+        already_covered = {row.proposal_id for row in rows if row.proposal_id}
+        proposal_query = db.query(ActionProposal).filter(
+            ActionProposal.action_type.ilike("%budget%")
+        )
+        proposal_scope = workspace_filter(ActionProposal, workspace_id)
+        if proposal_scope is not None:
+            proposal_query = proposal_query.filter(proposal_scope)
+        if department_scope:
+            proposal_query = proposal_query.filter(or_(
+                ActionProposal.department == department_scope,
+                ActionProposal.department.like(f"%:{department_scope}"),
+            ))
+        proposals = (
+            proposal_query.order_by(ActionProposal.created_at.desc())
+            .limit(max(1, min(int(limit or 10), 50)))
+            .all()
+        )
+
+        status_label = {
+            "awaiting_confirmation": "Proposed, awaiting confirmation",
+            "executed": "Confirmed and applied",
+            "rejected": "Rejected",
+            "expired": "Expired, never confirmed",
+        }
+        for proposal in proposals:
+            if proposal.id in already_covered:
+                continue
+            effective_ts = proposal.resolved_at or proposal.created_at
+            decisions.append({
+                "timestamp": effective_ts.isoformat() if effective_ts else None,
+                "department": str(proposal.department or "Unassigned").split(":")[-1],
+                "agent_name": None,
+                "actor_name": None,
+                "actor_email": None,
+                "selected_model_name": None,
+                "selected_model_tier": None,
+                "event_type": "PROPOSAL",
+                "decision_outcome": (
+                    f"{status_label.get(proposal.status, proposal.status)}: "
+                    f"{proposal.action_type} {proposal.target_id} -> {proposal.proposed_value}"
+                ),
+                "risk_level": proposal.risk_level,
+                "rationale": proposal.reason or "No reason recorded.",
+                "governed_request_id": None,
+            })
+        decisions.sort(key=lambda d: d["timestamp"] or "", reverse=True)
+        decisions = decisions[: max(1, min(int(limit or 10), 50))]
+
     return {
-        "decisions": [
-            {
-                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
-                "department": str(row.department or "Unassigned").split(":")[-1],
-                "agent_name": agent_names.get(row.agent_id),
-                "actor_name": row.actor_name,
-                "actor_email": row.actor_email,
-                "selected_model_name": row.selected_model_name,
-                "selected_model_tier": row.selected_model_tier,
-                "event_type": row.event_type,
-                "decision_outcome": row.decision_outcome,
-                "risk_level": row.risk_level,
-                "rationale": row.rationale,
-                "governed_request_id": row.governed_request_id,
-            }
-            for row in rows
-        ],
-        "count": len(rows),
+        "decisions": decisions,
+        "count": len(decisions),
     }
 
 

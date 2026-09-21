@@ -323,3 +323,73 @@ def test_get_usage_report_result_includes_top_providers():
     assert result["top_providers"][0]["label"] == "Anthropic"
 
 
+def _add_proposal(db, **overrides):
+    from database.models import ActionProposal
+
+    defaults = dict(
+        workspace_id="ws1", department="ws1:Engineering", action_type="BUDGET_CAP_SET",
+        target_type="budget_department", target_id="ws1:Engineering",
+        current_value="{}", proposed_value='{"new_cap_usd": 3.75}',
+        reason="User requested a $1 increase.", risk_level="low",
+        required_permission="manage_budget", status="awaiting_confirmation",
+        created_at=datetime.utcnow(),
+    )
+    defaults.update(overrides)
+    proposal = ActionProposal(**defaults)
+    db.add(proposal)
+    db.commit()
+    db.refresh(proposal)
+    return proposal
+
+
+def test_decision_history_budget_cap_only_surfaces_orphaned_proposal():
+    """
+    Reproduces the production gap (fage-engine, 2026-09-18/21): a real
+    BUDGET_CAP_SET proposal sat awaiting_confirmation for days with no
+    AuditEvent trail a workspace-scoped query could find (a since-fixed
+    write_audit_event bug dropped workspace_id on these events entirely).
+    get_decision_history(budget_cap_only=True) must still surface it by
+    querying ActionProposal directly, since ActionProposal.workspace_id
+    was always set correctly even when the AuditEvent side wasn't.
+    """
+    db = _usage_session()
+    _add_proposal(db)
+    result = tools.run_get_decision_history(
+        db, "ws1", budget_cap_only=True,
+    )
+    assert result["count"] == 1
+    decision = result["decisions"][0]
+    assert decision["department"] == "Engineering"
+    assert "awaiting confirmation" in decision["decision_outcome"].lower()
+    assert decision["event_type"] == "PROPOSAL"
+
+
+def test_decision_history_budget_cap_only_scopes_to_workspace():
+    db = _usage_session()
+    _add_proposal(db, workspace_id="ws1", department="ws1:Engineering")
+    _add_proposal(db, workspace_id="ws2", department="ws2:Engineering")
+    result = tools.run_get_decision_history(db, "ws1", budget_cap_only=True)
+    assert result["count"] == 1
+
+
+def test_decision_history_budget_cap_only_does_not_duplicate_audit_event_row():
+    """
+    A proposal that already has its own confirm/reject AuditEvent row
+    (proposal_id set) must not be reported twice -- once from the
+    AuditEvent query, once again from the raw ActionProposal row.
+    """
+    from database.models import AuditEvent
+
+    db = _usage_session()
+    proposal = _add_proposal(db, status="rejected", resolved_at=datetime.utcnow())
+    db.add(AuditEvent(
+        workspace_id="ws1", event_type="GOVERNANCE", department="ws1:Engineering",
+        rationale="Rejected proposal", decision_outcome="Rejected: budget change",
+        proposal_id=proposal.id, timestamp=datetime.utcnow(),
+    ))
+    db.commit()
+    result = tools.run_get_decision_history(db, "ws1", budget_cap_only=True)
+    assert result["count"] == 1
+    assert result["decisions"][0]["event_type"] == "GOVERNANCE"
+
+
