@@ -587,6 +587,30 @@ def _ask_intent(question: str, default_days: int) -> dict:
         "highest", "most", "top", "largest", "lowest", "least", "fewest",
         "smallest", "bottom", "rank",
     )
+    # "Which department grew the fastest this quarter?" -- confirmed live
+    # (165-question pass, 2026-09-21): the growth_ranking_question check
+    # below already correctly detects "grew ... fastest" as a growth
+    # question, but that flag only changes HOW a ranking answer is
+    # computed (by delta, not absolute value) -- it never sets
+    # intent="ranking" in the first place, and neither "fastest" nor
+    # "biggest" is in ranking_terms above. Without one of those words,
+    # entity="department" defaulted to intent="overview", so the
+    # growth-ranking branch (which requires intent=="ranking") was never
+    # reached, and the answer silently fell back to a plain absolute-spend
+    # ranking ("Sales leads at $11.35") instead of an actual growth
+    # comparison -- despite the equivalent per-project growth question
+    # working correctly, because "grew the most" already contains the
+    # pre-existing "most" trigger. Deliberately a SEPARATE check, not
+    # added to ranking_terms itself: that tuple is also used below (the
+    # "total" intent gate) to mean "this is NOT a single-value total
+    # question" -- adding "biggest" there broke "What's our biggest AI
+    # expense this month?" (a real total question) by excluding it from
+    # the total gate the same way a real ranking word correctly would.
+    implies_growth_ranking = bool(re.search(
+        r"\b(?:grew|grow|growth|increased?|jumped?|surged?|fell|dropped?|decreased?|declined?)\b"
+        r"[^.?!]{0,25}\b(?:fastest|biggest)\b",
+        text,
+    ))
     # "Which opportunities have we lost?" names no ranking_terms word at
     # all, but "which X have we Y" is itself an implicit request for a
     # list, not a single aggregate -- confirmed falling back to overview
@@ -596,7 +620,7 @@ def _ask_intent(question: str, default_days: int) -> dict:
     # overview questions as rankings.
     implies_ranking = "which" in text and "have we" in text
     intent = "ranking" if entity != "overview" and (
-        any(term in text for term in ranking_terms) or implies_ranking
+        any(term in text for term in ranking_terms) or implies_ranking or implies_growth_ranking
     ) else "overview"
     if asks_for_help:
         intent = "help"
@@ -1143,6 +1167,22 @@ def _ask_intent(question: str, default_days: int) -> dict:
         # know/watch pattern above, so it doesn't widen to unrelated
         # "should I" questions (e.g. "should I increase the budget?").
         or re.search(r"\bwhat\s+should\s+i\s+(?:review|look\s+at|check)(?:\s+first)?\b", text)
+        # "Are there any governance gaps I should know about?" -- confirmed
+        # live (165-question pass, 2026-09-21): when the agent loop
+        # answers this directly it correctly calls get_priority_signals
+        # (its own system prompt already tells it to, for open-ended
+        # attention questions), but when a transient agent-loop failure
+        # falls back to this deterministic path, "governance gap(s)" isn't
+        # covered by any pattern above and there is no "governance" keyword
+        # trigger anywhere else in this classifier either -- so it fell
+        # through to the generic company overview branch, which has no
+        # gap-analysis data at all, and the grounded-narrator pass papered
+        # over that emptiness with a plausible-sounding but ungrounded "no
+        # governance gaps identified" sentence -- flatly contradicting the
+        # same real budget-risk signals every synonym of this question
+        # (paying attention to / needs attention / what's important /
+        # biggest risk) correctly surfaced in the same test run.
+        or re.search(r"\bgovernance\s+gaps?\b", text)
     )
 
     # "Why are we using Sonnet for the Sales agent?" / "who approved this
@@ -2809,6 +2849,24 @@ def _ask_named_entity_candidates(question: str, report: dict, context_hint: str 
             label_tokens = _ask_name_tokens(label)
             overlap = question_tokens & label_tokens
             if not overlap:
+                continue
+            # Require a real containment match in at least one direction
+            # (every question token present in the label, e.g. a bare
+            # "Maya" matching "Maya Chen" -- or every label token present
+            # in the question) -- not just ANY shared token. Confirmed
+            # live (165-question pass, 2026-09-21): "How much did Marcus
+            # Webb spend on AI last week?" silently answered about Marcus
+            # Reed instead -- this report's people_breakdown for that
+            # narrow week didn't include Marcus Webb at all (he simply
+            # wasn't in the top-N for that window), so "Marcus Reed"
+            # (overlap={"marcus"}, missing "webb") was the ONLY candidate
+            # with any overlap and won by default as a false "unique
+            # match," not because it was actually right. A real two-token
+            # name like "Marcus Webb" partially matching a *different*
+            # two-token name like "Marcus Reed" on just one shared token
+            # is exactly the false-positive case _ask_named_entity's own
+            # docstring says this function must never guess through.
+            if overlap != question_tokens and overlap != label_tokens:
                 continue
             key = (entity, label, row.get("email") or None)
             existing = merged.get(key)

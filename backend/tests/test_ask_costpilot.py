@@ -201,6 +201,61 @@ def test_highest_token_spend_yesterday_is_an_exact_person_token_ranking():
     assert intent["period_key"] == "yesterday"
 
 
+def test_governance_gaps_phrasing_routes_to_priority_signals():
+    """
+    Reproduces a real production answer (165-question pass, 2026-09-21):
+    "Are there any governance gaps I should know about?" got a
+    content-free "no specific governance gaps ... identified" non-answer
+    on the deterministic fallback path, while five synonyms asked in the
+    same run ("what should I be paying attention to", "what's important
+    right now", "is anything unusual happening", "which department needs
+    a closer look", "what's the biggest risk") all correctly surfaced the
+    same real budget-risk signals. Neither "governance" nor "gap" matched
+    any pattern in _ask_intent's attention_question detector, so this
+    phrasing fell through to the generic company-overview branch instead
+    of the same pre-ranked get_priority_signals computation those five
+    working synonyms reach. This only bites when the primary agent loop
+    isn't used (it already knows to call get_priority_signals itself,
+    per its own system prompt) -- so this deterministic-path coverage is
+    what protects a transient agent-loop failure from downgrading into a
+    wrong-sounding "no gaps" answer instead of a real one.
+    """
+    intent = _ask_intent("Are there any governance gaps I should know about?", default_days=30)
+    assert intent["attention_question"] is True
+
+
+def test_growth_superlative_without_a_ranking_word_still_becomes_a_ranking_question():
+    """
+    Reproduces a real production answer (165-question pass, 2026-09-21):
+    "Which department grew the fastest this quarter?" answered with a
+    plain absolute-spend ranking ("Sales leads at $11.35") instead of an
+    actual growth comparison -- despite growth_ranking_question already
+    correctly detecting "grew ... fastest," and despite the equivalent
+    per-project growth question working correctly (it happens to also
+    contain "most", an existing ranking_terms word). Neither "fastest"
+    nor "biggest" was in ranking_terms, so entity="department" defaulted
+    to intent="overview", and the growth-ranking answer branch (which
+    requires intent=="ranking") was never reached at all.
+    """
+    intent = _ask_intent("Which department grew the fastest this quarter?", default_days=30)
+    assert intent["intent"] == "ranking"
+    assert intent["entity"] == "department"
+    assert intent["growth_ranking_question"] is True
+
+
+def test_biggest_expense_question_stays_a_total_not_a_ranking():
+    """
+    Regression guard for the fix above: "biggest"/"fastest" must only
+    affect a growth-phrased ranking question (see the test above), never
+    the unrelated "total" intent gate a few lines below ranking_terms'
+    own definition -- that gate treats ANY ranking_terms word as "this is
+    not a single total question." A naive fix that added "biggest"
+    straight into ranking_terms broke exactly this case.
+    """
+    intent = _ask_intent("What's our biggest AI expense this month?", default_days=30)
+    assert intent["intent"] == "total"
+
+
 def test_last_year_on_this_date_means_one_calendar_day_not_the_prior_year():
     request = AskCostPilotRequest(
         question="What was my AI spend last year on this date?",
@@ -1363,6 +1418,53 @@ def test_ambiguous_name_is_not_guessed():
     }
 
     assert _ask_named_entity("How many tokens has Alex used?", report) is None
+
+
+def test_full_name_does_not_falsely_match_a_different_person_sharing_one_token():
+    """
+    Reproduces a real production answer (165-question pass, 2026-09-21):
+    "How much did Marcus Webb spend on AI last week?" answered about
+    Marcus Reed instead -- Marcus Webb simply wasn't in that narrow
+    week's people_breakdown (this matcher only ever searches within an
+    already-computed, period-scoped report, never the full database), so
+    Marcus Reed -- overlap={"marcus"}, missing "webb" entirely -- was the
+    ONLY candidate with any shared token and won by default as a false
+    "unique match." A real two-token name partially overlapping a
+    *different* two-token name on just one shared token must never be
+    accepted as an identification.
+    """
+    report = {
+        "people_breakdown": [
+            {"id": "USER-2", "label": "Marcus Reed", "spend_usd": 2.49, "request_count": 128},
+        ],
+        "agent_breakdown": [],
+        "organizational_unit_breakdown": [],
+        "project_breakdown": [],
+    }
+
+    assert _ask_named_entity("How much did Marcus Webb spend on AI last week?", report) is None
+
+
+def test_bare_first_name_still_matches_its_unique_full_name():
+    """
+    Guards the fix above from over-tightening: a bare single-token name
+    (no last name given) must still resolve when it's the unique
+    candidate -- this is the documented, intentional "Maya" -> "Maya
+    Chen" behavior _ask_named_entity's own docstring describes, and must
+    keep working after requiring a containment match.
+    """
+    report = {
+        "people_breakdown": [
+            {"id": "USER-1", "label": "Maya Chen", "spend_usd": 1.94, "request_count": 93},
+        ],
+        "agent_breakdown": [],
+        "organizational_unit_breakdown": [],
+        "project_breakdown": [],
+    }
+
+    match = _ask_named_entity("How much did Maya spend?", report)
+    assert match is not None
+    assert match["row"]["label"] == "Maya Chen"
 
 
 def test_won_opportunity_ranking_question_sets_outcome_filter():
