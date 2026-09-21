@@ -73,6 +73,17 @@ _ASK_WRITER_DISABLED_UNTIL = 0.0
 # scoped separately from the tool-dispatch and causal-language bugs fixed
 # alongside it this session.
 _ASK_AGENT_DISABLED_UNTIL: dict[str, float] = {}
+# Keyed the same as _ASK_AGENT_DISABLED_UNTIL -- counts consecutive
+# exceptions per workspace before the breaker above actually trips.
+# Confirmed live (2026-09-21): a single transient Anthropic timeout on the
+# first question of a voice call armed a 300s (5min) cooldown for that
+# workspace, which outlived the rest of that same call -- every remaining
+# question in an otherwise-fine call was silently downgraded to the
+# deterministic fallback because of one blip, not a real outage. Requiring
+# a second consecutive failure before tripping means one blip just falls
+# back for that one turn (as it always would anyway); only a real run of
+# failures disables the loop.
+_ASK_AGENT_CONSECUTIVE_FAILURES: dict[str, int] = {}
 
 
 def _ask_env_seconds(name: str, default: float, minimum: float, maximum: float) -> float:
@@ -4378,22 +4389,27 @@ def _ask_suggested_questions(
 
 def _ask_agent_final_payload(
     request: "AskCostPilotRequest", db: Session, final_args: dict, tool_call_log: list,
-) -> Optional[dict]:
+) -> tuple[Optional[dict], list[str]]:
     """
     Build the response payload from the model's final_answer call. Title and
     answer text come from the model; every number in `evidence`/`calculation`
     comes from tool_call_log — the actual deterministic tool results — never
     from the model's own arguments.
+
+    Returns (payload, contract_issues): payload is None when validation
+    failed, and contract_issues is non-empty in that case so the caller can
+    feed the specific problems back to the model for a repair turn instead
+    of only knowing that *something* was wrong.
     """
     title = str(final_args.get("title") or "").strip()[:180]
     answer = str(final_args.get("answer") or "").strip()[:4000]
     if not title or not answer or not tool_call_log:
-        return None
+        return None, ["final_answer is missing a title, answer, or any prior tool call"]
 
     contract_issues = _ask_agent_validate_answer(tool_call_log, answer)
     if contract_issues:
         logger.warning("Ask CostPilot agent answer failed validation: %s", "; ".join(contract_issues))
-        return None
+        return None, contract_issues
 
     calculation = None
     period = None
@@ -4818,7 +4834,7 @@ def _ask_agent_final_payload(
     except Exception as exc:
         logger.warning("Ask CostPilot proactive signal lookup failed: %s", exc)
 
-    return payload
+    return payload, []
 
 
 def _ask_query_plan_step_summary(tool_name: str, result: dict) -> str:
@@ -4963,6 +4979,9 @@ def _ask_costpilot_agent(
     instructions = """You are CostPilot's usage analyst. Answer the user's question about their
 attributed AI spend and usage by calling tools to retrieve real numbers — never state a figure
 you did not retrieve from a tool in this conversation.
+You may state the exact sum or difference of two figures a tool returned (e.g. spend minus a
+budget cap) — never a percentage, average, multiplication, or any other multi-step calculation
+a tool did not already return.
 Always write your final answer in English, regardless of what language the question or any prior
 turn in this conversation is in -- this app's UI and TTS voice output are English-only. Confirmed
 live: a reply drifted into French purely to stay consistent with an earlier non-English exchange
@@ -5195,6 +5214,14 @@ appeared in their question."""
         model = os.getenv(
             "ASK_COSTPILOT_AGENT_MODEL", os.getenv("ANTHROPIC_FLAGSHIP_MODEL", "claude-sonnet-4-6")
         )
+        # Unset defaults to the API's temperature of 1.0 -- too loose for a task
+        # that requires exact numeric fidelity to tool output. Confirmed live:
+        # the model has repeatedly stated a dollar figure that matched nothing
+        # any tool returned (e.g. "$31.00", "$20.00"), caught downstream by
+        # _ask_agent_validate_answer. 0.0 is the default; kept env-overridable
+        # like the timeout/budget constants above in case a low-but-nonzero
+        # value is ever needed for answer variety.
+        temperature = _ask_env_seconds("ASK_COSTPILOT_AGENT_TEMPERATURE", 0.0, 0.0, 1.0)
         all_tools = to_anthropic_tools(TOOL_SCHEMAS + [FINAL_ANSWER_TOOL])
         # Prompt caching: this tool list + the instructions string below are
         # identical on essentially every Ask CostPilot call, from every user,
@@ -5220,6 +5247,14 @@ appeared in their question."""
         messages: list = [
             {"role": "user", "content": f"{window_line}\n{conversation_text}"}
         ]
+        # Give the model exactly one chance to repair a final_answer that fails
+        # the numeric-fidelity/causal-language guardrail (_ask_agent_validate_answer)
+        # instead of discarding the whole agent answer for the slower deterministic
+        # fallback on the first failure -- confirmed live this guardrail rejects a
+        # fabricated figure (e.g. "$31.00 does not match any figure the tools
+        # returned") fairly often, and the model can usually restate the same
+        # answer correctly once told exactly which figure was unverified.
+        repair_attempted = False
 
         for _turn in range(max_tool_calls + 1):
             elapsed = time.monotonic() - loop_start
@@ -5234,6 +5269,7 @@ appeared in their question."""
             response = client.messages.create(
                 model=model,
                 max_tokens=1024,
+                temperature=temperature,
                 system=cached_system,
                 messages=messages,
                 tools=all_tools,
@@ -5258,13 +5294,31 @@ appeared in their question."""
                     "turn": _turn, "args": final_args,
                     "tool_calls": [{"tool": n, "args": a} for n, a, _r in tool_call_log],
                 })
-                payload = _ask_agent_final_payload(request, db, final_args, tool_call_log)
-                _ask_debug_log(request, "response", {"payload": payload})
-                if payload is None:
-                    _ask_record_agent_fallback(request.workspace_id, "validation_failed", f"turn={_turn}")
-                else:
+                payload, contract_issues = _ask_agent_final_payload(request, db, final_args, tool_call_log)
+                _ask_debug_log(request, "response", {"payload": payload, "contract_issues": contract_issues})
+                if payload is not None:
                     _ask_record_agent_outcome(True)
-                return payload
+                    _ASK_AGENT_CONSECUTIVE_FAILURES[breaker_key] = 0
+                    return payload
+                if not repair_attempted:
+                    repair_attempted = True
+                    _ask_debug_log(request, "repair_attempt", {"turn": _turn, "issues": contract_issues})
+                    messages.append({
+                        "role": "user",
+                        "content": [{
+                            "type": "tool_result",
+                            "tool_use_id": final_call.id,
+                            "content": (
+                                "Your answer could not be verified: " + "; ".join(contract_issues)
+                                + ". Call final_answer again using only exact figures already "
+                                "returned by a tool call in this conversation."
+                            ),
+                            "is_error": True,
+                        }],
+                    })
+                    continue
+                _ask_record_agent_fallback(request.workspace_id, "validation_failed", f"turn={_turn}")
+                return None
 
             tool_results = []
             for call in tool_uses:
@@ -5288,16 +5342,29 @@ appeared in their question."""
         _ask_record_agent_fallback(request.workspace_id, "loop_exhausted", f"turns={max_tool_calls + 1}")
         return None
     except Exception as exc:
-        cooldown_seconds = _ask_env_seconds(
-            "ASK_COSTPILOT_AGENT_COOLDOWN_SECONDS", 300.0, 15.0, 3600.0
-        )
-        # Scoped to this one workspace -- a transient provider timeout or a
-        # genuine bug hit while answering one workspace's question no
-        # longer suppresses correct answers for every other workspace for
-        # the whole cooldown window (see plan: "Scope the Ask CostPilot
-        # circuit breaker to workspace, not global").
-        _ASK_AGENT_DISABLED_UNTIL[breaker_key] = time.monotonic() + cooldown_seconds
+        failure_threshold = int(_ask_env_seconds(
+            "ASK_COSTPILOT_AGENT_FAILURE_THRESHOLD", 2.0, 1.0, 10.0
+        ))
+        consecutive_failures = _ASK_AGENT_CONSECUTIVE_FAILURES.get(breaker_key, 0) + 1
+        _ASK_AGENT_CONSECUTIVE_FAILURES[breaker_key] = consecutive_failures
         logger.warning("Ask CostPilot agent loop failed: %s", exc)
+        if consecutive_failures >= failure_threshold:
+            cooldown_seconds = _ask_env_seconds(
+                "ASK_COSTPILOT_AGENT_COOLDOWN_SECONDS", 300.0, 15.0, 3600.0
+            )
+            # Scoped to this one workspace -- a transient provider timeout or a
+            # genuine bug hit while answering one workspace's question no
+            # longer suppresses correct answers for every other workspace for
+            # the whole cooldown window (see plan: "Scope the Ask CostPilot
+            # circuit breaker to workspace, not global"). Only trips after
+            # failure_threshold consecutive failures (default 2) -- a single
+            # transient timeout falls back for just that one turn instead of
+            # disabling the loop for the rest of the call (confirmed live: a
+            # 5min cooldown from one blip outlived the entire voice call it
+            # started in). Resets to 0 on the next success (see the
+            # _ask_record_agent_outcome(True) branch above).
+            _ASK_AGENT_DISABLED_UNTIL[breaker_key] = time.monotonic() + cooldown_seconds
+            _ASK_AGENT_CONSECUTIVE_FAILURES[breaker_key] = 0
         _ask_record_agent_fallback(request.workspace_id, "exception", str(exc)[:200])
         return None
 

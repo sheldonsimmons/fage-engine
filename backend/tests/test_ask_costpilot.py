@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from copy import deepcopy
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -13,8 +14,11 @@ from core.analytics_periods import comparison_coverage, comparison_plan, resolve
 from core.analytics_drivers import change_decomposition, dimension_contributors
 
 from api.routes_efficiency import (
+    _ASK_AGENT_DISABLED_UNTIL,
+    _ASK_AGENT_CONSECUTIVE_FAILURES,
     _ask_agent_final_payload,
     _ask_agent_validate_answer,
+    _ask_costpilot_agent,
     _ask_build_query_plan,
     _ask_query_plan_step_summary,
     _ask_conversation_text,
@@ -1848,7 +1852,7 @@ def test_agent_validate_answer_allows_association_language_from_query_metrics_fa
 
 def test_agent_final_payload_rejects_answer_missing_title_or_answer():
     tool_call_log = [("get_usage_report", {}, {"top_people": []})]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="How much did we spend?"),
         db=None,
         final_args={"title": "", "answer": "Some answer", "evidence_ids": []},
@@ -1858,7 +1862,7 @@ def test_agent_final_payload_rejects_answer_missing_title_or_answer():
 
 
 def test_agent_final_payload_rejects_answer_with_no_tool_calls():
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="How much did we spend?"),
         db=None,
         final_args={"title": "Spend", "answer": "We spent $100.", "evidence_ids": []},
@@ -1883,7 +1887,7 @@ def test_agent_final_payload_includes_conversation_context_from_tool_args():
             "departments": [{"id": "Support", "label": "Support", "used_pct": 82.0}],
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="Is Support close to its budget cap?"),
         db=None,
         final_args={"title": "Support budget", "answer": "Support is at 82% of its cap.", "evidence_ids": ["Support"]},
@@ -1906,7 +1910,7 @@ def test_agent_final_payload_conversation_context_prefers_named_subject_over_dep
             "data_scope": "live",
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="How is Acme Corp doing?"),
         db=None,
         final_args={"title": "Acme Corp", "answer": "Acme Corp closed one deal.", "evidence_ids": []},
@@ -1940,7 +1944,7 @@ def test_agent_final_payload_account_outcomes_gets_fallback_evidence():
             "ai_touched_work_items": 2,
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="How is Acme Corp doing?"),
         db=None,
         final_args={"title": "Acme Corp", "answer": "Acme Corp has 50% outcome coverage.", "evidence_ids": []},
@@ -1971,7 +1975,7 @@ def test_agent_final_payload_cost_per_outcome_gets_fallback_evidence():
             "evidence_label": "meaningful",
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="What is our cost per successful outcome?"),
         db=None,
         final_args={"title": "Cost per outcome", "answer": "About $0.000228 per successful outcome.", "evidence_ids": []},
@@ -2018,7 +2022,7 @@ def test_agent_final_payload_decision_history_gets_fallback_evidence():
             ],
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="What decisions have been made about our AI budget recently?"),
         db=None,
         final_args={"title": "Recent decisions", "answer": "Scout and Advisor were both selected recently.", "evidence_ids": []},
@@ -2043,7 +2047,7 @@ def test_agent_final_payload_builds_evidence_from_cited_ids():
             ],
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="How much did Sheldon spend?"),
         db=None,
         final_args={
@@ -2070,7 +2074,7 @@ def test_agent_final_payload_falls_back_to_primary_breakdown_when_no_ids_cited()
             "top_people": [{"id": "USER-1", "label": "Sheldon", "spend_usd": 12.5}],
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="Who spent the most?"),
         db=None,
         final_args={
@@ -2102,7 +2106,7 @@ def test_agent_final_payload_includes_query_plan_trace():
             "top_people": [{"id": "USER-1", "label": "Sheldon", "spend_usd": 12.5}],
         },
     )]
-    payload = _ask_agent_final_payload(
+    payload, _issues = _ask_agent_final_payload(
         AskCostPilotRequest(question="How much did we spend?"),
         db=None,
         final_args={"title": "Spend", "answer": "We spent $42.50 this month.", "evidence_ids": []},
@@ -2311,3 +2315,225 @@ def test_dimension_contributors_net_change_pct_is_none_when_total_change_is_zero
     # another dimension decreasing by the same amount elsewhere.
     contributors = dimension_contributors(current_rows, prior_rows, "spend_usd", "department", 0.0)
     assert contributors[0]["net_change_contribution_pct"] is None
+
+
+class _AgentToolUseBlock:
+    def __init__(self, name, input_dict, call_id):
+        self.type = "tool_use"
+        self.name = name
+        self.input = input_dict
+        self.id = call_id
+
+
+def _patch_agent_loop_client(monkeypatch, responses):
+    """
+    Shared setup for the agent-loop repair tests below: a fake Anthropic
+    client that returns each of `responses` in order, one per model call,
+    and a stubbed _ask_run_agent_tool so the test doesn't depend on any
+    real tool's DB-backed behavior -- only the loop's own repair-turn
+    logic is under test here.
+    """
+    import anthropic
+
+    monkeypatch.setattr(
+        "api.routes_efficiency._ask_run_agent_tool",
+        lambda name, args, db, request, reporting_filters, department_scope=None, user_id=None: {"used_pct": 92.0},
+    )
+
+    calls = []
+
+    class _FakeClient:
+        def __init__(self, **_kw):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, **kwargs):
+            # messages is the same list object every turn (mutated in place
+            # by the loop) -- snapshot it now, or a later append would
+            # silently rewrite what this call "saw" by the time the test
+            # inspects it.
+            calls.append({**kwargs, "messages": list(kwargs["messages"])})
+            return responses[len(calls) - 1]
+
+    monkeypatch.setattr(anthropic, "Anthropic", lambda **kw: _FakeClient(**kw))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    return calls
+
+
+def test_agent_loop_repairs_fabricated_number_instead_of_falling_back(monkeypatch):
+    """
+    Reproduces the production failure mode (fage-engine, 2026-09-20): the
+    agent loop called a real tool, then stated a dollar figure ("$31.00")
+    that matched nothing the tool returned. _ask_agent_validate_answer
+    correctly rejects that answer -- this locks in that the loop now gives
+    the model one repair turn (feeding back exactly which figure was
+    unverified) instead of discarding the whole agent answer for the
+    slower deterministic fallback on the very first failure.
+    """
+    responses = [
+        SimpleNamespace(content=[_AgentToolUseBlock("get_budget_status", {}, "call_1")]),
+        SimpleNamespace(content=[_AgentToolUseBlock(
+            "final_answer",
+            {"title": "Support budget", "answer": "Support is $31.00 over its budget cap.", "evidence_ids": []},
+            "call_2",
+        )]),
+        SimpleNamespace(content=[_AgentToolUseBlock(
+            "final_answer",
+            {"title": "Support budget", "answer": "Support is at 92% of its budget cap.", "evidence_ids": []},
+            "call_3",
+        )]),
+    ]
+    calls = _patch_agent_loop_client(monkeypatch, responses)
+
+    db = _named_department_db("Support", workspace_id="WS-REPAIR-1")
+    payload = _ask_costpilot_agent(
+        AskCostPilotRequest(
+            question="Are there any governance gaps I should be paying attention to?",
+            workspace_id="WS-REPAIR-1",
+        ),
+        db,
+    )
+
+    assert payload is not None
+    assert "92%" in payload["answer"]
+    assert "$31.00" not in payload["answer"]
+    # Exactly one repair turn: tool call, failed final_answer, corrected
+    # final_answer -- not an immediate fallback after the first failure,
+    # and not an unbounded retry loop either.
+    assert len(calls) == 3
+    repair_message = calls[2]["messages"][-1]
+    assert repair_message["role"] == "user"
+    repair_content = repair_message["content"][0]
+    assert repair_content["tool_use_id"] == "call_2"
+    assert repair_content["is_error"] is True
+    assert "$31.00" in repair_content["content"]
+
+
+def test_agent_loop_falls_back_after_repair_attempt_also_fails(monkeypatch):
+    """
+    The repair turn is bounded to exactly one attempt -- if the model
+    fabricates a number again on the retry, the loop must fall back to the
+    deterministic path like before, not retry indefinitely.
+    """
+    responses = [
+        SimpleNamespace(content=[_AgentToolUseBlock("get_budget_status", {}, "call_1")]),
+        SimpleNamespace(content=[_AgentToolUseBlock(
+            "final_answer",
+            {"title": "Support budget", "answer": "Support is $31.00 over its budget cap.", "evidence_ids": []},
+            "call_2",
+        )]),
+        SimpleNamespace(content=[_AgentToolUseBlock(
+            "final_answer",
+            {"title": "Support budget", "answer": "Support is $47.00 over its budget cap.", "evidence_ids": []},
+            "call_3",
+        )]),
+    ]
+    calls = _patch_agent_loop_client(monkeypatch, responses)
+
+    db = _named_department_db("Support", workspace_id="WS-REPAIR-2")
+    payload = _ask_costpilot_agent(
+        AskCostPilotRequest(
+            question="Are there any governance gaps I should be paying attention to?",
+            workspace_id="WS-REPAIR-2",
+        ),
+        db,
+    )
+
+    assert payload is None
+    assert len(calls) == 3
+
+
+def _patch_raising_agent_client(monkeypatch):
+    import anthropic
+
+    class _RaisingClient:
+        def __init__(self, **_kw):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, **_kwargs):
+            raise RuntimeError("Request timed out or interrupted.")
+
+    monkeypatch.setattr(anthropic, "Anthropic", lambda **kw: _RaisingClient(**kw))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+
+def test_agent_loop_breaker_does_not_trip_on_a_single_transient_failure(monkeypatch):
+    """
+    Reproduces the production failure mode (fage-engine, 2026-09-21): one
+    transient Anthropic timeout on the FIRST question of a real voice call
+    tripped a 5-minute circuit-breaker cooldown for that workspace, which
+    outlived the rest of that same call -- every later question in an
+    otherwise-fine call got silently downgraded to the deterministic
+    fallback because of one blip, never getting another shot at the
+    primary agent loop. This locks in that a single failure no longer
+    trips the breaker on its own; only two IN A ROW do.
+    """
+    workspace_id = "WS-BREAKER-1"
+    _ASK_AGENT_DISABLED_UNTIL.pop(workspace_id, None)
+    _ASK_AGENT_CONSECUTIVE_FAILURES.pop(workspace_id, None)
+
+    _patch_raising_agent_client(monkeypatch)
+    db = _named_department_db("Support", workspace_id=workspace_id)
+
+    payload = _ask_costpilot_agent(
+        AskCostPilotRequest(question="How is governance looking?", workspace_id=workspace_id),
+        db,
+    )
+
+    assert payload is None
+    assert _ASK_AGENT_CONSECUTIVE_FAILURES[workspace_id] == 1
+    # Breaker must NOT be armed after just one failure -- the very next
+    # question in the same call should still be allowed to try the real
+    # agent loop instead of being forced straight into cooldown.
+    assert _ASK_AGENT_DISABLED_UNTIL.get(workspace_id, 0.0) <= time.monotonic()
+
+
+def test_agent_loop_breaker_trips_after_two_consecutive_failures(monkeypatch):
+    workspace_id = "WS-BREAKER-2"
+    _ASK_AGENT_DISABLED_UNTIL.pop(workspace_id, None)
+    _ASK_AGENT_CONSECUTIVE_FAILURES.pop(workspace_id, None)
+
+    _patch_raising_agent_client(monkeypatch)
+    db = _named_department_db("Support", workspace_id=workspace_id)
+
+    _ask_costpilot_agent(
+        AskCostPilotRequest(question="How is governance looking?", workspace_id=workspace_id), db,
+    )
+    payload = _ask_costpilot_agent(
+        AskCostPilotRequest(question="How is governance looking?", workspace_id=workspace_id), db,
+    )
+
+    assert payload is None
+    assert _ASK_AGENT_DISABLED_UNTIL[workspace_id] > time.monotonic()
+    # Counter resets once the breaker actually trips, so it counts a fresh
+    # run of failures next time instead of staying stuck above threshold.
+    assert _ASK_AGENT_CONSECUTIVE_FAILURES[workspace_id] == 0
+
+
+def test_agent_loop_breaker_resets_consecutive_failures_on_success(monkeypatch):
+    workspace_id = "WS-BREAKER-3"
+    _ASK_AGENT_DISABLED_UNTIL.pop(workspace_id, None)
+    _ASK_AGENT_CONSECUTIVE_FAILURES.pop(workspace_id, None)
+
+    db = _named_department_db("Support", workspace_id=workspace_id)
+
+    _patch_raising_agent_client(monkeypatch)
+    _ask_costpilot_agent(
+        AskCostPilotRequest(question="How is governance looking?", workspace_id=workspace_id), db,
+    )
+    assert _ASK_AGENT_CONSECUTIVE_FAILURES[workspace_id] == 1
+
+    responses = [
+        SimpleNamespace(content=[_AgentToolUseBlock("get_budget_status", {}, "call_1")]),
+        SimpleNamespace(content=[_AgentToolUseBlock(
+            "final_answer",
+            {"title": "Support budget", "answer": "Support is at 92% of its budget cap.", "evidence_ids": []},
+            "call_2",
+        )]),
+    ]
+    _patch_agent_loop_client(monkeypatch, responses)
+    payload = _ask_costpilot_agent(
+        AskCostPilotRequest(question="How is Support's budget?", workspace_id=workspace_id), db,
+    )
+
+    assert payload is not None
+    assert _ASK_AGENT_CONSECUTIVE_FAILURES[workspace_id] == 0
