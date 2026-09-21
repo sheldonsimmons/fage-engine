@@ -5269,7 +5269,19 @@ appeared in their question."""
             response = client.messages.create(
                 model=model,
                 max_tokens=1024,
-                temperature=temperature,
+                # extra_body, not a typed temperature= kwarg -- confirmed
+                # live: production's installed anthropic SDK (1.7.0) has
+                # dropped temperature/top_k/top_p from messages.create()'s
+                # typed signature entirely (a local dev venv on an older
+                # 0.121.0 SDK still had it, which is why this passed local
+                # testing and then failed 100% of the time in production --
+                # "Messages.create() got an unexpected keyword argument
+                # 'temperature'" -- tripping the circuit breaker and
+                # forcing every question in the session into fallback).
+                # extra_body is the SDK's own documented escape hatch for
+                # a real API field with no typed kwarg; the API itself
+                # still accepts temperature in the request body.
+                extra_body={"temperature": temperature},
                 system=cached_system,
                 messages=messages,
                 tools=all_tools,
