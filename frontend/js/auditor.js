@@ -437,8 +437,16 @@ function _populateAuditDeptFilter(events, budgetDepts = []) {
   if (!sel) return;
   const current = sel.value;
   while (sel.options.length > 1) sel.remove(1);  // keep "All Depts", rebuild the rest
+  // /api/budget's department field (unlike /api/audit's events, already
+  // stripped server-side) can come back workspace-prefixed
+  // ("WORKSPACE_ID:Engineering") -- strip it here too, the same
+  // "last segment after the colon" convention used everywhere else in this
+  // codebase, so a department doesn't appear twice under two names.
+  const stripWorkspacePrefix = d => String(d).split(":").pop();
   const eventDepts = events.map(e => e.display_department || e.department);
-  const depts = [...new Set([...eventDepts, ...budgetDepts].filter(Boolean))].sort();
+  const depts = [...new Set(
+    [...eventDepts, ...budgetDepts].filter(Boolean).map(stripWorkspacePrefix)
+  )].sort();
   depts.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.toLowerCase(); opt.textContent = d;
