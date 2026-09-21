@@ -294,7 +294,24 @@ async def entrypoint(ctx: JobContext):
             face_id=simli_face_id,
         ),
     )
-    await simli_avatar.start(session, room=ctx.room)
+    try:
+        await simli_avatar.start(session, room=ctx.room)
+    except Exception:
+        # Confirmed live: Simli itself has failed with a 429 (rate limit)
+        # and a 402 ("Free credits ran out") -- this call previously had no
+        # error handling at all, so the LiveKit session below still starts
+        # and runs audio-only with no video track ever published, and
+        # nothing told the frontend why. Same pattern as the greeting-done
+        # signal below: log loudly, tell the frontend explicitly, then keep
+        # going audio-only rather than failing the whole call over a
+        # video-only vendor outage.
+        logger.exception("simli avatar session failed to start -- continuing audio-only")
+        try:
+            await ctx.room.local_participant.publish_data(
+                b"{}", topic="ask-costpilot-avatar-video-unavailable",
+            )
+        except Exception:
+            logger.exception("couldn't publish avatar-video-unavailable signal")
     _register_answer_publisher(ctx, session, workspace_id)
 
     await session.start(

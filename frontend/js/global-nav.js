@@ -457,6 +457,13 @@
               _askLiveAvatarConnection?.retryAudio();
             });
           },
+          // Confirmed live: a Simli outage/rate-limit/billing lapse left
+          // the call running with a permanently black video window and no
+          // explanation -- this is a non-blocking note, not onError, since
+          // the call itself is fine and should keep going audio-only.
+          onVideoUnavailable: () => {
+            addAskMessage("assistant", "<p>📵 Video avatar unavailable right now — continuing with voice only.</p>");
+          },
         });
       }
       floatEl?.removeAttribute("hidden");
@@ -499,7 +506,7 @@
     const el = document.getElementById("cpAskAvatarFloat");
     if (!el || el.dataset.dragBound) return;
     el.dataset.dragBound = "1";
-    const size = el.offsetWidth || 108;
+    const size = el.offsetWidth || 320;
 
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(ASK_AVATAR_POS_KEY) || "null"); } catch (_err) {}
@@ -556,8 +563,15 @@
     el.addEventListener("pointercancel", endDrag);
     // A real tap (endDrag above left it un-prevented) now starts/ends a
     // live avatar call -- the avatar itself is the primary entry point,
-    // no separate button.
-    el.addEventListener("click", () => toggleAskLiveAvatar());
+    // no separate button. Guard against `moved`: the browser still fires a
+    // synthetic click after pointerup even though endDrag called
+    // preventDefault on the pointer event -- that doesn't suppress click.
+    // Confirmed live: dragging the avatar mid-call ended the call, because
+    // this listener fired toggleAskLiveAvatar() on every drag release too.
+    el.addEventListener("click", (event) => {
+      if (moved) { event.preventDefault(); event.stopPropagation(); return; }
+      toggleAskLiveAvatar();
+    });
     el.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();

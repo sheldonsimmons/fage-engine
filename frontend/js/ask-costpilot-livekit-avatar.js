@@ -21,12 +21,14 @@
  * element's place, the ring/animation CSS needs no changes at all.
  */
 
-function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswer, onAudioBlocked }) {
+function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswer, onAudioBlocked, onVideoUnavailable }) {
   let room = null;
   let connected = false;
   let micEnabled = false;
   let micFallbackTimer = null;
   let manuallyMuted = false;
+  let videoWatchdogTimer = null;
+  let videoAttached = false;
 
   function setState(state) {
     if (typeof onState === "function") onState(state);
@@ -116,6 +118,13 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
         if (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) {
           track.attach(videoEl);
         }
+        if (track.kind === Track.Kind.Video) {
+          videoAttached = true;
+          if (videoWatchdogTimer) {
+            clearTimeout(videoWatchdogTimer);
+            videoWatchdogTimer = null;
+          }
+        }
       });
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
         track.detach(videoEl);
@@ -142,6 +151,10 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
         console.warn("[Ask CostPilot avatar] room disconnected, reason:", reason);
         connected = false;
         setState("idle");
+        if (videoWatchdogTimer) {
+          clearTimeout(videoWatchdogTimer);
+          videoWatchdogTimer = null;
+        }
         onError?.(new Error(`Live call ended (${reason ?? "unknown reason"}).`));
       });
       // Autoplay can be blocked by the browser the same way it can for
@@ -170,6 +183,14 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
           enableMicrophone();
           return;
         }
+        if (topic === "ask-costpilot-avatar-video-unavailable") {
+          if (videoWatchdogTimer) {
+            clearTimeout(videoWatchdogTimer);
+            videoWatchdogTimer = null;
+          }
+          if (!videoAttached) onVideoUnavailable?.();
+          return;
+        }
         if (topic !== "ask-costpilot-answer") return;
         try {
           const data = JSON.parse(new TextDecoder().decode(payload));
@@ -184,6 +205,15 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
       console.info("[Ask CostPilot avatar] room connected, enabling microphone…");
       connected = true;
       setState("listening");
+      // Covers any avatar-video failure that never reaches the explicit
+      // "ask-costpilot-avatar-video-unavailable" backend signal (e.g. a
+      // hard crash before that try/except, or a slow/edge-case race) --
+      // confirmed live: a Simli failure previously left the call running
+      // with a permanently black video element and no explanation at all.
+      videoWatchdogTimer = setTimeout(() => {
+        videoWatchdogTimer = null;
+        if (!videoAttached) onVideoUnavailable?.();
+      }, 8000);
       // LiveKit's own documented unlock for browser autoplay policy (most
       // browsers require a real user interaction before audio plays) --
       // called here, still inside the async chain the original tap
@@ -219,6 +249,11 @@ function createAskCostpilotAvatarConnection({ videoEl, onState, onError, onAnswe
       clearTimeout(micFallbackTimer);
       micFallbackTimer = null;
     }
+    if (videoWatchdogTimer) {
+      clearTimeout(videoWatchdogTimer);
+      videoWatchdogTimer = null;
+    }
+    videoAttached = false;
     micEnabled = false;
     manuallyMuted = false;
     if (room) {

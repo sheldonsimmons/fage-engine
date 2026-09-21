@@ -383,10 +383,10 @@ header.header .header-sub,
   border-radius: 22px;
   cursor: pointer;
   filter: drop-shadow(0 10px 28px rgba(0,0,0,.45));
-  height: 260px;
+  height: 320px;
   position: fixed;
   touch-action: none;
-  width: 260px;
+  width: 320px;
   z-index: 2100;
 }
 .cp-ask-avatar-float[hidden] { display: none; }
@@ -525,7 +525,7 @@ video#avatarVideo {
 }
 
 @media (max-width: 560px) {
-  .cp-ask-avatar-float { height: 170px; width: 170px; }
+  .cp-ask-avatar-float { height: 200px; width: 200px; }
 }
 
 .cp-ask-clear {

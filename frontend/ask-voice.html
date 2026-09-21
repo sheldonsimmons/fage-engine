@@ -1042,6 +1042,11 @@
     // avatar tap (which means "end call" once connected) can't also be
     // the fix for this.
     onAudioBlocked: () => audioUnlockButton.classList.add("visible"),
+    // Confirmed live: a Simli outage/rate-limit/billing lapse left the
+    // call running with a permanently black video window and no
+    // explanation -- non-blocking status text, not setError, since the
+    // call itself is fine and should keep going audio-only.
+    onVideoUnavailable: () => setStatus("Video avatar unavailable right now — continuing with voice only."),
   });
 
   audioUnlockButton.addEventListener("click", async () => {
