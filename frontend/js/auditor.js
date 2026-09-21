@@ -80,7 +80,22 @@ async function loadAuditLog() {
   try {
     const events = await apiGet(workspaceScopedApiPath("/api/audit?limit=50"));
     auditAllEvents = events;
-    _populateAuditDeptFilter(events);
+    // The dept filter used to be built ONLY from these 50 most-recent
+    // events -- confirmed live: a real, active department (e.g. one
+    // sitting well over its budget cap) can simply have no event recent
+    // enough to land in that capped, unrelated-to-department window, and
+    // silently vanishes from the filter with no way to select it. /api/budget
+    // returns every department actually configured for this workspace
+    // regardless of event recency; union it with the events' own
+    // departments so a department with events but no budget row (if that
+    // ever happens) still shows up too.
+    let budgetDepts = [];
+    try {
+      budgetDepts = (await apiGet(workspaceScopedApiPath("/api/budget"))).map(b => b.department);
+    } catch (_err) {
+      // Non-fatal -- the filter just falls back to events-derived depts only.
+    }
+    _populateAuditDeptFilter(events, budgetDepts);
     updateBlockedBanner(events);
     applyAuditFilters();
     // Restore open row and re-fetch its content after re-render
@@ -417,12 +432,13 @@ function clearAuditFilters() {
   renderAuditTable(auditAllEvents);
 }
 
-function _populateAuditDeptFilter(events) {
+function _populateAuditDeptFilter(events, budgetDepts = []) {
   const sel = document.getElementById("auditFilterDept");
   if (!sel) return;
   const current = sel.value;
   while (sel.options.length > 1) sel.remove(1);  // keep "All Depts", rebuild the rest
-  const depts = [...new Set(events.map(e => e.display_department || e.department).filter(Boolean))].sort();
+  const eventDepts = events.map(e => e.display_department || e.department);
+  const depts = [...new Set([...eventDepts, ...budgetDepts].filter(Boolean))].sort();
   depts.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.toLowerCase(); opt.textContent = d;
